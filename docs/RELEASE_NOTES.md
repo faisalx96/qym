@@ -1,10 +1,48 @@
+# October 2026 — Platform 0.6.0 / SDK 1.9.0
+
+Evaluation Service experiments get a schema-driven launch form, runs carry free-form versioning details, stops show within seconds, and the platform logs every error with its traceback. SDK 1.9.0 scores metrics in their own queue. Platform 0.6.0 still accepts SDK 1.8.0.
+
+## Before you update
+
+- **Migrations `0072`–`0086` (head `0086`).** Evaluation Service environments, experiments, presets and best-run scores, filterable run versioning, admin-only private test sets and dataset read tokens. All are quick DDL. These revisions were numbered `0060`–`0070` before `main`'s `0060`–`0071` were merged; a database stamped with one of the old ids needs the one-time re-stamp in `docs/internal/OPERATIONS.md` ("Databases that ran the pre-merge eval branch"). `0083` adds the job queue columns to `background_jobs` and the empty `service_heartbeats` table for the optional service split (main / ingestion / workers); the single-server layout is unchanged. `0084` adds the nullable `versioning_details` JSON column to `runs` and `eval_experiments` (metadata-only). `0086` adds the environments' evaluator schema history (`eval_environment_evaluator_schemas`) and two `eval_environments` columns.
+- **Daily span partitions (`0085`).** Raw traces (`spans`) are now partitioned by day instead of by month, so `QYM_SPAN_RETENTION_DAYS` frees disk a day at a time. Existing monthly partitions keep their data and are dropped once their whole month expires; `0085` drops the still-empty monthly partitions pre-created for future months and creates daily ones 14 days ahead (`QYM_SPAN_PARTITION_DAYS_AHEAD`). See "Span partitions" in `docs/internal/OPERATIONS.md`.
+- **New platform env vars:** `QYM_LOG_LEVEL` (default `INFO`), `QYM_LOG_FORMAT` (`text` | `json`, default `text`) and `QYM_SPAN_PARTITION_DAYS_AHEAD` (default 14). See "Logging" and "Span partitions" in `docs/internal/OPERATIONS.md`.
+- **Timing logger renamed.** The per-request timing line now comes from `qym_platform.middleware.timing` instead of `qym.timing`; update any log filter that matches the old name.
+
+## SDK 1.9.0
+
+- **Metrics run in their own queue.** Task workers hand each output to a metric queue and move straight on to the next item, so a slow metric no longer holds up tasks. `QYM_METRIC_CONCURRENCY` (or `config["metric_concurrency"]`, default `max_concurrency`) sets how many items are scored at once. An item still completes, and reaches the platform with its scores, only after it is scored; the run ends once the queue drains.
+- **`versioning_details` on runs.** Attach free-form keys with `EvaluatorConfig.versioning_details`, `qym run create --versioning-detail KEY=VALUE` or `--versioning-details JSON`. They show on the run page and in `qym run get` / `qym run list --json`. 1.9.0 sends them only when set, so it works with platform 0.5.0 too.
+
+## What changed
+
+### Experiments
+
+- **Evaluation config tab.** Environment and role overrides, sweeps, evaluation inputs and Raw JSON have their own tab on the new-experiment page and in the default preset editor. Presets now show, save and restore every value: evaluation inputs, `run_metadata` and `report_k` are visible and can be cleared, edits survive leaving Customize, and a preset is applied only after every environment's form has loaded and again after a schema refresh.
+- **Evaluation inputs from the service's evaluator schema.** qym reads `GET /evals/evaluator/schema` (Evaluation Service integration guide v1.1) next to the settings schema, on **Test**, schema refresh and when an environment is selected on the new-experiment page. The **Evaluation inputs** card, presets and launch validation follow it, so new `evaluator.config` keys such as `metric_concurrency` appear without a qym update and keys the service dropped are removed from presets on load. Services older than v1.1 keep the standard inputs, with a note on the card. On v1.1 services the experiment's **Versioning details** are also sent as `evaluator.config.versioning_details`.
+- **Any schema shape.** Settings without a declared type, unions, open objects and mixed enums are detected and shown; nothing is dropped. A value that doesn't fit its field is edited as JSON, extra keys can be added and removed, and values no field covers appear under **Other values**.
+- **Global model.** The Models step has a global model that sets every LLM endpoint at once (roles follow their endpoint). Endpoints changed afterwards are marked custom; a later global change overwrites all of them. A global model sweep is one axis, so two models give two runs.
+- **Versioning details.** The launch form has a **Versioning details** box; the keys are stored on the experiment, kept by Rerun and merged into each linked run.
+
+### Runs
+
+- **Stops show within seconds.** Cancelling a job or force-stopping a run shows **Stopping…** on the runs list and run page within about 1–3 seconds, and other open tabs are told at once.
+- **Every runs column can be hidden,** frozen ones included; the frozen block closes up without gaps.
+- **JSON run metadata** opens in a collapsible viewer with expand/collapse all and copy.
+- **Item metrics stay beside the item** after its dropdown is closed.
+
+### Operations
+
+- **Central logging.** One logging setup for every platform process, with request ids, tracebacks for every caught or unhandled error, redaction of keys, tokens, passwords and Authorization headers, and optional JSON output.
+- **Daily span partitions** (see Before you update).
+
 # October 2026 — Platform 0.5.0 (SDK 1.8.0 unchanged)
 
 Fixes the P1 issues of the September design review: a run page you can read and filter without the page moving, a Reviews queue with project approval rules, faster dataset search and comparisons, and safer admin and sign-in. It needs no SDK update: SDK 1.8.0 works as is.
 
 ## Before you update
 
-- **Migrations `0066`–`0071` (head `0071`).** `0066` adds `background_jobs`, `0067` the project review rules (defaults keep today's behaviour), `0068` dataset search text and stored lineage counts, `0069` each run's stored overview inputs and the overview cache shared by every pod, `0070` the Runs search index job, `0071` each run's stored search text. All are quick DDL. `0068` queues the `backfill_dataset_search_text` job on every database: it fills search text, stores lineage counts, then builds the search indexes (the trigram index needs the privilege to create `pg_trgm`; without it search stays correct, only unindexed). `0069` queues `backfill_dashboard_overview`, which stores the overview inputs of existing runs (until it reaches a run, the overview reads that run as before, with the same numbers). `0070` and `0071` queue `build_runs_search_index` (one job runs), which fills each run's search text and builds the Runs search's trigram index over it CONCURRENTLY (without `pg_trgm` it logs that the index was skipped and finishes; the search stays correct, only unindexed). See `docs/internal/OPERATIONS.md`.
+- **Migrations `0066`–`0071` (head then `0071`).** `0066` adds `background_jobs`, `0067` the project review rules (defaults keep today's behaviour), `0068` dataset search text and stored lineage counts, `0069` each run's stored overview inputs and the overview cache shared by every pod, `0070` the Runs search index job, `0071` each run's stored search text. All are quick DDL. `0068` queues the `backfill_dataset_search_text` job on every database: it fills search text, stores lineage counts, then builds the search indexes (the trigram index needs the privilege to create `pg_trgm`; without it search stays correct, only unindexed). `0069` queues `backfill_dashboard_overview`, which stores the overview inputs of existing runs (until it reaches a run, the overview reads that run as before, with the same numbers). `0070` and `0071` queue `build_runs_search_index` (one job runs), which fills each run's search text and builds the Runs search's trigram index over it CONCURRENTLY (without `pg_trgm` it logs that the index was skipped and finishes; the search stays correct, only unindexed). See `docs/internal/OPERATIONS.md`.
 - **Scores of reviewed runs are locked.** Score edits and resets on a SUBMITTED or APPROVED run answer 403 ("Scores are locked…"); deleting passes of such a run answers 409. Reject or unapprove the run first. Scripts that override scores on reviewed runs need that step.
 - **Dataset rights.** Moving the `production` alias and changing a dataset's slug need a project manager (or admin); members create, publish and delete their own datasets. Renaming a dataset's display name is audited (`dataset.renamed`); SDK/CI uploads that still use the old name keep failing with `409`, and the error now names the new name.
 - **Paged dataset compare.** `GET …:compare` with `include_diffs=1&limit=N` now returns `summary`, `page` and that page's rows only; the full `added` / `removed` / `changed` / `unchanged` lists and `timestamps` come only without `limit`, as before.
@@ -20,6 +58,7 @@ Fixes the P1 issues of the September design review: a run page you can read and 
 - Datasets: indexed search over IDs, inputs, outputs and metadata; stored lineage counts; compare ordered by time with timestamps and paged diffs; Deleted datasets with restore.
 - Runs list: keyed rows, stable menus, a run search (served by a trigram index), a custom date range; Deleted Runs lists every deleted run, page by page.
 - Runs list: runs checked for Compare stay checked after Back and on return to Runs until you clear them or sign out, and the pager stays beside the selection actions; frozen columns that would cover more than about half the table scroll with it until they fit (date first, never the run name), and the Columns menu names them; your saved choice is kept.
+- Runs list: Columns shows and hides every Runs column (Run name, Status, Task, Model, Dataset, Owner, Date, Analysis, Experiment, Version, Duration), frozen ones included; the frozen columns close up around a hidden one, a hidden Run name keeps its checkbox while selecting, and the table always keeps at least one column. A column choice saved earlier still applies, with every Runs column shown.
 - Runs, Charts and Models: the project overview is aggregated in the database from each run's stored inputs and shared by every web process and pod, once per published change, with the same numbers as before.
 - Admin: confirm-and-undo when disabling users, never zero active admins, no self-disable or self-demotion.
 - Compare and Models: a baseline with noise bands, short labels, server-side model stats.

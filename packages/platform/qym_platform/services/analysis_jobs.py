@@ -8,6 +8,10 @@ updates and polling are safe across worker threads.  When the submitting
 request passes its database (``store_bind``), the job is also published to
 ``background_jobs`` (services/job_registry.py) so that other web worker
 processes can report it, find it as the run's active job and cancel it.
+
+In split mode (``QYM_SERVICE=main``) ``submit(..., enqueue=True)`` only
+queues the job in ``background_jobs``; a workers process claims it and runs
+it through :meth:`AnalysisJobManager.adopt` (services/job_executor.py).
 """
 
 from __future__ import annotations
@@ -23,7 +27,15 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Set, Tupl
 from uuid import uuid4
 
 from qym_platform.datetime_utils import utc_now_naive
-from qym_platform.services.job_registry import ActiveJobExists, JobDescription, job_registry
+from qym_platform.log import get_logger
+from qym_platform.services.job_registry import (
+    EXPIRED_ERROR,
+    ActiveJobExists,
+    JobDescription,
+    job_registry,
+)
+
+logger = get_logger(__name__)
 
 
 ACTIVE_JOB_STATUSES = frozenset({"queued", "running", "cancelling"})
@@ -63,6 +75,10 @@ class AnalysisJob:
     future: Optional[Future[Any]] = field(default=None, repr=False)
     worker_loop: Optional[asyncio.AbstractEventLoop] = field(default=None, repr=False)
     request_wakeup_task: Optional[asyncio.Task[Any]] = field(default=None, repr=False)
+    # True once the job is published to ``background_jobs``; a finished job's
+    # full result then lives there and is released from memory (``released``).
+    published: bool = field(default=False, repr=False)
+    released: bool = field(default=False, repr=False)
 
     def touch(self) -> None:
         self.updated_at = utc_now_naive()
@@ -107,7 +123,9 @@ class RemoteAnalysisJob:
         if self.lost:
             progress["phase"] = "failed"
             snap["error"] = (
-                "The server process running this job stopped before it "
+                EXPIRED_ERROR
+                if self._row.get("lost_reason") == EXPIRED_ERROR
+                else "The server process running this job stopped before it "
                 "finished. Start it again."
             )
         snap.update(
@@ -147,12 +165,12 @@ class AnalysisJobManager:
     def __init__(
         self,
         *,
-        max_retained_jobs: int = 100,
+        max_retained_jobs: int = 20,
         max_workers: Optional[int] = None,
         job_id_prefix: str = "analysis",
     ) -> None:
         self._jobs: Dict[str, AnalysisJob] = {}
-        self._max_retained_jobs = max(10, int(max_retained_jobs))
+        self._max_retained_jobs = max(1, int(max_retained_jobs))
         self._max_workers = max(1, int(max_workers or _configured_worker_count()))
         self._job_id_prefix = str(job_id_prefix or "analysis")
         self._lock = threading.RLock()
@@ -180,13 +198,20 @@ class AnalysisJobManager:
         return self._job_id_prefix
 
     def get(self, job_id: str, db: Any = None) -> Optional[AnyAnalysisJob]:
-        """This process's job, else (given ``db``) the one another process published."""
+        """This process's job, else (given ``db``) the one another process published.
+
+        A finished local job whose result was released from memory is read
+        back from its published row so pollers still get the full result.
+        """
         with self._lock:
             job = self._jobs.get(job_id)
-        if job is not None or db is None:
+            released = job is not None and job.released
+        if db is None or (job is not None and not released):
             return job
         row = job_registry.fetch(db, self.kind, job_id)
-        return RemoteAnalysisJob(row) if row is not None else None
+        if row is not None:
+            return RemoteAnalysisJob(row)
+        return job
 
     def active_for_run(
         self, run_id: str, pass_number: Optional[int] = None, db: Any = None
@@ -238,12 +263,25 @@ class AnalysisJobManager:
         progress: Optional[Dict[str, Any]],
         runner: AnalysisRunner,
         store_bind: Any = None,
+        enqueue: bool = False,
     ) -> Tuple[AnyAnalysisJob, bool]:
         """Create a job or return the existing active job for this run/pass.
 
         ``store_bind`` (the request's engine or connection) publishes the job
-        for the other web worker processes and finds theirs.
+        for the other web worker processes and finds theirs. ``enqueue``
+        (split mode) queues it for a workers process instead of running it
+        here; ``runner`` is then unused (the worker has its own).
         """
+        if enqueue:
+            return await asyncio.to_thread(
+                self._enqueue,
+                run_id=run_id,
+                user_id=user_id,
+                auth_type=auth_type,
+                request_payload=request_payload,
+                progress=progress,
+                store_bind=store_bind,
+            )
         pass_number = _pass_number_from_payload(request_payload)
         with self._lock:
             existing = next(
@@ -275,7 +313,7 @@ class AnalysisJobManager:
             # Claimed before it starts: a second start on another web worker
             # process gets this job back instead of a duplicate LLM run.
             try:
-                job_registry.track(
+                published = job_registry.track(
                     store_bind,
                     kind=self.kind,
                     job_id=job.job_id,
@@ -287,6 +325,8 @@ class AnalysisJobManager:
                 with self._lock:
                     self._jobs.pop(job.job_id, None)
                 return RemoteAnalysisJob(conflict.row), False
+            with self._lock:
+                job.published = bool(published)
         with self._lock:
             executor = self._ensure_executor()
             # A tiny caller-loop heartbeat makes thread-originated progress
@@ -298,7 +338,103 @@ class AnalysisJobManager:
             )
             job.future = executor.submit(self._worker_entry, job, runner)
             self._prune_unlocked()
+        logger.info("%s job %s submitted for run %s", self.kind, job.job_id, run_id)
         return job, True
+
+    def _enqueue(
+        self,
+        *,
+        run_id: str,
+        user_id: str,
+        auth_type: str,
+        request_payload: Dict[str, Any],
+        progress: Optional[Dict[str, Any]],
+        store_bind: Any,
+    ) -> Tuple[AnyAnalysisJob, bool]:
+        """Queue the job in ``background_jobs`` for a workers process."""
+        if store_bind is None:
+            raise RuntimeError("Queued analysis jobs need the request's database")
+        job = AnalysisJob(
+            run_id=run_id,
+            user_id=user_id,
+            auth_type=auth_type,
+            request_payload=dict(request_payload),
+            progress=dict(progress or {}),
+        )
+        job.job_id = f"{self._job_id_prefix}_{uuid4().hex}"
+        payload = _json_safe(
+            {
+                "run_id": run_id,
+                "user_id": user_id,
+                "auth_type": auth_type,
+                "request_payload": dict(request_payload),
+                "progress": dict(progress or {}),
+            }
+        )
+        try:
+            # Exclusive like a local start: one unfinished job per run/pass
+            # across the queue and every process.
+            row = job_registry.enqueue(
+                store_bind,
+                kind=self.kind,
+                job_id=job.job_id,
+                description=self._describe(job),
+                payload=payload,
+                exclusive=True,
+            )
+        except ActiveJobExists as conflict:
+            return RemoteAnalysisJob(conflict.row), False
+        logger.info("%s job %s queued for run %s", self.kind, job.job_id, run_id)
+        return RemoteAnalysisJob(row), True
+
+    def free_slots(self) -> int:
+        """Executor threads not busy with an unfinished job of this process."""
+        with self._lock:
+            busy = sum(
+                1 for job in self._jobs.values() if job.status in ACTIVE_JOB_STATUSES
+            )
+        return max(0, self._max_workers - busy)
+
+    def running_count(self) -> int:
+        with self._lock:
+            return sum(
+                1 for job in self._jobs.values() if job.status in ACTIVE_JOB_STATUSES
+            )
+
+    def adopt(self, row: Dict[str, Any], runner: AnalysisRunner, store_bind: Any) -> AnalysisJob:
+        """Run a job a ``main`` service queued (``row`` from ``job_registry.claim``).
+
+        The job keeps its id; from here on this process owns, heartbeats and
+        cancels it exactly like a job it accepted itself.
+        """
+        payload = dict(row.get("payload") or {})
+        snapshot = dict(row.get("snapshot") or {})
+        job = AnalysisJob(
+            run_id=str(payload.get("run_id") or row.get("scope_id") or ""),
+            user_id=str(payload.get("user_id") or row.get("owner_user_id") or ""),
+            auth_type=str(payload.get("auth_type") or "none"),
+            request_payload=dict(payload.get("request_payload") or {}),
+            progress=dict(snapshot.get("progress") or payload.get("progress") or {}),
+        )
+        job.job_id = str(row["id"])
+        if row.get("created_at") is not None:
+            job.created_at = row["created_at"]
+        with self._lock:
+            self._jobs[job.job_id] = job
+        published = job_registry.track(
+            store_bind,
+            kind=self.kind,
+            job_id=job.job_id,
+            describe=lambda: self._describe(job),
+            on_cancel=lambda: self.cancel(job.job_id),
+        )
+        with self._lock:
+            job.published = bool(published)
+            executor = self._ensure_executor()
+            job.future = executor.submit(self._worker_entry, job, runner)
+            self._prune_unlocked()
+        logger.info("%s job %s adopted for run %s", self.kind, job.job_id, job.run_id)
+        return job
 
     async def _request_loop_heartbeat(self, job: AnalysisJob) -> None:
         try:
@@ -352,10 +488,13 @@ class AnalysisJobManager:
                 else:
                     job.result = result
                     job.status = "completed"
+            logger.info("%s job %s for run %s finished (%s)", self.kind, job.job_id, job.run_id, job.status)
         except asyncio.CancelledError:
             with self._lock:
                 self._finish_cancelled_unlocked(job)
+            logger.info("%s job %s for run %s cancelled", self.kind, job.job_id, job.run_id)
         except Exception as exc:  # pragma: no cover - runner-specific failures
+            logger.exception("%s job %s for run %s failed", self.kind, job.job_id, job.run_id)
             with self._lock:
                 job.status = "failed"
                 job.progress["phase"] = "failed"
@@ -367,6 +506,31 @@ class AnalysisJobManager:
                 job.touch()
                 self._prune_unlocked()
             job_registry.changed(job.job_id, flush=True)
+            self._release_if_persisted(job)
+
+    def _release_if_persisted(self, job: AnalysisJob) -> None:
+        """Drop a finished job's heavy state once ``background_jobs`` holds it.
+
+        The terminal snapshot (with the full ``result``) is written by the
+        flush above, and the registry forgets a job only after that write
+        succeeded.  Without a shareable database (in-memory SQLite: tests,
+        embedded use) the result stays in memory, bounded by
+        ``max_retained_jobs``.
+        """
+        with self._lock:
+            if (
+                not job.published
+                or job.released
+                or job.status not in TERMINAL_JOB_STATUSES
+                or job_registry.is_tracked(job.job_id)
+            ):
+                return
+            job.result = None
+            pass_number = _pass_number_from_payload(job.request_payload)
+            job.request_payload = (
+                {"pass_number": pass_number} if pass_number is not None else {}
+            )
+            job.released = True
 
     @staticmethod
     def _finish_cancelled_unlocked(job: AnalysisJob) -> None:

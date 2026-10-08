@@ -41,6 +41,23 @@ def _span_partitions(engine):
         }
 
 
+def _reset_span_partitions(engine):
+    """Drop the bounded partitions the migrations made from the wall clock,
+    so a test's fixed ``now`` decides what exists (they are empty here)."""
+    from qym_platform.migrations_support import partition_bounds
+
+    with engine.begin() as conn:
+        for name, bounds in partition_bounds(conn):
+            if bounds:
+                conn.execute(text(f"DROP TABLE {name}"))
+
+
+def _placed(conn, run_id):
+    return conn.execute(
+        text("SELECT tableoid::regclass::text FROM spans WHERE run_id = :r"), {"r": run_id}
+    ).scalar()
+
+
 def test_partitions_are_created_ahead_and_dropped_after_retention(migrated_postgres):
     engine = migrated_postgres
     now = datetime(2026, 9, 14, 12, 0, 0)
@@ -48,35 +65,126 @@ def test_partitions_are_created_ahead_and_dropped_after_retention(migrated_postg
     recent = now - timedelta(days=10)
     from qym_platform.migrations_support import ensure_month_partitions_between
 
-    ensure_month_partitions_between(engine, old, now)
+    _reset_span_partitions(engine)
+    # History before the switch: monthly partitions May..September.
+    assert ensure_month_partitions_between(engine, old, now) == [
+        "spans_y2026m05",
+        "spans_y2026m06",
+        "spans_y2026m07",
+        "spans_y2026m08",
+        "spans_y2026m09",
+    ]
     with engine.begin() as conn:
         _seed_run(conn, "old", old)
         _seed_run(conn, "recent", recent)
         partitioned = conn.execute(text("SELECT relkind FROM pg_class WHERE oid = 'spans'::regclass")).scalar()
         assert partitioned == "p"
-        placed = conn.execute(text("SELECT tableoid::regclass::text FROM spans WHERE run_id = 'old'")).scalar()
-        assert placed.startswith("spans_y") and "default" not in placed
+        assert _placed(conn, "old") == "spans_y2026m05"
 
-    # The migration pre-creates partitions from the wall clock. Remove the two
-    # months after `now` so the create path always runs; September already
-    # exists from ensure_month_partitions_between(old, now) above.
+    # Daily partitions start where the monthly September partition ends:
+    # September 14..30 is covered already, so only October 1..4 is created.
+    created = retention.ensure_span_partitions(engine, days_ahead=20, now=now)
+    assert created == [f"spans_y2026m10d{day:02d}" for day in range(1, 5)]
+    assert retention.ensure_span_partitions(engine, days_ahead=20, now=now) == []
     with engine.begin() as conn:
-        for name in ("spans_y2026m10", "spans_y2026m11"):
-            conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
-    created = retention.ensure_span_partitions(engine, months_ahead=2, now=now)
-    assert created == ["spans_y2026m10", "spans_y2026m11"]
-    assert {"spans_y2026m09", "spans_y2026m10", "spans_y2026m11"} <= _span_partitions(engine)
-    assert retention.ensure_span_partitions(engine, months_ahead=2, now=now) == []
+        _seed_run(conn, "october", datetime(2026, 10, 2, 9, 30))
+        assert _placed(conn, "october") == "spans_y2026m10d02"
 
     # 60 days before 2026-09-14 is 2026-07-16: only May and June end before it.
     dropped = retention.drop_expired_span_partitions(engine, retention_days=60, now=now)
-    assert sorted(dropped) == ["spans_y2026m05", "spans_y2026m06"]
+    assert dropped == ["spans_y2026m05", "spans_y2026m06"]
     with engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM spans WHERE run_id = 'old'")).scalar() == 0
         assert conn.execute(text("SELECT count(*) FROM spans WHERE run_id = 'recent'")).scalar() == 1
         # derived rows survive raw-trace retention
         assert conn.execute(text("SELECT count(*) FROM run_items WHERE run_id = 'old'")).scalar() == 1
     assert retention.drop_expired_span_partitions(engine, retention_days=0, now=now) == []
+
+    # Later: the cutoff (2026-10-04 12:00) passes the monthly partitions and
+    # the first daily ones whole; October 4 still reaches past it.
+    later = datetime(2026, 12, 3, 12, 0, 0)
+    dropped = retention.drop_expired_span_partitions(engine, retention_days=60, now=later)
+    assert dropped == [
+        "spans_y2026m07",
+        "spans_y2026m08",
+        "spans_y2026m09",
+        "spans_y2026m10d01",
+        "spans_y2026m10d02",
+        "spans_y2026m10d03",
+    ]
+    assert "spans_y2026m10d04" in _span_partitions(engine)
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM spans WHERE run_id = 'october'")).scalar() == 0
+        assert conn.execute(text("SELECT count(*) FROM spans_default")).scalar() == 0
+
+
+def test_daily_partitions_skip_a_monthly_range_and_backfill_fills_the_gap(migrated_postgres):
+    """A monthly partition later in the window is never overlapped, and the
+    backfill fills a month already reached by daily partitions day by day."""
+    engine = migrated_postgres
+    from qym_platform.migrations_support import ensure_month_partitions_between
+
+    _reset_span_partitions(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE spans_y2026m10 PARTITION OF spans"
+                " FOR VALUES FROM ('2026-10-01') TO ('2026-11-01')"
+            )
+        )
+    created = retention.ensure_span_partitions(engine, days_ahead=3, now=datetime(2026, 9, 29, 18))
+    assert created == ["spans_y2026m09d29", "spans_y2026m09d30"]
+    created = retention.ensure_span_partitions(engine, days_ahead=3, now=datetime(2026, 10, 30))
+    assert created == ["spans_y2026m11d01", "spans_y2026m11d02"]
+
+    # History back to August: August gets one monthly partition, September
+    # (reached by daily ones) gets the missing days 1..28 only.
+    created = ensure_month_partitions_between(engine, datetime(2026, 8, 20), datetime(2026, 11, 2))
+    assert created == ["spans_y2026m08"] + [f"spans_y2026m09d{day:02d}" for day in range(1, 29)]
+    assert ensure_month_partitions_between(engine, datetime(2026, 8, 20), datetime(2026, 11, 2)) == []
+    with engine.begin() as conn:
+        _seed_run(conn, "sep", datetime(2026, 9, 3))
+        _seed_run(conn, "oct", datetime(2026, 10, 15))
+        assert _placed(conn, "sep") == "spans_y2026m09d03"
+        assert _placed(conn, "oct") == "spans_y2026m10"
+
+
+def test_daily_partitions_migration_drops_empty_future_months(postgres):
+    """0085 drops empty monthly partitions after today, keeps one holding
+    rows, and covers the next 14 days with daily partitions (no overlaps)."""
+    from alembic import command
+
+    from qym_platform.migrations_support import partition_bounds
+
+    engine, config = postgres
+    command.upgrade(config, "0083")
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    with engine.connect() as conn:
+        future = sorted(
+            (bounds[0], name)
+            for name, bounds in partition_bounds(conn)
+            if bounds and bounds[0] > today
+        )
+    # 0053 pre-creates about three months ahead.
+    assert len(future) >= 2
+    kept_start, kept = future[-1]
+    with engine.begin() as conn:
+        _seed_run(conn, "future", kept_start + timedelta(days=2))
+    command.upgrade(config, "0085")
+
+    with engine.connect() as conn:
+        rows = {name: bounds for name, bounds in partition_bounds(conn) if bounds}
+        assert kept in rows
+        assert _placed(conn, "future") == kept
+    for _, name in future[:-1]:
+        assert name not in rows
+    ordered = sorted(rows.values())
+    assert all(a[1] <= b[0] for a, b in zip(ordered, ordered[1:])), "partitions overlap"
+    for offset in range(15):
+        day = today + timedelta(days=offset)
+        assert any(lower <= day < upper for lower, upper in ordered), day
+    daily = [name for name, (lower, upper) in rows.items() if upper - lower == timedelta(days=1)]
+    assert all(len(name) == len("spans_y2026m10d01") for name in daily)
 
 
 def test_purge_cascades_children_after_grace(migrated_postgres):
@@ -219,7 +327,9 @@ def test_restore_waiting_for_purge_returns_404(migrated_postgres):
             assert resume.wait(10)
 
     def before_restore(conn, cursor, statement, parameters, context, executemany):
-        if "runs.deleted_at IS NOT NULL" in statement and "FOR UPDATE" in statement:
+        if "runs.deleted_at IS NOT NULL" in statement and (
+            "FOR UPDATE" in statement or "FOR NO KEY UPDATE" in statement
+        ):
             restore_started.set()
 
     event.listen(engine, "after_cursor_execute", observe)
@@ -423,3 +533,205 @@ def test_public_restore_during_dashboard_cleanup_preserves_lock_order(
             ).scalar()
             == 1
         )
+
+
+def _seed_bulk(conn, run_id, created_at, *, items, spans, events):
+    for index in range(1, items):
+        conn.execute(
+            text(
+                "INSERT INTO run_items (run_id, item_id, index, input, item_metadata, retry_count) "
+                "VALUES (:r, :i, :n, '{}', '{}', 0)"
+            ),
+            {"r": run_id, "i": f"i{index}", "n": index},
+        )
+    for index in range(1, spans):
+        conn.execute(
+            text(
+                "INSERT INTO spans (run_created_at, run_id, trace_id, span_id, name) "
+                "VALUES (:c, :r, 't', :s, 'x')"
+            ),
+            {"c": created_at, "r": run_id, "s": f"s{index:03d}"},
+        )
+    for index in range(events):
+        conn.execute(
+            text(
+                "INSERT INTO run_events (run_id, event_id, sequence, type, sent_at, payload) "
+                "VALUES (:r, :e, :n, 'item', now(), '{}')"
+            ),
+            {"r": run_id, "e": f"{run_id}-e{index}", "n": index},
+        )
+
+
+def test_purge_deletes_bulk_children_in_batches(migrated_postgres):
+    engine = migrated_postgres
+    now = datetime(2026, 9, 14)
+    from qym_platform.migrations_support import ensure_month_partitions_between
+
+    ensure_month_partitions_between(engine, now - timedelta(days=40), now)
+    created = now - timedelta(days=5)
+    with engine.begin() as conn:
+        # _seed_run adds one item and one span; _seed_bulk adds the rest.
+        _seed_run(conn, "bulk", created, deleted_at=now - timedelta(days=40))
+        _seed_bulk(conn, "bulk", created, items=7, spans=9, events=5)
+        _seed_run(conn, "keep", created)
+        _seed_bulk(conn, "keep", created, items=3, spans=3, events=2)
+    batches = []
+
+    def count(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("DELETE FROM ") and "RETURNING" in statement:
+            batches.append(statement.split()[2])
+
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        purged = retention.purge_soft_deleted_runs(
+            engine, grace_days=30, now=now, batch_size=2
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+    assert purged == ["bulk"]
+    # 9 spans in batches of 2 -> 5 statements; items and events batch too.
+    assert batches.count("spans") == 5
+    assert batches.count("run_items") == 4
+    assert batches.count("run_events") == 3
+    with engine.connect() as conn:
+        for table in ("runs", "run_items", "spans", "run_events"):
+            column = "id" if table == "runs" else "run_id"
+            left = conn.execute(
+                text(f"SELECT count(*) FROM {table} WHERE {column} = 'bulk'")
+            ).scalar()
+            assert left == 0, table
+        keep = {
+            table: conn.execute(
+                text(f"SELECT count(*) FROM {table} WHERE run_id = 'keep'")
+            ).scalar()
+            for table in ("run_items", "spans", "run_events")
+        }
+        assert keep == {"run_items": 3, "spans": 3, "run_events": 2}
+
+
+def test_purge_defers_a_run_whose_batch_hits_a_lock_timeout(migrated_postgres):
+    engine = migrated_postgres
+    now = datetime(2026, 9, 14)
+    from qym_platform.migrations_support import ensure_month_partitions_between
+
+    ensure_month_partitions_between(engine, now - timedelta(days=40), now)
+    with engine.begin() as conn:
+        _seed_run(
+            conn, "held", now - timedelta(days=5), deleted_at=now - timedelta(days=40)
+        )
+    holder = engine.connect()
+    try:
+        holder.execute(
+            text("SELECT 1 FROM run_items WHERE run_id = 'held' FOR UPDATE")
+        )
+
+        def short_timeout(conn, cursor, statement, parameters, context, executemany):
+            if statement == "SET LOCAL lock_timeout = '5s'":
+                cursor.execute("SET LOCAL lock_timeout = '200ms'")
+
+        event.listen(engine, "after_cursor_execute", short_timeout)
+        try:
+            assert (
+                retention.purge_soft_deleted_runs(engine, grace_days=30, now=now)
+                == []
+            )
+        finally:
+            event.remove(engine, "after_cursor_execute", short_timeout)
+    finally:
+        holder.rollback()
+        holder.close()
+    with engine.connect() as conn:
+        # The run stays soft-deleted with its items for the next tick.
+        assert conn.execute(
+            text("SELECT deleted_at IS NOT NULL FROM runs WHERE id = 'held'")
+        ).scalar()
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM run_items WHERE run_id = 'held'")
+            ).scalar()
+            == 1
+        )
+    assert retention.purge_soft_deleted_runs(engine, grace_days=30, now=now) == [
+        "held"
+    ]
+
+
+def _partition_shape(conn, name):
+    indexes = conn.execute(
+        text("SELECT count(*) FROM pg_indexes WHERE tablename = :t"), {"t": name}
+    ).scalar()
+    fks = conn.execute(
+        text(
+            "SELECT count(*) FROM pg_constraint WHERE conrelid = CAST(:t AS regclass) AND contype = 'f'"
+        ),
+        {"t": name},
+    ).scalar()
+    checks = conn.execute(
+        text(
+            "SELECT count(*) FROM pg_constraint WHERE conrelid = CAST(:t AS regclass) AND contype = 'c'"
+        ),
+        {"t": name},
+    ).scalar()
+    return indexes, fks, checks
+
+
+def test_attached_partition_matches_a_partition_of_and_takes_rows(migrated_postgres):
+    engine = migrated_postgres
+    now = datetime(2031, 1, 10)
+    from qym_platform.migrations_support import ensure_month_partitions_between
+
+    # Reference shape: a partition built by the migrations' PARTITION OF path.
+    ensure_month_partitions_between(engine, datetime(2030, 12, 1), datetime(2030, 12, 1))
+    # A reader of another month holds ACCESS SHARE on ``spans`` itself, which
+    # CREATE TABLE ... PARTITION OF (ACCESS EXCLUSIVE) would wait for; the
+    # ATTACH path (SHARE UPDATE EXCLUSIVE on the parent) does not.
+    reader = engine.connect()
+    try:
+        reader.execute(
+            text(
+                "SELECT count(*) FROM spans WHERE run_created_at >= '2030-12-01'"
+                " AND run_created_at < '2031-01-01'"
+            )
+        )
+        assert retention.ensure_span_partitions(engine, days_ahead=0, now=now) == [
+            "spans_y2031m01d10"
+        ]
+    finally:
+        reader.rollback()
+        reader.close()
+    with engine.begin() as conn:
+        assert _partition_shape(conn, "spans_y2031m01d10") == _partition_shape(
+            conn, "spans_y2030m12"
+        )
+        _seed_run(conn, "jan", now)
+        placed = conn.execute(
+            text("SELECT tableoid::regclass::text, id FROM spans WHERE run_id = 'jan'")
+        ).one()
+        assert placed[0] == "spans_y2031m01d10" and placed[1] is not None
+
+
+def test_partition_drop_gives_up_on_a_busy_lock_without_queueing(
+    migrated_postgres, monkeypatch
+):
+    engine = migrated_postgres
+    now = datetime(2026, 9, 14)
+    from qym_platform.migrations_support import ensure_month_partitions_between
+
+    ensure_month_partitions_between(engine, datetime(2026, 5, 1), now)
+    monkeypatch.setattr(retention, "PARTITION_LOCK_TIMEOUT", "100ms")
+    monkeypatch.setattr(retention, "PARTITION_LOCK_ATTEMPTS", 2)
+    monkeypatch.setattr(retention.time, "sleep", lambda _: None)
+    reader = engine.connect()
+    try:
+        reader.execute(text("SELECT count(*) FROM spans"))
+        assert (
+            retention.drop_expired_span_partitions(engine, retention_days=60, now=now)
+            == []
+        )
+    finally:
+        reader.rollback()
+        reader.close()
+    assert "spans_y2026m05" in _span_partitions(engine)
+    assert sorted(
+        retention.drop_expired_span_partitions(engine, retention_days=60, now=now)
+    ) == ["spans_y2026m05", "spans_y2026m06"]

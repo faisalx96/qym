@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlencode
 
@@ -24,8 +23,10 @@ from qym_platform.db.models import (
     RunWorkflowStatus,
 )
 from qym_platform.deps import get_db
+from qym_platform.permissions import can_view_run_items, redact_item_content
 from qym_platform.services.ingest_completeness import public_run_metadata
 from qym_platform.services.product_evals import (
+    ProductEvalConfigError,
     ProductEvalError,
     ProductEvalJob,
     ProductEvalJobManager,
@@ -36,10 +37,12 @@ from qym_platform.services.run_lifecycle import (
     REVIEW_RUN_STATUSES,
     TERMINAL_RUN_STATUSES,
 )
+from qym_platform.service_layout import job_execution_queued
 from qym_platform.settings import PlatformSettings
+from qym_platform.log import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Stop never touches a finished run, nor one in review (its status is the
 # review state; moving it would strand the review).
@@ -107,7 +110,7 @@ def _qym_run_url(run_id: Optional[str]) -> Optional[str]:
     if not run_id:
         return None
     settings = PlatformSettings()
-    return f"{settings.base_url.rstrip('/')}/run/{run_id}"
+    return f"{settings.public_ui_base}/run/{run_id}"
 
 
 def _qym_compare_url(run_ids: List[str]) -> Optional[str]:
@@ -115,7 +118,7 @@ def _qym_compare_url(run_ids: List[str]) -> Optional[str]:
     if len(clean) < 2:
         return None
     settings = PlatformSettings()
-    return f"{settings.base_url.rstrip('/')}/compare?{urlencode({'runs': clean}, doseq=True)}"
+    return f"{settings.public_ui_base}/compare?{urlencode({'runs': clean}, doseq=True)}"
 
 
 def _run_summary_payload(db: Session, run: Run) -> Dict[str, Any]:
@@ -444,6 +447,8 @@ def _stop_product_eval_runs(
         run.last_event_at = now
         stopped += 1
     db.commit()
+    if stopped:
+        logger.info("Stopped %d product eval run(s)", stopped)
     return stopped
 
 
@@ -484,6 +489,8 @@ def _stop_runs(db: Session, runs: List[Run]) -> int:
         run.last_event_at = now
         stopped += 1
     db.commit()
+    if stopped:
+        logger.info("Stopped %d product eval run(s)", stopped)
     return stopped
 
 
@@ -497,6 +504,7 @@ def _mark_run_stopped(db: Session, run: Run) -> bool:
     run.ended_at = now
     run.last_event_at = now
     db.commit()
+    logger.info("Product eval run %s stopped", run.id)
     return True
 
 
@@ -645,6 +653,7 @@ def build_product_eval_run_payload(
     try:
         total = int(total_raw)
     except Exception:
+        logger.debug("Run %s has an unreadable total_items", run.id, exc_info=True)
         total = len(items)
     total = max(total, len(items))
     pending = max(total - completed - failed - in_progress, 0)
@@ -722,19 +731,28 @@ def submit_product_eval(
             project_id=principal.project_id,
             run_count=request.run_count,
             store_bind=db.get_bind(),
+            # Split mode (QYM_SERVICE=main): queued for the workers service.
+            enqueue=job_execution_queued(),
+            db=db,
         )
     except ProductEvalError as exc:
         return _error_response(400, "invalid_request", str(exc))
     except ProductEvalQueueFull as exc:
+        logger.warning("Product eval refused: queue full (%s)", exc)
         return _error_response(
             429,
             "queue_full",
             str(exc),
             headers={"Retry-After": "30"},
         )
+    except ProductEvalConfigError as exc:
+        logger.error("Product eval refused: queue unavailable (%s)", exc)
+        return _error_response(503, "queue_unavailable", str(exc))
     except RuntimeError as exc:
+        logger.exception("Product eval submission failed")
         return _error_response(500, "preset_error", str(exc))
 
+    logger.info("Product eval job %s submitted by user %s", job.job_id, principal.user.id)
     job.wait_for_run(timeout=5.0)
     return JSONResponse(
         _ok(_job_payload(job, db=db, principal=principal)), status_code=202
@@ -846,4 +864,7 @@ def get_product_eval(
         return _ok(_db_eval_payload(db, identifier, runs))
 
     run = _require_run_access(db, principal, identifier)
-    return _ok(build_product_eval_run_payload(db, run, include_items=include_items))
+    payload = build_product_eval_run_payload(db, run, include_items=include_items)
+    if payload.get("items") and not can_view_run_items(db, principal, run):
+        redact_item_content(payload["items"])
+    return _ok(payload)

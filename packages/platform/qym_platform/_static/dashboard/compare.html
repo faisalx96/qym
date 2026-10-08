@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Compare Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
-<link rel="stylesheet" href="./static/dashboard.css?v=p1-20261005-3">
+<link rel="stylesheet" href="./static/dashboard.css?v=p1-20261008-cols">
   <link rel="stylesheet" href="./static/shell.css?v=p1-20261005-6">
   <script src="./static/qym_safe.js?v=p1-20261001"></script>
   <script src="./static/auth.js?v=p1-20261005"></script>
-  <script src="./static/shell.js?v=p1-20261005-8"></script>
+  <script src="./static/shell.js?v=p1-20261006-1"></script>
   <script src="./static/metrics.js?v=p1-20261005"></script>
   <script src="./static/run_details.js?v=p1-20261005"></script>
   <script src="./static/trace_viewer.js?v=p1-20261001"></script>
   <script src="./static/step_latency.js?v=p1-20261005-3"></script>
-  <script src="./static/playground.js?v=p1-20261005-3"></script>
+  <script src="./static/playground.js?v=p1-20261008-cols"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* Compare-specific styles */
@@ -1028,6 +1028,21 @@
     .compare-run-title-line .compare-run-status {
       margin-left: var(--space-sm);
       vertical-align: middle;
+    }
+
+    .compare-run-title-line .origin-badge {
+      margin-left: var(--space-xs);
+      vertical-align: middle;
+    }
+
+    .compare-experiment-link {
+      color: var(--accent-primary);
+      text-decoration: none;
+    }
+
+    .compare-experiment-link:hover,
+    .compare-experiment-link:focus-visible {
+      text-decoration: underline;
     }
 
     .compare-run-remove.compare-run-remove {
@@ -10296,6 +10311,17 @@
         }, { total: 0, completed: 0, failed: 0 });
       }
 
+      // Official runs link to their experiment detail (plan §11).
+      function compareExperimentLink(info) {
+        const experiment = info && info.experiment;
+        if (!experiment || !experiment.id) return '';
+        const nameHtml = escapeHtml(experiment.name || experiment.id);
+        const slug = info.project && info.project.slug;
+        if (!slug) return nameHtml;
+        const href = apiUrl('projects/' + encodeURIComponent(slug) + '/experiments?experiment=' + encodeURIComponent(experiment.id));
+        return `<a class="compare-experiment-link" href="${escapeAttr(href)}">${nameHtml}</a>`;
+      }
+
       function renderSummaries() {
         const container = el('run-summaries');
         const visibleContextRows = getVisibleCompareContextEntries();
@@ -10363,6 +10389,9 @@
             metaItem('Started', formatIsoDateTime(startedAt), { nowrap: true }),
             metaItem('Runtime', runtimeText, { nowrap: true }),
             metaItem('Version', versionText, { mono: true, nowrap: true }),
+            info.experiment && info.experiment.id
+              ? metaItem('Experiment', info.experiment.name || info.experiment.id, { nowrap: true, html: compareExperimentLink(info) })
+              : '',
           ].filter(Boolean).join('');
           const summaryHtml =
             '<div class="compare-run-summary-strip qym-stat-strip">' +
@@ -10399,6 +10428,7 @@
                       <span class="compare-run-status qym-badge ${escapeAttr(statusClass)} ${statusToneClass}">
                         <span class="compare-run-status-dot"></span>${statusText}
                       </span>
+                      ${info.origin === 'official' ? '<span class="qym-tag qym-tag--accent origin-badge" title="Dispatched by the platform and verified at ingest">Official run</span>' : ''}
                     </div>
                   </div>
                 </div>

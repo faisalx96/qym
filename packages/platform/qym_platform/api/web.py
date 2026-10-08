@@ -25,6 +25,10 @@ from qym_platform.security import generate_temporary_password, hash_password
 from qym_platform.settings import PlatformSettings
 
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 
@@ -152,6 +156,7 @@ def admin_create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    logger.info("User %s created by admin %s", user.id, principal.user.id)
     return {"id": user.id, "email": user.email}
 
 
@@ -229,6 +234,13 @@ def admin_update_user(
 
     db.commit()
     db.refresh(user)
+    logger.info(
+        "User %s updated by admin %s (role=%s, active=%s)",
+        user.id,
+        principal.user.id,
+        getattr(user.role, "value", user.role),
+        user.is_active,
+    )
     return {"id": user.id, "email": user.email, "ok": True}
 
 
@@ -301,8 +313,12 @@ def admin_reset_user_password(
         except IntegrityError:
             db.rollback()
             if attempt:
+                logger.exception("Password reset for user %s failed twice on the credential row", user.id)
                 raise
+            logger.debug("Concurrent password reset for user %s; retrying", user.id)
     response.headers["Cache-Control"] = "no-store"
+    # Never the temporary password.
+    logger.info("Password of user %s reset by admin %s", user.id, actor_id)
     return {"ok": True, "user_id": user.id, "temporary_password": temporary_password}
 
 
@@ -328,4 +344,5 @@ def admin_delete_user(
 
     db.delete(user)
     db.commit()
+    logger.info("User %s deleted by admin %s", user_id, principal.user.id)
     return {"ok": True, "deleted_id": user_id}

@@ -4,7 +4,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import sessionmaker
 
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
+
+logger = get_logger(__name__)
 
 
 def build_engine(settings: PlatformSettings | None = None, *, role: str = "api") -> Engine:
@@ -44,7 +47,31 @@ def build_engine(settings: PlatformSettings | None = None, *, role: str = "api")
             connect_args={"options": " ".join(options)},
         )
     # future=True by default in SQLAlchemy 2.x
-    return create_engine(url, **kwargs)
+    engine = create_engine(url, **kwargs)
+    # Never the URL: it carries the database password.
+    logger.info(
+        "database engine created (role=%s, backend=%s, pool_size=%s, max_overflow=%s)",
+        role,
+        engine.dialect.name,
+        kwargs.get("pool_size", "-"),
+        kwargs.get("max_overflow", "-"),
+    )
+    return engine
+
+
+def request_threadpool_size(settings: PlatformSettings) -> int:
+    """Threads for sync request handlers: the API pool's connection ceiling.
+
+    Starlette runs sync handlers on AnyIO's default limiter (40 threads), more
+    than the API pool's ``db_pool_size + db_max_overflow`` connections, so
+    under load the surplus threads waited ``db_pool_timeout_seconds`` and
+    failed. Capping the threads instead queues those requests, and never
+    raises the number of Postgres connections a process can open.
+    ``QYM_HTTP_THREADPOOL_SIZE`` overrides it.
+    """
+    if settings.http_threadpool_size > 0:
+        return int(settings.http_threadpool_size)
+    return max(1, int(settings.db_pool_size) + int(settings.db_max_overflow))
 
 
 def _build_engine():

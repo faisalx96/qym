@@ -14,8 +14,9 @@ The qym platform stores evaluation runs, datasets, traces, reviews, and analysis
 8. [Datasets](#datasets)
 9. [Analysis, reviews, and traces](#analysis-reviews-and-traces)
 10. [Run review and deletion](#run-review-and-deletion)
-11. [Connect the SDK and CLI](#connect-the-sdk-and-cli)
-12. [Administration](#administration)
+11. [Experiments (Evaluation Service)](#experiments-evaluation-service)
+12. [Connect the SDK and CLI](#connect-the-sdk-and-cli)
+13. [Administration](#administration)
 
 ## Projects and navigation
 
@@ -27,9 +28,10 @@ The global navigation contains **Projects** and **Docs**. After opening a projec
 - **Charts** — trends across runs.
 - **Runs** — searchable run table and cohort selection.
 - **Models** — model-level performance summaries.
+- **Experiments** — launch and follow Evaluation Service runs, with a **Queue** tab.
 - **Reviews** — root-cause correction review.
 - **Datasets** — versioned test data.
-- **Project Settings** — members, API keys, and LLM connections.
+- **Project Settings** — members, API keys, LLM connections, and Evaluation Service environments.
 
 Admins additionally see **Admin** and **Deleted Runs**.
 
@@ -97,7 +99,9 @@ The key owner, a project manager, or a global admin can revoke a key.
 
 ### LLM connections
 
-Any project member can add, test, choose a default, or remove an OpenAI-compatible LLM connection. These connections power platform-side AI analysis. They are separate from SDK judge configuration (`QYM_JUDGE_*`).
+Any project member can add, test, choose a default, or remove an OpenAI-compatible LLM connection. These connections power platform-side AI analysis and are the **project models** offered when launching experiments. They are separate from SDK judge configuration (`QYM_JUDGE_*`).
+
+Clear **Available for experiments** on a connection to keep it for root cause analysis only; it then no longer appears in the experiments model picker.
 
 Each connection stores a base URL, a model, and an encrypted API key; the UI only shows a masked last-four-character hint. The first connection becomes the project default, and a different connection can be chosen for an individual analysis run. Updating a connection without entering a new key preserves the stored key.
 
@@ -152,6 +156,7 @@ The run page leads with **Overview**, followed by repeat analysis when applicabl
 ### Overview and filters
 
 - Summary cards show scores, pass rates, latency, status, and run metadata.
+- **Versioning details** lists the run's free-form version keys, one row per key: what the SDK sent (`versioning_details` in the evaluator config, `--versioning-detail KEY=VALUE` on the CLI) plus, for an official run, its experiment's keys. The panel is hidden when the run has none.
 - All metadata-category cards remain visible so changing a filter does not hide the other available categories.
 - Metric chips cycle through **any → passed → failed**. Active metric conditions are combined with AND.
 - Metadata and review filters narrow the same item list.
@@ -271,6 +276,222 @@ Deleting a project archives it when it already contains runs. An empty project c
 
 An archived project leaves the project list and switcher and its API keys stop working, but admins and its members still open it read-only from **Admin → Projects** or a link: runs, run pages, compare, dashboard, charts, models, datasets and settings, under a notice that says it is archived. Nothing can be changed until an admin unarchives it, except that admins and managers can still revoke API keys and remove members, and an admin can delete the project. Deleted runs of an archived project stay in **Deleted Runs** with "Purge paused while the project is archived": their grace period resumes where it stopped once the project is unarchived. **Unarchive** asks first and names the API keys that start working again, with **Revoke keys first** to open the project's API keys.
 
+## Experiments (Evaluation Service)
+
+An experiment launches qym evaluations on one or more remote **Evaluation Service** deployments, called **environments**. The platform builds the launch form from each environment's live settings schema, fills LLM settings from your project models, sends one job per configuration, follows each job until it finishes, and links the resulting run back to the experiment.
+
+Operators: deployment, environment variables, and troubleshooting are in the [operations runbook](../../../docs/internal/OPERATIONS.md#evaluation-service-experiments).
+
+### Environments
+
+Environments live under **Project Settings → Environments**. Every project member can view them. Only project managers (and global admins) can add, edit, test, refresh, or delete them.
+
+**Add environment** opens a three-step dialog:
+
+1. **Connect**: a name, the **Base URL**, and the service's API key. Include the service's `EVAL_SERVER_PREFIX` in the URL; qym appends `/evals` itself. **Test & connect** checks the key and fetches the settings schema before anything is saved.
+2. **Review settings**: a read-only preview of the form generated from the schema.
+3. **Group LLM settings**: confirm the model slots (below).
+
+Rules that apply to every environment:
+
+- **Ingest with this project's key.** The deployment must send its runs to qym with an API key of *this* project (`QYM_API_KEY` on the service's workers). Otherwise the runs land in another project and never count as official. The dialog links to **Create a project API key**.
+- An environment URL belongs to one project. A URL already registered in another project is refused with the name of the owning project.
+- The URL must use `https://` unless the operator set `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true`.
+- The key is stored encrypted and shown only as `••••last4`. Leaving the key empty when editing keeps the stored key.
+- Deleting an environment that experiments or presets use disables it instead, so their history stays intact.
+
+The environment drawer shows its schema (with **Refresh schema**), its **LLM model slots**, the **Official defaults**, and **Policies**:
+
+An environment has two schemas, both re-read when you test the connection, refresh the schema, or select the environment on the new-experiment page: the **settings** schema (`env_overrides`) and, from Evaluation Service v1.1, the **evaluator** schema (the `evaluator.config` inputs such as `samples`, `metric_concurrency` or `timeout`). A service older than v1.1 has no evaluator schema; qym then uses its standard list of inputs and says so on the **Evaluation inputs** card. Nothing else changes for such a service.
+
+| Policy | Default | Meaning |
+|---|---|---|
+| **Default priority** | `NORMAL` | Priority used when the launch form leaves it on **Environment default**. |
+| **Max priority** | `NORMAL` | Highest priority allowed on this environment. Raise it to `HIGH` to allow preempting launches. |
+| **Max in-flight jobs** | `5` | Jobs qym keeps submitted or running on this environment at once. The rest wait in the queue. |
+| **Allow connection keys** | off | Send model API keys to this service. Changing the URL turns it off again. |
+| **Ranking metric** and k | project default | How **Best run** ranks runs on this environment. |
+
+The health dot is **Healthy**, **Error**, or **Unknown**. **Test** checks it again. When the service rejects the key, dispatch to the environment pauses until a check passes.
+
+### Model slots
+
+A **model slot** groups the schema fields that describe one LLM (model name, base URL, and API key) so a launch can fill them from a project model. qym proposes slots automatically:
+
+- Every entry of `LLM_OVERRIDES.endpoints` becomes an `endpoint:<name>` slot. `endpoint:primary` is always proposed and required.
+- Top-level fields that share a prefix and end in `_MODEL`, `_BASE_URL`, `_API_KEY`, or a similar suffix become one `flat:<PREFIX>` slot. A group with only a model field is still a slot.
+
+In **Group LLM settings** a manager can rename slots, map or unmap fields, merge slots, add an endpoint slot (for example `fast`), and remove slots (their fields become plain inputs). **Confirm grouping** saves them. Until the slots are confirmed, the launch form still works but shows LLM fields as raw inputs, with the banner "Group LLM settings to pick project models". The environments table flags such an environment with **Needs LLM grouping**.
+
+When a schema refresh changes the fields, confirmed slots whose fields still exist carry over. Slots whose fields disappeared become stale, new candidates are proposed, and the banner returns until a manager confirms again.
+
+### Project models and temporary models
+
+At launch, each slot takes one binding:
+
+| Binding | What it sends |
+|---|---|
+| **Project models** | The model, base URL, and key of a project LLM connection marked **Available for experiments**. The dispatcher reads the connection again each time it submits a job, so a rotated key is picked up on retry. |
+| **+ Temporary model** | A label, model, base URL, and API key typed for this experiment only. |
+| **Inherit** | Nothing. The worker keeps its own setting. |
+
+Model keys are only sent to environments with **Allow connection keys** turned on. On other environments, a connection that carries a key is shown as unavailable ("Model API keys are not sent to this environment") and temporary models are not accepted. A connection without a key, or a slot without an API-key field, works on any environment.
+
+A temporary model's key is encrypted, never shown again, and deleted once every job of the experiment has finished or is blocked. Retrying a job after that asks for the key again. Clones, presets, and best-run bases copy the label, model, and base URL, never the key. A project manager can tick **Save to project models** to turn a temporary model into a project LLM connection instead.
+
+If a bound connection is deleted or made unavailable before its job is sent, the job becomes `BLOCKED` with a reason such as `Model "X" no longer exists`.
+
+### Launching an experiment
+
+Open **Experiments → New experiment**. The form has one section per step and a live **Preview** on the side:
+
+1. **Environments**: one or more. Each selected environment gets one job per configuration. **+ New environment** opens the environment dialog.
+2. **Dataset**: a **Project dataset** (optionally pinned to a version or alias) or a **Custom string** sent as `evaluator.dataset`. Runs on a custom string are never ranked as best runs.
+3. **Start from**: the base configuration that your edits are layered on.
+
+   | Base | Loads |
+   |---|---|
+   | **Official defaults** | The environment's published official defaults (see below). |
+   | **Best run** | The configuration of a top-ranked official run on the selected dataset version. |
+   | **Saved preset** | A named preset saved on the environment. |
+   | **Blank** | Nothing; every setting inherits the environment's value. |
+   | **Clone** | An earlier experiment, from its **Clone** action or from **Rerun with this config** on a run page. |
+
+   A changed setting shows a dot and can be reset to the base value. The header counts the **Diff vs base**. **Reset all to base** drops every edit, and **Switch base** keeps the edits that also exist on the new base. When a base was authored on an older schema, settings that no longer exist are dropped and listed ("Some settings are no longer supported").
+4. **Models**: one card per confirmed slot.
+5. **Settings**: the generated form, grouped, with **Search settings** and **Changed only**. Only changed values are sent; an unset field shows "Inherited from environment".
+6. **Advanced**: collapsed by default, with three tabs.
+   - **Evaluation inputs**: the `evaluator.config` fields (`samples`, `report_k`, `metric_concurrency`, timeouts, retries, and so on) and custom **Run metadata** keys. The fields come from the selected environments' evaluator schema, so a field the service adds appears without a qym update; for a service older than v1.1 the card shows the standard inputs. The fields work like the settings: a value that does not fit its field (say, text in a number field) is edited as JSON, a value no field shows is listed under **Other values** where you can edit or remove it, and a field one of the selected environments does not have is tagged "not in …". Keys starting with `qym_` are reserved. The platform fills `run_name`, `live_mode` (always `platform`), the model from the `primary` slot and, for v1.1 services, `versioning_details` from **Versioning details**, and shows them read-only.
+   - **Role overrides**: one row per role in the schema (`main`, `router`, …) with `endpoint`, `temperature`, `max_tokens`, and the other role fields. An empty cell keeps the service default.
+   - **Raw JSON**: the whole configuration document, kept in sync with the form. Keys never appear here; model slots show a `connection_id` or a secret reference.
+7. **Priority and name**: **Environment default**, `LOW`, `NORMAL`, or `HIGH`, the **Experiment name**, and optional **Versioning details**: one `key=value` per line. Every run the experiment launches records them under **Versioning details**, and **Clone** / **Rerun with this config** copy them. An Evaluation Service v1.1 also receives them (as `evaluator.config.versioning_details`) and records them with its own `agent_version`, `image_version` and `kb_version`; there the service's value wins for a key both set (`kb_version` is always the KB the job used). On an older service they are added when the run arrives, and the experiment's value wins. The API takes them as `versioning_details` (a JSON object) on `POST /v1/projects/{id}/experiments`.
+
+The **Preview** validates the configuration against every selected environment as you edit, lists the generated run names (`{experiment name} · {swept values}`, plus the environment name when you launch on several), and enables **Launch** once the configuration is valid. A setting that one of the selected environments does not have is an error for that environment; reset the field or deselect the environment.
+
+#### Sweeps and linked groups
+
+Any scalar setting, and any model slot, can take several values. Use **Sweep several values** on a field to turn it into a list of values; numbers also offer **Range…** (start, stop, step). Picking several project models in a slot sweeps the model.
+
+Every swept field is an axis of a grid, so two models × two thresholds give four configurations. Under **Sweeps**, select two or more swept fields and choose **Link selected** to vary them together instead: the n-th values run together, for example model X with temperature 0.2 and model Y with 0.7. Linked fields must have the same number of values.
+
+The job count is `configurations × environments`. It is capped at 64 by default (the operator setting `QYM_EVAL_SWEEP_MAX_JOBS`). Over the cap, the preview shows **Over the run limit** and **Launch** stays disabled.
+
+Launches are also rate-limited per user, to 30 per hour by default. Previews are not counted.
+
+#### HIGH priority
+
+A `HIGH` job makes the Evaluation Service cancel every running `LOW` or `NORMAL` job on that environment, for all users. So `HIGH` needs all three of:
+
+- the environment's **Max priority** set to `HIGH`;
+- a project manager or global admin launching it;
+- confirmation of **Launch at HIGH** in the warning dialog.
+
+Retrying a `HIGH` job asks for the same confirmation.
+
+### Experiment detail: matrix, compare, retry, cancel
+
+The **Experiments** list shows each experiment's environments, base source, job counts, best score, and creator. Opening one shows:
+
+- **Matrix**: one row per configuration and one column per environment. Each cell shows the job status, the headline metric, and a link to the run. Tick cells and use **Compare selected** to open their runs side by side. **Save as preset** saves a cell's configuration as a saved preset on its environment; **Promote to official** opens the official defaults editor with it.
+- **Setting vs metric**: the mean metric of each finished run against one swept setting, one line per environment.
+- **Job history**: every job, including earlier attempts, with **Cancel** and **Retry** per job.
+- A queue strip with the experiment's unfinished jobs and **Open in queue →**.
+
+The experiment's creator and project managers can cancel and retry. **Cancel experiment** cancels every queued or running job. **Retry failed** queues a new attempt of every failed, timed-out, cancelled, or blocked job; earlier attempts stay in the history. Each job can be retried once; after that, retry its newest attempt.
+
+Job statuses:
+
+| Status | Meaning |
+|---|---|
+| `QUEUED` | Waiting in qym, for example for a free in-flight slot. |
+| `SUBMITTING` | Being sent to the service. |
+| `SUBMITTED` | Accepted by the service and waiting in its queue. |
+| `RUNNING` | Running on the service, or its linked run has started. |
+| `SUCCEEDED` / `FAILED` | Finished. A linked run that failed or stopped early counts as failed. |
+| `BLOCKED` | Cannot be sent without a change, for example a missing model or a configuration the service rejected. Fix the cause, then **Retry**. |
+| `CANCELLING` | Cancel requested; the dispatcher is stopping the remote job. |
+| `CANCELLED` | Cancelled. The linked run, if any, is marked `STOPPED`. |
+| `TIMED_OUT` | Running, but with no progress from the service or the run for 2h15m. |
+
+The experiment status summarizes its jobs: `QUEUED`, `RUNNING`, `COMPLETED` (all succeeded), `PARTIAL` (some succeeded), `FAILED`, or `CANCELLED`.
+
+### Official defaults and saved presets
+
+Each environment can have **Official defaults**: a curated, versioned configuration that is the default base of every launch on it. Open it from the environment drawer in **Project Settings → Environments**.
+
+- Only project managers publish. **Edit and publish** opens the launch form without sweeps. Publishing requires release notes ("What changed and why") and creates the next version. Earlier versions never change and stay in the **Version history**.
+- **Run official defaults**, on the environment row and in the launch form, launches a one-job experiment from the latest version.
+- Official defaults cannot hold temporary models. Rebind those slots to project models before **Publish** is enabled.
+- **Saved presets** are named starting points that any member can save, for example from a matrix cell. Open one with **Open in launch form**.
+
+**Promote to official** is offered on a saved preset, on a completed official run (in the run page's Experiment panel), and on a matrix cell. It always opens the official defaults editor, prefilled with that configuration and compared with the current version. Nothing is published until a manager clicks **Publish**.
+
+### Best run and drift warnings
+
+**Start from → Best run** first asks what to rank on, and retrieves nothing until you click **Find best runs**:
+
+- **Dataset** and **Dataset version**: only datasets and versions that have eligible runs are listed, with their run counts.
+- One select per **versioning** key the runs reported, for example **Agent version** and **KB version**.
+
+Each part left on **Any** is not filtered. Leaving everything on **Any** ranks every run of the environment, across datasets and versions, including runs on a custom dataset string. Scores from different datasets or versions aren't strictly comparable, so the picker reminds you when no version is chosen. Pick a version to compare like with like. When a chosen version has no eligible run, the picker says so and offers the latest version that has runs. Change the selects and click **Update best runs** to rank again.
+
+The API equivalents are `GET …/eval-environments/{id}/best-runs/scope` for the choices and `GET …/eval-environments/{id}/best-runs?dataset_id=&dataset_version_id=&versioning=agent_version%3Dv1.12` for the ranking. Leave out a parameter to leave that part open.
+
+- A run is eligible when it is official, linked to a job on the environment, not deleted, completed (a run that moved on to submitted or approved review also counts; a rejected one does not), and has a score for the chosen metric.
+- **Rank by metric** defaults to the environment's ranking metric, then to the most common metric. Runs are ordered by mean score (in the metric's direction), then pass@k, then size (larger first), then recency.
+- Runs with more than 20% errored items are hidden unless you tick **Include runs with over 20% errored items**.
+
+Choosing a run loads its configuration, re-mapped onto the current schema. Deleted or unavailable project models become unbound slots with a warning. Temporary models are left unbound ("Temporary models were left unbound"): pick a project model, or use the temporary model again and enter its key.
+
+The header warns **Agent or KB versions changed since this run** when the service's latest reported agent or knowledge-base version differs from the run's. Launching reproduces the configuration, not the agent or knowledge base the run used, so scores may differ.
+
+### The queue
+
+**Experiments → Queue** lists every unfinished job of the project in the order the dispatcher picks them up. Choose one environment or **All environments**, and filter by status or **Only my jobs**. The page refreshes automatically and pauses while the tab is hidden.
+
+- One card per environment shows **In flight** against its cap, **Queued**, **Blocked**, the health, and a banner while a `HIGH` job is active. A full environment says "At capacity: queued jobs start as running ones finish."
+- **Our jobs** shows each job's experiment, environment, priority, status, `wait_reason` (why it is not moving), creator, elapsed time, and linked-run progress.
+- Cancel one job, the selected jobs (**Cancel selected**), or **Cancel all queued in experiment**. The confirmation splits the selection: **Queued here (not yet sent)** jobs are removed immediately; **Submitted or running on the service** jobs are hard-stopped, and their partial results stay on the linked run; jobs you may not cancel are skipped. You can give an optional reason.
+- **Remote queue** shows what each environment's service holds, from a snapshot refreshed about every 30 seconds. A remote job that matches no job of this project is an **Orphan**. A remote job whose qym job already finished (for example timed out) but that the service still runs is **Stale**; it still counts toward the environment's in-flight cap. Only project managers can cancel orphans and stale jobs; that call goes straight to the service and is audit-logged.
+
+### Official and local runs
+
+A run is **official** only when the platform dispatched it to a registered environment and ingest verified its one-time launch token. Everything else (a laptop, CI, or copied metadata) is **local**.
+
+- Official runs carry an **Official run** badge. The run page adds an **Experiment** panel (environment, base source, swept params, remote job id, job status, versioning) with **Rerun with this config** and, for completed runs, **Promote to official**.
+- The **Runs**, **Dashboard**, **Charts**, and **Models** pages have an origin filter: **All**, **Official**, or **Local**.
+- Only official runs are ranked as best runs.
+
+"Official defaults" (the preset) and "official run" (the origin) are separate ideas.
+
+From the CLI:
+
+```bash
+qym run list --origin official --json
+qym run list --origin local
+```
+
+`--origin` accepts `official`, `local`, or `all` (the default). Each JSON row carries `origin` and an `experiment` reference (`id`, `name`, `job_id`), or `null`. The API equivalent is `GET /api/runs?origin=official`.
+
+### Filtering by agent, KB or any reported version
+
+When a job finishes, the Evaluation Service reports `versioning_metadata` (today `agent_version` and `kb_version`). Every key it reports becomes a filter, so a key the service adds later shows up without a platform change.
+
+- The **Runs**, **Dashboard**, **Charts**, and **Models** pages show one dropdown per key next to the other filters (for example **All agent versions**, **All kb versions**). Values are listed newest first. **Empty / Missing** matches runs that don't report the key, such as local runs.
+- Values you pick within one key are alternatives. Picks across different keys must all match: agent `v1.12` **and** KB `381`.
+- **Experiments** has one select per key. An experiment matches when one of its job's runs matches every selected key.
+- The versions appear on a run a few seconds after its job finishes, once the dashboard catches up.
+
+From the CLI and API:
+
+```bash
+qym run list --versioning agent_version=v1.12 --versioning kb_version=381 --json
+qym run list --versioning agent_version=v1.12 --versioning agent_version=v1.13
+qym run list --versioning prompt_version=__empty__
+```
+
+Each JSON row carries `versioning`, for example `{"agent_version": "v1.12", "kb_version": "381"}`, or `{}`, and `versioning_details`, the run's free-form keys from the SDK or its experiment (shown, not filtered). The API equivalents are `GET /api/runs?versioning=agent_version%3Dv1.12` and `GET /v1/projects/{id}/experiments?versioning=agent_version%3Dv1.12`. Dashboard API calls take `"versioning": {"agent_version": ["v1.12"]}` in their `filters`.
+
 ## Connect the SDK and CLI
 
 Create a project API key, then configure the process that runs qym:
@@ -315,4 +536,4 @@ Raw upload files are parsed into database rows and are not retained as uploaded 
 
 Global admins can manage users and projects, inspect deleted runs, and restore runs. There are no organization-tree or platform-wide personal-key screens.
 
-For deployment, auth bootstrap, migrations, backups, health checks, and the complete environment reference, see [`packages/platform/README.md`](../README.md). The live OpenAPI schema is available at `/openapi.json`, interactive API docs at `/api-docs`, and health status at `/healthz`.
+For deployment, auth bootstrap, migrations, backups, health checks, and the complete environment reference, see [`packages/platform/README.md`](../README.md). Storage maintenance, recovery, and the Evaluation Service dispatcher are covered in the [operations runbook](../../../docs/internal/OPERATIONS.md). The live OpenAPI schema is available at `/openapi.json`, interactive API docs at `/api-docs`, and health status at `/healthz`.

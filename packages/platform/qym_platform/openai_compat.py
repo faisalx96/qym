@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 
 def _should_retry_with_max_completion_tokens(exc: Exception) -> bool:
     message = str(exc).lower()
@@ -38,6 +42,7 @@ async def create_chat_completion_compat(client: Any, **kwargs: Any) -> Any:
             ):
                 call_kwargs["max_completion_tokens"] = call_kwargs.pop("max_tokens")
                 changed_max_tokens = True
+                logger.info("LLM endpoint refused max_tokens; retrying with max_completion_tokens")
                 continue
             if (
                 not removed_response_format
@@ -46,6 +51,8 @@ async def create_chat_completion_compat(client: Any, **kwargs: Any) -> Any:
             ):
                 call_kwargs.pop("response_format", None)
                 removed_response_format = True
+                logger.info("LLM endpoint refused response_format; retrying without it")
                 continue
+            logger.warning("chat completion failed (attempt %d)", attempt + 1, exc_info=True)
             raise
     raise RuntimeError("LLM compatibility retries were exhausted")

@@ -213,6 +213,10 @@
     filterStatuses: new Set(),
     filterVersions: new Set(),
     filterUsers: new Set(),
+    filterOrigin: 'all',
+    // Evaluation Service versioning_metadata: key -> Set of selected values.
+    filterVersioning: new Map(),
+    versioningFilterIds: new Map(),
     knownVersions: new Set(),
     knownVersionsProjectSlug: '',
     currentView: window.__QYM_INITIAL_VIEW__ || 'charts',
@@ -298,7 +302,38 @@
     { key: GROUP_CONSISTENCY_COLUMN_KEY, label: 'Consistency' },
     { key: GROUP_RELIABILITY_COLUMN_KEY, label: 'Reliability' },
   ];
-  const RUNS_TABLE_BASE_COLUMN_COUNT = 11;
+  const RUNS_TABLE_BASE_COLUMN_COUNT = 12;
+  // Runs table columns the Columns menu shows and hides (Runs table only),
+  // in table order. Their keys share state.visibleMetrics with the metric
+  // columns; the prefix keeps them apart from any metric name. Actions holds
+  // the row's controls and always shows.
+  const RUNS_BASE_DISPLAY_COLUMNS = [
+    { column: 'run', label: 'Run name' },
+    { column: 'status', label: 'Status' },
+    { column: 'task', label: 'Task' },
+    { column: 'model', label: 'Model' },
+    { column: 'dataset', label: 'Dataset' },
+    { column: 'owner', label: 'Owner' },
+    { column: 'time', label: 'Date' },
+    { column: 'analysis', label: 'Analysis' },
+    { column: 'experiment', label: 'Experiment' },
+    { column: 'version', label: 'Version' },
+    { column: 'duration', label: 'Duration' },
+  ].map(col => Object.assign(col, { key: `__runs_col_${col.column}__` }));
+  const RUNS_BASE_COLUMN_KEYS = RUNS_BASE_DISPLAY_COLUMNS.map(col => col.key);
+  const RUNS_RUN_NAME_COLUMN_KEY = RUNS_BASE_DISPLAY_COLUMNS[0].key;
+  // Column ('run', 'task', ...) of each Runs column the reader hid.
+  function hiddenRunsBaseColumns() {
+    const vis = state.visibleMetrics;
+    if (vis === null) return [];
+    return RUNS_BASE_DISPLAY_COLUMNS.filter(col => !vis.has(col.key)).map(col => col.column);
+  }
+  // Is a Runs column laid out? A hidden Run name keeps its selection
+  // checkbox while rows are being selected (see the hidden-column CSS).
+  function isRunsColumnRendered(column, hidden = hiddenRunsBaseColumns()) {
+    if (!hidden.includes(column)) return true;
+    return column === 'run' && !!state.selectMode;
+  }
   const MODELS_VIEW_SCORE_STAT_KEYS = ['passAtK', 'passHatK', 'maxAtK', 'consistency', 'reliability', 'avgScore', 'failedCount', 'totalRetries', 'avgLatency', 'medianLatency', 'correctDistribution'];
   const MODELS_VIEW_NUMERIC_STAT_KEYS = ['avgScore', 'minScore', 'maxAtK', 'stddevScore', 'totalScoreSum', 'failedCount', 'totalRetries', 'avgLatency', 'medianLatency'];
   function _traceMetricsForRuns(runs = null) {
@@ -344,12 +379,17 @@
     const systemCols = Number(visibleSystemColumnCount) || 0;
     const traceMetricCols = Number(visibleTraceMetricCount) || 0;
     const traceCols = traceMetricCols > 0 ? traceMetricCols + 1 : 0; // +1 separator
-    return RUNS_TABLE_BASE_COLUMN_COUNT + metricCols + systemCols + traceCols;
+    // A hidden Run name still counts: select mode shows it again without a
+    // re-render, and a span one column too wide is harmless.
+    const hiddenCols = hiddenRunsBaseColumns().filter(column => column !== 'run').length;
+    return RUNS_TABLE_BASE_COLUMN_COUNT - hiddenCols + metricCols + systemCols + traceCols;
   }
 
   function getMetricDisplayName(metricKey) {
     const groupColumn = GROUP_DISPLAY_COLUMNS.find(col => col.key === metricKey);
     if (groupColumn) return groupColumn.label;
+    const runsColumn = RUNS_BASE_DISPLAY_COLUMNS.find(col => col.key === metricKey);
+    if (runsColumn) return runsColumn.label;
     const systemColumn = SYSTEM_DISPLAY_COLUMNS.find(col => col.key === metricKey);
     if (systemColumn) return systemColumn.label;
     const traceMetric = TRACE_METRICS.find(tm => tm.key === metricKey);
@@ -461,6 +501,37 @@
   // One shared escaping rule (qym_safe.js): & < > " ' so it is attribute-safe.
   function escapeHtml(str) {
     return QymSafe.escapeHtml(str || '');
+  }
+
+  // Origin (plan §11): "Official run" is the badge for a platform-dispatched,
+  // ingest-verified run. It is distinct from an environment's "Default preset".
+  const ORIGIN_FILTER_VALUES = ['all', 'official', 'local'];
+  const OFFICIAL_RUN_BADGE_TITLE = 'Dispatched by the platform and verified at ingest';
+
+  function getRunOrigin(run) {
+    return run && run.origin === 'official' ? 'official' : 'local';
+  }
+
+  function renderOfficialRunBadge(run) {
+    if (getRunOrigin(run) !== 'official') return '';
+    return `<span class="qym-tag qym-tag--accent origin-badge" title="${escapeHtml(OFFICIAL_RUN_BADGE_TITLE)}">Official run</span>`;
+  }
+
+  function experimentUrlForRun(run) {
+    const experimentId = run && run.experiment && run.experiment.id;
+    const slug = (state.currentProject && state.currentProject.slug) || getProjectSlugFromPath();
+    if (!experimentId || !slug) return '';
+    return projectUrl(slug, `experiments?experiment=${encodeURIComponent(experimentId)}`);
+  }
+
+  function renderExperimentCell(run) {
+    const experiment = run && run.experiment;
+    if (!experiment || !experiment.id) return '<span class="metric-na">—</span>';
+    const name = String(experiment.name || String(experiment.id).slice(0, 8));
+    const label = name.length > 28 ? name.slice(0, 27) + '…' : name;
+    const href = experimentUrlForRun(run);
+    if (!href) return `<span class="experiment-name" title="${escapeHtml(name)}">${escapeHtml(label)}</span>`;
+    return `<a class="experiment-link" href="${escapeHtml(href)}" title="Open experiment ${escapeHtml(name)}" onclick="event.stopPropagation()">${escapeHtml(label)}</a>`;
   }
 
   const MODEL_REASONING_BADGE_TITLE = 'Reasoning model';
@@ -749,6 +820,8 @@
       statuses: [...state.filterStatuses].sort(),
       versions: [...state.filterVersions].sort(),
       users: [...state.filterUsers].sort(),
+      origin: state.filterOrigin,
+      versioning: versioningFilters(),
     });
   }
 
@@ -858,6 +931,38 @@
     if (value === EMPTY_FILTER_VALUE) return 'Empty / Missing';
     const label = getOwnerFilterLabel(value);
     return `<span class="owner-filter-label"><span class="owner-avatar">${escapeHtml(getInitials(label))}</span><span class="owner-filter-text">${escapeHtml(label)}</span></span>`;
+  }
+
+  // ── Versioning filters (Evaluation Service versioning_metadata) ──
+  // One dropdown per key the project's runs report: agent_version, kb_version
+  // or any key the service adds later. Values of a key are alternatives;
+  // different keys must all match (the server applies the same rule).
+
+  function getRunVersioning(run) {
+    return run && run.versioning && typeof run.versioning === 'object' ? run.versioning : {};
+  }
+
+  function activeVersioningFilters() {
+    return [...state.filterVersioning].filter(([, selection]) => selection.size > 0);
+  }
+
+  function versioningFilters() {
+    const filters = {};
+    activeVersioningFilters().forEach(([key, selection]) => { filters[key] = [...selection].sort(); });
+    return filters;
+  }
+
+  function matchesVersioningFilters(run, skipKey = null) {
+    const versioning = getRunVersioning(run);
+    return activeVersioningFilters().every(([key, selection]) =>
+      key === skipKey || matchesFilterSelection(selection, versioning[key]));
+  }
+
+  // "kb_version" -> "KB version": short words read as acronyms.
+  function getVersioningKeyWords(key) {
+    const words = String(key).replace(/[_-]+/g, ' ').trim().split(/\s+/).filter(Boolean)
+      .map(word => (word.length <= 2 ? word.toUpperCase() : word.toLowerCase()));
+    return words.length ? words.join(' ') : String(key);
   }
 
   function summarizeFilterSelection(selection, labelFn = null) {
@@ -1090,8 +1195,11 @@
 
   function setVisibleMetricsForAvailable(availableMetrics, checkedMetrics) {
     const availableSet = new Set(availableMetrics || []);
+    // The Runs columns are always known, so a choice made in another view
+    // (which does not offer them) never hides them.
     const knownMetrics = Array.from(new Set([
       ...state.allMetrics,
+      ...RUNS_BASE_COLUMN_KEYS,
       ...(availableMetrics || []),
       ...(state.visibleMetrics ? [...state.visibleMetrics] : []),
     ]));
@@ -1100,27 +1208,54 @@
       ? knownMetrics.filter(m => !availableSet.has(m) && state.visibleMetrics.has(m))
       : knownMetrics.filter(m => !availableSet.has(m));
 
-    const merged = new Set([...preserved, ...checkedMetrics]);
+    const checked = new Set(checkedMetrics);
+    // At least one column stays: a Runs table with every offered column
+    // unchecked (None, or the last box cleared) keeps Run name.
+    if (availableSet.has(RUNS_RUN_NAME_COLUMN_KEY) && !(availableMetrics || []).some(m => checked.has(m))) {
+      checked.add(RUNS_RUN_NAME_COLUMN_KEY);
+    }
+    const merged = new Set([...preserved, ...checked]);
     state.visibleMetrics = merged.size === knownMetrics.length ? null : merged;
+  }
+
+  // Saved column choice. Version 2 also lists the Runs columns (Run name,
+  // Status, ...). A version 1 choice (a bare array, saved before those
+  // columns could be hidden) only listed metric columns: it reads back with
+  // every Runs column shown.
+  const METRIC_VISIBILITY_STORAGE_KEY = 'qym_visible_metrics';
+  const METRIC_VISIBILITY_STORAGE_VERSION = 2;
+  function readSavedMetricVisibility(raw) {
+    let saved = null;
+    try {
+      saved = JSON.parse(raw || 'null');
+    } catch (e) {
+      return null;
+    }
+    if (Array.isArray(saved)) return [...saved, ...RUNS_BASE_COLUMN_KEYS];
+    if (saved && typeof saved === 'object' && Array.isArray(saved.visible)) return saved.visible;
+    return null;
   }
 
   function saveMetricVisibility() {
     try {
       if (!state.visibleMetrics) {
-        sessionStorage.removeItem('qym_visible_metrics');
+        sessionStorage.removeItem(METRIC_VISIBILITY_STORAGE_KEY);
       } else {
-        sessionStorage.setItem('qym_visible_metrics', JSON.stringify([...state.visibleMetrics]));
+        sessionStorage.setItem(METRIC_VISIBILITY_STORAGE_KEY, JSON.stringify({
+          version: METRIC_VISIBILITY_STORAGE_VERSION,
+          visible: [...state.visibleMetrics],
+        }));
       }
     } catch (e) {}
   }
 
   function loadMetricVisibility() {
     try {
-      const saved = sessionStorage.getItem('qym_visible_metrics');
+      const saved = sessionStorage.getItem(METRIC_VISIBILITY_STORAGE_KEY);
       if (saved) {
-        const arr = JSON.parse(saved);
+        const arr = readSavedMetricVisibility(saved);
         if (Array.isArray(arr)) {
-          const allowedMetrics = _allMetricsWithTrace(state.flatRuns, state.allMetrics);
+          const allowedMetrics = [..._allMetricsWithTrace(state.flatRuns, state.allMetrics), ...RUNS_BASE_COLUMN_KEYS];
           const valid = arr.filter(m => allowedMetrics.includes(m));
           if (valid.length > 0 && valid.length < allowedMetrics.length) {
             state.visibleMetrics = new Set(valid);
@@ -1141,7 +1276,9 @@
     const traceMetrics = _traceMetricsForRuns(runs);
     const groupColumns = shouldShowGroupedRunColumnOptions() ? GROUP_DISPLAY_COLUMNS : [];
     const systemColumns = SYSTEM_DISPLAY_COLUMNS;
+    const runsColumns = state.currentView === 'table' ? RUNS_BASE_DISPLAY_COLUMNS : [];
     const metricOptions = [
+      ...runsColumns.map(col => col.key),
       ...(availableMetrics || []),
       ...groupColumns.map(col => col.key),
       ...systemColumns.map(col => col.key),
@@ -1191,6 +1328,14 @@
         '<button class="ms-action-btn qym-dropdown__action" id="mv-select-all">All</button>' +
         '<button class="ms-action-btn qym-dropdown__action" id="mv-select-none">None</button>' +
       '</div>' +
+      (runsColumns.length > 0 ?
+        '<div class="mv-trace-label">Run columns</div>' +
+        runsColumns.map(col => {
+          const checked = allVisible || visibleMetrics.has(col.key) ? 'checked' : '';
+          const hidden = searchValue && !col.label.toLowerCase().includes(searchValue.toLowerCase()) ? ' style="display:none"' : '';
+          return `<label class="multi-select-option qym-dropdown__option"${hidden}><input type="checkbox" ${checked} data-mv-metric="${escapeHtml(col.key)}" /><span>${escapeHtml(col.label)}</span></label>`;
+        }).join('') +
+        ((availableMetrics || []).length > 0 ? '<div class="mv-trace-separator"></div><div class="mv-trace-label">Metrics</div>' : '') : '') +
       availableMetrics.map(m => {
         const checked = allVisible || visibleMetrics.has(m) ? 'checked' : '';
         const hidden = searchValue && !getMetricDisplayName(m).toLowerCase().includes(searchValue.toLowerCase()) ? ' style="display:none"' : '';
@@ -1974,6 +2119,12 @@
     } else if (state.filterUsers.has('__none__')) {
       runs = [];
     }
+    if (state.filterOrigin !== 'all') {
+      runs = runs.filter(r => getRunOrigin(r) === state.filterOrigin);
+    }
+    if (activeVersioningFilters().length > 0) {
+      runs = runs.filter(r => matchesVersioningFilters(r));
+    }
 
     // Sort
     sortRuns(runs);
@@ -2267,7 +2418,7 @@
     // Update subtitle with filter info
     const subtitleEl = $('.charts-subtitle');
     if (subtitleEl) {
-      const isFiltered = state.quickFilter !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0;
+      const isFiltered = state.quickFilter !== 'all' || state.filterOrigin !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0 || activeVersioningFilters().length > 0;
       if (isFiltered) {
         subtitleEl.textContent = `Filtered: ${usesDashboardSummary() ? state.dashboardOverview.total_runs : state.filteredRuns.length} runs • Showing average metric scores across all items`;
       } else {
@@ -2278,7 +2429,7 @@
     if (!chartData || chartData.combos.length === 0) {
       el('charts-grid').innerHTML = `
         <div class="chart-no-data" style="grid-column: 1/-1;">
-          ${state.quickFilter !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0
+          ${state.quickFilter !== 'all' || state.filterOrigin !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0 || activeVersioningFilters().length > 0
             ? 'No runs match current filters'
             : 'No data available for charts. Run some evaluations first.'}
         </div>
@@ -3735,12 +3886,37 @@
     syncRunsFrozenColumnControls();
   }
 
+  // Hidden Runs columns (Display > Columns > Run columns) are named on the
+  // table, and CSS takes their cells out of every row. Their frozen choice
+  // is kept for when they show again.
+  function syncRunsHiddenColumns() {
+    const table = document.querySelector('.runs-table');
+    if (!table) return;
+    const hidden = hiddenRunsBaseColumns().join(' ');
+    if ((table.dataset.hiddenColumns || '') !== hidden) {
+      if (hidden) table.dataset.hiddenColumns = hidden;
+      else delete table.dataset.hiddenColumns;
+    }
+    syncRunsFrozenColumnControls();
+    scheduleRunsStickyColumnSizing();
+  }
+
   function syncRunsFrozenColumnControls() {
     const dropdown = el('metric-visibility-dropdown');
     if (!dropdown) return;
     const frozen = new Set(getRunsFrozenColumns());
+    const hidden = hiddenRunsBaseColumns();
     dropdown.querySelectorAll('input[data-frozen-column]').forEach(cb => {
       cb.checked = frozen.has(cb.dataset.frozenColumn);
+      // A hidden column cannot be frozen until it shows again.
+      const isHidden = hidden.includes(cb.dataset.frozenColumn);
+      cb.disabled = isHidden;
+      const option = cb.closest('label');
+      if (option) {
+        option.classList.toggle('mv-frozen-option--hidden', isHidden);
+        if (isHidden) option.title = 'Hidden column: show it under Run columns to freeze it';
+        else option.removeAttribute('title');
+      }
     });
     // aria-disabled, not disabled: focus stays on the button after a reset.
     const reset = dropdown.querySelector('#mv-frozen-reset');
@@ -3763,8 +3939,8 @@
   // until the block fits. The saved choice is not changed, so a wider window
   // freezes them again. Returns the columns to freeze now and those let go.
   const RUNS_FROZEN_MAX_SHARE = 0.55;
-  function fitRunsFrozenColumns(widths, available) {
-    const fitted = getRunsFrozenColumns().slice();
+  function fitRunsFrozenColumns(widths, available, rendered = null) {
+    const fitted = getRunsFrozenColumns().filter(key => !rendered || rendered.has(key));
     const unfrozen = [];
     if (!(available > 0)) return { fitted, unfrozen };
     let total = fitted.reduce((sum, key) => sum + (widths[key] || 0), 0);
@@ -3788,18 +3964,23 @@
   // the measured width of the frozen columns before it. A frozen column with
   // a scrolling column (or the table's data) to its right is an edge and
   // casts the separator shadow.
-  function applyRunsFrozenColumns(table, widths, frozenKeys) {
+  // Hidden columns take no room: offsets and edges skip them, so the block
+  // closes up around them.
+  function applyRunsFrozenColumns(table, widths, frozenKeys, rendered = null) {
     const frozen = new Set(frozenKeys);
     const edges = [];
     let left = 0;
-    RUNS_IDENTITY_COLUMNS.forEach((column, index) => {
-      if (!frozen.has(column.key)) {
+    const columns = RUNS_IDENTITY_COLUMNS.filter(column => !rendered || rendered.has(column.key));
+    RUNS_IDENTITY_COLUMNS.forEach(column => {
+      if (!frozen.has(column.key) || !columns.includes(column)) {
         table.style.removeProperty(`--runs-col-${column.key}-left`);
-        return;
       }
+    });
+    columns.forEach((column, index) => {
+      if (!frozen.has(column.key)) return;
       table.style.setProperty(`--runs-col-${column.key}-left`, `${left}px`);
       left += widths[column.key] || 0;
-      const next = RUNS_IDENTITY_COLUMNS[index + 1];
+      const next = columns[index + 1];
       if (!next || !frozen.has(next.key)) edges.push(column.key);
     });
     table.dataset.frozenColumns = RUNS_IDENTITY_COLUMNS
@@ -3896,10 +4077,14 @@
       table.classList.add('runs-table--measuring-sticky-columns');
       const computed = getComputedStyle(table);
       const measured = [];
+      const hidden = hiddenRunsBaseColumns();
+      const rendered = new Set(RUNS_IDENTITY_COLUMNS
+        .map(config => config.key)
+        .filter(key => isRunsColumnRendered(key, hidden)));
       try {
         RUNS_IDENTITY_COLUMNS.forEach(config => {
           const header = table.querySelector(`thead ${config.selector}`);
-          if (!header) return;
+          if (!header || !rendered.has(config.key)) return;
           const naturalWidth = Math.ceil(header.getBoundingClientRect().width);
           const minWidth = Number.parseFloat(computed.getPropertyValue(config.minVar));
           const maxWidth = config.maxVar
@@ -3921,8 +4106,8 @@
       });
       // A table that does not scroll sideways shows every column either way.
       const scrolls = !!scroller && scroller.scrollWidth > scroller.clientWidth + 1;
-      const { fitted, unfrozen } = fitRunsFrozenColumns(widths, scrolls ? scroller.clientWidth : 0);
-      applyRunsFrozenColumns(table, widths, fitted);
+      const { fitted, unfrozen } = fitRunsFrozenColumns(widths, scrolls ? scroller.clientWidth : 0, rendered);
+      applyRunsFrozenColumns(table, widths, fitted, rendered);
       if (unfrozen.join(' ') !== (state.runsUnfrozenToFit || []).join(' ')) {
         state.runsUnfrozenToFit = unfrozen;
         syncRunsFrozenColumnControls();
@@ -4218,6 +4403,7 @@
 
     // Update header with dynamic metric columns
     updateTableHeader(metricsToShow);
+    syncRunsHiddenColumns();
     const headerRow = el('table-header-row');
     if (headerRow) {
       const latencyHeader = headerRow.querySelector('.col-latency');
@@ -4329,6 +4515,12 @@
       // Build status tooltip with approval info. The approval keeps the last
       // decision after it is withdrawn; attribute only a decision in effect.
       let statusTooltip = status;
+      // A cancelled evaluation job's run stays RUNNING until the Evaluation
+      // Service confirms; show the stop as under way meanwhile.
+      const stopping = isStoppingRun(run);
+      const badgeStatus = stopping ? 'STOPPED' : status;
+      const badgeLabel = stopping ? 'STOPPING…' : status;
+      if (stopping) statusTooltip = 'Stop requested: waiting for the evaluation service to confirm';
       if (approval && approval.decision_by && approval.decision === status) {
         statusTooltip = `${status} by ${approval.decision_by.display_name || approval.decision_by.email}`;
         if (approval.comment) {
@@ -4354,10 +4546,11 @@
                 : (anyRepeatRows ? '<span class="samples-toggle-spacer" aria-hidden="true"></span>' : '')}
               <a class="run-id" href="${escapeHtml(runOpenHref(run))}" title="${escapeHtml(run.run_id)}">${run.external_run_id ? truncateText(run.external_run_id, 30) : escapeHtml(run.run_id.substring(0, 8))}</a>
               ${run.samples > 1 ? `<span class="run-pass-count">x${run.samples}</span>` : ''}
+              ${renderOfficialRunBadge(run)}
             </div>
           </td>
           <td class="col-status">
-            ${status ? `<span class="status-badge qym-badge status-${escapeHtml(status)}" title="${escapeHtml(statusTooltip)}">${escapeHtml(status)}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}${renderIngestIncomplete(run)}
+            ${status ? `<span class="status-badge qym-badge status-${escapeHtml(badgeStatus)}" title="${escapeHtml(statusTooltip)}">${escapeHtml(badgeLabel)}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}${renderIngestIncomplete(run)}
           </td>
           <td class="col-task">
             <span class="tag qym-tag task" title="${escapeHtml(run.task_name || '')}">${run.task_name ? escapeHtml(run.task_name) : '—'}</span>
@@ -4387,6 +4580,7 @@
             </span>
           </td>
           <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(run, status)}</td>
+          <td class="col-experiment">${renderExperimentCell(run)}</td>
           <td class="col-version">
             ${run.git_commit ? `<span class="version-badge qym-tag" title="${escapeHtml((run.git_branch ? run.git_branch + '/' : '') + run.git_commit)}">${escapeHtml((run.git_branch ? run.git_branch + '/' : '') + run.git_commit)}</span>` : '<span style="color:var(--text-muted)">—</span>'}
           </td>
@@ -4819,6 +5013,7 @@
             ? `<span class="timestamp" title="${escapeHtml(passDate.full)}"><span class="date">${escapeHtml(passDate.date)}</span><span class="timestamp-sep">·</span><span class="time">${escapeHtml(passDate.time)}</span></span>`
             : '<span class="metric-na">—</span>'}</td>
           <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(parentRun, runStatus, firstPass, pass.analysis_cause_count)}</td>
+          ${inherit('col-experiment')}
           ${inherit('col-version')}
           ${metricCells}${visibleTraceMetrics.length > 0 ? '<td class="col-trace-separator"></td>' : ''}
           ${visibleSystemColumns.has('latency') ? latencyCell('col-latency', pass.avg_latency_ms, avgLatencyWinners) : ''}
@@ -5333,13 +5528,15 @@
     const countText = filtered === total ? `${total} runs` : `${filtered} of ${total} runs`;
 
     const hasFilters = state.quickFilter !== 'all'
+      || state.filterOrigin !== 'all'
       || !!activeSearchQuery()
       || state.filterTasks.size > 0
       || (state.filterModels.size > 0)
       || state.filterDatasets.size > 0
       || state.filterStatuses.size > 0
       || state.filterVersions.size > 0
-      || state.filterUsers.size > 0;
+      || state.filterUsers.size > 0
+      || activeVersioningFilters().length > 0;
 
     let filterText = countText;
     if (hasFilters) {
@@ -5373,6 +5570,11 @@
       } else if (state.filterUsers.has('__none__')) {
         parts.push('user: none');
       }
+      activeVersioningFilters().forEach(([key, selection]) => {
+        parts.push(`${getVersioningKeyWords(key)}: ${summarizeFilterSelection(selection)}`);
+      });
+      if (state.filterOrigin === 'official') parts.push('official runs');
+      if (state.filterOrigin === 'local') parts.push('local runs');
       if (activeSearchQuery()) parts.push(`search: "${activeSearchQuery()}"`);
       if (state.quickFilter === 'today') parts.push('today');
       if (state.quickFilter === 'week') parts.push('last 7d');
@@ -5653,6 +5855,8 @@
     if (state.filterDatasets.size > 0) n++;
     if (state.filterUsers.size > 0) n++;
     if (state.quickFilter !== 'all') n++;
+    if (state.filterOrigin !== 'all') n++;
+    n += activeVersioningFilters().length;
     if (activeSearchQuery()) n++;
     return n;
   }
@@ -5707,6 +5911,14 @@
     render();
   }
 
+  function setOriginFilterSelection(origin) {
+    $$('.origin-filter-btn').forEach(btn => {
+      const active = btn.dataset.origin === origin;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
   function clearAllFilters() {
     state.filterTasks.clear();
     state.filterModels.clear();
@@ -5714,8 +5926,13 @@
     state.filterVersions.clear();
     state.filterDatasets.clear();
     state.filterUsers.clear();
+    // In place: the open dropdowns keep a reference to each selection set.
+    state.filterVersioning.forEach(selection => selection.clear());
     state.quickFilter = 'all';
     setQuickFilterSelection('all');
+    state.filterOrigin = 'all';
+    setOriginFilterSelection('all');
+    populateFilterDropdowns();
     if (state.searchQuery) {
       setSearchQuery('', { updateInput: true });
       return;
@@ -6577,7 +6794,7 @@
             const runDisplayName = getRunDisplayName(run);
             html += `<label class="run-selection-item ${isSelected ? 'selected' : ''}">
               <input type="checkbox" data-file="${escapeHtml(run.file_path)}" ${isSelected ? 'checked' : ''} />
-              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${escapeHtml(formatDate(run.timestamp).full)}</div></div>
+              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${escapeHtml(formatDate(run.timestamp).full)}${renderOfficialRunBadge(run)}</div></div>
               ${score !== undefined ? `<span class="run-score ${scoreClass}">${escapeHtml(scoreDisplay)}</span>` : ''}
             </label>`;
           }
@@ -6668,7 +6885,7 @@
             <input type="checkbox" data-file="${escapeHtml(run.file_path)}" ${isSelected ? 'checked' : ''} />
             <div class="run-info">
               <div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div>
-              <div class="run-date">${escapeHtml(dt.full)}</div>
+              <div class="run-date">${escapeHtml(dt.full)}${renderOfficialRunBadge(run)}</div>
             </div>
             ${score !== undefined ? `<span class="run-score ${scoreClass}">${escapeHtml(scoreDisplay)}</span>` : ''}
           </label>
@@ -7521,6 +7738,13 @@
   const PAGE_CONCURRENCY = 3;
   const LIVE_REFRESH_INTERVAL_MS = 15000;
   const IDLE_REFRESH_INTERVAL_MS = 60000;
+  // While a stop is under way (a run shows "Stopping…", or a stop was just
+  // announced by another page), poll fast so STOPPED shows within seconds.
+  const STOPPING_REFRESH_INTERVAL_MS = 2000;
+  // How long an announced stop keeps the fast cadence: the dashboard
+  // projection publishes a status change in about a second, but a stop's
+  // remote cancel can take a few polls to confirm.
+  const ANNOUNCED_STOP_WINDOW_MS = 20000;
   const FULL_REFRESH_STALE_MS = 5 * 60 * 1000;
 
   function hasActiveRuns(runs = state.flatRuns) {
@@ -7528,6 +7752,16 @@
       const status = String(r.status || '').toUpperCase();
       return status === 'RUNNING' || status === 'PENDING';
     });
+  }
+
+  function isStoppingRun(run) {
+    const status = String(run?.status || '').toUpperCase();
+    return !!run?.stop_requested && (status === 'RUNNING' || status === 'PENDING');
+  }
+
+  function hasStoppingRuns() {
+    return (state.flatRuns || []).some(isStoppingRun)
+      || (state.dashboardPage?.rows || []).some(isStoppingRun);
   }
 
   function queueRunsFetch(options) {
@@ -8000,6 +8234,8 @@
       datasets: [...state.filterDatasets], statuses: [...state.filterStatuses],
       versions: [...state.filterVersions], users: [...state.filterUsers],
     };
+    if (state.filterOrigin !== 'all') filters.origins = [state.filterOrigin];
+    if (activeVersioningFilters().length > 0) filters.versioning = versioningFilters();
     const { since, until } = timeFilterBounds(now);
     if (since) filters.since = since.toISOString();
     if (until) filters.until = until.toISOString();
@@ -8649,7 +8885,7 @@
   function populateFilterDropdowns() {
     // For each filter, compute applicable values from runs matching ALL OTHER active filters.
     // This ensures each dropdown only shows values that would produce results.
-    function runsExcluding(skipFilter) {
+    function runsExcluding(skipFilter, skipVersioningKey = null) {
       const bounds = timeFilterBounds();
       let runs = state.flatRuns.filter(r => runMatchesTimeFilter(r, bounds) && runMatchesSearch(r));
       if (skipFilter !== 'tasks' && state.filterTasks.size > 0 && !state.filterTasks.has('__none__')) {
@@ -8670,6 +8906,12 @@
       if (skipFilter !== 'users' && state.filterUsers.size > 0 && !state.filterUsers.has('__none__')) {
         runs = runs.filter(r => matchesFilterSelection(state.filterUsers, getRunOwnerKey(r)));
       }
+      if (state.filterOrigin !== 'all') {
+        runs = runs.filter(r => getRunOrigin(r) === state.filterOrigin);
+      }
+      if (activeVersioningFilters().length > 0) {
+        runs = runs.filter(r => matchesVersioningFilters(r, skipVersioningKey));
+      }
       return runs;
     }
 
@@ -8684,12 +8926,14 @@
       .sort((a, b) => getOwnerFilterLabel(a).localeCompare(getOwnerFilterLabel(b)))
       .concat(ownerValues.includes(EMPTY_FILTER_VALUE) ? [EMPTY_FILTER_VALUE] : []);
     const constrainingFiltersActive = state.quickFilter !== 'all'
+      || state.filterOrigin !== 'all'
       || !!activeSearchQuery()
       || state.filterTasks.size > 0
       || state.filterDatasets.size > 0
       || state.filterModels.size > 0
       || state.filterStatuses.size > 0
-      || state.filterUsers.size > 0;
+      || state.filterUsers.size > 0
+      || activeVersioningFilters().length > 0;
     const versionValues = facets?.versions || collectFilterValues(runsExcluding('versions'), r => getRunVersionKey(r));
     const versions = (!facets && !constrainingFiltersActive && state.knownVersions.size > versionValues.length)
       ? Array.from(new Set([...versionValues, ...state.knownVersions])).sort()
@@ -8756,6 +9000,70 @@
       },
       defaultLabel: 'All Versions', showSearch: true, searchPlaceholder: 'Search versions...',
     });
+
+    let versioningValues = facets?.versioning;
+    if (!versioningValues) {
+      versioningValues = {};
+      const keys = new Set();
+      state.flatRuns.forEach(r => Object.keys(getRunVersioning(r)).forEach(key => keys.add(key)));
+      keys.forEach(key => {
+        const values = collectFilterValues(runsExcluding('versioning', key), r => getRunVersioning(r)[key]);
+        if (values.some(v => v !== EMPTY_FILTER_VALUE)) versioningValues[key] = values;
+      });
+    }
+    renderVersioningFilters(versioningValues);
+  }
+
+  function renderVersioningFilters(valuesByKey) {
+    const host = el('versioning-filters');
+    if (!host) return;
+    // A key stays while it is filtered on, even if no listed run reports it now.
+    const keys = [...new Set([
+      ...Object.keys(valuesByKey || {}),
+      ...activeVersioningFilters().map(([key]) => key),
+    ])].sort((a, b) => a.localeCompare(b));
+    const wrappers = new Map([...host.querySelectorAll(':scope > .multi-select-wrapper')]
+      .map(wrapper => [wrapper.dataset.versioningKey, wrapper]));
+    wrappers.forEach((wrapper, key) => { if (!keys.includes(key)) wrapper.remove(); });
+    host.hidden = keys.length === 0;
+    keys.forEach(key => {
+      if (!state.versioningFilterIds.has(key)) state.versioningFilterIds.set(key, state.versioningFilterIds.size);
+      const id = state.versioningFilterIds.get(key);
+      let wrapper = wrappers.get(key);
+      if (!wrapper) {
+        wrapper = document.createElement('div');
+        wrapper.className = 'multi-select-wrapper';
+        wrapper.dataset.versioningKey = key;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'multi-select-btn';
+        btn.id = `filter-versioning-btn-${id}`;
+        btn.title = `Evaluation Service versioning: ${key}`;
+        const dropdown = document.createElement('div');
+        dropdown.className = 'multi-select-dropdown';
+        dropdown.id = `filter-versioning-dropdown-${id}`;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.querySelectorAll('.multi-select-dropdown.open').forEach(other => {
+            if (other !== dropdown) other.classList.remove('open');
+          });
+          dropdown.classList.toggle('open');
+        });
+        wrapper.append(btn, dropdown);
+      }
+      host.appendChild(wrapper);
+      if (!state.filterVersioning.has(key)) state.filterVersioning.set(key, new Set());
+      const selection = state.filterVersioning.get(key);
+      const values = (valuesByKey && valuesByKey[key])
+        || [...selection].filter(v => v !== '__none__');
+      const words = getVersioningKeyWords(key);
+      buildMultiSelect({
+        btnId: `filter-versioning-btn-${id}`, dropdownId: `filter-versioning-dropdown-${id}`,
+        stateSet: selection, values,
+        labelFn: null, defaultLabel: `All ${words}s`,
+        showSearch: true, searchPlaceholder: `Search ${words}...`,
+      });
+    });
   }
 
   function startHeartbeat() {
@@ -8814,6 +9122,18 @@
       }
       toggleTimeRangeDropdown(false);
       applyQuickFilter(btn.dataset.filter);
+    });
+  });
+
+  // Origin facet (All / Official / Local)
+  $$('.origin-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const origin = btn.dataset.origin;
+      if (!ORIGIN_FILTER_VALUES.includes(origin) || origin === state.filterOrigin) return;
+      state.filterOrigin = origin;
+      setOriginFilterSelection(origin);
+      state.focusedIndex = -1;
+      render();
     });
   });
 
@@ -9274,6 +9594,7 @@
     for (const [param, field] of Object.entries(DASHBOARD_URL_FILTERS)) {
       params[param] = field === 'filterModels' ? modelUrlValues() : [...state[field]];
     }
+    params.origin = state.filterOrigin !== 'all' ? state.filterOrigin : null;
     params.sort = table && state.sortKey !== DEFAULT_SORT_KEY ? state.sortKey : null;
     params.page = table && state.tablePage > 1 ? String(state.tablePage) : null;
     return params;
@@ -9290,7 +9611,7 @@
     // only a sort or a page was written with no filters, so the tab's saved
     // filters must not narrow it.
     const urlHasView = Object.keys(DASHBOARD_URL_FILTERS).some(key => params.has(key))
-      || ['range', 'from', 'to', 'sort', 'page', 'q'].some(key => params.has(key));
+      || ['range', 'from', 'to', 'sort', 'page', 'q', 'origin'].some(key => params.has(key));
     if (urlHasView) {
       for (const [param, field] of Object.entries(DASHBOARD_URL_FILTERS)) {
         const values = params.getAll(param).filter(Boolean);
@@ -9319,6 +9640,9 @@
         state.quickFilter = ['today', 'week', 'month'].includes(range) ? range : 'all';
       }
       setQuickFilterSelection(state.quickFilter);
+      const origin = params.get('origin');
+      state.filterOrigin = ORIGIN_FILTER_VALUES.includes(origin) ? origin : 'all';
+      setOriginFilterSelection(state.filterOrigin);
     }
     const sort = params.get('sort');
     if (sort && /^[^\s].*-(asc|desc)$/.test(sort)) state.sortKey = sort;
@@ -9456,6 +9780,8 @@
       filterDatasets: [...state.filterDatasets],
       filterUsers: [...state.filterUsers],
       quickFilter: state.quickFilter,
+      filterOrigin: state.filterOrigin,
+      filterVersioning: Object.fromEntries(activeVersioningFilters().map(([key, selection]) => [key, [...selection]])),
       customRange: state.customRange,
       chartFirstColWidth: state.chartFirstColWidth,
     };
@@ -9508,6 +9834,15 @@
         if (parsed.quickFilter) {
           state.quickFilter = parsed.quickFilter;
           setQuickFilterSelection(state.quickFilter);
+        }
+        if (parsed.filterVersioning && typeof parsed.filterVersioning === 'object') {
+          state.filterVersioning = new Map(Object.entries(parsed.filterVersioning)
+            .filter(([, values]) => Array.isArray(values))
+            .map(([key, values]) => [key, new Set(values.map(String))]));
+        }
+        if (ORIGIN_FILTER_VALUES.includes(parsed.filterOrigin)) {
+          state.filterOrigin = parsed.filterOrigin;
+          setOriginFilterSelection(state.filterOrigin);
         }
         applyChartFirstColWidth(parsed.chartFirstColWidth || CHART_FIRST_COL_DEFAULT_WIDTH);
       } catch (e) {
@@ -9643,7 +9978,16 @@
         state._updatingPolls = 0;
       }
       const backoffMs = Math.min(15000, 2000 * Math.pow(2, Math.max(0, (state._updatingPolls || 1) - 1)));
-      const intervalMs = state.dashboardBackfilling ? LIVE_REFRESH_INTERVAL_MS
+      // A stop the service is slow to confirm (unreachable, retrying) falls
+      // back to the live cadence after a minute instead of polling fast for hours.
+      const now = Date.now();
+      const stoppingShown = hasStoppingRuns();
+      if (!stoppingShown) state._stoppingSince = 0;
+      else if (!state._stoppingSince) state._stoppingSince = now;
+      const stopping = now < (state._announcedStopUntil || 0)
+        || (stoppingShown && now - state._stoppingSince < 60000);
+      const intervalMs = stopping ? STOPPING_REFRESH_INTERVAL_MS
+        : state.dashboardBackfilling ? LIVE_REFRESH_INTERVAL_MS
         : updating ? backoffMs
         : (state.dashboardOverview?.has_active_runs || hasActiveRuns()) ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS;
       if (window.__QYM_DASHBOARD_INTERVAL__) clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
@@ -9653,6 +9997,16 @@
       window.__QYM_DASHBOARD_INTERVAL__ = setInterval(pollRuns, IDLE_REFRESH_INTERVAL_MS);
     }
   }
+
+  // A stop made on another page or tab (admin force stop, cancelled job):
+  // re-read now and keep polling fast until it shows (QymShell.announceRunStatus).
+  document.addEventListener('qym:run-status', () => {
+    if (!dashboardActive) return;
+    state._announcedStopUntil = Date.now() + ANNOUNCED_STOP_WINDOW_MS;
+    updateRunsRefreshCadence();
+    if (document.hidden) state._pollMissedWhileHidden = true;
+    else fetchRuns();
+  }, pageListen());
 
   // Hidden tabs do not poll; the first look back refreshes once.
   function pollRuns() {

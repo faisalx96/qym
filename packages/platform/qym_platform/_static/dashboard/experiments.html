@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>قيِّم • Experiments</title>
+  <link rel="icon" type="image/png" href="/static/qym_icon.png">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261008-cols">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261006-1"></script>
+  <script src="/static/qym_table.js"></script>
+  <!--
+    Experiments page (plan §12.2, issue #22). Page-local recipes use the exp-
+    prefix; shared primitives (qym badges, tags, controls, inline actions,
+    stat strip, pagination) come from the shared component layer. Tokens only
+    (docs/DESIGN_LANGUAGE.md). Kept inline so client-side navigation carries it.
+  -->
+  <style>
+    .exp-page { }
+    /* One container for every Experiments view and the new-experiment form: wider than the 1120px shell cap and with the same padding everywhere. */
+    .shell-content > .exp-page { max-width: 1440px; padding: var(--space-lg); }
+    .exp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-lg); margin-bottom: var(--space-lg); }
+    .exp-header-text { min-width: 0; }
+    .exp-title { margin: 0; font-size: var(--font-title); font-weight: 650; color: var(--text-primary); letter-spacing: -0.3px; overflow-wrap: anywhere; }
+    .exp-description { margin: 6px 0 0; font-size: var(--font-base); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .exp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); margin-top: var(--space-sm); font-size: var(--font-base); color: var(--text-muted); }
+    .exp-meta-sep { color: var(--text-dim); }
+    .exp-header-actions { display: flex; align-items: center; gap: var(--space-sm); flex: none; }
+    .exp-back { display: inline-block; margin-bottom: var(--space-sm); color: var(--text-muted); font-size: var(--font-sm); text-decoration: none; }
+    .exp-back:hover { color: var(--accent-primary); }
+
+    .exp-tabs { margin-bottom: var(--space-lg); }
+    .exp-tabs .exp-tab { display: inline-flex; align-items: center; text-decoration: none; }
+    .exp-queue-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-lg); margin-bottom: var(--space-lg); padding: var(--space-sm) var(--space-lg); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; font-size: var(--font-base); color: var(--text-secondary); }
+    .exp-queue-strip[hidden] { display: none; }
+    .exp-queue-strip-label { font-size: var(--font-sm); font-weight: 650; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .exp-queue-strip-name { color: var(--text-primary); font-weight: 600; }
+    .exp-queue-strip-link { margin-left: auto; color: var(--accent-primary); text-decoration: none; font-size: var(--font-sm); }
+    .exp-queue-strip-link:hover { text-decoration: underline; }
+
+    .exp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md); }
+    .exp-toolbar-label { font-size: var(--font-sm); color: var(--text-muted); }
+    .exp-toolbar-spacer { flex: 1; }
+    .exp-check { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--font-sm); color: var(--text-muted); cursor: pointer; }
+
+    .exp-card { background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; overflow: hidden; margin-bottom: var(--space-lg); }
+    .exp-card-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
+    .exp-section-title { margin: 0; font-size: var(--font-lg); font-weight: 600; color: var(--text-primary); }
+    .exp-section-description { margin: 2px 0 0; font-size: var(--font-sm); color: var(--text-muted); }
+    .exp-table-wrap { overflow-x: auto; }
+    .exp-table-wrap .qdt-table tbody td { vertical-align: middle; }
+    .exp-footer { display: flex; align-items: center; justify-content: flex-end; padding: var(--space-sm) var(--space-lg); border-top: 1px solid var(--border-subtle); }
+    .exp-footer:empty { display: none; }
+
+    .exp-name { color: var(--text-primary); font-weight: 600; text-decoration: none; }
+    .exp-name:hover { color: var(--accent-primary); }
+    .exp-sub { margin-top: 2px; font-size: var(--font-sm); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
+    .exp-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .exp-num { text-align: right; }
+    td.exp-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .exp-muted { color: var(--text-muted); }
+    .exp-error-text { color: var(--error); }
+    .exp-counts { display: inline-flex; flex-wrap: wrap; gap: var(--space-xs); }
+    .exp-run-link { color: var(--accent-primary); text-decoration: none; font-family: var(--font-mono); }
+    .exp-run-link:hover { text-decoration: underline; }
+    .exp-row-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
+    .exp-row--superseded td { color: var(--text-muted); }
+    .exp-actions-cell { text-align: right; }
+
+    .exp-mx-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-sm); }
+    .exp-mx-table.qdt-table { table-layout: auto; }
+    .exp-mx-table.qdt-table tbody tr { cursor: default; }
+    .exp-mx-table.qdt-table tbody tr:hover td { background: transparent; }
+    .exp-mx-table.qdt-table tbody td { vertical-align: top; white-space: normal; padding: var(--space-sm) var(--space-md); }
+    .exp-mx-table .exp-mx-combo-head { width: 220px; }
+    .exp-mx-combo { max-width: 260px; }
+    .exp-mx-combo-label { font-family: var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
+    .exp-mx-cell { min-width: 220px; }
+    .exp-mx-cell-top { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; }
+    .exp-mx-check { margin: 0; accent-color: var(--accent-primary); }
+    .exp-mx-attempts { padding: 0; border: none; background: none; cursor: pointer; font-family: var(--font-sans); font-size: var(--font-sm); color: var(--info); }
+    .exp-mx-attempts:hover, .exp-mx-attempts:focus-visible { color: var(--accent-primary); }
+    .exp-mx-metric { display: flex; align-items: baseline; gap: var(--space-xs); margin-top: var(--space-xs); min-width: 0; }
+    .exp-mx-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-md); font-weight: 600; color: var(--text-primary); }
+    .exp-mx-metric-name { font-size: var(--font-sm); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .exp-mx-run { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+    .exp-mx-actions.exp-row-actions { justify-content: flex-start; flex-wrap: wrap; margin-top: var(--space-xs); }
+    .exp-mx-chart { padding: var(--space-md) var(--space-lg); }
+    .exp-mx-svg { display: block; width: 100%; max-width: 880px; height: auto; }
+    .exp-mx-svg .exp-mx-axis { font-family: var(--font-mono); font-size: var(--font-sm); fill: var(--text-muted); }
+    .exp-mx-svg .exp-mx-axis-title { font-family: var(--font-sans); }
+    .exp-mx-legend { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); margin-top: var(--space-sm); font-size: var(--font-sm); color: var(--text-secondary); }
+    .exp-mx-legend-item { display: inline-flex; align-items: center; gap: var(--space-xs); }
+    .exp-mx-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+
+    .exp-stats { margin-bottom: var(--space-lg); }
+    .exp-empty { padding: var(--space-xl); text-align: center; }
+    .exp-empty-title { margin: 0 0 var(--space-sm); font-size: var(--font-xl); font-weight: 650; color: var(--text-primary); }
+    .exp-empty-body { margin: 0; font-size: var(--font-md); color: var(--text-muted); line-height: 1.5; }
+    .exp-loading { padding: var(--space-xl); text-align: center; font-size: var(--font-base); color: var(--text-muted); }
+    .exp-error { padding: var(--space-md) var(--space-lg); color: var(--error); font-size: var(--font-base); }
+    .exp-poll-note { font-size: var(--font-sm); color: var(--text-muted); }
+  </style>
+  <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20261006-1">
+  <link rel="stylesheet" href="/static/eval_temporary_model.css?v=eval-temporary-model-20261006-1">
+  <link rel="stylesheet" href="/static/eval_official_defaults.css?v=eval-official-defaults-20260930-2">
+  <link rel="stylesheet" href="/static/experiment_launch.css?v=experiment-launch-20261008-global-model">
+  <link rel="stylesheet" href="/static/experiment_launch_json.css?v=experiment-launch-json-20261003-2">
+  <link rel="stylesheet" href="/static/experiment_launch_advanced.css?v=experiment-launch-advanced-20261008-1">
+  <link rel="stylesheet" href="/static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1">
+  <link rel="stylesheet" href="/static/experiment_launch_best_run.css?v=experiment-launch-best-run-20261004-1">
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <script defer src="/static/ui_components.js?v=p1-20261005"></script>
+</head>
+<body>
+  <main class="page exp-page" id="exp-root" aria-live="polite">
+    <div class="exp-loading">Loading experiments…</div>
+  </main>
+  <script src="/static/experiment_matrix.js?v=experiments-20261004-2"></script>
+  <!-- New-experiment form (#23): ?new=1 mounts window.QymExperimentLaunch. -->
+  <script src="/static/eval_environments.js?v=eval-environments-20261006-1"></script>
+  <script src="/static/eval_temporary_model.js?v=eval-temporary-model-20261006-1"></script>
+  <!-- Advanced panel (#24): mounted by experiment_launch.js into [data-xl-advanced]. -->
+  <script src="/static/experiment_launch_advanced.js?v=experiment-launch-advanced-20261008-2"></script>
+  <!-- Sweeps (#34): mounted by experiment_launch.js into [data-xl-sweeps]. -->
+  <script src="/static/experiment_launch_sweeps.js?v=experiment-launch-sweeps-20261008-global-model"></script>
+  <!-- Best run (#38): the "Start from best run" picker used by experiment_launch.js. -->
+  <script src="/static/experiment_launch_best_run.js?v=experiment-launch-best-run-20261002-scope"></script>
+  <!-- JSON settings as fields: used by experiment_launch.js. -->
+  <script src="/static/experiment_launch_json.js?v=experiment-launch-json-20261003-2"></script>
+  <script src="/static/experiment_launch.js?v=experiment-launch-20261008-3"></script>
+  <!-- Environment page (?environment=): default preset history and editor. -->
+  <script src="/static/eval_official_defaults.js?v=eval-official-defaults-20261004-1"></script>
+  <script src="/static/experiments.js?v=experiments-20261008-stop"></script>
+</body>
+</html>

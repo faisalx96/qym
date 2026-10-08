@@ -12,7 +12,6 @@ Statements that cannot run inside a transaction (``VACUUM``,
 
 from __future__ import annotations
 
-import logging
 import socket
 import threading
 import time
@@ -27,8 +26,9 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from qym_platform.db.maintenance_models import MaintenanceJob
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 LEASE_SECONDS = 120
 LOG_LINES = 200
@@ -224,8 +224,10 @@ def run_job(job_id: str, session_factory: Callable[[], Session], engine: Engine,
                 if done or (time.perf_counter() - started) >= step_budget_seconds:
                     break
         except JobLeaseLost:
+            logger.warning("maintenance job %s (%s) lost its lease; another worker resumes it", job_id, ctx.kind)
             return "lease_lost"
         except JobCancelled:
+            logger.info("maintenance job %s (%s) cancelled", job_id, ctx.kind)
             status = "cancelled"
         except Exception as exc:  # noqa: BLE001 - recorded on the job row
             logger.exception("maintenance job %s (%s) failed", job_id, ctx.kind)
@@ -258,6 +260,7 @@ def run_job(job_id: str, session_factory: Callable[[], Session], engine: Engine,
                 status = "succeeded"
             db.commit()
             if status != "running":
+                logger.info("maintenance job %s (%s) finished: %s", job_id, ctx.kind, status)
                 return status
 
 
@@ -312,7 +315,12 @@ class MaintenanceWorker:
 
         settings = ingest_settings_for_maintenance()
         try:
-            run_retention(self.engine, span_retention_days=settings.span_retention_days, deleted_run_grace_days=settings.deleted_run_grace_days)
+            run_retention(
+                self.engine,
+                span_retention_days=settings.span_retention_days,
+                deleted_run_grace_days=settings.deleted_run_grace_days,
+                partition_days_ahead=settings.span_partition_days_ahead,
+            )
         except Exception:  # noqa: BLE001
             logger.exception("scheduled retention failed")
 
@@ -601,13 +609,16 @@ def _migrate_spans(ctx: JobContext) -> bool:
         if first and first < cutoff:
             first = cutoff
         if first:
-            # Partitions for every month the copy can touch.
+            # Partitions for every day the copy can touch. Historic months
+            # get one monthly partition each (not ~30 daily ones); only the
+            # uncovered days of a month already partly covered by daily
+            # partitions get daily ones.
             from qym_platform.migrations_support import ensure_month_partitions_between
 
             created = ensure_month_partitions_between(ctx.engine, first, datetime.utcnow())
             if created:
                 ctx.log(f"created partitions {created}")
-        ensure_span_partitions(ctx.engine)
+        ensure_span_partitions(ctx.engine, days_ahead=ingest_settings_for_maintenance().span_partition_days_ahead)
     with ctx.session() as db:
         rows = db.execute(text("SELECT id, created_at, deleted_at FROM runs WHERE id > :c ORDER BY id LIMIT :n"), {"c": cursor, "n": batch_runs}).fetchall()
         if not rows:
@@ -735,7 +746,9 @@ def _in_own_transaction(ctx: JobContext, work: Callable[[Session], Any], *, atte
                 return result
         except OperationalError as exc:
             if attempt + 1 >= attempts:
+                logger.exception("maintenance step failed after %d attempts", attempts)
                 raise
+            logger.warning("maintenance step retry %d/%d", attempt + 1, attempts, exc_info=True)
             ctx.log(f"retrying after {type(getattr(exc, 'orig', exc)).__name__}")
             time.sleep(0.2 * (attempt + 1))
     return None
@@ -1087,7 +1100,12 @@ def _run_retention(ctx: JobContext) -> bool:
     from qym_platform.services.retention import run_retention
 
     settings = ingest_settings_for_maintenance()
-    result = run_retention(ctx.engine, span_retention_days=int(ctx.params.get("span_retention_days", settings.span_retention_days)), deleted_run_grace_days=int(ctx.params.get("deleted_run_grace_days", settings.deleted_run_grace_days)))
+    result = run_retention(
+        ctx.engine,
+        span_retention_days=int(ctx.params.get("span_retention_days", settings.span_retention_days)),
+        deleted_run_grace_days=int(ctx.params.get("deleted_run_grace_days", settings.deleted_run_grace_days)),
+        partition_days_ahead=int(ctx.params.get("partition_days_ahead", settings.span_partition_days_ahead)),
+    )
     ctx.progress.update(result)
     ctx.progress["message"] = ", ".join(f"{k}={len(v)}" for k, v in result.items())
     ctx.log(ctx.progress["message"])
@@ -1234,6 +1252,7 @@ def _ensure_pg_trgm(ctx: JobContext, index: str) -> bool:
         with ctx.autocommit() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
     except Exception as exc:  # noqa: BLE001 - see above
+        logger.warning("pg_trgm unavailable; %s skipped", index, exc_info=True)
         ctx.log(f"{index} skipped: pg_trgm is not available ({type(exc).__name__}); search still works without it")
         return False
     return True
@@ -1393,6 +1412,7 @@ def _backfill_dashboard_overview(ctx: JobContext) -> bool:
                 conn.execute(text("ANALYZE dashboard_run_overview"))
                 conn.execute(text("ANALYZE dashboard_run_dimensions"))
         except Exception as exc:  # noqa: BLE001 - autovacuum analyzes later anyway
+            logger.warning("ANALYZE of the dashboard overview tables failed", exc_info=True)
             ctx.log(f"analyze skipped ({type(exc).__name__}); autovacuum will analyze later")
         ctx.progress["phase"] = "done"
         ctx.progress["message"] = f"done: {ctx.progress['runs_stored']:,} runs stored"

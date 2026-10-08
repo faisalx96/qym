@@ -1,9 +1,54 @@
+import json
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..metrics.spec import Metric
+
+
+#: Bounds on ``versioning_details`` (the platform enforces the same ones).
+MAX_VERSIONING_DETAIL_KEYS = 50
+MAX_VERSIONING_DETAIL_KEY_LENGTH = 100
+MAX_VERSIONING_DETAILS_CHARS = 16_000
+
+
+def normalize_versioning_details(raw: Any) -> Dict[str, Any]:
+    """A validated, JSON-safe copy of a ``versioning_details`` mapping.
+
+    ``None`` is ``{}``. Keys are trimmed, non-blank strings of at most 100
+    characters; ``None`` values are dropped; values may be any JSON (other
+    objects become strings). At most 50 keys and 16,000 characters of compact
+    JSON. Raises ``ValueError`` otherwise.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise ValueError("versioning_details must be a mapping of key to value")
+    result: Dict[str, Any] = {}
+    for key, value in raw.items():
+        name = key.strip() if isinstance(key, str) else ""
+        if not name or len(name) > MAX_VERSIONING_DETAIL_KEY_LENGTH:
+            raise ValueError(
+                "versioning_details keys must be non-blank strings of at most "
+                f"{MAX_VERSIONING_DETAIL_KEY_LENGTH} characters"
+            )
+        if value is not None:
+            result[name] = value
+    if len(result) > MAX_VERSIONING_DETAIL_KEYS:
+        raise ValueError(
+            f"versioning_details has more than {MAX_VERSIONING_DETAIL_KEYS} keys"
+        )
+    try:
+        text = json.dumps(result, separators=(",", ":"), default=str, allow_nan=False)
+    except ValueError:
+        raise ValueError("versioning_details must be valid JSON (no NaN)") from None
+    if len(text) > MAX_VERSIONING_DETAILS_CHARS:
+        raise ValueError(
+            "versioning_details is larger than "
+            f"{MAX_VERSIONING_DETAILS_CHARS} characters of JSON"
+        )
+    return json.loads(text)
 
 
 class EvaluatorConfig(BaseModel):
@@ -13,6 +58,13 @@ class EvaluatorConfig(BaseModel):
     run_name: Optional[str] = None
     task_name: Optional[str] = None  # #15: Override the auto-derived task name
     max_concurrency: int = Field(default=10, ge=1)
+    # Metrics run in their own queue, separate from task execution: a task
+    # worker hands its output to the metric queue and immediately picks up the
+    # next item. ``metric_concurrency`` is how many items are scored at the
+    # same time (``max_metric_concurrency`` still caps the metrics running in
+    # parallel for ONE item). Unset: the ``QYM_METRIC_CONCURRENCY`` env var,
+    # else ``max_concurrency``.
+    metric_concurrency: Optional[int] = Field(default=None, ge=1)
     max_metric_concurrency: int = Field(default=1, ge=1)
     timeout: Optional[float] = Field(default=300, gt=0)
     # Hard wall-clock cap per metric attempt. Timed-out attempts retry according
@@ -40,6 +92,10 @@ class EvaluatorConfig(BaseModel):
     # and the run page on it; without it they use the first metric.
     primary_metric: Optional[str] = None
     run_metadata: Dict[str, Any] = Field(default_factory=dict)
+    # Free-form versioning of what was evaluated (e.g. {"agent_version": "v2",
+    # "prompt": "p-17"}). Sent when the platform run is created and shown on
+    # the run page and in `qym run get/list --json`.
+    versioning_details: Dict[str, Any] = Field(default_factory=dict)
     should_stop: Optional[Callable[[], bool]] = Field(default=None, exclude=True)
     git_branch: Optional[str] = None   # Override auto-detected git branch
     git_commit: Optional[str] = None   # Override auto-detected git commit hash
@@ -79,6 +135,11 @@ class EvaluatorConfig(BaseModel):
     platform_timeout: float = Field(default=5.0, gt=0)
     # Default policy: stream to platform. Users may explicitly opt out via live_mode="local".
     live_mode: str = "platform"  # local|platform|auto
+
+    @field_validator("versioning_details", mode="before")
+    @classmethod
+    def _validate_versioning_details(cls, v: Any) -> Dict[str, Any]:
+        return normalize_versioning_details(v)
 
     @field_validator("models", mode="before")
     @classmethod

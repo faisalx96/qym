@@ -4,7 +4,7 @@ import importlib.util
 import os
 import sys
 import threading
-import logging
+import time
 import re
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -13,11 +13,12 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from uuid import uuid4
 
-from qym_platform.services.job_registry import JobDescription, job_registry
+from qym_platform.services.job_registry import EXPIRED_ERROR, JobDescription, job_registry
 from qym_platform.settings import PlatformSettings, ProductEvalSettings
+from qym_platform.log import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 MAX_EFFECTIVE_CONCURRENCY = 20
 
@@ -28,6 +29,15 @@ class ProductEvalError(ValueError):
 
 class ProductEvalQueueFull(RuntimeError):
     """Raised when no product eval worker slot is available."""
+
+
+class ProductEvalConfigError(RuntimeError):
+    """The deployment cannot accept the eval (e.g. no encryption key in split mode)."""
+
+
+# Payload keys holding Fernet-encrypted secrets (split mode job queue).
+_ENCRYPTED_API_KEY = "api_key_encrypted"
+_ENCRYPTED_REFRESH_TOKEN = "refresh_token_encrypted"
 
 
 TERMINAL_JOB_STATUSES = {"COMPLETED", "FAILED", "STOPPED"}
@@ -413,9 +423,21 @@ def _load_script(script_path: Path) -> Any:
     try:
         spec.loader.exec_module(module)
     except Exception:
+        logger.exception("could not load product eval preset script %s", script_path)
         sys.modules.pop(module_name, None)
         raise
     return module
+
+
+def _unload_script(module: Any) -> None:
+    """Drop a preset module loaded by ``_load_script`` from ``sys.modules``.
+
+    Each job loads its preset under a unique module name; leaving it in
+    ``sys.modules`` would keep the module and all its globals alive forever.
+    """
+    name = getattr(module, "__name__", None)
+    if name and sys.modules.get(name) is module:
+        sys.modules.pop(name, None)
 
 
 def _get_function(
@@ -545,10 +567,13 @@ class RemoteProductEvalJob:
         self.owner_user_id = row.get("owner_user_id")
         self.project_id = row.get("project_id")
         if row.get("lost"):
-            # The owning process stopped (restart, crash or deploy) mid-eval.
+            # The owning process stopped (restart, crash or deploy) mid-eval,
+            # or (split mode) no workers process claimed the queued eval.
             self._snapshot["status"] = "FAILED"
             self._snapshot["error"] = (
-                "The server process running this eval stopped before it finished."
+                EXPIRED_ERROR
+                if row.get("lost_reason") == EXPIRED_ERROR
+                else "The server process running this eval stopped before it finished."
             )
 
     @property
@@ -560,8 +585,29 @@ class RemoteProductEvalJob:
         snapshot["runs"] = [dict(row) for row in snapshot.get("runs") or []]
         return snapshot
 
-    def wait_for_run(self, timeout: float) -> bool:
-        return bool(self._snapshot.get("run_id"))
+    def wait_for_run(self, timeout: float, poll_interval: float = 0.25) -> bool:
+        """Wait (polling ``background_jobs``) until the eval has its first run.
+
+        The database-backed equivalent of ``ProductEvalJob.wait_for_run`` for
+        an eval another process (split mode: a workers process) runs.
+        """
+        deadline = time.monotonic() + max(0.0, float(timeout))
+        while True:
+            if self._snapshot.get("run_id"):
+                return True
+            if self._snapshot.get("status") in TERMINAL_JOB_STATUSES or self._db is None:
+                return False
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(poll_interval)
+            try:
+                row = job_registry.fetch(self._db, PRODUCT_EVAL_JOB_KIND, self.job_id)
+            except Exception:
+                logger.warning("Could not poll product eval %s", self.job_id, exc_info=True)
+                return False
+            if row is None:
+                return False
+            self.__init__(row, self._db)
 
     def stop_requested(self) -> bool:
         return bool(self._row.get("cancel_requested"))
@@ -580,10 +626,22 @@ PRODUCT_EVAL_JOB_KIND = "product_eval"
 
 
 class ProductEvalJobManager:
-    def __init__(self, *, max_workers: Optional[int] = None) -> None:
-        if max_workers is None:
-            max_workers = ProductEvalSettings().max_workers
+    def __init__(
+        self,
+        *,
+        max_workers: Optional[int] = None,
+        max_retained_jobs: Optional[int] = None,
+    ) -> None:
+        if max_workers is None or max_retained_jobs is None:
+            settings = ProductEvalSettings()
+            if max_workers is None:
+                max_workers = settings.max_workers
+            if max_retained_jobs is None:
+                max_retained_jobs = settings.max_retained_jobs
         self._max_workers = max(1, int(max_workers))
+        # Finished jobs stay readable here for a while; older ones are only
+        # served from the shared ``background_jobs`` registry.
+        self._max_retained_jobs = max(1, int(max_retained_jobs))
         self._executor = ThreadPoolExecutor(
             max_workers=self._max_workers, thread_name_prefix="qym-product-eval"
         )
@@ -596,6 +654,27 @@ class ProductEvalJobManager:
             for job in self._jobs.values()
             if job.to_dict()["status"] not in TERMINAL_JOB_STATUSES
         )
+
+    def _prune_locked(self) -> None:
+        """Bound ``self._jobs``: forget the oldest finished jobs over the cap."""
+        excess = len(self._jobs) - self._max_retained_jobs
+        if excess <= 0:
+            return
+        terminal = sorted(
+            (
+                job
+                for job in self._jobs.values()
+                if job.to_dict()["status"] in TERMINAL_JOB_STATUSES
+            ),
+            key=lambda job: job.updated_at,
+        )
+        for job in terminal[:excess]:
+            self._jobs.pop(job.job_id, None)
+
+    def _finished(self, job: ProductEvalJob) -> None:
+        """Prune old finished jobs once ``job`` is done."""
+        with self._lock:
+            self._prune_locked()
 
     def submit(
         self,
@@ -613,7 +692,14 @@ class ProductEvalJobManager:
         platform_url: Optional[str] = None,
         run_count: Optional[int] = None,
         store_bind: Any = None,
-    ) -> ProductEvalJob:
+        enqueue: bool = False,
+        db: Any = None,
+    ) -> Any:
+        """Start an eval here, or (``enqueue``, split mode) queue it for a worker.
+
+        A queued eval is returned as a :class:`RemoteProductEvalJob` read from
+        ``background_jobs`` (``db`` is the request session it polls through).
+        """
         requested_dataset = validate_dataset_name(dataset_name)
         preset = validate_submit_request(
             preset_name=preset_name,
@@ -632,11 +718,27 @@ class ProductEvalJobManager:
             expected_runs=resolved_run_count,
         )
         job.initialize_planned_runs()
+        if enqueue:
+            return self._enqueue(
+                job,
+                preset=preset,
+                api_key=api_key,
+                run_name=run_name,
+                task_name=task_name,
+                dataset_name=requested_dataset,
+                runtime_inputs=validated_runtime_inputs,
+                model=model,
+                metadata=dict(metadata or {}),
+                run_count=resolved_run_count,
+                store_bind=store_bind,
+                db=db,
+            )
         with self._lock:
             if self._inflight_job_count_locked() >= self._max_workers:
                 raise ProductEvalQueueFull(
                     "Too many product eval jobs are already running. Try again later."
                 )
+            self._prune_locked()
             self._jobs[job.job_id] = job
         if store_bind is not None:
             # Before the thread starts, so its first change finds the handle.
@@ -663,11 +765,151 @@ class ProductEvalJobManager:
                 resolved_run_count,
             )
         except Exception:
+            logger.exception("product eval %s could not be queued", job.job_id)
             with self._lock:
                 self._jobs.pop(job.job_id, None)
             job.mark(status="FAILED", error="The eval could not be queued.")
             raise
         job._future = future
+        logger.info("product eval %s queued (preset=%s)", job.job_id, preset.name)
+        return job
+
+    def _enqueue(
+        self,
+        job: ProductEvalJob,
+        *,
+        preset: ProductEvalPreset,
+        api_key: str,
+        run_name: Optional[str],
+        task_name: Optional[str],
+        dataset_name: Optional[str],
+        runtime_inputs: ProductEvalRuntimeInputs,
+        model: Optional[str],
+        metadata: Dict[str, Any],
+        run_count: int,
+        store_bind: Any,
+        db: Any,
+    ) -> "RemoteProductEvalJob":
+        from qym_platform.secrets import encrypt_llm_api_key, encryption_available
+
+        if store_bind is None:
+            raise ProductEvalConfigError("Queued product evals need the request's database.")
+        settings = PlatformSettings()
+        if not encryption_available(settings):
+            # The job carries the caller's API key and refresh token to the
+            # workers service; they are never stored in plain text.
+            raise ProductEvalConfigError(
+                "QYM_LLM_CONFIG_ENCRYPTION_KEY must be set to queue product evals "
+                "for the workers service (QYM_SERVICE=main)."
+            )
+        cap = ProductEvalSettings().max_queued or self._max_workers
+        if job_registry.count_active(store_bind, PRODUCT_EVAL_JOB_KIND) >= cap:
+            raise ProductEvalQueueFull(
+                "Too many product eval jobs are already running. Try again later."
+            )
+        payload = {
+            "preset": preset.name,
+            _ENCRYPTED_API_KEY: encrypt_llm_api_key(api_key, settings),
+            "run_name": run_name,
+            "task_name": task_name,
+            "dataset_name": dataset_name,
+            "runtime_inputs": {
+                "insightor_url": runtime_inputs.insightor_url,
+                _ENCRYPTED_REFRESH_TOKEN: (
+                    encrypt_llm_api_key(runtime_inputs.refresh_token, settings)
+                    if runtime_inputs.refresh_token
+                    else None
+                ),
+                "agent_version": runtime_inputs.agent_version,
+                "image_version": runtime_inputs.image_version,
+                "kb_version": runtime_inputs.kb_version,
+            },
+            "model": model,
+            "metadata": metadata,
+            "run_count": run_count,
+        }
+        row = job_registry.enqueue(
+            store_bind,
+            kind=PRODUCT_EVAL_JOB_KIND,
+            job_id=job.job_id,
+            description=job.describe(),
+            payload=payload,
+        )
+        return RemoteProductEvalJob(row, db)
+
+    def free_slots(self) -> int:
+        with self._lock:
+            return max(0, self._max_workers - self._inflight_job_count_locked())
+
+    def running_count(self) -> int:
+        with self._lock:
+            return self._inflight_job_count_locked()
+
+    def adopt(self, row: Dict[str, Any], store_bind: Any) -> ProductEvalJob:
+        """Run an eval a ``main`` service queued (``row`` from ``job_registry.claim``).
+
+        Secrets are decrypted here and held only in memory; the platform is
+        called at ``QYM_INTERNAL_PLATFORM_URL`` (else ``QYM_BASE_URL``).
+        """
+        from qym_platform.secrets import decrypt_llm_api_key
+
+        payload = dict(row.get("payload") or {})
+        snapshot = dict(row.get("snapshot") or {})
+        settings = PlatformSettings()
+        api_key = decrypt_llm_api_key(str(payload.get(_ENCRYPTED_API_KEY) or ""), settings)
+        raw_inputs = dict(payload.get("runtime_inputs") or {})
+        token = raw_inputs.get(_ENCRYPTED_REFRESH_TOKEN)
+        runtime_inputs = ProductEvalRuntimeInputs(
+            insightor_url=raw_inputs.get("insightor_url"),
+            refresh_token=decrypt_llm_api_key(str(token), settings) if token else None,
+            agent_version=raw_inputs.get("agent_version"),
+            image_version=raw_inputs.get("image_version"),
+            kb_version=raw_inputs.get("kb_version"),
+        )
+        preset = get_preset(str(payload.get("preset") or snapshot.get("preset") or ""))
+        run_count = int(payload.get("run_count") or snapshot.get("expected_runs") or 1)
+        job = ProductEvalJob(
+            job_id=str(row["id"]),
+            preset=preset.name,
+            owner_user_id=row.get("owner_user_id"),
+            project_id=row.get("project_id"),
+            expected_runs=run_count,
+        )
+        if row.get("created_at") is not None:
+            job.created_at = row["created_at"]
+        job.initialize_planned_runs()
+        with self._lock:
+            self._jobs[job.job_id] = job
+        job_registry.track(
+            store_bind,
+            kind=PRODUCT_EVAL_JOB_KIND,
+            job_id=job.job_id,
+            describe=job.describe,
+            on_cancel=job.request_stop,
+        )
+        try:
+            future = self._executor.submit(
+                self._run_job,
+                job,
+                preset,
+                api_key,
+                payload.get("run_name"),
+                payload.get("task_name"),
+                payload.get("dataset_name"),
+                runtime_inputs,
+                payload.get("model"),
+                dict(payload.get("metadata") or {}),
+                settings.internal_platform_base,
+                run_count,
+            )
+        except Exception:
+            logger.exception("queued product eval %s could not be started", job.job_id)
+            with self._lock:
+                self._jobs.pop(job.job_id, None)
+            job.mark(status="FAILED", error="The eval could not be started.")
+            raise
+        job._future = future
+        logger.info("started queued product eval %s (preset=%s)", job.job_id, preset.name)
         return job
 
     def get(self, job_id: str, db: Any = None) -> Optional[Any]:
@@ -736,6 +978,7 @@ class ProductEvalJobManager:
         run_count: int = 3,
     ) -> None:
         job.mark(status="RUNNING")
+        module: Any = None
         try:
             if job.stop_requested():
                 job.mark(status="STOPPED")
@@ -928,3 +1171,7 @@ class ProductEvalJobManager:
             else:
                 job.mark(status="FAILED", error=error)
                 logger.warning("Product eval %s failed: %s", job.eval_id, error)
+        finally:
+            if module is not None:
+                _unload_script(module)
+            self._finished(job)

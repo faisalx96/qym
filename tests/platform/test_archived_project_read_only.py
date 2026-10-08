@@ -380,9 +380,68 @@ REFUSED = [
         {"json": {"value": "b"}},
         MGR,
     ),
+    (
+        "POST",
+        "/v1/projects/{project_id}/dataset-read-tokens",
+        "/v1/projects/pa/dataset-read-tokens",
+        {"json": {"name": "svc"}},
+        ADMIN,
+    ),
+    # Evaluation Service environments, presets and experiments.
+    (
+        "POST",
+        "/v1/projects/{project_id}/eval-environments",
+        "/v1/projects/pa/eval-environments",
+        {"json": {"name": "env", "base_url": "https://eval.example.com", "api_key": "k"}},
+        MGR,
+    ),
+    ("PUT", "/v1/projects/{project_id}/eval-environments/{env_id}", "/v1/projects/pa/eval-environments/e1", {"json": {}}, MGR),
+    ("DELETE", "/v1/projects/{project_id}/eval-environments/{env_id}", "/v1/projects/pa/eval-environments/e1", None, MGR),
+    (
+        "POST",
+        "/v1/projects/{project_id}/eval-environments/{env_id}/schema/refresh",
+        "/v1/projects/pa/eval-environments/e1/schema/refresh",
+        None,
+        MGR,
+    ),
+    (
+        "PUT",
+        "/v1/projects/{project_id}/eval-environments/{env_id}/model-slots",
+        "/v1/projects/pa/eval-environments/e1/model-slots",
+        {"json": {"slots": []}},
+        MGR,
+    ),
+    (
+        "POST",
+        "/v1/projects/{project_id}/eval-environments/{env_id}/presets",
+        "/v1/projects/pa/eval-environments/e1/presets",
+        {"json": {"config": {}}},
+        MGR,
+    ),
+    (
+        "POST",
+        "/v1/projects/{project_id}/eval-environments/{env_id}/presets/{preset_id}/versions",
+        "/v1/projects/pa/eval-environments/e1/presets/p1/versions",
+        {"json": {"config": {}}},
+        MGR,
+    ),
+    (
+        "POST",
+        "/v1/projects/{project_id}/experiments",
+        "/v1/projects/pa/experiments",
+        {"json": {"name": "x", "environment_ids": ["e1"], "spec": {}}},
+        MGR,
+    ),
+    (
+        "POST",
+        "/v1/projects/{project_id}/experiments/{experiment_id}/jobs/{job_id}/retry",
+        "/v1/projects/pa/experiments/x1/jobs/j1/retry",
+        None,
+        MGR,
+    ),
 ]
 
-_P = "/api/projects/{project_slug}"
+_P ="/api/projects/{project_slug}"
 _Q = "?project_slug=pa"
 # Project-slug writes. The archived project is readable to its members, so
 # its writes reach the shared 409 like every other write.
@@ -537,6 +596,15 @@ KEY_ONLY = [
         "/v1/runs:upload",
         {"data": {"task": "t", "dataset": "d"}, "files": {"file": ("r.csv", b"input\nq\n", "text/csv")}},
     ),
+    # The same ingest routes under QYM_INGESTION_PREFIX (service split alias).
+    ("POST", "/ingestion/v1/runs", "/ingestion/v1/runs", {"json": {"task": "t", "dataset": "d"}}),
+    ("POST", "/ingestion/v1/runs/{run_id}/events", "/ingestion/v1/runs/r1/events", {"content": b""}),
+    (
+        "POST",
+        "/ingestion/v1/runs:upload",
+        "/ingestion/v1/runs:upload",
+        {"data": {"task": "t", "dataset": "d"}, "files": {"file": ("r.csv", b"input\nq\n", "text/csv")}},
+    ),
     ("POST", "/v1/product-evals", "/v1/product-evals", {"json": {}}),
     ("POST", "/v1/product-evals/jobs/{job_id}/stop", "/v1/product-evals/jobs/j1/stop", None),
     ("POST", "/v1/product-evals/{identifier}/stop", "/v1/product-evals/r1/stop", None),
@@ -582,10 +650,17 @@ ALLOWED = {
     # Dry runs that store nothing.
     ("POST", "/api/runs/{run_id:path}/analyze-test"): "dry run, stores nothing",
     ("POST", "/v1/projects/{project_id}/llm-connections/{connection_id}/test"): "dry run, stores nothing",
+    ("POST", "/v1/projects/{project_id}/eval-environments/{env_id}/test"): "health probe, stores only its result",
+    ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/clone"): "launch-form prefill, stores nothing",
     # Taking access or work away stays possible without unarchiving (which
     # would switch the project's API keys back on).
     ("DELETE", "/v1/projects/{project_id}/members/{user_id}"): "removes access",
     ("DELETE", "/v1/projects/{project_id}/api-keys/{key_id}"): "revokes a key",
+    ("DELETE", "/v1/projects/{project_id}/dataset-read-tokens/{token_id}"): "revokes a token",
+    ("POST", "/v1/projects/{project_id}/eval-queue/cancel"): "stops a running job",
+    ("POST", "/v1/projects/{project_id}/eval-queue/remote/cancel"): "stops a running job",
+    ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/cancel"): "stops a running job",
+    ("POST", "/v1/projects/{project_id}/experiments/{experiment_id}/jobs/{job_id}/cancel"): "stops a running job",
     ("POST", "/api/runs/{run_id:path}/analysis-jobs/{job_id}/cancel"): "stops a running job",
     ("POST", "/api/runs/{run_id:path}/analysis-rule-jobs/{job_id}/cancel"): "stops a running job",
     ("POST", "/api/projects/{project_slug}/analysis-rule-jobs/{job_id}/cancel"): "stops a running job",

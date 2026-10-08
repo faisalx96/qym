@@ -14,6 +14,10 @@ from qym_platform.deps import get_db
 from qym_platform.services import maintenance
 from qym_platform.settings import PlatformSettings
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 _STATS_CACHE: Dict[str, Any] = {"at": 0.0, "value": None}
@@ -25,18 +29,32 @@ def _require_admin(principal: Principal) -> None:
         raise HTTPException(status_code=403, detail="Admin only")
 
 
-def _worker_state(request: Request, settings: PlatformSettings) -> Dict[str, Any]:
-    if settings.role == "api":
+def _worker_state(request: Request, settings: PlatformSettings, db: Session | None = None) -> Dict[str, Any]:
+    state = request.app.state
+    runs_loops = getattr(state, "runs_loops", None)
+    if runs_loops is None:
+        runs_loops = settings.role != "api"
+    if not runs_loops:
         # This HTTP process runs no loops: a worker process does (the
-        # QYM_WEB_WORKERS launcher's loop process or a worker Deployment).
-        # Its liveness is not visible from here, so do not report "stopped".
+        # workers service, the QYM_WEB_WORKERS launcher's loop process or a
+        # worker Deployment). It reports through ``service_heartbeats``; with
+        # no heartbeat at all (an old worker image) do not report "stopped".
+        from qym_platform.api.service_status import heartbeat_summary
+
+        workers = heartbeat_summary(db.get_bind()) if db is not None else {"processes": []}
+        live = [p for p in workers.get("processes") or [] if p.get("alive")]
+        layout = getattr(state, "service_layout", None)
+        # An explicit split (QYM_SERVICE=main) expects a workers service that
+        # heartbeats: none at all means it is down, not unknown.
+        reported = bool(workers.get("processes")) or bool(layout is not None and layout.queues_jobs)
+        loops = (live[0].get("loops") or {}) if live else {}
         return {
             "loops": "separate",
-            "summary_worker_alive": None,
-            "maintenance_worker_alive": None,
-            "maintenance_current_job": None,
+            "summary_worker_alive": (bool(loops.get("dashboard_summary")) if reported else None),
+            "maintenance_worker_alive": (bool(loops.get("maintenance")) if reported else None),
+            "maintenance_current_job": live[0].get("maintenance_current_job") if live else None,
+            "workers_service": workers,
         }
-    state = request.app.state
     summary = getattr(state, "dashboard_summary_worker", None)
     maint = getattr(state, "maintenance_worker", None)
     return {
@@ -63,18 +81,21 @@ def maintenance_overview(
         try:
             _STATS_CACHE["value"] = collect(db.get_bind(), top=12, sample_pct=1.0)
         except Exception as exc:  # noqa: BLE001 - stats are best effort (sqlite in tests)
+            logger.warning("Admin database stats unavailable", exc_info=True)
             _STATS_CACHE["value"] = {"error": str(exc).splitlines()[0]}
         _STATS_CACHE["at"] = now
     pool = db.get_bind().pool
     return {
         "settings": {
             "role": settings.role,
+            "service": getattr(getattr(request.app.state, "service_layout", None), "service", None),
             "maintenance_mode": settings.maintenance_mode,
             "event_log_mode": settings.event_log_mode,
             "span_retention_days": settings.span_retention_days,
             "deleted_run_grace_days": settings.deleted_run_grace_days,
+            "span_partition_days_ahead": settings.span_partition_days_ahead,
         },
-        "workers": _worker_state(request, settings),
+        "workers": _worker_state(request, settings, db),
         "pool": pool.status() if hasattr(pool, "status") else None,
         "db_stats": _STATS_CACHE["value"],
         "db_stats_age_seconds": round(now - _STATS_CACHE["at"], 1),
@@ -112,8 +133,10 @@ def maintenance_enqueue(
     try:
         job = maintenance.enqueue(db, kind, params, requested_by=principal.user.id)
     except ValueError as exc:
+        logger.info("Maintenance job %s not queued: %s", kind, exc)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.commit()
+    logger.info("Maintenance job %s (%s) queued by admin %s", job.id, kind, principal.user.id)
     return job.as_dict()
 
 
@@ -124,6 +147,7 @@ def maintenance_start(job_id: str, db: Session = Depends(get_db), principal: Pri
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     db.commit()
+    logger.info("Maintenance job %s start requested by admin %s", job_id, principal.user.id)
     return job.as_dict()
 
 
@@ -134,4 +158,5 @@ def maintenance_cancel(job_id: str, db: Session = Depends(get_db), principal: Pr
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     db.commit()
+    logger.info("Maintenance job %s cancel requested by admin %s", job_id, principal.user.id)
     return job.as_dict()

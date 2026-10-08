@@ -186,6 +186,25 @@ class DashboardRunDimension(Base):
     search_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+class DashboardRunVersion(Base):
+    """One filterable ``versioning_metadata`` entry of a run (any key).
+
+    Maintained with the run's dimension by the projection worker
+    (``services/run_versioning.py``), so filters are indexed lookups instead of
+    scans of JSON descriptors.
+    """
+
+    __tablename__ = "dashboard_run_versions"
+    __table_args__ = (
+        Index("ix_dashboard_run_versions_key_value", "key", "value"),
+        Index("ix_dashboard_run_versions_project_key", "project_key", "key", "value"),
+    )
+    run_key: Mapped[str] = mapped_column(String(36), primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    project_key: Mapped[str] = mapped_column(String(36), nullable=False)
+    value: Mapped[str] = mapped_column(String(500), nullable=False)
+
+
 class RollupNumbers:
     count: Mapped[int] = mapped_column(Integer, default=0)
     terminal_count: Mapped[int] = mapped_column(Integer, default=0)

@@ -56,7 +56,6 @@ the Python build on seeded projects.
 from __future__ import annotations
 
 import json
-import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple
 
@@ -84,8 +83,9 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.types import JSON
 
 from qym_platform.services.dashboard_views import _iso, _utf16_key
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Each run's descriptor and published summary are parsed once, into these.
 _DESCRIPTOR_FIELDS = (
@@ -479,6 +479,7 @@ def build_overview_postgres(
         _ordered_query,
         _search_condition,
         _sort,
+        _versioning_facets,
     )
     from qym_platform.db.dashboard_models import DashboardRunOverview as Facts
 
@@ -487,7 +488,10 @@ def build_overview_postgres(
         name: and_(true(), *_filter_conditions({name: filters.get(name) or []}, facets=True))
         for name in _FILTER_COLUMNS
     }
-    terms = _filter_conditions({k: filters[k] for k in ("since", "until") if k in filters})
+    # Versioning keys narrow every facet, the chart and the list alike.
+    terms = _filter_conditions(
+        {k: filters[k] for k in ("since", "until", "versioning") if k in filters}
+    )
     if filters.get("q"):
         # The search as a semi-join, which the trigram index serves (C060); as
         # a per-row flag it would read every run's JSON.
@@ -520,6 +524,7 @@ def build_overview_postgres(
             Dimension.status.collate("C").label("status"),
             Dimension.version.collate("C").label("version"),
             Dimension.owner.collate("C").label("owner_id"),
+            _FILTER_COLUMNS["origins"].collate("C").label("origin"),
             Dimension.timestamp.label("timestamp"),
             Summary.projection_revision.label("revision"),
             func.row_number().over(order_by=legacy).label("pos_g"),
@@ -629,6 +634,9 @@ def build_overview_postgres(
     whole = _assemble_global(raw, now) if include_global else None
     filtered = _assemble_chart(raw)
     filtered["kpis"] = _kpi_result(raw["kpis"], filtered=bool(active))
+    filtered["facets"]["versioning"] = _versioning_facets(
+        db, _base_conditions(project), filters
+    )
     return whole, filtered
 
 
@@ -897,6 +905,7 @@ def _filter_parts(scope, filter_names):
         "statuses": s.status,
         "versions": s.version,
         "users": s.owner_id,
+        "origins": s.origin,
     }
     sort_columns = {
         "tasks": s.task,
@@ -1136,10 +1145,17 @@ def _assemble_chart(raw: Dict[str, Any]) -> Dict[str, Any]:
 SHARED_GRACE = timedelta(minutes=2)
 SHARED_MAX_AGE = timedelta(days=1)
 SHARED_PER_PROJECT = 200
+# Entries of every project older than SHARED_MAX_AGE are pruned by at most one
+# writer per process in this interval; the per-project prune runs on each write.
+SHARED_GLOBAL_PRUNE_INTERVAL = timedelta(minutes=10)
+_next_global_prune = 0.0
+# Namespace of the shared store's pg_try_advisory_xact_lock keys.
+_STORE_LOCK_SPACE = "qym.dashboard_overview_snapshots:"
 # Bump when the stored payload changes shape, so pods of a new release never
 # read an entry an older release stored for the same revision. 2: a filter
-# entry holds only its filtered part.
-SHARED_SHAPE = 2
+# entry holds only its filtered part. 3: the filtered facets carry origins
+# and versioning.
+SHARED_SHAPE = 3
 # Key prefixes: the whole-project part and one filter's part.
 _PROJECT_PART = "p:"
 _FILTER_PART = "f:"
@@ -1187,13 +1203,58 @@ def load_shared(db, keys) -> Dict[str, Any]:
     return {key: json.loads(payload) for key, payload in rows}
 
 
+def _store_lock_key(name: str):
+    """A 64-bit advisory lock key for one project (or the global prune).
+
+    Advisory locks are database-wide: the key includes the schema, so two
+    deployments (or test schemas) sharing a database never block each other.
+    """
+    return func.hashtextextended(
+        func.current_schema() + literal(":" + _STORE_LOCK_SPACE + name), 0
+    )
+
+
+def _try_store_lock(connection, name: str) -> bool:
+    """Take a transaction-scoped advisory lock without waiting.
+
+    Readers that miss the cache together all try to store the same entries
+    and prune the same rows; one writer per project proceeds and the others
+    skip (a skipped write only costs a later recompute). Databases without
+    advisory locks always proceed.
+    """
+    if connection.dialect.name != "postgresql":
+        return True
+    return bool(
+        connection.execute(
+            select(func.pg_try_advisory_xact_lock(_store_lock_key(name)))
+        ).scalar()
+    )
+
+
+def _global_prune_due() -> bool:
+    """At most one prune of every project's old entries per interval."""
+    import time
+
+    global _next_global_prune
+    now = time.monotonic()
+    if now < _next_global_prune:
+        return False
+    _next_global_prune = now + SHARED_GLOBAL_PRUNE_INTERVAL.total_seconds()
+    return True
+
+
 def store_shared(engine, entries, project_key: str, catalog_revision: str) -> None:
     """Store overview parts (``{key: value}``) for every process and pod, and
     prune entries of replaced revisions and old ones.
 
     Its own short transaction, on a connection taken after the request's
     snapshot connection was released (``api.dashboard.after_snapshot``). A
-    failed write only costs the next reader a recompute.
+    failed or skipped write only costs the next reader a recompute.
+
+    One writer per project at a time (a non-blocking advisory lock): readers
+    that missed the cache together never wait on, or deadlock over, each
+    other's inserts and prunes. Other projects' old entries are pruned only
+    occasionally, so a request rarely touches rows outside its project.
     """
     from sqlalchemy import delete
     from sqlalchemy.dialects.postgresql import insert
@@ -1203,6 +1264,8 @@ def store_shared(engine, entries, project_key: str, catalog_revision: str) -> No
     now = datetime.utcnow()
     try:
         with engine.begin() as connection:
+            if not _try_store_lock(connection, "project:" + project_key):
+                return
             connection.execute(
                 insert(Snapshot)
                 .values(
@@ -1221,14 +1284,14 @@ def store_shared(engine, entries, project_key: str, catalog_revision: str) -> No
             )
             connection.execute(
                 delete(Snapshot).where(
+                    Snapshot.project_key == project_key,
                     or_(
                         and_(
-                            Snapshot.project_key == project_key,
                             Snapshot.catalog_revision != catalog_revision,
                             Snapshot.created_at < now - SHARED_GRACE,
                         ),
                         Snapshot.created_at < now - SHARED_MAX_AGE,
-                    )
+                    ),
                 )
             )
             newest = (
@@ -1246,6 +1309,10 @@ def store_shared(engine, entries, project_key: str, catalog_revision: str) -> No
                     Snapshot.cache_key.in_(newest.scalar_subquery()),
                 )
             )
+            if _global_prune_due() and _try_store_lock(connection, "global-prune"):
+                connection.execute(
+                    delete(Snapshot).where(Snapshot.created_at < now - SHARED_MAX_AGE)
+                )
     except Exception:  # noqa: BLE001 - the store only saves work
         logger.warning("Could not write the shared overview cache", exc_info=True)
 

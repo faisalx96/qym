@@ -182,7 +182,8 @@ For non-Docker platform setup and admin operations, see the [Platform README](pa
 **Platform**
 
 - [Platform README](packages/platform/README.md) - local setup and operator overview
-- [Platform User Guide](packages/platform/docs/USER_GUIDE.md) - dashboard workflows and analysis features
+- [Platform User Guide](packages/platform/docs/USER_GUIDE.md) - dashboard workflows, analysis features, and Evaluation Service experiments
+- [Operations runbook](docs/internal/OPERATIONS.md) - storage maintenance, recovery, and the Evaluation Service dispatcher
 - [LLM analyzer branch record](docs/BRANCH_CHANGES_LLM_ANALYZER.md) - analyzer behavior, API surface, security, migrations, and verification coverage
 
 ## License

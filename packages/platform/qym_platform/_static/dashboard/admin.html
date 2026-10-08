@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Admin</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261008-cols">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p1-20261005"></script>
-  <script src="/static/shell.js?v=p1-20261005-8"></script>
+  <script src="/static/shell.js?v=p1-20261006-1"></script>
   <style>
     .admin-page { }
     .admin-header { margin-bottom: var(--space-xl); }
@@ -412,6 +412,8 @@
           liveRequest++;
           recentRequest++;
           forceStoppedRuns.set(runId, stopped);
+          // Open runs lists and run pages (any tab) re-read now.
+          window.QymShell?.announceRunStatus?.({ runIds: [runId], status: 'STOPPED' });
           if (state.liveRuns.some(item => item.run_id === runId)) state.liveRunsTotal = Math.max(0, state.liveRunsTotal - 1);
           state.liveRuns = state.liveRuns.filter(item => item.run_id !== runId);
           state.recentRuns = state.recentRuns.map(item => item.run_id === runId ? { ...item, ...stopped } : item);
@@ -882,8 +884,10 @@
           `${dbSize} total · role ${st.role} · maintenance mode ${st.maintenance_mode ? 'ON' : 'off'} · event log ${st.event_log_mode} · ` +
           `span retention ${st.span_retention_days} d · deleted-run grace ${st.deleted_run_grace_days} d · ` +
           (w.loops === 'separate'
-            ? 'workers: in a separate worker process'
-            : `workers: summary ${w.summary_worker_alive ? 'running' : 'stopped'}, maintenance ${w.maintenance_worker_alive ? 'running' : 'stopped'}`) +
+            ? (w.workers_service && (w.workers_service.processes || []).length
+              ? `workers service ${w.workers_service.alive ? 'alive' : 'NOT RESPONDING'} (${w.workers_service.processes.filter(p => p.alive).length}/${w.workers_service.processes.length} processes): summary ${w.summary_worker_alive ? 'running' : 'stopped'}, maintenance ${w.maintenance_worker_alive ? 'running' : 'stopped'}`
+              : 'workers: in a separate worker process')
+            :`workers: summary ${w.summary_worker_alive ? 'running' : 'stopped'}, maintenance ${w.maintenance_worker_alive ? 'running' : 'stopped'}`) +
           ` · refreshed ${Math.round(data.db_stats_age_seconds)} s ago`;
         const stats = data.db_stats || {};
         const tb = document.querySelector('#maint-tables tbody');

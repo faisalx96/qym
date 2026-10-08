@@ -1,0 +1,843 @@
+{
+  "$defs": {
+    "EndpointConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Url"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key"
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeout"
+        },
+        "max_attempts": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Attempts"
+        },
+        "max_connections": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Connections"
+        },
+        "max_keepalive": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Keepalive"
+        },
+        "connect_timeout": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connect Timeout"
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "title": "EndpointConfig",
+      "type": "object"
+    },
+    "LlmOverrides": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoints": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EndpointConfig"
+          },
+          "minProperties": 1,
+          "title": "Endpoints",
+          "type": "object"
+        },
+        "main": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "router": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "brief": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "drafting": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "finalize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "audit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "table_selector_rerank": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "table_selector_decide": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "report_sub_agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "report_definition_sub_agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "report_planner": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "report_definition_extractor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "report_summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "chart_suggester_detailed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "chart_suggester_quick": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "out_of_scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "spatial_join_dedup": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "spatial_join_infer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "question_alignment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "followup_suggester": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "input_completion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cot_summarizer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "conversation_title": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "endpoints"
+      ],
+      "title": "LlmOverrides",
+      "type": "object"
+    },
+    "ResponseFormat": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "text",
+            "json_object"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ResponseFormat",
+      "type": "object"
+    },
+    "RoleConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Endpoint"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "reasoning_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Enabled"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Effort"
+        },
+        "top_p": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top P"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
+        "response_format": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResponseFormat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "RoleConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "LLM_OVERRIDES": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LlmOverrides"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "ENABLE_RESPONSE_DRAFTING": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Enable Response Drafting"
+    },
+    "BRIEF_ENABLED": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Brief Enabled"
+    },
+    "SKILL_TRIGGERS_ENABLED": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Skill Triggers Enabled"
+    },
+    "ROUTER_SKILL_HINTS_ENABLED": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Router Skill Hints Enabled"
+    },
+    "SKILL_TOOL_ENABLED": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Skill Tool Enabled"
+    },
+    "VIZ_ENFORCEMENT_ENABLED": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Viz Enforcement Enabled"
+    },
+    "TABLE_SELECTION_MODE": {
+      "anyOf": [
+        {
+          "enum": [
+            "rag",
+            "llm_direct",
+            "pure_llm"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Table Selection Mode"
+    },
+    "USE_LLM_TABLE_SELECTION": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Use Llm Table Selection"
+    },
+    "RAG_ITERATION": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rag Iteration"
+    },
+    "MILVUS_SEARCH_THRESHOLD": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Milvus Search Threshold"
+    },
+    "SQL_RESULT_LIMIT": {
+      "anyOf": [
+        {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sql Result Limit"
+    },
+    "CONTEXT_MAX_TOKENS": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context Max Tokens"
+    },
+    "CONTEXT_COMPACT_THRESHOLD": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context Compact Threshold"
+    },
+    "CONTEXT_KEEP_RECENT": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context Keep Recent"
+    },
+    "VIZ_LLM_ENABLED": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Viz Llm Enabled"
+    },
+    "VIZ_LLM_TIMEOUT": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Viz Llm Timeout"
+    },
+    "VIZ_LLM_MIN_CONFIDENCE": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Viz Llm Min Confidence"
+    },
+    "VIZ_LLM_MODEL": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Viz Llm Model"
+    },
+    "VIZ_SEMANTIC_INFERENCE_ENABLED": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Viz Semantic Inference Enabled"
+    },
+    "VIZ_DATA_TRANSFORM_ENABLED": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Viz Data Transform Enabled"
+    },
+    "VIZ_MAX_CATEGORIES": {
+      "anyOf": [
+        {
+          "minimum": 2,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Viz Max Categories"
+    },
+    "VIZ_MAX_GROUPS": {
+      "anyOf": [
+        {
+          "minimum": 2,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Viz Max Groups"
+    },
+    "VIZ_DIVERSITY_ENABLED": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Viz Diversity Enabled"
+    },
+    "REQUEST_TIMEOUT": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Timeout"
+    }
+  },
+  "title": "EnvOverrides",
+  "type": "object"
+}

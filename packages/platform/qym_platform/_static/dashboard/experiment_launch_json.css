@@ -1,0 +1,21 @@
+/* Structured editor for JSON settings (experiment_launch_json.js). Tokens only. */
+.xlj-editor { display: grid; gap: var(--space-sm); min-width: 0; padding: var(--space-sm) var(--space-md); border: 1px solid var(--border-subtle); border-radius: var(--control-radius); background: var(--bg-base); }
+.xlj-toolbar { display: flex; align-items: center; gap: var(--space-sm); }
+.xlj-object, .xlj-list, .xlj-items { display: grid; gap: var(--space-sm); min-width: 0; }
+.xlj-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-sm) var(--space-md); }
+.xlj-entry { display: grid; gap: var(--space-xs); align-content: start; min-width: 0; }
+.xlj-nested { display: grid; gap: var(--space-xs); padding-left: var(--space-md); border-left: 2px solid var(--border-subtle); min-width: 0; }
+.xlj-key { display: flex; align-items: center; gap: var(--space-xs); min-height: 20px; }
+.xlj-key-name { font-family: var(--font-mono); font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); overflow-wrap: anywhere; }
+.xlj-list-head { display: flex; align-items: center; gap: var(--space-sm); }
+.xlj-item-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: var(--space-sm); }
+.xlj-index { font-family: var(--font-mono); font-size: var(--font-sm); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.xlj-control { width: 100%; min-width: 96px; box-sizing: border-box; }
+.xlj-json { min-height: 32px; min-width: 160px; }
+.xlj-invalid { border-color: var(--error); }
+.xlj-table { border-collapse: collapse; width: max-content; min-width: 100%; }
+.xlj-table th { position: sticky; top: 0; z-index: 1; padding: var(--space-xs) var(--space-sm); background: var(--bg-elevated); font-size: var(--font-sm); font-weight: 650; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; text-align: left; white-space: nowrap; }
+.xlj-table td { padding: var(--space-xs) var(--space-sm); border-top: 1px solid var(--border-subtle); font-size: var(--font-base); color: var(--text-secondary); vertical-align: middle; }
+.xlj-all-row td { background: var(--bg-elevated); }
+.xlj-all-label { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+.xlj-all-block, .xlj-all-item { padding: var(--space-xs) var(--space-sm); border-radius: var(--control-radius); background: var(--bg-elevated); }

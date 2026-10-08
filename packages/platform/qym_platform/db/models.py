@@ -23,6 +23,7 @@ from sqlalchemy import (
     delete,
     event,
     false,
+    text,
 )
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import JSONB
@@ -73,6 +74,76 @@ class AnalysisRuleVersionStatus(str, enum.Enum):
 class ApprovalDecision(str, enum.Enum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
+
+
+class EvalPriority(str, enum.Enum):
+    """Evaluation Service job priority (``HIGH`` preempts lower jobs remotely)."""
+
+    LOW = "LOW"
+    NORMAL = "NORMAL"
+    HIGH = "HIGH"
+
+
+class EvalModelSlotKind(str, enum.Enum):
+    ENDPOINT = "endpoint"
+    FLAT = "flat"
+
+
+class EvalModelSlotStatus(str, enum.Enum):
+    PROPOSED = "proposed"
+    CONFIRMED = "confirmed"
+    STALE = "stale"
+
+
+class EvalExperimentStatus(str, enum.Enum):
+    """Aggregate status of an experiment across its jobs."""
+
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    PARTIAL = "PARTIAL"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class EvalJobStatus(str, enum.Enum):
+    """Platform-side status of one experiment job (dispatcher state machine)."""
+
+    QUEUED = "QUEUED"
+    SUBMITTING = "SUBMITTING"
+    SUBMITTED = "SUBMITTED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
+    CANCELLING = "CANCELLING"
+    CANCELLED = "CANCELLED"
+    TIMED_OUT = "TIMED_OUT"
+
+
+class RunOrigin(str, enum.Enum):
+    """``official`` only when ingest verified a platform launch token."""
+
+    LOCAL = "local"
+    OFFICIAL = "official"
+
+
+class EvalConfigPresetKind(str, enum.Enum):
+    """``official``: the environment's manager-published defaults (at most one)."""
+
+    OFFICIAL = "official"
+    SAVED = "saved"
+
+
+def _string_enum(enum_cls: type[enum.Enum], length: int) -> Enum:
+    """VARCHAR-backed enum storing member values; no native PostgreSQL type."""
+    return Enum(
+        enum_cls,
+        native_enum=False,
+        length=length,
+        values_callable=lambda members: [member.value for member in members],
+        validate_strings=True,
+    )
 
 
 class User(Base):
@@ -407,6 +478,27 @@ class ApiKey(Base):
     __table_args__ = (Index("ix_api_key_prefix_active", "prefix", "revoked_at"),)
 
 
+class DatasetReadToken(Base):
+    """Admin-issued token that lets a service read one project's dataset items,
+    private test sets included (``services.dataset_read_tokens``).
+
+    Sent next to a user's API key, never in place of it: the key still decides
+    who acts and in which project; the token only lifts the private test set
+    block on item reads for its own project.
+    """
+
+    __tablename__ = "dataset_read_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    prefix: Mapped[str] = mapped_column(String(16), index=True)
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class ProjectLlmConnection(Base):
     """A named LLM provider configuration owned by a project.
 
@@ -424,6 +516,10 @@ class ProjectLlmConnection(Base):
     llm_api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
     llm_api_key_last4: Mapped[str] = mapped_column(String(8), default="")
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Lets a project keep analyzer-only connections out of the experiment model picker.
+    available_for_experiments: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
     created_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -454,6 +550,629 @@ class ProjectAnalysisPromptSettings(Base):
     )
 
 
+class EvalEnvironment(Base):
+    """A remote Evaluation Service deployment registered in one project.
+
+    ``base_url`` is the normalized service prefix (no trailing ``/``, without
+    ``/evals``). An active URL belongs to exactly one project, because the
+    deployment ingests runs with that project's qym API key. The service key is
+    stored Fernet-encrypted via ``qym_platform.secrets`` and never returned.
+    """
+
+    __tablename__ = "eval_environments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    base_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    api_key_encrypted: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    api_key_last4: Mapped[str] = mapped_column(
+        String(8), default="", server_default="", nullable=False
+    )
+    default_priority: Mapped[EvalPriority] = mapped_column(
+        _string_enum(EvalPriority, 10),
+        default=EvalPriority.NORMAL,
+        server_default=EvalPriority.NORMAL.value,
+        nullable=False,
+    )
+    max_priority: Mapped[EvalPriority] = mapped_column(
+        _string_enum(EvalPriority, 10),
+        default=EvalPriority.NORMAL,
+        server_default=EvalPriority.NORMAL.value,
+        nullable=False,
+    )
+    # Opt-in to send decrypted ProjectLlmConnection keys to this environment.
+    allow_connection_keys: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    current_schema_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_environment_schemas.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_eval_environments_current_schema",
+        ),
+        nullable=True,
+    )
+    # ``GET /evals/evaluator/schema`` (guide v1.1 §3.4): the evaluator schema in use,
+    # NULL when the service has not published one. ``evaluator_schema_status`` is
+    # ``unknown`` (never fetched), ``available`` or ``unsupported`` (the service
+    # answered 404: an older service; the launch form falls back to the static
+    # ``EvaluatorRequestConfig`` mirror).
+    current_evaluator_schema_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_environment_evaluator_schemas.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_eval_environments_current_evaluator_schema",
+        ),
+        nullable=True,
+    )
+    evaluator_schema_status: Mapped[str] = mapped_column(
+        String(20), default="unknown", server_default="unknown", nullable=False
+    )
+    # Best-run ranking defaults; NULL falls back to the project default.
+    ranking_metric: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    ranking_k: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    health_status: Mapped[str] = mapped_column(
+        String(20), default="unknown", server_default="unknown", nullable=False
+    )
+    health_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    health_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_eval_environment_project_name"),
+        # Platform-wide: an active environment URL can't be registered twice.
+        Index(
+            "ux_eval_environments_active_base_url",
+            "base_url",
+            unique=True,
+            postgresql_where=text("is_active"),
+            sqlite_where=text("is_active"),
+        ),
+        CheckConstraint(
+            "default_priority IN ('LOW', 'NORMAL', 'HIGH')",
+            name="ck_eval_environments_default_priority",
+        ),
+        CheckConstraint(
+            "max_priority IN ('LOW', 'NORMAL', 'HIGH')",
+            name="ck_eval_environments_max_priority",
+        ),
+    )
+
+
+class EvalEnvironmentSchema(Base):
+    """Immutable history of an environment's ``env-overrides`` JSON Schema.
+
+    A refresh that yields a new ``schema_hash`` (sha256 of canonical JSON)
+    inserts a row; existing rows are never rewritten apart from ``fetched_at``.
+    """
+
+    __tablename__ = "eval_environment_schemas"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), index=True
+    )
+    schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_json: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, nullable=False)
+    form_descriptor: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        BIG_JSON, nullable=True
+    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "environment_id", "schema_hash", name="uq_eval_environment_schema_hash"
+        ),
+    )
+
+
+class EvalEnvironmentEvaluatorSchema(Base):
+    """Immutable history of an environment's ``evaluator`` JSON Schema (§3.4).
+
+    The counterpart of :class:`EvalEnvironmentSchema` for ``GET
+    /evals/evaluator/schema`` (``EvaluatorInputs`` with ``EvaluatorRequestConfig``
+    under ``$defs``). ``form_descriptor`` is the ``evaluator.config`` descriptor.
+    """
+
+    __tablename__ = "eval_environment_evaluator_schemas"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), index=True
+    )
+    schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_json: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, nullable=False)
+    form_descriptor: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        BIG_JSON, nullable=True
+    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "environment_id",
+            "schema_hash",
+            name="uq_eval_environment_evaluator_schema_hash",
+        ),
+    )
+
+
+class EvalModelSlot(Base):
+    """A proposed or confirmed grouping of LLM fields in an environment schema."""
+
+    __tablename__ = "eval_model_slots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), index=True
+    )
+    schema_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environment_schemas.id", ondelete="CASCADE"), index=True
+    )
+    slot_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[EvalModelSlotKind] = mapped_column(
+        _string_enum(EvalModelSlotKind, 10), nullable=False
+    )
+    label: Mapped[str] = mapped_column(
+        String(200), default="", server_default="", nullable=False
+    )
+    # {"model": "<json-pointer>", "base_url": "<ptr>|null", "api_key": "<ptr>|null"}
+    field_map: Mapped[dict[str, Any]] = mapped_column(
+        BIG_JSON, default=dict, nullable=False
+    )
+    # {"timeout": "<ptr>", "max_attempts": "<ptr>", ...} left editable per slot.
+    transport_fields: Mapped[dict[str, Any]] = mapped_column(
+        BIG_JSON, default=dict, nullable=False
+    )
+    # More key sets the same bound model fills, each shaped like ``field_map``
+    # (e.g. VIZ_LLM_MODEL and CHART_LLM_MODEL under one "Visualization model").
+    extra_field_maps: Mapped[list[dict[str, Any]]] = mapped_column(
+        BIG_JSON, default=list, server_default="[]", nullable=False
+    )
+    required: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    status: Mapped[EvalModelSlotStatus] = mapped_column(
+        _string_enum(EvalModelSlotStatus, 10),
+        default=EvalModelSlotStatus.PROPOSED,
+        server_default=EvalModelSlotStatus.PROPOSED.value,
+        nullable=False,
+    )
+    confirmed_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint("schema_id", "slot_key", name="uq_eval_model_slot_schema_key"),
+        CheckConstraint("kind IN ('endpoint', 'flat')", name="ck_eval_model_slots_kind"),
+        CheckConstraint(
+            "status IN ('proposed', 'confirmed', 'stale')",
+            name="ck_eval_model_slots_status",
+        ),
+    )
+
+
+class EvalExperiment(Base):
+    """One launch: a sweep of config combinations over one or more environments.
+
+    ``spec`` is the config document with sweeps; secrets appear in it only as
+    refs, and ``secrets_encrypted`` holds the Fernet blob ``{ref_id: value}``
+    for temporary-model keys until every job is terminal. ``qym_api_key_*`` is the
+    creator's per-experiment platform API key, revoked once every job is terminal.
+    """
+
+    __tablename__ = "eval_experiments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    environment_ids: Mapped[list[str]] = mapped_column(
+        BIG_JSON, default=list, nullable=False
+    )
+    # {"kind": "official" | "saved" | "best_run" | "blank" | "clone", ...}
+    base_source: Mapped[dict[str, Any]] = mapped_column(
+        BIG_JSON, default=dict, nullable=False
+    )
+    spec: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict, nullable=False)
+    # Keys copied into every launched run's ``versioning_details`` (0084).
+    versioning_details: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
+    secrets_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The creator's dedicated qym API key, sent as ``qym_api_key`` on every submit
+    # (migration 0077, ``services/eval_submitter_keys``). The id outlives revocation;
+    # the Fernet blob is cleared when the key is revoked.
+    qym_api_key_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "api_keys.id",
+            ondelete="SET NULL",
+            name="fk_eval_experiments_qym_api_key_id",
+        ),
+        nullable=True,
+        index=True,
+    )
+    qym_api_key_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    priority: Mapped[EvalPriority] = mapped_column(
+        _string_enum(EvalPriority, 10),
+        default=EvalPriority.NORMAL,
+        server_default=EvalPriority.NORMAL.value,
+        nullable=False,
+    )
+    preemption_acknowledged_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+    status: Mapped[EvalExperimentStatus] = mapped_column(
+        _string_enum(EvalExperimentStatus, 10),
+        default=EvalExperimentStatus.QUEUED,
+        server_default=EvalExperimentStatus.QUEUED.value,
+        nullable=False,
+    )
+    job_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    cancelled_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_eval_experiments_project_created", "project_id", "created_at"),
+        CheckConstraint(
+            "priority IN ('LOW', 'NORMAL', 'HIGH')", name="ck_eval_experiments_priority"
+        ),
+        CheckConstraint(
+            "status IN ('QUEUED', 'RUNNING', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED')",
+            name="ck_eval_experiments_status",
+        ),
+        CheckConstraint("job_count >= 0", name="ck_eval_experiments_job_count"),
+    )
+
+
+class EvalExperimentJob(Base):
+    """One attempt of one sweep combination submitted to one environment.
+
+    A retry is a new row with the same ``combo_index``, ``attempt + 1`` and
+    ``retry_of_job_id`` pointing at the attempt it replaces (migration 0075).
+
+    The dispatcher claims rows by ``(status, next_attempt_at)`` under a lease
+    (``lease_owner`` / ``lease_until``). ``run_id`` is set once ingest verifies
+    the launch token whose sha256 is ``launch_token_hash``.
+    """
+
+    __tablename__ = "eval_experiment_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    experiment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_experiments.id", ondelete="CASCADE"), nullable=False
+    )
+    # Cascades so a project hard-delete succeeds; the API soft-disables an
+    # environment that jobs reference instead of deleting it.
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), nullable=False
+    )
+    combo_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 0 for the first submission of a combination; each retry adds a row with +1.
+    attempt: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    # The attempt this row retries (kept for history, left out of the aggregate).
+    retry_of_job_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_experiment_jobs.id",
+            ondelete="SET NULL",
+            name="fk_eval_experiment_jobs_retry_of_job_id",
+        ),
+        nullable=True,
+        index=True,
+    )
+    # Swept values for this combo (redacted; model slots as connection names).
+    params: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict, nullable=False)
+    # Materialized EvalJobCreate body with secret refs, never secret values.
+    request_body: Mapped[dict[str, Any]] = mapped_column(
+        BIG_JSON, default=dict, nullable=False
+    )
+    schema_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environment_schemas.id", ondelete="CASCADE"), nullable=False
+    )
+    launch_token_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    remote_job_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    remote_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    remote_result: Mapped[Optional[dict[str, Any]]] = mapped_column(BIG_JSON, nullable=True)
+    remote_versioning: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        BIG_JSON, nullable=True
+    )
+    status: Mapped[EvalJobStatus] = mapped_column(
+        _string_enum(EvalJobStatus, 20),
+        default=EvalJobStatus.QUEUED,
+        server_default=EvalJobStatus.QUEUED.value,
+        nullable=False,
+    )
+    run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("runs.id", ondelete="SET NULL"), nullable=True
+    )
+    # When ingest linked a run (0076). Never cleared, so a job whose linked run was
+    # hard-deleted (``run_id`` SET NULL) can't be claimed again by a replayed token.
+    run_linked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    submit_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    next_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    lease_owner: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_polled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Why a non-terminal job isn't progressing, e.g. "Environment is disabled".
+    wait_reason: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    cancel_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    cancelled_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    cancel_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "experiment_id",
+            "environment_id",
+            "combo_index",
+            "attempt",
+            name="uq_eval_experiment_job_attempt",
+        ),
+        Index("ix_eval_experiment_jobs_status_next_attempt", "status", "next_attempt_at"),
+        Index("ix_eval_experiment_jobs_environment_status", "environment_id", "status"),
+        # A run links to at most one job (the launch token is single-use).
+        Index("ix_eval_experiment_jobs_run_id", "run_id", unique=True),
+        CheckConstraint("combo_index >= 0", name="ck_eval_experiment_jobs_combo_index"),
+        CheckConstraint("attempt >= 0", name="ck_eval_experiment_jobs_attempt"),
+        CheckConstraint(
+            "submit_attempts >= 0", name="ck_eval_experiment_jobs_submit_attempts"
+        ),
+        CheckConstraint(
+            "status IN ('QUEUED', 'SUBMITTING', 'SUBMITTED', 'RUNNING', 'SUCCEEDED', "
+            "'FAILED', 'BLOCKED', 'CANCELLING', 'CANCELLED', 'TIMED_OUT')",
+            name="ck_eval_experiment_jobs_status",
+        ),
+    )
+
+
+class EvalRunScore(Base):
+    """Best-run index (plan §4.7): one metric of one scored official run.
+
+    Written by ``services/eval_run_scores.py`` once the run's job is terminal and the
+    run completed, refreshed on re-score, and filled for older runs by the backfill.
+    """
+
+    __tablename__ = "eval_run_scores"
+
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("runs.id", ondelete="CASCADE", name="fk_eval_run_scores_run_id"),
+        primary_key=True,
+    )
+    metric_name: Mapped[str] = mapped_column(String(200), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "projects.id", ondelete="CASCADE", name="fk_eval_run_scores_project_id"
+        ),
+        nullable=False,
+    )
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "eval_environments.id",
+            ondelete="CASCADE",
+            name="fk_eval_run_scores_environment_id",
+        ),
+        nullable=False,
+    )
+    dataset_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "datasets.id", ondelete="SET NULL", name="fk_eval_run_scores_dataset_id"
+        ),
+        nullable=True,
+    )
+    dataset_version_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "dataset_versions.id",
+            ondelete="SET NULL",
+            name="fk_eval_run_scores_dataset_version_id",
+        ),
+        nullable=True,
+    )
+    # The runs-list mean: errored items count as 0, unscored items are left out.
+    mean_score: Mapped[float] = mapped_column(Float, nullable=False)
+    # ``RunMetricSpec.direction`` ("maximize" when the run has no spec).
+    direction: Mapped[str] = mapped_column(
+        String(10), default="maximize", server_default="maximize", nullable=False
+    )
+    # {"k": pass@k}: k = 1..samples from the stored pass scores of a repeat run, else
+    # the service result's single value for its analysis_metric; None otherwise.
+    pass_at_k: Mapped[Optional[dict[str, Any]]] = mapped_column(BIG_JSON, nullable=True)
+    item_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    error_item_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_eval_run_scores_ranking",
+            "environment_id",
+            "dataset_version_id",
+            "metric_name",
+            "mean_score",
+        ),
+        CheckConstraint(
+            "direction IN ('maximize', 'minimize')",
+            name="ck_eval_run_scores_direction",
+        ),
+        CheckConstraint(
+            "item_count >= 0 AND error_item_count >= 0 "
+            "AND error_item_count <= item_count",
+            name="ck_eval_run_scores_counts",
+        ),
+    )
+
+
+class EvalRemoteQueueSnapshot(Base):
+    """Latest redacted view of an environment's remote queue.
+
+    ``items`` keeps only ``{remote_job_id, status, priority, user_id,
+    created_at, run_name}`` per PENDING/RUNNING job; ``env_overrides`` and
+    ``eval_input`` are never stored.
+    """
+
+    __tablename__ = "eval_remote_queue_snapshots"
+
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), primary_key=True
+    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    fetch_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    items: Mapped[list[dict[str, Any]]] = mapped_column(BIG_JSON, default=list, nullable=False)
+
+
+class EvalConfigPreset(Base):
+    """A named config starting point for one environment.
+
+    Each environment has at most one ``official`` preset (the published
+    defaults); members may keep any number of ``saved`` ones. Content lives in
+    immutable ``EvalConfigPresetVersion`` rows; ``current_version_id`` points
+    at the latest published one.
+    """
+
+    __tablename__ = "eval_config_presets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    # Cascades so a project hard-delete succeeds; the API soft-disables an
+    # environment that has presets instead of deleting it.
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[EvalConfigPresetKind] = mapped_column(
+        _string_enum(EvalConfigPresetKind, 10), nullable=False
+    )
+    current_version_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_config_preset_versions.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_eval_config_presets_current_version",
+        ),
+        nullable=True,
+    )
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        # At most one official preset per environment.
+        Index(
+            "ux_eval_config_presets_official_env",
+            "environment_id",
+            unique=True,
+            postgresql_where=text("kind = 'official'"),
+            sqlite_where=text("kind = 'official'"),
+        ),
+        CheckConstraint(
+            "kind IN ('official', 'saved')", name="ck_eval_config_presets_kind"
+        ),
+    )
+
+
+class EvalConfigPresetVersion(Base):
+    """Immutable published content of a preset.
+
+    ``config`` is a config document without sweeps (``evaluator``,
+    secret-free ``env_overrides``, ``slot_bindings``) authored against
+    ``schema_id``. Publishing adds ``version = n + 1``; rows are never updated.
+    """
+
+    __tablename__ = "eval_config_preset_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    preset_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_config_presets.id", ondelete="CASCADE"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environment_schemas.id", ondelete="CASCADE"), index=True
+    )
+    config: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict, nullable=False)
+    notes: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    published_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("preset_id", "version", name="uq_eval_config_preset_version"),
+        CheckConstraint("version >= 1", name="ck_eval_config_preset_versions_version"),
+    )
+
+
+@event.listens_for(EvalConfigPresetVersion, "before_update")
+def _refuse_preset_version_update(mapper, connection, target) -> None:
+    """Published preset versions are immutable; publish ``version + 1`` instead."""
+    raise ValueError(
+        "Preset versions are immutable; publish a new version instead"
+    )
+
+
 class Run(Base):
     __tablename__ = "runs"
 
@@ -471,8 +1190,32 @@ class Run(Base):
     metrics: Mapped[list[str]] = mapped_column(JSON, default=list)
     run_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     run_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # Free-form versioning the run's creator supplied, plus the launching
+    # experiment's keys (0084; services/run_versioning.normalize_versioning_details).
+    # NULL on runs created before it, read as {}.
+    versioning_details: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
     # Repeat runs: how many passes evaluate each item (1 = classic run).
     samples: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # "official" only when ingest verified an Evaluation Service launch token.
+    origin: Mapped[RunOrigin] = mapped_column(
+        _string_enum(RunOrigin, 10),
+        default=RunOrigin.LOCAL,
+        server_default=RunOrigin.LOCAL.value,
+        nullable=False,
+        index=True,
+    )
+    experiment_job_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_experiment_jobs.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_runs_experiment_job_id",
+        ),
+        nullable=True,
+        index=True,
+    )
 
     status: Mapped[RunWorkflowStatus] = mapped_column(Enum(RunWorkflowStatus), default=RunWorkflowStatus.DRAFT, index=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -495,6 +1238,10 @@ class Run(Base):
     scores: Mapped[list["RunItemScore"]] = relationship("RunItemScore", lazy="noload", foreign_keys="RunItemScore.run_id")
     approval_rel: Mapped[Optional["Approval"]] = relationship("Approval", uselist=False, lazy="noload", foreign_keys="Approval.run_id")
     owner_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[owner_user_id], lazy="noload")
+
+    __table_args__ = (
+        CheckConstraint("origin IN ('local', 'official')", name="ck_runs_origin"),
+    )
 
     @classmethod
     def active(cls, db: Session):
@@ -628,6 +1375,11 @@ class Dataset(Base):
     slug: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, default="")
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Private test set: item contents, and those of runs evaluated on it, are
+    # admin-only (``permissions.can_view_dataset_items``).
+    private_test_set: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -1184,7 +1936,7 @@ class RunTraceNamedContribution(Base):
 
 # Import projection mappings so Base.metadata includes their durable tables.
 from qym_platform.db.maintenance_models import MaintenanceJob  # noqa: E402,F401
-from qym_platform.db.background_job_models import BackgroundJob  # noqa: E402,F401
+from qym_platform.db.background_job_models import BackgroundJob, ServiceHeartbeat  # noqa: E402,F401
 from qym_platform.db.dashboard_models import (  # noqa: E402,F401
     DashboardChangeEvent, DashboardEventCause, DashboardRecordState,
     DashboardRecordCause, DashboardRunDimension, DashboardRunSummary,

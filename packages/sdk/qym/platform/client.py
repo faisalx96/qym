@@ -4,6 +4,7 @@ import asyncio
 import json
 import math
 import os
+import random
 import sys
 import threading
 import time
@@ -13,7 +14,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time as dt_time, timezone
 from queue import Empty, Full
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib import request
 
 from .tls import urlopen
@@ -33,6 +34,20 @@ if _DEBUG and _DEBUG.lower() not in ("0", "false", "no", ""):
             _DEBUG_FILE = sys.stderr
 
 
+def _spill_limit(client: Any) -> int:
+    """Disk spill allowance: QYM_PLATFORM_EVENT_SPILL_BYTES, else the class default."""
+    raw = os.environ.get("QYM_PLATFORM_EVENT_SPILL_BYTES", "").strip()
+    if raw:
+        try:
+            value = int(raw)
+        except ValueError:
+            value = -1
+        if value >= 0:
+            return value
+        _debug(f"ignoring invalid QYM_PLATFORM_EVENT_SPILL_BYTES={raw!r}")
+    return client.MAX_PENDING_DISK_BYTES
+
+
 def _debug(msg: str) -> None:
     if _DEBUG_FILE:
         ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -43,10 +58,61 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _sanitize_for_json(obj: Any) -> Any:
-    """Recursively coerce platform event payloads into JSON-safe values."""
-    if obj is None or isinstance(obj, (str, int, bool)):
+def _env_number(name: str, default: float, *, minimum: float = 0.0) -> float:
+    """A numeric env override (``name``) or ``default`` when unset/invalid."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        _debug(f"ignoring invalid {name}={raw!r}")
+        return default
+    if not math.isfinite(value) or value < minimum:
+        _debug(f"ignoring out-of-range {name}={raw!r}")
+        return default
+    return value
+
+
+TRUNCATION_MARKER = "…[truncated by qym: {omitted} bytes omitted]"
+
+
+class _Truncator:
+    """Caps every string in a payload at ``limit`` UTF-8 bytes; counts the cuts."""
+
+    def __init__(self, limit: Optional[int]) -> None:
+        self.limit = limit if limit and limit > 0 else None
+        self.truncated = 0
+        # Characters of string data kept; a cheap bound on payload size.
+        self.kept_chars = 0
+
+    def __call__(self, text: str) -> str:
+        self.kept_chars += len(text)
+        limit = self.limit
+        # A str of n chars encodes to at most 4n bytes: skip the encode for
+        # the common short value.
+        if limit is None or len(text) * 4 <= limit:
+            return text
+        encoded = text.encode("utf-8", "surrogatepass")
+        if len(encoded) <= limit:
+            return text
+        self.truncated += 1
+        head = encoded[:limit].decode("utf-8", "ignore")
+        self.kept_chars -= len(text) - len(head)
+        return head + TRUNCATION_MARKER.format(omitted=len(encoded) - limit)
+
+
+def _sanitize_for_json(obj: Any, _cap: Optional[_Truncator] = None) -> Any:
+    """Recursively coerce platform event payloads into JSON-safe values.
+
+    With ``_cap``, every string longer than its byte limit is cut and marked
+    (``TRUNCATION_MARKER``) so one huge output or span attribute cannot make
+    an oversized request.
+    """
+    if obj is None or isinstance(obj, (int, bool)):
         return obj
+    if isinstance(obj, str):
+        return _cap(obj) if _cap is not None else obj
     if isinstance(obj, float):
         return obj if math.isfinite(obj) else None
     if isinstance(obj, (datetime, date, dt_time)):
@@ -54,27 +120,27 @@ def _sanitize_for_json(obj: Any) -> Any:
     if isinstance(obj, uuid.UUID):
         return str(obj)
     if isinstance(obj, Path):
-        return str(obj)
+        return _sanitize_for_json(str(obj), _cap)
     if is_dataclass(obj) and not isinstance(obj, type):
-        return _sanitize_for_json(asdict(obj))
+        return _sanitize_for_json(asdict(obj), _cap)
     if isinstance(obj, dict):
-        return {str(k): _sanitize_for_json(v) for k, v in obj.items()}
+        return {str(k): _sanitize_for_json(v, _cap) for k, v in obj.items()}
     if isinstance(obj, (list, tuple, set)):
-        return [_sanitize_for_json(v) for v in obj]
+        return [_sanitize_for_json(v, _cap) for v in obj]
     if hasattr(obj, "model_dump"):
         try:
-            return _sanitize_for_json(obj.model_dump(mode="json"))
+            return _sanitize_for_json(obj.model_dump(mode="json"), _cap)
         except Exception:
             try:
-                return _sanitize_for_json(obj.model_dump())
+                return _sanitize_for_json(obj.model_dump(), _cap)
             except Exception:
                 pass
     if hasattr(obj, "dict"):
         try:
-            return _sanitize_for_json(obj.dict())
+            return _sanitize_for_json(obj.dict(), _cap)
         except Exception:
             pass
-    return str(obj)
+    return _sanitize_for_json(str(obj), _cap)
 
 
 def _post_json(
@@ -230,7 +296,15 @@ class PlatformEventStream:
     # During shutdown, give up on a dead endpoint after this many consecutive
     # send failures instead of burning the whole close budget.
     CLOSE_GIVEUP_FAILURES = 6
-    SYNC_SEND_TIMEOUT = 10.0
+    # Per-request client timeouts. They must clearly exceed the platform's
+    # per-request statement budget (30s): a client that gives up first
+    # re-sends the batch while the server is still applying it, and the two
+    # requests contend for the same run row. Env overrides:
+    # QYM_PLATFORM_REQUEST_TIMEOUT (mid-run) and
+    # QYM_PLATFORM_DRAIN_REQUEST_TIMEOUT (close() drain and direct sends).
+    REQUEST_TIMEOUT = 60.0
+    DRAIN_REQUEST_TIMEOUT = 45.0
+    SYNC_SEND_TIMEOUT = DRAIN_REQUEST_TIMEOUT
     SYNC_SEND_RETRIES = 3
     HEARTBEAT_INTERVAL = 15.0
     # Default wall-clock budget for flush() barriers between items.
@@ -239,11 +313,29 @@ class PlatformEventStream:
     # requests under common reverse-proxy body limits.
     MAX_BATCH_EVENTS = 200
     MAX_BATCH_BYTES = 2_000_000
-    # Cadence flush for near-real-time live views when the queue is quiet.
-    FLUSH_INTERVAL = 0.25
+    # Cadence flush for live views when the queue is quiet. Each POST is one
+    # platform transaction on the run row, so the cadence stays near 1/s and
+    # stretches (up to MAX_FLUSH_INTERVAL) while POSTs are slow
+    # (> SLOW_POST_SECONDS). Batch caps still flush immediately.
+    # Env override: QYM_PLATFORM_FLUSH_INTERVAL.
+    FLUSH_INTERVAL = 1.0
+    MAX_FLUSH_INTERVAL = 5.0
+    SLOW_POST_SECONDS = 1.0
     RETRY_BACKOFF_BASE = 0.5
     RETRY_BACKOFF_MAX = 10.0
+    # Any single string in an event payload (task output, span attribute,
+    # input) is cut to this many UTF-8 bytes and marked. Env override:
+    # QYM_PLATFORM_MAX_FIELD_BYTES (0 disables the cap).
+    MAX_FIELD_BYTES = 256 * 1024
+    # Whole-event ceiling after field truncation; larger events are cut
+    # further (smaller per-field limit) until they fit.
+    MAX_EVENT_BYTES = MAX_BATCH_BYTES
+    # Span events are best-effort: wait at most this long for backlog room
+    # rather than blocking the caller (often the event loop).
+    SPAN_ENQUEUE_TIMEOUT = 0.1
     MAX_PENDING_MEMORY_BYTES = 16 * 1024 * 1024
+    # Overflow spool in the temp dir; QYM_PLATFORM_EVENT_SPILL_BYTES overrides it
+    # (0 = never spill: the platform image sets that, events wait in memory).
     MAX_PENDING_DISK_BYTES = 256 * 1024 * 1024
 
     def __init__(self, platform_url: str, api_key: str, run_id: str) -> None:
@@ -261,13 +353,40 @@ class PlatformEventStream:
         self.rejected_events = 0
         self._first_rejection: Optional[str] = None
         self._first_refusal: Optional[str] = None
+        # Best-effort span events skipped because the backlog was full. Not
+        # part of dropped_events: they never hold the run's completion.
+        self.dropped_spans = 0
+        # Events whose oversized string fields were cut before upload.
+        self.truncated_events = 0
+        self._truncation_warned = False
+        self._request_timeout = _env_number(
+            "QYM_PLATFORM_REQUEST_TIMEOUT", float(self.REQUEST_TIMEOUT), minimum=1.0
+        )
+        self._drain_request_timeout = _env_number(
+            "QYM_PLATFORM_DRAIN_REQUEST_TIMEOUT",
+            float(self.DRAIN_REQUEST_TIMEOUT),
+            minimum=1.0,
+        )
+        self._flush_interval = _env_number(
+            "QYM_PLATFORM_FLUSH_INTERVAL", float(self.FLUSH_INTERVAL)
+        )
+        self._max_field_bytes = int(
+            _env_number("QYM_PLATFORM_MAX_FIELD_BYTES", float(self.MAX_FIELD_BYTES))
+        )
+        # Serializes every POST of this run's events: the flush thread's batch
+        # and direct sends (run_completed, SIGINT STOPPED, post-close emits)
+        # never race each other on the platform's run row.
+        self._send_lock = threading.Lock()
+        self._sync_send_timeout = _env_number(
+            "QYM_PLATFORM_DRAIN_REQUEST_TIMEOUT",
+            float(self.SYNC_SEND_TIMEOUT),
+            minimum=1.0,
+        )
         self._consecutive_failures = 0
         self._seq = 0
         self._seq_lock = threading.Lock()
         self._state_lock = threading.Lock()
-        self._q = EventBacklog(
-            self.MAX_PENDING_MEMORY_BYTES, self.MAX_PENDING_DISK_BYTES
-        )
+        self._q = EventBacklog(self.MAX_PENDING_MEMORY_BYTES, _spill_limit(self))
         self._active_emitters = 0
         self._accepting = True
         self._delivery_error: Optional[BaseException] = None
@@ -286,6 +405,46 @@ class PlatformEventStream:
             self._seq += 1
             return self._seq
 
+    def _sanitize_payload(self, type_: str, payload: Dict[str, Any]) -> Any:
+        """JSON-safe payload with oversized strings cut to fit one request.
+
+        Strings are capped at ``MAX_FIELD_BYTES``; if the event is still over
+        ``MAX_EVENT_BYTES`` (many large fields), the per-field cap shrinks
+        until it fits. Truncated payloads carry ``_qym_truncated`` (ignored by
+        the platform's payload models, kept in the raw event log).
+        """
+        limit: Optional[int] = self._max_field_bytes or None
+        cap = _Truncator(limit)
+        clean = _sanitize_for_json(payload, cap)
+        if limit is not None and isinstance(clean, dict):
+            # Only payloads carrying lots of string data can be oversized;
+            # skip the extra serialization for everything else.
+            while (
+                limit > 1024
+                and cap.kept_chars * 4 > self.MAX_EVENT_BYTES // 2
+                and len(json.dumps(clean, ensure_ascii=False).encode("utf-8"))
+                > self.MAX_EVENT_BYTES
+            ):
+                limit //= 4
+                cap = _Truncator(limit)
+                clean = _sanitize_for_json(payload, cap)
+        if cap.truncated and isinstance(clean, dict):
+            clean["_qym_truncated"] = {
+                "fields": cap.truncated,
+                "max_field_bytes": limit,
+            }
+            self.truncated_events += 1
+            if not self._truncation_warned:
+                self._truncation_warned = True
+                print(
+                    f"qym: WARNING: a platform {type_} event had {cap.truncated} "
+                    f"string field(s) over {limit} bytes; they were truncated for "
+                    "upload (local results keep the full values). Raise "
+                    "QYM_PLATFORM_MAX_FIELD_BYTES to send more.",
+                    file=sys.stderr,
+                )
+        return clean
+
     def _build_event(self, type_: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "schema_version": 1,
@@ -294,8 +453,18 @@ class PlatformEventStream:
             "sent_at": _utc_now(),
             "type": type_,
             "run_id": self.run_id,
-            "payload": _sanitize_for_json(payload),
+            "payload": self._sanitize_payload(type_, payload),
         }
+
+    def _post(self, ndjson: str, timeout: float) -> Optional[Dict[str, Any]]:
+        """POST events for this run, one request at a time per stream."""
+        with self._send_lock:
+            return _post_ndjson(
+                f"{self.platform_url}/v1/runs/{self.run_id}/events",
+                ndjson,
+                self.api_key,
+                timeout=timeout,
+            )
 
     def _send_event_sync(self, evt: Dict[str, Any], *, reason: str) -> None:
         if self._remote_closed.is_set():
@@ -306,12 +475,7 @@ class PlatformEventStream:
             if self._remote_closed.is_set():
                 return
             try:
-                response = _post_ndjson(
-                    f"{self.platform_url}/v1/runs/{self.run_id}/events",
-                    ndjson,
-                    self.api_key,
-                    timeout=self.SYNC_SEND_TIMEOUT,
-                )
+                response = self._post(ndjson, self._sync_send_timeout)
                 _debug(f"direct emit success: {evt.get('type', '?')}")
                 self.sent_events += 1 - self._record_rejections(response, [evt])
                 return
@@ -411,7 +575,9 @@ class PlatformEventStream:
             file=sys.stderr,
         )
 
-    def _enqueue(self, evt: Dict[str, Any], *, block=True, timeout=None) -> None:
+    def _enqueue(
+        self, evt: Dict[str, Any], *, block=True, timeout=None, allow_direct=True
+    ) -> None:
         with self._state_lock:
             if self._remote_closed.is_set():
                 return
@@ -421,7 +587,7 @@ class PlatformEventStream:
                 direct = False
                 self._active_emitters += 1
         if direct:
-            if not block:
+            if not block or not allow_direct:
                 raise Full
             self._send_event_sync(evt, reason="closed")
             return
@@ -458,6 +624,37 @@ class PlatformEventStream:
             self._send_event_sync(evt, reason="sync")
         else:
             self._enqueue(evt)
+
+    def emit_nowait(self, type_: str, payload: Dict[str, Any]) -> bool:
+        """Best-effort queue for high-volume telemetry (span events).
+
+        Never sends over the network and waits at most
+        ``SPAN_ENQUEUE_TIMEOUT`` for backlog room, so a full backlog or a
+        closed stream cannot stall the caller (typically the event loop
+        thread, from an OTEL span processor). A skipped event is counted in
+        ``dropped_spans`` and reported once; it does not hold completion.
+        """
+        if self._remote_closed.is_set():
+            return False
+        evt = self._build_event(type_, payload)
+        try:
+            self._enqueue(evt, timeout=self.SPAN_ENQUEUE_TIMEOUT, allow_direct=False)
+            return True
+        except Exception as exc:
+            self.dropped_spans += 1
+            if self.dropped_spans == 1:
+                reason = (
+                    "the upload backlog is full"
+                    if isinstance(exc, Full)
+                    else f"{type(exc).__name__}: {exc}"
+                )
+                print(
+                    f"qym: WARNING: skipped a platform {type_} event because "
+                    f"{reason}; further skipped span events are counted in the "
+                    "run summary (dropped_spans).",
+                    file=sys.stderr,
+                )
+            return False
 
     async def aemit(
         self, type_: str, payload: Dict[str, Any], *, sync: bool = False
@@ -668,7 +865,6 @@ class PlatformEventStream:
         deterministic 4xx. Events that individually get a 4xx are dropped
         (they can never succeed); a transient blip gets one more attempt.
         """
-        url = f"{self.platform_url}/v1/runs/{self.run_id}/events"
         _debug(f"falling back to per-event send for {len(entries)} events")
         for index, (evt, line, _, _) in enumerate(entries):
             if self._remote_closed.is_set():
@@ -679,7 +875,7 @@ class PlatformEventStream:
                     self.dropped_events += len(entries) - index
                     return
                 try:
-                    response = _post_ndjson(url, line + "\n", self.api_key)
+                    response = self._post(line + "\n", self._batch_timeout())
                     self.sent_events += 1 - self._record_rejections(response, [evt])
                     break
                 except Exception as e2:
@@ -700,6 +896,31 @@ class PlatformEventStream:
                         break
                     time.sleep(0.5)
 
+    def _batch_timeout(self) -> float:
+        """Client timeout for one batch POST (shorter while draining)."""
+        if self._stop.is_set():
+            return self._drain_request_timeout
+        return self._request_timeout
+
+    def _retry_backoff(self, retry_count: int) -> float:
+        """Capped exponential backoff with full jitter.
+
+        Jitter keeps many runs that failed together (platform restart, lock
+        wait) from retrying in lockstep against the same database.
+        """
+        ceiling = min(
+            self.RETRY_BACKOFF_BASE * (2 ** min(max(retry_count - 1, 0), 10)),
+            self.RETRY_BACKOFF_MAX,
+        )
+        return random.uniform(0.0, ceiling)
+
+    def _next_flush_interval(self, post_seconds: float) -> float:
+        """Cadence after a POST took ``post_seconds``: stretch while slow."""
+        base = self._flush_interval
+        if post_seconds <= self.SLOW_POST_SECONDS:
+            return base
+        return max(base, min(float(self.MAX_FLUSH_INTERVAL), 2.0 * post_seconds))
+
     def _loop(self) -> None:
         # Each entry: (event, serialized line, encoded byte length, from_queue).
         # from_queue tells us whether to task_done() it — in-loop heartbeats
@@ -707,22 +928,46 @@ class PlatformEventStream:
         batch: list[tuple[dict[str, Any], str, int, bool]] = []
         batch_bytes = 0
         queue_items_in_batch = 0
+        # A taken event that would push the batch past MAX_BATCH_BYTES. It
+        # opens the next batch instead, so a batch only exceeds the byte cap
+        # when it holds a single event.
+        carry: Optional[tuple[dict[str, Any], str, int, bool]] = None
+        # After a transient failure the batch is frozen: the retry resends
+        # exactly the same events (same event_ids), and new events wait for
+        # the next batch. Growing a batch between retries made every retry a
+        # bigger transaction while the timed-out one could still be running.
+        frozen = False
+        flush_interval = self._flush_interval
         last_flush = time.time()
         last_heartbeat = time.time()
         retry_count = 0
         _debug(f"flush loop started for run {self.run_id}")
 
-        def _append(evt: Dict[str, Any], from_queue: bool) -> None:
+        def _add(entry: "tuple[dict[str, Any], str, int, bool]") -> None:
             nonlocal batch_bytes, queue_items_in_batch
-            line = json.dumps(evt, ensure_ascii=False)
-            batch.append((evt, line, len(line.encode("utf-8")), from_queue))
-            batch_bytes += len(line.encode("utf-8")) + 1
-            if from_queue:
+            batch.append(entry)
+            batch_bytes += entry[2] + 1
+            if entry[3]:
                 queue_items_in_batch += 1
+
+        def _append(evt: Dict[str, Any], from_queue: bool) -> None:
+            nonlocal carry
+            line = json.dumps(evt, ensure_ascii=False)
+            entry = (evt, line, len(line.encode("utf-8")), from_queue)
+            if batch and batch_bytes + entry[2] + 1 > self.MAX_BATCH_BYTES:
+                carry = entry
+                return
+            _add(entry)
+
+        def _take_carry() -> None:
+            nonlocal carry
+            if carry is not None:
+                _add(carry)
+                carry = None
 
         def _clear_batch() -> None:
             """task_done() every queue-sourced event, then reset the batch."""
-            nonlocal batch_bytes, queue_items_in_batch
+            nonlocal batch_bytes, queue_items_in_batch, frozen
             for _ in range(queue_items_in_batch):
                 try:
                     self._q.task_done()
@@ -733,19 +978,24 @@ class PlatformEventStream:
             queue_items_in_batch = 0
             batch.clear()
             batch_bytes = 0
+            frozen = False
 
         def _batch_full() -> bool:
             return (
-                len(batch) >= self.MAX_BATCH_EVENTS
+                carry is not None
+                or len(batch) >= self.MAX_BATCH_EVENTS
                 or batch_bytes >= self.MAX_BATCH_BYTES
             )
 
         while True:
             if self._remote_closed.is_set():
+                _take_carry()
                 self.dropped_events += len(batch)
                 _clear_batch()
                 break
-            if not _batch_full():
+            if carry is not None and not batch:
+                _take_carry()
+            if not frozen and not _batch_full():
                 try:
                     _append(self._q.get(timeout=0.1), True)
                 except Empty:
@@ -753,6 +1003,8 @@ class PlatformEventStream:
             now = time.time()
             if (
                 not self._stop.is_set()
+                and not frozen
+                and carry is None
                 and (now - last_heartbeat) >= self.HEARTBEAT_INTERVAL
             ):
                 _append(
@@ -760,17 +1012,19 @@ class PlatformEventStream:
                     False,
                 )
                 last_heartbeat = now
-            # Flush on a full batch or on cadence for near-real-time updates.
+            # Flush on a full batch or on cadence; a frozen batch is retried
+            # as soon as its backoff has elapsed.
             should_flush = bool(batch) and (
-                _batch_full() or (now - last_flush) >= self.FLUSH_INTERVAL
+                frozen or _batch_full() or (now - last_flush) >= flush_interval
             )
             if self._stop.is_set():
                 # Drain mode: fill up to the caps and ship without waiting.
-                try:
-                    while not _batch_full():
-                        _append(self._q.get_nowait(), True)
-                except Empty:
-                    pass
+                if not frozen:
+                    try:
+                        while not _batch_full():
+                            _append(self._q.get_nowait(), True)
+                    except Empty:
+                        pass
                 should_flush = bool(batch)
                 if should_flush:
                     _debug(f"final flush: {len(batch)} events")
@@ -779,14 +1033,10 @@ class PlatformEventStream:
             if self._remote_closed.is_set():
                 continue
             if should_flush:
+                started = time.monotonic()
                 try:
                     ndjson = "\n".join(line for _, line, _, _ in batch) + "\n"
-                    response = _post_ndjson(
-                        f"{self.platform_url}/v1/runs/{self.run_id}/events",
-                        ndjson,
-                        self.api_key,
-                        timeout=10 if self._stop.is_set() else 30,
-                    )
+                    response = self._post(ndjson, self._batch_timeout())
                     # Partial success: the platform applied the valid events
                     # and refused the rest; never resend the refused ones.
                     self.sent_events += len(batch) - self._record_rejections(
@@ -800,6 +1050,9 @@ class PlatformEventStream:
                     last_heartbeat = last_flush
                     retry_count = 0
                     self._consecutive_failures = 0
+                    flush_interval = self._next_flush_interval(
+                        time.monotonic() - started
+                    )
                 except Exception as e:
                     retry_count += 1
                     self._consecutive_failures += 1
@@ -833,19 +1086,23 @@ class PlatformEventStream:
                         _clear_batch()
                         retry_count = 0
                     else:
-                        # Transient (network/5xx/429): retry with capped backoff.
-                        # Never drop mid-run — the server dedups by event_id, so
+                        # Transient (network/timeout/5xx/429): retry the same
+                        # frozen batch with jittered, capped backoff. Never drop
+                        # mid-run — the server dedups by event_id, so
                         # redelivery is always safe.
-                        backoff = min(
-                            self.RETRY_BACKOFF_BASE * (2 ** min(retry_count - 1, 5)),
-                            self.RETRY_BACKOFF_MAX,
+                        frozen = True
+                        flush_interval = self._next_flush_interval(
+                            time.monotonic() - started
                         )
+                        backoff = self._retry_backoff(retry_count)
                         _debug(
-                            f"flush error (attempt {retry_count}), retrying in "
-                            f"{backoff:.1f}s: {e}"
+                            f"flush error (attempt {retry_count}), retrying "
+                            f"{len(batch)} events in {backoff:.2f}s: {e}"
                         )
                         time.sleep(backoff)
             if self._stop.is_set() and not batch:
+                if carry is not None:
+                    continue
                 try:
                     _append(self._q.get_nowait(), True)
                 except Empty:
@@ -883,7 +1140,10 @@ class PlatformClient:
         dataset_version_id: Optional[str] = None,
         dataset_alias: Optional[str] = None,
         timeout: Optional[float] = None,
+        versioning_details: Optional[Dict[str, Any]] = None,
     ) -> PlatformRunHandle:
+        """``POST /v1/runs``. ``versioning_details`` is a free-form JSON object
+        stored on the run (platforms before it ignore the field)."""
         payload = {
             "external_run_id": external_run_id,
             "task": task,
@@ -897,6 +1157,8 @@ class PlatformClient:
             "dataset_version_id": dataset_version_id,
             "dataset_alias": dataset_alias,
         }
+        if versioning_details:
+            payload["versioning_details"] = versioning_details
         data = _post_json(
             f"{self.platform_url}/v1/runs",
             payload,
@@ -909,6 +1171,29 @@ class PlatformClient:
             raise RuntimeError(f"Platform did not return run_id/live_url: {data}")
         return PlatformRunHandle(run_id=run_id, live_url=live_url)
 
+    def list_runs(
+        self,
+        *,
+        origin: Optional[str] = None,
+        versioning: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """List runs (``GET /api/runs``), grouped as ``{"tasks": {task: {model: [run]}}}``.
+
+        ``origin`` is ``"official"``, ``"local"`` or ``"all"`` (default: no
+        filter). ``versioning`` is a list of ``"KEY=VALUE"`` filters on the
+        Evaluation Service's ``versioning_metadata`` (any key, e.g.
+        ``["agent_version=v1.12"]``): a repeated key matches any of its values,
+        different keys must all match. Invalid values raise ``ValueError`` before
+        any request. Each run dict carries ``origin``, ``experiment`` (``{id,
+        name, job_id}`` for official runs, ``None`` for local ones),
+        ``versioning`` and ``versioning_details`` (the run's free-form keys).
+        """
+        from ..cli._platform_api import PlatformAPIClient
+
+        return PlatformAPIClient(
+            platform_url=self.platform_url, api_key=self.api_key
+        ).list_runs(origin=origin, versioning=versioning)
+
     def get_dataset_items(
         self,
         *,
@@ -917,8 +1202,11 @@ class PlatformClient:
         alias: Optional[str] = None,
         project_slug: Optional[str] = None,
         limit: int = 1000,
+        read_token: Optional[str] = None,
     ) -> Dict[str, Any]:
         import urllib.parse
+
+        from ..core.dataset import DATASET_READ_TOKEN_HEADER
 
         ref = urllib.parse.quote(dataset, safe="")
         version_ref = urllib.parse.quote(version or alias or "production", safe="")
@@ -929,7 +1217,11 @@ class PlatformClient:
             f"{self.platform_url}/v1/datasets/{ref}/versions/{version_ref}/items?"
             + urllib.parse.urlencode(params)
         )
-        req = request.Request(url, headers={"Authorization": f"Bearer {self.api_key}"})
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        token = read_token or os.getenv("QYM_DATASET_READ_TOKEN")
+        if token:
+            headers[DATASET_READ_TOKEN_HEADER] = token
+        req = request.Request(url, headers=headers)
         with request.urlopen(req, timeout=self.CREATE_RUN_TIMEOUT) as resp:
             body = resp.read().decode("utf-8")
             return json.loads(body) if body else {}

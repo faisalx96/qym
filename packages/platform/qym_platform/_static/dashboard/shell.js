@@ -112,6 +112,8 @@
       /\/projects\/[^/]+\/overview$/,
       /\/projects\/[^/]+\/charts$/,
       /\/projects\/[^/]+\/models$/,
+      /\/projects\/[^/]+\/experiments\/queue$/,
+      /\/projects\/[^/]+\/experiments$/,
       /\/projects\/[^/]+$/,
       /\/run\/[^/]+\/analyzer$/,
       /\/run\/[^/]+$/,
@@ -153,6 +155,8 @@
       if (rest === '' || rest === 'runs') page = 'runs';
       else if (rest === 'charts') page = 'charts';
       else if (rest === 'models') page = 'models';
+      else if (rest === 'experiments') page = 'experiments';
+      else if (rest === 'experiments/queue') page = 'experiments-queue';
       else if (rest === 'datasets') page = 'datasets';
       else if (rest.startsWith('datasets/')) {
         page = 'datasets';
@@ -238,7 +242,8 @@
     if (relative === null) return false;
     if (relative === '') return true;
     return [
-      /^projects\/[^/]+(?:\/(?:runs|overview|charts|models|datasets(?:\/[^/]+(?:\/compare)?)?|analysis|reviews|settings))?$/,
+      /^projects\/[^/]+(?:\/(?:runs|overview|charts|models|experiments|datasets(?:\/[^/]+(?:\/compare)?)?|analysis|reviews|settings))?$/,
+      /^projects\/[^/]+\/experiments\/queue$/,
       /^projects\/[^/]+\/runs\/[^/]+$/,
       /^projects\/[^/]+\/runs\/[^/]+\/analyzer$/,
       /^run\/[^/]+$/,
@@ -354,6 +359,7 @@
   // their own notices (they can mix projects).
   var ARCHIVED_NOTICE_PAGES = {
     runs: true, overview: true, charts: true, models: true, datasets: true, settings: true, 'run-detail': true,
+    experiments: true, 'experiments-queue': true,
   };
 
   function renderArchivedNotice() {
@@ -484,6 +490,7 @@
     dashboard: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
     charts: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
     runs: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    experiments: '<path d="M9 3h6"/><path d="M10 3v6.5L4.6 18.2A1.8 1.8 0 0 0 6.1 21h11.8a1.8 1.8 0 0 0 1.5-2.8L14 9.5V3"/><path d="M7.2 15h9.6"/>',
     models: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>',
     analysis: '<path d="M12 3v3"/><path d="M12 18v3"/><path d="M3 12h3"/><path d="M18 12h3"/><path d="m5.64 5.64 2.12 2.12"/><path d="m16.24 16.24 2.12 2.12"/><path d="m18.36 5.64-2.12 2.12"/><path d="m7.76 16.24-2.12 2.12"/><circle cx="12" cy="12" r="3"/>',
     datasets: '<path d="M21 5c0 1.7-4 3-9 3S3 6.7 3 5s4-3 9-3 9 1.3 9 3Z"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/>',
@@ -541,6 +548,7 @@
       buildNavItem('Charts', 'charts', 'charts', { href: projectSlug ? projectUrl(projectSlug, 'charts') : '#' }),
       buildNavItem('Runs', 'runs', 'runs', { href: projectSlug ? projectUrl(projectSlug) : '#' }),
       buildNavItem('Models', 'models', 'models', { href: projectSlug ? projectUrl(projectSlug, 'models') : '#' }),
+      buildNavItem('Experiments', 'experiments', 'experiments', { href: projectSlug ? projectUrl(projectSlug, 'experiments') : '#' }),
       buildNavItem('Auto-analysis', 'analysis', 'analysis', { href: projectSlug ? projectUrl(projectSlug, 'analysis') : '#' }),
       buildNavItem('Reviews', 'reviews', 'reviews', { href: projectSlug ? projectUrl(projectSlug, 'reviews') : '#' }),
       buildNavItem('Datasets', 'datasets', 'datasets', { href: projectSlug ? projectUrl(projectSlug, 'datasets') : '#' }),
@@ -628,6 +636,8 @@
     analyzer: 'Auto-analysis',
     analysis: 'Auto-analysis',
     models: 'Models',
+    experiments: 'Experiments',
+    'experiments-queue': 'Queue',
     datasets: 'Datasets',
     reviews: 'Reviews',
     traces: 'Traces',
@@ -655,6 +665,9 @@
       } else if (ctx.page === 'compare') {
         crumbs.push({ label: 'Runs', href: projectUrl(ctx.projectSlug) });
         crumbs.push({ label: 'Compare', current: true });
+      } else if (ctx.page === 'experiments-queue') {
+        crumbs.push({ label: 'Experiments', href: projectUrl(ctx.projectSlug, 'experiments') });
+        crumbs.push({ label: 'Queue', current: true });
       } else {
         crumbs.push({ label: PAGE_LABELS[ctx.page] || ctx.page, current: true });
       }
@@ -719,6 +732,7 @@
     'run-detail': 'runs',
     'analyzer': 'analysis',
     'compare': 'runs',
+    'experiments-queue': 'experiments',
   };
 
   function setActiveNav(page) {
@@ -1613,6 +1627,42 @@
     if (_pageController && !_pageController.signal.aborted) _pageController.abort();
   }
 
+  // ── Run status changes ──
+  // A stop made on one page (an admin force stop, a cancelled evaluation job)
+  // reaches every open page that shows runs: this tab through a document
+  // event, other tabs through a BroadcastChannel. The runs list and the run
+  // page re-read at once instead of waiting for their next poll.
+  //   QymShell.announceRunStatus({ runIds: [...], status: 'STOPPED' | 'STOPPING' })
+  //   document.addEventListener('qym:run-status', e => e.detail ...)
+  var RUN_STATUS_EVENT = 'qym:run-status';
+  var _runStatusChannel = null;
+  try {
+    if (typeof BroadcastChannel === 'function') {
+      _runStatusChannel = new BroadcastChannel('qym-run-status');
+      _runStatusChannel.onmessage = function (event) { dispatchRunStatus(event.data); };
+    }
+  } catch (err) {
+    _runStatusChannel = null;
+  }
+
+  function dispatchRunStatus(detail) {
+    if (!detail || typeof detail !== 'object') return;
+    var runIds = Array.isArray(detail.runIds) ? detail.runIds.filter(function (id) { return typeof id === 'string' && id; }) : [];
+    var status = typeof detail.status === 'string' ? detail.status.toUpperCase() : '';
+    document.dispatchEvent(new CustomEvent(RUN_STATUS_EVENT, { detail: { runIds: runIds, status: status } }));
+  }
+
+  function announceRunStatus(detail) {
+    var message = {
+      runIds: (detail && Array.isArray(detail.runIds)) ? detail.runIds.slice(0, 500) : [],
+      status: (detail && detail.status) || '',
+    };
+    dispatchRunStatus(message);
+    if (_runStatusChannel) {
+      try { _runStatusChannel.postMessage(message); } catch (err) { /* other tabs poll anyway */ }
+    }
+  }
+
   function mountPage() {
     unmountPage();
     _pageController = typeof AbortController === 'function' ? new AbortController() : null;
@@ -2051,6 +2101,7 @@
       'charts': projectUrl(slug, 'charts'),
       'runs': projectUrl(slug),
       'models': projectUrl(slug, 'models'),
+      'experiments': projectUrl(slug, 'experiments'),
       'analysis': projectUrl(slug, 'analysis'),
       'datasets': projectUrl(slug, 'datasets'),
       'reviews': projectUrl(slug, 'reviews'),
@@ -2793,6 +2844,7 @@
     navigateTo: navigateTo,
     pageSignal: pageSignal,
     onPageUnmount: onPageUnmount,
+    announceRunStatus: announceRunStatus,
     replaceUrlQuery: replaceUrlQuery,
     copyText: copyText,
     openCreateProjectDialog: openCreateProjectDialog,

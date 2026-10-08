@@ -27,7 +27,9 @@
     ['status', 'statuses'], ['version', 'versions'], ['owner', 'users'],
   ];
   // The order the list writes its view parameters in (page left out).
-  var CONTEXT_KEYS = ['range', 'from', 'to', 'task', 'model', 'dataset', 'status', 'version', 'owner', 'q', 'sort'];
+  var CONTEXT_KEYS = ['range', 'from', 'to', 'task', 'model', 'dataset', 'status', 'version', 'owner', 'origin', 'q', 'sort'];
+  // The list's Origin toggle: one value, absent for "all".
+  var ORIGINS = ['official', 'local'];
   // Text sorts the browser collates, and the overview's sort_values column.
   var COLLATED = { task: 'tasks', model: 'models', dataset: 'dataset_names', version: 'git_commits', owner: 'owner_names' };
 
@@ -66,7 +68,7 @@
     var source = {};
     CONTEXT_KEYS.forEach(function (key) {
       var values = params.getAll(key);
-      if (values.length) source[key] = key === 'q' || key === 'sort' || key === 'range' || key === 'from' || key === 'to' ? values[0] : values;
+      if (values.length) source[key] = key === 'q' || key === 'sort' || key === 'origin' || key === 'range' || key === 'from' || key === 'to' ? values[0] : values;
     });
     return contextFromParams(source);
   }
@@ -131,6 +133,7 @@
     var bounds = rangeBounds(params.get('range'), params.get('from'), params.get('to'), now);
     if (bounds.since) filters.since = bounds.since.toISOString();
     if (bounds.until) filters.until = bounds.until.toISOString();
+    if (ORIGINS.indexOf(params.get('origin')) >= 0) filters.origins = [params.get('origin')];
     var search = normalizeSearch(params.get('q'));
     if (search) filters.q = search;
     return { filters: filters, sort: validSort(params.get('sort')) };

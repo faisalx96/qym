@@ -2,23 +2,27 @@ from __future__ import annotations
 
 import codecs
 import csv
+import hashlib
 import io
+import itertools
 import json
 import re
+import sys
 import unicodedata
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Iterator, Optional
 from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import String, cast, func
+from sqlalchemy import DateTime, String, and_, bindparam, case, cast, func, insert, literal, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
+from starlette.concurrency import run_in_threadpool
 
 from qym_platform.auth import Principal, require_api_key_scope, require_ui_principal, resolve_api_key_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
@@ -40,18 +44,27 @@ from qym_platform.db.models import (
 from qym_platform.deps import get_db
 from qym_platform.item_identity import build_identity_fingerprint
 from qym_platform.permissions import (
+    PRIVATE_TEST_SET_DETAIL,
+    can_view_dataset_items,
     has_project_access,
+    is_platform_admin,
     is_project_manager,
     project_for_read_by_slug,
     require_project_writable,
 )
-from qym_platform.services.dataset_search import filter_dataset_item_search
+from qym_platform.services.dataset_read_tokens import HEADER as DATASET_READ_TOKEN_HEADER
+from qym_platform.services.dataset_read_tokens import token_grants_project
+from qym_platform.services.dataset_search import dataset_item_search_text, filter_dataset_item_search
 from qym_platform.services.dataset_versions import (
     change_counts_for,
     store_change_counts,
 )
 from qym_platform.services.run_means import metric_directions
+from qym_platform.uploads import read_upload
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -206,6 +219,33 @@ def _get_dataset(db: Session, project: Project, ref: str) -> Dataset:
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return dataset
+
+
+def _require_items_visible(
+    principal: Principal,
+    dataset: Dataset,
+    *,
+    db: Optional[Session] = None,
+    read_token: Optional[str] = None,
+) -> None:
+    if can_view_dataset_items(principal, dataset):
+        return
+    # Item reads only: an admin-issued dataset read token of this dataset's
+    # project, sent next to an API key, lifts the private test set block
+    # (Evaluation Service runs). The key still decides the user and project.
+    if (
+        db is not None
+        and read_token
+        and principal.auth_type == "api_key"
+        and token_grants_project(db, read_token, dataset.project_id)
+    ):
+        return
+    raise HTTPException(status_code=403, detail=PRIVATE_TEST_SET_DETAIL)
+
+
+def _require_admin_for_private_flag(principal: Principal) -> None:
+    if not is_platform_admin(principal):
+        raise HTTPException(status_code=403, detail="Only admins can change whether a dataset is a private test set")
 
 
 def _free_slug_from_deleted(db: Session, project: Project, slug: str) -> None:
@@ -541,6 +581,11 @@ def _dataset_payloads(
             "slug": dataset.slug,
             "description": dataset.description,
             "tags": dataset.tags or [],
+            "private_test_set": bool(dataset.private_test_set),
+            # Viewer-specific: whether this caller may read item contents and
+            # toggle the private flag (admins only).
+            "items_visible": principal is None or can_view_dataset_items(principal, dataset),
+            "can_set_private_test_set": principal is not None and is_platform_admin(principal),
             "created_by_user_id": dataset.created_by_user_id,
             "created_by": _user_payload(users.get(dataset.created_by_user_id)),
             "created_at": to_api_timestamp(dataset.created_at),
@@ -642,6 +687,46 @@ def _numeric_score(score_numeric: Optional[float], raw: Any) -> Optional[float]:
     return None
 
 
+def _run_metric_sums(db: Session, run_ids: list[str]) -> Iterator[tuple[str, str, float, int]]:
+    """(run_id, metric_name, sum, count) of each run's numeric scores.
+
+    Scores with ``score_numeric`` are summed in SQL. The rest fall back to
+    ``score_raw`` as :func:`_numeric_score` reads it; only those rows' raw
+    values are loaded (never explanations or meta). A run and metric may come
+    back twice, once per source; every count is at least 1.
+    """
+    for run_id, metric_name, total, count in (
+        db.query(
+            RunItemScore.run_id,
+            RunItemScore.metric_name,
+            func.sum(RunItemScore.score_numeric),
+            func.count(RunItemScore.score_numeric),
+        )
+        .filter(RunItemScore.run_id.in_(run_ids), RunItemScore.score_numeric.isnot(None))
+        .group_by(RunItemScore.run_id, RunItemScore.metric_name)
+    ):
+        if count:
+            yield run_id, metric_name, float(total), int(count)
+    fallback: Dict[tuple[str, str], list[float]] = {}
+    for run_id, metric_name, raw in (
+        db.query(RunItemScore.run_id, RunItemScore.metric_name, RunItemScore.score_raw)
+        .filter(
+            RunItemScore.run_id.in_(run_ids),
+            RunItemScore.score_numeric.is_(None),
+            RunItemScore.score_raw.isnot(None),
+        )
+        .yield_per(1000)
+    ):
+        value = _numeric_score(None, raw)
+        if value is None:
+            continue
+        pair = fallback.setdefault((run_id, metric_name), [0.0, 0])
+        pair[0] += value
+        pair[1] += 1
+    for (run_id, metric_name), (total, count) in fallback.items():
+        yield run_id, metric_name, total, int(count)
+
+
 def _is_generated_item_id(value: Any) -> bool:
     text = str(value or "").strip()
     if not text:
@@ -655,39 +740,31 @@ def _is_generated_item_id(value: Any) -> bool:
     return False
 
 
+_ITEM_FILTER_LIMIT = 1000
+
+
 def _item_result_summaries(
     db: Session,
     version: DatasetVersion,
     items: list[Any],
+    *,
+    with_scores: bool = True,
+    metric_name: Optional[str] = None,
 ) -> Dict[int, Dict[str, Any]]:
     """Run results per dataset item (``items`` need ``id`` and ``item_id`` only).
 
-    Reads only the columns it aggregates (no run or item bodies), so a computed
-    sort over a whole version stays light.
+    Aggregated in SQL per (dataset_item_pk, item_id) group of the version's
+    run items, so memory follows the number of items and metrics, not runs x
+    items. Each group counts for the item it names by row id, else by item ID,
+    as before. Scores whose ``score_numeric`` is NULL fall back to
+    ``score_raw`` (only those rows' raw values are read). ``with_scores=False``
+    skips scores (run count and latency sorts); ``metric_name`` keeps only that
+    metric's scores (a metric sort).
     """
     if not items:
         return {}
     by_pk = {item.id: item for item in items}
     by_item_id = {item.item_id: item for item in items}
-    rows = (
-        db.query(
-            RunItem.run_id,
-            RunItem.dataset_item_pk,
-            RunItem.item_id,
-            RunItem.error,
-            RunItem.latency_ms,
-        )
-        .join(Run, RunItem.run_id == Run.id)
-        .filter(
-            Run.deleted_at.is_(None),
-            Run.dataset_version_id == version.id,
-            (
-                RunItem.dataset_item_pk.in_(list(by_pk))
-                | RunItem.item_id.in_(list(by_item_id))
-            ),
-        )
-        .all()
-    )
     summaries: Dict[int, Dict[str, Any]] = {
         item.id: {
             "run_count": 0,
@@ -699,66 +776,123 @@ def _item_result_summaries(
         }
         for item in items
     }
-    run_item_keys_by_pk: Dict[int, set[tuple[str, str]]] = {item.id: set() for item in items}
-    latencies_by_pk: Dict[int, list[float]] = {item.id: [] for item in items}
-    for run_id, dataset_item_pk, run_item_id, error, latency_ms in rows:
+
+    def owner(dataset_item_pk: Optional[int], run_item_id: str) -> Any:
         item = by_pk.get(dataset_item_pk) if dataset_item_pk is not None else None
-        if item is None:
-            item = by_item_id.get(run_item_id)
+        return item if item is not None else by_item_id.get(run_item_id)
+
+    scope = [Run.deleted_at.is_(None), Run.dataset_version_id == version.id]
+    if len(items) <= _ITEM_FILTER_LIMIT:
+        # A page of items: let the indexes narrow the rows. A whole-version
+        # sort reads every group instead of binding thousands of parameters;
+        # groups of other items are skipped by ``owner``.
+        scope.append(RunItem.dataset_item_pk.in_(list(by_pk)) | RunItem.item_id.in_(list(by_item_id)))
+
+    errored = case((and_(RunItem.error.isnot(None), RunItem.error != ""), 1), else_=0)
+    latency_totals: Dict[int, list[float]] = {item.id: [0.0, 0] for item in items}
+    for dataset_item_pk, run_item_id, runs, errors, latency_sum, latency_count in (
+        db.query(
+            RunItem.dataset_item_pk,
+            RunItem.item_id,
+            func.count(RunItem.id),
+            func.sum(errored),
+            func.sum(RunItem.latency_ms),
+            func.count(RunItem.latency_ms),
+        )
+        .join(Run, RunItem.run_id == Run.id)
+        .filter(*scope)
+        .group_by(RunItem.dataset_item_pk, RunItem.item_id)
+    ):
+        item = owner(dataset_item_pk, run_item_id)
         if item is None:
             continue
         summary = summaries[item.id]
-        summary["run_count"] += 1
-        if error:
-            summary["error_count"] += 1
-        else:
-            summary["success_count"] += 1
-        if latency_ms is not None:
-            latencies_by_pk[item.id].append(float(latency_ms))
-        run_item_keys_by_pk[item.id].add((run_id, run_item_id))
+        summary["run_count"] += int(runs)
+        summary["error_count"] += int(errors or 0)
+        summary["success_count"] += int(runs) - int(errors or 0)
+        if latency_count:
+            latency_totals[item.id][0] += float(latency_sum)
+            latency_totals[item.id][1] += int(latency_count)
+    for item_pk, (total, count) in latency_totals.items():
+        summaries[item_pk]["avg_latency_ms"] = round(total / count, 2) if count else None
+    if not with_scores:
+        return summaries
 
-    all_run_ids = {run_id for keys in run_item_keys_by_pk.values() for run_id, _ in keys}
-    all_item_ids = {item_id for keys in run_item_keys_by_pk.values() for _, item_id in keys}
-    scores_by_key: Dict[tuple[str, str], list[tuple[str, Optional[float]]]] = defaultdict(list)
-    if all_run_ids and all_item_ids:
-        for run_id, score_item_id, metric_name, score_numeric, score_raw in (
-            db.query(
-                RunItemScore.run_id,
-                RunItemScore.item_id,
-                RunItemScore.metric_name,
-                RunItemScore.score_numeric,
-                RunItemScore.score_raw,
-            )
-            .filter(RunItemScore.run_id.in_(all_run_ids), RunItemScore.item_id.in_(all_item_ids))
-        ):
-            scores_by_key[(run_id, score_item_id)].append(
-                (metric_name, _numeric_score(score_numeric, score_raw))
-            )
+    # metric -> [count, sum, min, max] per item, and [sum, count] over all metrics.
+    metrics_by_pk: Dict[int, Dict[str, list[Any]]] = {item.id: {} for item in items}
+    score_totals: Dict[int, list[float]] = {item.id: [0.0, 0] for item in items}
+
+    def add(item: Any, metric: str, count: int, total: float, low: float, high: float) -> None:
+        metric_row = metrics_by_pk[item.id].get(metric)
+        if metric_row is None:
+            metrics_by_pk[item.id][metric] = [count, total, low, high]
+        else:
+            metric_row[0] += count
+            metric_row[1] += total
+            metric_row[2] = min(metric_row[2], low)
+            metric_row[3] = max(metric_row[3], high)
+        score_totals[item.id][0] += total
+        score_totals[item.id][1] += count
+
+    score_scope = list(scope)
+    if metric_name is not None:
+        score_scope.append(RunItemScore.metric_name == metric_name)
+
+    def scores_query(*columns: Any) -> Any:
+        return (
+            db.query(*columns)
+            .select_from(RunItemScore)
+            .join(RunItem, and_(RunItem.run_id == RunItemScore.run_id, RunItem.item_id == RunItemScore.item_id))
+            .join(Run, Run.id == RunItem.run_id)
+            .filter(*score_scope)
+        )
+
+    for dataset_item_pk, run_item_id, metric, count, total, low, high in (
+        scores_query(
+            RunItem.dataset_item_pk,
+            RunItem.item_id,
+            RunItemScore.metric_name,
+            func.count(RunItemScore.score_numeric),
+            func.sum(RunItemScore.score_numeric),
+            func.min(RunItemScore.score_numeric),
+            func.max(RunItemScore.score_numeric),
+        )
+        .filter(RunItemScore.score_numeric.isnot(None))
+        .group_by(RunItem.dataset_item_pk, RunItem.item_id, RunItemScore.metric_name)
+    ):
+        item = owner(dataset_item_pk, run_item_id)
+        if item is None or not count:
+            continue
+        add(item, metric, int(count), float(total), float(low), float(high))
+    for dataset_item_pk, run_item_id, metric, raw in (
+        scores_query(
+            RunItem.dataset_item_pk,
+            RunItem.item_id,
+            RunItemScore.metric_name,
+            RunItemScore.score_raw,
+        )
+        .filter(RunItemScore.score_numeric.is_(None), RunItemScore.score_raw.isnot(None))
+        .yield_per(1000)
+    ):
+        item = owner(dataset_item_pk, run_item_id)
+        value = _numeric_score(None, raw) if item is not None else None
+        if value is None:
+            continue
+        add(item, metric, 1, value, value, value)
 
     for item in items:
-        numeric_scores: list[float] = []
-        metrics: Dict[str, Dict[str, Any]] = {}
-        for key in run_item_keys_by_pk[item.id]:
-            for metric_name, value in scores_by_key.get(key, []):
-                if value is None:
-                    continue
-                numeric_scores.append(value)
-                metric = metrics.setdefault(
-                    metric_name,
-                    {"count": 0, "avg": None, "min": None, "max": None, "_sum": 0.0},
-                )
-                metric["count"] += 1
-                metric["_sum"] += value
-                metric["min"] = value if metric["min"] is None else min(float(metric["min"]), value)
-                metric["max"] = value if metric["max"] is None else max(float(metric["max"]), value)
-        for metric in metrics.values():
-            metric["avg"] = round(float(metric["_sum"]) / int(metric["count"]), 4) if metric["count"] else None
-            metric.pop("_sum", None)
-        latencies = latencies_by_pk[item.id]
         summary = summaries[item.id]
-        summary["avg_latency_ms"] = round(sum(latencies) / len(latencies), 2) if latencies else None
-        summary["avg_score"] = round(sum(numeric_scores) / len(numeric_scores), 4) if numeric_scores else None
-        summary["metrics"] = metrics
+        summary["metrics"] = {
+            metric: {
+                "count": count,
+                "avg": round(total / count, 4) if count else None,
+                "min": low,
+                "max": high,
+            }
+            for metric, (count, total, low, high) in sorted(metrics_by_pk[item.id].items())
+        }
+        total, count = score_totals[item.id]
+        summary["avg_score"] = round(total / count, 4) if count else None
     return summaries
 
 
@@ -827,17 +961,19 @@ def _version_metric_names(db: Session, version: DatasetVersion) -> list[str]:
 def _item_edit_counts(db: Session, version: DatasetVersion, items: list[DatasetItem]) -> Dict[int, int]:
     if not items:
         return {}
-    versions_by_id = {
-        row.id: row
-        for row in db.query(DatasetVersion).filter(DatasetVersion.dataset_id == version.dataset_id).all()
-    }
+    parents = dict(
+        db.query(DatasetVersion.id, DatasetVersion.parent_version_id).filter(
+            DatasetVersion.dataset_id == version.dataset_id
+        )
+    )
     chain_ids: list[str] = []
     seen: set[str] = set()
-    cursor: Optional[DatasetVersion] = version
-    while cursor and cursor.id not in seen:
-        seen.add(cursor.id)
-        chain_ids.append(cursor.id)
-        cursor = versions_by_id.get(cursor.parent_version_id) if cursor.parent_version_id else None
+    cursor_id: Optional[str] = version.id
+    while cursor_id and cursor_id not in seen:
+        seen.add(cursor_id)
+        chain_ids.append(cursor_id)
+        parent_id = parents.get(cursor_id)
+        cursor_id = parent_id if parent_id in parents else None
 
     # Each revision counts for the first item (in ``items`` order) it matches by
     # row id, by item ID, or by index for generated IDs; lookups are by key so a
@@ -850,32 +986,39 @@ def _item_edit_counts(db: Session, version: DatasetVersion, items: list[DatasetI
         by_item_id.setdefault(item.item_id, item.id)
         if _is_generated_item_id(item.item_id):
             by_index.setdefault(item.index, item.id)
-    revisions = (
-        db.query(
-            DatasetItemRevision.dataset_item_id,
-            DatasetItemRevision.before,
-            DatasetItemRevision.after,
-        )
-        .filter(
-            DatasetItemRevision.dataset_version_id.in_(chain_ids),
-            DatasetItemRevision.change_type == "updated",
-        )
-        .all()
+    # Only the keys the match reads, extracted from the stored JSON in SQL:
+    # never the before/after item bodies.
+    revisions = db.query(
+        DatasetItemRevision.dataset_item_id,
+        DatasetItemRevision.before["item_id"],
+        DatasetItemRevision.after["item_id"],
+        DatasetItemRevision.before["index"],
+        DatasetItemRevision.after["index"],
+    ).filter(
+        DatasetItemRevision.dataset_version_id.in_(chain_ids),
+        DatasetItemRevision.change_type == "updated",
     )
-    for dataset_item_id, before, after in revisions:
-        before = before or {}
-        after = after or {}
+    for dataset_item_id, before_id, after_id, before_index, after_index in revisions:
         candidates = [
             dataset_item_id if dataset_item_id in counts else None,
-            by_item_id.get(str(before.get("item_id") or "")),
-            by_item_id.get(str(after.get("item_id") or "")),
-            by_index.get(before.get("index")) if before.get("index") is not None else None,
-            by_index.get(after.get("index")) if after.get("index") is not None else None,
+            by_item_id.get(str(before_id or "")),
+            by_item_id.get(str(after_id or "")),
+            by_index.get(before_index) if before_index is not None else None,
+            by_index.get(after_index) if after_index is not None else None,
         ]
         matched = [pk for pk in candidates if pk is not None]
         if matched:
             counts[min(matched, key=position.__getitem__)] += 1
     return counts
+
+
+def _revision_count(db: Session, version: DatasetVersion) -> int:
+    return int(
+        db.query(func.count(DatasetItemRevision.id))
+        .filter(DatasetItemRevision.dataset_version_id == version.id)
+        .scalar()
+        or 0
+    )
 
 
 def _record_item_revision(
@@ -887,18 +1030,16 @@ def _record_item_revision(
     before: Optional[Dict[str, Any]],
     after: Optional[Dict[str, Any]],
     actor_user_id: str,
+    revision_number: Optional[int] = None,
 ) -> None:
-    count = (
-        db.query(func.count(DatasetItemRevision.id))
-        .filter(DatasetItemRevision.dataset_version_id == version.id)
-        .scalar()
-        or 0
-    )
+    """Add a revision row; ``revision_number`` skips the count when the caller tracks it."""
+    if revision_number is None:
+        revision_number = _revision_count(db, version) + 1
     db.add(
         DatasetItemRevision(
             dataset_item_id=item.id if item else None,
             dataset_version_id=version.id,
-            revision_number=int(count) + 1,
+            revision_number=revision_number,
             change_type=change_type,
             before=before or {},
             after=after or {},
@@ -923,8 +1064,12 @@ def _detach_item_run_results(db: Session, item: DatasetItem) -> None:
 
 
 def _content_hash(items: Iterable[DatasetItem]) -> str:
-    import hashlib
+    """SHA-256 of a version's items in (index, item_id) order.
 
+    The routes compute the same digest with :class:`_ContentHasher` while they
+    stream items; this whole-list form is the reference definition (tests
+    assert the two agree).
+    """
     payload = [
         {
             "item_id": item.item_id,
@@ -938,6 +1083,85 @@ def _content_hash(items: Iterable[DatasetItem]) -> str:
     ]
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+class _ContentHasher:
+    """Incremental :func:`_content_hash`: feed items in (index, item_id) order.
+
+    Hashes the same bytes as ``json.dumps([payload, ...])`` with the same
+    options, one item at a time, so no list of payloads or giant JSON string is
+    built.
+    """
+
+    def __init__(self) -> None:
+        self._sha = hashlib.sha256(b"[")
+        self._first = True
+
+    def update(
+        self, item_id: str, input_value: Any, expected: Any, metadata: Any, labels: Any, fingerprint: Optional[str]
+    ) -> None:
+        payload = {
+            "item_id": item_id,
+            "input": input_value,
+            "expected_output": expected,
+            "metadata": metadata or {},
+            "labels": labels or [],
+            "fingerprint": fingerprint,
+        }
+        if not self._first:
+            self._sha.update(b",")
+        self._first = False
+        raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+        self._sha.update(raw.encode("utf-8"))
+
+    def hexdigest(self) -> str:
+        sha = self._sha.copy()
+        sha.update(b"]")
+        return sha.hexdigest()
+
+
+def _stream_version_hash(db: Session, version_id: str) -> tuple[int, str]:
+    """Item count and content hash of a version, streamed from the database.
+
+    Rows are read in batches over the hashed columns only (no ORM objects).
+    Rows sharing an index are re-sorted by item_id in Python, so the order is
+    exactly ``_content_hash``'s (index, item_id) whatever the database collation.
+    Raises 409 on a duplicate item_id, as publishing always has.
+    """
+    rows = (
+        db.query(
+            DatasetItem.index,
+            DatasetItem.item_id,
+            DatasetItem.input,
+            DatasetItem.expected_output,
+            DatasetItem.item_metadata,
+            DatasetItem.labels,
+            DatasetItem.fingerprint,
+        )
+        .filter(DatasetItem.dataset_version_id == version_id)
+        .order_by(DatasetItem.index, DatasetItem.id)
+        .yield_per(1000)
+    )
+    hasher = _ContentHasher()
+    seen: set[str] = set()
+    count = 0
+    group: list[Any] = []
+
+    def flush_group() -> None:
+        for row in sorted(group, key=lambda r: r.item_id):
+            hasher.update(row.item_id, row.input, row.expected_output, row.item_metadata, row.labels, row.fingerprint)
+        group.clear()
+
+    for row in rows:
+        if row.item_id in seen:
+            raise HTTPException(status_code=409, detail=f"Duplicate item_id: {row.item_id}")
+        seen.add(row.item_id)
+        count += 1
+        if group and group[0].index != row.index:
+            flush_group()
+        group.append(row)
+    flush_group()
+    return count, hasher.hexdigest()
 
 
 def _parse_cell(raw: Any) -> Any:
@@ -1036,13 +1260,49 @@ def _legacy_text_score(text: str) -> int:
     return total
 
 
-def _decode_csv(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str]:
-    """Decode an uploaded CSV. Returns the text and the encoding label that was used.
+# Encoding checks decode in chunks of this many bytes, so a large upload is never
+# held in memory a second time as one decoded string per candidate encoding.
+_DECODE_CHUNK_BYTES = 1 << 20
+
+
+def _decodes(raw: bytes, codec: str) -> bool:
+    """Whether ``raw`` decodes with ``codec``, checked chunk by chunk (no full copy)."""
+    decoder = codecs.getincrementaldecoder(codec)()
+    try:
+        for start in range(0, len(raw), _DECODE_CHUNK_BYTES):
+            decoder.decode(raw[start : start + _DECODE_CHUNK_BYTES], False)
+        decoder.decode(b"", True)
+    except UnicodeError:
+        return False
+    return True
+
+
+def _without_bom_native(codec: str, raw: bytes) -> str:
+    """The codec ``bytes.decode`` really applies to a BOM-less UTF-16/32 file.
+
+    ``raw.decode("utf-16")`` reads a file without a BOM in native byte order,
+    but the incremental decoders (and so a text stream) refuse it; name the
+    native-order codec instead so both read the file the same way.
+    """
+    order = "le" if sys.byteorder == "little" else "be"
+    if codec == "utf-16" and not raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return f"utf-16-{order}"
+    if codec == "utf-32" and not raw.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+        return f"utf-32-{order}"
+    return codec
+
+
+def _detect_csv_encoding(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str, bool]:
+    """The codec, encoding label and whether to strip leading BOMs for an uploaded CSV.
 
     An explicit ``encoding`` (from the upload wizard's Encoding choice) is honored or
     rejected; otherwise BOMs and strict UTF-8 win, and a non-UTF-8 file is decoded with
     the legacy encoding whose result looks most like real text (Windows-1256 Arabic
     exports from Excel no longer turn into Windows-1252 mojibake).
+
+    Every candidate is validated over the whole file, but incrementally; only the
+    legacy candidates' leading sample is decoded in full for scoring. The legacy
+    encodings are single-byte, so the first N bytes are exactly the first N characters.
     """
     if not raw:
         raise HTTPException(status_code=400, detail="CSV file is empty")
@@ -1053,53 +1313,72 @@ def _decode_csv(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str]:
             raise HTTPException(status_code=400, detail=f"Unsupported CSV encoding: {encoding}")
         if codec.startswith("utf-16") and raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
             codec = "utf-16"
-        try:
-            return raw.decode(codec).lstrip("\uFEFF"), requested
-        except UnicodeDecodeError as exc:
-            label = requested.upper() if requested.startswith("utf") else requested
-            raise HTTPException(
-                status_code=400,
-                detail=f"The file is not valid {label}. Choose the file's real encoding. {_CSV_ENCODING_HELP}",
-            ) from exc
+        codec = _without_bom_native(codec, raw)
+        if _decodes(raw, codec):
+            return codec, requested, True
+        label = requested.upper() if requested.startswith("utf") else requested
+        raise HTTPException(
+            status_code=400,
+            detail=f"The file is not valid {label}. Choose the file's real encoding. {_CSV_ENCODING_HELP}",
+        )
     if raw.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
-        try:
-            return raw.decode("utf-32"), "utf-32"
-        except UnicodeDecodeError:
-            pass
+        if _decodes(raw, "utf-32"):
+            return "utf-32", "utf-32", False
     elif raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
-        try:
-            return raw.decode("utf-16"), "utf-16"
-        except UnicodeDecodeError:
-            pass
+        if _decodes(raw, "utf-16"):
+            return "utf-16", "utf-16", False
     else:
-        try:
-            return raw.decode("utf-8-sig"), "utf-8"
-        except UnicodeDecodeError:
-            pass
-        best: Optional[tuple[int, str, str]] = None
+        if _decodes(raw, "utf-8-sig"):
+            return "utf-8-sig", "utf-8", False
+        best: Optional[tuple[int, str]] = None
+        sample = raw[:_ENCODING_SAMPLE_CHARS]
         for label in _LEGACY_CSV_ENCODINGS:
-            try:
-                text = raw.decode(_CSV_ENCODINGS[label])
-            except UnicodeDecodeError:
+            codec = _CSV_ENCODINGS[label]
+            if not _decodes(raw, codec):
                 continue
-            score = _legacy_text_score(text[:_ENCODING_SAMPLE_CHARS])
+            score = _legacy_text_score(sample.decode(codec))
             if best is None or score > best[0]:
-                best = (score, label, text)
+                best = (score, label)
         if best is not None:
-            return best[2], best[1]
+            return _CSV_ENCODINGS[best[1]], best[1], False
     raise HTTPException(
         status_code=400,
         detail=f"Could not detect the CSV encoding. {_CSV_ENCODING_HELP}",
     )
 
 
+def _decode_csv(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str]:
+    """Decode an uploaded CSV. Returns the text and the encoding label that was used."""
+    codec, label, strip_bom = _detect_csv_encoding(raw, encoding)
+    text = raw.decode(codec)
+    return (text.lstrip("\ufeff") if strip_bom else text), label
+
+
+_CSV_SNIFF_CHARS = 65536
+
+
 def _csv_reader(raw: bytes, encoding: Optional[str] = None) -> tuple[csv.DictReader, str]:
-    text, used_encoding = _decode_csv(raw, encoding)
+    """A DictReader that decodes the file line by line (no full decoded copy)."""
+    codec, used_encoding, strip_bom = _detect_csv_encoding(raw, encoding)
+    # newline="" as for a csv file: lines keep their endings and quoted fields
+    # may span lines, exactly like io.StringIO(text, newline="").
+    stream = io.TextIOWrapper(io.BytesIO(raw), encoding=codec, newline="")
+    head: list[str] = []
+    head_chars = 0
+    for line in stream:
+        if not head and strip_bom:
+            line = line.lstrip("\ufeff")
+            if not line:
+                continue
+        head.append(line)
+        head_chars += len(line)
+        if head_chars >= _CSV_SNIFF_CHARS:
+            break
     try:
-        dialect = csv.Sniffer().sniff(text[:65536], delimiters=",;\t|")
+        dialect = csv.Sniffer().sniff("".join(head)[:_CSV_SNIFF_CHARS], delimiters=",;\t|")
     except csv.Error:
         dialect = csv.excel
-    return csv.DictReader(io.StringIO(text, newline=""), dialect=dialect), used_encoding
+    return csv.DictReader(itertools.chain(head, stream), dialect=dialect), used_encoding
 
 
 def _items_from_csv(
@@ -1198,22 +1477,27 @@ def _items_from_jsonl(raw: bytes) -> list[Dict[str, Any]]:
     items: list[Dict[str, Any]] = []
     problems: list[str] = []
     record_count = 0
-    # Split on newlines only (like the browser import), so U+2028 inside a string is not a line break.
-    for line_no, line in enumerate(_decode_json_text(raw, "JSONL").split("\n"), start=1):
-        text = line.strip()
-        if not text:
-            continue
-        record_count += 1
-        try:
-            obj = json.loads(text)
-        except json.JSONDecodeError as exc:
-            problems.append(f"line {line_no} is not valid JSON ({exc.msg})")
-            continue
-        problem = _json_record_problem(obj)
-        if problem:
-            problems.append(f"line {line_no} {problem}")
-            continue
-        items.append(_json_record_item(obj))
+    # Split on newlines only (like the browser import), so U+2028 inside a string is
+    # not a line break. Lines are decoded one at a time: no full decoded copy.
+    stream = io.TextIOWrapper(io.BytesIO(raw), encoding="utf-8-sig", newline="\n")
+    try:
+        for line_no, line in enumerate(stream, start=1):
+            text = line.strip()
+            if not text:
+                continue
+            record_count += 1
+            try:
+                obj = json.loads(text)
+            except json.JSONDecodeError as exc:
+                problems.append(f"line {line_no} is not valid JSON ({exc.msg})")
+                continue
+            problem = _json_record_problem(obj)
+            if problem:
+                problems.append(f"line {line_no} {problem}")
+                continue
+            items.append(_json_record_item(obj))
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="JSONL files must be UTF-8 encoded") from exc
     if problems:
         shown = "; ".join(problems[:_MAX_REPORTED_LINE_ERRORS])
         more = len(problems) - _MAX_REPORTED_LINE_ERRORS
@@ -1271,9 +1555,20 @@ def _upload_format(requested: str, filename: str, raw: bytes) -> str:
     return "csv"
 
 
-def _insert_items(db: Session, version: DatasetVersion, items: list[Dict[str, Any]]) -> None:
+_INSERT_BATCH_SIZE = 1000
+
+
+def _insert_items(db: Session, version_id: str, items: list[Dict[str, Any]]) -> int:
+    """Insert parsed items in batches with Core inserts (no ORM objects kept).
+
+    Returns the item count. ``search_text`` is written here because Core
+    inserts skip the ORM listener that sets it.
+    """
     duplicate_counts: dict[str, int] = defaultdict(int)
     seen_ids: set[str] = set()
+    table = DatasetItem.__table__
+    batch: list[Dict[str, Any]] = []
+    now = utc_now_naive()
     for index, source in enumerate(items):
         input_value = _json_safe(source.get("input"))
         expected = _json_safe(source.get("expected_output"))
@@ -1287,21 +1582,97 @@ def _insert_items(db: Session, version: DatasetVersion, items: list[Dict[str, An
         if item_id in seen_ids:
             raise HTTPException(status_code=409, detail=f"Duplicate item_id: {item_id}")
         seen_ids.add(item_id)
-        db.add(
-            DatasetItem(
-                dataset_version_id=version.id,
-                item_id=item_id,
-                index=index,
-                input=input_value,
-                expected_output=expected,
-                item_metadata=metadata,
-                labels=labels,
-                fingerprint=fingerprint,
-                created_at=utc_now_naive(),
-                updated_at=utc_now_naive(),
-            )
+        batch.append(
+            {
+                "dataset_version_id": version_id,
+                "item_id": item_id,
+                "index": index,
+                "input": input_value,
+                "expected_output": expected,
+                "metadata": metadata,
+                "labels": labels,
+                "fingerprint": fingerprint,
+                "search_text": dataset_item_search_text(item_id, input_value, expected, metadata),
+                "created_at": now,
+                "updated_at": now,
+            }
         )
-    version.item_count = len(items)
+        if len(batch) >= _INSERT_BATCH_SIZE:
+            db.execute(insert(table), batch)
+            batch = []
+    if batch:
+        db.execute(insert(table), batch)
+    return len(items)
+
+
+def _copy_items(db: Session, from_version_id: str, to_version_id: str) -> None:
+    """Copy every item of one version into another with one INSERT ... SELECT.
+
+    No item body passes through Python. Copies keep their stored values (item
+    ID, index, bodies, labels, fingerprint, search text) and get new
+    timestamps, as the ORM copy did.
+    """
+    now = utc_now_naive()
+    columns = (
+        "item_id",
+        "index",
+        "input",
+        "expected_output",
+        "metadata",
+        "labels",
+        "fingerprint",
+        "search_text",
+    )
+    source = DatasetItem.__table__.c
+    rows = (
+        select(
+            literal(to_version_id).label("dataset_version_id"),
+            *(source[name] for name in columns),
+            literal(now, DateTime).label("created_at"),
+            literal(now, DateTime).label("updated_at"),
+        )
+        .where(source.dataset_version_id == from_version_id)
+        .order_by(source.index, source.id)
+    )
+    db.execute(
+        insert(DatasetItem.__table__).from_select(["dataset_version_id", *columns, "created_at", "updated_at"], rows)
+    )
+    # Rows written before search_text existed copy a NULL; give the copies the
+    # text an ORM insert would have written (normally there are none).
+    last_id = 0
+    while True:
+        pending = (
+            db.query(
+                DatasetItem.id,
+                DatasetItem.item_id,
+                DatasetItem.input,
+                DatasetItem.expected_output,
+                DatasetItem.item_metadata,
+            )
+            .filter(
+                DatasetItem.dataset_version_id == to_version_id,
+                DatasetItem.search_text.is_(None),
+                DatasetItem.id > last_id,
+            )
+            .order_by(DatasetItem.id)
+            .limit(_INSERT_BATCH_SIZE)
+            .all()
+        )
+        if not pending:
+            return
+        last_id = pending[-1].id
+        db.execute(
+            DatasetItem.__table__.update()
+            .where(DatasetItem.__table__.c.id == bindparam("pk"))
+            .values(search_text=bindparam("text")),
+            [
+                {
+                    "pk": row.id,
+                    "text": dataset_item_search_text(row.item_id, row.input, row.expected_output, row.item_metadata),
+                }
+                for row in pending
+            ],
+        )
 
 
 class CreateDatasetRequest(BaseModel):
@@ -1310,6 +1681,7 @@ class CreateDatasetRequest(BaseModel):
     description: str = ""
     tags: list[str] = Field(default_factory=list)
     project_slug: Optional[str] = None
+    private_test_set: bool = False
 
 
 class UpdateDatasetRequest(BaseModel):
@@ -1317,6 +1689,7 @@ class UpdateDatasetRequest(BaseModel):
     slug: Optional[str] = None
     description: Optional[str] = None
     tags: Optional[list[str]] = None
+    private_test_set: Optional[bool] = None
 
 
 class CreateVersionRequest(BaseModel):
@@ -1410,6 +1783,8 @@ def create_dataset(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
+    if req.private_test_set:
+        _require_admin_for_private_flag(principal)
     project = _project_for_request(db, principal, req.project_slug, write=True)
     slug = _slugify(req.slug or req.name)
     _free_slug_from_deleted(db, project, slug)
@@ -1420,6 +1795,7 @@ def create_dataset(
         slug=slug,
         description=req.description,
         tags=_labels(req.tags),
+        private_test_set=req.private_test_set,
         created_by_user_id=principal.user.id,
         created_at=utc_now_naive(),
         updated_at=utc_now_naive(),
@@ -1430,6 +1806,7 @@ def create_dataset(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=_slug_conflict_detail(db, project, slug)) from exc
+    logger.info("Dataset %s created in project %s", dataset.id, project.id)
     return {"dataset": _dataset_payload(db, dataset, principal)}
 
 
@@ -1485,6 +1862,9 @@ def update_dataset(
         dataset.description = req.description
     if req.tags is not None:
         dataset.tags = _labels(req.tags)
+    if req.private_test_set is not None and req.private_test_set != bool(dataset.private_test_set):
+        _require_admin_for_private_flag(principal)
+        dataset.private_test_set = req.private_test_set
     dataset.updated_at = utc_now_naive()
     try:
         db.commit()
@@ -1518,6 +1898,7 @@ def delete_dataset(
         after={"deleted_at": to_api_timestamp(dataset.deleted_at)},
     )
     db.commit()
+    logger.info("Dataset %s deleted (restorable) in project %s", dataset.id, project.id)
     return {"ok": True, "restorable": True}
 
 
@@ -1579,6 +1960,7 @@ def restore_dataset(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=_slug_conflict_detail(db, project, slug)) from exc
+    logger.info("Dataset %s restored in project %s", dataset.id, project.id)
     return {"dataset": _dataset_payload(db, dataset, principal)}
 
 
@@ -1637,8 +2019,9 @@ def list_dataset_runs(
     run_ids = [run.id for run in runs]
     items_counts: Dict[str, int] = {}
     avg_latencies: Dict[str, float] = {}
-    metric_values_by_run: Dict[str, Dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
-    eval_values_by_run: Dict[str, list[float]] = defaultdict(list)
+    # (sum, count) of the numeric scores per run and metric, and per run.
+    metric_values_by_run: Dict[str, Dict[str, list[float]]] = defaultdict(lambda: defaultdict(lambda: [0.0, 0]))
+    eval_values_by_run: Dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
     run_directions = metric_directions(db, run_ids)
     if run_ids:
         items_counts = dict(
@@ -1657,30 +2040,25 @@ def list_dataset_runs(
             )
             if avg_latency is not None
         }
-        score_rows = (
-            db.query(RunItemScore)
-            .filter(RunItemScore.run_id.in_(run_ids))
-            .all()
-        )
-        for score in score_rows:
-            value = _score_numeric_value(score)
-            if value is None:
-                continue
-            metric_values_by_run[score.run_id][score.metric_name].append(value)
-            eval_values_by_run[score.run_id].append(value)
+        for run_id, metric_name, total, count in _run_metric_sums(db, run_ids):
+            pair = metric_values_by_run[run_id][metric_name]
+            pair[0] += total
+            pair[1] += count
+            run_pair = eval_values_by_run[run_id]
+            run_pair[0] += total
+            run_pair[1] += count
 
     metric_names = sorted({metric for metrics in metric_values_by_run.values() for metric in metrics})
 
     def run_metric_averages(run_id: str) -> Dict[str, Optional[float]]:
         metrics = metric_values_by_run.get(run_id, {})
         return {
-            metric: round(sum(values) / len(values), 4) if values else None
-            for metric, values in sorted(metrics.items())
+            metric: round(total / count, 4) if count else None for metric, (total, count) in sorted(metrics.items())
         }
 
     def run_eval_score(run_id: str) -> Optional[float]:
-        values = eval_values_by_run.get(run_id) or []
-        return round(sum(values) / len(values), 4) if values else None
+        total, count = eval_values_by_run.get(run_id) or (0.0, 0)
+        return round(total / count, 4) if count else None
 
     return {
         "runs": [
@@ -1745,26 +2123,13 @@ def create_version(
     db.add(version)
     db.flush()
     if parent:
-        for item in db.query(DatasetItem).filter(DatasetItem.dataset_version_id == parent.id).order_by(DatasetItem.index).all():
-            db.add(
-                DatasetItem(
-                    dataset_version_id=version.id,
-                    item_id=item.item_id,
-                    index=item.index,
-                    input=item.input,
-                    expected_output=item.expected_output,
-                    item_metadata=dict(item.item_metadata or {}),
-                    labels=list(item.labels or []),
-                    fingerprint=item.fingerprint,
-                    created_at=utc_now_naive(),
-                    updated_at=utc_now_naive(),
-                )
-            )
+        _copy_items(db, parent.id, version.id)
         version.item_count = parent.item_count
     _record_change(
         db, version, {"type": "created", "from_version_id": parent.id if parent else None}, actor_user_id=principal.user.id
     )
     db.commit()
+    logger.info("Dataset version %s created (dataset=%s)", version.id, version.dataset_id)
     return {"version": _version_payload(db, version)}
 
 
@@ -1783,26 +2148,29 @@ def publish_version(
     version = _resolve_version(db, dataset, version_ref)
     if req.set_alias:
         _require_alias_permission(db, principal, dataset, req.set_alias)
-    items = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id).order_by(DatasetItem.index).all()
-    if not items:
+    # Streamed over the hashed columns: no ORM item objects, no payload list.
+    item_count, content_hash = _stream_version_hash(db, version.id)
+    if not item_count:
         raise HTTPException(status_code=400, detail="Cannot publish an empty dataset version")
-    seen = set()
-    for item in items:
-        if item.item_id in seen:
-            raise HTTPException(status_code=409, detail=f"Duplicate item_id: {item.item_id}")
-        seen.add(item.item_id)
     version.status = DatasetVersionStatus.PUBLISHED
-    version.item_count = len(items)
-    version.content_hash = _content_hash(items)
+    version.item_count = item_count
+    version.content_hash = content_hash
     version.published_by_user_id = principal.user.id
     version.published_at = utc_now_naive()
     version.updated_at = utc_now_naive()
-    _record_change(db, version, {"type": "published", "item_count": len(items)}, actor_user_id=principal.user.id)
-    _audit(db, principal, "dataset.version_published", dataset, after={"version": version.version, "item_count": len(items)})
+    _record_change(db, version, {"type": "published", "item_count": item_count}, actor_user_id=principal.user.id)
+    _audit(
+        db,
+        principal,
+        "dataset.version_published",
+        dataset,
+        after={"version": version.version, "item_count": item_count},
+    )
     _store_published_counts(db, version)
     if req.set_alias:
         _set_alias(db, dataset, req.set_alias, version, principal)
     db.commit()
+    logger.info("Dataset %s version %s published (%s items)", dataset.id, version.version, item_count)
     return {"version": _version_payload(db, version)}
 
 
@@ -2057,8 +2425,16 @@ def _computed_sort_ids(db: Session, version: DatasetVersion, query, sort_raw: st
         def computed_value(row: Any) -> Any:
             return edit_counts.get(row.id, 0)
     else:
-        summaries = _item_result_summaries(db, version, light)
         metric_name = sort_raw.split(":")[1] if sort_key.startswith("metric:") and len(sort_raw.split(":")) >= 2 else ""
+        # Only what the sort reads: no scores for run counts or latency, and
+        # one metric's scores for a metric sort.
+        summaries = _item_result_summaries(
+            db,
+            version,
+            light,
+            with_scores=sort_key.startswith("metric:"),
+            metric_name=metric_name if sort_key.startswith("metric:") else None,
+        )
 
         def computed_value(row: Any) -> Any:
             summary = summaries.get(row.id, {}) or {}
@@ -2097,10 +2473,12 @@ def list_items(
     ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
+    read_token: Optional[str] = Header(default=None, alias=DATASET_READ_TOKEN_HEADER),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
     query = _filtered_items_query(db, version, search, label)
 
@@ -2167,6 +2545,7 @@ def create_item(
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
     input_value = _json_safe(req.input)
@@ -2219,10 +2598,12 @@ def get_item(
     project_slug: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
+    read_token: Optional[str] = Header(default=None, alias=DATASET_READ_TOKEN_HEADER),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
     item = (
         db.query(DatasetItem)
@@ -2252,6 +2633,7 @@ def update_item(
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
     item = (
@@ -2305,6 +2687,7 @@ def delete_item(
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
     item = (
@@ -2324,6 +2707,9 @@ def delete_item(
     return {"ok": True}
 
 
+MAX_BULK_ENTRIES = 1000
+
+
 @router.post("/v1/datasets/{dataset_ref}/versions/{version_ref}/items:bulk")
 def bulk_items(
     dataset_ref: str,
@@ -2333,37 +2719,77 @@ def bulk_items(
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
+    """Create, update and delete draft items in one transaction.
+
+    At most ``MAX_BULK_ENTRIES`` upserts and deletes per request (422 above;
+    send larger imports in several requests). Lookups, detaches and the
+    version's item count are set-based, and the version row is written once,
+    at the end, so its row lock is held only for the commit.
+    """
     _require_scope(principal, "datasets:write")
+    entries = len(req.upserts or []) + len(req.deletes or [])
+    if entries > MAX_BULK_ENTRIES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"A bulk request takes at most {MAX_BULK_ENTRIES} upserts and deletes together "
+                f"({entries} sent). Send the items in several requests."
+            ),
+        )
     project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
+    actor_user_id = principal.user.id
+    revision_number = _revision_count(db, version)
+
+    def next_revision() -> int:
+        nonlocal revision_number
+        revision_number += 1
+        return revision_number
 
     created: list[Dict[str, Any]] = []
     updated: list[Dict[str, Any]] = []
     deleted: list[str] = []
 
-    for raw_id in req.deletes or []:
-        target_id = (raw_id or "").strip()
-        if not target_id:
+    delete_ids = list(dict.fromkeys(target for target in ((raw or "").strip() for raw in req.deletes or []) if target))
+    doomed = (
+        {
+            item.item_id: item
+            for item in db.query(DatasetItem).filter(
+                DatasetItem.dataset_version_id == version.id, DatasetItem.item_id.in_(delete_ids)
+            )
+        }
+        if delete_ids
+        else {}
+    )
+    doomed_pks: list[int] = []
+    for target_id in delete_ids:
+        item = doomed.get(target_id)
+        if item is None:
             continue
-        item = (
-            db.query(DatasetItem)
-            .filter(DatasetItem.dataset_version_id == version.id, DatasetItem.item_id == target_id)
-            .first()
-        )
-        if not item:
-            continue
-        before = _item_payload(item)
         _record_item_revision(
-            db, version, None, change_type="deleted", before=before, after={}, actor_user_id=principal.user.id,
+            db,
+            version,
+            None,
+            change_type="deleted",
+            before=_item_payload(item),
+            after={},
+            actor_user_id=actor_user_id,
+            revision_number=next_revision(),
         )
-        _detach_item_revisions(db, item)
-        _detach_item_run_results(db, item)
-        db.delete(item)
-        version.item_count = max(0, int(version.item_count or 0) - 1)
+        doomed_pks.append(item.id)
         deleted.append(target_id)
-
+    if doomed_pks:
+        db.query(DatasetItemRevision).filter(DatasetItemRevision.dataset_item_id.in_(doomed_pks)).update(
+            {DatasetItemRevision.dataset_item_id: None}, synchronize_session=False
+        )
+        db.query(RunItem).filter(RunItem.dataset_item_pk.in_(doomed_pks)).update(
+            {RunItem.dataset_item_pk: None}, synchronize_session=False
+        )
+        for target_id in deleted:
+            db.delete(doomed[target_id])
     db.flush()
 
     max_index = (
@@ -2373,21 +2799,75 @@ def bulk_items(
     )
     next_index = int(max_index) + 1 if max_index is not None else 0
 
-    for entry in req.upserts or []:
+    upserts = req.upserts or []
+    named = {(entry.item_id or "").strip() for entry in upserts if entry.item_id} - {""}
+    existing_by_id: Dict[str, DatasetItem] = (
+        {
+            item.item_id: item
+            for item in db.query(DatasetItem).filter(
+                DatasetItem.dataset_version_id == version.id, DatasetItem.item_id.in_(named)
+            )
+        }
+        if named
+        else {}
+    )
+    # New items are flushed together; their "created" revisions need their ids.
+    pending: list[tuple[DatasetItem, int]] = []
+
+    def conflict(item_id: str) -> HTTPException:
+        db.rollback()
+        return HTTPException(status_code=409, detail=f"Dataset item ID already exists: {item_id}")
+
+    def flush_pending() -> None:
+        if not pending:
+            return
+        # Generated IDs were not prefetched: refuse one that is taken, by name.
+        generated = [item.item_id for item, _ in pending if item.item_id not in named]
+        if generated:
+            taken = {
+                item_id
+                for (item_id,) in db.query(DatasetItem.item_id).filter(
+                    DatasetItem.dataset_version_id == version.id, DatasetItem.item_id.in_(generated)
+                )
+            }
+            for item_id in generated:
+                if item_id in taken:
+                    raise conflict(item_id)
+        try:
+            db.flush()
+        except IntegrityError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=409, detail=f"Dataset item ID already exists: {pending[0][0].item_id}"
+            ) from exc
+        for new_item, number in pending:
+            payload = _item_payload(new_item)
+            _record_item_revision(
+                db,
+                version,
+                new_item,
+                change_type="created",
+                before={},
+                after=payload,
+                actor_user_id=actor_user_id,
+                revision_number=number,
+            )
+            created.append(payload)
+        pending.clear()
+
+    for entry in upserts:
         input_value = _json_safe(entry.input)
         expected = _json_safe(entry.expected_output)
         metadata = _json_safe(entry.metadata or {})
         labels = _labels(entry.labels)
         fingerprint = build_identity_fingerprint(input_value=input_value, expected_value=expected, metadata=metadata)
-        existing = None
-        if entry.item_id:
-            existing = (
-                db.query(DatasetItem)
-                .filter(DatasetItem.dataset_version_id == version.id, DatasetItem.item_id == entry.item_id.strip())
-                .first()
-            )
+        key = (entry.item_id or "").strip()
+        existing = existing_by_id.get(key) if entry.item_id else None
         op = (entry.op or "").lower()
         if existing and op != "create":
+            if existing.id is None:
+                # Updating an item created earlier in this request.
+                flush_pending()
             before = _item_payload(existing)
             existing.input = input_value
             existing.expected_output = expected
@@ -2396,36 +2876,43 @@ def bulk_items(
             existing.fingerprint = fingerprint
             existing.updated_at = utc_now_naive()
             _record_item_revision(
-                db, version, existing, change_type="updated", before=before, after=_item_payload(existing), actor_user_id=principal.user.id,
+                db,
+                version,
+                existing,
+                change_type="updated",
+                before=before,
+                after=_item_payload(existing),
+                actor_user_id=actor_user_id,
+                revision_number=next_revision(),
             )
             updated.append(_item_payload(existing))
-        else:
-            item_id = (entry.item_id or "").strip() or f"item-{next_index + 1}"
-            new_item = DatasetItem(
-                dataset_version_id=version.id,
-                item_id=item_id,
-                index=next_index,
-                input=input_value,
-                expected_output=expected,
-                item_metadata=metadata,
-                labels=labels,
-                fingerprint=fingerprint,
-                created_at=utc_now_naive(),
-                updated_at=utc_now_naive(),
-            )
-            db.add(new_item)
-            version.item_count = int(version.item_count or 0) + 1
-            try:
-                db.flush()
-            except IntegrityError as exc:
-                db.rollback()
-                raise HTTPException(status_code=409, detail=f"Dataset item ID already exists: {item_id}") from exc
-            _record_item_revision(
-                db, version, new_item, change_type="created", before={}, after=_item_payload(new_item), actor_user_id=principal.user.id,
-            )
-            created.append(_item_payload(new_item))
-            next_index += 1
+            continue
+        item_id = key or f"item-{next_index + 1}"
+        if existing or item_id in existing_by_id:
+            raise conflict(item_id)
+        new_item = DatasetItem(
+            dataset_version_id=version.id,
+            item_id=item_id,
+            index=next_index,
+            input=input_value,
+            expected_output=expected,
+            item_metadata=metadata,
+            labels=labels,
+            fingerprint=fingerprint,
+            created_at=utc_now_naive(),
+            updated_at=utc_now_naive(),
+        )
+        db.add(new_item)
+        existing_by_id[item_id] = new_item
+        pending.append((new_item, next_revision()))
+        next_index += 1
+    flush_pending()
 
+    # The version row is written once, last: its lock lasts only to the commit.
+    db.flush()
+    version.item_count = int(
+        db.query(func.count(DatasetItem.id)).filter(DatasetItem.dataset_version_id == version.id).scalar() or 0
+    )
     db.commit()
     return {
         "summary": {"created": len(created), "updated": len(updated), "deleted": len(deleted)},
@@ -2447,6 +2934,7 @@ def item_runs(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     item = (
         db.query(DatasetItem)
@@ -2585,6 +3073,7 @@ def item_neighbors(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     query = _filtered_items_query(db, version, search, label)
     sort_key = (sort or "index_asc").lower()
@@ -2642,6 +3131,7 @@ def item_lineage(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     versions_by_id = {
         row.id: row
@@ -2756,6 +3246,38 @@ def _compare_rows(db: Session, version_id: str) -> Dict[str, Any]:
     }
 
 
+_COMPARE_DIFF_LIMIT = 500
+
+
+def _compare_bodies(db: Session, version_id: str, item_ids: list[str]) -> Dict[str, Any]:
+    """The compared body columns of some items (no ORM objects)."""
+    return {
+        row.item_id: row
+        for row in db.query(
+            DatasetItem.item_id,
+            DatasetItem.input,
+            DatasetItem.expected_output,
+            DatasetItem.item_metadata,
+            DatasetItem.labels,
+        ).filter(DatasetItem.dataset_version_id == version_id, DatasetItem.item_id.in_(item_ids))
+    }
+
+
+def _changed_fields(b: Any, t: Any) -> list[str]:
+    """Which fields differ between two item bodies (type-strict JSON compare)."""
+    fields = []
+    # Type-strict, so "51" -> 51 (or 1 -> true) is reported as a change.
+    if not _same_json(b.input, t.input):
+        fields.append("input")
+    if not _same_json(b.expected_output, t.expected_output):
+        fields.append("expected_output")
+    if not _same_json(b.item_metadata or {}, t.item_metadata or {}):
+        fields.append("metadata")
+    if (b.labels or []) != (t.labels or []):
+        fields.append("labels")
+    return fields
+
+
 @router.get("/v1/datasets/{dataset_ref}/versions/{version_ref}:compare")
 def compare_versions(
     dataset_ref: str,
@@ -2763,8 +3285,15 @@ def compare_versions(
     base: str = Query(...),
     project_slug: Optional[str] = Query(default=None),
     include_diffs: int = Query(default=0),
-    kind: Optional[str] = Query(default=None, description="With limit: which list to page (changed, added, removed, unchanged)."),
-    limit: Optional[int] = Query(default=None, ge=1, le=500, description="Page the item bodies of one list; omit for every list in full."),
+    kind: Optional[str] = Query(
+        default=None, description="With limit: which list to page (changed, added, removed, unchanged)."
+    ),
+    limit: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=500,
+        description="Page the item bodies of one list; omit for every list, each with at most 500 bodies.",
+    ),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
@@ -2777,11 +3306,15 @@ def compare_versions(
     (an uploaded file, a version created before revisions were kept);
     ``changed_at_source`` says which. With ``limit``, item bodies are loaded
     only for one page of one list, so a version that edits thousands of items
-    opens without loading them all.
+    opens without loading them all. Without ``limit``, ``include_diffs``
+    returns the bodies of the first 500 items of each list (in list order) and
+    sets ``diffs_truncated`` when a list is longer; page with ``limit`` for the
+    rest. Every list of item IDs, and each changed item's ``fields``, stays whole.
     """
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     target = _resolve_version(db, dataset, version_ref)
     base_version = _resolve_version(db, dataset, base)
     page_kind = (kind or "changed").strip().lower()
@@ -2858,19 +3391,25 @@ def compare_versions(
     want_diffs = bool(include_diffs)
     paged = want_diffs and limit is not None
     lists = {"changed": changed_ids, "added": added, "removed": removed, "unchanged": unchanged}
+    # Without ``limit``, each list's bodies stop at _COMPARE_DIFF_LIMIT items
+    # (``diffs_truncated`` says so): an unbounded diff loaded every body.
+    truncated = (
+        want_diffs
+        and not paged
+        and any(len(lists[name]) > _COMPARE_DIFF_LIMIT for name in ("changed", "added", "removed"))
+    )
 
     def _window(kind_name: str) -> list[str]:
         ids = lists[kind_name]
         if not want_diffs or (paged and kind_name != page_kind):
             return []
-        return ids[offset : offset + limit] if paged else ids
+        return ids[offset : offset + limit] if paged else ids[:_COMPARE_DIFF_LIMIT]
 
-    # Full rows only for the item IDs whose bodies are returned. Without paging
-    # every changed item lists its changed fields, as callers always had.
-    changed_bodies = set(_window("changed")) if paged else set(changed_ids)
-    need_base = changed_bodies | set(_window("removed"))
+    # Full rows only for the item IDs whose bodies are returned.
+    changed_window = set(_window("changed"))
+    need_base = changed_window | set(_window("removed"))
     # Unchanged bodies are returned only as a page (``unchanged_items``).
-    need_target = changed_bodies | set(_window("added")) | (set(_window("unchanged")) if paged else set())
+    need_target = changed_window | set(_window("added")) | (set(_window("unchanged")) if paged else set())
 
     def _full(version_id: str, wanted: set[str]) -> Dict[str, DatasetItem]:
         if not wanted:
@@ -2885,9 +3424,26 @@ def compare_versions(
     base_full = _full(base_version.id, need_base)
     target_full = _full(target.id, need_target)
 
+    # Without paging every changed item lists its changed fields, as callers
+    # always had: items outside the returned bodies are compared in batches of
+    # body columns, so memory stays bounded whatever the diff size.
+    fields_by_id: Dict[str, list[str]] = {
+        item_id_key: _changed_fields(base_full[item_id_key], target_full[item_id_key])
+        for item_id_key in changed_window
+        if item_id_key in base_full and item_id_key in target_full
+    }
+    if not paged:
+        rest = [item_id_key for item_id_key in changed_ids if item_id_key not in fields_by_id]
+        for start in range(0, len(rest), _COMPARE_DIFF_LIMIT):
+            chunk = rest[start : start + _COMPARE_DIFF_LIMIT]
+            base_bodies = _compare_bodies(db, base_version.id, chunk)
+            target_bodies = _compare_bodies(db, target.id, chunk)
+            for item_id_key in chunk:
+                if item_id_key in base_bodies and item_id_key in target_bodies:
+                    fields_by_id[item_id_key] = _changed_fields(base_bodies[item_id_key], target_bodies[item_id_key])
+
     changed = []
     field_diffs: list[Dict[str, Any]] = []
-    changed_window = set(_window("changed"))
     # A paged response carries only its page: changed entries are built for
     # the changed window alone, so its size follows ``limit``, not the diff.
     for item_id_key in (_window("changed") if paged else changed_ids):
@@ -2900,26 +3456,16 @@ def compare_versions(
             "edited_by": _revision_actor_payload(item_id_key),
             **_timing(item_id_key),
         }
-        b = base_full.get(item_id_key)
-        t = target_full.get(item_id_key)
-        if b is None or t is None:
+        if item_id_key not in fields_by_id:
             # Outside the returned page: the changed fields need the bodies, so
             # a paged compare lists them only for the diffs it returns.
             changed.append(entry)
             continue
-        fields = []
-        # Type-strict, so "51" -> 51 (or 1 -> true) is reported as a change.
-        if not _same_json(b.input, t.input):
-            fields.append("input")
-        if not _same_json(b.expected_output, t.expected_output):
-            fields.append("expected_output")
-        if not _same_json(b.item_metadata or {}, t.item_metadata or {}):
-            fields.append("metadata")
-        if (b.labels or []) != (t.labels or []):
-            fields.append("labels")
-        entry["fields"] = fields
+        entry["fields"] = fields_by_id[item_id_key]
         changed.append(entry)
-        if want_diffs and item_id_key in changed_window:
+        b = base_full.get(item_id_key)
+        t = target_full.get(item_id_key)
+        if want_diffs and item_id_key in changed_window and b is not None and t is not None:
             field_diffs.append(
                 dict(
                     entry,
@@ -2961,6 +3507,9 @@ def compare_versions(
             _item_payload(base_full[i]) | _timing(i) for i in _window("removed") if i in base_full
         ]
         response["field_diffs"] = field_diffs
+        if truncated:
+            response["diffs_truncated"] = True
+            response["diffs_limit"] = _COMPARE_DIFF_LIMIT
         if paged:
             response["unchanged_items"] = [_item_payload(target_full[i]) for i in _window("unchanged") if i in target_full]
             total = len(lists[page_kind])
@@ -2996,6 +3545,7 @@ async def upload_dataset(
     encoding: str = Form(default=""),
     create_only: bool = Form(default=False),
     dataset_ref: Optional[str] = Form(default=None),
+    private_test_set: bool = Form(default=False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
@@ -3006,8 +3556,78 @@ async def upload_dataset(
     - ``create_only``: always create a new dataset; 409 if the name or slug is taken.
     - neither (SDK/CI default): append to the dataset with the same name or slug,
       otherwise create it. A different name that only shares the slug is a 409.
+
+    Only the multipart read runs on the event loop; parsing and the database
+    work run in the threadpool, so a large file never blocks other requests.
     """
     _require_scope(principal, "datasets:write")
+    # Bounded read before any database work: an oversized file is a 413.
+    raw = await read_upload(file)
+    return await run_in_threadpool(
+        _upload_dataset_sync,
+        db=db,
+        principal=principal,
+        raw=raw,
+        filename=file.filename or "",
+        name=name,
+        project_slug=project_slug,
+        version=version,
+        version_name=version_name,
+        description=description,
+        tags=tags,
+        labels=labels,
+        publish=publish,
+        set_alias=set_alias,
+        input_col=input_col,
+        expected_col=expected_col,
+        input_cols=input_cols,
+        expected_cols=expected_cols,
+        id_col=id_col,
+        metadata_cols=metadata_cols,
+        label_cols=label_cols,
+        upload_format=upload_format,
+        encoding=encoding,
+        create_only=create_only,
+        dataset_ref=dataset_ref,
+        private_test_set=private_test_set,
+    )
+
+
+def _upload_dataset_sync(
+    *,
+    db: Session,
+    principal: Principal,
+    raw: bytes,
+    filename: str,
+    name: str,
+    project_slug: Optional[str],
+    version: str,
+    version_name: str,
+    description: str,
+    tags: str,
+    labels: str,
+    publish: bool,
+    set_alias: Optional[str],
+    input_col: str,
+    expected_col: str,
+    input_cols: str,
+    expected_cols: str,
+    id_col: Optional[str],
+    metadata_cols: str,
+    label_cols: str,
+    upload_format: str,
+    encoding: str,
+    create_only: bool,
+    dataset_ref: Optional[str],
+    private_test_set: bool,
+) -> Dict[str, Any]:
+    """The upload's checks, parse and writes (runs in the threadpool).
+
+    Order keeps locks short: every check reads first, the read transaction ends
+    before the file is parsed (no connection is held, nothing is idle in a
+    transaction), and only then are the dataset, version and items written,
+    in one short transaction.
+    """
     project = _project_for_request(db, principal, project_slug, write=True)
     clean_name = (name or "").strip()
     if not clean_name:
@@ -3025,14 +3645,13 @@ async def upload_dataset(
                     "Choose another name, or upload the file as a new version of that dataset."
                 ),
             )
+    if private_test_set:
+        _require_admin_for_private_flag(principal)
+    if dataset:
+        _require_items_visible(principal, dataset)
     if dataset and publish and set_alias:
         # Refuse before anything is written: an upload must not move production for a member.
         _require_alias_permission(db, principal, dataset, set_alias)
-    if not dataset:
-        _free_slug_from_deleted(db, project, slug)
-        dataset = Dataset(id=str(uuid4()), project_id=project.id, name=clean_name, slug=slug, description=description, tags=_labels(tags), created_by_user_id=principal.user.id, created_at=utc_now_naive(), updated_at=utc_now_naive())
-        db.add(dataset)
-        db.flush()
     # New-style callers (the dashboard) send the multi-column params input_cols/expected_cols,
     # where an empty expected_cols genuinely means "no expected output". Legacy callers (the SDK)
     # send the single-column input_col/expected_col, which carry the historical defaults.
@@ -3042,8 +3661,12 @@ async def upload_dataset(
     else:
         input_columns = [input_col] if input_col else []
         expected_columns = [expected_col] if expected_col else []
-    raw = await file.read()
-    filename = file.filename or ""
+    project_id = project.id
+    dataset_id = dataset.id if dataset else None
+    user_id = principal.user.id
+    # End the read transaction before the (possibly long) parse.
+    db.rollback()
+
     source_type = _upload_format(upload_format, filename, raw)
     used_encoding: Optional[str] = None
     if source_type == "jsonl":
@@ -3060,6 +3683,31 @@ async def upload_dataset(
             label_cols=_labels(label_cols),
             encoding=encoding or None,
         )
+    del raw
+
+    if dataset_id:
+        dataset = db.get(Dataset, dataset_id)
+        if dataset is None or dataset.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        if private_test_set:
+            dataset.private_test_set = True
+    else:
+        project = db.get(Project, project_id)
+        _free_slug_from_deleted(db, project, slug)
+        dataset = Dataset(
+            id=str(uuid4()),
+            project_id=project_id,
+            name=clean_name,
+            slug=slug,
+            description=description,
+            tags=_labels(tags),
+            private_test_set=private_test_set,
+            created_by_user_id=user_id,
+            created_at=utc_now_naive(),
+            updated_at=utc_now_naive(),
+        )
+        db.add(dataset)
+        db.flush()
     version_label, display_name = _version_identity(db, dataset, version, version_name)
     schema = {"input_cols": input_columns, "expected_cols": expected_columns, "id_col": id_col, "metadata_cols": _labels(metadata_cols), "label_cols": _labels(label_cols)}
     if used_encoding:
@@ -3075,27 +3723,47 @@ async def upload_dataset(
         source_uri=filename,
         labels=_labels(labels),
         schema=schema,
-        created_by_user_id=principal.user.id,
+        created_by_user_id=user_id,
         created_at=utc_now_naive(),
         updated_at=utc_now_naive(),
     )
     db.add(version_row)
     db.flush()
-    _insert_items(db, version_row, items)
+    item_count = _insert_items(db, version_row.id, items)
+    del items
+    version_row.item_count = item_count
     _record_change(
-        db, version_row, {"type": "uploaded", "source_type": source_type, "item_count": len(items)}, actor_user_id=principal.user.id
+        db,
+        version_row,
+        {"type": "uploaded", "source_type": source_type, "item_count": item_count},
+        actor_user_id=user_id,
     )
     if publish:
-        inserted = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version_row.id).all()
         version_row.status = DatasetVersionStatus.PUBLISHED
-        version_row.published_by_user_id = principal.user.id
+        version_row.published_by_user_id = user_id
         version_row.published_at = utc_now_naive()
-        version_row.content_hash = _content_hash(inserted)
-        _audit(db, principal, "dataset.version_published", dataset, after={"version": version_row.version, "item_count": len(inserted)})
+        # Hashed from the stored rows, streamed, like a later publish would:
+        # the database's JSON may normalize numbers (e.g. 1e20, -0.0).
+        version_row.content_hash = _stream_version_hash(db, version_row.id)[1]
+        _audit(
+            db,
+            principal,
+            "dataset.version_published",
+            dataset,
+            after={"version": version_row.version, "item_count": item_count},
+        )
         _store_published_counts(db, version_row)
         if set_alias:
             _set_alias(db, dataset, set_alias, version_row, principal)
     db.commit()
+    logger.info(
+        "Dataset %s uploaded: version %s, %d items from %s%s",
+        dataset.id,
+        version_row.version,
+        item_count,
+        source_type,
+        " (published)" if publish else "",
+    )
     return {"dataset": _dataset_payload(db, dataset, principal), "version": _version_payload(db, version_row)}
 
 
@@ -3106,32 +3774,73 @@ def download_version(
     project_slug: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
+    read_token: Optional[str] = Header(default=None, alias=DATASET_READ_TOKEN_HEADER),
 ) -> Response:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
-    items = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id).order_by(DatasetItem.index).all()
-    lines = [
-        json.dumps(
-            {
-                "item_id": item.item_id,
-                "input": item.input,
-                "expected_output": item.expected_output,
-                "metadata": item.item_metadata or {},
-                "labels": item.labels or [],
-            },
-            ensure_ascii=False,
-        )
-        for item in items
-    ]
     filename = f"{dataset.slug}-{version.version}.jsonl"
     fallback = f"{_ascii_name(dataset.slug, 'dataset')}-{_ascii_name(version.version, 'version')}.jsonl"
-    return Response(
-        "\n".join(lines) + ("\n" if lines else ""),
+    session_factory = sessionmaker(bind=db.get_bind(), autoflush=False)
+    # Return the request's connection to the pool now: the body is streamed
+    # after this returns and must not keep a transaction open meanwhile.
+    db.rollback()
+    return StreamingResponse(
+        _jsonl_chunks(session_factory, version.id),
         media_type="application/x-ndjson",
         headers={"Content-Disposition": _attachment_disposition(filename, fallback)},
     )
+
+
+_DOWNLOAD_BATCH_SIZE = 1000
+
+
+def _jsonl_chunks(session_factory: sessionmaker, version_id: str) -> Iterator[bytes]:
+    """The version's JSONL, one chunk per batch of items, in index order.
+
+    Each batch is a keyset page read by its own short-lived session, closed
+    before the chunk is sent: a slow client never holds a database connection
+    or leaves a transaction idle, and only one batch is in memory at a time.
+    """
+    after: Optional[tuple[int, int]] = None
+    while True:
+        with session_factory() as session:
+            query = session.query(
+                DatasetItem.id,
+                DatasetItem.index,
+                DatasetItem.item_id,
+                DatasetItem.input,
+                DatasetItem.expected_output,
+                DatasetItem.item_metadata,
+                DatasetItem.labels,
+            ).filter(DatasetItem.dataset_version_id == version_id)
+            if after is not None:
+                last_index, last_id = after
+                query = query.filter(
+                    (DatasetItem.index > last_index) | ((DatasetItem.index == last_index) & (DatasetItem.id > last_id))
+                )
+            rows = query.order_by(DatasetItem.index, DatasetItem.id).limit(_DOWNLOAD_BATCH_SIZE).all()
+        if not rows:
+            return
+        after = (rows[-1].index, rows[-1].id)
+        yield "".join(
+            json.dumps(
+                {
+                    "item_id": row.item_id,
+                    "input": row.input,
+                    "expected_output": row.expected_output,
+                    "metadata": row.item_metadata or {},
+                    "labels": row.labels or [],
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+            for row in rows
+        ).encode("utf-8")
+        if len(rows) < _DOWNLOAD_BATCH_SIZE:
+            return
 
 
 @router.get("/v1/datasets/{dataset_ref}/versions/{version_ref}")
@@ -3146,7 +3855,7 @@ def get_version(
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
-    return {"dataset": _dataset_payload(db, dataset), "version": _version_payload(db, version)}
+    return {"dataset": _dataset_payload(db, dataset, principal), "version": _version_payload(db, version)}
 
 
 @router.get("/api/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}/revisions")
@@ -3161,6 +3870,7 @@ def item_revisions(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     item = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id, DatasetItem.item_id == item_id).first()
     if not item:

@@ -1,0 +1,39 @@
+/*
+ * Sweeps in the launch form (plan §8.3, issue #34): experiment_launch_sweeps.js.
+ * Page-local recipes use the xs- prefix and reuse the launch form's xl- recipes
+ * (experiment_launch.css). Chips, controls, inline actions and tags come from
+ * ui_components.css and are never restyled here. Tokens only
+ * (docs/DESIGN_LANGUAGE.md).
+ */
+
+.xs-host { display: block; }
+
+/* Chip editor of one swept field */
+.xs-editor { display: grid; gap: var(--space-xs); min-width: 0; padding: var(--space-xs) var(--space-sm); border: 1px solid var(--border-default); border-radius: var(--control-radius); background: var(--bg-elevated); }
+.xs-editor:focus-within { border-color: var(--accent-primary); }
+.xs-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); min-width: 0; }
+.xs-chip-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.xs-chip-remove { padding: 0; border: 0; background: none; font-size: var(--font-sm); line-height: 1; cursor: pointer; }
+.xs-chip-remove:hover, .xs-chip-remove:focus-visible { color: var(--accent-primary); }
+.xs-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); min-width: 0; }
+.xs-add { flex: 1; min-width: 120px; }
+.xs-range-input { width: 72px; }
+.xs-toggle { white-space: nowrap; }
+
+/* Swept model slot */
+.xs-model-card { border-color: var(--accent-primary); }
+
+/* Sweeps card: axes and linked groups */
+.xs-math { font-size: var(--font-base); color: var(--text-primary); }
+.xs-axes { display: grid; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
+.xs-axis { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: start; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); border: 1px solid var(--border-subtle); border-radius: var(--control-radius); background: var(--bg-elevated); }
+.xs-axis--linked { border-left: 2px solid var(--accent-primary); }
+.xs-axis-lead { display: flex; align-items: center; min-height: 20px; }
+.xs-axis-lead input { accent-color: var(--accent-primary); }
+.xs-axis-body { display: grid; gap: 2px; min-width: 0; }
+.xs-axis-member { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); min-width: 0; }
+.xs-axis-name { font-size: var(--font-base); color: var(--text-primary); overflow-wrap: anywhere; }
+.xs-axis-values { overflow-wrap: anywhere; }
+
+/* Preview panel: swept axes of the dry run */
+.xs-preview-axes { display: grid; gap: 2px; margin: 0 0 var(--space-xs); padding: 0; list-style: none; font-size: var(--font-sm); color: var(--text-secondary); overflow-wrap: anywhere; }

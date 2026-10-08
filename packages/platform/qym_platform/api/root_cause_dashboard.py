@@ -7,9 +7,13 @@ from typing import Any, Iterable, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from qym_platform.auth import Principal, require_ui_principal
-from qym_platform.db.models import Project
+from qym_platform.db.models import Project, Run
 from qym_platform.deps import get_db
-from qym_platform.permissions import project_for_read_by_slug
+from qym_platform.permissions import (
+    PRIVATE_TEST_SET_PLACEHOLDER,
+    hidden_item_run_ids,
+    project_for_read_by_slug,
+)
 from qym_platform.services.root_cause_dashboard import (
     DashboardFilters,
     build_compare_payload,
@@ -148,6 +152,13 @@ def root_cause_dashboard(
     )
 
 
+def _hidden_run_ids(db: Session, principal: Principal, run_ids: Iterable[Any]) -> set[str]:
+    ids = sorted({str(run_id) for run_id in run_ids if run_id})
+    if not ids:
+        return set()
+    return hidden_item_run_ids(db, principal, db.query(Run).filter(Run.id.in_(ids)).all())
+
+
 @router.get("/api/projects/{project_slug}/root-cause-dashboard/occurrences")
 def root_cause_dashboard_occurrences(
     project_slug: str,
@@ -170,7 +181,7 @@ def root_cause_dashboard_occurrences(
 ) -> dict[str, Any]:
     _require_dashboard_enabled()
     project = _project(db, principal, project_slug)
-    return build_occurrences_payload(
+    payload = build_occurrences_payload(
         db,
         project,
         _filters(
@@ -190,6 +201,13 @@ def root_cause_dashboard_occurrences(
         limit=limit,
         offset=offset,
     )
+    occurrences = payload.get("occurrences") or []
+    hidden = _hidden_run_ids(db, principal, {row.get("run_id") for row in occurrences})
+    for row in occurrences:
+        if row.get("run_id") in hidden and row.get("note"):
+            # Approved findings can quote private test set items.
+            row["note"] = PRIVATE_TEST_SET_PLACEHOLDER
+    return payload
 
 
 @router.get("/api/projects/{project_slug}/root-cause-dashboard/compare")

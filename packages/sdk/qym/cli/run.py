@@ -14,11 +14,49 @@ import typer
 
 from ._exit_codes import ExitCode
 from ._output import is_json_mode, output, output_error, err_console, status
-from ._platform_api import PlatformAPIClient, PlatformAPIError
+from ._platform_api import (
+    RUN_ORIGIN_CHOICES,
+    PlatformAPIClient,
+    PlatformAPIError,
+    normalize_run_origin,
+    parse_versioning_filters,
+    run_origin_of,
+)
 from ._legacy import load_function_from_file, load_multi_run_specs
 from ..utils.env import get_platform_url_env
 
 run_app = typer.Typer(help="Manage evaluation runs.")
+
+
+def parse_versioning_details(
+    entries: Optional[List[str]] = None, details_json: Optional[str] = None
+) -> dict:
+    """``--versioning-details JSON`` and ``--versioning-detail KEY=VALUE`` -> a dict.
+
+    The JSON object is applied first; each ``KEY=VALUE`` (a string value, which
+    may contain ``=``) then sets or replaces its key. Raises ``ValueError`` for
+    invalid JSON, a non-object, an entry without ``=`` or an empty key, and for
+    anything :func:`qym.core.config.normalize_versioning_details` refuses.
+    """
+    from ..core.config import normalize_versioning_details
+
+    details: dict = {}
+    if details_json:
+        try:
+            parsed = json.loads(details_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid --versioning-details JSON: {exc}") from None
+        if not isinstance(parsed, dict):
+            raise ValueError("--versioning-details must be a JSON object")
+        details.update(parsed)
+    for entry in entries or []:
+        key, sep, value = str(entry).partition("=")
+        if not sep or not key.strip():
+            raise ValueError(
+                f"Invalid versioning detail: {entry!r} (expected KEY=VALUE)"
+            )
+        details[key.strip()] = value.strip()
+    return normalize_versioning_details(details)
 
 
 # ── qym run create ──────────────────────────────────────────
@@ -56,6 +94,18 @@ def run_create(
     runs_config: Optional[str] = typer.Option(None, "--runs-config", help="Multi-run YAML/JSON config"),
     git_branch: Optional[str] = typer.Option(None, "--git-branch", help="Override auto-detected git branch"),
     git_commit: Optional[str] = typer.Option(None, "--git-commit", help="Override auto-detected git commit hash"),
+    versioning_detail: Optional[List[str]] = typer.Option(
+        None,
+        "--versioning-detail",
+        metavar="KEY=VALUE",
+        help="Record a versioning detail on the run (any key, string value); repeatable. Wins over --versioning-details.",
+    ),
+    versioning_details_json: Optional[str] = typer.Option(
+        None,
+        "--versioning-details",
+        metavar="JSON",
+        help='Versioning details as a JSON object, e.g. \'{"agent_version": "v2", "kb": 381}\'.',
+    ),
 ) -> None:
     """Execute an LLM evaluation run."""
     from ..core.evaluator import Evaluator, _graceful_interrupt_signals
@@ -65,6 +115,18 @@ def run_create(
     from ..utils.text import arabic_display
 
     is_multi_run = bool(runs_config)
+
+    try:
+        cli_versioning_details = parse_versioning_details(
+            versioning_detail, versioning_details_json
+        )
+    except ValueError as exc:
+        output_error(
+            "usage_error",
+            str(exc),
+            suggestion="Use --versioning-detail KEY=VALUE or --versioning-details '{\"key\": \"value\"}'.",
+        )
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
 
     if is_multi_run and model:
         status("Ignoring --model because --runs-config is provided.")
@@ -91,6 +153,12 @@ def run_create(
         if not run_specs:
             output_error("failure", "Runs config is empty")
             raise typer.Exit(code=ExitCode.FAILURE)
+        if cli_versioning_details:
+            for spec in run_specs:
+                spec.config.versioning_details = {
+                    **(spec.config.versioning_details or {}),
+                    **cli_versioning_details,
+                }
 
         show_tui = not quiet and not no_progress and not no_ui
         runner = MultiModelRunner(run_specs, console=err_console)
@@ -201,6 +269,11 @@ def run_create(
             config["dataset_version"] = dataset_version
         if dataset_alias:
             config["dataset_alias"] = dataset_alias
+        if cli_versioning_details:
+            config["versioning_details"] = {
+                **dict(config.get("versioning_details") or {}),
+                **cli_versioning_details,
+            }
 
         # Build dataset
         dataset_obj: Any = dataset
@@ -340,12 +413,47 @@ def run_list(
     model_filter: Optional[str] = typer.Option(None, "--model", help="Filter by model name"),
     status_filter: Optional[str] = typer.Option(None, "--status", help="Filter by status"),
     user_filter: Optional[str] = typer.Option(None, "--user", help="Filter by run owner user"),
+    origin: Optional[str] = typer.Option(
+        None,
+        "--origin",
+        metavar="[official|local|all]",
+        help="Filter by run origin: official (dispatched by the platform), local, or all",
+    ),
+    versioning: Optional[List[str]] = typer.Option(
+        None,
+        "--versioning",
+        metavar="KEY=VALUE",
+        help=(
+            "Filter by the Evaluation Service's versioning_metadata, any key "
+            "(e.g. agent_version=v1.12). Repeat a key to match any of its values; "
+            "different keys must all match. KEY=__empty__ matches runs without it."
+        ),
+    ),
 ) -> None:
     """List recent evaluation runs from the platform."""
+    try:
+        origin_value = normalize_run_origin(origin)
+    except ValueError as exc:
+        output_error(
+            "usage_error",
+            str(exc),
+            suggestion="Use --origin " + "|".join(RUN_ORIGIN_CHOICES) + ".",
+        )
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
+    try:
+        parse_versioning_filters(versioning)
+    except ValueError as exc:
+        output_error(
+            "usage_error",
+            str(exc),
+            suggestion="Use --versioning KEY=VALUE, e.g. --versioning agent_version=v1.12.",
+        )
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
+
     client = PlatformAPIClient()
 
     try:
-        data = client.list_runs()
+        data = client.list_runs(origin=origin_value, versioning=versioning)
     except PlatformAPIError as exc:
         output_error(
             error_type="connection_failed" if exc.status_code == 0 else "failure",
@@ -375,7 +483,12 @@ def run_list(
                     ]
                     if not any(user_filter.lower() in field.lower() for field in owner_fields):
                         continue
-                flat_runs.append(run_summary)
+                row = dict(run_summary)
+                row["origin"] = run_origin_of(row)
+                row.setdefault("experiment", None)
+                row.setdefault("versioning", {})
+                row.setdefault("versioning_details", {})
+                flat_runs.append(row)
 
     # Sort by timestamp descending, apply limit
     flat_runs.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
@@ -388,6 +501,7 @@ def run_list(
             err_console.print("[dim]No runs found.[/dim]")
             return
 
+        from rich.markup import escape as rich_escape
         from rich.table import Table
 
         table = Table(title=f"Recent Runs ({len(flat_runs)})")
@@ -397,11 +511,20 @@ def run_list(
         table.add_column("Status")
         table.add_column("Success Rate", justify="right")
         table.add_column("Items", justify="right")
+        table.add_column("Origin")
         table.add_column("Timestamp")
 
         for r in flat_runs:
             sr = r.get("success_rate")
             sr_str = f"{sr:.1%}" if sr is not None else "—"
+            if r["origin"] == "official":
+                experiment = r.get("experiment")
+                experiment_name = str(experiment.get("name") or "") if isinstance(experiment, dict) else ""
+                origin_str = "Official run"
+                if experiment_name:
+                    origin_str += f" · {rich_escape(experiment_name)}"
+            else:
+                origin_str = "Local"
             table.add_row(
                 str(r.get("run_id", ""))[:12],
                 r.get("task_name", ""),
@@ -409,6 +532,7 @@ def run_list(
                 r.get("status", ""),
                 sr_str,
                 str(r.get("total_items", "")),
+                origin_str,
                 r.get("timestamp", ""),
             )
         err_console.print(table)
@@ -452,6 +576,15 @@ def run_get(
         err_console.print(f"[bold]Status:[/bold] {run_info.get('status', '—')}")
         err_console.print(f"[bold]Items:[/bold] {len(items)}")
         err_console.print(f"[bold]Metrics:[/bold] {', '.join(run_info.get('metric_names', []))}")
+        details = run_info.get("versioning_details")
+        if isinstance(details, dict) and details:
+            from rich.markup import escape as rich_escape
+
+            err_console.print("[bold]Versioning details:[/bold]")
+            for key in sorted(details):
+                value = details[key]
+                text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+                err_console.print(f"  {rich_escape(str(key))}: {rich_escape(text)}")
 
         # Metric averages from snapshot
         if metrics:

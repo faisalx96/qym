@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 from qym_platform.datetime_utils import utc_now_naive
+from qym_platform.log import get_logger
 from qym_platform.services.score_edits import SCORE_EDIT_META_KEYS
 from qym_platform.services.run_means import metric_directions, reduce_pass_scores
 from qym_platform.db.models import (
@@ -21,9 +22,11 @@ from qym_platform.db.models import (
     RunWorkflowStatus,
     Span,
 )
-from sqlalchemy import Integer, cast, func
+from sqlalchemy import Integer, and_, cast, func, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
+
+logger = get_logger(__name__)
 
 
 class RepeatPassDeletionError(ValueError):
@@ -178,6 +181,9 @@ def _recover_completed_outputs(
     return recovered
 
 
+_TRACE_METADATA_BATCH = 500
+
+
 def _refresh_trace_metadata(db: Session, run: Run) -> None:
     # Representative item/trace mappings changed outside ingestion. Invalidate
     # the private ledger atomically; the next live batch backfills it once.
@@ -209,20 +215,39 @@ def _refresh_trace_metadata(db: Session, run: Run) -> None:
         for aggregate in aggregates
     }
     run_buckets: List[Dict[str, Any]] = []
-    for item in db.query(RunItem).filter(RunItem.run_id == run.id).all():
-        bucket = buckets.get(item.trace_id or "")
+    # Only the columns read here (not inputs/outputs), and only changed
+    # metadata is written back, by primary key in batches.
+    db.flush()
+    rows = db.query(
+        RunItem.id,
+        RunItem.trace_id,
+        RunItem.item_metadata,
+        and_(RunItem.error.isnot(None), RunItem.error != "").label("has_error"),
+    ).filter(RunItem.run_id == run.id)
+    updates: List[Dict[str, Any]] = []
+    for row in rows:
+        bucket = buckets.get(row.trace_id or "")
         item_metadata = (
-            dict(item.item_metadata) if isinstance(item.item_metadata, dict) else {}
+            dict(row.item_metadata) if isinstance(row.item_metadata, dict) else {}
         )
         if bucket and int(bucket.get("span_count") or 0) > 0:
             item_metadata["trace_stats"] = _sanitize_for_json(
                 _public_trace_bucket(bucket)
             )
-            if not item.error:
+            if not row.has_error:
                 run_buckets.append(bucket)
         else:
             item_metadata.pop("trace_stats", None)
-        item.item_metadata = _sanitize_for_json(item_metadata)
+        item_metadata = _sanitize_for_json(item_metadata)
+        if item_metadata != row.item_metadata:
+            updates.append({"id": row.id, "item_metadata": item_metadata})
+    for start in range(0, len(updates), _TRACE_METADATA_BATCH):
+        db.execute(update(RunItem), updates[start : start + _TRACE_METADATA_BATCH])
+    if updates:
+        # RunItem objects a caller loaded must not keep the old metadata.
+        for obj in list(db.identity_map.values()):
+            if isinstance(obj, RunItem) and obj.run_id == run.id:
+                db.expire(obj, ["item_metadata"])
 
     run_metadata["trace_stats"] = _build_run_trace_stats(run_buckets)
     run.run_metadata = _sanitize_for_json(run_metadata)
@@ -644,6 +669,16 @@ def delete_repeat_pass(
                 },
             },
         )
+    )
+    logger.info(
+        "pass %d of run %s deleted by user %s (%d attempts, %d scores, %d events, %d reviews retired)",
+        pass_number,
+        run.id,
+        actor_user_id or "-",
+        deleted_attempts,
+        deleted_scores,
+        deleted_events,
+        retired_reviews,
     )
     return {
         "ok": True,

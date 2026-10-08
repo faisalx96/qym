@@ -1,5 +1,6 @@
 # Standard library imports
 import json
+import logging
 import os
 import re
 import random
@@ -998,15 +999,25 @@ def accuracy(output, expected, input_data=None) -> dict:
 # =============================================================================
 
 _timings_lock = threading.Lock()
-_timings_file = os.path.join(os.path.dirname(__file__), "eval_timings.jsonl")
+# Timings go to the logger (stdout in a container) at DEBUG. A file is opt-in:
+# INSIGHTOR_TIMINGS_FILE=/path/to/eval_timings.jsonl, ideally on a mounted volume.
+# Nothing is ever written next to this script, which is read-only when deployed.
+_timings_file = os.getenv("INSIGHTOR_TIMINGS_FILE", "").strip()
+_timings_logger = logging.getLogger("insightor_eval.timings")
 
 
 def _log_timing(entry: dict):
-    """Append a timing entry to the timings file (thread-safe)."""
+    """Record one timing entry: DEBUG log line, plus the opt-in file (thread-safe)."""
+    line = json.dumps(entry, ensure_ascii=False)
+    _timings_logger.debug(line)
+    if not _timings_file:
+        return
     with _timings_lock:
-        os.makedirs(os.path.dirname(_timings_file), exist_ok=True)
-        with open(_timings_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        try:
+            with open(_timings_file, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except OSError as exc:
+            _timings_logger.warning("Cannot write timings to %s: %s", _timings_file, exc)
 
 
 # =============================================================================

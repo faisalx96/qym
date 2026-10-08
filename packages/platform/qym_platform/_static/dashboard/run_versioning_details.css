@@ -1,0 +1,47 @@
+/* Run page "Versioning details" panel (run_versioning_details.js).
+   Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only. */
+#run-versioning-details:empty { display: none; }
+.rvd-panel {
+  margin-bottom: var(--space-xl);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: var(--space-lg);
+}
+.rvd-title { margin-bottom: 0; }
+.rvd-desc {
+  margin: 2px 0 var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.rvd-list { margin: 0; }
+.rvd-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 240px) minmax(0, 1fr);
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.rvd-row:first-child { border-top: none; }
+.rvd-key {
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rvd-value {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  text-align: start;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

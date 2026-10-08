@@ -5,15 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Dashboard</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261008-cols">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p1-20261005"></script>
-  <script src="/static/shell.js?v=p1-20261005-8"></script>
+  <script src="/static/shell.js?v=p1-20261006-1"></script>
   <script src="/static/kpis.js?v=p0-20260930"></script>
   <style>
     .overview { }
-    .overview-header { margin-bottom: var(--space-lg); }
+    .overview-header { margin-bottom: var(--space-lg); display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; }
+    .overview-header-text { min-width: 0; }
+    .overview-origin { flex: 0 0 auto; }
+    .recent-table .origin-badge { margin-left: var(--space-xs); vertical-align: middle; }
     .overview-header h1 { font-size: var(--font-title); font-weight: 600; margin: 0; }
     .overview-header p { color: var(--text-muted); font-size: var(--font-sm); margin-top: 6px; }
     .overview-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-md); margin-bottom: var(--space-lg); }
@@ -96,8 +99,15 @@
 <body>
   <main class="overview">
     <div class="overview-header">
-      <h1 id="overview-title" data-qym-project-name>Dashboard</h1>
-      <p id="overview-subtitle">Project overview and recent activity.</p>
+      <div class="overview-header-text">
+        <h1 id="overview-title" data-qym-project-name>Dashboard</h1>
+        <p id="overview-subtitle">Project overview and recent activity.</p>
+      </div>
+      <div class="overview-origin qym-segmented" role="group" aria-label="Run origin" data-qym-segmented-key="overview-run-origin">
+        <button type="button" class="ov-origin-btn qym-segmented__option active" data-origin="all" aria-pressed="true">All</button>
+        <button type="button" class="ov-origin-btn qym-segmented__option" data-origin="official" aria-pressed="false" title="Runs dispatched by the platform and verified at ingest">Official</button>
+        <button type="button" class="ov-origin-btn qym-segmented__option" data-origin="local" aria-pressed="false" title="Runs from a laptop, CI or any unverified source">Local</button>
+      </div>
     </div>
 
     <!-- Names, definitions and values come from QymKpis.entries() (kpis.js),
@@ -243,6 +253,21 @@
         return runs;
       }
 
+      // Origin facet (plan §11). "Official run" is the badge; "Official
+      // defaults" is the preset — keep the two names distinct.
+      const ORIGIN_VALUES = ['all', 'official', 'local'];
+      let originFilter = 'all';
+
+      function withOrigin(filters) {
+        return originFilter === 'all' ? filters : Object.assign({}, filters, { origins: [originFilter] });
+      }
+
+      function officialRunBadge(run) {
+        return run && run.origin === 'official'
+          ? '<span class="qym-tag qym-tag--accent origin-badge" title="Dispatched by the platform and verified at ingest">Official run</span>'
+          : '';
+      }
+
       function getRunName(run) {
         return run.run_name || run.external_run_id || (run.run_id || '').slice(0, 8) || '—';
       }
@@ -278,7 +303,7 @@
           const owner = r.owner && (r.owner.display_name || (r.owner.email || '').split('@')[0]) || '—';
           const runUrl = slug ? projectUrl(slug, 'runs/' + r.run_id) : ((window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '') + '/run/' + r.run_id);
           return '<tr>'
-            + '<td><a class="run-link" href="' + esc(runUrl) + '">' + esc(name) + '</a></td>'
+            + '<td><a class="run-link" href="' + esc(runUrl) + '">' + esc(name) + '</a>' + officialRunBadge(r) + '</td>'
             + '<td><span class="live-owner">' + esc(owner) + '</span></td>'
             + (includeStatus ? '<td>' + statusBadge(r.status) + '</td>' : '')
             + '<td><span class="live-progress">' + esc(progressLabel(r)) + '</span></td>'
@@ -583,7 +608,7 @@
         if (!overviewActive) throw new Error('Overview stopped');
         const response = await fetch(apiUrl('api/dashboard/runs'), {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_slug: slug, filters, limit, offset: 0, sort }),
+          body: JSON.stringify({ project_slug: slug, filters: withOrigin(filters), limit, offset: 0, sort }),
         });
         handleAuthResponse(response);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -614,17 +639,17 @@
         shared.renderTopbar(kpiView.unknown ? null : kpiView.kpis);
       }
 
-      async function loadKpis(slug) {
-        if (!overviewActive) return false;
+      async function loadKpis(slug, isStale = () => !overviewActive) {
+        if (isStale()) return false;
         try {
           const response = await fetch(apiUrl('api/dashboard/kpis'), {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ project_slug: slug, filters: {} }),
+            body: JSON.stringify({ project_slug: slug, filters: withOrigin({}) }),
           });
           handleAuthResponse(response);
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const data = await response.json();
-          if (!overviewActive) return false;
+          if (isStale()) return false;
           kpiView.kpis = data.kpis;
           kpiView.updating = !!data.freshness?.updating;
           kpiView.unknown = kpiView.updating && !data.kpis.runs;
@@ -654,7 +679,7 @@
             const owner = run.owner && (run.owner.display_name || (run.owner.email || '').split('@')[0]) || '—';
             const status = run.status || 'RUNNING';
             return '<tr>'
-              + '<td><a class="run-link" href="' + esc(runUrl) + '">' + esc(getRunName(run)) + '</a><div class="row-meta">' + esc(run.task_name || '') + '</div></td>'
+              + '<td><a class="run-link" href="' + esc(runUrl) + '">' + esc(getRunName(run)) + '</a>' + officialRunBadge(run) + '<div class="row-meta">' + esc(run.task_name || '') + '</div></td>'
               + '<td><span class="live-owner">' + esc(owner) + '</span></td>'
               + '<td><span class="live-status"><span class="live-status-dot"></span>' + esc(status) + '</span></td>'
               + '<td><span class="live-progress">' + esc(progressLabel(run)) + '</span></td>'
@@ -668,13 +693,16 @@
         }
       }
 
+      let overviewLoadGeneration = 0;
       async function load() {
-        if (!overviewActive) return;
+        const generation = ++overviewLoadGeneration;
+        const isStale = () => !overviewActive || generation !== overviewLoadGeneration;
+        if (isStale()) return;
         // Wait for shell
         if (window.QymShell && !window.__QYM_USER__) {
           await new Promise(r => document.addEventListener('qym:shell-ready', r, overviewListen({ once: true })));
         }
-        if (!overviewActive) return;
+        if (isStale()) return;
 
         const ctx = window.QymShell ? window.QymShell.getPageContext() : {};
         const project = window.QymShell ? window.QymShell.getProject() : null;
@@ -693,21 +721,21 @@
           document.getElementById('view-approved-runs').href = projectUrl(slug);
         }
 
-        const kpisUpdating = loadKpis(slug);
+        const kpisUpdating = loadKpis(slug, isStale);
         if (!trendView.data) loadTrend(slug);
         // Every section loads at once and arrives as its answer lands; one
         // after another, the last waited on all the others.
-        await Promise.all([loadLiveRuns(slug), loadRunLists(slug, kpisUpdating), loadPendingReviews(slug)]);
+        await Promise.all([loadLiveRuns(slug), loadRunLists(slug, kpisUpdating, isStale), loadPendingReviews(slug, isStale)]);
       }
 
-      async function loadRunLists(slug, kpisUpdating) {
-        if (!overviewActive) return;
+      async function loadRunLists(slug, kpisUpdating, isStale = () => !overviewActive) {
+        if (isStale()) return;
         try {
           const [data, approvedData] = await Promise.all([
             summaryRuns(slug, { statuses: ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'COMPLETED', 'FAILED', 'STOPPED'] }, 5),
             summaryRuns(slug, { statuses: ['APPROVED'] }, 5),
           ]);
-          if (!overviewActive) return;
+          if (isStale()) return;
           const runs = flattenRunsPayload(data);
 
           // Recent runs table
@@ -725,30 +753,30 @@
           kpiView.listsUpdating = !!(data.freshness?.updating || approvedData.freshness?.updating);
           renderKpiCards();
           const kpisStillUpdating = await kpisUpdating;
-          if (!overviewActive) return;
+          if (isStale()) return;
           if (kpiView.listsUpdating || kpisStillUpdating) {
             clearTimeout(summaryRefreshTimer);
             summaryRefreshTimer = setTimeout(() => { if (overviewActive) load(); }, 2000);
           }
         } catch (e) {
-          if (!overviewActive) return;
+          if (isStale()) return;
           console.error('[Overview] Failed to load runs:', e);
           document.getElementById('recent-runs-body').innerHTML = '<tr><td colspan="5" class="empty-state">Failed to load</td></tr>';
           document.getElementById('approved-runs-body').innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load</td></tr>';
         }
       }
 
-      async function loadPendingReviews(slug) {
-        if (!overviewActive) return;
+      async function loadPendingReviews(slug, isStale = () => !overviewActive) {
+        if (isStale()) return;
         try {
           const reviewLimit = 12;
           const corrUrl = slug ? `api/corrections?limit=${reviewLimit}&status=pending&project_slug=${encodeURIComponent(slug)}` : `api/corrections?limit=${reviewLimit}&status=pending`;
           const res = await fetch(apiUrl(corrUrl));
           handleAuthResponse(res);
-          if (!overviewActive) return;
+          if (isStale()) return;
           if (res.ok) {
             const data = await res.json();
-            if (!overviewActive) return;
+            if (isStale()) return;
             const items = data.corrections || data.items || [];
             const total = data.total || items.length;
             const body = document.getElementById('pending-reviews-body');
@@ -783,6 +811,20 @@
         const project = window.QymShell ? window.QymShell.getProject() : null;
         loadLiveRuns(ctx.projectSlug || (project && project.slug) || '');
       }, 10000);
+      document.querySelectorAll('.ov-origin-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const origin = btn.dataset.origin;
+          if (!ORIGIN_VALUES.includes(origin) || origin === originFilter) return;
+          originFilter = origin;
+          document.querySelectorAll('.ov-origin-btn').forEach(other => {
+            const active = other.dataset.origin === origin;
+            other.classList.toggle('active', active);
+            other.setAttribute('aria-pressed', active ? 'true' : 'false');
+          });
+          clearTimeout(summaryRefreshTimer);
+          load().catch(err => console.error('[Overview] Failed to reload:', err));
+        });
+      });
       document.addEventListener('qym:before-navigate', stopOverview, overviewListen({ once: true }));
     })();
   </script>

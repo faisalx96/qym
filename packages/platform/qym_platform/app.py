@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -11,8 +11,14 @@ from qym_platform.auth_oidc import SESSION_MAX_AGE_SECONDS, origin_matches_base,
 from qym_platform.middleware.cache_control import NoStoreMiddleware
 from qym_platform.api.auth import router as auth_router
 from qym_platform.settings import PlatformSettings
+from qym_platform.validation_errors import validation_exception_handler
 from qym_platform.api.web import router as web_router
 from qym_platform.api.projects import router as projects_router
+from qym_platform.api.eval_environments import router as eval_environments_router
+from qym_platform.api.eval_queue import router as eval_queue_router
+from qym_platform.api.eval_presets import router as eval_presets_router
+from qym_platform.api.eval_best_runs import router as eval_best_runs_router
+from qym_platform.api.experiments import router as experiments_router
 from qym_platform.api.runs import router as runs_router
 from qym_platform.api.step_latency import router as step_latency_router
 from qym_platform.api.ingest import router as ingest_router
@@ -30,13 +36,43 @@ from qym_platform.services.analysis_jobs import (
 )
 from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
 from qym_platform.static_files import GZipExceptStatic, PrecompressedStaticFiles
+from qym_platform.log import configure_logging, get_logger
+from qym_platform.middleware.request_context import install_request_context
+
+logger = get_logger(__name__)
 
 # Starlette defaults to level 9: on multi-MB run/compare JSON that is about 3x
 # the CPU of level 6 for 2-4 % smaller bodies.
 GZIP_COMPRESSLEVEL = 6
 
+_DEV_ENVIRONMENTS = {"dev", "development", "local", "test", "testing"}
+
+
+def process_layout_warning(settings: PlatformSettings) -> str | None:
+    """Warn when a non-dev deployment runs HTTP and every loop in one process.
+
+    ``QYM_ROLE=all`` (the default) puts request handling, the dashboard,
+    maintenance and eval-dispatch loops in this process, so one memory spike
+    (a large retention purge, a backfill) takes HTTP down with it.
+    """
+    from qym_platform.service_layout import resolve_layout
+
+    if resolve_layout(settings).service != "all":
+        return None
+    if str(settings.environment or "").strip().lower() in _DEV_ENVIRONMENTS:
+        return None
+    return (
+        "QYM_ROLE=all runs HTTP and all background loops in this process. For "
+        "production run the API with QYM_ROLE=api and a separate worker "
+        "(QYM_ROLE=worker, QYM_SKIP_MIGRATIONS=1, `python -m qym_platform.worker`, "
+        "docker compose --profile worker) with its own memory limit, or split "
+        "the platform into services (QYM_SERVICE=main|ingestion|workers); see "
+        "docs/internal/OPERATIONS.md."
+    )
+
 
 def create_app(settings: PlatformSettings | None = None) -> FastAPI:
+    configure_logging()
     settings = settings or PlatformSettings()
     analysis_job_manager.configure(max_workers=settings.analysis_job_max_workers)
     rule_inference_job_manager.configure(max_workers=settings.analysis_job_max_workers)
@@ -48,19 +84,34 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/openapi.json",
     )
+    # 422 responses must never echo a submitted key (security checklist §15).
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
     from qym_platform.db.session import SessionLocal, build_engine
     from qym_platform.deps import get_db
+    from qym_platform.services.eval_dispatcher import EvalDispatcher
+    from qym_platform.services.eval_remote_queue import RemoteQueueSnapshotter
     from qym_platform.services.maintenance import MaintenanceWorker
     from sqlalchemy.orm import sessionmaker
 
+    from qym_platform.service_layout import resolve_layout
+
+    layout = resolve_layout(settings)
+    runs_loops = layout.runs_loops
+    app.state.service_layout = layout
+    app.state.runs_loops = runs_loops
+
     # Background loops get their own small pool so a backfill cannot starve requests.
-    worker_engine = build_engine(settings, role="worker") if settings.role != "api" else None
+    worker_engine = build_engine(settings, role="worker") if runs_loops else None
     worker_sessions = sessionmaker(bind=worker_engine, autoflush=False, autocommit=False) if worker_engine is not None else SessionLocal
     dashboard_worker = DashboardSummaryWorker(worker_sessions)
     app.state.dashboard_summary_worker = dashboard_worker
     maintenance_worker = MaintenanceWorker(worker_sessions, worker_engine if worker_engine is not None else SessionLocal.kw["bind"])
     app.state.maintenance_worker = maintenance_worker
+    eval_dispatcher = EvalDispatcher(worker_sessions)
+    app.state.eval_dispatcher = eval_dispatcher
+    remote_queue_snapshotter = RemoteQueueSnapshotter(worker_sessions)
+    app.state.remote_queue_snapshotter = remote_queue_snapshotter
 
     @app.on_event("startup")
     def start_dashboard_summary_worker() -> None:
@@ -68,14 +119,39 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         # use app.state.dashboard_summary_worker or run a worker for that factory.
         # The default role `all` runs the loops here. API-only processes
         # (QYM_ROLE=api) leave them to an optional separate worker process.
-        if settings.role == "api":
-            logging.getLogger("uvicorn.error").info("Dashboard summary worker disabled (QYM_ROLE=api)")
+        if not runs_loops:
+            logger.info(
+                "Dashboard summary worker disabled (service=%s: loops run in the workers service)",
+                layout.service,
+            )
             return
         if get_db not in app.dependency_overrides:
             dashboard_worker.start()
-            logging.getLogger("uvicorn.error").info("Dashboard summary worker started")
+            logger.info("Dashboard summary worker started")
             maintenance_worker.start()
-            logging.getLogger("uvicorn.error").info("Maintenance worker started")
+            logger.info("Maintenance worker started")
+            eval_dispatcher.start()
+            logger.info("Eval dispatcher started")
+            remote_queue_snapshotter.start()
+            logger.info("Remote queue snapshotter started")
+
+    @app.on_event("startup")
+    async def cap_request_threadpool() -> None:
+        # Sync handlers each hold a pooled connection; never run more of them
+        # at once than the API pool can serve (see request_threadpool_size).
+        import anyio.to_thread
+
+        from qym_platform.db.session import request_threadpool_size
+
+        size = request_threadpool_size(settings)
+        anyio.to_thread.current_default_thread_limiter().total_tokens = size
+        logger.info("Request threadpool capped at %d threads", size)
+
+    @app.on_event("startup")
+    def warn_single_process_layout() -> None:
+        warning = process_layout_warning(settings)
+        if warning:
+            logger.warning(warning)
 
     @app.on_event("startup")
     def warn_untrusted_proxy() -> None:
@@ -83,15 +159,17 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
 
         warning = proxy_trust_warning(settings)
         if warning:
-            logging.getLogger("uvicorn.error").warning(warning)
+            logger.warning(warning)
 
     @app.on_event("shutdown")
     def stop_dashboard_summary_worker() -> None:
+        remote_queue_snapshotter.stop()
+        eval_dispatcher.stop()
         maintenance_worker.stop()
         if dashboard_worker.stop():
-            logging.getLogger("uvicorn.error").info("Dashboard summary worker stopped")
+            logger.info("Dashboard summary worker stopped")
         else:
-            logging.getLogger("uvicorn.error").warning(
+            logger.warning(
                 "Dashboard summary worker did not stop within the shutdown timeout"
             )
 
@@ -100,6 +178,10 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     # Private pages and API data must not be replayed from the browser cache
     # (e.g. Back after signing out); static assets stay cacheable.
     app.add_middleware(NoStoreMiddleware)
+    # Oversized uploads are refused before Starlette spools them to /tmp.
+    from qym_platform.uploads import UploadLimitMiddleware
+
+    app.add_middleware(UploadLimitMiddleware, max_upload_bytes=settings.max_upload_bytes)
 
     if settings.request_timing:
         from qym_platform.db.session import engine as _engine
@@ -159,6 +241,11 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(auth_router)
     app.include_router(web_router)
     app.include_router(projects_router)
+    app.include_router(eval_environments_router)
+    app.include_router(eval_presets_router)
+    app.include_router(eval_best_runs_router)
+    app.include_router(experiments_router)
+    app.include_router(eval_queue_router)
     app.include_router(analysis_router)  # before runs_router (its {run_id:path} is a catch-all)
     # Keep the dashboard route family registered so the feature can be restored
     # without rebuilding the application; its handlers are feature-gated.
@@ -171,7 +258,36 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(admin_router)
     app.include_router(step_latency_router)
     app.include_router(runs_router)
-    app.include_router(ingest_router)
+    serves_ingest = layout.service != "main" or layout.main_include_ingest
+    if serves_ingest:
+        app.include_router(ingest_router)
+        if layout.ingestion_prefix:
+            # The ingestion service's paths, so a client or ingress configured
+            # for /ingestion also works against this server.
+            from qym_platform.api.service_status import healthz_router
+
+            app.include_router(ingest_router, prefix=layout.ingestion_prefix, include_in_schema=False)
+            app.include_router(
+                healthz_router(
+                    service=layout.service, environment=settings.environment, prefix=layout.ingestion_prefix
+                )
+            )
+    if layout.single_server_surface and layout.workers_prefix:
+        from qym_platform.api.service_status import local_status, workers_status_router
+
+        def _local_status() -> dict:
+            from qym_platform.db.session import engine as _api_engine
+
+            return local_status(app.state, _api_engine)
+
+        app.include_router(
+            workers_status_router(
+                prefix=layout.workers_prefix,
+                environment=settings.environment,
+                status=_local_status,
+                service=layout.service,
+            )
+        )
 
     @app.on_event("shutdown")
     def shutdown_analysis_jobs() -> None:
@@ -180,4 +296,143 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         analysis_job_manager.shutdown(wait=True)
         rule_inference_job_manager.shutdown(wait=True)
 
+    # Outermost: request ids on every log line, unhandled errors logged with traceback.
+    install_request_context(app)
+    logger.info("platform app created (service=%s, environment=%s)", layout.service, settings.environment)
+    return app
+
+
+def _cap_threadpool_on_startup(app: FastAPI, settings: PlatformSettings) -> None:
+    @app.on_event("startup")
+    async def cap_request_threadpool() -> None:
+        import anyio.to_thread
+
+        from qym_platform.db.session import request_threadpool_size
+
+        size = request_threadpool_size(settings)
+        anyio.to_thread.current_default_thread_limiter().total_tokens = size
+        logger.info("Request threadpool capped at %d threads", size)
+
+
+def create_ingestion_app(settings: PlatformSettings | None = None) -> FastAPI:
+    """The ingestion service (``QYM_SERVICE=ingestion``): the SDK write path only.
+
+    Serves ``POST /v1/runs``, ``/v1/runs/{id}/events`` and ``/v1/runs:upload``
+    under ``QYM_INGESTION_PREFIX`` and (``QYM_INGESTION_LEGACY_PATHS``, on by
+    default) at their legacy paths, so an ingress can send exactly those
+    paths here while SDK clients keep using ``QYM_BASE_URL``. Bearer API keys
+    only: no session middleware, no UI, no other API route (404).
+    """
+    from qym_platform.api.service_status import healthz_router
+    from qym_platform.service_layout import resolve_layout
+    from qym_platform.uploads import UploadLimitMiddleware
+
+    configure_logging()
+    settings = settings or PlatformSettings()
+    layout = resolve_layout(settings)
+    app = FastAPI(title="qym-ingestion", version="0.2.3", docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.state.service_layout = layout
+    app.add_middleware(NoStoreMiddleware)
+    app.add_middleware(UploadLimitMiddleware, max_upload_bytes=settings.max_upload_bytes)
+    _cap_threadpool_on_startup(app, settings)
+
+    @app.on_event("startup")
+    def configure_models() -> None:
+        # Every model (and its outbox hooks) before the first concurrent request.
+        from sqlalchemy.orm import configure_mappers
+
+        from qym_platform.db import models  # noqa: F401
+
+        configure_mappers()
+
+    app.include_router(healthz_router(service="ingestion", environment=settings.environment))
+    if layout.ingestion_prefix:
+        app.include_router(
+            healthz_router(service="ingestion", environment=settings.environment, prefix=layout.ingestion_prefix)
+        )
+        app.include_router(ingest_router, prefix=layout.ingestion_prefix)
+    if layout.ingestion_legacy_paths or not layout.ingestion_prefix:
+        app.include_router(ingest_router)
+    install_request_context(app)
+    logger.info("ingestion app created (prefix=%s)", layout.ingestion_prefix or "-")
+    return app
+
+
+def create_workers_app(settings: PlatformSettings | None = None, *, runtime_factory=None) -> FastAPI:
+    """The workers service (``QYM_SERVICE=workers``).
+
+    Runs every background loop and the executor for queued jobs
+    (services/workers_runtime.py) for the lifetime of the app, and serves only
+    ``/healthz``, ``{QYM_WORKERS_PREFIX}/healthz`` and ``{QYM_WORKERS_PREFIX}/status``.
+    """
+    import threading
+    from contextlib import asynccontextmanager
+
+    from qym_platform.api.service_status import healthz_router, workers_status_router
+    from qym_platform.service_layout import resolve_layout
+
+    configure_logging()
+    settings = settings or PlatformSettings()
+    layout = resolve_layout(settings)
+    holder: dict = {}
+
+    def _default_runtime():
+        from sqlalchemy.orm import configure_mappers
+
+        from qym_platform.db import models  # noqa: F401
+        from qym_platform.services.workers_runtime import WorkersRuntime
+
+        configure_mappers()
+        return WorkersRuntime(settings)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        runtime = (runtime_factory or _default_runtime)()
+        holder["runtime"] = runtime
+        stop = threading.Event()
+        runtime.start()
+
+        def supervise() -> None:
+            while not stop.wait(1.0):
+                try:
+                    runtime.supervise_once()
+                except Exception:  # pragma: no cover - keep supervising
+                    logger.exception("workers supervision failed")
+
+        supervisor = threading.Thread(target=supervise, name="qym-workers-supervisor", daemon=True)
+        supervisor.start()
+        logger.info("qym workers service started")
+        try:
+            yield
+        finally:
+            stop.set()
+            supervisor.join(5)
+            runtime.stop()
+            holder.pop("runtime", None)
+            logger.info("qym workers service stopped")
+
+    app = FastAPI(
+        title="qym-workers", version="0.2.3", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
+    )
+    app.state.service_layout = layout
+    app.state.workers_runtime = holder
+
+    def status() -> dict:
+        runtime = holder.get("runtime")
+        if runtime is None:
+            return {"ok": False, "service": "workers", "error": "not started"}
+        payload = runtime.status()
+        executor = payload.get("job_executor") or {}
+        payload["ok"] = all(payload.get("loops", {}).values()) and bool(executor.get("alive"))
+        return payload
+
+    app.include_router(healthz_router(service="workers", environment=settings.environment))
+    if layout.workers_prefix:
+        app.include_router(
+            workers_status_router(prefix=layout.workers_prefix, environment=settings.environment, status=status)
+        )
+    else:
+        app.include_router(workers_status_router(prefix="", environment=settings.environment, status=status))
+    install_request_context(app)
     return app

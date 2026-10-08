@@ -81,6 +81,9 @@ CASES = [
     ({}, "status-asc", None),
     ({}, "latency-asc", None),
     ({"statuses": ["RUNNING", "FAILED"], "tasks": ["task-b"]}, "median-latency-desc", None),
+    ({"origins": ["official"]}, "time-desc", None),
+    ({"origins": ["local"], "tasks": ["task-a"]}, "run-asc", None),
+    ({"origins": ["__none__"]}, "time-desc", None),
 ]
 
 
@@ -140,6 +143,10 @@ def _seed_projection(engine, *, count=72, seed=37):
                 "git_commit": commit,
                 "status": "COMPLETED",
             }
+            # Descriptors published before origin existed read as local.
+            origin = ("official", "local", None)[index % 3]
+            if origin:
+                descriptor["origin"] = origin
             revision = rng.choice([1, 2, 3, 0]) if index % 9 else 0
             data = (
                 {}

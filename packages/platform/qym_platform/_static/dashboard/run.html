@@ -5,20 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Run Detail</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261008-cols">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p1-20261005"></script>
-  <script src="/static/shell.js?v=p1-20261005-8"></script>
+  <script src="/static/shell.js?v=p1-20261006-1"></script>
   <script src="/static/metrics.js?v=p1-20261005"></script>
-  <script src="/static/runs_order.js?v=p1-20261002"></script>
+  <script src="/static/runs_order.js?v=p1-20261006-1"></script>
   <script src="/static/run_details.js?v=p1-20261005"></script>
+  <script src="/static/run_experiment_panel.js?v=run-experiment-20261006-1"></script>
+  <script src="/static/run_versioning_details.js?v=rvd-20261008"></script>
   <script src="/static/qym_live.js?v=p1-20261001"></script>
   <script src="/static/trace_viewer.js?v=p1-20261001"></script>
-  <script src="/static/step_latency.js?v=p1-20261005-3"></script>
+  <script src="/static/latency_traces.js?v=lt-20261008"></script>
   <script src="/static/review_history.js?v=p1-20261001"></script>
   <script src="/static/item_reasons.js?v=p1-20261001"></script>
   <script src="/static/run_section_nav.js?v=p1-20261001-2"></script>
+  <script src="/static/json_viewer.js?v=jv-20261008"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     .run-container {
@@ -729,6 +732,7 @@
       white-space: nowrap;
       line-height: 1.2;
     }
+    .context-cell-val--json { display: flex; min-width: 0; }
     .context-section-empty {
       padding: 0 16px 12px;
       color: var(--text-muted);
@@ -1061,34 +1065,7 @@
       margin-top: var(--space-md);
       margin-bottom: var(--space-xl);
     }
-    .system-metrics-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: var(--space-md);
-    }
-    .system-metrics-grid > :is(.ri-panel, .metric-card) {
-      grid-column: auto;
-      min-width: 0;
-      height: auto;
-      align-self: stretch;
-    }
-    .system-trace-row {
-      margin-top: var(--space-md);
-    }
-    .system-trace-row > .metric-card {
-      width: 100%;
-    }
-    /* Tiles wrap at their natural width and the last row stretches to the
-       edge, so the strip never shows empty cells whatever the tile count. */
-    .system-trace-row .trace-pills-row.qym-stat-strip {
-      display: flex;
-      flex-wrap: wrap;
-    }
-    .system-trace-row .trace-pills-row.qym-stat-strip > .trace-pill {
-      flex: 1 1 210px;
-    }
     @media (max-width: 900px) {
-      .system-metrics-grid { grid-template-columns: 1fr; }
       .hero-top {
         flex-direction: column;
       }
@@ -1126,9 +1103,6 @@
         width: 100%;
         justify-content: center;
       }
-      .trace-pills-row {
-        grid-template-columns: 1fr;
-      }
     }
     @media (max-width: 520px) {
       .overview-summary-strip.qym-stat-strip,
@@ -1142,94 +1116,6 @@
       .hero-meta-grid {
         grid-template-columns: 1fr;
       }
-    }
-    /* When only latency or only trace, don't stretch full width */
-    .system-metrics-grid > .metric-card:only-child {
-      max-width: 600px;
-    }
-    /* Trace stats as pills in 2x2 grid */
-    .trace-pills-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: var(--space-sm);
-    }
-    .trace-pill {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      background: var(--bg-elevated);
-      border-radius: 6px;
-      transition: background 0.15s;
-    }
-    .trace-pill:hover {
-      background: var(--bg-hover);
-    }
-    /* Each kind of trace stat keeps one colour: its glyph sits on a tint of
-       it and its value reads in it. */
-    .trace-pill { --trace-tone: var(--text-primary); }
-    .trace-pill--tokens { --trace-tone: var(--accent-primary); }
-    .trace-pill--llm { --trace-tone: var(--accent-secondary); }
-    .trace-pill--tool { --trace-tone: var(--warning); }
-    .trace-pill--success { --trace-tone: var(--success); }
-    .trace-pill--retriever { --trace-tone: var(--info); }
-    .trace-pill--agent { --trace-tone: var(--accent-primary); }
-    .trace-pill--evaluator { --trace-tone: var(--accent-tertiary-soft); }
-    .trace-pill-icon {
-      width: 28px;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 6px;
-      flex-shrink: 0;
-      font-size: var(--font-lg);
-      line-height: 1;
-      color: var(--trace-tone);
-      background: color-mix(in srgb, var(--trace-tone) 12%, transparent);
-    }
-    .trace-pill--trace .trace-pill-icon {
-      background: color-mix(in srgb, var(--text-muted) 14%, transparent);
-    }
-    .metric-card-name.trace-card-title {
-      margin-top: 0;
-      font-size: var(--font-md);
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-    .trace-not-captured {
-      margin: 0;
-      font-size: var(--font-base);
-      color: var(--text-muted);
-    }
-    .trace-not-captured a { color: var(--accent-primary); }
-    .trace-pill-icon svg {
-      width: 16px;
-      height: 16px;
-      display: block;
-    }
-    .trace-pill-text {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
-    }
-    .trace-pill-label {
-      font-size: var(--font-xs);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .trace-pill-val {
-      font-family: var(--font-mono);
-      font-size: var(--font-xl);
-      font-weight: 700;
-      line-height: 1;
-      color: var(--text-primary);
     }
     .overview-summary-pills {
       display: flex;
@@ -1321,7 +1207,7 @@
       #run-content.is-entering .dist-chart-col .bar-count {
         animation: run-enter-fade 0.24s ease-out calc(var(--enter-wait, 0s) + 0.2s + var(--bar-i, 0) * 14ms) both;
       }
-      #run-content.is-entering :is(.metric-bool-track, .latency-ruler-track) {
+      #run-content.is-entering .metric-bool-track {
         transform-origin: left center;
         animation: run-enter-draw 0.55s var(--enter-ease) calc(var(--enter-wait, 0s) + 0.04s) both;
       }
@@ -1525,139 +1411,6 @@
     }
 
     /* ── Latency Card ── */
-    .latency-hero {
-      display: flex;
-      align-items: center;
-      gap: var(--space-lg);
-    }
-    .latency-p50-block {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
-    }
-    .latency-p50-val {
-      font-family: var(--font-mono);
-      font-size: var(--font-stat);
-      font-weight: 700;
-      color: var(--accent-secondary);
-      line-height: 1;
-      letter-spacing: -0.5px;
-    }
-    .latency-p50-label {
-      font-size: var(--font-xs);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: var(--text-muted);
-    }
-    .latency-ruler {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      max-width: 90%;
-    }
-    .latency-ruler-track {
-      position: relative;
-      height: 6px;
-      background: var(--bg-elevated);
-      border-radius: 100px;
-      margin: 14px 32px 32px 4px;
-    }
-    .latency-ruler-fill {
-      position: absolute;
-      top: 0; left: 0; bottom: 0;
-      border-radius: 100px;
-      background: linear-gradient(90deg, var(--accent-secondary), rgba(0, 168, 255, 0.3));
-      opacity: 0.3;
-    }
-    .latency-ruler-marker {
-      position: absolute;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      z-index: 1;
-    }
-    .latency-ruler-dot {
-      width: 11px;
-      height: 11px;
-      border-radius: 50%;
-      border: 2px solid var(--bg-surface);
-    }
-    .latency-ruler-label-below {
-      position: absolute;
-      top: 16px;
-      white-space: nowrap;
-      text-align: center;
-      font-family: var(--font-mono);
-      font-size: var(--font-xs);
-      line-height: 1.3;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-    .latency-ruler-label-below b {
-      display: block;
-      color: var(--text-secondary);
-      font-weight: 600;
-      font-size: var(--font-xs);
-    }
-
-    /* ── Trace Stats Card ── */
-    .trace-stats-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1px;
-      background: var(--border-subtle);
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    .trace-stat-item {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 10px 12px;
-      background: var(--bg-surface);
-      transition: background 0.15s;
-    }
-    .trace-stat-item:hover {
-      background: var(--bg-elevated);
-    }
-    .trace-stat-top {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .trace-stat-icon {
-      width: 20px;
-      height: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 4px;
-      font-size: 11px;
-      flex-shrink: 0;
-    }
-    .trace-stat-icon.tokens { background: rgba(0, 212, 170, 0.1); }
-    .trace-stat-icon.llm    { background: rgba(0, 168, 255, 0.1); }
-    .trace-stat-icon.tool   { background: rgba(245, 158, 11, 0.1); }
-    .trace-stat-icon.success { background: rgba(16, 185, 129, 0.1); }
-    .trace-stat-label {
-      font-size: var(--font-xs);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-muted);
-    }
-    .trace-stat-val {
-      font-family: var(--font-mono);
-      font-size: var(--font-xl);
-      font-weight: 700;
-      color: var(--text-primary);
-      line-height: 1;
-    }
 
     .threshold-control {
       display: flex;
@@ -5847,55 +5600,6 @@
       border-radius: 2px;
       background: var(--ri-color);
     }
-    .ri-frontier-legend {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: var(--space-md);
-      margin: var(--space-sm) 0 var(--space-xs);
-    }
-    .ri-frontier-legend-item {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-sm);
-      color: var(--text-muted);
-      font-size: var(--font-sm);
-    }
-    .ri-frontier-zone {
-      width: 16px;
-      height: 10px;
-      border: 1px solid var(--border-default);
-      border-radius: 2px;
-    }
-    .ri-frontier-zone.good { background: var(--success-dim); border-color: var(--success); }
-    .ri-frontier-zone.weak { background: var(--error-dim); border-color: var(--error); }
-    .ri-frontier-outlier {
-      width: 16px;
-      height: 10px;
-      border: 1px solid var(--border-default);
-      border-radius: 2px;
-      background: var(--bg-elevated);
-    }
-    .ri-frontier-dots {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-xs);
-      height: 12px;
-    }
-    .ri-frontier-dot {
-      display: block;
-      border-radius: 50%;
-      background: var(--chart-1);
-    }
-    .ri-frontier-dot.one { width: 5px; height: 5px; }
-    .ri-frontier-dot.two { width: 7px; height: 7px; }
-    .ri-frontier-dot.three { width: 9px; height: 9px; }
-    .ri-frontier-line {
-      width: 22px;
-      height: 0;
-      border-top: 2px dashed var(--border-strong);
-    }
-    .ri-frontier-line.p95 { border-top-style: dotted; }
     .ri-note-row {
       display: flex;
       justify-content: space-between;
@@ -6074,6 +5778,92 @@
     .pass-cmp-vtable td.score-1 { color: var(--score-1); }
     .pass-cmp-actions { display: flex; gap: 6px; }
 
+    /* ─── Experiment panel (official runs, #26; run_experiment_panel.js) ─── */
+    #run-experiment-panel:empty { display: none; }
+    .rxp-panel {
+      margin-bottom: var(--space-xl);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: 8px;
+      padding: var(--space-lg);
+    }
+    .rxp-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: var(--space-md);
+      margin-bottom: var(--space-md);
+      flex-wrap: wrap;
+    }
+    .rxp-heading { min-width: 0; }
+    .rxp-title-row { display: flex; align-items: center; gap: var(--space-sm); }
+    .rxp-title { margin-bottom: 0; }
+    .rxp-desc,
+    .rxp-note {
+      margin: 2px 0 0;
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .rxp-note { margin: 0 0 var(--space-md); color: var(--warning); }
+    .rxp-actions { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+    .rxp-actions a.qym-inline-action { text-decoration: none; }
+    .rxp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: var(--space-md) var(--space-lg);
+      margin: 0;
+    }
+    .rxp-field { min-width: 0; }
+    .rxp-field--wide { grid-column: 1 / -1; }
+    .rxp-label {
+      font-size: var(--font-sm);
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    .rxp-value {
+      margin: 0;
+      font-size: var(--font-base);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      overflow-wrap: anywhere;
+    }
+    .rxp-mono {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+    .rxp-link { color: var(--accent-primary); text-decoration: none; }
+    .rxp-link:hover { text-decoration: underline; }
+    .rxp-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .rxp-tag-value { color: var(--text-primary); }
+    .rxp-result {
+      margin-top: var(--space-md);
+      border-top: 1px solid var(--border-subtle);
+      padding-top: var(--space-md);
+    }
+    .rxp-result-summary {
+      cursor: pointer;
+      font-size: var(--font-md);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .rxp-json {
+      margin: var(--space-sm) 0 0;
+      max-height: 320px;
+      overflow: auto;
+      padding: var(--space-sm) var(--space-md);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: var(--font-base);
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
     /* ─── Sticky section nav (C058) ───
        One row under the run header: run name + status (once stuck) | section
        links with an underline on the section in view | Filters + Clear |
@@ -6484,6 +6274,9 @@
     .rdi-reason-help__pop strong { color: var(--text-primary); font-weight: 600; }
   </style>
   <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <link rel="stylesheet" href="/static/latency_traces.css?v=lt-20261008">
+  <link rel="stylesheet" href="/static/json_viewer.css?v=jv-20261008">
+  <link rel="stylesheet" href="/static/run_versioning_details.css?v=rvd-20261008">
   <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
@@ -6572,6 +6365,11 @@
         </div>
       </nav>
 
+      <!-- Experiment panel: official runs only (#26) -->
+      <div id="run-experiment-panel"></div>
+      <!-- Versioning details: free-form keys from the run's creator / experiment -->
+      <div id="run-versioning-details"></div>
+
       <div id="overview-section">
         <div id="overview-primary-section"></div>
         <!-- Pass-centric repeat analysis; empty for classic runs -->
@@ -6583,8 +6381,8 @@
 
       <!-- Step latency distributions: mounted once here, then shown in
            Latency and traces under Trace stats (renderOverview moves it). -->
-      <div id="step-latency-home" hidden>
-        <div id="step-latency-panel" class="system-trace-row"></div>
+      <div id="latency-traces-home" hidden>
+        <div id="latency-traces-panel"></div>
       </div>
 
       <div id="error-distribution-section"></div>
@@ -7957,7 +7755,10 @@
           if (Number.isFinite(serverNow)) live.clockOffset = serverNow - Date.now();
           const ended = !info.live;
           const changed = info.revision !== live.revision;
-          if (ended || (changed && Date.now() - live.loadedAt >= liveReloadIntervalMs(live))) {
+          // A stop was requested (its job is being cancelled) or withdrawn:
+          // show "Stopping…" at once, without waiting for the reload throttle.
+          const stopChanged = !ended && !!info.stop_requested !== !!state.run?.stop_requested;
+          if (ended || stopChanged || (changed && Date.now() - live.loadedAt >= liveReloadIntervalMs(live))) {
             const loadStarted = performance.now();
             await refreshRunData({ ended });
             if (liveRun !== live) return false;
@@ -7971,11 +7772,19 @@
             return false;
           }
           updateLiveIndicator();
-          return undefined;
+          // While stopping, probe faster so STOPPED shows as soon as it lands.
+          return info.stop_requested ? 1500 : undefined;
         }, { intervalMs: 3000, maxIntervalMs: 30000 });
         live.ticker = setInterval(tickLiveClock, 1000);
         updateLiveIndicator();
       }
+
+      // A stop made on another page or tab (admin force stop, cancelled job;
+      // QymShell.announceRunStatus): probe now instead of at the next tick.
+      document.addEventListener('qym:run-status', (event) => {
+        const runIds = (event.detail && event.detail.runIds) || [];
+        if (liveRun && liveRun.poller && (!runIds.length || runIds.includes(RUN_ID))) liveRun.poller.now();
+      }, pageListen());
 
       function stopLiveRefresh() {
         const live = liveRun;
@@ -8090,7 +7899,7 @@
         if (ended) {
           // Quiet: the panel keeps its current state (hidden for a run with
           // no spans) until the new data arrives, so nothing below it moves.
-          mountStepLatency({ quietReload: true });
+          if (window.QymLatencyTraces) window.QymLatencyTraces.reload({ quiet: true });
           if (window.QymReviewHistory && RUN_ID) {
             window.QymReviewHistory.load(
               el('review-history-section'),
@@ -8552,7 +8361,13 @@
             if (target) target.focus({ preventScroll: true });
           }
         });
-        if (patched) window.QymUIComponents?.alignMetricColumns(container);
+        if (patched) {
+          window.QymUIComponents?.alignMetricColumns(container);
+          // A card closed again needs the row fit too (shown metrics, order,
+          // "+N more"): the alignment alone sizes every row's grid for all
+          // metrics, which overflows the clipped metrics cell and hides them.
+          fitItemRows(container);
+        }
       }
       function renderOpenedItemStatus(itemId) {
         const style = ' style="padding: var(--space-md); color: var(--text-muted); font-size: var(--font-base);"';
@@ -9013,6 +8828,8 @@
         startEntrance(el('run-content'));
         ensureSectionNav();
         renderSummary();
+        renderExperimentPanel();
+        renderVersioningDetails();
         applyScoreLockMode();
         if (!IS_EXPORT && window.QymReviewHistory && RUN_ID) {
           window.QymReviewHistory.load(
@@ -9029,23 +8846,152 @@
         populateMetadataFieldsDropdown();
         populateMetricMetaFieldsDropdown();
         renderItems();
-        mountStepLatency();
+        mountLatencyTraces();
         // Auto-open trace if ?trace=itemId is in the URL
         if (window.QymTraceViewer) window.QymTraceViewer.restoreFromUrl();
       }
 
-      // Step latency loads once per page load (and again when a live run
-      // ends), never on a filter, sort, page or expand (C028). On the run
-      // page its Agent and Eval groups start collapsed (C143).
-      function mountStepLatency(extra = {}) {
+      // Official runs (#26): environment, base source, sweep, remote job, result,
+      // versioning and "Rerun with this config". Empty for local runs.
+      function renderExperimentPanel() {
+        const container = el('run-experiment-panel');
+        if (!container) return;
+        if (!window.QymRunExperimentPanel) { container.innerHTML = ''; return; }
+        const run = state.run || {};
+        window.QymRunExperimentPanel.render(container, run, {
+          projectSlug: (run.project && run.project.slug) || CURRENT_PROJECT_SLUG,
+          isExport: IS_EXPORT,
+        });
+      }
+
+      // Free-form versioning_details (0084); empty when the run has none.
+      function renderVersioningDetails() {
+        const container = el('run-versioning-details');
+        if (!container) return;
+        if (!window.QymRunVersioningDetails) { container.innerHTML = ''; return; }
+        window.QymRunVersioningDetails.render(container, state.run || {});
+      }
+
+      // Latency and traces loads its trace timings once per page load (and
+      // again when a live run ends), never on a filter, sort, page or expand
+      // (C028); a filter only redraws its Response time cards.
+      function mountLatencyTraces() {
         try {
-          const slPanel = el('step-latency-panel');
-          if (window.QymStepLatency && slPanel) {
-            QymStepLatency.mount(slPanel, [RUN_ID], { collapsible: true, ...extra });
+          const panel = el('latency-traces-panel');
+          if (window.QymLatencyTraces && panel) {
+            QymLatencyTraces.mount(panel, { runId: RUN_ID, passNumber: state.viewPass || null, offline: IS_EXPORT });
           }
         } catch (err) {
-          console.error('[step-latency] mount failed:', err);
+          console.error('[latency-traces] mount failed:', err);
         }
+      }
+
+      // The page's rows as the section reads them: every item the filters
+      // keep except the latency filter, so the histogram can show its
+      // selection, with each quality metric's score.
+      function latencyTracesItems(filteredItemsOverride) {
+        let rows;
+        if (state.latencyDistFilter) {
+          const saved = state.latencyDistFilter;
+          state.latencyDistFilter = null;
+          try { rows = getFilteredItems().map(item => item.row); } finally { state.latencyDistFilter = saved; }
+        } else {
+          rows = Array.isArray(filteredItemsOverride)
+            ? filteredItemsOverride.map(item => item.row).filter(Boolean)
+            : (state.snapshot.rows || []);
+        }
+        const metrics = state.allMetrics
+          .map((name, index) => ({ name, index }))
+          .filter(m => (state.metricTypes[m.name] || 'score') !== 'numeric' && metricDirectionOf(m.name));
+        return rows.filter(row => !window.QymMetrics.isNotReceivedRow(row)).map(row => {
+          const latency = row.latency_ms == null || row.latency_ms === '' ? NaN : Number(row.latency_ms);
+          const scores = {};
+          metrics.forEach(m => {
+            const parsed = rowScoreFor(row, m.index, m.name);
+            if (parsed.score !== null && Number.isFinite(parsed.score)) scores[m.name] = parsed.score;
+          });
+          return {
+            id: String(row.item_id || row.index),
+            // A completed item's recorded time is its run time, zero
+            // included; a failed item's counts when it has one.
+            latency: Number.isFinite(latency) && latency >= 0 && (row.status === 'completed' || latency > 0) ? latency : NaN,
+            // Its own run failed (metric errors are not task errors).
+            error: window.QymMetrics.isTaskErrorRow(row),
+            scores,
+          };
+        });
+      }
+
+      function updateLatencyTraces(filteredItemsOverride, aside) {
+        if (!window.QymLatencyTraces) return;
+        const samples = parseInt(state.run && state.run.samples, 10) || 1;
+        const metricInfo = state.allMetrics
+          .filter(name => (state.metricTypes[name] || 'score') !== 'numeric' && metricDirectionOf(name))
+          .map(name => ({
+            name,
+            direction: metricDirectionOf(name),
+            threshold: state.metricIsBoolean[name] ? 0.9999 : (state.metricThresholds[name] || 0.8),
+            isBoolean: !!state.metricIsBoolean[name],
+          }));
+        try {
+          QymLatencyTraces.update({
+            items: latencyTracesItems(filteredItemsOverride),
+            metrics: metricInfo,
+            metric: state.selectedMetric,
+            latencyFilter: state.latencyDistFilter,
+            // An export is one file: no pass pages, and no API for trace timings.
+            passes: !IS_EXPORT && samples > 1 && isRepeatRun() ? { count: samples, current: state.viewPass || 0 } : null,
+            expectTraces: !IS_EXPORT && !!((state.viewPass ? state.passSummary?.trace_stats : state.run && state.run.trace_stats) || {}).has_spans,
+            aside,
+            onLatencyFilter: range => {
+              state.latencyDistFilter = range;
+              state.page = 1;
+              renderItems(false, { viewOnly: true });
+            },
+            onOpenItem: id => openItemFromChart(id),
+            onPass: number => {
+              const url = new URL(window.location.href);
+              if (number) url.searchParams.set('pass', String(number)); else url.searchParams.delete('pass');
+              window.location.assign(url.pathname + url.search);
+            },
+            onVisibility: visible => {
+              const section = el('latency-traces-panel')?.closest('.system-metrics-section');
+              if (section) section.hidden = !visible;
+            },
+          });
+        } catch (err) {
+          console.error('[latency-traces] update failed:', err);
+        }
+      }
+
+      // A chart dot opens its item in the list: on its page, open and
+      // ringed, under the sticky section nav.
+      function openItemFromChart(id) {
+        let items = getFilteredItems();
+        let index = items.findIndex(({ row }) => String(row.item_id || row.index) === id);
+        if (index < 0 && state.latencyDistFilter) {
+          state.latencyDistFilter = null;
+          items = getFilteredItems();
+          index = items.findIndex(({ row }) => String(row.item_id || row.index) === id);
+        }
+        if (index < 0) return;
+        state.page = Math.floor(index / state.pageSize) + 1;
+        if (state.itemDetailView !== 'heatmap') {
+          state.itemExpanded = state.itemExpanded || {};
+          state.itemExpanded[id] = true;
+          syncItemUrl(id, true);
+        }
+        renderItems(false, { viewOnly: true });
+        requestAnimationFrame(() => {
+          const card = Array.from(document.querySelectorAll('#items-grid .item-card[data-item-id]')).find(node => node.dataset.itemId === id);
+          if (!card) return;
+          const host = getScrollHost();
+          const navCover = sectionNav && typeof sectionNav.coveredHeight === 'function' ? sectionNav.coveredHeight() : 0;
+          if (host) host.scrollTop += card.getBoundingClientRect().top - host.getBoundingClientRect().top - navCover - 16;
+          else card.scrollIntoView({ block: 'start' });
+          card.classList.add('item-card--target');
+          setTimeout(() => card.classList.remove('item-card--target'), 2600);
+        });
       }
 
       // Header entity links: a managed dataset opens its page (Runs tab); a
@@ -9106,8 +9052,11 @@
         const config = run.config || {};
         const metadata = run.metadata || {};
         const scopedStatus = pass?.status || run.status || 'unknown';
-        const statusClass = String(scopedStatus).toLowerCase();
-        const statusText = escapeHtml(String(scopedStatus).toUpperCase());
+        // A cancelled evaluation job's run stays RUNNING until the Evaluation
+        // Service confirms: show the stop as under way (warning tone) meanwhile.
+        const stopping = !pass && !!run.stop_requested && isLiveStatus(run.status);
+        const statusClass = stopping ? 'stopped' : String(scopedStatus).toLowerCase();
+        const statusText = stopping ? 'STOPPING…' : escapeHtml(String(scopedStatus).toUpperCase());
         const modelName = run.model_name || config.model || config.model_name || '';
         const runId = run.run_id || RUN_ID || '';
         const taskName = run.task_name || metadata.task_name || config.task || '—';
@@ -9209,6 +9158,19 @@
               '</div>';
           }
         }
+        if (run.items_restricted) {
+          // Private test set: the server redacted item contents for this viewer.
+          ingestWarningHtml +=
+            '<div class="ingest-warning-banner">' +
+              '<svg class="ingest-warning-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+              '<div>' +
+                '<div class="ingest-warning-title">Private test set</div>' +
+                '<div class="ingest-warning-body">' +
+                  'This run was evaluated on a private test set. Scores and latencies are shown, but item inputs, expected outputs, outputs, traces, and analysis are visible to admins only.' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+        }
 
         const samplesCount = parseInt(run.samples, 10) || 1;
         const samplesPillHtml = samplesCount > 1 && !state.viewPass
@@ -9224,6 +9186,8 @@
           metaItem('Started', formatIsoDateTime(startedAt), { nowrap: true }),
           metaItem('Runtime', runtimeText, { nowrap: true, id: 'hero-runtime' }),
           metaItem('Version', versionText, { mono: true, nowrap: true }),
+          // Why a run is STOPPED (lease timeout, cancelled by whom, lost events).
+          state.viewPass ? '' : metaItem('Stop reason', run.status_reason_label || ''),
         ].filter(Boolean).join('');
         const executionContextHtml = buildExecutionContextSectionHtml();
 
@@ -9244,7 +9208,9 @@
               '</div>' +
             '</div>' +
             '<div class="hero-right">' +
-              '<div class="hero-status qym-badge ' + escapeAttr(statusClass) + '"><span class="hero-status-dot"></span>' + statusText +
+              '<div class="hero-status qym-badge ' + escapeAttr(statusClass) + '"' +
+                (!state.viewPass && run.status_reason_label ? ' title="' + escapeAttr(run.status_reason_label) + '"' : '') +
+                '><span class="hero-status-dot"></span>' + statusText +
                 ((!state.viewPass && samplesCount > 1 && (statusClass === 'running' || statusClass === 'pending'))
                   ? ' • pass ' + Math.min((parseInt(run.last_completed_pass, 10) || 0) + 1, samplesCount) + '/' + samplesCount
                   : '') +
@@ -10180,19 +10146,21 @@
           'last_completed_pass',
           'git_branch', 'git_commit', 'ingest_incomplete', 'ingest_rejected'
         ]);
+        // The Experiment panel shows the reserved launch keys of official runs.
+        if (run.experiment) { hiddenMetadataKeys.add('qym_config'); hiddenMetadataKeys.add('qym_launch'); }
         const entries = [];
         const seenKeys = new Set();
 
         Object.entries(config).forEach(([key, value]) => {
           if (hiddenConfigKeys.has(key) || value == null || value === '') return;
           seenKeys.add(String(key).toLowerCase());
-          entries.push({ key: key, value: stringify(value), group: 'Config' });
+          entries.push({ key: key, value: stringify(value), raw: value, group: 'Config' });
         });
 
         Object.entries(metadata).forEach(([key, value]) => {
           if (hiddenMetadataKeys.has(key) || value == null || value === '') return;
           if (seenKeys.has(String(key).toLowerCase())) return;
-          entries.push({ key: key, value: stringify(value), group: 'Metadata' });
+          entries.push({ key: key, value: stringify(value), raw: value, group: 'Metadata' });
         });
 
         if (!entries.length) {
@@ -10203,10 +10171,16 @@
         const cellsHtml = entries.map((entry) => {
           const keyLabel = formatFieldLabel(entry.key);
           const sourceLabel = entry.group === 'Metadata' ? 'Metadata' : 'Config';
+          // Objects, arrays and JSON strings get a compact preview that
+          // opens the JSON viewer; scalars stay plain text.
+          const jsonPreview = window.QymJsonViewer ? QymJsonViewer.previewHtml(entry.raw, { title: keyLabel }) : '';
+          const valueHtml = jsonPreview
+            ? '<div class="context-cell-val context-cell-val--json">' + jsonPreview + '</div>'
+            : '<div class="context-cell-val" title="' + escapeAttr(entry.value) + '">' + escapeHtml(entry.value) + '</div>';
           return '<div class="context-cell">' +
             '<div class="context-cell-text">' +
               '<div class="context-cell-key">' + escapeHtml(keyLabel + ' • ' + sourceLabel) + '</div>' +
-              '<div class="context-cell-val" title="' + escapeAttr(entry.value) + '">' + escapeHtml(entry.value) + '</div>' +
+              valueHtml +
             '</div>' +
           '</div>';
         }).join('');
@@ -10334,66 +10308,6 @@
           'var(--accent-primary)', // 100%
         ];
         return colors[Math.min(bucketIdx, colors.length - 1)];
-      }
-
-      function buildLatencyBuckets(latencies) {
-        if (!latencies || latencies.length === 0) return [];
-        const sorted = [...latencies].sort((a, b) => a - b);
-        const minMs = sorted[0];
-        const maxMs = sorted[sorted.length - 1];
-        if (maxMs - minMs < 1) {
-          return [{ label: formatLatBucketLabel(0, null), min: 0, max: Infinity, color: 'var(--accent-primary)' }];
-        }
-
-        // Fixed-interval buckets: 10 equal-width buckets up to P95,
-        // plus an 11th open-ended tail bucket for everything beyond
-        const p95Idx = Math.floor(0.95 * (sorted.length - 1));
-        const capMs = sorted[p95Idx];
-
-        // Pick a nice interval that gives exactly 10 buckets
-        const rawInterval = capMs / 10;
-        let interval;
-        if (rawInterval <= 100) interval = Math.max(10, Math.ceil(rawInterval / 10) * 10);
-        else if (rawInterval <= 500) interval = Math.ceil(rawInterval / 50) * 50;
-        else if (rawInterval <= 2000) interval = Math.ceil(rawInterval / 250) * 250;
-        else if (rawInterval <= 5000) interval = Math.ceil(rawInterval / 1000) * 1000;
-        else if (rawInterval <= 20000) interval = Math.ceil(rawInterval / 2000) * 2000;
-        else if (rawInterval <= 60000) interval = Math.ceil(rawInterval / 5000) * 5000;
-        else interval = Math.ceil(rawInterval / 10000) * 10000;
-
-        // Build exactly 10 edges, then add tail
-        const buckets = [];
-        for (let i = 0; i < 10; i++) {
-          const bMin = i * interval;
-          const bMax = (i + 1) * interval;
-          buckets.push({ min: bMin, max: bMax, label: formatLatBucketLabel(bMin, bMax) });
-        }
-        // 11th bucket: everything beyond
-        const tailMin = 10 * interval;
-        buckets.push({ min: tailMin, max: Infinity, label: formatLatBucketLabel(tailMin, null) });
-
-        if (buckets.length === 0) {
-          buckets.push({ min: 0, max: Infinity, label: 'all' });
-        }
-
-        // Assign colors: gradient green → red
-        const colorStops = ['var(--score-5)', 'var(--score-4)', 'var(--score-3)', 'var(--score-2)', 'var(--score-1)'];
-        for (let i = 0; i < buckets.length; i++) {
-          const t = buckets.length > 1 ? i / (buckets.length - 1) : 0;
-          const ci = Math.min(colorStops.length - 1, Math.round(t * (colorStops.length - 1)));
-          buckets[i].color = colorStops[ci];
-        }
-        return buckets;
-      }
-
-      function formatLatBucketLabel(minMs, maxMs) {
-        const fmt = (ms) => {
-          if (ms >= 60000) return (ms / 60000).toFixed(ms % 60000 === 0 ? 0 : 1) + 'm';
-          if (ms >= 1000) return (ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1) + 's';
-          return ms + 'ms';
-        };
-        if (maxMs === null) return fmt(minMs) + '+';
-        return fmt(minMs) + '-' + fmt(maxMs);
       }
 
       function riScoreColor(value, direction = 'maximize') {
@@ -10720,7 +10634,7 @@
       function buildDeepAnalysisCharts(rows) {
         const series = riMetricSeries(rows);
         if (!series.length || !rows.length) {
-          return { deepAnalysisHtml: '', frontierPanel: '' };
+          return { deepAnalysisHtml: '' };
         }
         const metricByName = new Map(series.map(metric => [metric.name, metric]));
         if (!metricByName.has(state.relationshipX)) state.relationshipX = series[0].name;
@@ -10802,77 +10716,11 @@
             '<svg class="ri-chart" viewBox="0 0 ' + SW + ' ' + SH + '" role="img" aria-label="Relationship between selected metrics">' + scatter + '</svg></div>');
         }
 
-        // "Fast + strong" needs a declared direction; lower-is-better metrics
-        // plot with 0% at the top so the strong zone stays top-left (C008).
-        const qualityMetric = series.find(metric => metric.name === state.selectedMetric && metric.type !== 'numeric' && metric.direction)
-          || series.find(metric => metric.type !== 'numeric' && metric.direction);
-        const qualityItems = qualityMetric ? qualityMetric.points.map(point => ({ row: point.row, rowIndex: point.rowIndex, quality: point.value, latency: Number(point.row.latency_ms) })).filter(item => Number.isFinite(item.latency) && item.latency > 0) : [];
-        let frontierPanel = '';
-        if (qualityItems.length > 1) {
-          const W = 620, H = 250, L = 54, R = 18, T = 16, B = 42;
-          const latencies = qualityItems.map(item => item.latency);
-          const qualities = qualityItems.map(item => item.quality);
-          let latMin = Math.min(...latencies), latMax = Math.max(...latencies);
-          if (latMin === latMax) { latMin *= 0.95; latMax *= 1.05; }
-          const medianLatency = riQuantile(latencies, 0.5);
-          const p95Latency = riQuantile(latencies, 0.95);
-          const medianQuality = riQuantile(qualities, 0.5);
-          const plotRight = W - R;
-          const outlierItems = qualityItems.filter(item => item.latency > p95Latency);
-          const hasOutliers = outlierItems.length > 0;
-          const outlierBandWidth = hasOutliers ? Math.min(110, (plotRight - L) * 0.14) : 0;
-          const p95X = plotRight - outlierBandWidth;
-          const mainLatencyMax = Math.max(p95Latency, latMin + 1);
-          const x = value => {
-            if (!hasOutliers || value <= p95Latency) return riScale(value, latMin, mainLatencyMax, L, p95X);
-            return riScale(value, p95Latency, latMax, p95X + 12, plotRight);
-          };
-          const y = qualityMetric.direction === 'minimize'
-            ? value => riScale(value, 0, 1, T, H - B)
-            : value => riScale(value, 0, 1, H - B, T);
-          const medianX = x(medianLatency), zoneY = y(medianQuality);
-          let frontier = (hasOutliers ? '<rect x="' + p95X.toFixed(1) + '" y="' + T + '" width="' + outlierBandWidth.toFixed(1) + '" height="' + (H - B - T) + '" fill="var(--bg-elevated)" opacity="0.55"/>' : '') +
-            '<rect x="' + L + '" y="' + T + '" width="' + (medianX - L).toFixed(1) + '" height="' + Math.max(0, zoneY - T).toFixed(1) + '" fill="var(--success)" opacity="0.10"/>' +
-            '<rect x="' + p95X.toFixed(1) + '" y="' + zoneY.toFixed(1) + '" width="' + (plotRight - p95X).toFixed(1) + '" height="' + (H - B - zoneY).toFixed(1) + '" fill="var(--error)" opacity="0.10"/>' +
-            '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + plotRight + '" y2="' + (H - B) + '" class="ri-axis"/><line x1="' + L + '" y1="' + T + '" x2="' + L + '" y2="' + (H - B) + '" class="ri-axis"/>' +
-            '<line x1="' + medianX.toFixed(1) + '" y1="' + T + '" x2="' + medianX.toFixed(1) + '" y2="' + (H - B) + '" stroke="var(--border-strong)" stroke-dasharray="5 4"/>' +
-            '<line x1="' + L + '" y1="' + y(medianQuality).toFixed(1) + '" x2="' + plotRight + '" y2="' + y(medianQuality).toFixed(1) + '" stroke="var(--border-strong)" stroke-dasharray="5 4"/>' +
-            '<line x1="' + p95X.toFixed(1) + '" y1="' + T + '" x2="' + p95X.toFixed(1) + '" y2="' + (H - B) + '" stroke="var(--border-strong)" stroke-dasharray="2 3"/>';
-          if (hasOutliers) {
-            frontier += '<text x="' + (p95X + outlierBandWidth / 2).toFixed(1) + '" y="' + (T + 12) + '" text-anchor="middle" class="ri-data-label">&gt;p95</text>';
-          }
-          [0, 0.5, 1].forEach(value => {
-            frontier += '<text x="' + (L - 10) + '" y="' + (y(value) + 4).toFixed(1) + '" text-anchor="end" class="ri-data-label">' + Math.round(value * 100) + '%</text>';
-          });
-          [latMin, medianLatency, p95Latency].forEach(value => {
-            frontier += '<text x="' + x(value).toFixed(1) + '" y="' + (H - B + 18) + '" text-anchor="middle" class="ri-data-label">' + escapeHtml(formatLatency(value)) + '</text>';
-          });
-          qualityItems.forEach(item => {
-            const radius = 3.5 + Math.min(2, Number(item.row.retry_count || 0));
-            frontier += '<circle cx="' + x(item.latency).toFixed(1) + '" cy="' + y(item.quality).toFixed(1) + '" r="' + radius + '" fill="' + riScoreColor(item.quality, qualityMetric.direction) + '" stroke="var(--bg-surface)" stroke-width="1.5"><title>' + escapeHtml((item.row.item_id || ('Item ' + (item.rowIndex + 1))) + ' · ' + qualityMetric.name + ' ' + riMetricValue(qualityMetric, item.quality) + ' · latency ' + formatLatency(item.latency)) + '</title></circle>';
-          });
-          frontier += '<text x="' + ((L + W - R) / 2) + '" y="' + (H - 8) + '" text-anchor="middle" class="ri-label">Average latency</text>' +
-            '<text x="16" y="' + ((T + H - B) / 2) + '" text-anchor="middle" transform="rotate(-90 16 ' + ((T + H - B) / 2) + ')" class="ri-label">Mean ' + escapeHtml(qualityMetric.name) + '</text>';
-          const frontierLegend = '<div class="ri-frontier-legend" aria-label="Chart legend">' +
-            '<span class="ri-frontier-legend-item"><span class="ri-frontier-zone good"></span>Fast + strong zone</span>' +
-            '<span class="ri-frontier-legend-item"><span class="ri-frontier-zone weak"></span>Slow + weak zone</span>' +
-            '<span class="ri-frontier-legend-item"><span class="ri-frontier-dots"><i class="ri-frontier-dot one"></i><i class="ri-frontier-dot two"></i><i class="ri-frontier-dot three"></i></span>Dot size = retries</span>' +
-            '<span class="ri-frontier-legend-item"><span class="ri-frontier-line"></span>Latency median</span>' +
-            '<span class="ri-frontier-legend-item"><span class="ri-frontier-line"></span>' + escapeHtml(qualityMetric.name) + ' median</span>' +
-            '<span class="ri-frontier-legend-item"><span class="ri-frontier-line p95"></span>p95 latency</span>' +
-            (hasOutliers ? '<span class="ri-frontier-legend-item"><span class="ri-frontier-outlier"></span>&gt;p95 outliers</span>' : '') +
-          '</div>';
-          frontierPanel = '<div class="ri-panel system-frontier-panel"><div class="ri-panel-head"><div><div class="ri-panel-title">Quality–Latency Frontier</div><div class="ri-panel-copy">One point per item, positioned by quality and response time.</div></div></div>' +
-            frontierLegend +
-            '<svg class="ri-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Quality versus latency by item">' + frontier + '</svg>' +
-          '</div>';
-        }
-
         const deepAnalysisHtml = relationshipPanels.length
           ? '<div class="ri-insights">' + runSectionHeadHtml('deep', 'Deep analysis', 'How metric results relate to each other across items.') +
               '<div class="ri-grid deep-analysis-grid">' + relationshipPanels.join('') + '</div></div>'
           : '';
-        return { deepAnalysisHtml, frontierPanel };
+        return { deepAnalysisHtml };
       }
 
       function renderOverview(filteredItemsOverride = null) {
@@ -10896,7 +10744,6 @@
           const executionErrors = Number(row.execution_error_count);
           return sum + (Number.isFinite(executionErrors) ? Math.max(0, executionErrors) : rowError);
         }, 0);
-        const latencies = rows.filter(r => Number.isFinite(r.latency_ms) && r.latency_ms >= 0 && r.status === 'completed').map(r => r.latency_ms);
         // A completed run's items whose outcome never arrived: neither
         // completed nor errors (the server's not_received_count).
         const notReceived = rows.filter(r => window.QymMetrics.isNotReceivedRow(r)).length;
@@ -10919,7 +10766,6 @@
 
         const analysisCharts = buildDeepAnalysisCharts(rows);
         const intelligenceCharts = analysisCharts.deepAnalysisHtml;
-        const frontierPanel = analysisCharts.frontierPanel;
 
         // ── Gauge color (hex for conic-gradient) ──
         function gaugeColorHex(score) {
@@ -11223,172 +11069,19 @@
           }
         }
 
-        // ── Latency card ──
-        let latencyCard = '';
-        if (latencies.length > 0) {
-          const sorted = [...latencies].sort((a, b) => a - b);
-          const minLat = sorted[0];
-          const maxLat = sorted[sorted.length - 1];
-          const latTotal = latencies.length;
-          const [p50, p90, p95, p99] = computePercentiles(latencies, [50, 90, 95, 99]);
-          const meanLat = latencies.reduce((a, b) => a + b, 0) / latTotal;
-
-          const latBuckets = buildLatencyBuckets(latencies);
-          const counts = latBuckets.map(() => 0);
-          for (const lat of latencies) {
-            for (let i = 0; i < latBuckets.length; i++) {
-              if (lat >= latBuckets[i].min && lat < latBuckets[i].max) { counts[i]++; break; }
-              if (i === latBuckets.length - 1) counts[i]++;
-            }
-          }
-          const maxCount = Math.max(...counts);
-
-          let barsHtml = '<div class="dist-chart">';
-          for (let i = 0; i < latBuckets.length; i++) {
-            const count = counts[i];
-            const barH = maxCount > 0 ? Math.max(count > 0 ? 14 : 0, Math.round((count / maxCount) * MAX_BAR_PX)) : 0;
-            const pct = latTotal > 0 ? ((count / latTotal) * 100).toFixed(0) : '0';
-            if (count === 0) continue;
-            barsHtml += '<div class="dist-chart-col" data-lat-min="' + latBuckets[i].min + '" data-lat-max="' + latBuckets[i].max + '" title="' + latBuckets[i].label + ': ' + count + ' items (' + pct + '%) — Click to filter">' +
-              '<span class="bar-count">' + (count > 0 ? count : '') + '</span>' +
-              '<div class="bar-fill" style="height:' + barH + 'px;background:' + latBuckets[i].color + ';"></div>' +
-              '<span class="bar-label">' + latBuckets[i].label + '</span>' +
-            '</div>';
-          }
-          barsHtml += '</div>';
-
-          // Round latency for ruler labels (no decimals)
-          const fmtRuler = (ms) => {
-            if (!Number.isFinite(ms) || ms < 0) return '—';
-            if (ms >= 60000) {
-              const m = Math.floor(ms / 60000);
-              const s = Math.round((ms % 60000) / 1000);
-              return s > 0 ? m + 'm ' + s + 's' : m + 'm';
-            } else if (ms >= 1000) {
-              return Math.round(ms / 1000) + 's';
-            }
-            return Math.round(ms) + 'ms';
-          };
-
-          // Ruler marker positions: spread evenly for readability
-          const rulerPct = (v) => maxLat > minLat ? ((v - minLat) / (maxLat - minLat) * 100).toFixed(1) : 50;
-          const rulerMarkers = [
-            { val: minLat, label: 'Min', pos: rulerPct(minLat), color: 'var(--score-5)' },
-            { val: p50,    label: 'P50', pos: rulerPct(p50),    color: 'var(--score-4)' },
-            { val: p90,    label: 'P90', pos: rulerPct(p90),    color: 'var(--score-3)' },
-            { val: p95,    label: 'P95', pos: rulerPct(p95),    color: 'var(--score-3)' },
-            { val: p99,    label: 'P99', pos: rulerPct(p99),    color: 'var(--score-2)' },
-            { val: maxLat, label: 'Max', pos: rulerPct(maxLat), color: 'var(--score-1)' }
-          ];
-          // Filter out markers too close to neighbors (< 8% apart),
-          // but always keep P50 visible even when it sits near Min/Max.
-          const MIN_GAP = 8;
-          const filtered = [rulerMarkers[0], rulerMarkers[1]]; // always keep Min + P50
-          for (let i = 2; i < rulerMarkers.length - 1; i++) {
-            const prev = filtered[filtered.length - 1];
-            const next = rulerMarkers[rulerMarkers.length - 1]; // Max
-            if (Math.abs(rulerMarkers[i].pos - prev.pos) >= MIN_GAP &&
-                Math.abs(rulerMarkers[i].pos - next.pos) >= MIN_GAP) {
-              filtered.push(rulerMarkers[i]);
-            }
-          }
-          filtered.push(rulerMarkers[rulerMarkers.length - 1]); // always keep Max
-
-          let rulerHtml = '<div class="latency-ruler-fill" style="width:100%;"></div>';
-          for (const m of filtered) {
-            rulerHtml += '<div class="latency-ruler-marker" style="left:' + m.pos + '%;">' +
-              '<div class="latency-ruler-dot" style="background:' + m.color + ';"></div>' +
-              '<div class="latency-ruler-label-below"><b>' + fmtRuler(m.val) + '</b>' + m.label + '</div>' +
-            '</div>';
-          }
-
-          // Format mean as rounded integer seconds if >= 1s
-          const meanFmt = meanLat >= 1000 ? Math.round(meanLat / 1000) + 's' : (meanLat === 0 ? '0ms' : formatLatency(meanLat));
-
-          latencyCard = '<div class="metric-card system-latency-card">' +
-            '<div class="latency-hero">' +
-              '<div class="latency-p50-block">' +
-                '<div class="latency-p50-val">' + meanFmt + '</div>' +
-                '<div class="latency-p50-label">Avg Latency</div>' +
-              '</div>' +
-              '<div class="latency-ruler">' +
-                '<div class="latency-ruler-track">' + rulerHtml + '</div>' +
-              '</div>' +
-            '</div>' +
-            barsHtml +
-          '</div>';
-          cardIdx++;
-        }
-
-        // ── ⚡ Trace Stats card ──
-        let traceCard = '';
-        const ts = state.viewPass
-          ? state.passSummary?.trace_stats
-          : (state.run && state.run.trace_stats);
-        const hasTraceValues = ts && (
-          ['avg_tokens', 'avg_llm_calls', 'avg_tool_calls', 'tool_success_rate', 'avg_llm_ms',
-            'avg_tool_ms', 'avg_retriever_ms', 'avg_top_level_chain_ms', 'avg_evaluator_ms']
-            .some(key => Number.isFinite(ts[key])) ||
-          (Array.isArray(ts.outer_scope_parent_spans) && ts.outer_scope_parent_spans.some(span => span?.name && Number.isFinite(span.avg_ms)))
-        );
-        if (total > 0 && ts && ts.has_spans && hasTraceValues) {
-          // Only what was captured gets a tile (C143): a run without LLM or
-          // tool spans says so once instead of showing 0, 0.0 and dashes.
-          // Each kind keeps its own glyph and colour (tokens, LLM, tools,
-          // retriever, trace, agent, evaluator), and tiles sit by kind.
-          const finite = v => v != null && Number.isFinite(Number(v));
-          const positive = v => finite(v) && Number(v) > 0;
-          const hasLlm = positive(ts.avg_llm_calls) || positive(ts.avg_tokens);
-          const hasTool = positive(ts.avg_tool_calls);
-          const AGENT_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4" r="3" fill="currentColor"/><path d="M2.5 14.5c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5z" fill="currentColor" opacity=".75"/></svg>';
-          const tile = (tone, glyph, label, value, title) =>
-            '<div class="trace-pill qym-stat-strip__item trace-pill--' + tone + '"' + (title ?' title="' + escapeAttr(title) + '"' : '') + '>' +
-              '<div class="trace-pill-icon" aria-hidden="true">' + glyph + '</div>' +
-              '<div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">' + escapeHtml(label) + '</span>' +
-              '<span class="trace-pill-val qym-stat-strip__value">' + value + '</span></div></div>';
-          const tiles = [];
-          if (positive(ts.avg_tokens)) tiles.push(tile('tokens', '📝', 'Avg Tokens', _fmtTraceNum(ts.avg_tokens)));
-          if (hasLlm && finite(ts.avg_llm_calls)) tiles.push(tile('llm', '🧠', 'Avg LLM Calls', Number(ts.avg_llm_calls).toFixed(1)));
-          if (hasLlm && finite(ts.avg_llm_ms)) tiles.push(tile('llm', '⏱', 'Avg LLM Latency', formatLatency(ts.avg_llm_ms)));
-          if (hasTool) tiles.push(tile('tool', '🔧', 'Avg Tool Calls', Number(ts.avg_tool_calls).toFixed(1)));
-          if (hasTool && finite(ts.avg_tool_ms)) tiles.push(tile('tool', '⏱', 'Avg Tool Latency', formatLatency(ts.avg_tool_ms)));
-          if (hasTool && finite(ts.tool_success_rate)) tiles.push(tile('success', '✓', 'Tool Success', (ts.tool_success_rate * 100).toFixed(1) + '%'));
-          if (finite(ts.avg_retriever_ms)) tiles.push(tile('retriever', '🔎', 'Avg Retriever Latency', formatLatency(ts.avg_retriever_ms)));
-          if (finite(ts.avg_top_level_chain_ms)) tiles.push(tile('trace', '⛓', 'Avg Trace Latency', formatLatency(ts.avg_top_level_chain_ms)));
-          (Array.isArray(ts.outer_scope_parent_spans) ? ts.outer_scope_parent_spans : [])
-            .filter(s => s && s.name && finite(s.avg_ms))
-            .forEach(s => tiles.push(tile('agent', AGENT_ICON, 'Avg ' + s.name + ' latency', formatLatency(s.avg_ms), 'Avg ' + s.name + ' latency')));
-          if (finite(ts.avg_evaluator_ms)) tiles.push(tile('evaluator', '★', 'Avg Evaluator Latency', formatLatency(ts.avg_evaluator_ms)));
-          const docsRoot = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
-          const notCapturedHtml = !hasLlm && !hasTool
-            ? '<p class="trace-not-captured">LLM and tool spans were not captured for this run. ' +
-                '<a href="' + escapeAttr(docsRoot + '/docs-guide#sdk-guide/results') + '">How tracing works</a></p>'
-            : '';
-          traceCard = '<div class="metric-card system-trace-card">' +
-            '<div class="metric-card-header">' +
-              '<div class="metric-card-gauge">' +
-                '<div class="metric-card-info">' +
-                  '<span class="metric-card-name trace-card-title">Trace stats</span>' +
-                '</div>' +
-              '</div>' +
-            '</div>' +
-            (tiles.length ? '<div class="trace-pills-row qym-stat-strip">' + tiles.join('') + '</div>' : '') +
-            notCapturedHtml +
-          '</div>';
-          cardIdx++;
-        }
-
-        // ── Latency and trace: operational tradeoffs first, trace detail below. ──
-        const latencyPanels = (latencyCard || '') + (frontierPanel || '');
-        const systemCards = (latencyPanels || traceCard
-            ? '<div class="system-metrics-section">' +
-                runSectionHeadHtml('latency', 'Latency and traces',
-                  'Response latency, quality tradeoffs and trace-level execution behavior.') +
-                (latencyPanels ? '<div class="system-metrics-grid">' + latencyPanels + '</div>' : '') +
-                (traceCard ? '<div class="system-trace-row">' + traceCard + '</div>' : '') +
-                '<div data-step-latency-slot></div>' +
-              '</div>'
-            : '');
+        // ── Latency and traces: the section module draws it (latency_traces.js).
+        // Response time follows the item filters; Inside the traces comes
+        // from the run's spans. The section shows when either has data.
+        const traceStats = state.viewPass ? state.passSummary?.trace_stats : (state.run && state.run.trace_stats);
+        const hasLatency = rows.some(r => Number.isFinite(r.latency_ms) && r.latency_ms >= 0 && !window.QymMetrics.isNotReceivedRow(r));
+        const systemCards = total > 0 && (hasLatency || (traceStats && traceStats.has_spans))
+          ? '<div class="system-metrics-section">' +
+              runSectionHeadHtml('latency', 'Latency and traces',
+                'How long each item takes end to end, and where every trace spends that time.',
+                '<div class="lt-head-aside" data-lt-aside></div>') +
+              '<div data-latency-traces-slot></div>' +
+            '</div>'
+          : '';
 
         // ── Assemble ──
         primarySection.innerHTML = total > 0 ?
@@ -11396,23 +11089,16 @@
             'Score distributions per metric and response latency. Click a bar to filter the items.',
             runSummaryHtml) +
           (cards ? '<div class="metric-cards-grid">' + cards + '</div>' : '') : '';
-        // Step latency is mounted once per load (C028): the same node moves
-        // into each new Latency and traces section, under Trace stats, and
-        // back to its hidden home when the section has nothing to show.
-        const stepLatencyPanel = el('step-latency-panel');
+        // The Latency and traces panel is mounted once per load (C028): the
+        // same node moves into each new section and back to its hidden home
+        // when the section has nothing to show.
+        const latencyTracesPanel = el('latency-traces-panel');
         deepSection.innerHTML = systemCards + intelligenceCharts;
-        if (stepLatencyPanel) {
-          const slot = deepSection.querySelector('[data-step-latency-slot]');
-          if (slot) slot.replaceWith(stepLatencyPanel);
-          else el('step-latency-home')?.appendChild(stepLatencyPanel);
-        }
-
-        // Step latency is mounted once per load (mountStepLatency); a new
-        // Trace Stats strip only needs its breakdowns re-attached (C028).
-        try {
-          if (window.QymStepLatency && QymStepLatency.refreshTraceStats) QymStepLatency.refreshTraceStats();
-        } catch (err) {
-          console.error('[step-latency] trace stats refresh failed:', err);
+        if (latencyTracesPanel) {
+          const slot = deepSection.querySelector('[data-latency-traces-slot]');
+          if (slot) slot.replaceWith(latencyTracesPanel);
+          else el('latency-traces-home')?.appendChild(latencyTracesPanel);
+          if (slot) updateLatencyTraces(filteredItemsOverride, deepSection.querySelector('[data-lt-aside]'));
         }
 
         // ── Wire click handlers ──
@@ -11432,16 +11118,6 @@
             }
             state.repeatDistFilter = null;
             state.scoreDistFilter = { min, max };
-            state.page = 1;
-            renderItems(false, { viewOnly: true });
-          });
-        });
-
-        grid.querySelectorAll('.dist-chart-col[data-lat-min]').forEach(col => {
-          col.addEventListener('click', () => {
-            const min = parseFloat(col.dataset.latMin);
-            const max = col.dataset.latMax === 'Infinity' ? Infinity : parseFloat(col.dataset.latMax);
-            state.latencyDistFilter = { min, max };
             state.page = 1;
             renderItems(false, { viewOnly: true });
           });
@@ -13596,7 +13272,7 @@
       // screen, so no filter or view change moves the page (C028).
       const SCROLL_ANCHOR_IDS = new Set([
         'overview-primary-section', 'samples-analysis-section', 'overview-deep-section',
-        'metadata-breakdown', 'step-latency-panel', 'error-distribution-section', 'root-cause-section',
+        'metadata-breakdown', 'latency-traces-panel', 'error-distribution-section', 'root-cause-section',
       ]);
       // Found when the control is used: a control that redraws its section
       // is gone from the page by the time a later render looks for its block.
@@ -13699,11 +13375,12 @@
         return result && typeof result.then === 'function' ? result.then(settle) : settle(result);
       }
 
-      // Step latency redraws itself (its group headers, and its toggles once
-      // their data arrives): the panel keeps its place while the reader is
-      // using it, also when it shrinks near the page end (C028).
+      // Latency and traces redraws itself (its step groups, breakdowns and
+      // toggles, and its trace timings once they arrive): the panel keeps
+      // its place while the reader is using it, also when it shrinks near
+      // the page end (C028).
       {
-        const panel = el('step-latency-panel');
+        const panel = el('latency-traces-panel');
         if (panel && typeof ResizeObserver === 'function') {
           let anchor = null;
           const remember = event => {

@@ -139,6 +139,27 @@ def test_query_sends_the_filters_and_sort_the_list_sends():
     }
 
 
+def test_the_origin_toggle_carries_into_the_run_page_order():
+    """The list's Origin toggle (official/local) narrows the neighbors too."""
+    assert run_js(
+        """return [
+          api.contextFromParams({ origin: 'official', task: ['t'], sort: 'run-asc' }),
+          api.normalizeContext('origin=local&origin=official&page=2'),
+          api.query('origin=official').filters.origins,
+          api.query('origin=local').filters.origins,
+          api.query('origin=all').filters.origins === undefined,
+          api.query('origin=verified').filters.origins === undefined,
+        ];"""
+    ) == [
+        "task=t&origin=official&sort=run-asc",
+        "origin=local",
+        ["official"],
+        ["local"],
+        True,
+        True,
+    ]
+
+
 def test_text_sorts_collate_like_the_list():
     assert run_js(
         """return [
@@ -193,6 +214,6 @@ def test_dashboard_collation_comes_from_the_shared_helper():
     assert "localeCompare" not in body
     for page in ("index.html", "charts.html", "models.html", "run.html"):
         html = (DASHBOARD / page).read_text(encoding="utf-8")
-        assert '<script src="/static/runs_order.js?v=p1-20261002"></script>' in html, page
+        assert '<script src="/static/runs_order.js?v=p1-20261006-1"></script>' in html, page
         if page != "run.html":
             assert html.index("runs_order.js") < html.index("dashboard.js?v="), page

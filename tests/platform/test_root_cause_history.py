@@ -5970,6 +5970,113 @@ def test_approved_example_picker_is_paged_and_filters_by_user(
     ]
 
 
+def test_approved_example_picker_pages_and_facets_in_sql(
+    db_session: Session,
+) -> None:
+    from qym_platform.services.llm_analyzer import (
+        estimate_rule_writer_example_characters,
+    )
+
+    actor, manager, run, _ = _seed_run(db_session)
+    run.model = "openai/gpt-4o"
+    run.run_config = {"run_name": "Named run"}
+    other_run = Run(
+        id="run-sql-picker-other",
+        project_id=run.project_id,
+        created_by_user_id=actor.id,
+        owner_user_id=actor.id,
+        external_run_id="external-other",
+        task=run.task,
+        dataset="dataset-other",
+        model="gpt-4o-mini",
+        metrics=["accuracy"],
+        status=RunWorkflowStatus.COMPLETED,
+    )
+    db_session.add(other_run)
+    corrections = [
+        ReviewCorrection(
+            run_id=run.id if index % 2 == 0 else other_run.id,
+            item_id=f"sql-item-{index}",
+            metric_name="accuracy",
+            task=run.task,
+            input_snapshot={"question": "q" * (index + 1)},
+            expected_snapshot={"answer": f"Expected {index}"},
+            output_snapshot={"answer": f"Actual {index}"},
+            scores_snapshot={},
+            ai_root_cause="Reasoning Error",
+            human_root_cause="Reasoning Error",
+            corrected_by_user_id=actor.id if index % 2 == 0 else None,
+            reviewed_by_user_id=manager.id,
+            ai_confidence=0.8,
+            created_at=datetime(2026, 1, 1, 0, index),
+            status=CorrectionStatus.APPROVED,
+            is_active=True,
+        )
+        for index in range(7)
+    ]
+    db_session.add_all(corrections)
+    db_session.commit()
+
+    def listing(**overrides: Any) -> dict:
+        params: dict[str, Any] = dict(
+            scope_id=run.id,
+            page=1,
+            page_size=3,
+            task=None,
+            dataset=None,
+            model=None,
+            run_name=None,
+            user_id=None,
+            source=None,
+            conf_min=0,
+            conf_max=100,
+            search="sql-item",
+            selected_ids=None,
+            db=db_session,
+            principal=Principal(user=manager, auth_type="none"),
+        )
+        params.update(overrides)
+        return _list_analysis_examples(**params)
+
+    newest_first = [
+        c.id for c in sorted(corrections, key=lambda c: c.created_at, reverse=True)
+    ]
+    payload = listing(page=2, selected_ids=[corrections[1].id, corrections[2].id])
+    assert payload["total"] == 7
+    assert payload["page_count"] == 3
+    assert payload["matching_ids"] == newest_first
+    assert [row["id"] for row in payload["examples"]] == newest_first[3:6]
+    assert payload["matching_characters"] == sum(
+        estimate_rule_writer_example_characters(c) for c in corrections
+    )
+    assert sorted(payload["selected_ids"]) == sorted(
+        [corrections[1].id, corrections[2].id]
+    )
+    assert payload["selected_count"] == 2
+    assert payload["selected_characters"] == sum(
+        estimate_rule_writer_example_characters(c) for c in corrections[1:3]
+    )
+    facets = payload["facets"]
+    assert facets["tasks"] == [run.task]
+    assert set(facets["datasets"]) == {run.dataset, "dataset-other"}
+    assert facets["models"] == ["gpt-4o", "gpt-4o-mini"]
+    assert facets["run_names"] == ["Named run", "external-other"]
+    assert {user["id"] for user in facets["users"]} == {actor.id, manager.id}
+
+    # The last page is short; a page past the end is empty but keeps totals.
+    assert len(listing(page=3)["examples"]) == 1
+    beyond = listing(page=9)
+    assert beyond["examples"] == [] and beyond["total"] == 7
+
+    # A facet ignores its own filter but honours the others.
+    narrowed = listing(dataset=["dataset-other"])
+    assert narrowed["total"] == 3
+    assert set(narrowed["facets"]["datasets"]) == {run.dataset, "dataset-other"}
+    assert narrowed["facets"]["models"] == ["gpt-4o-mini"]
+    assert narrowed["facets"]["run_names"] == ["external-other"]
+    assert {user["id"] for user in narrowed["facets"]["users"]} == {manager.id}
+
+
 def test_build_analysis_prompt_projects_nested_output_mapping() -> None:
     item = RunItem(
         run_id="run-1",

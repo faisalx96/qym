@@ -62,6 +62,17 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Run unprivileged: /app stays root-owned and read-only to the process, so
+# nothing is written into the image layer. Deployments also mount the root
+# filesystem read-only with a small tmpfs at /tmp (docker-compose.yml).
+RUN groupadd --system --gid 10001 qym \
+    && useradd --system --uid 10001 --gid qym --no-create-home --shell /usr/sbin/nologin qym
+# HOME points at the tmpfs so a library cache never reaches the image layer;
+# platform event streams never spill to disk (events wait in memory instead).
+ENV HOME=/tmp \
+    QYM_PLATFORM_EVENT_SPILL_BYTES=0
+USER qym
+
 EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]

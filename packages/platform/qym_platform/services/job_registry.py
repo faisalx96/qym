@@ -15,14 +15,21 @@ therefore publishes its snapshot to ``background_jobs``:
 * a row whose heartbeat is older than ``STALE_AFTER_SECONDS`` belongs to a
   process that stopped (restart, crash, deploy), so readers report it as lost.
 
-The table is only an exchange point: the job itself stays in its process. An
+In split mode (``QYM_SERVICE=main``, services/job_executor.py) the table is
+also the job queue: the HTTP process inserts a ``queued`` row carrying the
+job's ``payload`` and a workers process claims it (``claim``: ``SELECT ...
+FOR UPDATE SKIP LOCKED`` on PostgreSQL, a compare-and-set update elsewhere),
+then owns and heartbeats it like a local job. A queued row has no owner, so it
+is never reported lost; it expires (reads as failed) when no worker claims it
+within ``QYM_JOB_QUEUE_TIMEOUT_SECONDS``.
+
+Otherwise the table is only an exchange point: the job stays in its process. An
 in-memory SQLite database cannot be shared between processes or even between
 pooled connections safely, so the registry is off there (tests, embedded use).
 """
 
 from __future__ import annotations
 
-import logging
 import os
 import socket
 import threading
@@ -40,8 +47,9 @@ from sqlalchemy.orm import Session as OrmSession
 
 from qym_platform.datetime_utils import utc_now_naive
 from qym_platform.db.background_job_models import BackgroundJob
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 FLUSH_SECONDS = 0.5
 HEARTBEAT_SECONDS = 2.0
@@ -52,6 +60,26 @@ PRUNE_EVERY_SECONDS = 600.0
 _TABLE = BackgroundJob.__table__
 _ANY = object()
 LOST_ERROR = "The server process running this job stopped before it finished."
+EXPIRED_ERROR = (
+    "No workers service picked up this job in time. Check that the workers "
+    "service is running, then start it again."
+)
+DEFAULT_QUEUE_TIMEOUT_SECONDS = 1800.0
+_queue_timeout: Optional[float] = None
+
+
+def queue_timeout_seconds() -> float:
+    """``QYM_JOB_QUEUE_TIMEOUT_SECONDS`` (read once per process)."""
+    global _queue_timeout
+    if _queue_timeout is None:
+        try:
+            from qym_platform.settings import PlatformSettings
+
+            _queue_timeout = float(PlatformSettings().job_queue_timeout_seconds)
+        except Exception:  # settings unavailable (no database URL): the default
+            logger.debug("job queue timeout setting unavailable; using the default", exc_info=True)
+            _queue_timeout = DEFAULT_QUEUE_TIMEOUT_SECONDS
+    return _queue_timeout
 
 
 class ActiveJobExists(Exception):
@@ -97,6 +125,7 @@ def _engine_of_session(db: Any) -> Optional[Engine]:
     try:
         return shared_engine(db.get_bind())
     except Exception:  # pragma: no cover - unbound session
+        logger.debug("session has no bound engine", exc_info=True)
         return None
 
 
@@ -176,12 +205,20 @@ def _row_dict(row: Any) -> Dict[str, Any]:
     data = dict(row._mapping)
     now = data.pop("_db_now", None) or utc_now_naive()
     heartbeat = data.get("heartbeat_at")
+    queued = bool(data.get("queued"))
+    # A queued row has no owner yet: its heartbeat is the enqueue time, not a
+    # lease, so it only expires after the (much longer) queue timeout.
+    limit = queue_timeout_seconds() if queued else STALE_AFTER_SECONDS
+    data["queued"] = queued
     data["lost"] = bool(
         data.get("active")
         and heartbeat is not None
-        and heartbeat < now - timedelta(seconds=STALE_AFTER_SECONDS)
+        and heartbeat < now - timedelta(seconds=limit)
     )
+    data["lost_reason"] = (EXPIRED_ERROR if queued else LOST_ERROR) if data["lost"] else None
     data["snapshot"] = dict(data.get("snapshot") or {})
+    # Never hand the payload (it may hold encrypted secrets) to readers.
+    data.pop("payload", None)
     return data
 
 
@@ -246,14 +283,14 @@ class JobRegistry:
         self._maybe_prune(engine)
         return True
 
-    def _claim(self, handle: _Handle) -> None:
+    def _claim(self, handle: _Handle, *, payload: Optional[Dict[str, Any]] = None) -> None:
         for _ in range(3):
             try:
                 with handle.engine.begin() as conn:
-                    self._insert(conn, handle, handle.describe())
+                    self._insert(conn, handle, handle.describe(), payload=payload)
                 return
             except IntegrityError:
-                pass
+                logger.debug("background job %s/%s already claimed; re-reading", handle.kind, handle.describe().scope_id)
             desc = handle.describe()
             with handle.engine.begin() as conn:
                 row = conn.execute(
@@ -276,13 +313,23 @@ class JobRegistry:
                 conn.execute(
                     update(_TABLE)
                     .where(_TABLE.c.id == holder["id"], _TABLE.c.active.is_(True))
-                    .values(active=False, status="failed", error=LOST_ERROR,
-                            cancel_requested=True, updated_at=now, completed_at=now)
+                    .values(active=False, status="failed",
+                            error=holder.get("lost_reason") or LOST_ERROR,
+                            cancel_requested=True, queued=False, payload=None,
+                            updated_at=now, completed_at=now)
                 )
         raise RuntimeError(f"could not claim background job {handle.job_id}")
 
-    def _insert(self, conn: Any, handle: _Handle, desc: JobDescription) -> None:
+    def _insert(
+        self,
+        conn: Any,
+        handle: _Handle,
+        desc: JobDescription,
+        *,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> None:
         now = utc_now_naive()
+        queued = payload is not None
         conn.execute(
             insert(_TABLE).values(
                 id=handle.job_id,
@@ -302,9 +349,141 @@ class JobRegistry:
                 heartbeat_at=_heartbeat_now(conn),
                 updated_at=desc.updated_at or now,
                 completed_at=desc.completed_at,
+                queued=queued,
+                payload=payload,
             )
         )
         handle.last_published = time.monotonic()
+
+    def enqueue(
+        self,
+        bind: Any,
+        *,
+        kind: str,
+        job_id: str,
+        description: JobDescription,
+        payload: Dict[str, Any],
+        exclusive: bool = False,
+    ) -> Dict[str, Any]:
+        """Queue a job for a workers process; returns its row.
+
+        ``exclusive`` raises :class:`ActiveJobExists` when the scope already
+        has an unfinished job (queued or running), like :meth:`track`.
+        Raises ``RuntimeError`` when the database cannot be shared.
+        """
+        engine = shared_engine(bind)
+        if engine is None:
+            raise RuntimeError("The job queue needs a shared database (not in-memory SQLite).")
+        handle = _Handle(engine, kind, job_id, lambda: description, lambda: None)
+        if exclusive:
+            self._claim(handle, payload=dict(payload))
+        else:
+            with engine.begin() as conn:
+                self._insert(conn, handle, description, payload=dict(payload))
+        self._maybe_prune(engine)
+        with engine.connect() as conn:
+            row = conn.execute(_job_select(conn).where(_TABLE.c.id == job_id)).first()
+        if row is None:  # pragma: no cover - deleted between insert and read
+            raise RuntimeError(f"queued job {job_id} disappeared")
+        return _row_dict(row)
+
+    def claim(self, bind: Any, kind: str, *, limit: int = 1) -> List[Dict[str, Any]]:
+        """Take up to ``limit`` queued jobs of ``kind`` for this process.
+
+        PostgreSQL: ``FOR UPDATE SKIP LOCKED``, so concurrent workers never
+        wait on or double-claim a row. Every database: the update re-checks
+        ``queued`` (compare-and-set), so a row cancelled or claimed meanwhile
+        is skipped. Returned rows include the ``payload``.
+        """
+        engine = shared_engine(bind)
+        if engine is None or limit < 1:
+            return []
+        claimed: List[Dict[str, Any]] = []
+        now = utc_now_naive()
+        not_expired = now - timedelta(seconds=queue_timeout_seconds())
+        with engine.begin() as conn:
+            stmt = (
+                select(_TABLE)
+                .where(
+                    _TABLE.c.kind == kind,
+                    _TABLE.c.queued.is_(True),
+                    _TABLE.c.active.is_(True),
+                    _TABLE.c.cancel_requested.is_(False),
+                    _TABLE.c.heartbeat_at >= not_expired,
+                )
+                .order_by(_TABLE.c.created_at, _TABLE.c.id)
+                .limit(int(limit))
+            )
+            if _uses_db_clock(conn):
+                stmt = stmt.with_for_update(skip_locked=True)
+            rows = [dict(row._mapping) for row in conn.execute(stmt)]
+            me = process_id()
+            for row in rows:
+                values = {
+                    "queued": False,
+                    "claimed_by": me,
+                    "claimed_at": now,
+                    "process_id": me,
+                    "heartbeat_at": _heartbeat_now(conn),
+                    "updated_at": now,
+                    # The claimer keeps the payload in memory only: secrets
+                    # leave the table as soon as a worker owns the job.
+                    "payload": None,
+                }
+                result = conn.execute(
+                    update(_TABLE)
+                    .where(
+                        _TABLE.c.id == row["id"],
+                        _TABLE.c.queued.is_(True),
+                        _TABLE.c.active.is_(True),
+                        _TABLE.c.cancel_requested.is_(False),
+                    )
+                    .values(**values)
+                )
+                if result.rowcount:
+                    payload = row.get("payload")
+                    row.update(values, heartbeat_at=now)
+                    row["payload"] = dict(payload or {})
+                    row["snapshot"] = dict(row.get("snapshot") or {})
+                    claimed.append(row)
+        return claimed
+
+    def fail(self, bind: Any, job_id: str, *, status: str, error: str) -> None:
+        """Mark a claimed job that could not start as finished with ``error``."""
+        engine = shared_engine(bind)
+        if engine is None:
+            return
+        now = utc_now_naive()
+        with engine.begin() as conn:
+            current = conn.execute(
+                select(_TABLE.c.snapshot).where(_TABLE.c.id == job_id)
+            ).scalar()
+            snapshot = dict(current or {})
+            snapshot.update(status=status, error=error)
+            if isinstance(snapshot.get("progress"), dict):
+                snapshot["progress"] = {**snapshot["progress"], "phase": "failed"}
+            conn.execute(
+                update(_TABLE)
+                .where(_TABLE.c.id == job_id, _TABLE.c.active.is_(True))
+                .values(
+                    snapshot=snapshot,
+                    active=False,
+                    queued=False,
+                    payload=None,
+                    status=status[:32],
+                    error=error,
+                    updated_at=now,
+                    completed_at=now,
+                )
+            )
+
+    def count_active(self, bind: Any, kind: str) -> int:
+        """Unfinished (queued or running, not lost) jobs of ``kind`` in every process."""
+        engine = shared_engine(bind)
+        if engine is None:
+            return 0
+        with OrmSession(engine) as db:
+            return len(self.active(db, kind))
 
     def changed(self, job_id: str, *, flush: bool = False) -> None:
         """Note a change of a tracked job; ``flush`` publishes it now."""
@@ -341,6 +520,9 @@ class JobRegistry:
                 "updated_at": desc.updated_at or now,
                 "completed_at": desc.completed_at,
             }
+            if not desc.active:
+                # A finished job's payload (encrypted secrets included) is wiped.
+                values["payload"] = None
             cancel_requested = False
             with handle.engine.begin() as conn:
                 values["heartbeat_at"] = _heartbeat_now(conn)
@@ -516,6 +698,9 @@ class JobRegistry:
                     cancel_requested=True,
                     status=status,
                     active=False,
+                    # A queued job is never claimed now; drop what it carried.
+                    queued=False,
+                    payload=None,
                     snapshot=snapshot,
                     updated_at=now,
                     completed_at=data.get("completed_at") or now,
@@ -529,6 +714,8 @@ class JobRegistry:
             updated_at=now,
             completed_at=data.get("completed_at") or now,
             lost=False,
+            lost_reason=None,
+            queued=False,
         )
         return data
 
@@ -541,6 +728,8 @@ __all__ = [
     "HEARTBEAT_SECONDS",
     "STALE_AFTER_SECONDS",
     "ActiveJobExists",
+    "EXPIRED_ERROR",
+    "LOST_ERROR",
     "JobDescription",
     "JobRegistry",
     "job_registry",

@@ -1071,6 +1071,15 @@ html {
   position: relative;
 }
 
+/* One dropdown per versioning_metadata key, laid out with the other filters. */
+.versioning-filters {
+  display: contents;
+}
+
+.versioning-filters[hidden] {
+  display: none;
+}
+
 .multi-select-btn {
   padding: var(--space-xs) var(--space-sm);
   padding-right: 24px;
@@ -3342,6 +3351,49 @@ button.legend-item {
   white-space: nowrap;
 }
 
+/* EXPERIMENT column + "Official run" provenance tag (plan §11). The tag is
+   named "Official run" so it never reads as the "Official defaults" preset. */
+.col-experiment {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.runs-table th.col-experiment,
+.runs-table td.col-experiment {
+  text-align: left;
+}
+
+.experiment-link {
+  color: var(--accent-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  text-decoration: none;
+}
+
+.experiment-link:hover,
+.experiment-link:focus-visible {
+  text-decoration: underline;
+}
+
+.experiment-name {
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+}
+
+.origin-badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.run-date .origin-badge {
+  margin-left: var(--space-sm);
+  vertical-align: middle;
+}
+
+.origin-filters {
+  flex: 0 0 auto;
+}
+
 .version-badge {
   display: inline-block;
   font-size: var(--font-sm);
@@ -3430,6 +3482,37 @@ button.legend-item {
   inset: 0 0 -1px 0;
   box-shadow: 4px 0 8px rgba(0, 0, 0, 0.25);
   pointer-events: none;
+}
+
+/* ── Hidden columns: the Runs columns unchecked under Display > Columns >
+   Run columns, named in the table's data-hidden-columns. Their cells leave
+   every row (runs, passes, headers), and scheduleRunsStickyColumnSizing()
+   skips them, so the frozen offsets close up with no gap. ── */
+.runs-table[data-hidden-columns~="status"] .col-status,
+.runs-table[data-hidden-columns~="task"] .col-task,
+.runs-table[data-hidden-columns~="model"] .col-model,
+.runs-table[data-hidden-columns~="dataset"] .col-dataset,
+.runs-table[data-hidden-columns~="owner"] .col-owner,
+.runs-table[data-hidden-columns~="time"] .col-time,
+.runs-table[data-hidden-columns~="analysis"] .col-analysis,
+.runs-table[data-hidden-columns~="experiment"] .col-experiment,
+.runs-table[data-hidden-columns~="version"] .col-version,
+.runs-table[data-hidden-columns~="duration"] .col-duration,
+.table-container:not(.select-mode) .runs-table[data-hidden-columns~="run"] .col-run {
+  display: none;
+}
+/* A hidden Run name keeps only its selection checkbox while runs are being
+   selected, so rows stay selectable. */
+.table-container.select-mode .runs-table[data-hidden-columns~="run"] {
+  --runs-col-run-min-width: 0px;
+  --runs-col-run-max-width: 120px;
+}
+.table-container.select-mode .runs-table[data-hidden-columns~="run"] :is(
+  .run-header-content,
+  .run-cell-content
+) > :not(.run-select-control),
+.table-container.select-mode .runs-table[data-hidden-columns~="run"] tr.pass-member .col-run > :not(.run-select-control) {
+  display: none;
 }
 
 /* Opaque backgrounds for sticky cells — must cover scrolling content */
@@ -10586,6 +10669,12 @@ td.col-trace-metric-value {
 }
 .mv-frozen-fit[hidden] {
   display: none;
+}
+/* A hidden column's Frozen columns option: it can be frozen again once it
+   shows (Run columns above). */
+.mv-frozen-option--hidden {
+  color: var(--text-dim);
+  cursor: default;
 }
 
 /* ─── Responsive ─── */

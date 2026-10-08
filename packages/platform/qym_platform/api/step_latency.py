@@ -169,19 +169,69 @@ def _step_label(kind: str, name: str, attrs: Dict[str, Any], rollup: str) -> str
     if kind == "TOOL":
         return str(attrs.get("tool.name") or name or "tool")
     if kind == "LLM":
+        if rollup == "site":
+            # A call site: the span's own name; its model is a separate field.
+            return name or "llm"
         model = str(attrs.get("llm.model_name") or "").strip()
         return f"llm:{model}" if model else (name or "llm")
     return name or kind.lower()
 
 
+def _site_context(spans: Sequence[Any], eval_ids: set) -> tuple:
+    """Sub-agents for the call-site rollup.
+
+    A sub-agent is an AGENT span of the task phase below the phase parent
+    (the parent itself is the Agent phase). Returns each span's nearest
+    sub-agent name, keyed like ``eval_ids``, and the sub-agent spans.
+    """
+    agent_of: Dict[tuple, str] = {}
+    agent_spans: List[Any] = []
+    by_trace: Dict[tuple, List[Any]] = defaultdict(list)
+    for span in spans:
+        by_trace[(span.run_id, span.trace_id)].append(span)
+    for (run_id, trace_id), trace_spans in by_trace.items():
+        def is_eval(span: Any) -> bool:
+            return (run_id, trace_id, span.span_id) in eval_ids
+
+        parents = _phase_parents(trace_spans, is_eval)
+        stop = {node.span_id for nodes in parents.values() for node in nodes}
+        by_id = {span.span_id: span for span in trace_spans}
+        agents = {
+            span.span_id
+            for span in trace_spans
+            if span.span_id not in stop
+            and not is_eval(span)
+            and _span_oi_kind(span.attributes or {}) == "AGENT"
+        }
+        agent_spans.extend(by_id[span_id] for span_id in agents)
+        for span in trace_spans:
+            parent_id, seen = span.parent_span_id, set()
+            while parent_id and parent_id not in stop and parent_id not in seen:
+                if parent_id in agents:
+                    agent_of[(run_id, trace_id, span.span_id)] = by_id[parent_id].name
+                    break
+                seen.add(parent_id)
+                parent = by_id.get(parent_id)
+                if parent is None:
+                    break
+                parent_id = parent.parent_span_id
+    return agent_of, agent_spans
+
+
 def classify_spans(
-    spans: Sequence[Any], rollup: str = "name", eval_ids: Optional[set] = None
+    spans: Sequence[Any],
+    rollup: str = "name",
+    eval_ids: Optional[set] = None,
+    agent_of: Optional[Dict[tuple, str]] = None,
 ) -> List[Dict[str, Any]]:
     """Map spans to step rows: [{phase, kind, step_type, name, duration_ms,
     status, ...}] keeping only step-kind spans with usable durations or
-    error status. ``eval_ids`` reuses an attribution already computed."""
+    error status. ``eval_ids`` reuses an attribution already computed.
+    The call-site rollup (``site``) adds each row's ``model`` and ``agent``."""
     if eval_ids is None:
         eval_ids = _metric_span_ids(spans)
+    if rollup == "site" and agent_of is None:
+        agent_of, _ = _site_context(spans, eval_ids)
     parent_ids = {
         (span.run_id, span.trace_id, span.parent_span_id)
         for span in spans
@@ -204,24 +254,26 @@ def classify_spans(
         tokens = _token_counts(attrs)
         if duration is None and status != "ERROR":
             continue
-        rows.append(
-            {
-                "run_id": span.run_id,
-                "trace_id": span.trace_id,
-                "span_id": span.span_id,
-                "phase": "eval" if span_key in eval_ids else "task",
-                "kind": kind,
-                "step_type": _step_label(kind, span.name, attrs, rollup),
-                "name": span.name,
-                "duration_ms": duration,
-                "status": status,
-                "tokens_total": tokens[0],
-                "tokens_prompt": tokens[1],
-                "tokens_completion": tokens[2],
-                "start_time_ns": span.start_time_ns,
-                "end_time_ns": span.end_time_ns,
-            }
-        )
+        row = {
+            "run_id": span.run_id,
+            "trace_id": span.trace_id,
+            "span_id": span.span_id,
+            "phase": "eval" if span_key in eval_ids else "task",
+            "kind": kind,
+            "step_type": _step_label(kind, span.name, attrs, rollup),
+            "name": span.name,
+            "duration_ms": duration,
+            "status": status,
+            "tokens_total": tokens[0],
+            "tokens_prompt": tokens[1],
+            "tokens_completion": tokens[2],
+            "start_time_ns": span.start_time_ns,
+            "end_time_ns": span.end_time_ns,
+        }
+        if rollup == "site":
+            row["model"] = str(attrs.get("llm.model_name") or "").strip() or None
+            row["agent"] = (agent_of or {}).get(span_key)
+        rows.append(row)
     return rows
 
 
@@ -269,7 +321,9 @@ def _bucket_stats(bucket: Dict[str, Any]) -> Dict[str, Any]:
 def _aggregate_steps(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     groups: Dict[tuple, Dict[str, Any]] = {}
     for row in rows:
-        key = (row["phase"], row["step_type"], row["kind"])
+        # Call-site rows also split by model and sub-agent; other rows have
+        # neither field, so their groups are unchanged.
+        key = (row["phase"], row["step_type"], row["kind"], row.get("model"), row.get("agent"))
         group = groups.setdefault(key, _new_bucket())
         _add_tokens(group, row)
         if row["status"] == "ERROR":
@@ -277,12 +331,15 @@ def _aggregate_steps(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         elif row["duration_ms"] is not None:
             group["durations"].append(row["duration_ms"])
 
+    site = any("agent" in row for row in rows)
     out: List[Dict[str, Any]] = []
-    for (phase, step_type, kind), group in groups.items():
+    for (phase, step_type, kind, model, agent), group in groups.items():
         if not group["durations"] and group["error_count"] == 0:
             continue
-        out.append({"phase": phase, "step_type": step_type, "kind": kind,
-                    **_bucket_stats(group)})
+        entry = {"phase": phase, "step_type": step_type, "kind": kind}
+        if site:
+            entry.update({"model": model, "agent": agent})
+        out.append({**entry, **_bucket_stats(group)})
 
     out.sort(
         key=lambda g: (
@@ -393,19 +450,81 @@ def _aggregate_phases(
     ]
 
 
+def _aggregate_agents(agent_spans: Sequence[Any]) -> List[Dict[str, Any]]:
+    """One distribution per sub-agent name, one sample per invocation."""
+    buckets: Dict[str, Dict[str, Any]] = {}
+    for span in agent_spans:
+        bucket = buckets.setdefault(span.name or "agent", _new_bucket())
+        duration = _duration_ms(span.duration_ms)
+        if str(span.status or "").upper() == "ERROR":
+            bucket["error_count"] += 1
+        elif duration is not None:
+            bucket["durations"].append(duration)
+    return [{"name": name, **_bucket_stats(bucket)} for name, bucket in buckets.items()]
+
+
+def _aggregate_traces(spans: Sequence[Any], eval_ids: set) -> Dict[str, Any]:
+    """Whole traces: each trace's root span(s), one sample per trace. A trace
+    whose root or phase parent errored counts as an error, as for steps."""
+    bucket = _new_bucket()
+    by_trace: Dict[tuple, List[Any]] = defaultdict(list)
+    for span in spans:
+        if span.trace_id:
+            by_trace[(span.run_id, span.trace_id)].append(span)
+    for (run_id, trace_id), trace_spans in by_trace.items():
+        ids = {span.span_id for span in trace_spans}
+        roots = [span for span in trace_spans if not span.parent_span_id or span.parent_span_id not in ids]
+        parents = _phase_parents(
+            trace_spans, lambda span: (run_id, trace_id, span.span_id) in eval_ids
+        )
+        heads = roots + [node for nodes in parents.values() for node in nodes]
+        if any(str(node.status or "").upper() == "ERROR" for node in heads):
+            bucket["error_count"] += 1
+            continue
+        duration = _parents_duration(roots) if roots else None
+        if duration is not None:
+            bucket["durations"].append(duration)
+    stats = _bucket_stats(bucket)
+    return {field: stats[field] for field in ["n", "error_count"] + _LATENCY_FIELDS}
+
+
 def summarize_step_latency(
     spans: Sequence[Any], rollup: str = "name"
-) -> Dict[str, List[Dict[str, Any]]]:
-    """Step groups plus phase parent distributions, from one attribution."""
+) -> Dict[str, Any]:
+    """Step groups plus phase parent distributions, from one attribution.
+
+    The call-site rollup (``site``) also returns each sub-agent's span
+    distribution (``agents``); every rollup returns whole-trace timings
+    (``traces``)."""
     eval_ids = _metric_span_ids(spans)
-    rows = classify_spans(spans, rollup=rollup, eval_ids=eval_ids)
-    return {
+    agent_of, agent_spans = _site_context(spans, eval_ids) if rollup == "site" else (None, [])
+    rows = classify_spans(spans, rollup=rollup, eval_ids=eval_ids, agent_of=agent_of)
+    summary: Dict[str, Any] = {
         "groups": _aggregate_steps(rows),
         "phases": _aggregate_phases(spans, eval_ids, rows),
+        "traces": _aggregate_traces(spans, eval_ids),
     }
+    if rollup == "site":
+        summary["agents"] = _aggregate_agents(agent_spans)
+    return summary
 
 
 PASS_REF_SEP = "::pass"
+# Distinct runs (and run or pass refs) one step-latency request may pool; the
+# run cap matches GET /api/compare, whose lanes this endpoint serves.
+MAX_STEP_LATENCY_RUNS = 20
+MAX_STEP_LATENCY_REFS = 500
+# The attributes this module reads, for spans stored before promoted columns.
+_LEGACY_ATTRIBUTE_KEYS = (
+    "openinference.span.kind",
+    "ai.openinference.span.kind",
+    "qym.usage_scope",
+    "llm.model_name",
+    "tool.name",
+    "llm.token_count.total",
+    "llm.token_count.prompt",
+    "llm.token_count.completion",
+)
 
 
 def _parse_run_ref(ref: str) -> tuple:
@@ -436,8 +555,20 @@ def _load_spans(
     if not run_ids:
         raise HTTPException(status_code=400, detail="No run ids given")
 
+    if len(set(run_ids)) > MAX_STEP_LATENCY_REFS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"At most {MAX_STEP_LATENCY_REFS} run or pass refs at once",
+        )
     refs = [_parse_run_ref(ref) for ref in run_ids]
     base_ids = list(dict.fromkeys(base for base, _ in refs))
+    if len(base_ids) > MAX_STEP_LATENCY_RUNS:
+        # Every span of every run is pooled in memory: bound the request.
+        raise HTTPException(
+            status_code=422,
+            detail=f"At most {MAX_STEP_LATENCY_RUNS} runs at once "
+            f"({len(base_ids)} requested)",
+        )
 
     runs = Run.active(db).filter(Run.id.in_(base_ids)).all()
     found = {run.id: run for run in runs}
@@ -548,10 +679,16 @@ def _project_spans(db: Session, filters) -> List[_SpanView]:
     rows = db.query(*cols).filter(or_(*filters)).order_by(Span.start_time_ns.asc().nullslast(), Span.id.asc()).all()
     legacy_ids = [row[16] for row in rows if row[9] is None and row[10] is None and row[13] is None]
     legacy_attrs: Dict[int, Dict[str, Any]] = {}
+    # Only the attribute keys read here, extracted in SQL, not the whole JSON.
+    legacy_cols = [Span.attributes[key] for key in _LEGACY_ATTRIBUTE_KEYS]
     for start in range(0, len(legacy_ids), 500):
         chunk = legacy_ids[start : start + 500]
-        for span_id, attrs in db.query(Span.id, Span.attributes).filter(Span.id.in_(chunk)):
-            legacy_attrs[span_id] = attrs or {}
+        for span_id, *values in db.query(Span.id, *legacy_cols).filter(Span.id.in_(chunk)):
+            legacy_attrs[span_id] = {
+                key: value
+                for key, value in zip(_LEGACY_ATTRIBUTE_KEYS, values)
+                if value is not None
+            }
     views: List[_SpanView] = []
     for row in rows:
         if row[16] in legacy_attrs:
@@ -594,7 +731,12 @@ def multi_run_step_latency(
     run_ids: str = Query(..., description="Comma-separated run ids"),
     format: str = Query("json", pattern="^(json|csv)$"),
     level: str = Query("summary", pattern="^(summary|spans)$"),
-    rollup: str = Query("name", pattern="^(name|kind)$"),
+    rollup: str = Query(
+        "name",
+        pattern="^(name|kind|site)$",
+        description="name: LLM calls by model; kind: one row per kind; "
+        "site: LLM calls by span name and model, with each step's sub-agent",
+    ),
     pass_number: Optional[int] = Query(None, ge=1, description="Restrict to one repeat pass"),
     group_by: Optional[str] = Query(
         None,
@@ -609,15 +751,19 @@ def multi_run_step_latency(
     trace_count = len(
         {(span.run_id, span.trace_id) for span in spans if span.trace_id}
     )
+    # Call-site rows name their model and sub-agent; CSV exports keep them.
+    site_fields = ["model", "agent"] if rollup == "site" else []
     if level == "spans":
         rows = classify_spans(spans, rollup=rollup)
         if format == "csv":
-            return _csv_response(_SPAN_FIELDS, rows, "step_latency_spans.csv")
+            fields = _SPAN_FIELDS[:7] + site_fields + _SPAN_FIELDS[7:]
+            return _csv_response(fields, rows, "step_latency_spans.csv")
         return {"run_ids": ids, "pass_number": pass_number, "passes": passes,
                 "trace_count": trace_count, "spans": rows}
     if format == "csv":
         groups = compute_step_latency(spans, rollup=rollup)
-        return _csv_response(_SUMMARY_FIELDS, groups, "step_latency_summary.csv")
+        fields = _SUMMARY_FIELDS[:3] + site_fields + _SUMMARY_FIELDS[3:]
+        return _csv_response(fields, groups, "step_latency_summary.csv")
     summary = summarize_step_latency(spans, rollup=rollup)
     payload: Dict[str, Any] = {
         "run_ids": ids,
@@ -628,7 +774,10 @@ def multi_run_step_latency(
         "groups": summary["groups"],
         # Phase headers draw their parent spans, which steps leave out.
         "phases": summary["phases"],
+        "traces": summary["traces"],
     }
+    if "agents" in summary:
+        payload["agents"] = summary["agents"]
     if group_by == "ref":
         # Compare draws one lane per run or pass; serving every lane from the
         # pooled spans replaces one request per lane.
@@ -646,7 +795,7 @@ def single_run_step_latency(
     run_id: str,
     format: str = Query("json", pattern="^(json|csv)$"),
     level: str = Query("summary", pattern="^(summary|spans)$"),
-    rollup: str = Query("name", pattern="^(name|kind)$"),
+    rollup: str = Query("name", pattern="^(name|kind|site)$"),
     pass_number: Optional[int] = Query(None, ge=1, description="Restrict to one repeat pass"),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),

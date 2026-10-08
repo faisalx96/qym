@@ -109,7 +109,7 @@ def test_deep_linked_item_header_lands_below_the_section_nav(browser, width):
         fixture.close()
 
 
-def test_quiet_step_latency_remount_keeps_an_empty_panel_hidden(browser):
+def test_reloading_trace_timings_keeps_an_empty_subsection_hidden(browser):
     fixture = StructureFixture(browser, count=30)
     page = fixture.page
     delay = {"ms": 0}
@@ -119,40 +119,35 @@ def test_quiet_step_latency_remount_keeps_an_empty_panel_hidden(browser):
             time.sleep(delay["ms"] / 1000)
         route.fulfill(json={"run_ids": ["run-1"], "passes": [], "trace_count": 0, "groups": []})
 
-    # A run without spans: step latency has no groups.
+    # A run without spans: no trace timings, so Inside the traces stays out.
     page.route("**/api/runs/step-latency**", no_spans)
+    hidden = "() => document.querySelector('#latency-traces-panel [data-lt=\"inside\"]')?.hidden === true"
     try:
         fixture.goto()
-        panel = page.locator("#step-latency-panel")
-        page.wait_for_function(
-            "getComputedStyle(document.querySelector('#step-latency-panel')).display === 'none'"
-        )
+        page.wait_for_function(hidden)
 
-        def remount(quiet):
+        def reload(quiet):
             return page.evaluate(
                 """(quiet) => new Promise(resolve => {
-                  const panel = document.querySelector('#step-latency-panel');
+                  const inside = document.querySelector('#latency-traces-panel [data-lt="inside"]');
                   const seen = [];
                   const t0 = performance.now();
                   const tick = () => {
-                    seen.push(getComputedStyle(panel).display !== 'none' && panel.innerHTML.trim() !== '');
+                    seen.push(!inside.hidden);
                     if (performance.now() - t0 < 900) requestAnimationFrame(tick);
                     else resolve(seen);
                   };
-                  window.QymStepLatency.mount(panel, ['run-1'], { collapsible: true, quietReload: quiet });
+                  window.QymLatencyTraces.reload({ quiet });
                   tick();
                 })""",
                 quiet,
             )
 
         delay["ms"] = 400
-        # The plain mount shows a loading card while the request runs (the
-        # flicker); the quiet remount the run page now uses never does.
-        assert any(remount(False))
-        page.wait_for_function(
-            "getComputedStyle(document.querySelector('#step-latency-panel')).display === 'none'"
-        )
-        assert not any(remount(True))
-        assert panel.evaluate("node => getComputedStyle(node).display") == "none"
+        # Neither the live run's quiet reload nor a plain one shows a loading
+        # block for a run that recorded no spans: nothing below it moves.
+        assert not any(reload(True))
+        assert not any(reload(False))
+        page.wait_for_function(hidden)
     finally:
         fixture.close()

@@ -1,0 +1,27 @@
+/*
+ * "Start from best run" picker (plan §10.2/§10.3, issue #38):
+ * experiment_launch_best_run.js. Page-local recipes use the xlb- prefix and reuse
+ * the launch form's xl- recipes (experiment_launch.css). Controls, inline actions
+ * and tags come from ui_components.css. Tokens only (docs/DESIGN_LANGUAGE.md).
+ */
+
+.xlb-picker { display: grid; gap: var(--space-sm); min-width: 0; }
+.xlb-toggle { display: inline-flex; align-items: center; gap: var(--space-xs); cursor: pointer; }
+
+/* Top-5 table (QymDataTable header/cell recipe) */
+.xlb-table { border-collapse: collapse; width: max-content; min-width: 100%; }
+.xlb-table th { position: sticky; top: 0; z-index: 1; padding: var(--space-xs) var(--space-sm); background: var(--bg-elevated); font-size: var(--font-sm); font-weight: 650; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; text-align: left; white-space: nowrap; }
+.xlb-table td { padding: var(--space-xs) var(--space-sm); border-top: 1px solid var(--border-subtle); font-size: var(--font-base); color: var(--text-secondary); vertical-align: middle; white-space: nowrap; }
+.xlb-table .xlb-num { text-align: right; }
+.xlb-table tr.xlb-selected td { background: var(--bg-active); color: var(--text-primary); }
+.xlb-params { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.xlb-dataset { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.xlb-age { color: var(--text-muted); }
+.xlb-action { text-align: right; }
+
+/* Temporary-model prompts */
+.xlb-prompts { display: grid; gap: var(--space-xs); }
+
+/* Drift marker next to "Base: …" in the page meta line */
+.xlb-drift-tag { margin-left: var(--space-xs); }
+.xlb-drift-tag[hidden] { display: none; }

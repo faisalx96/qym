@@ -10,6 +10,9 @@ from urllib.parse import urlparse
 import httpcore
 import httpx
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
 
 DNS_RESOLUTION_TIMEOUT_SECONDS = 5.0
 
@@ -28,10 +31,12 @@ def _resolve_public_address(hostname: str, port: int, *, allow_private: bool) ->
             for *_, sockaddr in socket.getaddrinfo(hostname, port)
         }
     except (OSError, ValueError) as exc:
+        logger.warning("LLM base URL hostname %s could not be resolved", hostname, exc_info=True)
         raise LlmEndpointValidationError(
             "LLM base URL hostname could not be resolved"
         ) from exc
     if not addresses or any(not address.is_global for address in addresses):
+        logger.warning("refused LLM base URL hostname %s: resolves to a non-public address", hostname)
         raise LlmEndpointValidationError(
             "LLM base URL resolves to a non-public address. Set "
             "QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true only for trusted local providers."
@@ -65,6 +70,30 @@ def validate_llm_base_url(value: str, *, allow_private: bool) -> str:
     return normalized
 
 
+HTTPS_REQUIRED_CODE = "https_required"
+EXPERIMENT_HTTPS_REQUIRED_MESSAGE = (
+    "Experiments need an https:// base URL. Set "
+    "QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true only for local development."
+)
+
+
+def experiment_base_url_needs_https(value: object, *, allow_private: bool) -> bool:
+    """Whether a model URL must be refused for experiments: not ``https://``.
+
+    Experiments hand the model (and possibly its key) to a remote worker, so its base
+    URL must be HTTPS, the same rule as environment URLs. ``allow_private``
+    (``QYM_ALLOW_PRIVATE_LLM_BASE_URLS``) lifts it for local development. An empty URL
+    sends none (the worker keeps its default), so it passes. Analyzer connections are
+    not subject to this rule.
+    """
+    if allow_private:
+        return False
+    text = str(value or "").strip()
+    if not text:
+        return False
+    return urlparse(text).scheme.lower() != "https"
+
+
 async def _resolve_public_address_async(
     hostname: str,
     port: int,
@@ -86,6 +115,7 @@ async def _resolve_public_address_async(
             timeout=timeout or DNS_RESOLUTION_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError as exc:
+        logger.warning("LLM base URL hostname resolution timed out")
         raise LlmEndpointValidationError("LLM base URL hostname resolution timed out") from exc
 
 

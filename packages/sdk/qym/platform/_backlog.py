@@ -18,11 +18,15 @@ class EventBacklog:
     The disk file is truncated when its queued records have been consumed. A full
     disk allowance applies backpressure until the consumer reaches that boundary.
     Capacity excludes the uploader's separately count/byte-bounded active batch.
+    ``max_disk_bytes=0`` never spills to disk: a full memory allowance applies
+    backpressure instead (read-only or size-limited containers).
     """
 
     def __init__(self, max_memory_bytes: int, max_disk_bytes: int) -> None:
-        if max_memory_bytes <= 0 or max_disk_bytes <= 0:
-            raise ValueError("Platform backlog byte limits must be positive")
+        if max_memory_bytes <= 0 or max_disk_bytes < 0:
+            raise ValueError(
+                "Platform backlog limits: memory must be positive, disk not negative"
+            )
         self.max_memory_bytes = max_memory_bytes
         self.max_disk_bytes = max_disk_bytes
         self.memory_bytes = 0

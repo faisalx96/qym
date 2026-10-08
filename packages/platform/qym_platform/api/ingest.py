@@ -3,13 +3,13 @@ from __future__ import annotations
 import csv
 import io
 import json
-import logging
 import math
 import sys
 from collections import defaultdict
 
 csv.field_size_limit(sys.maxsize)
 from typing import Any, Dict, Optional
+from qym_platform.log import get_logger
 
 
 def _sanitize_for_json(obj: Any) -> Any:
@@ -23,12 +23,14 @@ def _sanitize_for_json(obj: Any) -> Any:
     return obj
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+
+from qym_platform.uploads import read_upload
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import func, insert, inspect
+from sqlalchemy import func, insert, inspect, or_, select
 from sqlalchemy.exc import DataError, DBAPIError, IntegrityError, StatementError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -50,6 +52,7 @@ from qym_platform.db.models import (
     RunItem,
     RunItemScore,
     RunMetricSpec,
+    RunOrigin,
     RunTraceAggregate,
     RunWorkflowStatus,
     Span,
@@ -93,6 +96,7 @@ from qym_platform.services.ingest_completeness import (
     record_reported_rejections,
 )
 from qym_platform.services.run_lifecycle import (
+    RUN_STATUS_REASON_ADMIN_FORCE_STOP,
     is_run_force_stopped,
     is_run_in_review,
     mark_run_running,
@@ -100,7 +104,21 @@ from qym_platform.services.run_lifecycle import (
     touch_run_event,
 )
 from qym_platform.settings import PlatformSettings
-from qym_platform.services.dashboard_outbox import enqueue_inserted_events
+from qym_platform.services.dashboard_outbox import (
+    enqueue_inserted_events,
+    enqueue_snapshots,
+    snapshot,
+)
+from qym_platform.services.eval_run_linking import (
+    link_official_run,
+    merge_run_metadata,
+    strip_launch_token,
+)
+from qym_platform.services.run_versioning import normalize_versioning_details
+from qym_platform.services.eval_run_scores import (
+    SCORABLE_RUN_STATUSES,
+    sync_run_scores,
+)
 from qym_platform.services.event_storage import (
     ingest_settings,
     oversized_span_attributes,
@@ -579,20 +597,30 @@ def _refresh_live_trace_stats(
     run: Run,
     touched_trace_ids: Optional[set[str]] = None,
     touched_item_ids: Optional[set[str]] = None,
-) -> None:
-    """Refresh only affected contributions; backfill existing runs once."""
+    defer_on_backoff: bool = False,
+) -> bool:
+    """Refresh only affected contributions; backfill existing runs once.
+
+    Returns ``False`` when a recent failure's back-off deferred the refresh
+    (the touched sets are remembered for the next attempt).
+    """
     from qym_platform.services.trace_statistics import refresh_trace_statistics
 
-    refresh_trace_statistics(
+    return refresh_trace_statistics(
         db,
         run,
         touched_trace_ids=touched_trace_ids,
         touched_item_ids=touched_item_ids,
+        defer_on_backoff=defer_on_backoff,
     )
 
 
 def _store_trace_stats(db: Session, run: Run) -> None:
-    """Reconcile trace statistics and their durable contribution ledger."""
+    """Rebuild trace statistics and their ledger from every span of the run.
+
+    Column-projected and streamed, but it reads the whole run: maintenance and
+    tests only. Ingest refreshes incrementally, including at run_completed.
+    """
     _refresh_live_trace_stats(db, run)
 
 
@@ -608,6 +636,9 @@ class CreateRunRequest(BaseModel):
     dataset_alias: Optional[str] = None
     run_metadata: Dict[str, Any] = Field(default_factory=dict)
     run_config: Dict[str, Any] = Field(default_factory=dict)
+    # Free-form versioning keys (services/run_versioning.normalize_versioning_details).
+    # ``Any`` so a malformed value gets our 422 message, not a validation echo.
+    versioning_details: Any = None
 
 
 _PAYLOAD_TYPE = {
@@ -624,6 +655,11 @@ _PAYLOAD_TYPE = {
     "metadata_update": MetadataUpdatePayload,
     "span_completed": SpanCompletedPayload,
 }
+
+# Batches made only of these cannot change a run's scores (eval_run_scores).
+_SCORE_NEUTRAL_EVENTS = frozenset({"run_heartbeat", "span_completed"})
+# A heartbeat-only batch is tiny; anything bigger takes the regular path.
+_HEARTBEAT_FAST_PATH_MAX_BYTES = 64 * 1024
 
 # Per-event rejections are reported in full by count; the response lists only
 # the first few so a batch of garbage cannot produce a huge reply.
@@ -940,6 +976,17 @@ def _store_metric_specs(
         )
 
 
+# Event types whose stored payload may carry client run metadata.
+_METADATA_EVENT_TYPES = frozenset({"run_started", "run_completed", "metadata_update"})
+
+
+def _event_log_payload(event_type: str, payload: Any) -> Any:
+    """The event-log copy of a payload, never holding a launch token."""
+    if event_type in _METADATA_EVENT_TYPES:
+        return strip_launch_token(payload)
+    return payload
+
+
 def require_ingest_open() -> None:
     """During a maintenance window SDK clients buffer and retry; tell them to."""
     if ingest_settings().maintenance_mode:
@@ -960,6 +1007,12 @@ def create_run(
     require_api_key_scope(principal, "runs:write")
     if not principal.project_id:
         raise HTTPException(status_code=403, detail="API key is not bound to a project")
+    try:
+        versioning_details = normalize_versioning_details(
+            strip_launch_token(req.versioning_details)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     dataset_id = req.dataset_id
     dataset_version_id = req.dataset_version_id
     if not dataset_version_id and (dataset_id or req.dataset_alias):
@@ -997,8 +1050,10 @@ def create_run(
         dataset_version_id=dataset_version_id,
         model=req.model,
         metrics=req.metrics,
-        run_metadata=req.run_metadata,
-        run_config=req.run_config,
+        # The launch token is read once (below) and never stored.
+        run_metadata=strip_launch_token(req.run_metadata),
+        run_config=strip_launch_token(req.run_config),
+        versioning_details=versioning_details or None,
         samples=_samples_from_config(req.run_config),
         status=RunWorkflowStatus.RUNNING,
         started_at=utc_now_naive(),
@@ -1006,9 +1061,17 @@ def create_run(
     )
     db.add(run)
     db.flush()
+    # Plan §11: official only when the launch token verifies; same transaction.
+    link_official_run(db, run, req.run_metadata)
     _store_metric_specs(db, run, req.metric_specs)
     db.commit()
     db.refresh(run)
+    logger.info(
+        "Run %s created (project=%s, origin=%s)",
+        run.id,
+        run.project_id,
+        getattr(run, "origin", None) or "-",
+    )
 
     settings = PlatformSettings()
     project = db.query(Project).filter(Project.id == run.project_id).first()
@@ -1016,7 +1079,7 @@ def create_run(
         live_path = f"/projects/{project.slug}/runs/{run.id}"
     else:
         live_path = f"/run/{run.id}"
-    live_url = f"{settings.base_url.rstrip('/')}{live_path}"
+    live_url = f"{settings.public_ui_base}{live_path}"
     # supports_pass_events: capability flag for repeat runs (samples=k) — new
     # SDKs check it before streaming pass-aware events to old platforms.
     return {
@@ -1027,6 +1090,46 @@ def create_run(
     }
 
 
+def _max_event_line_chars() -> int:
+    """Largest single NDJSON event line: half the batch body limit."""
+    return max(1, ingest_settings().max_ingest_body_bytes // 2)
+
+
+def _ingest_body_limit_detail(limit: int) -> str:
+    return (
+        f"The event batch exceeds the {limit} byte limit "
+        "(QYM_MAX_INGEST_BODY_BYTES); send smaller batches."
+    )
+
+
+async def _read_ingest_body(request: Request, limit: int) -> bytes:
+    """The request body, or HTTP 413 once it is larger than ``limit``.
+
+    ``Content-Length`` is checked first; the stream is still counted while it
+    is read, so a chunked or lying client cannot buffer more than the limit.
+    """
+    length = request.headers.get("content-length")
+    if length is not None:
+        try:
+            declared = int(length)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length header")
+        if declared > limit:
+            raise HTTPException(
+                status_code=413, detail=_ingest_body_limit_detail(limit)
+            )
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise HTTPException(
+                status_code=413, detail=_ingest_body_limit_detail(limit)
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @router.post("/runs/{run_id}/events")
 async def ingest_events(
     run_id: str,
@@ -1035,7 +1138,7 @@ async def ingest_events(
     principal: Principal = Depends(require_api_key_principal),
     _open: None = Depends(require_ingest_open),
 ) -> JSONResponse:
-    body = await request.body()
+    body = await _read_ingest_body(request, ingest_settings().max_ingest_body_bytes)
     # Authentication has already completed. Only immutable identity data crosses
     # into the worker; its Session is created, used and closed on that thread.
     identity = inspect(principal.user).identity
@@ -1072,6 +1175,7 @@ def _ingest_events_worker(
         "refused events: %s",
         run_id,
         _store_error_reason(error),
+        exc_info=error,
     )
     # A refused value fails its batch the same way on every retry, and
     # clients retry a 5xx forever. Apply the batch again in halves, each in
@@ -1164,6 +1268,148 @@ def _split_line_range(
     }
 
 
+def _iter_lines(text: str):
+    """NDJSON lines, split on "\\n" only, without materializing a list."""
+    start = 0
+    while start <= len(text):
+        end = text.find("\n", start)
+        if end < 0:
+            end = len(text)
+        yield text[start:end]
+        start = end + 1
+
+
+def _heartbeat_fast_path(
+    run_id: str, body: bytes, db: Session, principal: Principal
+) -> Optional[JSONResponse]:
+    """Apply a heartbeat-only batch with one short guarded UPDATE.
+
+    Heartbeats only move ``last_event_at``. They skip the batch machinery and
+    never wait for the run lock: when another batch holds it, that batch is
+    refreshing liveness itself. Anything unusual (another event type, an
+    invalid line, a run that is not plainly RUNNING, a refused principal)
+    returns ``None`` and takes the regular path, which owns those contracts.
+    """
+    if len(body) > _HEARTBEAT_FAST_PATH_MAX_BYTES or b"run_heartbeat" not in body:
+        return None
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    event_rows = []
+    for line in _iter_lines(text):
+        if not line.strip():
+            continue
+        try:
+            raw = json.loads(line)
+            evt = RunEventV1.model_validate(raw)
+            RunHeartbeatPayload.model_validate(raw.get("payload") or {})
+        except Exception:
+            return None
+        if (
+            evt.type != "run_heartbeat"
+            or str(evt.run_id) != run_id
+            or evt.sequence > _MAX_DB_INT
+        ):
+            return None
+        event_rows.append(
+            dict(
+                run_id=run_id,
+                event_id=str(evt.event_id),
+                sequence=evt.sequence,
+                type=evt.type,
+                sent_at=evt.sent_at,
+                payload=_sanitize_for_json(raw.get("payload") or {}),
+            )
+        )
+    if not event_rows:
+        return None
+    row = (
+        db.query(
+            Run.owner_user_id,
+            Run.created_by_user_id,
+            Run.origin,
+            Run.project_id,
+            Run.status,
+            Run.status_reason,
+            Run.deleted_at,
+        )
+        .filter(Run.id == run_id)
+        .first()
+    )
+    if (
+        row is None
+        or row.status != RunWorkflowStatus.RUNNING
+        or row.status_reason == RUN_STATUS_REASON_ADMIN_FORCE_STOP
+        or row.deleted_at is not None
+        or (principal.project_id and row.project_id != principal.project_id)
+        or not (
+            row.owner_user_id == principal.user.id
+            or (
+                row.origin == RunOrigin.OFFICIAL
+                and row.created_by_user_id == principal.user.id
+            )
+        )
+    ):
+        return None
+    now = utc_now_naive()
+    guard = (
+        Run.id == run_id,
+        Run.status == RunWorkflowStatus.RUNNING,
+        Run.deleted_at.is_(None),
+        or_(
+            Run.status_reason.is_(None),
+            Run.status_reason != RUN_STATUS_REASON_ADMIN_FORCE_STOP,
+        ),
+    )
+    runs = Run.__table__
+    # Core statement: no ORM flush hooks, and no lock wait (SKIP LOCKED).
+    result = db.execute(
+        runs.update()
+        .where(
+            runs.c.id.in_(
+                select(Run.id).where(*guard).with_for_update(skip_locked=True)
+            ),
+            or_(runs.c.last_event_at.is_(None), runs.c.last_event_at < now),
+        )
+        .values(last_event_at=now)
+    )
+    applied = len(event_rows)
+    if result.rowcount:
+        # This transaction now holds the run row, so the event-log insert's
+        # foreign-key check cannot wait on another batch. Redelivered
+        # heartbeats are skipped by the unique constraints.
+        if db.get_bind().dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as dialect_insert
+        else:
+            from sqlalchemy.dialects.sqlite import insert as dialect_insert
+        inserted = db.execute(
+            dialect_insert(RunEvent.__table__)
+            .values(event_rows)
+            .on_conflict_do_nothing()
+        ).rowcount
+        if inserted is not None and inserted >= 0:
+            applied = inserted
+        # The dashboard notification the ORM path would have queued.
+        enqueue_snapshots(
+            db.connection(), [snapshot(Run(id=run_id, project_id=row.project_id))]
+        )
+    elif db.query(Run.id).filter(*guard).first() is None:
+        # The run changed state since it was read: the regular path decides.
+        db.rollback()
+        return None
+    # Otherwise another batch holds the run row and refreshes liveness itself.
+    db.commit()
+    return _ingest_response(
+        {
+            "applied": applied,
+            "skipped": len(event_rows) - applied,
+            "rejected": 0,
+            "rejected_events": [],
+        }
+    )
+
+
 def _ingest_events_sync(
     run_id: str,
     body: bytes,
@@ -1173,6 +1419,9 @@ def _ingest_events_sync(
 ) -> JSONResponse:
     """Apply one ordered batch using an exclusively owned synchronous session."""
     require_api_key_scope(principal, "runs:write")
+    fast = _heartbeat_fast_path(run_id, body, db, principal)
+    if fast is not None:
+        return fast
     # Serialize batches for one run. Different runs can ingest concurrently;
     # duplicates cannot race the event-identity or mutable projection checks.
     run = (
@@ -1184,7 +1433,14 @@ def _ingest_events_sync(
     )
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-    if run.owner_user_id != principal.user.id:
+    # An official run is owned by the experiment creator. It is normally streamed
+    # with the creator's own per-experiment ``qym_api_key`` (owner == creator); a
+    # worker that uploads with the environment's own ingest key is its
+    # ``created_by_user_id`` and may stream it too.
+    if run.owner_user_id != principal.user.id and not (
+        run.origin == RunOrigin.OFFICIAL
+        and run.created_by_user_id == principal.user.id
+    ):
         raise HTTPException(status_code=403, detail="Forbidden")
     if principal.project_id and run.project_id != principal.project_id:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -1221,8 +1477,15 @@ def _ingest_events_sync(
     foreign_lines = set()
     # NDJSON lines end at "\n" only. str.splitlines() would also split inside
     # a JSON string at U+2028, U+2029 or U+0085, which JSON leaves unescaped.
-    for line_no, line in enumerate(text.split("\n"), start=1 + line_offset):
+    line_limit = _max_event_line_chars()
+    for line_no, line in enumerate(_iter_lines(text), start=1 + line_offset):
         if not line.strip():
+            continue
+        if len(line) > line_limit:
+            # Refused before parsing: one huge event must not be expanded
+            # into Python objects many times its size.
+            _reject(line_no, None, f"event exceeds the {line_limit} character limit")
+            unidentified_lines[line_no] = line[:4096]
             continue
         raw = None
         try:
@@ -1240,6 +1503,8 @@ def _ingest_events_sync(
             continue
         raw["__bytes"] = len(line)
         parsed.append((line_no, raw, evt))
+    # The decoded text is no longer needed; only parsed events are kept.
+    text = line = None
 
     # Fetch identities once per bounded chunk, including IDs absent from the DB.
     # Missing entries remain cached too, avoiding a SELECT for every new row.
@@ -1348,6 +1613,7 @@ def _ingest_events_sync(
                 continue
         known_events.add(event_id)
         accepted.append((raw, evt, payload))
+    del parsed
     if rejections:
         logger.warning(
             "Rejected %d event(s) for run %s; first: line %s: %s",
@@ -1434,9 +1700,12 @@ def _ingest_events_sync(
             type=evt.type,
             sent_at=evt.sent_at,
             payload=_sanitize_for_json(
-                structural_event_payload(evt.type, raw.get("payload") or {})
-                if storage.event_log_mode == "structural"
-                else (raw.get("payload") or {})
+                _event_log_payload(
+                    evt.type,
+                    structural_event_payload(evt.type, raw.get("payload") or {})
+                    if storage.event_log_mode == "structural"
+                    else (raw.get("payload") or {}),
+                )
             ),
         )
         for raw, evt, _ in accepted
@@ -1768,20 +2037,29 @@ def _ingest_events_sync(
     # as PendingRollbackError at commit. Each block flushes before its try so
     # a value the database refuses raises its own error, which the worker
     # isolates to the event that carried it.
-    def _invalidate_trace_summary():
-        from qym_platform.db.models import RunTraceSummary
+    def _mark_trace_summary_stale():
+        # Never delete the ledger here: without it every later batch would
+        # rebuild the whole run under the run lock, and a rebuild that hit the
+        # statement timeout once would keep hitting it. The marker remembers
+        # what this batch touched and backs off before the next attempt.
+        from qym_platform.services.trace_statistics import (
+            mark_trace_statistics_stale,
+        )
 
         db.flush()
         try:
             with db.begin_nested():
-                db.query(RunTraceSummary).filter_by(run_id=run_id).delete(
-                    synchronize_session=False
+                mark_trace_statistics_stale(
+                    db,
+                    run_id,
+                    touched_trace_ids=touched_trace_ids,
+                    touched_item_ids=touched_item_ids,
                 )
         except Exception:
             # A deployment missing the trace migration must still accept
-            # items and scores. The next migrated request will backfill.
+            # items and scores.
             logger.warning(
-                "Could not invalidate trace summary for run %s", run_id, exc_info=True
+                "Could not mark trace summary stale for run %s", run_id, exc_info=True
             )
 
     def _flush_pending_spans():
@@ -1798,6 +2076,12 @@ def _ingest_events_sync(
         except Exception:
             # The common path uses one bulk write/savepoint. Isolate individual
             # failures only when needed so a bad span cannot discard good ones.
+            logger.warning(
+                "Bulk span insert failed for run %s; storing %d spans one by one",
+                run_id,
+                len(rows),
+                exc_info=True,
+            )
             inserted = []
             for row in rows:
                 try:
@@ -1824,7 +2108,10 @@ def _ingest_events_sync(
             evt.type,
             type(payload).__name__,
         )
-        touch_run_event(run, evt.sent_at)
+        # Liveness uses the platform's receive time, not the worker's ``sent_at``:
+        # a skewed worker clock or events that waited in the SDK queue must not
+        # make a live run look stale (lease_timeout).
+        touch_run_event(run, utc_now_naive())
 
         if isinstance(payload, RunStartedPayload):
             run.external_run_id = payload.external_run_id
@@ -1842,7 +2129,13 @@ def _ingest_events_sync(
                     started_directions[name] = declared_direction(
                         _normalized_metric_spec(raw_spec)
                     )
-            md = _sanitize_for_json(dict(payload.run_metadata or {}))
+            # Replaces client metadata, but the qym_* keys fixed at create_run stay
+            # and the launch token is never re-introduced.
+            md = _sanitize_for_json(
+                merge_run_metadata(
+                    run.run_metadata, payload.run_metadata or {}, replace=True
+                )
+            )
             if payload.total_items is not None:
                 md["total_items"] = int(payload.total_items)
             # Refusals already tallied (possibly from this very batch) stay.
@@ -1854,7 +2147,7 @@ def _ingest_events_sync(
             if isinstance(tally, dict):
                 md[INGEST_REJECTED_KEY] = tally
             run.run_metadata = md
-            run.run_config = _sanitize_for_json(payload.run_config)
+            run.run_config = _sanitize_for_json(strip_launch_token(payload.run_config))
             run.samples = _samples_from_config(payload.run_config)
             run.started_at = to_storage_utc(payload.started_at)
             mark_run_running(run)
@@ -2085,7 +2378,7 @@ def _ingest_events_sync(
                 try:
                     ts_ms = int(evt.sent_at.timestamp() * 1000 - payload.latency_ms)
                 except Exception:
-                    pass
+                    logger.debug("Could not derive task start for run %s", run_id, exc_info=True)
 
             item = _get_item(payload.item_id)
             payload_metadata = (
@@ -2205,7 +2498,7 @@ def _ingest_events_sync(
                 _FINAL_STATUS.get(payload.final_status, RunWorkflowStatus.FAILED),
                 ended_at=payload.ended_at,
             )
-            logger.debug("Run %s status -> %s", run_id, payload.final_status)
+            logger.info("Run %s status -> %s", run_id, payload.final_status)
             # Allow the client to attach final metadata (e.g., langfuse_url) at completion time.
             try:
                 md = (
@@ -2214,29 +2507,40 @@ def _ingest_events_sync(
                     else None
                 )
                 if isinstance(md, dict) and md:
-                    current = (
-                        run.run_metadata if isinstance(run.run_metadata, dict) else {}
+                    # Never re-adds the launch token or changes qym_* (plan §11.6).
+                    run.run_metadata = _sanitize_for_json(
+                        merge_run_metadata(run.run_metadata, md)
                     )
-                    run.run_metadata = _sanitize_for_json({**current, **md})
             except Exception:
-                pass
+                logger.warning(
+                    "Could not merge final run metadata for run %s", run_id, exc_info=True
+                )
 
-            # ⚡ Compute and store trace stats from OTEL spans
+            # Bring trace stats up to date with this batch. Incremental, like
+            # live batches: earlier batches already maintained the ledger, so
+            # completion never re-reads every item and span under the run lock.
+            # A run without a ledger yet gets the bounded one-time backfill.
             db.flush()
             try:
                 _flush_pending_spans()
                 db.flush()  # ensure all spans from this batch are visible
                 with db.begin_nested():
-                    _store_trace_stats(db, run)
-                # The final span-derived stats are authoritative; drop any
-                # pending live refresh from earlier events in this batch.
-                trace_stats_dirty = False
-                touched_trace_ids.clear()
+                    _refresh_live_trace_stats(
+                        db,
+                        run,
+                        touched_trace_ids=touched_trace_ids,
+                        touched_item_ids=touched_item_ids,
+                        defer_on_backoff=True,
+                    )
             except Exception:
                 logger.warning(
                     "Failed to compute trace stats for run %s", run_id, exc_info=True
                 )
-                _invalidate_trace_summary()
+                _mark_trace_summary_stale()
+            # Consumed (or remembered by the stale marker) either way.
+            trace_stats_dirty = False
+            touched_trace_ids.clear()
+            touched_item_ids.clear()
 
             # Safety net: the summary says how many items the run produced.
             # If fewer item rows made it through the event stream, flag the
@@ -2277,7 +2581,9 @@ def _ingest_events_sync(
             if payload.extra:
                 updates.update(payload.extra)
             if updates:
-                run.run_metadata = _sanitize_for_json({**current, **updates})
+                run.run_metadata = _sanitize_for_json(
+                    merge_run_metadata(current, updates)
+                )
 
         elif isinstance(payload, SpanCompletedPayload):
             mark_run_running(run)
@@ -2345,10 +2651,23 @@ def _ingest_events_sync(
                     run,
                     touched_trace_ids=touched_trace_ids,
                     touched_item_ids=touched_item_ids,
+                    defer_on_backoff=True,
                 )
         except Exception as e:
-            logger.warning("Live trace aggregation failed for run %s: %s", run_id, e)
-            _invalidate_trace_summary()
+            logger.warning("Live trace aggregation failed for run %s: %s", run_id, e, exc_info=True)
+            _mark_trace_summary_stale()
+
+    # Best-run index (plan §4.7): run_completed, or scores arriving after it, on an
+    # official run. Writes only once the job is terminal too; the dispatcher's hook
+    # covers the other order. It re-aggregates the whole run, so batches that
+    # cannot change scores (late spans, heartbeats) skip it.
+    if (
+        applied
+        and run.origin == RunOrigin.OFFICIAL
+        and run.status in SCORABLE_RUN_STATUSES
+        and any(evt.type not in _SCORE_NEUTRAL_EVENTS for _, evt, _ in accepted)
+    ):
+        sync_run_scores(db, run)
 
     db.commit()
     return _ingest_response(
@@ -2376,10 +2695,47 @@ async def upload_run(
     if not principal.project_id:
         raise HTTPException(status_code=403, detail="API key is not bound to a project")
     filename = (file.filename or "").lower()
-    raw = await file.read()
+    raw = await read_upload(file)
     if not raw:
         raise HTTPException(status_code=400, detail="Empty upload")
+    # Parsing and the ORM writes are synchronous: run them on the threadpool so
+    # a large upload cannot stall the event loop (and every other client's
+    # heartbeats) for its whole duration.
+    return await run_in_threadpool(
+        _upload_run_sync,
+        raw,
+        filename,
+        task,
+        dataset,
+        model,
+        external_run_id,
+        db,
+        principal,
+    )
 
+
+# Uploaded rows are flushed and detached in chunks so the identity map stays
+# bounded however many rows the file holds.
+_UPLOAD_FLUSH_ROWS = 500
+
+
+def _release_upload_rows(db: Session) -> None:
+    db.flush()
+    for obj in list(db.identity_map.values()):
+        if isinstance(obj, (RunItem, RunItemScore, RunItemPassScore, RunItemAttempt)):
+            db.expunge(obj)
+
+
+def _upload_run_sync(
+    raw: bytes,
+    filename: str,
+    task: str,
+    dataset: str,
+    model: Optional[str],
+    external_run_id: Optional[str],
+    db: Session,
+    principal: Principal,
+) -> Dict[str, Any]:
     # Create run as completed by default (file upload is post-hoc)
     run = Run(
         project_id=principal.project_id,
@@ -2426,8 +2782,23 @@ async def upload_run(
             run.dataset = str(source_run.get("dataset_name") or dataset)
             run.model = source_run.get("model_name") or model
             run.metrics = metrics
-            run.run_metadata = _sanitize_for_json(source_run.get("metadata") or {})
-            run.run_config = _sanitize_for_json(source_run.get("config") or {})
+            # Uploaded runs are always local; never store a copied launch token.
+            run.run_metadata = _sanitize_for_json(
+                strip_launch_token(source_run.get("metadata") or {})
+            )
+            run.run_config = _sanitize_for_json(
+                strip_launch_token(source_run.get("config") or {})
+            )
+            try:
+                run.versioning_details = (
+                    normalize_versioning_details(
+                        strip_launch_token(source_run.get("versioning_details"))
+                    )
+                    or None
+                )
+            except ValueError:
+                # A post-hoc upload keeps its rows; bad details are left out.
+                run.versioning_details = None
             try:
                 run.samples = max(1, int(source_run.get("samples") or 1))
             except (TypeError, ValueError):
@@ -2442,6 +2813,8 @@ async def upload_run(
                 }
 
             for fallback_index, row in enumerate(snapshot_rows):
+                if fallback_index and fallback_index % _UPLOAD_FLUSH_ROWS == 0:
+                    _release_upload_rows(db)
                 if not isinstance(row, dict):
                     continue
                 item_id = str(row.get("item_id") or fallback_index)
@@ -2590,6 +2963,8 @@ async def upload_run(
             results = data.get("results") or {}
             errors = data.get("errors") or {}
             for idx, (item_id, inp) in enumerate(inputs.items()):
+                if idx and idx % _UPLOAD_FLUSH_ROWS == 0:
+                    _release_upload_rows(db)
                 md = metadatas.get(item_id) or {}
                 result = results.get(item_id)
                 err = errors.get(item_id)
@@ -2679,7 +3054,7 @@ async def upload_run(
             if first.get("run_metadata"):
                 try:
                     run.run_metadata = _sanitize_for_json(
-                        json.loads(first["run_metadata"])
+                        strip_launch_token(json.loads(first["run_metadata"]))
                     )
                 except (json.JSONDecodeError, TypeError):
                     pass
@@ -2953,6 +3328,12 @@ async def upload_run(
             status_code=400, detail="Unsupported file type (use .csv or .json)"
         )
 
+    logger.info(
+        "Run %s uploaded from %s file (project=%s)",
+        run.id,
+        "JSON" if filename.endswith(".json") else "CSV",
+        run.project_id,
+    )
     settings = PlatformSettings()
-    live_url = f"{settings.base_url.rstrip('/')}/run/{run.id}"
+    live_url = f"{settings.public_ui_base}/run/{run.id}"
     return {"run_id": run.id, "live_url": live_url}

@@ -28,6 +28,10 @@ services:
       QYM_DATABASE_URL: ${QYM_DATABASE_URL}
       # Default `all`: this container serves HTTP and runs the background
       # loops. Set QYM_ROLE=api and start the `worker` profile to split them.
+      # Recommended for production (the API warns at startup otherwise): a
+      # heavy maintenance job then cannot OOM-kill the API, since each
+      # container has its own memory limit. See docs/internal/OPERATIONS.md,
+      # "Recommended production layout".
       QYM_ROLE: ${QYM_ROLE:-all}
       # >1 serves HTTP from N processes; with QYM_ROLE=all one more process
       # runs the background loops (qym_platform/serve.py). Default: 1 process.
@@ -65,6 +69,16 @@ services:
       QYM_CA_BUNDLE: ${QYM_CA_BUNDLE:-}
       QYM_SSL_VERIFY: ${QYM_SSL_VERIFY:-}
       QYM_PRODUCT_EVAL_RUN_COUNT: ${QYM_PRODUCT_EVAL_RUN_COUNT:-3}
+      QYM_MAX_UPLOAD_BYTES: ${QYM_MAX_UPLOAD_BYTES:-104857600}
+    # Nothing is written into the container: read-only root filesystem, and a
+    # bounded tmpfs for /tmp (multipart parsing, HOME). Keep the tmpfs above
+    # QYM_MAX_UPLOAD_BYTES.
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    # Example memory ceiling (the tmpfs above counts toward it). Roughly
+    # 350 MB per web process plus headroom for product evals and analyses.
+    # mem_limit: 2g
     ports:
       - "8000:8000"
     depends_on:
@@ -111,6 +125,12 @@ services:
       QYM_EVENT_LOG_MODE: ${QYM_EVENT_LOG_MODE:-full}
       QYM_SPAN_RETENTION_DAYS: ${QYM_SPAN_RETENTION_DAYS:-60}
       QYM_DELETED_RUN_GRACE_DAYS: ${QYM_DELETED_RUN_GRACE_DAYS:-30}
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    # Its own ceiling: a heavy maintenance job is restarted alone (jobs resume)
+    # instead of taking the API down with it.
+    # mem_limit: 1g
     depends_on:
       api:
         condition: service_healthy

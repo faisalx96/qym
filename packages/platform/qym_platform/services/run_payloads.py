@@ -40,7 +40,10 @@ def text_preview(value: str) -> str:
 
 
 def compact_attempt(attempt: Dict[str, Any]) -> Dict[str, Any]:
+    """Index form of a pass attempt; an attempt already in that form is kept."""
     result = dict(attempt)
+    if "output" not in result and "output_digest" in result:
+        return result
     output = result.pop("output", None)
     result["__has_output"] = output is not None
     result["__execution_error"] = output if result.get("status") == "error" else ""

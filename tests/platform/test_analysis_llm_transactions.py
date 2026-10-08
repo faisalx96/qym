@@ -297,7 +297,9 @@ def _fake_llm(monkeypatch, tracker):
             for attr in sa_inspect(RunItem).column_attrs:
                 getattr(item, attr.key)
             for score in scores.values():
-                for attr in sa_inspect(type(score)).column_attrs:
+                # Scores reach the analyzer as plain copies with the
+                # reduced-score interface.
+                for attr in sa_inspect(RunItemScore).column_attrs:
                     getattr(score, attr.key)
         await slow_call("analyze")
         results = []
