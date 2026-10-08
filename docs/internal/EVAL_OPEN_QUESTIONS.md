@@ -367,6 +367,10 @@ and skip `refreshEnvSchema` for non-managers in `experiment_launch.js`.
 
 ### B19. Evaluation config gets its own tab; preset inputs are shown and editable (Implemented)
 
+> **Superseded by B24** for the layout: the Setup / Evaluation config tabs are gone,
+> and their contents are wizard steps 4 and 5 plus the review step. The preset
+> fixes below still hold.
+
 **Decision.** Customize (and the default preset editor, which is the same form) has
 two `qym-tabs`: **Setup**, the wizard, now four steps (where it runs / dataset,
 starting point, models, review), and **Evaluation config**, which holds everything
@@ -589,6 +593,43 @@ service adds would show as an editable input until it is added to
 query in `experiment_launch_advanced.js` `loadPanel()` to show the static card. To
 let the experiment win again at link time, remove the `sent_versioning_details`
 branch in `eval_run_linking.link_official_run`.
+
+
+---
+
+### B24. Configuration is two wizard steps after Models; Raw JSON is on the review step (Implemented)
+
+**Decision.** Users did not find the Evaluation config tab (B19), so Customize (and the
+default preset editor, the same form) is one wizard again, now six steps:
+1 Where it runs (editor: Dataset), 2 Starting point (editor: Compared with),
+3 Models, **4 Environment configurations**, **5 Evaluation configurations**,
+6 Review and launch (editor: Review and publish/save).
+
+- Step 4 holds Environment overrides, the Role overrides card and Sweeps (launch
+  form only). Sweeps can also vary evaluation inputs, but mostly vary overrides and
+  models, so they stay here.
+- Step 5 holds the Evaluation inputs card only (`evaluator.config`, `run_metadata`).
+- Raw JSON covers the whole document, so it is on the review step: the review panel
+  first, then the Raw JSON card, in the main column. It stays in sync with steps 4
+  and 5 in both directions. A parse or validation error is shown in the card and
+  keeps the user on the review step (its preview entry focuses the editor there).
+
+`experiment_launch_advanced.js` places its cards through slots anywhere in the
+layout: `[data-xl-advanced-slot="roles"]` (step 4), `[data-xl-advanced-slot="json"]`
+(review) and the `[data-xl-advanced]` host (step 5, Evaluation inputs).
+
+Steps 4 and 5 show a badge with the values changed from the starting point
+(settings for step 4, evaluation inputs and `run_metadata` for step 5). A
+validation error in a hidden step opens that step. From Models on, **Skip to
+review** jumps to the last step, since steps 4 and 5 are optional. Hints that said
+"Evaluation config" now say "Environment configurations (step 4)".
+
+**Trade-offs.** Six steps instead of four plus a tab; the configuration steps can be
+skipped. Raw JSON is no longer next to the fields it edits.
+
+**To reverse.** Restore the `TABS`/`tabBar()`/`setTab()`/`configGroup()` layout from
+B19 in `experiment_launch.js` and the single-host placement (roles slot only) in
+`experiment_launch_advanced.js` `build()`.
 
 ---
 
