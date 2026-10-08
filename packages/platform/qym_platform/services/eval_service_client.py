@@ -380,6 +380,23 @@ class EvalServiceClient:
         """``GET /evals/env-overrides/schema``; the raw JSON Schema."""
         return _redact_schema(await self._request("GET", "/evals/env-overrides/schema"))
 
+    async def evaluator_schema(self) -> Optional[Dict[str, Any]]:
+        """``GET /evals/evaluator/schema`` (guide v1.1 §3.4); the raw JSON Schema.
+
+        ``None`` when the service does not have the endpoint (404/405: services
+        older than v1.1), so callers fall back to the static
+        ``EvaluatorRequestConfig`` mirror. Other failures raise as usual.
+        """
+        try:
+            data = await self._request("GET", "/evals/evaluator/schema")
+        except RemoteNotFound:
+            return None
+        except EvalServiceError as exc:
+            if exc.status_code == 405:
+                return None
+            raise
+        return _redact_schema(data)
+
     # -- transport ----------------------------------------------------------- #
 
     async def _request(
