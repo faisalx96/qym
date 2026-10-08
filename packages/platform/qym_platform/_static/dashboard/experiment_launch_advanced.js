@@ -4,7 +4,7 @@
  * Mounted by experiment_launch.js into its [data-xl-advanced] host:
  *
  *   window.QymLaunchAdvanced.mount(host, api)
- *     → { decorateSpec, localErrors, onSpecChange, reveal, roleTableSummary, open, teardown }
+ *     → { decorateSpec, localErrors, onSpecChange, reveal, roleTableSummary, open, resetInputs, teardown }
  *
  * `api` is the launch form's advancedApi(): its state (st) and helpers. There is
  * one source of truth: env_overrides stay in st.values, bindings in st.bindings,
@@ -12,6 +12,14 @@
  * what the main form has no control for: evaluator.config inputs, custom
  * run_metadata, and the extra evaluator keys only reachable from Raw JSON
  * (top-level report_k, a dataset_version next to a custom dataset string).
+ *
+ * Starting point (#31): the base's evaluator.config lives in st.evaluatorExtra.
+ * The fields show it, adv.config holds the edits on top of it (a value, or null
+ * for a base input the user cleared) and run_metadata rows start as the base's
+ * keys until the user edits them; decorateSpec() lays the edits over the base, so
+ * what the fields show is what is sent (and what a preset editor saves). The
+ * panel's state is kept in st.advancedSaved when it is re-mounted (the launch form
+ * rebuilds its layout when it switches between the entry screen and Customize).
  *
  * Sweeps (#34): with api.sweeps (experiment_launch_sweeps.js), {"sweep": [...]}
  * values round-trip: Raw JSON sweeps of settings, role cells, evaluation inputs
@@ -150,6 +158,8 @@
       meta: [], // [{ id, key, raw }] custom run_metadata rows
       nextMetaId: 1,
       extra: {}, // { report_k, dataset_version } only reachable from Raw JSON
+      metaSeed: null, // JSON of the base run_metadata the rows were seeded from
+      metaTouched: false, // the user edited the rows: a new base no longer reseeds them
       roleSearch: '',
       overriddenOnly: false,
       summaries: [], // role summary nodes rendered into the Settings form
@@ -166,6 +176,12 @@
       errors: [],
     };
     const nodes = {};
+    // State kept across a re-mount of the panel (see teardown()).
+    const SAVED_KEYS = ['config', 'invalid', 'meta', 'nextMetaId', 'extra', 'metaSeed', 'metaTouched', 'roleSearch', 'overriddenOnly'];
+    if (isPlainObject(st.advancedSaved)) {
+      SAVED_KEYS.forEach((key) => { if (has(st.advancedSaved, key)) adv[key] = st.advancedSaved[key]; });
+      st.advancedSaved = null;
+    }
     // Inside the launch form's "Advanced configuration" disclosure the panel is a
     // plain card that follows that disclosure, so there is one collapsible only.
     const nested = host.parentElement ? host.parentElement.closest('details') : null;
@@ -200,6 +216,65 @@
       return st.datasetMode === 'project' && typeof st.datasetRef === 'string' && st.datasetRef.indexOf('a:') === 0;
     }
 
+    // ── Base inputs (#31) ──────────────────────────────────────────────────
+    function baseConfig() {
+      const extra = st.evaluatorExtra;
+      return extra && isPlainObject(extra.config) ? extra.config : {};
+    }
+    function baseValue(name) {
+      const base = baseConfig();
+      return has(base, name) && base[name] != null ? base[name] : undefined;
+    }
+    /** What a field shows and sends: the edit, else the base value. */
+    function configValue(name) {
+      if (has(adv.config, name)) return adv.config[name] === null ? undefined : adv.config[name];
+      return baseValue(name);
+    }
+    function configChanged(name) {
+      return has(adv.invalid, name) || (has(adv.config, name) && !sameJson(configValue(name), baseValue(name)));
+    }
+    /** An edit: undefined unsets the field (null over a base value); the base value itself is no edit. */
+    function setConfig(name, value) {
+      const base = baseValue(name);
+      if (value === undefined) {
+        if (base !== undefined) adv.config[name] = null;
+        else delete adv.config[name];
+      } else if (base !== undefined && sameJson(value, base)) {
+        delete adv.config[name];
+      } else {
+        adv.config[name] = value;
+      }
+    }
+    function baseMeta() {
+      const meta = baseConfig().run_metadata;
+      return isPlainObject(meta) ? meta : {};
+    }
+    function metaRows(values) {
+      return Object.keys(values).filter((key) => !isReservedKey(key))
+        .map((key) => ({ id: adv.nextMetaId++, key, raw: metadataText(values[key]) }));
+    }
+    /** run_metadata rows follow the base's keys until the user edits them. */
+    function syncMetaSeed() {
+      const seed = JSON.stringify(baseMeta());
+      if (seed === adv.metaSeed) return;
+      adv.metaSeed = seed;
+      if (!adv.metaTouched) adv.meta = metaRows(baseMeta());
+    }
+    function touchMeta() {
+      adv.metaTouched = true;
+    }
+    /** "Undo all changes" of the launch form: back to the base's inputs. */
+    function resetInputs() {
+      adv.config = {};
+      adv.invalid = {};
+      adv.extra = {};
+      adv.metaTouched = false;
+      adv.metaSeed = null;
+      syncMetaSeed();
+      if (adv.open) renderInputs();
+      updateCounts();
+    }
+
     // ── Spec contribution ──────────────────────────────────────────────────
     function metadataState() {
       const values = {};
@@ -226,21 +301,27 @@
     }
 
     function decorateSpec(spec) {
+      syncMetaSeed();
       const evaluator = spec.evaluator || (spec.evaluator = {});
       const config = {};
+      const removed = [];
       Object.keys(adv.config).forEach((name) => {
-        if (!has(adv.invalid, name)) config[name] = clone(adv.config[name]);
+        if (has(adv.invalid, name)) return;
+        if (adv.config[name] === null) removed.push(name);
+        else config[name] = clone(adv.config[name]);
       });
+      // The rows are the whole run_metadata (they start as the base's keys).
       const meta = metadataState().values;
       if (Object.keys(meta).length) config.run_metadata = meta;
+      else removed.push('run_metadata');
       // Panel edits win over the base's evaluator inputs (#31 st.evaluatorExtra);
       // the Dataset section's dataset_alias wins over both.
-      if (Object.keys(config).length) {
-        const current = evaluator.config || {};
-        const merged = Object.assign({}, current, config);
-        if (has(current, 'dataset_alias')) merged.dataset_alias = current.dataset_alias;
-        evaluator.config = merged;
-      }
+      const current = isPlainObject(evaluator.config) ? evaluator.config : {};
+      const merged = Object.assign({}, current, config);
+      removed.forEach((name) => { delete merged[name]; });
+      if (has(current, 'dataset_alias') && pickerAlias()) merged.dataset_alias = current.dataset_alias;
+      if (Object.keys(merged).length) evaluator.config = merged;
+      else delete evaluator.config;
       if (adv.extra.report_k != null) evaluator.report_k = adv.extra.report_k;
       if (adv.extra.dataset_version != null && evaluator.dataset_version == null) evaluator.dataset_version = adv.extra.dataset_version;
       return spec;
@@ -417,18 +498,17 @@
     }
 
     function markConfigField(wrapper, name) {
-      wrapper.classList.toggle('xl-field--changed', has(adv.config, name) || has(adv.invalid, name));
+      wrapper.classList.toggle('xl-field--changed', configChanged(name));
       wrapper.classList.toggle('xl-field--error', has(adv.invalid, name));
     }
 
     /** Sweeps (#34) of an evaluation input: adv.config[name] = {"sweep": [...]}. */
     function configTarget(name) {
       return {
-        get: () => adv.config[name],
+        get: () => configValue(name),
         set: (value) => {
           delete adv.invalid[name];
-          if (value === undefined) delete adv.config[name];
-          else adv.config[name] = value;
+          setConfig(name, value);
         },
       };
     }
@@ -444,13 +524,13 @@
       const sweepable = !!api.sweeps && !locked && name !== 'dataset_alias' && name !== 'dataset_version';
       const target = configTarget(name);
       let control;
-      if (sweepable && isSweep(adv.config[name])) {
+      if (sweepable && isSweep(configValue(name))) {
         control = api.sweeps.editor({
           entry, pointer, label: entry.label || name, get: target.get, set: target.set,
           onChange: () => { markConfigField(wrapper, name); updateCounts(); api.schedulePreview(); },
         });
       } else if (entry.type === 'boolean') {
-        const current = has(adv.config, name) ? adv.config[name] : undefined;
+        const current = configValue(name);
         control = el('select', Object.assign({ className: 'qym-control qym-select xl-wide' }, common), [
           el('option', { value: '', text: entry.has_default ? 'Default (' + JSON.stringify(entry.default) + ')' : 'Service default' }),
           el('option', { value: 'true', selected: current === true, text: 'true' }),
@@ -463,15 +543,16 @@
           type: 'text', inputmode: numeric ? 'decimal' : null, spellcheck: 'false',
           placeholder: locked ? 'Set by the dataset picker' : formatDefault(entry),
         }, common));
-        control.value = has(adv.invalid, name) ? adv.invalid[name].raw : has(adv.config, name) && !locked ? String(adv.config[name]) : '';
+        const current = configValue(name);
+        control.value = has(adv.invalid, name) ? adv.invalid[name].raw : current !== undefined && !locked ? String(current) : '';
       }
       const error = el('div', { className: 'xl-error-text', role: 'alert', text: has(adv.invalid, name) ? adv.invalid[name].message : '' });
       if (!control.hasAttribute('data-xs-sweep')) control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', () => {
         const parsed = parseConfigInput(entry, control.value);
         delete adv.invalid[name];
-        if (parsed.unset) delete adv.config[name];
+        if (parsed.unset) setConfig(name, undefined);
         else if (parsed.error) { delete adv.config[name]; adv.invalid[name] = { message: parsed.error, raw: control.value }; }
-        else adv.config[name] = parsed.value;
+        else setConfig(name, parsed.value);
         error.textContent = has(adv.invalid, name) ? adv.invalid[name].message : '';
         markConfigField(wrapper, name);
         updateCounts();
@@ -480,11 +561,11 @@
       const reset = el('button', {
         type: 'button', className: 'xl-link-btn xl-reset', text: 'Reset',
         onClick: () => {
-          const swept = isSweep(adv.config[name]);
-          delete adv.config[name];
+          const swept = isSweep(configValue(name));
+          delete adv.config[name]; // back to the starting point's value, if any
           delete adv.invalid[name];
-          if (swept) { renderInputs(); updateCounts(); api.schedulePreview(); return; }
-          control.value = '';
+          if (swept || isSweep(configValue(name)) || control.tagName === 'SELECT') { renderInputs(); updateCounts(); api.schedulePreview(); return; }
+          control.value = configValue(name) !== undefined && !locked ? String(configValue(name)) : '';
           error.textContent = '';
           markConfigField(wrapper, name);
           updateCounts();
@@ -496,7 +577,7 @@
         el('label', { className: 'xl-field-label', for: id, text: entry.label || name }),
         el('span', { className: 'xl-field-name', text: name }),
         el('span', { className: 'xl-spacer' }),
-        sweepable && !isSweep(adv.config[name]) ? api.sweeps.toggle({ entry, label: entry.label || name, get: target.get, set: target.set }) : null,
+        sweepable && !isSweep(configValue(name)) ? api.sweeps.toggle({ entry, label: entry.label || name, get: target.get, set: target.set }) : null,
         reset,
       ]));
       wrapper.appendChild(control);
@@ -524,11 +605,11 @@
       adv.meta.forEach((row) => {
         const keyInput = el('input', {
           className: 'qym-control qym-input xl-mono', type: 'text', maxlength: '200', placeholder: 'key', 'aria-label': 'run_metadata key', value: row.key, spellcheck: 'false',
-          onInput: (e) => { row.key = e.target.value; updateMetadataErrors(); updateCounts(); api.schedulePreview(); },
+          onInput: (e) => { row.key = e.target.value; touchMeta(); updateMetadataErrors(); updateCounts(); api.schedulePreview(); },
         });
         const valueInput = el('input', {
           className: 'qym-control qym-input xl-mono', type: 'text', maxlength: '5000', placeholder: 'value (text or JSON)', 'aria-label': 'run_metadata value', value: row.raw, spellcheck: 'false',
-          onInput: (e) => { row.raw = e.target.value; updateMetadataErrors(); api.schedulePreview(); },
+          onInput: (e) => { row.raw = e.target.value; touchMeta(); updateMetadataErrors(); api.schedulePreview(); },
         });
         const error = el('div', { className: 'xl-error-text xa-meta-error', role: 'alert' });
         const node = el('div', { className: 'xa-meta-row', 'data-xa-meta-row': String(row.id) }, [
@@ -536,7 +617,7 @@
           valueInput,
           el('button', {
             type: 'button', className: 'xl-link-btn', text: 'Remove', 'aria-label': 'Remove run_metadata key',
-            onClick: () => { adv.meta = adv.meta.filter((r) => r !== row); renderInputs(); updateCounts(); api.schedulePreview(); },
+            onClick: () => { adv.meta = adv.meta.filter((r) => r !== row); touchMeta(); renderInputs(); updateCounts(); api.schedulePreview(); },
           }),
           error,
         ]);
@@ -552,7 +633,7 @@
         el('div', { className: 'xl-row' }, [
           el('button', {
             type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xa-add-meta': '1', text: '+ Add key',
-            onClick: () => { adv.meta.push({ id: adv.nextMetaId++, key: '', raw: '' }); renderInputs(); const rows = nodes.metaRows; if (rows.length) rows[rows.length - 1].keyInput.focus(); },
+            onClick: () => { adv.meta.push({ id: adv.nextMetaId++, key: '', raw: '' }); touchMeta(); renderInputs(); const rows = nodes.metaRows; if (rows.length) rows[rows.length - 1].keyInput.focus(); },
           }),
           el('span', { className: 'xl-hint' }, ['Set by the platform, read-only: '].concat(platformKeys.map((k) => api.tag(k, 'data')))),
         ]),
@@ -587,6 +668,7 @@
     function renderInputs() {
       const panel = nodes.panels.inputs;
       const children = [];
+      syncMetaSeed();
       if (adv.panelError) children.push(el('div', { className: 'xl-callout xl-callout--error', role: 'alert', text: adv.panelError }));
       if (!adv.panel && !adv.panelError) children.push(el('div', { className: 'xl-hint', text: 'Loading evaluation inputs…' }));
       if (adv.panel) {
@@ -599,12 +681,24 @@
         children.push(metadataEditor());
       }
       const extras = [];
-      if (adv.extra.report_k != null) extras.push('evaluator.report_k = ' + adv.extra.report_k);
-      if (adv.extra.dataset_version != null) extras.push('evaluator.dataset_version = ' + adv.extra.dataset_version);
+      const base = isPlainObject(st.evaluatorExtra) ? st.evaluatorExtra : {};
+      const reportK = adv.extra.report_k != null ? adv.extra.report_k : base.report_k;
+      const datasetVersion = adv.extra.dataset_version != null ? adv.extra.dataset_version : base.dataset_version;
+      if (reportK != null) extras.push('evaluator.report_k = ' + JSON.stringify(reportK));
+      if (datasetVersion != null) extras.push('evaluator.dataset_version = ' + JSON.stringify(datasetVersion));
       if (extras.length) {
-        children.push(el('div', { className: 'xl-callout', role: 'note' }, [
-          el('div', null, [el('div', { text: 'Also sent, set from Raw JSON:' }), el('div', { className: 'xl-mono', text: extras.join('; ') })]),
-          el('button', { type: 'button', className: 'xl-link-btn', text: 'Remove', onClick: () => { adv.extra = {}; renderInputs(); api.schedulePreview(); } }),
+        children.push(el('div', { className: 'xl-callout', role: 'note', 'data-xa-extras': '1' }, [
+          el('div', null, [el('div', { text: 'Also sent (from the starting point or Raw JSON):' }), el('div', { className: 'xl-mono', text: extras.join('; ') })]),
+          el('button', {
+            type: 'button', className: 'xl-link-btn', text: 'Remove',
+            onClick: () => {
+              adv.extra = {};
+              delete base.report_k;
+              delete base.dataset_version;
+              renderInputs();
+              api.schedulePreview();
+            },
+          }),
         ]));
       }
       nodes.owned = el('div');
@@ -1040,12 +1134,29 @@
       api.pruneSecrets();
       st.values = result.values;
       st.invalid = {};
-      adv.config = config;
+      // Only what differs from the starting point is an edit; a base input the
+      // document leaves out is cleared (null), so Raw JSON can remove it too.
+      const base = baseConfig();
+      const edits = {};
+      Object.keys(config).forEach((name) => {
+        if (!sameJson(config[name], baseValue(name))) edits[name] = config[name];
+      });
+      Object.keys(base).forEach((name) => {
+        if (name !== 'run_metadata' && !has(config, name) && baseValue(name) !== undefined) edits[name] = null;
+      });
+      adv.config = edits;
       adv.invalid = {};
       adv.meta = result.evaluator.meta.map((row) => ({ id: adv.nextMetaId++, key: row.key, raw: row.raw }));
+      adv.metaSeed = JSON.stringify(baseMeta());
+      adv.metaTouched = true;
       adv.extra = {};
       if (result.evaluator.report_k != null) adv.extra.report_k = result.evaluator.report_k;
       if (version) adv.extra.dataset_version = version;
+      if (isPlainObject(st.evaluatorExtra)) {
+        // The document is the whole truth: base extras it leaves out are dropped.
+        if (result.evaluator.report_k == null) delete st.evaluatorExtra.report_k;
+        if (!version) delete st.evaluatorExtra.dataset_version;
+      }
       st.links = result.links || undefined;
       json.dirty = false;
       api.rerender();
@@ -1058,7 +1169,14 @@
     // ── Panel shell ────────────────────────────────────────────────────────
     function updateCounts() {
       if (!nodes.counts) return;
-      const inputs = Object.keys(adv.config).length + Object.keys(adv.invalid).length + adv.meta.filter((r) => r.key.trim()).length;
+      syncMetaSeed();
+      // Inputs that are set (the starting point's included), not only the edits.
+      const names = {};
+      Object.keys(baseConfig()).concat(Object.keys(adv.config)).forEach((name) => {
+        if (name !== 'run_metadata' && configValue(name) !== undefined) names[name] = true;
+      });
+      Object.keys(adv.invalid).forEach((name) => { names[name] = true; });
+      const inputs = Object.keys(names).length + adv.meta.filter((r) => r.key.trim()).length;
       nodes.counts.inputs.textContent = String(inputs);
       const loading = !st.selected.length || st.selected.some((id) => !st.envData[id] || st.envData[id].loading);
       nodes.counts.roles.textContent = loading ? '0' : String(overriddenRoleCount());
@@ -1179,6 +1297,10 @@
     }
 
     function teardown() {
+      // The launch form re-mounts the panel when it rebuilds its layout: keep the edits.
+      const saved = {};
+      SAVED_KEYS.forEach((key) => { saved[key] = adv[key]; });
+      st.advancedSaved = saved;
       adv.active = false;
       if (adv.frame) cancelAnimationFrame(adv.frame);
       adv.frame = null;
@@ -1191,7 +1313,7 @@
 
     build();
     loadPanel();
-    return { decorateSpec, localErrors, onSpecChange, reveal, roleTableSummary, open, teardown };
+    return { decorateSpec, localErrors, onSpecChange, reveal, roleTableSummary, open, resetInputs, teardown };
   }
 
   window.QymLaunchAdvanced = { mount };

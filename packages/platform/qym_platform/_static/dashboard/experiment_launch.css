@@ -179,3 +179,8 @@
 @media (max-width: 960px) {
   .xl-entry-where, .xl-start-grid, .xl-start-grid--compact, .xl-steps { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── Customize tabs: Setup (the wizard) and Evaluation config ── */
+.xl-tabs { margin-bottom: var(--space-md); }
+.xl-tab { display: inline-flex; align-items: center; gap: var(--space-xs); }
+.xl-tab-panel[hidden], .xl-steps[hidden], .xl-tab > [hidden] { display: none; }

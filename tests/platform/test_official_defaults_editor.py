@@ -212,10 +212,16 @@ def test_launch_form_has_a_small_editor_mode():
     # priority, name or dry-run preview; the last step reviews and publishes.
     groups = LAUNCH[LAUNCH.index("function wizardGroups(newEnvButton)") :]
     editor_groups = groups[: groups.index("      return {\n        1: [")]
-    for section in ("'dataset'", "'base'", "'models'", "'settings'", "data-xl-advanced"):
+    for section in ("'dataset'", "'base'", "'models'"):
         assert section in editor_groups
     for section in ("'environments'", "'run'", "data-xl-sweeps"):
         assert section not in editor_groups
+    # Settings live on the Evaluation config tab; the editor gets no sweeps there.
+    config = LAUNCH[LAUNCH.index("    function configGroup()") :]
+    config = config[: config.index("    function tabBar()")]
+    for part in ("section('settings'", "'data-xl-advanced': '1'"):
+        assert part in config, part
+    assert "editor ? null : el('div', { 'data-xl-sweeps': '1'" in config
     assert "if (editor) { renderWizardLayout(null); return; }" in LAUNCH
     assert "label: 'Review and ' + (opts.saveVerb || 'publish')" in LAUNCH
     assert "if (editor) { renderPreviewSoon(); return; }" in LAUNCH

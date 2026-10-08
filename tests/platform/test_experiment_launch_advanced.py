@@ -144,7 +144,8 @@ def test_module_mounts_three_separate_cards():
     assert "'data-xa-section': section.id" in MODULE
     # Role overrides sit under the form's environment overrides.
     assert "[data-xl-advanced-slot=\"roles\"]" in MODULE
-    assert LAUNCH.count("'data-xl-advanced-slot': 'roles'") == 2  # launch + editor
+    # One Evaluation config tab, shared by the launch form and the editor.
+    assert LAUNCH.count("'data-xl-advanced-slot': 'roles'") == 1
 
 
 def test_evaluation_inputs_tab():
