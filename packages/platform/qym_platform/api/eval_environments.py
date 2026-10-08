@@ -517,7 +517,9 @@ def _adopt_evaluator(
     )
     changed = (previous.id if previous else None) != (row.id if row else None)
     diff = (
-        evaluator_schema_diff(_evaluator_descriptor(previous), _evaluator_descriptor(row))
+        evaluator_schema_diff(
+            _evaluator_descriptor(previous), _evaluator_descriptor(row)
+        )
         if changed
         else {"added": [], "removed": [], "changed_types": []}
     )
@@ -1055,8 +1057,8 @@ def get_environment_form(
         "schema_id": schema.id,
         "schema_hash": schema.schema_hash,
         "descriptor": descriptor_for_schema(schema),
-        # The evaluator schema in use (guide v1.1 §3.4); the launch form's
-        # Evaluation inputs card reads its descriptor from /experiments/evaluator-config.
+        # The evaluator schema in use (guide v1.1 §3.4). The Evaluation inputs card
+        # reads its descriptor from /experiments/evaluator-config.
         "evaluator": {
             "status": env.evaluator_schema_status or "unknown",
             "schema_id": evaluator.id if evaluator else None,

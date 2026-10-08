@@ -176,7 +176,9 @@ def test_panel_union_reports_fields_missing_per_environment(schema):
         "metric_concurrency": ["e1"],
     }
     # Static fields first (the first environment), the new one after.
-    assert panel["fields"][: len(EVALUATOR_INPUT_FIELDS)] == list(EVALUATOR_INPUT_FIELDS)
+    assert panel["fields"][: len(EVALUATOR_INPUT_FIELDS)] == list(
+        EVALUATOR_INPUT_FIELDS
+    )
     assert panel["fields"][-1] == "metric_concurrency"
     assert "/versioning_details" in panel["descriptor"]["fields"]
 
@@ -216,8 +218,7 @@ def test_top_level_unknown_keys_and_dataset(schema):
     doc["evaluator"]["metrics"] = ["exact_match"]  # silently dropped by the service
     del doc["evaluator"]["dataset"]
     errors = {
-        e["pointer"]: e["rule"]
-        for e in _validate(doc, evaluator_schema=schema).errors
+        e["pointer"]: e["rule"] for e in _validate(doc, evaluator_schema=schema).errors
     }
     assert errors == {
         "/evaluator/metrics": "unknown_key",

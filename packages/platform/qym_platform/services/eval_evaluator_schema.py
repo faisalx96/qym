@@ -298,7 +298,11 @@ def evaluator_schema_diff(
         before = old_fields.get(pointer)
         if before is not None and before.get("type") != entry.get("type"):
             changed_types.append(
-                {"pointer": pointer, "from": before.get("type"), "to": entry.get("type")}
+                {
+                    "pointer": pointer,
+                    "from": before.get("type"),
+                    "to": entry.get("type"),
+                }
             )
     return {"added": added, "removed": removed, "changed_types": changed_types}
 

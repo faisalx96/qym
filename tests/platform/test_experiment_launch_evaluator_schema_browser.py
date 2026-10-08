@@ -259,4 +259,3 @@ def test_a_refreshed_evaluator_schema_reloads_the_inputs(launch):
     )
     assert launch.panel_queries[-1] == ["e1"]
     assert len(launch.panel_queries) >= 2  # loaded again for the new schema
-
