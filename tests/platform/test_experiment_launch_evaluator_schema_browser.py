@@ -168,7 +168,7 @@ def launch(browser):  # noqa: F811
 def _inputs(launch, start="official"):
     page = launch.page
     page.locator(f'[data-xl-view="entry"] [data-xl-start="{start}"]').click()
-    launch.customize("config")
+    launch.customize("eval")
     panel = page.locator('[data-xa-panel="inputs"]')
     panel.locator("[data-xa-config]").wait_for()
     return panel

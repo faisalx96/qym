@@ -211,17 +211,20 @@ def test_launch_form_has_a_small_editor_mode():
     # Editor mode is the launch wizard over one environment: no environments,
     # priority, name or dry-run preview; the last step reviews and publishes.
     groups = LAUNCH[LAUNCH.index("function wizardGroups(newEnvButton)") :]
-    editor_groups = groups[: groups.index("      return {\n        1: [")]
+    groups = groups[: groups.index("    function stepChangeCount(")]
+    editor_groups = groups[groups.index("      if (editor) {") : groups.index("      return Object.assign({\n        1: [")]
     for section in ("'dataset'", "'base'", "'models'"):
         assert section in editor_groups
-    for section in ("'environments'", "'run'", "data-xl-sweeps"):
+    for section in ("'environments'", "'run'", "data-xl-sweeps", "'settings'"):
         assert section not in editor_groups
-    # Settings live on the Evaluation config tab; the editor gets no sweeps there.
-    config = LAUNCH[LAUNCH.index("    function configGroup()") :]
-    config = config[: config.index("    function tabBar()")]
-    for part in ("section('settings'", "'data-xl-advanced': '1'"):
-        assert part in config, part
-    assert "editor ? null : el('div', { 'data-xl-sweeps': '1'" in config
+    # Steps 4 to 6 are shared: Environment configurations (no sweeps in the
+    # editor), Evaluation configurations, then the review step with Raw JSON.
+    shared = groups[groups.index("      const shared = {") : groups.index("      if (editor) {")]
+    for part in ("section('settings'", "'data-xl-advanced': '1'", "'data-xl-advanced-slot': 'json'"):
+        assert part in shared, part
+    assert "editor ? null : el('div', { 'data-xl-sweeps': '1'" in shared
+    for label in ("Environment configurations", "Evaluation configurations"):
+        assert LAUNCH.count(f"label: '{label}'") == 2, label
     assert "if (editor) { renderWizardLayout(null); return; }" in LAUNCH
     assert "label: 'Review and ' + (opts.saveVerb || 'publish')" in LAUNCH
     assert "if (editor) { renderPreviewSoon(); return; }" in LAUNCH

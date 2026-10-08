@@ -856,7 +856,7 @@ def test_version_read_can_remap_onto_current_schema(client, env, session_factory
 
 
 def test_saved_preset_round_trips_every_evaluation_value(client, env):
-    """What the launch form saves is what it loads back (Evaluation config tab):
+    """What the launch form saves is what it loads back (Environment / Evaluation configurations steps):
     nested overrides, role cells, evaluator.config inputs, run_metadata, report_k."""
     doc = _doc()
     doc["evaluator"]["report_k"] = 2
