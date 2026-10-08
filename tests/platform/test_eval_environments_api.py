@@ -45,6 +45,7 @@ from qym_platform.deps import get_db
 from qym_platform.services.eval_service_client import EvalServiceClient
 
 FIXTURE = Path(__file__).parent / "fixtures" / "eval_env_overrides_schema.json"
+EVALUATOR_FIXTURE = Path(__file__).parent / "fixtures" / "eval_evaluator_schema.json"
 P1, P2 = "project-1", "project-2"
 ADMIN = "admin@example.com"
 MANAGER = "manager@example.com"
@@ -70,6 +71,10 @@ class FakeService:
         self.valid_keys = {KEY, "rotated-key-5555"}
         self.requests: list[httpx.Request] = []
         self.down = False
+        # GET /evals/evaluator/schema (guide v1.1): None = an older service (404);
+        # evaluator_status forces another answer (e.g. 500).
+        self.evaluator_schema = None
+        self.evaluator_status = None
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -81,6 +86,14 @@ class FakeService:
         path = request.url.path
         if path.endswith("/evals/env-overrides/schema"):
             return httpx.Response(200, json=self.schema)
+        if path.endswith("/evals/evaluator/schema"):
+            if self.evaluator_status is not None:
+                return httpx.Response(
+                    self.evaluator_status, json={"detail": "boom api_key=sk-x"}
+                )
+            if self.evaluator_schema is None:
+                return httpx.Response(404, json={"detail": "Not Found"})
+            return httpx.Response(200, json=self.evaluator_schema)
         if path.endswith("/evals"):
             return httpx.Response(
                 200, json={"total": 0, "limit": 1, "offset": 0, "items": []}
@@ -201,9 +214,17 @@ def test_create_tests_fetches_schema_and_proposes_slots(
     assert keys["endpoint:primary"]["required"] is True
     assert keys["endpoint:primary"]["status"] == "proposed"
 
-    # Auth probe then schema fetch, both authenticated with the env key.
+    # Auth probe then both schema fetches, all authenticated with the env key. This
+    # service predates guide v1.1 (404 on the evaluator schema): no error.
     paths = [r.url.path for r in service.requests]
-    assert paths == ["/prefix/evals", "/prefix/evals/env-overrides/schema"]
+    assert paths == [
+        "/prefix/evals",
+        "/prefix/evals/env-overrides/schema",
+        "/prefix/evals/evaluator/schema",
+    ]
+    assert env["evaluator_schema_status"] == "unsupported"
+    assert env["evaluator_schema_hash"] is None
+    assert body["evaluator"]["supported"] is False
     assert service.requests[0].url.params["limit"] == "1"
 
     with session_factory() as s:
@@ -746,3 +767,170 @@ def test_url_change_resets_connection_key_opt_in(client):
         json={"base_url": "https://moved2.example.com", "allow_connection_keys": True},
     )
     assert res.json()["allow_connection_keys"] is True
+
+
+# --------------------------------------------------------------------------- evaluator schema
+
+
+def _evaluator_schema() -> dict:
+    return json.loads(EVALUATOR_FIXTURE.read_text())
+
+
+def test_create_on_a_v11_service_stores_the_evaluator_schema(
+    client, service, session_factory
+):
+    from qym_platform.db.models import EvalEnvironmentEvaluatorSchema
+
+    service.evaluator_schema = _evaluator_schema()
+    body = _created(client)
+    env = body["environment"]
+    assert env["evaluator_schema_status"] == "available"
+    assert env["evaluator_schema_hash"] and env["current_evaluator_schema_id"]
+    assert body["evaluator"]["supported"] is True
+    with session_factory() as s:
+        row = s.get(EvalEnvironmentEvaluatorSchema, env["current_evaluator_schema_id"])
+        assert row.environment_id == env["id"]
+        assert row.schema_json["title"] == "EvaluatorInputs"
+        fields = row.form_descriptor["fields"]
+        assert fields["/metric_concurrency"]["read_only"] is False
+        assert fields["/versioning_details"]["read_only"] is True
+    listed = client.get(_url(), headers=_headers(MEMBER)).json()["environments"]
+    assert listed[0]["evaluator_schema_hash"] == env["evaluator_schema_hash"]
+    form = client.get(_url(suffix=f"/{env['id']}/form"), headers=_headers(MEMBER))
+    assert form.json()["evaluator"] == {
+        "status": "available",
+        "schema_id": env["current_evaluator_schema_id"],
+        "schema_hash": env["evaluator_schema_hash"],
+    }
+
+
+def test_refresh_detects_evaluator_schema_changes(client, service, session_factory):
+    from qym_platform.db.models import EvalEnvironmentEvaluatorSchema
+
+    env_id = _created(client)["environment"]["id"]
+    refresh = _url(suffix=f"/{env_id}/schema/refresh")
+    # An older service stays on the static mirror: no change, no error (B18: members).
+    same = client.post(refresh, headers=_headers(MEMBER)).json()
+    assert same["changed"] is False
+    assert same["evaluator"]["supported"] is False
+    assert same["evaluator"]["status"] == "unsupported"
+    assert same["evaluator"]["error"] is None
+
+    # The service is upgraded to v1.1: the evaluator schema is adopted.
+    service.evaluator_schema = _evaluator_schema()
+    first = client.post(refresh, headers=_headers(MEMBER)).json()
+    assert first["changed"] is True and first["env_overrides_changed"] is False
+    assert first["added"] == []  # env_overrides pointers
+    evaluator = first["evaluator"]
+    assert evaluator["changed"] is True and evaluator["supported"] is True
+    assert {"/metric_concurrency", "/versioning_details"} <= set(evaluator["added"])
+    assert evaluator["previous_schema_id"] is None
+    schema_a = evaluator["schema_id"]
+
+    again = client.post(refresh, headers=_headers(MEMBER)).json()
+    assert again["changed"] is False and again["evaluator"]["changed"] is False
+    assert again["evaluator"]["schema_id"] == schema_a
+
+    # A new version drops a key and retypes another.
+    changed = _evaluator_schema()
+    props = changed["$defs"]["EvaluatorRequestConfig"]["properties"]
+    props.pop("metric_concurrency")
+    props["git_branch"] = {"type": "integer"}
+    service.evaluator_schema = changed
+    diff = client.post(refresh, headers=_headers(MEMBER)).json()["evaluator"]
+    assert diff["changed"] is True and diff["previous_schema_id"] == schema_a
+    assert diff["removed"] == ["/metric_concurrency"]
+    assert {"pointer": "/git_branch", "from": "string", "to": "integer"} in diff[
+        "changed_types"
+    ]
+
+    # A failing call (5xx) keeps what is stored and is only reported.
+    service.evaluator_status = 500
+    kept = client.post(refresh, headers=_headers(MEMBER))
+    assert kept.status_code == 200, kept.text
+    kept = kept.json()["evaluator"]
+    assert kept["changed"] is False and kept["schema_id"] == diff["schema_id"]
+    assert kept["error"] and "sk-x" not in kept["error"]
+
+    # Downgraded to an older service: back to the static mirror.
+    service.evaluator_status = None
+    service.evaluator_schema = None
+    down = client.post(refresh, headers=_headers(MEMBER)).json()["evaluator"]
+    assert down["changed"] is True and down["supported"] is False
+    assert "/metric_concurrency" not in down["added"]
+    with session_factory() as s:
+        env = s.get(EvalEnvironment, env_id)
+        assert env.current_evaluator_schema_id is None
+        assert env.evaluator_schema_status == "unsupported"
+        # History is kept.
+        rows = s.query(EvalEnvironmentEvaluatorSchema).filter_by(environment_id=env_id)
+        assert rows.count() == 2
+
+
+def test_test_endpoint_reports_the_evaluator_schema(client, service):
+    env_id = _created(client)["environment"]["id"]
+    test = _url(suffix=f"/{env_id}/test")
+    body = client.post(test, headers=_headers(MANAGER)).json()
+    assert body["evaluator_schema"] == {
+        "supported": False,
+        "schema_hash": None,
+        "changed": False,
+        "error": None,
+    }
+    service.evaluator_schema = _evaluator_schema()
+    body = client.post(test, headers=_headers(MANAGER)).json()
+    assert body["evaluator_schema"]["supported"] is True
+    assert body["evaluator_schema"]["changed"] is True
+
+
+def test_evaluator_config_panel_per_environment(client, service):
+    old_env = _created(client)["environment"]["id"]
+    service.evaluator_schema = _evaluator_schema()
+    new_env = _created(client, name="v11", base_url="https://v11.example.com")[
+        "environment"
+    ]["id"]
+    panel_url = f"/v1/projects/{P1}/experiments/evaluator-config"
+
+    static = client.get(panel_url, headers=_headers(MEMBER)).json()
+    assert static["source"] == "static"
+    assert "metric_concurrency" not in static["fields"]
+
+    old = client.get(
+        panel_url, headers=_headers(MEMBER), params={"environment_id": old_env}
+    ).json()
+    assert old["source"] == "static" and old["missing"] == {}
+    assert old["environments"][0]["status"] == "unsupported"
+    assert "/metric_concurrency" not in old["descriptor"]["fields"]
+
+    new = client.get(
+        panel_url, headers=_headers(MEMBER), params={"environment_id": new_env}
+    ).json()
+    assert new["source"] == "environment"
+    fields = new["fields"]
+    assert fields.index("metric_concurrency") == fields.index("max_concurrency") + 1
+    assert "versioning_details" not in fields
+    assert "versioning_details" in new["platform_owned_present"]
+
+    both = client.get(
+        panel_url,
+        headers=_headers(MEMBER),
+        params=[("environment_id", new_env), ("environment_id", old_env)],
+    ).json()
+    assert both["source"] == "mixed"
+    assert both["missing"] == {"metric_concurrency": [old_env]}
+
+    other = client.get(
+        panel_url, headers=_headers(MEMBER), params={"environment_id": "nope"}
+    )
+    assert other.status_code == 404
+
+
+def test_delete_removes_evaluator_schemas(client, service, session_factory):
+    from qym_platform.db.models import EvalEnvironmentEvaluatorSchema
+
+    service.evaluator_schema = _evaluator_schema()
+    env_id = _created(client)["environment"]["id"]
+    res = client.delete(_url(suffix=f"/{env_id}"), headers=_headers(MANAGER))
+    assert res.json()["deleted"] is True
+    with session_factory() as s:
+        assert s.query(EvalEnvironmentEvaluatorSchema).count() == 0

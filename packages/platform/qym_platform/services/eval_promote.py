@@ -36,6 +36,7 @@ from qym_platform.services.eval_config_snapshot import (
     job_qym_config,
     run_metadata_values,
 )
+from qym_platform.services.eval_evaluator_schema import environment_evaluator_schema
 from qym_platform.services.eval_experiments import redact_secret_refs
 from qym_platform.services.eval_model_slots import list_model_slots
 from qym_platform.services.eval_presets import PresetError
@@ -255,7 +256,11 @@ def promote_prefill(
         raise PresetError(422, f"Unknown source kind {kind!r}")
     document, from_schema, source = loader(db, env, source_id)
     result = eval_presets.remap(
-        document, from_schema, schema, to_slots=list_model_slots(db, schema.id)
+        document,
+        from_schema,
+        schema,
+        to_slots=list_model_slots(db, schema.id),
+        evaluator_schema=environment_evaluator_schema(db, env),
     )
     config, unbound = unbind_temporary(result.config)
     for item in unbound:

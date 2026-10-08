@@ -1,5 +1,13 @@
 """Evaluation Service environments: CRUD, connection test, schema refresh, slots.
 
+Each environment has two schemas, both re-read by the connection test, creation and
+"refresh schema": the ``env_overrides`` one (``GET /evals/env-overrides/schema``) and,
+from guide v1.1, the ``evaluator`` one (``GET /evals/evaluator/schema``,
+``eval_evaluator_schema``). A service without the second endpoint (404) is marked
+``evaluator_schema_status = "unsupported"`` and the platform keeps its static
+``EvaluatorRequestConfig``; any other failure of that call leaves the stored evaluator
+schema alone and is reported as ``evaluator.error``, never failing the refresh.
+
 Routes live under ``/v1/projects/{project_id}/eval-environments`` (plan §5.1).
 Project members may read; project managers (or platform admins) may write, test
 and refresh, because those calls send the decrypted environment key outbound.
@@ -25,6 +33,7 @@ from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db import models as db_models
 from qym_platform.db.models import (
     EvalEnvironment,
+    EvalEnvironmentEvaluatorSchema,
     EvalEnvironmentSchema,
     EvalModelSlot,
     EvalModelSlotStatus,
@@ -43,6 +52,20 @@ from qym_platform.secrets import (
     encryption_available,
 )
 from qym_platform.services.eval_bindings import connection_options
+from qym_platform.services.eval_config import (
+    PLATFORM_OWNED_CONFIG_FIELDS,
+    RESERVED_METADATA_PREFIX,
+    evaluator_config_descriptor,
+)
+from qym_platform.services.eval_evaluator_schema import (
+    adopt_evaluator_schema,
+    current_evaluator_schema,
+    descriptor_for_row,
+    evaluator_schema_diff,
+)
+from qym_platform.services.eval_evaluator_schema import (
+    schema_hash as evaluator_schema_hash,
+)
 from qym_platform.services.eval_model_slots import (
     SlotValidationError,
     confirm_model_slots,
@@ -262,19 +285,58 @@ def _remote_http_error(exc: Exception, api_key: str) -> HTTPException:
 _REMOTE_ERRORS = (EvalServiceError, LlmEndpointValidationError)
 
 
+class _EvaluatorFetch:
+    """Outcome of ``GET /evals/evaluator/schema``.
+
+    ``schema`` is the fetched schema, or ``None`` when the service has no endpoint
+    (``supported`` false). ``error`` is set when the call failed otherwise: the stored
+    evaluator schema is then kept as it is.
+    """
+
+    __slots__ = ("schema", "supported", "error")
+
+    def __init__(
+        self,
+        schema: Optional[Dict[str, Any]] = None,
+        supported: bool = True,
+        error: Optional[str] = None,
+    ) -> None:
+        self.schema = schema
+        self.supported = supported
+        self.error = error
+
+
+async def _fetch_evaluator_schema(
+    client: EvalServiceClient, api_key: str
+) -> _EvaluatorFetch:
+    """The evaluator schema (guide v1.1 §3.4); never raises for a remote failure."""
+    try:
+        schema = await client.evaluator_schema()
+    except _REMOTE_ERRORS as exc:
+        return _EvaluatorFetch(error=_remote_http_error(exc, api_key).detail)
+    if schema is None:
+        return _EvaluatorFetch(supported=False)
+    if not isinstance(schema, dict):
+        return _EvaluatorFetch(
+            error="Evaluation service returned an invalid evaluator schema"
+        )
+    return _EvaluatorFetch(schema=schema)
+
+
 async def _probe(
     factory: EvalClientFactory, base_url: str, api_key: str
-) -> Dict[str, Any]:
-    """Auth probe (``GET /evals?limit=1``) then fetch the env-overrides schema."""
+) -> Tuple[Dict[str, Any], _EvaluatorFetch]:
+    """Auth probe (``GET /evals?limit=1``), then fetch both schemas."""
     client = factory(base_url, api_key)
     try:
         await client.list(limit=1)
         schema = await client.env_overrides_schema()
+        evaluator = await _fetch_evaluator_schema(client, api_key)
     finally:
         await client.aclose()
     if not isinstance(schema, dict):
         raise EvalServiceError("Evaluation service returned an invalid schema")
-    return schema
+    return schema, evaluator
 
 
 def _get_environment(db: Session, project_id: str, env_id: str) -> EvalEnvironment:
@@ -422,6 +484,64 @@ def _adopt_schema(
     return row, previous
 
 
+def _evaluator_descriptor(
+    row: Optional[EvalEnvironmentEvaluatorSchema],
+) -> Dict[str, Any]:
+    """``evaluator.config`` descriptor of a row; the static mirror's for ``None``."""
+    if row is None:
+        return evaluator_config_descriptor()
+    return descriptor_for_row(
+        row,
+        platform_owned=PLATFORM_OWNED_CONFIG_FIELDS,
+        reserved_prefix=RESERVED_METADATA_PREFIX,
+    )
+
+
+def _adopt_evaluator(
+    db: Session, env: EvalEnvironment, fetched: _EvaluatorFetch
+) -> Dict[str, Any]:
+    """Apply a fetch to the environment; the ``evaluator`` block of a refresh.
+
+    ``changed`` compares the effective schema (the static mirror counts as one), so
+    a first fetch on an older service, ``unknown`` -> ``unsupported``, is no change.
+    """
+    previous = current_evaluator_schema(db, env)
+    if fetched.error is not None:
+        return {
+            "status": env.evaluator_schema_status,
+            "supported": previous is not None,
+            "changed": False,
+            "added": [],
+            "removed": [],
+            "changed_types": [],
+            "schema_id": previous.id if previous else None,
+            "schema_hash": previous.schema_hash if previous else None,
+            "previous_schema_id": previous.id if previous else None,
+            "error": fetched.error,
+        }
+    row, previous = adopt_evaluator_schema(
+        db, env, fetched.schema if fetched.supported else None
+    )
+    changed = (previous.id if previous else None) != (row.id if row else None)
+    diff = (
+        evaluator_schema_diff(
+            _evaluator_descriptor(previous), _evaluator_descriptor(row)
+        )
+        if changed
+        else {"added": [], "removed": [], "changed_types": []}
+    )
+    return {
+        "status": env.evaluator_schema_status,
+        "supported": row is not None,
+        "changed": changed,
+        **diff,
+        "schema_id": row.id if row else None,
+        "schema_hash": row.schema_hash if row else None,
+        "previous_schema_id": previous.id if previous else None,
+        "error": None,
+    }
+
+
 def _schema_diff(old: Optional[Dict[str, Any]], new: Dict[str, Any]) -> Dict[str, Any]:
     old_fields = (old or {}).get("fields") or {}
     new_fields = new.get("fields") or {}
@@ -490,6 +610,7 @@ def _serialize_environment(
     schema: Optional[EvalEnvironmentSchema],
     slot_summary: Dict[str, Any],
     official: Optional[Dict[str, Any]] = None,
+    evaluator_schema: Optional[EvalEnvironmentEvaluatorSchema] = None,
 ) -> Dict[str, Any]:
     official = official or {}
     return {
@@ -508,6 +629,15 @@ def _serialize_environment(
         "current_schema_id": env.current_schema_id,
         "schema_hash": schema.schema_hash if schema else None,
         "schema_fetched_at": to_api_timestamp(schema.fetched_at) if schema else None,
+        # GET /evals/evaluator/schema (guide v1.1): unknown | available | unsupported.
+        "evaluator_schema_status": env.evaluator_schema_status or "unknown",
+        "current_evaluator_schema_id": env.current_evaluator_schema_id,
+        "evaluator_schema_hash": (
+            evaluator_schema.schema_hash if evaluator_schema else None
+        ),
+        "evaluator_schema_fetched_at": (
+            to_api_timestamp(evaluator_schema.fetched_at) if evaluator_schema else None
+        ),
         "health_status": env.health_status,
         "health_checked_at": to_api_timestamp(env.health_checked_at),
         "health_error": env.health_error,
@@ -531,7 +661,11 @@ def _environment_payload(db: Session, env: EvalEnvironment) -> Dict[str, Any]:
     )
     slots = list_model_slots(db, schema.id) if schema else []
     return _serialize_environment(
-        env, schema, _slot_summary(slots), _official_presets(db, [env.id]).get(env.id)
+        env,
+        schema,
+        _slot_summary(slots),
+        _official_presets(db, [env.id]).get(env.id),
+        current_evaluator_schema(db, env),
     )
 
 
@@ -561,6 +695,19 @@ def list_environments(
     envs = query.order_by(EvalEnvironment.is_active.desc(), EvalEnvironment.name).all()
 
     schema_ids = [e.current_schema_id for e in envs if e.current_schema_id]
+    evaluator_ids = [
+        e.current_evaluator_schema_id for e in envs if e.current_evaluator_schema_id
+    ]
+    evaluator_rows: Dict[str, EvalEnvironmentEvaluatorSchema] = (
+        {
+            row.id: row
+            for row in db.query(EvalEnvironmentEvaluatorSchema).filter(
+                EvalEnvironmentEvaluatorSchema.id.in_(evaluator_ids)
+            )
+        }
+        if evaluator_ids
+        else {}
+    )
     schemas: Dict[str, EvalEnvironmentSchema] = {}
     counts: Dict[str, Dict[str, int]] = {}
     if schema_ids:
@@ -593,6 +740,7 @@ def list_environments(
                 schemas.get(env.current_schema_id or ""),
                 summary,
                 officials.get(env.id),
+                evaluator_rows.get(env.current_evaluator_schema_id or ""),
             )
         )
     return {"environments": payload}
@@ -654,7 +802,7 @@ async def create_environment(
     _store_key(env, api_key, settings)
 
     try:
-        schema_json = await _probe(client_factory, base_url, api_key)
+        schema_json, evaluator = await _probe(client_factory, base_url, api_key)
     except _REMOTE_ERRORS as exc:
         raise _remote_http_error(exc, api_key)
 
@@ -668,13 +816,17 @@ async def create_environment(
             detail="An environment with that name or URL already exists",
         )
     schema, _ = _adopt_schema(db, env, schema_json)
+    evaluator_block = _adopt_evaluator(db, env, evaluator)
     _record_health(env, ok=True)
     _commit(db)
     db.refresh(env)
     slots = list_model_slots(db, schema.id)
     logger.info("Evaluation environment %s created in project %s", env.id, project_id)
     return {
-        "environment": _serialize_environment(env, schema, _slot_summary(slots)),
+        "environment": _serialize_environment(
+            env, schema, _slot_summary(slots), None, current_evaluator_schema(db, env)
+        ),
+        "evaluator": evaluator_block,
         **_slots_payload(slots),
     }
 
@@ -779,7 +931,11 @@ def delete_environment(
     # Break the env <-> current schema cycle, then remove children explicitly so
     # this works without database-level cascades (e.g. SQLite without FK pragma).
     env.current_schema_id = None
+    env.current_evaluator_schema_id = None
     db.flush()
+    db.query(EvalEnvironmentEvaluatorSchema).filter(
+        EvalEnvironmentEvaluatorSchema.environment_id == env.id
+    ).delete(synchronize_session=False)
     db.query(EvalModelSlot).filter(EvalModelSlot.environment_id == env.id).delete(
         synchronize_session=False
     )
@@ -809,8 +965,9 @@ async def test_environment(
         if env.current_schema_id
         else None
     )
+    current_evaluator = current_evaluator_schema(db, env)
     try:
-        schema_json = await _probe(client_factory, env.base_url, api_key)
+        schema_json, evaluator = await _probe(client_factory, env.base_url, api_key)
     except _REMOTE_ERRORS as exc:
         error = _remote_http_error(exc, api_key).detail
         _record_health(env, ok=False, error=error)
@@ -819,11 +976,25 @@ async def test_environment(
     _record_health(env, ok=True)
     db.commit()
     digest = _schema_hash(schema_json)
+    evaluator_digest = (
+        evaluator_schema_hash(evaluator.schema)
+        if evaluator.schema is not None
+        else None
+    )
     return {
         "ok": True,
         "health_status": env.health_status,
         "schema_hash": digest,
         "schema_changed": current is None or current.schema_hash != digest,
+        # Guide v1.1 §3.4; ``supported`` is false on older services (404).
+        "evaluator_schema": {
+            "supported": evaluator.supported if evaluator.error is None else None,
+            "schema_hash": evaluator_digest,
+            "changed": evaluator.error is None
+            and (current_evaluator.schema_hash if current_evaluator else None)
+            != evaluator_digest,
+            "error": evaluator.error,
+        },
     }
 
 
@@ -845,6 +1016,7 @@ async def refresh_environment_schema(
     client = client_factory(env.base_url, api_key)
     try:
         schema_json = await client.env_overrides_schema()
+        evaluator = await _fetch_evaluator_schema(client, api_key)
     except _REMOTE_ERRORS as exc:
         http_error = _remote_http_error(exc, api_key)
         _record_health(env, ok=False, error=http_error.detail)
@@ -858,22 +1030,28 @@ async def refresh_environment_schema(
         )
 
     schema, previous = _adopt_schema(db, env, schema_json)
-    changed = previous is None or previous.id != schema.id
+    env_changed = previous is None or previous.id != schema.id
     diff = (
         _schema_diff(
             descriptor_for_schema(previous) if previous else None,
             descriptor_for_schema(schema),
         )
-        if changed
+        if env_changed
         else {"added": [], "removed": [], "changed_types": []}
     )
+    evaluator_block = _adopt_evaluator(db, env, evaluator)
     _record_health(env, ok=True)
     _commit(db)
     slots = list_model_slots(db, schema.id)
     logger.info("Evaluation environment %s schema refreshed (changed=%s)", env.id, changed)
     return {
-        "changed": changed,
+        # Either schema: the launch form reloads its forms and re-maps its base.
+        "changed": env_changed or evaluator_block["changed"],
+        "env_overrides_changed": env_changed,
+        # ``added``/``removed``/``changed_types`` are env_overrides pointers; the
+        # evaluator.config ones are under ``evaluator``.
         **diff,
+        "evaluator": evaluator_block,
         "schema_id": schema.id,
         "schema_hash": schema.schema_hash,
         "previous_schema_id": previous.id if previous else None,
@@ -891,11 +1069,19 @@ def get_environment_form(
     _require_project_access(db, principal, project_id)
     env = _get_environment(db, project_id, env_id)
     schema = _current_schema(db, env)
+    evaluator = current_evaluator_schema(db, env)
     return {
         "environment_id": env.id,
         "schema_id": schema.id,
         "schema_hash": schema.schema_hash,
         "descriptor": descriptor_for_schema(schema),
+        # The evaluator schema in use (guide v1.1 §3.4). The Evaluation inputs card
+        # reads its descriptor from /experiments/evaluator-config.
+        "evaluator": {
+            "status": env.evaluator_schema_status or "unknown",
+            "schema_id": evaluator.id if evaluator else None,
+            "schema_hash": evaluator.schema_hash if evaluator else None,
+        },
     }
 
 

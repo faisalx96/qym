@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0085"]
+    assert heads == ["0086"]
 
 
 def test_operations_docs_name_the_current_migration_head() -> None:
@@ -732,7 +732,8 @@ def test_eval_environments_migration_sqlite_upgrade_and_downgrade(
 def test_eval_environments_migration_matches_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The ORM models and migrations 0072 + 0080 + 0081 describe the same schema."""
+    """The ORM models and migrations 0072 + 0080 + 0081 + 0086 describe the same
+    schema."""
     from alembic.autogenerate import compare_metadata
     from qym_platform.db import models
     from qym_platform.db.base import Base
@@ -740,21 +741,30 @@ def test_eval_environments_migration_matches_models(
     migration = _load_migration("0072_eval_environments.py")
     drop_cap = _load_migration("0080_drop_eval_inflight_cap.py")
     extra_maps = _load_migration("0081_eval_slot_extra_field_maps.py")
+    evaluator_schemas = _load_migration("0086_eval_evaluator_schemas.py")
     engine = sa.create_engine("sqlite://")
     _eval_environment_prerequisites(engine)
 
     def include_object(obj, name, kind, reflected, compare_to):  # type: ignore[no-untyped-def]
         table = obj if kind == "table" else getattr(obj, "table", None)
-        return table is not None and table.name in EVAL_TABLES
+        if table is None or table.name not in EVAL_TABLES | EVALUATOR_SCHEMA_TABLES:
+            return False
+        # 0086 adds this FK inline (ALTER ADD COLUMN): SQLite reflects it without
+        # its name, so it is checked with PRAGMA in the 0086 round trip instead.
+        if kind == "foreign_key_constraint":
+            return {c.name for c in obj.columns} != {"current_evaluator_schema_id"}
+        return True
 
     with engine.begin() as connection:
         ops = Operations(MigrationContext.configure(connection))
         monkeypatch.setattr(migration, "op", ops)
         monkeypatch.setattr(drop_cap, "op", ops)
         monkeypatch.setattr(extra_maps, "op", ops)
+        monkeypatch.setattr(evaluator_schemas, "op", ops)
         migration.upgrade()
         drop_cap.upgrade()
         extra_maps.upgrade()
+        evaluator_schemas.upgrade()
         context = MigrationContext.configure(
             connection,
             opts={"compare_type": True, "include_object": include_object},
@@ -837,6 +847,7 @@ EXPERIMENT_TABLES = {
 RUN_EXPERIMENT_COLUMNS = {"origin", "experiment_job_id"}
 RUN_EXPERIMENT_INDEXES = {"ix_runs_origin", "ix_runs_experiment_job_id"}
 SCORE_TABLES = frozenset({"eval_run_scores"})  # 0076
+EVALUATOR_SCHEMA_TABLES = frozenset({"eval_environment_evaluator_schemas"})  # 0086
 # Revisions after 0073 that change its tables: (table, column they add, file).
 # (table, marker column, revision, whether the revision adds the marker or drops it)
 LATER_REVISIONS = (
@@ -851,6 +862,12 @@ LATER_REVISIONS = (
     ("eval_environments", "max_inflight_jobs", "0080_drop_eval_inflight_cap.py", False),
     ("eval_model_slots", "extra_field_maps", "0081_eval_slot_extra_field_maps.py", True),
     ("eval_experiments", "versioning_details", "0084_run_versioning_details.py", True),
+    (
+        "eval_environments",
+        "evaluator_schema_status",
+        "0086_eval_evaluator_schemas.py",
+        True,
+    ),
 )
 
 
@@ -1111,6 +1128,7 @@ def _eval_experiment_model_diffs(
     ``extra_tables`` adds tables from later revisions (e.g. 0074 presets).
     """
     from alembic.autogenerate import compare_metadata
+    from qym_platform.db import models  # noqa: F401  (fills Base.metadata)
     from qym_platform.db.base import Base
 
     sqlite = connection.dialect.name == "sqlite"
@@ -1119,7 +1137,14 @@ def _eval_experiment_model_diffs(
         table = obj if kind == "table" else getattr(obj, "table", None)
         if table is None:
             return False
-        if table.name in EVAL_TABLES | EXPERIMENT_TABLES | SCORE_TABLES | extra_tables:
+        if (
+            table.name
+            in EVAL_TABLES
+            | EXPERIMENT_TABLES
+            | SCORE_TABLES
+            | EVALUATOR_SCHEMA_TABLES
+            | extra_tables
+        ):
             return True
         if table.name != "runs":
             return False
@@ -1136,10 +1161,11 @@ def _eval_experiment_model_diffs(
         return kind == "table"
 
     def include_eval_object(obj, name, kind, reflected, compare_to):  # type: ignore[no-untyped-def]
-        # Same for eval_experiments.qym_api_key_id (0077): PRAGMA-checked on SQLite.
+        # Same for eval_experiments.qym_api_key_id (0077) and
+        # eval_environments.current_evaluator_schema_id (0086): PRAGMA-checked.
         if sqlite and kind == "foreign_key_constraint":
             columns = {column.name for column in obj.columns}
-            if columns == {"qym_api_key_id"}:
+            if columns in ({"qym_api_key_id"}, {"current_evaluator_schema_id"}):
                 return False
         return include_object(obj, name, kind, reflected, compare_to)
 
@@ -2084,3 +2110,92 @@ def test_run_versioning_details_migration_postgres_round_trips(
     _versioning_details_prerequisites(postgres_engine)
     with postgres_engine.begin() as connection:
         _run_versioning_details_round_trip(connection, monkeypatch)
+
+
+def _evaluator_schemas_round_trip(connection: sa.Connection, monkeypatch) -> None:
+    """0086: the evaluator schema history, the env pointer and its status."""
+    base = _load_migration("0072_eval_environments.py")
+    migration = _load_migration("0086_eval_evaluator_schemas.py")
+    assert (migration.revision, migration.down_revision) == ("0086", "0085")
+    ops = Operations(MigrationContext.configure(connection))
+    monkeypatch.setattr(base, "op", ops)
+    monkeypatch.setattr(migration, "op", ops)
+    base.upgrade()
+    _insert_environment(connection, "e1")
+    migration.upgrade()
+
+    def scalar(sql: str) -> Any:
+        return connection.execute(sa.text(sql)).scalar_one()
+
+    inspector = sa.inspect(connection)
+    assert "eval_environment_evaluator_schemas" in inspector.get_table_names()
+    # Existing environments read as "never fetched".
+    assert scalar("SELECT evaluator_schema_status FROM eval_environments") == "unknown"
+    assert scalar("SELECT current_evaluator_schema_id FROM eval_environments") is None
+
+    insert = sa.text(
+        "INSERT INTO eval_environment_evaluator_schemas (id, environment_id, "
+        "schema_hash, schema_json, fetched_at, first_seen_at) "
+        "VALUES (:id, 'e1', :hash, '{}', :ts, :ts)"
+    )
+    connection.execute(insert, {"id": "v1", "hash": "a" * 64, "ts": TS})
+    with pytest.raises(sa.exc.IntegrityError):
+        with connection.begin_nested():
+            connection.execute(insert, {"id": "v2", "hash": "a" * 64, "ts": TS})
+    connection.execute(
+        sa.text(
+            "UPDATE eval_environments SET current_evaluator_schema_id = 'v1', "
+            "evaluator_schema_status = 'available'"
+        )
+    )
+    (fk,) = [
+        fk
+        for fk in sa.inspect(connection).get_foreign_keys("eval_environments")
+        if fk["constrained_columns"] == ["current_evaluator_schema_id"]
+    ]
+    assert fk["referred_table"] == "eval_environment_evaluator_schemas"
+    if connection.dialect.name == "sqlite":
+        rows = connection.exec_driver_sql(
+            "PRAGMA foreign_key_list(eval_environments)"
+        ).all()
+        assert [(r[2], r[6]) for r in rows if r[3] == "current_evaluator_schema_id"] == [
+            ("eval_environment_evaluator_schemas", "SET NULL")
+        ]
+    else:
+        assert fk["name"] == "fk_eval_environments_current_evaluator_schema"
+        assert fk["options"].get("ondelete") == "SET NULL"
+    # Deleting the schema row clears the pointer; deleting the env cascades.
+    connection.execute(sa.text("DELETE FROM eval_environment_evaluator_schemas"))
+    assert scalar("SELECT current_evaluator_schema_id FROM eval_environments") is None
+    connection.execute(insert, {"id": "v3", "hash": "b" * 64, "ts": TS})
+    connection.execute(
+        sa.text("UPDATE eval_environments SET current_evaluator_schema_id = 'v3'")
+    )
+
+    migration.downgrade()
+    inspector = sa.inspect(connection)
+    assert "eval_environment_evaluator_schemas" not in inspector.get_table_names()
+    columns = {c["name"] for c in inspector.get_columns("eval_environments")}
+    assert not {"current_evaluator_schema_id", "evaluator_schema_status"} & columns
+    assert scalar("SELECT id FROM eval_environments") == "e1"
+    # Re-upgrading after a downgrade is clean.
+    migration.upgrade()
+
+
+def test_evaluator_schemas_migration_round_trips(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = sa.create_engine("sqlite://")
+    _eval_environment_prerequisites(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        _evaluator_schemas_round_trip(connection, monkeypatch)
+    engine.dispose()
+
+
+def test_evaluator_schemas_migration_postgres_round_trips(
+    monkeypatch: pytest.MonkeyPatch, postgres_engine: sa.engine.Engine
+) -> None:
+    _eval_environment_prerequisites(postgres_engine)
+    with postgres_engine.begin() as connection:
+        _evaluator_schemas_round_trip(connection, monkeypatch)

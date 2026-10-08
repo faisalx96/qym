@@ -510,6 +510,8 @@
         loading: false,
         form: form.ok ? form.data.descriptor : null,
         formError: form.ok ? '' : errorMessage(form.data, 'Failed to load the settings form'),
+        // The evaluator schema in use (guide v1.1): {status, schema_id, schema_hash}.
+        evaluator: form.ok && form.data.evaluator ? form.data.evaluator : null,
         slots: slotRows.filter((slot) => slot.status === 'confirmed'),
         needsConfirmation: slots.ok ? !!slots.data.needs_confirmation : false,
         options: models.ok ? models.data : null,
@@ -2074,8 +2076,9 @@
       env.model_slots = Object.assign({}, env.model_slots, { needs_confirmation: !!data.needs_confirmation });
       renderEnvironments();
       if (!data.changed) return;
-      const added = (data.added || []).length;
-      const removed = (data.removed || []).length;
+      const evaluator = data.evaluator || {};
+      const added = (data.added || []).length + (evaluator.added || []).length;
+      const removed = (data.removed || []).length + (evaluator.removed || []).length;
       toast('Schema updated for ' + env.name + ' (' + added + ' added, ' + removed + ' removed)', 'info');
       if (st.selected.indexOf(env.id) < 0) return;
       delete st.envData[env.id];
@@ -4138,6 +4141,9 @@
         mode: editor ? 'editor' : 'launch', // 'editor' (#30): one config, no sweeps
         union, unionSlots, boundPointers, roleColumns, roleAllRow, leafControl, onLeafInput, markChanged,
         buildSpec, bindingSummary, clearBinding, pruneSecrets, loadVersions, fillCell,
+        // Same widgets and any-value rules for evaluator.config as for env_overrides (B20).
+        parseInput, fitsWidget, jsonFallback, hintText, formatValue, envName,
+        versioningDetails: () => parseVersioning(st.versioningText).details,
         rerender: () => { renderDataset(); renderModels(); renderSettings(); renderRun(); renderPreview(); },
         renderDataset, renderPreview, schedulePreview, updateChangedCount,
         sweeps, // #34: null when sweeps are off

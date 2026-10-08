@@ -140,14 +140,14 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0085`, following `0050` through
-`0051`–`0083`. Migrations run before API readiness. Large storage rewrites and index
+The combined migration chain has one head, `0086`, following `0050` through
+`0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084` are quick DDL or small job/queue inserts. `0085`
-switches `spans` to daily partitions; it locks `spans` for an instant only to
-drop still-empty monthly partitions that start after today.
+Migrations `0058`–`0084` and `0086` are quick DDL or small job/queue inserts.
+`0085` switches `spans` to daily partitions; it locks `spans` for an instant only
+to drop still-empty monthly partitions that start after today.
 
 On PostgreSQL every `alembic upgrade` takes a per-schema advisory lock, so
 replicas that start together migrate one at a time (the others wait, then find
@@ -182,6 +182,7 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0086 | Empty `eval_environment_evaluator_schemas` table; `eval_environments.current_evaluator_schema_id` (nullable) and `evaluator_schema_status` (constant default `unknown`) | None: each environment fetches its evaluator schema on its next **Test**, schema refresh or selection in the launch form |
 | 0085 | Drops still-empty monthly `spans` partitions that start after today (brief `ACCESS EXCLUSIVE` on `spans`, under `QYM_MIGRATION_LOCK_TIMEOUT`) and creates daily partitions for the next 14 days | None: the hourly retention pass keeps daily partitions ahead; see "Span partitions" |
 | 0071 | Nullable `dashboard_run_dimensions.search_text` (instant) and one job insert, skipped while a `build_runs_search_index` job still waits to start | `build_runs_search_index` (this release's job does all of it) — **queued, runs by itself**: builds the partial index `ix_dashboard_run_dimensions_unsearchable` CONCURRENTLY, fills `search_text` in run-key windows (one statement per 500-run window), then rebuilds `ix_dashboard_run_dimensions_search_trgm` over `search_text` and the run ID, CONCURRENTLY. It replaces `0070`'s index over descriptor expressions, which made every descriptor rewrite of a live run a non-HOT update. Until it reaches a row, the search reads that row's names from its descriptor, with the same results. Without `pg_trgm` it fills the column, logs "runs search index skipped" and finishes. Resumable and safe to start again |
 
@@ -268,7 +269,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0085` and a healthy API. The API process then runs every queued job itself.
+   `0086` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -450,7 +451,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0085`.
+deployment only after the API has migrated to `0086`.
 
 ```yaml
 apiVersion: apps/v1
@@ -905,10 +906,35 @@ Setup, per deployment:
 3. In qym, a project manager opens **Project Settings → Environments → Add environment**
    and enters the base URL (including the service's `EVAL_SERVER_PREFIX`, without
    `/evals`) and the service key. qym checks `GET /evals?limit=1`, fetches the
-   env-overrides schema, and proposes model slots. The URL must be `https://` unless
+   env-overrides schema and the evaluator schema (`GET /evals/evaluator/schema`,
+   guide v1.1), and proposes model slots. The URL must be `https://` unless
    `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` is set.
 4. Confirm the model slots (**Group LLM settings**) and, if the service may receive
    provider keys, turn on **Allow connection keys**.
+
+**Schemas and refresh.** Each environment keeps two schema histories, each row
+immutable and keyed by the sha256 of the canonical JSON: `eval_environment_schemas`
+(env-overrides) and `eval_environment_evaluator_schemas` (evaluator, migration
+`0086`). **Test**, environment creation and `POST …/eval-environments/{id}/schema/refresh`
+re-read both; any project member may refresh (decision B18), and the new-experiment
+page refreshes each selected environment once per visit. The refresh answer has
+`changed` (either schema), `env_overrides_changed`, the env-overrides diff
+(`added`/`removed`/`changed_types`) and an `evaluator` block with its own diff,
+`supported` and `status`. On a change the launch form reloads the environment's form
+and its Evaluation inputs card, and re-fetches the starting point with
+`?remap=current` (B19), which also drops `evaluator.config` keys the new evaluator
+schema rejects. The evaluator call never fails a refresh:
+
+| `evaluator_schema_status` | Meaning | What qym uses |
+|---|---|---|
+| `unknown` | Not fetched since `0086` | The static `EvaluatorRequestConfig` (guide v1.0) |
+| `available` | The service answered `GET /evals/evaluator/schema` | That schema: launch form, presets and launch validation |
+| `unsupported` | The service answered 404/405 (older than v1.1) | The static `EvaluatorRequestConfig` |
+
+A 401, timeout or 5xx on the evaluator call keeps the stored evaluator schema and
+is returned as `evaluator.error`. With an evaluator schema, the experiment's
+`versioning_details` are also sent as `evaluator.config.versioning_details`
+(decision B23); at link time the run's values then win over the experiment's.
 
 One environment URL belongs to one project. qym normalizes the URL (lower-case host,
 no default port, no trailing `/` or `/evals`), and a platform-wide unique index refuses

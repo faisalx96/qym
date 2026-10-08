@@ -876,3 +876,76 @@ def test_saved_preset_round_trips_every_evaluation_value(client, env):
     for section in ("evaluator", "slot_bindings", "env_overrides"):
         assert remapped["config"][section] == doc[section], section
         assert body["version"]["config"][section] == doc[section], section
+
+
+# ------------------------------------------------------- evaluator schema (v1.1)
+
+EVALUATOR_FIXTURE = Path(__file__).parent / "fixtures" / "eval_evaluator_schema.json"
+
+
+def _set_evaluator_schema(session_factory, env_id, schema, digest):
+    from qym_platform.db.models import EvalEnvironmentEvaluatorSchema
+
+    with session_factory() as s:
+        row = EvalEnvironmentEvaluatorSchema(
+            environment_id=env_id, schema_hash=digest, schema_json=schema
+        )
+        s.add(row)
+        s.flush()
+        env = s.get(EvalEnvironment, env_id)
+        env.current_evaluator_schema_id = row.id
+        env.evaluator_schema_status = "available"
+        s.commit()
+
+
+def test_presets_validate_and_remap_on_the_evaluator_schema(
+    client, env, session_factory
+):
+    """B19's ``remap=current`` re-fetch also follows evaluator schema changes."""
+    schema = json.loads(EVALUATOR_FIXTURE.read_text())
+    doc = _doc()
+    doc["evaluator"]["config"]["metric_concurrency"] = 3
+    # An older service (static mirror) has no metric_concurrency: refused.
+    res = _create(client, env["id"], email=MEMBER, name="mc", config=doc)
+    assert res.status_code == 422
+    errors = res.json()["detail"]["errors"]
+    assert errors[0]["pointer"] == "/evaluator/config/metric_concurrency"
+
+    _set_evaluator_schema(session_factory, env["id"], schema, "a" * 64)
+    res = _create(client, env["id"], email=MEMBER, name="mc", config=doc)
+    assert res.status_code == 200, res.text
+    preset = res.json()["preset"]
+    url = _presets_url(env["id"], f"/{preset['id']}/versions/1?remap=current")
+    same = client.get(url, headers=_headers(MEMBER)).json()["remap"]
+    assert same["dropped"] == []
+    assert same["config"]["evaluator"]["config"]["metric_concurrency"] == 3
+
+    # The service drops the key; the env-overrides hash is unchanged.
+    newer = json.loads(EVALUATOR_FIXTURE.read_text())
+    newer["$defs"]["EvaluatorRequestConfig"]["properties"].pop("metric_concurrency")
+    _set_evaluator_schema(session_factory, env["id"], newer, "b" * 64)
+    remapped = client.get(url, headers=_headers(MEMBER)).json()["remap"]
+    assert [d["pointer"] for d in remapped["dropped"]] == [
+        "/evaluator/config/metric_concurrency"
+    ]
+    assert remapped["errors"] == []
+    config = remapped["config"]["evaluator"]["config"]
+    assert "metric_concurrency" not in config and config["samples"] == 3
+
+
+def test_pure_remap_drops_evaluator_keys_the_schema_rejects():
+    v1, _ = _schemas()
+    schema = json.loads(EVALUATOR_FIXTURE.read_text())
+    doc = _doc()
+    doc["evaluator"]["config"].update({"metric_concurrency": 0, "max_retries": 1})
+    result = eval_presets.remap(doc, v1, v1, evaluator_schema=schema)
+    assert [(d["pointer"], d["reason"]) for d in result.dropped] == [
+        ("/evaluator/config/metric_concurrency", "invalid")
+    ]
+    assert result.config["evaluator"]["config"]["max_retries"] == 1
+    # Without an evaluator schema the static mirror applies (no such key).
+    doc["evaluator"]["config"]["metric_concurrency"] = 2
+    result = eval_presets.remap(doc, v1, v1)
+    assert [d["pointer"] for d in result.dropped] == [
+        "/evaluator/config/metric_concurrency"
+    ]

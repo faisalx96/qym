@@ -239,6 +239,61 @@ def test_env_overrides_schema_keeps_shape_but_masks_secret_defaults():
     _assert_no_secrets(result)
 
 
+def test_evaluator_schema_is_fetched_and_redacted():
+    """Guide v1.1 §3.4: GET /evals/evaluator/schema, same shape as §3.3."""
+    schema = {
+        "$defs": {
+            "EvaluatorRequestConfig": {
+                "additionalProperties": False,
+                "properties": {
+                    "metric_concurrency": {
+                        "anyOf": [{"minimum": 1, "type": "integer"}, {"type": "null"}],
+                        "default": None,
+                    },
+                    "judge_api_key": {"type": "string", "default": PROVIDER_KEY},
+                },
+            }
+        },
+        "properties": {"dataset": {"type": "string"}},
+        "required": ["dataset"],
+    }
+    result, requests = _run(
+        lambda request: httpx.Response(200, json=schema),
+        lambda client: client.evaluator_schema(),
+    )
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/prefix/evals/evaluator/schema"
+    assert requests[0].headers["authorization"] == f"Bearer {ENV_KEY}"
+    props = result["$defs"]["EvaluatorRequestConfig"]["properties"]
+    assert props["judge_api_key"]["default"] == esc.REDACTED
+    assert props["metric_concurrency"] == schema["$defs"]["EvaluatorRequestConfig"][
+        "properties"
+    ]["metric_concurrency"]
+    _assert_no_secrets(result)
+
+
+@pytest.mark.parametrize("status", [404, 405])
+def test_evaluator_schema_is_none_on_older_services(status):
+    """A service before v1.1 has no such route: None, never an error."""
+    result, requests = _run(
+        lambda request: httpx.Response(status, json={"detail": "Not Found"}),
+        lambda client: client.evaluator_schema(),
+    )
+    assert result is None
+    assert len(requests) == 1
+
+
+@pytest.mark.parametrize(
+    "status, error", [(401, EnvAuthError), (500, RetryableError)]
+)
+def test_evaluator_schema_other_failures_raise(status, error):
+    with pytest.raises(error):
+        _run(
+            lambda request: httpx.Response(status, json={"detail": "x"}),
+            lambda client: client.evaluator_schema(),
+        )
+
+
 # --------------------------------------------------------------------------- #
 # Error mapping
 # --------------------------------------------------------------------------- #

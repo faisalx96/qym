@@ -601,6 +601,23 @@ class EvalEnvironment(Base):
         ),
         nullable=True,
     )
+    # ``GET /evals/evaluator/schema`` (guide v1.1 §3.4): the evaluator schema in use,
+    # NULL when the service has not published one. ``evaluator_schema_status`` is
+    # ``unknown`` (never fetched), ``available`` or ``unsupported`` (the service
+    # answered 404: an older service; the launch form falls back to the static
+    # ``EvaluatorRequestConfig`` mirror).
+    current_evaluator_schema_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_environment_evaluator_schemas.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_eval_environments_current_evaluator_schema",
+        ),
+        nullable=True,
+    )
+    evaluator_schema_status: Mapped[str] = mapped_column(
+        String(20), default="unknown", server_default="unknown", nullable=False
+    )
     # Best-run ranking defaults; NULL falls back to the project default.
     ranking_metric: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     ranking_k: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -665,6 +682,37 @@ class EvalEnvironmentSchema(Base):
     __table_args__ = (
         UniqueConstraint(
             "environment_id", "schema_hash", name="uq_eval_environment_schema_hash"
+        ),
+    )
+
+
+class EvalEnvironmentEvaluatorSchema(Base):
+    """Immutable history of an environment's ``evaluator`` JSON Schema (§3.4).
+
+    The counterpart of :class:`EvalEnvironmentSchema` for ``GET
+    /evals/evaluator/schema`` (``EvaluatorInputs`` with ``EvaluatorRequestConfig``
+    under ``$defs``). ``form_descriptor`` is the ``evaluator.config`` descriptor.
+    """
+
+    __tablename__ = "eval_environment_evaluator_schemas"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), index=True
+    )
+    schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_json: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, nullable=False)
+    form_descriptor: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        BIG_JSON, nullable=True
+    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "environment_id",
+            "schema_hash",
+            name="uq_eval_environment_evaluator_schema_hash",
         ),
     )
 

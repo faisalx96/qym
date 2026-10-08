@@ -87,6 +87,7 @@ touches the database; the module is pure and every result is JSON-serializable.
 from __future__ import annotations
 
 import copy
+import json
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -115,6 +116,11 @@ from .eval_schema_form import (
     split_pointer,
     unescape_pointer_segment,
 )
+from .eval_evaluator_schema import (
+    config_schema,
+    evaluator_config_descriptor_for,
+    input_fields,
+)
 from .eval_service_client import redact_text
 
 # --------------------------------------------------------------------------- constants
@@ -138,6 +144,9 @@ PLATFORM_OWNED_CONFIG_FIELDS = (
     "model",
     "models",
     "model_full",
+    # Guide v1.1: filled from the experiment's "Versioning details" (B21/B23), only
+    # for environments whose evaluator schema declares it.
+    "versioning_details",
 )
 # ``evaluator`` keys the platform owns: ``model`` comes from the ``primary`` slot (§7.4).
 PLATFORM_OWNED_EVALUATOR_FIELDS = ("model",)
@@ -237,22 +246,139 @@ def evaluator_config_descriptor() -> dict[str, Any]:
     return copy.deepcopy(_evaluator_config_descriptor())
 
 
-def evaluator_inputs_panel() -> dict[str, Any]:
-    """The Advanced panel's "Evaluation inputs" contract (§8.4, D5).
+def environment_evaluator_descriptor(
+    evaluator_schema: Optional[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """``evaluator.config`` descriptor of an environment: its fetched schema's, or the
+    static mirror's when ``evaluator_schema`` is ``None`` (services before v1.1)."""
+    if evaluator_schema is None:
+        return evaluator_config_descriptor()
+    return evaluator_config_descriptor_for(
+        evaluator_schema,
+        platform_owned=PLATFORM_OWNED_CONFIG_FIELDS,
+        reserved_prefix=RESERVED_METADATA_PREFIX,
+    )
 
-    ``descriptor`` is ``evaluator_config_descriptor()``; ``fields`` the editable
-    ``evaluator.config`` fields in display order; ``platform_owned`` the fields the
-    platform fills (read-only in the form, rejected when a document sets them);
-    ``reserved_metadata_prefix``/``platform_metadata_keys`` describe ``run_metadata``.
+
+def _panel_fields(descriptor: Mapping[str, Any], static: bool) -> list[str]:
+    if static:
+        return list(EVALUATOR_INPUT_FIELDS)
+    return input_fields(
+        descriptor,
+        preferred=EVALUATOR_INPUT_FIELDS,
+        skip=(*PLATFORM_OWNED_CONFIG_FIELDS, "run_metadata"),
+    )
+
+
+@dataclass
+class EvaluatorPanelSource:
+    """One environment's input to :func:`evaluator_inputs_panel`.
+
+    ``schema`` is its fetched evaluator schema, or ``None`` for the static mirror;
+    ``descriptor`` its ``evaluator.config`` descriptor when already built (cached).
     """
+
+    environment_id: str
+    name: str
+    schema: Optional[Mapping[str, Any]] = None
+    schema_hash: Optional[str] = None
+    status: str = "unknown"
+    descriptor: Optional[Mapping[str, Any]] = None
+
+
+def evaluator_inputs_panel(
+    sources: Sequence[EvaluatorPanelSource] = (),
+) -> dict[str, Any]:
+    """The Advanced panel's "Evaluation inputs" contract (§8.4, D5; guide v1.1 §3.4).
+
+    Without ``sources`` (or for environments whose service has no evaluator schema)
+    ``descriptor`` is the static ``evaluator_config_descriptor()``. With sources it is
+    the union of their ``evaluator.config`` descriptors (the first environment wins a
+    pointer both declare), like the env-overrides union form.
+
+    ``fields`` are the editable fields in display order; ``missing`` maps a field to
+    the environment ids that do not declare it (only with several environments);
+    ``platform_owned`` the fields the platform fills (read-only in the form, rejected
+    when a document sets them) and ``platform_owned_present`` those the descriptor
+    declares; ``reserved_metadata_prefix``/``platform_metadata_keys`` describe
+    ``run_metadata``. ``source`` is ``static``, ``environment`` or ``mixed``;
+    ``environments`` lists each source with its own ``source`` and ``schema_hash``.
+    """
+    per_env: list[tuple[EvaluatorPanelSource, dict[str, Any], list[str], bool]] = []
+    for item in sources:
+        static = item.schema is None
+        env_descriptor = (
+            copy.deepcopy(dict(item.descriptor))
+            if item.descriptor is not None
+            else environment_evaluator_descriptor(item.schema)
+        )
+        per_env.append(
+            (item, env_descriptor, _panel_fields(env_descriptor, static), static)
+        )
+    missing: dict[str, list[str]] = {}
+    if not per_env:
+        descriptor = evaluator_config_descriptor()
+        fields = _panel_fields(descriptor, True)
+        source = "static"
+    else:
+        merged: dict[str, Any] = {}
+        fields = []
+        for _, env_descriptor, env_fields, _static in per_env:
+            for pointer, entry in (env_descriptor.get("fields") or {}).items():
+                merged.setdefault(pointer, entry)
+            for name in env_fields:
+                if name not in fields:
+                    fields.append(name)
+        first = per_env[0][1]
+        descriptor = {
+            "descriptor_version": first.get("descriptor_version"),
+            "title": first.get("title"),
+            "root": [p for p, e in merged.items() if e.get("parent") is None],
+            "fields": merged,
+            "groups": [],
+            "rules": [],
+            "warnings": [],
+        }
+        if len(per_env) > 1:
+            for name in fields:
+                absent = [
+                    item.environment_id
+                    for item, env_descriptor, _f, _s in per_env
+                    if "/" + name not in (env_descriptor.get("fields") or {})
+                ]
+                if absent:
+                    missing[name] = absent
+        kinds = {static for *_, static in per_env}
+        if len(kinds) > 1:
+            source = "mixed"
+        else:
+            source = "static" if True in kinds else "environment"
+    owned_present = [
+        name
+        for name in PLATFORM_OWNED_CONFIG_FIELDS
+        if "/" + name in (descriptor.get("fields") or {})
+    ]
     return {
-        "descriptor": evaluator_config_descriptor(),
-        "fields": list(EVALUATOR_INPUT_FIELDS),
+        "descriptor": descriptor,
+        "fields": fields,
+        "missing": missing,
+        "source": source,
+        "environments": [
+            {
+                "environment_id": item.environment_id,
+                "name": item.name,
+                "source": "static" if static else "environment",
+                "status": item.status,
+                "schema_hash": item.schema_hash,
+            }
+            for item, _d, _f, static in per_env
+        ],
         "platform_owned": {
             "config": list(PLATFORM_OWNED_CONFIG_FIELDS),
             "evaluator": list(PLATFORM_OWNED_EVALUATOR_FIELDS),
             "body": list(PLATFORM_OWNED_BODY_FIELDS),
         },
+        "platform_owned_present": owned_present,
         "reserved_metadata_prefix": RESERVED_METADATA_PREFIX,
         "platform_metadata_keys": list(PLATFORM_METADATA_KEYS),
     }
@@ -281,6 +407,36 @@ def _evaluator_validator(require_dataset: bool) -> Draft202012Validator:
     if not require_dataset:
         schema["required"] = [k for k in schema.get("required", []) if k != "dataset"]
     return Draft202012Validator(schema)
+
+
+@lru_cache(maxsize=32)
+def _environment_evaluator_validator(
+    schema_text: str, require_dataset: bool
+) -> Draft202012Validator:
+    """Validator of an environment's evaluator schema, closed like env_overrides.
+
+    The service drops unknown top-level ``evaluator`` keys and rejects unknown
+    ``config`` keys (``additionalProperties: false``); both are errors here, so a typo
+    never becomes a silent no-op. Raises ``SchemaError`` for an invalid schema.
+    """
+    schema = json.loads(schema_text)
+    Draft202012Validator.check_schema(schema)
+    if not require_dataset and isinstance(schema.get("required"), list):
+        schema["required"] = [k for k in schema["required"] if k != "dataset"]
+    return Draft202012Validator(_closed_schema(schema))
+
+
+def _schema_text(schema: Mapping[str, Any]) -> str:
+    return json.dumps(schema, sort_keys=True, separators=(",", ":"))
+
+
+def _default_samples(evaluator_schema: Optional[Mapping[str, Any]]) -> Any:
+    if evaluator_schema is None:
+        return DEFAULT_SAMPLES
+    props = config_schema(evaluator_schema).get("properties") or {}
+    samples = props.get("samples") if isinstance(props, Mapping) else None
+    default = samples.get("default") if isinstance(samples, Mapping) else None
+    return default if _is_int(default) else DEFAULT_SAMPLES
 
 
 # --------------------------------------------------------------------------- document
@@ -686,6 +842,7 @@ def _locate(
     message: str,
     env_descriptor: Mapping[str, Any],
     mat: Optional[_Materialized] = None,
+    evaluator_descriptor: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Any]:
     """Build an error for a document pointer, mapped onto its form pointer."""
     if mat is not None:
@@ -707,7 +864,11 @@ def _locate(
         relative = pointer[len("/evaluator/config") :]
         return _located(
             "/evaluator/config",
-            _evaluator_config_descriptor(),
+            (
+                evaluator_descriptor
+                if evaluator_descriptor is not None
+                else _evaluator_config_descriptor()
+            ),
             relative,
             "evaluator",
             rule,
@@ -836,11 +997,22 @@ def _closed_schema(schema: Any) -> Any:
 
 
 def _not_in_environment(
-    item: tuple[str, str, str], environment_name: Optional[str]
+    item: tuple[str, str, str],
+    environment_name: Optional[str],
+    evaluator_config: bool = False,
 ) -> tuple[str, str, str]:
-    """Re-code an ``env_overrides`` unknown key as ``not_in_environment``."""
+    """Re-code an ``env_overrides`` unknown key as ``not_in_environment``.
+
+    With ``evaluator_config`` (the environment's own evaluator schema, or a named
+    environment) an unknown ``evaluator.config`` key is re-coded the same way.
+    """
     pointer, rule, message = item
-    if rule != "unknown_key" or not pointer.startswith("/env_overrides/"):
+    if rule != "unknown_key":
+        return item
+    if not (
+        pointer.startswith("/env_overrides/")
+        or (evaluator_config and pointer.startswith("/evaluator/config/"))
+    ):
         return item
     key = unescape_pointer_segment(pointer.rsplit("/", 1)[1])
     where = (
@@ -1006,7 +1178,9 @@ def _leaves(value: Any, pointer: str):
         yield pointer, value
 
 
-def _report_k_errors(evaluator: Mapping[str, Any]) -> list[tuple[str, str, str]]:
+def _report_k_errors(
+    evaluator: Mapping[str, Any], default_samples: Any = DEFAULT_SAMPLES
+) -> list[tuple[str, str, str]]:
     """``report_k <= samples`` for the effective (top-level wins) and config values.
 
     ``samples`` defaults to the service default (1) when unset. The config-level value
@@ -1014,7 +1188,7 @@ def _report_k_errors(evaluator: Mapping[str, Any]) -> list[tuple[str, str, str]]
     """
     config = evaluator.get("config")
     config = config if isinstance(config, Mapping) else {}
-    samples = config.get("samples", DEFAULT_SAMPLES)
+    samples = config.get("samples", default_samples)
     if not _is_int(samples):
         return []
     out = []
@@ -1100,6 +1274,8 @@ def validate_config_document(
     schema_hash: Optional[str] = None,
     require_dataset: bool = True,
     environment_name: Optional[str] = None,
+    evaluator_schema: Optional[Mapping[str, Any]] = None,
+    evaluator_descriptor: Optional[Mapping[str, Any]] = None,
 ) -> ConfigValidationResult:
     """Validate one combination of a config document for one environment.
 
@@ -1108,6 +1284,9 @@ def validate_config_document(
     the environment's current hash (a mismatch is a warning; re-mapping is §9.3).
     ``require_dataset=False`` suits presets that leave the dataset to the launch form.
     ``environment_name`` is named in ``not_in_environment`` messages.
+    ``evaluator_schema`` is the environment's ``GET /evals/evaluator/schema`` (guide
+    v1.1 §3.4; ``None`` = the static mirror, for older services) and
+    ``evaluator_descriptor`` its ``evaluator.config`` descriptor (built when omitted).
     The result's ``body`` is the materialized ``EvalJobCreate`` (without ``user_id``),
     or ``None`` when there are errors.
     """
@@ -1117,6 +1296,8 @@ def validate_config_document(
         return ConfigValidationResult(errors, warnings, None)
     if descriptor is None:
         descriptor = build_form_descriptor(dict(env_schema))
+    if evaluator_schema is not None and evaluator_descriptor is None:
+        evaluator_descriptor = environment_evaluator_descriptor(evaluator_schema)
 
     doc_hash = document.get("schema_hash")
     if schema_hash and doc_hash and doc_hash != schema_hash:
@@ -1244,14 +1425,36 @@ def validate_config_document(
         schema_located += _schema_errors(
             env_validator, body["env_overrides"], "/env_overrides"
         )
-    schema_located += _schema_errors(
-        _evaluator_validator(require_dataset), body["evaluator"], "/evaluator"
-    )
+    evaluator_validator: Optional[Draft202012Validator] = None
+    if evaluator_schema is None:
+        evaluator_validator = _evaluator_validator(require_dataset)
+    else:
+        try:
+            evaluator_validator = _environment_evaluator_validator(
+                _schema_text(evaluator_schema), require_dataset
+            )
+        except (SchemaError, ValueError, TypeError) as exc:
+            errors.append(
+                _error(
+                    "evaluator",
+                    "/evaluator",
+                    "schema",
+                    "The environment's evaluator schema is invalid: "
+                    + str(getattr(exc, "message", exc)),
+                )
+            )
+    if evaluator_validator is not None:
+        schema_located += _schema_errors(
+            evaluator_validator, body["evaluator"], "/evaluator"
+        )
     # Placeholders are not real values: ignore their pattern/enum/format errors.
     # jsonschema messages echo the value: never for a secret field.
+    recode_config = evaluator_schema is not None or environment_name is not None
     schema_located = [
         _not_in_environment(
-            (p, r, _redacted_message(p, m, descriptor)), environment_name
+            (p, r, _redacted_message(p, m, descriptor)),
+            environment_name,
+            recode_config,
         )
         for p, r, m in schema_located
         if not is_placeholder(_get(body, split_pointer(p)))
@@ -1260,14 +1463,18 @@ def validate_config_document(
 
     existing = {p for p, _, _ in schema_located}
     rule_located = _rule_errors(body["env_overrides"], descriptor, existing)
-    rule_located += _report_k_errors(body["evaluator"])
+    rule_located += _report_k_errors(
+        body["evaluator"], _default_samples(evaluator_schema)
+    )
 
     seen: set[tuple[str, str]] = set()
     tagged = [(item, None) for item in located]
     tagged += [(item, mat) for item in rule_located + schema_located]
     for (pointer, rule, message), origin in tagged:
         # Only materialized-body errors map back onto the binding that wrote them.
-        error = _locate(pointer, rule, message, descriptor, origin)
+        error = _locate(
+            pointer, rule, message, descriptor, origin, evaluator_descriptor
+        )
         key = (error["pointer"], error["message"])
         if key in seen:
             continue

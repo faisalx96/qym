@@ -18,7 +18,12 @@ put in ``run_metadata.qym_launch.token``:
 On success the run gets ``origin = official``, ``experiment_job_id`` and
 ``owner_user_id = experiment.created_by_user_id``; ``created_by_user_id`` stays the
 ingest principal for audit. The experiment's ``versioning_details`` are merged into
-the run's (the experiment's value wins for a key both set). Anything else leaves the run ``local``.
+the run's. Which side wins a key both set depends on whether the job sent them to the
+service (B23): when ``evaluator.config.versioning_details`` was in the job's request
+(guide v1.1), the service already merged them over its own ``agent_version`` /
+``image_version`` / ``kb_version`` (``kb_version`` always being the KB it served), so
+**the run's** value wins and the experiment's keys only fill gaps. Otherwise (an older
+service) the experiment's value wins, as before. Anything else leaves the run ``local``.
 
 Ingest principal. The dispatcher sends ``qym_api_key``, the creator's per-experiment
 key (``eval_submitter_keys``), so a conforming worker creates the run as the creator:
@@ -198,18 +203,35 @@ def link_official_run(
     run.origin = RunOrigin.OFFICIAL
     run.experiment_job_id = job.id
     if experiment.versioning_details:
-        # The experiment's keys win: they are what the launch form recorded.
-        run.versioning_details = merge_versioning_details(
-            run.versioning_details, experiment.versioning_details
-        )
+        if sent_versioning_details(job):
+            # The service merged them already and owns kb_version: the run wins.
+            run.versioning_details = merge_versioning_details(
+                experiment.versioning_details, run.versioning_details
+            )
+        else:
+            # The experiment's keys win: they are what the launch form recorded.
+            run.versioning_details = merge_versioning_details(
+                run.versioning_details, experiment.versioning_details
+            )
     if experiment.created_by_user_id:
         run.owner_user_id = experiment.created_by_user_id
     return True
+
+
+def sent_versioning_details(job: EvalExperimentJob) -> bool:
+    """Whether the job's request carried ``evaluator.config.versioning_details``."""
+    body = job.request_body if isinstance(job.request_body, Mapping) else {}
+    evaluator = body.get("evaluator")
+    config = evaluator.get("config") if isinstance(evaluator, Mapping) else None
+    return isinstance(config, Mapping) and isinstance(
+        config.get("versioning_details"), Mapping
+    )
 
 
 __all__ = [
     "LAUNCH_KEY",
     "link_official_run",
     "merge_run_metadata",
+    "sent_versioning_details",
     "strip_launch_token",
 ]
