@@ -64,6 +64,23 @@ Kind-specific keys:
   valid values).
 - ``RAG_ITERATION``: ``hints`` = ``{"values": ["", "latest"], "pattern": "^[0-9]+$", ...}``.
 
+Any-value keys (every entry, so no schema shape is dropped):
+
+- ``accepts``: the JSON types a ``json`` field takes (``["integer", "string"]`` for a
+  ``string | integer`` union), or ``None`` when anything goes. The form edits such a
+  field as JSON and, when ``"string"`` is accepted, keeps text that is not JSON as a
+  string.
+- ``item_type``: for ``array`` fields, the items' type (``string``, ``object``, …) or
+  ``None``.
+- ``additional_pointer``: on ``object`` entries whose schema also allows extra keys
+  (an explicit ``additionalProperties`` or ``patternProperties``), the templated entry
+  (``/<object>/{key}``) describing an extra key's value. It is not in ``children``;
+  ``match_pointer`` maps extra keys onto it.
+
+A schema node without ``type`` gets one inferred from its keywords (``properties`` →
+object, ``items`` → array, ``minimum`` → number, ``pattern`` → string, …); a node that
+says nothing is a ``json`` field accepting any value.
+
 ``rules`` lists the cross-field checks the service enforces so validation can mirror
 them: ``{"rule": "required_keys", "pointer", "keys"}``, ``{"rule": "min_items",
 "pointer", "min"}`` and ``{"rule": "endpoint_ref", "pointer", "collection"}``.
@@ -90,6 +107,31 @@ _BOUND_KEYS = (
     "maxLength",
 )
 _ANNOTATION_KEYS = ("title", "description", "default", "examples", "deprecated")
+_JSON_TYPES = ("null", "boolean", "integer", "number", "string", "array", "object")
+# Keywords that only make sense for one JSON type: used when ``type`` is missing.
+_TYPE_HINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "object",
+        (
+            "properties",
+            "additionalProperties",
+            "patternProperties",
+            "propertyNames",
+            "minProperties",
+            "maxProperties",
+            "required",
+        ),
+    ),
+    (
+        "array",
+        ("items", "prefixItems", "minItems", "maxItems", "uniqueItems", "contains"),
+    ),
+    ("string", ("pattern", "minLength", "maxLength", "format", "contentMediaType")),
+    (
+        "number",
+        ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"),
+    ),
+)
 
 _SECRET_NAME = re.compile(r"^(api_key|.+_api_key|.+_token)$", re.IGNORECASE)
 _MODEL_NAME = re.compile(r"^(model|model_name|.+_model|.+_model_name)$", re.IGNORECASE)
@@ -218,6 +260,9 @@ def match_pointer(descriptor: dict[str, Any], pointer: str) -> str | None:
             return None
         current = chosen
         candidates = list(fields[chosen].get("children") or [])
+        extra = fields[chosen].get("additional_pointer")
+        if extra:
+            candidates.append(extra)
     return current
 
 
@@ -294,6 +339,66 @@ def _fingerprint(resolved: _Resolved) -> str:
 def _is_object_with_properties(schema: dict[str, Any]) -> bool:
     props = schema.get("properties")
     return isinstance(props, dict) and bool(props)
+
+
+def _infer_type(schema: dict[str, Any]) -> str | None:
+    """The type a ``type``-less node implies through its keywords, else ``None``."""
+    for type_, keys in _TYPE_HINTS:
+        if any(k in schema for k in keys):
+            return type_
+    return None
+
+
+def _schema_types(schema: dict[str, Any]) -> list[str] | None:
+    """JSON types one resolved node accepts; ``None`` for anything."""
+    if isinstance(schema.get("x-accepts"), list):
+        return list(schema["x-accepts"])
+    if "x-accepts" in schema:
+        return None
+    values = schema.get("enum")
+    if "const" in schema:
+        values = [schema["const"]]
+    if isinstance(values, list):
+        return sorted({_value_type(v) for v in values}, key=_JSON_TYPES.index)
+    type_ = schema.get("type")
+    if type_ in _JSON_TYPES:
+        return ["number", "integer"] if type_ == "number" else [type_]
+    return None
+
+
+def _accepted_types(schemas: list[dict[str, Any]]) -> list[str] | None:
+    out: set[str] = set()
+    for schema in schemas:
+        types = _schema_types(schema)
+        if types is None:
+            return None
+        out.update(types)
+    return sorted(out, key=_JSON_TYPES.index)
+
+
+def _value_type(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    return "object"
+
+
+def _allows_extra_keys(schema: dict[str, Any]) -> bool:
+    extra = schema.get("additionalProperties")
+    return (
+        extra is True
+        or isinstance(extra, dict)
+        or bool(schema.get("patternProperties"))
+    )
 
 
 class _Builder:
@@ -408,7 +513,12 @@ class _Builder:
                     return _Resolved({**outer, "type": "null"}, True, ref, refs)
                 chosen = self._pick_variant(kept)
                 if chosen is None:
-                    schema = {**outer, "type": "json", "x-variants": len(kept)}
+                    schema = {
+                        **outer,
+                        "type": "json",
+                        "x-variants": len(kept),
+                        "x-accepts": _accepted_types([k.schema for k in kept]),
+                    }
                     break
                 if chosen.ref:
                     ref, ref_description = chosen.ref, chosen.ref_description
@@ -431,9 +541,23 @@ class _Builder:
                 schema["type"] = "boolean"
             else:
                 schema["type"] = "json"
+                schema["x-accepts"] = (
+                    sorted(
+                        {t for t in non_null if t in _JSON_TYPES}, key=_JSON_TYPES.index
+                    )
+                    or None
+                )
         if isinstance(schema.get("enum"), list) and None in schema["enum"]:
             nullable = True
             schema["enum"] = [v for v in schema["enum"] if v is not None]
+            if not schema["enum"]:
+                # ``enum: [null]``: only null; edited as JSON.
+                schema.pop("enum")
+                schema["type"] = "null"
+        if "type" not in schema and "enum" not in schema and "const" not in schema:
+            inferred = _infer_type(schema)
+            if inferred:
+                schema["type"] = inferred
         return _Resolved(schema, nullable, ref, refs, None, ref_description)
 
     @staticmethod
@@ -585,6 +709,8 @@ class _Builder:
             "pattern": schema.get("pattern"),
             "format": schema.get("format"),
             "quirks": [],
+            "accepts": None,
+            "item_type": None,
         }
 
     def _emit(
@@ -613,7 +739,9 @@ class _Builder:
         type_ = schema.get("type")
         if "const" in schema and "enum" not in schema:
             schema = {**schema, "enum": [schema["const"]]}
-        if isinstance(schema.get("enum"), list):
+        if isinstance(schema.get("enum"), list) and not schema["enum"]:
+            self.warn(pointer, "empty enum; edited as JSON")
+        elif isinstance(schema.get("enum"), list):
             entry.update(
                 type="enum",
                 widget="select",
@@ -625,6 +753,7 @@ class _Builder:
             entry["widget"] = self._scalar_widget(name, type_, schema)
         elif type_ == "array":
             entry["type"] = "array"
+            entry["item_type"] = self._item_type(schema, res.refs)
         elif (
             type_ == "object"
             or "properties" in schema
@@ -635,6 +764,10 @@ class _Builder:
                 entry["children"] = self._walk_properties(
                     schema, path, pointer, group, res.refs, depth
                 )
+                if _allows_extra_keys(schema):
+                    entry["additional_pointer"] = self._emit_additional(
+                        entry, schema, res.refs, group, depth
+                    )
             elif (
                 isinstance(schema.get("additionalProperties"), dict)
                 and schema["additionalProperties"]
@@ -645,6 +778,8 @@ class _Builder:
 
         if entry["type"] == "boolean":
             entry["quirks"].append("real_boolean")
+        if entry["type"] == "json":
+            entry["accepts"] = _schema_types(schema)
         if (
             _SECRET_NAME.match(name)
             or schema.get("writeOnly")
@@ -679,6 +814,45 @@ class _Builder:
         if _URL_NAME.match(name) or schema.get("format") in ("uri", "url"):
             return "url"
         return "text"
+
+    def _item_type(self, schema: dict[str, Any], refs: tuple[str, ...]) -> str | None:
+        items = schema.get("items")
+        if not isinstance(items, dict):
+            return None
+        resolved = self.resolve(items, refs)
+        if resolved.error:
+            return None
+        if isinstance(resolved.schema.get("enum"), list):
+            return "enum"
+        type_ = resolved.schema.get("type")
+        return type_ if isinstance(type_, str) else None
+
+    def _emit_additional(
+        self,
+        entry: dict[str, Any],
+        schema: dict[str, Any],
+        refs: tuple[str, ...],
+        group: tuple[str, str],
+        depth: int,
+    ) -> str:
+        """Templated entry for the extra keys of an object that also has properties."""
+        param = "key"
+        taken = set(entry["params"])
+        while param in taken:
+            param += "_key"
+        extra = schema.get("additionalProperties")
+        node = extra if isinstance(extra, dict) else True
+        item = self.resolve(node, refs)
+        return self._emit(
+            param,
+            item,
+            entry["path"],
+            entry["pointer"],
+            group,
+            False,
+            depth + 1,
+            entry["path"] + ["{" + param + "}"],
+        )
 
     def _fill_collection(
         self,
