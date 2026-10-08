@@ -33,6 +33,7 @@ from qym_platform.services.dashboard_outbox import (
     source_snapshot_query,
 )
 from qym_platform.services.ingest_completeness import runs_list_ingest_flag
+from qym_platform.services.run_lifecycle import is_run_stop_requested
 from qym_platform.services.metric_semantics import declared_direction, primary_metric
 from qym_platform.services.run_means import (
     MetricTotals,
@@ -1032,6 +1033,9 @@ def _sync_dimension(db, run_id, version):
         "owner": owner_info,
         "approval": approval_info,
         "status": dimension.status,
+        # A user cancelled the run's job; it stops once the Evaluation
+        # Service confirms (the runs list shows "Stopping…" meanwhile).
+        "stop_requested": is_run_stop_requested(db, run),
         "trace_stats": trace,
         "product_eval": metadata.get("product_eval"),
         "langfuse_url": metadata.get("langfuse_url"),

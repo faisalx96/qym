@@ -7748,7 +7748,10 @@
           if (Number.isFinite(serverNow)) live.clockOffset = serverNow - Date.now();
           const ended = !info.live;
           const changed = info.revision !== live.revision;
-          if (ended || (changed && Date.now() - live.loadedAt >= liveReloadIntervalMs(live))) {
+          // A stop was requested (its job is being cancelled) or withdrawn:
+          // show "Stopping…" at once, without waiting for the reload throttle.
+          const stopChanged = !ended && !!info.stop_requested !== !!state.run?.stop_requested;
+          if (ended || stopChanged || (changed && Date.now() - live.loadedAt >= liveReloadIntervalMs(live))) {
             const loadStarted = performance.now();
             await refreshRunData({ ended });
             if (liveRun !== live) return false;
@@ -7762,11 +7765,19 @@
             return false;
           }
           updateLiveIndicator();
-          return undefined;
+          // While stopping, probe faster so STOPPED shows as soon as it lands.
+          return info.stop_requested ? 1500 : undefined;
         }, { intervalMs: 3000, maxIntervalMs: 30000 });
         live.ticker = setInterval(tickLiveClock, 1000);
         updateLiveIndicator();
       }
+
+      // A stop made on another page or tab (admin force stop, cancelled job;
+      // QymShell.announceRunStatus): probe now instead of at the next tick.
+      document.addEventListener('qym:run-status', (event) => {
+        const runIds = (event.detail && event.detail.runIds) || [];
+        if (liveRun && liveRun.poller && (!runIds.length || runIds.includes(RUN_ID))) liveRun.poller.now();
+      }, pageListen());
 
       function stopLiveRefresh() {
         const live = liveRun;
@@ -9019,8 +9030,11 @@
         const config = run.config || {};
         const metadata = run.metadata || {};
         const scopedStatus = pass?.status || run.status || 'unknown';
-        const statusClass = String(scopedStatus).toLowerCase();
-        const statusText = escapeHtml(String(scopedStatus).toUpperCase());
+        // A cancelled evaluation job's run stays RUNNING until the Evaluation
+        // Service confirms: show the stop as under way (warning tone) meanwhile.
+        const stopping = !pass && !!run.stop_requested && isLiveStatus(run.status);
+        const statusClass = stopping ? 'stopped' : String(scopedStatus).toLowerCase();
+        const statusText = stopping ? 'STOPPING…' : escapeHtml(String(scopedStatus).toUpperCase());
         const modelName = run.model_name || config.model || config.model_name || '';
         const runId = run.run_id || RUN_ID || '';
         const taskName = run.task_name || metadata.task_name || config.task || '—';

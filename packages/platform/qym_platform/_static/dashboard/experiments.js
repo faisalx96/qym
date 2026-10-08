@@ -1050,7 +1050,15 @@
     if (!res.ok) { handleDenied(res, 'Failed to cancel the experiment'); return; }
     const skipped = (res.data.skipped_running || []).length;
     toast(outcomeSummary(res.data.outcomes) + (skipped ? '; ' + skipped + ' running left untouched' : ''), 'success');
+    announceStops(stopRunning ? running : pending);
     if (res.data.experiment) applyDetail(res.data.experiment);
+  }
+
+  // Open runs lists and run pages (any tab) re-read the cancelled jobs' runs
+  // now: they show "Stopping…" until the Evaluation Service confirms.
+  function announceStops(jobs) {
+    const runIds = (jobs || []).map((job) => job.run_id).filter(Boolean);
+    if (runIds.length) window.QymShell?.announceRunStatus?.({ runIds: runIds, status: 'STOPPING' });
   }
 
   async function cancelJob(job) {
@@ -1071,6 +1079,7 @@
     if (!state.active) return;
     if (!res.ok) { handleDenied(res, 'Failed to cancel the job'); return; }
     toast(outcomeSummary({ [job.id]: res.data.outcome }), 'success');
+    announceStops([job]);
     if (res.data.experiment) applyDetail(res.data.experiment);
   }
 

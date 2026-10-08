@@ -534,9 +534,57 @@ def _before_flush(session, flush_context, instances):
             if (
                 attrs.remote_versioning.history.has_changes()
                 or attrs.remote_result.history.has_changes()
+                or _enters_or_leaves_cancelling(attrs.status.history)
             ):
                 jobs.add(obj.id)
     session.info["dashboard_dimension_changes"] = (users, versions, jobs)
+
+
+def _enters_or_leaves_cancelling(history):
+    """A job status change into or out of ``CANCELLING`` ("Stopping…" runs)."""
+    from qym_platform.db.models import EvalJobStatus
+
+    return any(
+        value == EvalJobStatus.CANCELLING
+        for value in (*(history.added or ()), *(history.deleted or ()))
+    )
+
+
+def _run_descriptor_snapshots(rows):
+    """Run-level UPSERTs that republish each run's descriptor (no numbers)."""
+    return [
+        (
+            dict(
+                partition_key=run_id,
+                project_key=project,
+                record_key=run_id + ":run",
+                record_kind="run",
+                operation="UPSERT",
+            ),
+            [],
+        )
+        for run_id, project in rows
+    ]
+
+
+def enqueue_job_run_refresh(session, job_ids):
+    """Republish the runs of evaluation jobs changed by a bulk ``UPDATE``.
+
+    Guarded job updates (``eval_experiments.cancel_job``) bypass the flush
+    hooks; without this a run whose job a user is cancelling would not show
+    "Stopping…" in the runs list until something else touched the run.
+    """
+    from qym_platform.db.models import Run
+
+    ids = sorted({job_id for job_id in job_ids if job_id})
+    if not ids or session.info.get("dashboard_projection_worker"):
+        return
+    connection = session.connection()
+    rows = connection.execute(
+        select(Run.id, Run.project_id).where(Run.experiment_job_id.in_(ids))
+    ).all()
+    if rows:
+        enqueue_snapshots(connection, _run_descriptor_snapshots(rows))
 
 
 def _after_flush(session, flush_context):
@@ -562,19 +610,7 @@ def _after_flush(session, flush_context):
                 Run.experiment_job_id.in_(jobs),
             )
         )
-        dimensions = [
-            (
-                dict(
-                    partition_key=run_id,
-                    project_key=project,
-                    record_key=run_id + ":run",
-                    record_kind="run",
-                    operation="UPSERT",
-                ),
-                [],
-            )
-            for run_id, project in session.connection().execute(query)
-        ]
+        dimensions = _run_descriptor_snapshots(session.connection().execute(query))
     if pending or dimensions:
         enqueue_snapshots(
             session.connection(),

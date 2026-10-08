@@ -140,3 +140,36 @@ def reconcile_stale_running_run(
     run.status_reason = RUN_STATUS_REASON_LEASE_TIMEOUT
     run.ended_at = last_seen.replace(tzinfo=None)
     return True
+
+
+LIVE_RUN_STATUSES = frozenset({RunWorkflowStatus.RUNNING, RunWorkflowStatus.PENDING})
+
+
+def stop_requested_job_ids(db, job_ids) -> set:
+    """The evaluation jobs among ``job_ids`` that a user is cancelling.
+
+    Cancelling a running job is asynchronous: the dispatcher cancels it on the
+    Evaluation Service and only then marks its run ``STOPPED``
+    (``eval_experiments.stop_linked_run``). Until then the run is still
+    ``RUNNING`` but its stop was requested; pages show it as "Stopping…"
+    instead of leaving it looking untouched.
+    """
+    from qym_platform.db.models import EvalExperimentJob, EvalJobStatus
+
+    ids = {job_id for job_id in job_ids if job_id}
+    if not ids:
+        return set()
+    return {
+        job_id
+        for (job_id,) in db.query(EvalExperimentJob.id).filter(
+            EvalExperimentJob.id.in_(ids),
+            EvalExperimentJob.status == EvalJobStatus.CANCELLING,
+        )
+    }
+
+
+def is_run_stop_requested(db, run: Run) -> bool:
+    """Whether a live run's evaluation job is being cancelled (see above)."""
+    if run.status not in LIVE_RUN_STATUSES or not run.experiment_job_id:
+        return False
+    return bool(stop_requested_job_ids(db, [run.experiment_job_id]))

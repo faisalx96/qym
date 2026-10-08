@@ -90,8 +90,10 @@ from qym_platform.services.run_lifecycle import (
     RUN_STATUS_REASONS_CANCELLED,
     can_force_stop_run,
     is_run_force_stopped,
+    is_run_stop_requested,
     is_stale_running_run,
     reconcile_stale_running_run,
+    stop_requested_job_ids,
 )
 from qym_platform.services.eval_run_linking import strip_launch_token
 from qym_platform.services.run_experiment_panel import run_experiment_panel
@@ -2057,6 +2059,7 @@ def _live_run_summary(
     owner: Optional[User],
     item_agg: Dict[str, Any],
     dataset_fields: Optional[Dict[str, Any]] = None,
+    stop_requested: bool = False,
 ) -> Dict[str, Any]:
     expected_total = None
     if isinstance(run.run_metadata, dict):
@@ -2098,6 +2101,7 @@ def _live_run_summary(
         if hasattr(run.status, "value")
         else str(run.status or ""),
         "status_reason": run.status_reason,
+        "stop_requested": stop_requested,
         "can_force_stop": can_force_stop_run(run),
         "ended_at": _iso(run.ended_at) if run.ended_at else None,
         "timestamp": _iso(run.started_at or run.created_at),
@@ -2178,6 +2182,10 @@ def _summarize_runs_for_admin(db: Session, runs: List[Run]) -> List[Dict[str, An
     project_map = {project.id: project for project in projects}
     owner_map = {owner.id: owner for owner in owners}
     dataset_info = _dataset_version_info_map(db, runs)
+    stopping_jobs = stop_requested_job_ids(
+        db,
+        [run.experiment_job_id for run in runs if run.status in _LIVE_RUN_STATUSES],
+    )
 
     return [
         _live_run_summary(
@@ -2186,6 +2194,10 @@ def _summarize_runs_for_admin(db: Session, runs: List[Run]) -> List[Dict[str, An
             owner=owner_map.get(run.owner_user_id),
             item_agg=item_agg.get(run.id, {}),
             dataset_fields=_dataset_version_fields(run, dataset_info),
+            stop_requested=bool(
+                run.status in _LIVE_RUN_STATUSES
+                and run.experiment_job_id in stopping_jobs
+            ),
         )
         for run in runs
     ]
@@ -4373,6 +4385,7 @@ def _build_run_data(
                 "status": run.status,
                 "status_reason": run.status_reason,
                 "status_reason_label": _status_reason_label(db, run),
+                "stop_requested": is_run_stop_requested(db, run),
                 "owner": owner_info,
                 "team_name": project.name if project else None,
                 "project": project_info,
@@ -5700,6 +5713,9 @@ def run_live_status(
         "status": status,
         "status_reason": run.status_reason,
         "live": run.status in _LIVE_RUN_STATUSES,
+        # Its evaluation job is being cancelled: the page shows "Stopping…"
+        # and keeps following it until the run reports STOPPED.
+        "stop_requested": is_run_stop_requested(db, run),
         "started_at": (
             _iso(run.started_at or run.created_at)
             if (run.started_at or run.created_at)
