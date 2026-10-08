@@ -118,6 +118,61 @@ def test_opening_an_item_redraws_only_that_card(browser):
         view.close()
 
 
+ROW_METRICS = """() => [...document.querySelectorAll('#items-grid > .item-card.item-collapsed')]
+  .slice(0, 4).map(card => {
+    const box = card.querySelector('.rdi-metrics').getBoundingClientRect();
+    const shown = [...card.querySelectorAll('.rdi-metrics [data-qym-metric-column]')]
+      .filter(cell => getComputedStyle(cell).display !== 'none');
+    return {
+      id: card.dataset.itemId,
+      shown: shown.map(cell => cell.querySelector('.metric-score-name').textContent),
+      inside: shown.every(cell => {
+        const r = cell.getBoundingClientRect();
+        return r.width > 0 && r.left >= box.left - 1 && r.right <= box.right + 1;
+      }),
+      more: card.querySelector('.rdi-metric-more').hidden
+        ? '' : card.querySelector('.rdi-metric-more').textContent,
+    };
+  })"""
+
+
+@pytest.mark.parametrize("width", [1440, 800])
+def test_closing_an_item_keeps_its_metrics_beside_it(browser, width):
+    """Closing an item leaves every row's metric pills fitted and in view,
+    not sized for all metrics and clipped out of the metrics cell."""
+    view = RunPage(browser, count=20)
+    names = ["accuracy", "count"] + [f"judge_metric_{k}" for k in range(8)]
+    data = view.data["run-1"]
+    data["run"]["metric_names"] = names
+    data["snapshot"]["metric_names"] = names
+    for name in names[2:]:
+        data["snapshot"]["metric_specs"][name] = {
+            "score_type": "number",
+            "direction": "maximize",
+        }
+    for row in data["snapshot"]["rows"]:
+        row["metric_values"] = row["metric_values"] + [0.5] * 8
+    try:
+        view.page.set_viewport_size({"width": width, "height": 900})
+        view.goto()
+        page = view.page
+        page.wait_for_selector(CARDS + " .rdi-metrics [data-qym-metric-column]")
+        page.wait_for_timeout(300)
+        before = page.evaluate(ROW_METRICS)
+        assert before[1]["shown"] and before[1]["more"], before
+        assert all(row["inside"] for row in before), before
+
+        page.locator(CARDS).nth(1).click()
+        page.wait_for_selector(CARDS + ":nth-child(2) .item-input-row")
+        page.locator(CARDS + ":nth-child(2) [data-item-expand]").click()
+        page.wait_for_selector(CARDS + ":nth-child(2).item-collapsed")
+
+        after = page.evaluate(ROW_METRICS)
+        assert after == before
+    finally:
+        view.close()
+
+
 def test_sort_page_and_display_changes_keep_the_overview_and_step_latency(browser):
     view = RunPage(browser)
     try:

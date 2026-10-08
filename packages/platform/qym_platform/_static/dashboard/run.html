@@ -8346,7 +8346,13 @@
             if (target) target.focus({ preventScroll: true });
           }
         });
-        if (patched) window.QymUIComponents?.alignMetricColumns(container);
+        if (patched) {
+          window.QymUIComponents?.alignMetricColumns(container);
+          // A card closed again needs the row fit too (shown metrics, order,
+          // "+N more"): the alignment alone sizes every row's grid for all
+          // metrics, which overflows the clipped metrics cell and hides them.
+          fitItemRows(container);
+        }
       }
       function renderOpenedItemStatus(itemId) {
         const style = ' style="padding: var(--space-md); color: var(--text-muted); font-size: var(--font-base);"';
