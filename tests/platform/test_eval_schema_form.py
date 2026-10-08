@@ -21,7 +21,7 @@ from qym_platform.services.eval_schema_form import (build_form_descriptor,
 FIXTURE = Path(__file__).parent / "fixtures" / "eval_env_overrides_schema.json"
 
 # The abbreviated response of GET /evals/env-overrides/schema, verbatim from
-# docs/evaluation-service-api-integration.md §3.3 (placeholders included).
+# docs/evaluation-service-api-integration-v1.1.md §3.3 (placeholders included).
 GUIDE_EXAMPLE_SCHEMA = {
     "$defs": {
         "EndpointConfig": {

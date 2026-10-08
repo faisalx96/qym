@@ -721,7 +721,7 @@ This section is the runbook for Evaluation Service experiments: remote deploymen
 ("environments") that qym launches evaluation jobs on. The user-facing workflow is in
 the [Platform User Guide](../../packages/platform/docs/USER_GUIDE.md#experiments-evaluation-service).
 The service's HTTP contract is in
-[`evaluation-service-api-integration.md`](../evaluation-service-api-integration.md).
+[`evaluation-service-api-integration-v1.1.md`](../evaluation-service-api-integration-v1.1.md).
 Code lives in `packages/platform/qym_platform/services/eval_*.py` and
 `api/eval_*.py` / `api/experiments.py`.
 

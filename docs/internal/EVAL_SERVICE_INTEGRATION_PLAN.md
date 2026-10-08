@@ -1,7 +1,7 @@
 # Evaluation Service Integration Plan
 
 Status: proposal (v2) · Branch: `experiments-platform` · Source contract:
-[`docs/evaluation-service-api-integration.md`](../evaluation-service-api-integration.md)
+[`docs/evaluation-service-api-integration-v1.0.md`](../evaluation-service-api-integration-v1.0.md)
 
 ## 1. Goal
 
