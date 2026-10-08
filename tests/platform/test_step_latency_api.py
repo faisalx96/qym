@@ -473,3 +473,21 @@ def test_legacy_spans_read_only_the_attributes_used(client, session_factory):
     assert tokens == (12, 7, 5)
     assert row["step_type"] == "llm:m2"
     assert not any("spans.attributes AS" in s for s in statements), statements
+
+
+def test_call_site_rollup_names_models_and_keeps_them_in_csv(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+    headers = _headers("owner@example.com")
+    payload = client.get("/api/runs/run-1/step-latency?rollup=site", headers=headers).json()
+    llm = next(g for g in payload["groups"] if g["kind"] == "LLM")
+    assert (llm["step_type"], llm["model"], llm["agent"]) == ("ChatCompletion", "m1", None)
+    assert payload["agents"] == []
+    assert payload["traces"]["n"] == 1 and payload["traces"]["mean_ms"] == pytest.approx(2500.0)
+    summary = client.get("/api/runs/run-1/step-latency?rollup=site&format=csv", headers=headers).text
+    assert summary.splitlines()[0].startswith("phase,step_type,kind,model,agent,n,error_count")
+    spans = client.get("/api/runs/run-1/step-latency?rollup=site&format=csv&level=spans", headers=headers).text
+    assert spans.splitlines()[0].startswith("run_id,trace_id,span_id,phase,kind,step_type,name,model,agent,duration_ms")
+    # The default rollup's CSV is unchanged.
+    plain = client.get("/api/runs/run-1/step-latency?format=csv", headers=headers).text
+    assert plain.splitlines()[0].startswith("phase,step_type,kind,n,error_count")

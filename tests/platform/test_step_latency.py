@@ -382,3 +382,72 @@ class TestPhaseParents:
 
     def test_traces_without_timed_parents_report_no_phases(self):
         assert summarize_step_latency(make_trace())["phases"] == []
+
+
+def agent(span_id, name, parent, dur, trace="t1", status="OK"):
+    return FakeSpan(
+        span_id=span_id, name=name, parent_span_id=parent, duration_ms=dur, trace_id=trace,
+        status=status, attributes={"openinference.span.kind": "AGENT"},
+    )
+
+
+def named_llm(span_id, name, parent, dur, model="m1", trace="t1"):
+    span = llm(span_id, parent, dur, model=model, trace=trace)
+    span.name = name
+    return span
+
+
+def site_trace(trace="t1"):
+    """root -> task (AGENT: the phase parent) -> researcher (AGENT) ->
+    [web_search, planner@m1]; task -> sql_agent (AGENT) -> [sql_query];
+    task -> planner@m1, planner@m2; root -> eval_metrics -> judge@j1."""
+    return [
+        FakeSpan(span_id="root", name="eval-item", trace_id=trace, duration_ms=9000.0),
+        agent("task", "orchestrator", "root", 6000.0, trace=trace),
+        agent("res", "researcher", "task", 2500.0, trace=trace),
+        tool("ws", "web_search", "res", 900.0, trace=trace),
+        named_llm("p1", "planner", "res", 1200.0, trace=trace),
+        agent("sqla", "sql_agent", "task", 1500.0, trace=trace),
+        tool("sq", "sql_query", "sqla", 700.0, trace=trace),
+        named_llm("p2", "planner", "task", 1000.0, trace=trace),
+        named_llm("p3", "planner", "task", 1100.0, model="m2", trace=trace),
+        FakeSpan(span_id="em", name="eval_metrics", parent_span_id="root", trace_id=trace, duration_ms=2000.0),
+        named_llm("j1", "metric:faithfulness", "em", 1800.0, model="j1", trace=trace),
+    ]
+
+
+class TestCallSiteRollup:
+    def test_llm_calls_split_by_call_site_and_model(self):
+        groups = summarize_step_latency(site_trace(), rollup="site")["groups"]
+        llm_sites = sorted(((g["step_type"], g["model"], g["agent"], g["n"]) for g in groups if g["kind"] == "LLM"),
+                           key=lambda site: (site[0], site[1], site[2] or ""))
+        assert llm_sites == [
+            ("metric:faithfulness", "j1", None, 1),
+            ("planner", "m1", None, 1),
+            ("planner", "m1", "researcher", 1),
+            ("planner", "m2", None, 1),
+        ]
+        # The default rollup still groups LLM calls by model only.
+        by_model = {g["step_type"]: g["n"] for g in compute_step_latency(site_trace()) if g["kind"] == "LLM"}
+        assert by_model == {"llm:m1": 2, "llm:m2": 1, "llm:j1": 1}
+
+    def test_steps_name_their_nearest_sub_agent_but_not_the_phase_parent(self):
+        groups = summarize_step_latency(site_trace(), rollup="site")["groups"]
+        agents = {g["step_type"]: g["agent"] for g in groups if g["kind"] == "TOOL"}
+        assert agents == {"web_search": "researcher", "sql_query": "sql_agent"}
+        summary = summarize_step_latency(site_trace(), rollup="site")
+        spans = {a["name"]: (a["n"], a["mean_ms"]) for a in summary["agents"]}
+        # The task span is the Agent phase itself, never a sub-agent.
+        assert spans == {"researcher": (1, 2500.0), "sql_agent": (1, 1500.0)}
+
+    def test_other_rollups_keep_their_shape(self):
+        summary = summarize_step_latency(site_trace(), rollup="name")
+        assert "agents" not in summary
+        assert all("model" not in g and "agent" not in g for g in summary["groups"])
+
+    def test_traces_time_whole_traces_and_count_failed_ones(self):
+        spans = site_trace("t1") + site_trace("t2")
+        next(s for s in spans if s.trace_id == "t2" and s.span_id == "task").status = "ERROR"
+        traces = summarize_step_latency(spans, rollup="site")["traces"]
+        assert (traces["n"], traces["error_count"]) == (1, 1)
+        assert traces["mean_ms"] == pytest.approx(9000.0)
