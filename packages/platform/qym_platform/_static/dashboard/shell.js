@@ -1627,6 +1627,42 @@
     if (_pageController && !_pageController.signal.aborted) _pageController.abort();
   }
 
+  // ── Run status changes ──
+  // A stop made on one page (an admin force stop, a cancelled evaluation job)
+  // reaches every open page that shows runs: this tab through a document
+  // event, other tabs through a BroadcastChannel. The runs list and the run
+  // page re-read at once instead of waiting for their next poll.
+  //   QymShell.announceRunStatus({ runIds: [...], status: 'STOPPED' | 'STOPPING' })
+  //   document.addEventListener('qym:run-status', e => e.detail ...)
+  var RUN_STATUS_EVENT = 'qym:run-status';
+  var _runStatusChannel = null;
+  try {
+    if (typeof BroadcastChannel === 'function') {
+      _runStatusChannel = new BroadcastChannel('qym-run-status');
+      _runStatusChannel.onmessage = function (event) { dispatchRunStatus(event.data); };
+    }
+  } catch (err) {
+    _runStatusChannel = null;
+  }
+
+  function dispatchRunStatus(detail) {
+    if (!detail || typeof detail !== 'object') return;
+    var runIds = Array.isArray(detail.runIds) ? detail.runIds.filter(function (id) { return typeof id === 'string' && id; }) : [];
+    var status = typeof detail.status === 'string' ? detail.status.toUpperCase() : '';
+    document.dispatchEvent(new CustomEvent(RUN_STATUS_EVENT, { detail: { runIds: runIds, status: status } }));
+  }
+
+  function announceRunStatus(detail) {
+    var message = {
+      runIds: (detail && Array.isArray(detail.runIds)) ? detail.runIds.slice(0, 500) : [],
+      status: (detail && detail.status) || '',
+    };
+    dispatchRunStatus(message);
+    if (_runStatusChannel) {
+      try { _runStatusChannel.postMessage(message); } catch (err) { /* other tabs poll anyway */ }
+    }
+  }
+
   function mountPage() {
     unmountPage();
     _pageController = typeof AbortController === 'function' ? new AbortController() : null;
@@ -2808,6 +2844,7 @@
     navigateTo: navigateTo,
     pageSignal: pageSignal,
     onPageUnmount: onPageUnmount,
+    announceRunStatus: announceRunStatus,
     replaceUrlQuery: replaceUrlQuery,
     copyText: copyText,
     openCreateProjectDialog: openCreateProjectDialog,

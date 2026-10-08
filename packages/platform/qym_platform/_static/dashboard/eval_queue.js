@@ -403,6 +403,8 @@
     } else {
       toast(outcomeSummary(res.data.counts), 'success');
       state.selected.clear();
+      // Open runs lists and run pages (any tab) re-read their runs now.
+      window.QymShell?.announceRunStatus?.({ runIds: [], status: 'STOPPING' });
     }
     await refresh({ silent: false, force: true });
   }

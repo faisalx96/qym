@@ -808,6 +808,13 @@ def cancel_jobs(
                 },
             )
         )
+    # A cancelling job's run is still RUNNING until the dispatcher's remote cancel:
+    # republish it now so the runs list shows "Stopping…" within a projection tick.
+    cancelling = [job_id for job_id in ids if outcomes[job_id] == CANCELLING]
+    if cancelling:
+        from .dashboard_outbox import enqueue_job_run_refresh
+
+        enqueue_job_run_refresh(db, cancelling)
     # Last, after every job and run row: the dispatcher's order (job, environment or
     # run, experiment), so a cancel racing a dispatcher settle cannot deadlock.
     for experiment_id in sorted(touched):

@@ -4404,6 +4404,12 @@
       // Build status tooltip with approval info. The approval keeps the last
       // decision after it is withdrawn; attribute only a decision in effect.
       let statusTooltip = status;
+      // A cancelled evaluation job's run stays RUNNING until the Evaluation
+      // Service confirms; show the stop as under way meanwhile.
+      const stopping = isStoppingRun(run);
+      const badgeStatus = stopping ? 'STOPPED' : status;
+      const badgeLabel = stopping ? 'STOPPING…' : status;
+      if (stopping) statusTooltip = 'Stop requested: waiting for the evaluation service to confirm';
       if (approval && approval.decision_by && approval.decision === status) {
         statusTooltip = `${status} by ${approval.decision_by.display_name || approval.decision_by.email}`;
         if (approval.comment) {
@@ -4433,7 +4439,7 @@
             </div>
           </td>
           <td class="col-status">
-            ${status ? `<span class="status-badge qym-badge status-${escapeHtml(status)}" title="${escapeHtml(statusTooltip)}">${escapeHtml(status)}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}${renderIngestIncomplete(run)}
+            ${status ? `<span class="status-badge qym-badge status-${escapeHtml(badgeStatus)}" title="${escapeHtml(statusTooltip)}">${escapeHtml(badgeLabel)}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}${renderIngestIncomplete(run)}
           </td>
           <td class="col-task">
             <span class="tag qym-tag task" title="${escapeHtml(run.task_name || '')}">${run.task_name ? escapeHtml(run.task_name) : '—'}</span>
@@ -7621,6 +7627,13 @@
   const PAGE_CONCURRENCY = 3;
   const LIVE_REFRESH_INTERVAL_MS = 15000;
   const IDLE_REFRESH_INTERVAL_MS = 60000;
+  // While a stop is under way (a run shows "Stopping…", or a stop was just
+  // announced by another page), poll fast so STOPPED shows within seconds.
+  const STOPPING_REFRESH_INTERVAL_MS = 2000;
+  // How long an announced stop keeps the fast cadence: the dashboard
+  // projection publishes a status change in about a second, but a stop's
+  // remote cancel can take a few polls to confirm.
+  const ANNOUNCED_STOP_WINDOW_MS = 20000;
   const FULL_REFRESH_STALE_MS = 5 * 60 * 1000;
 
   function hasActiveRuns(runs = state.flatRuns) {
@@ -7628,6 +7641,16 @@
       const status = String(r.status || '').toUpperCase();
       return status === 'RUNNING' || status === 'PENDING';
     });
+  }
+
+  function isStoppingRun(run) {
+    const status = String(run?.status || '').toUpperCase();
+    return !!run?.stop_requested && (status === 'RUNNING' || status === 'PENDING');
+  }
+
+  function hasStoppingRuns() {
+    return (state.flatRuns || []).some(isStoppingRun)
+      || (state.dashboardPage?.rows || []).some(isStoppingRun);
   }
 
   function queueRunsFetch(options) {
@@ -9844,7 +9867,16 @@
         state._updatingPolls = 0;
       }
       const backoffMs = Math.min(15000, 2000 * Math.pow(2, Math.max(0, (state._updatingPolls || 1) - 1)));
-      const intervalMs = state.dashboardBackfilling ? LIVE_REFRESH_INTERVAL_MS
+      // A stop the service is slow to confirm (unreachable, retrying) falls
+      // back to the live cadence after a minute instead of polling fast for hours.
+      const now = Date.now();
+      const stoppingShown = hasStoppingRuns();
+      if (!stoppingShown) state._stoppingSince = 0;
+      else if (!state._stoppingSince) state._stoppingSince = now;
+      const stopping = now < (state._announcedStopUntil || 0)
+        || (stoppingShown && now - state._stoppingSince < 60000);
+      const intervalMs = stopping ? STOPPING_REFRESH_INTERVAL_MS
+        : state.dashboardBackfilling ? LIVE_REFRESH_INTERVAL_MS
         : updating ? backoffMs
         : (state.dashboardOverview?.has_active_runs || hasActiveRuns()) ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS;
       if (window.__QYM_DASHBOARD_INTERVAL__) clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
@@ -9854,6 +9886,16 @@
       window.__QYM_DASHBOARD_INTERVAL__ = setInterval(pollRuns, IDLE_REFRESH_INTERVAL_MS);
     }
   }
+
+  // A stop made on another page or tab (admin force stop, cancelled job):
+  // re-read now and keep polling fast until it shows (QymShell.announceRunStatus).
+  document.addEventListener('qym:run-status', () => {
+    if (!dashboardActive) return;
+    state._announcedStopUntil = Date.now() + ANNOUNCED_STOP_WINDOW_MS;
+    updateRunsRefreshCadence();
+    if (document.hidden) state._pollMissedWhileHidden = true;
+    else fetchRuns();
+  }, pageListen());
 
   // Hidden tabs do not poll; the first look back refreshes once.
   function pollRuns() {

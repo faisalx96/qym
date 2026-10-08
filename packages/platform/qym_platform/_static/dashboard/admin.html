@@ -412,6 +412,8 @@
           liveRequest++;
           recentRequest++;
           forceStoppedRuns.set(runId, stopped);
+          // Open runs lists and run pages (any tab) re-read now.
+          window.QymShell?.announceRunStatus?.({ runIds: [runId], status: 'STOPPED' });
           if (state.liveRuns.some(item => item.run_id === runId)) state.liveRunsTotal = Math.max(0, state.liveRunsTotal - 1);
           state.liveRuns = state.liveRuns.filter(item => item.run_id !== runId);
           state.recentRuns = state.recentRuns.map(item => item.run_id === runId ? { ...item, ...stopped } : item);
