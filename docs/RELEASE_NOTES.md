@@ -27,6 +27,7 @@ Fixes the P1 issues of the September design review: a run page you can read and 
 - Datasets: indexed search over IDs, inputs, outputs and metadata; stored lineage counts; compare ordered by time with timestamps and paged diffs; Deleted datasets with restore.
 - Runs list: keyed rows, stable menus, a run search (served by a trigram index), a custom date range; Deleted Runs lists every deleted run, page by page.
 - Runs list: runs checked for Compare stay checked after Back and on return to Runs until you clear them or sign out, and the pager stays beside the selection actions; frozen columns that would cover more than about half the table scroll with it until they fit (date first, never the run name), and the Columns menu names them; your saved choice is kept.
+- Runs list: Columns shows and hides every Runs column (Run name, Status, Task, Model, Dataset, Owner, Date, Analysis, Experiment, Version, Duration), frozen ones included; the frozen columns close up around a hidden one, a hidden Run name keeps its checkbox while selecting, and the table always keeps at least one column. A column choice saved earlier still applies, with every Runs column shown.
 - Runs, Charts and Models: the project overview is aggregated in the database from each run's stored inputs and shared by every web process and pod, once per published change, with the same numbers as before.
 - Admin: confirm-and-undo when disabling users, never zero active admins, no self-disable or self-demotion.
 - Compare and Models: a baseline with noise bands, short labels, server-side model stats.

@@ -297,7 +297,9 @@ def frozen_section(page):
 
 def toggle_with_keyboard(page, *names):
     for name in names:
-        page.get_by_role("checkbox", name=name, exact=True).focus()
+        page.get_by_role("group", name="Frozen columns").get_by_role(
+            "checkbox", name=name, exact=True
+        ).focus()
         page.keyboard.press("Space")
     settle(page)
 
@@ -359,7 +361,8 @@ def test_default_keeps_the_seven_identity_columns_frozen_as_before(browser):
             """() => [...document.querySelectorAll('#metric-visibility-dropdown .multi-select-option')]
               .filter(opt => opt.style.display !== 'none').map(opt => opt.textContent.trim())"""
         )
-        assert visible == ["Dataset", "Date"]
+        # Run columns (show/hide) then Frozen columns.
+        assert visible == ["Dataset", "Date", "Dataset", "Date"]
     finally:
         view.close()
 

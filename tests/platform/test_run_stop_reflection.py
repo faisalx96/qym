@@ -217,7 +217,7 @@ def test_runs_list_shows_stopping_and_polls_fast_while_a_stop_is_under_way():
     # A slow-to-confirm stop falls back to the live cadence.
     assert "now - state._stoppingSince < 60000" in js
     index = _read("index.html")
-    assert "dashboard.js?v=p1-20261008-stop" in index
+    assert "dashboard.js?v=p1-20261008-cols" in index
 
 
 def test_run_page_shows_stopping_and_reacts_at_once():
