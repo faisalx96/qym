@@ -1,14 +1,40 @@
-# Unreleased — Evaluation Service and private test sets
+# October 2026 — Platform 0.6.0 / SDK 1.9.0
+
+Evaluation Service experiments get a schema-driven launch form, runs carry free-form versioning details, stops show within seconds, and the platform logs every error with its traceback. SDK 1.9.0 scores metrics in their own queue. Platform 0.6.0 still accepts SDK 1.8.0.
 
 ## Before you update
 
-- **SDK 1.9.0.** Metrics are scored in their own queue, separate from task execution, so a slow metric no longer holds up the next task; `QYM_METRIC_CONCURRENCY` (or `config["metric_concurrency"]`, default `max_concurrency`) sets how many items are scored at once. Runs can carry free-form `versioning_details` (`EvaluatorConfig.versioning_details`, `qym run create --versioning-detail KEY=VALUE` / `--versioning-details JSON`). The platform still accepts SDK 1.8.0; 1.9.0 sends `versioning_details` only when it is set.
 - **Migrations `0072`–`0086` (head `0086`).** Evaluation Service environments, experiments, presets and best-run scores, filterable run versioning, admin-only private test sets and dataset read tokens. All are quick DDL. These revisions were numbered `0060`–`0070` before `main`'s `0060`–`0071` were merged; a database stamped with one of the old ids needs the one-time re-stamp in `docs/internal/OPERATIONS.md` ("Databases that ran the pre-merge eval branch"). `0083` adds the job queue columns to `background_jobs` and the empty `service_heartbeats` table for the optional service split (main / ingestion / workers); the single-server layout is unchanged. `0084` adds the nullable `versioning_details` JSON column to `runs` and `eval_experiments` (metadata-only). `0086` adds the environments' evaluator schema history (`eval_environment_evaluator_schemas`) and two `eval_environments` columns.
 - **Daily span partitions (`0085`).** Raw traces (`spans`) are now partitioned by day instead of by month, so `QYM_SPAN_RETENTION_DAYS` frees disk a day at a time. Existing monthly partitions keep their data and are dropped once their whole month expires; `0085` drops the still-empty monthly partitions pre-created for future months and creates daily ones 14 days ahead (`QYM_SPAN_PARTITION_DAYS_AHEAD`). See "Span partitions" in `docs/internal/OPERATIONS.md`.
+- **New platform env vars:** `QYM_LOG_LEVEL` (default `INFO`), `QYM_LOG_FORMAT` (`text` | `json`, default `text`) and `QYM_SPAN_PARTITION_DAYS_AHEAD` (default 14). See "Logging" and "Span partitions" in `docs/internal/OPERATIONS.md`.
+- **Timing logger renamed.** The per-request timing line now comes from `qym_platform.middleware.timing` instead of `qym.timing`; update any log filter that matches the old name.
+
+## SDK 1.9.0
+
+- **Metrics run in their own queue.** Task workers hand each output to a metric queue and move straight on to the next item, so a slow metric no longer holds up tasks. `QYM_METRIC_CONCURRENCY` (or `config["metric_concurrency"]`, default `max_concurrency`) sets how many items are scored at once. An item still completes, and reaches the platform with its scores, only after it is scored; the run ends once the queue drains.
+- **`versioning_details` on runs.** Attach free-form keys with `EvaluatorConfig.versioning_details`, `qym run create --versioning-detail KEY=VALUE` or `--versioning-details JSON`. They show on the run page and in `qym run get` / `qym run list --json`. 1.9.0 sends them only when set, so it works with platform 0.5.0 too.
 
 ## What changed
 
+### Experiments
+
+- **Evaluation config tab.** Environment and role overrides, sweeps, evaluation inputs and Raw JSON have their own tab on the new-experiment page and in the default preset editor. Presets now show, save and restore every value: evaluation inputs, `run_metadata` and `report_k` are visible and can be cleared, edits survive leaving Customize, and a preset is applied only after every environment's form has loaded and again after a schema refresh.
 - **Evaluation inputs from the service's evaluator schema.** qym reads `GET /evals/evaluator/schema` (Evaluation Service integration guide v1.1) next to the settings schema, on **Test**, schema refresh and when an environment is selected on the new-experiment page. The **Evaluation inputs** card, presets and launch validation follow it, so new `evaluator.config` keys such as `metric_concurrency` appear without a qym update and keys the service dropped are removed from presets on load. Services older than v1.1 keep the standard inputs, with a note on the card. On v1.1 services the experiment's **Versioning details** are also sent as `evaluator.config.versioning_details`.
+- **Any schema shape.** Settings without a declared type, unions, open objects and mixed enums are detected and shown; nothing is dropped. A value that doesn't fit its field is edited as JSON, extra keys can be added and removed, and values no field covers appear under **Other values**.
+- **Global model.** The Models step has a global model that sets every LLM endpoint at once (roles follow their endpoint). Endpoints changed afterwards are marked custom; a later global change overwrites all of them. A global model sweep is one axis, so two models give two runs.
+- **Versioning details.** The launch form has a **Versioning details** box; the keys are stored on the experiment, kept by Rerun and merged into each linked run.
+
+### Runs
+
+- **Stops show within seconds.** Cancelling a job or force-stopping a run shows **Stopping…** on the runs list and run page within about 1–3 seconds, and other open tabs are told at once.
+- **Every runs column can be hidden,** frozen ones included; the frozen block closes up without gaps.
+- **JSON run metadata** opens in a collapsible viewer with expand/collapse all and copy.
+- **Item metrics stay beside the item** after its dropdown is closed.
+
+### Operations
+
+- **Central logging.** One logging setup for every platform process, with request ids, tracebacks for every caught or unhandled error, redaction of keys, tokens, passwords and Authorization headers, and optional JSON output.
+- **Daily span partitions** (see Before you update).
 
 # October 2026 — Platform 0.5.0 (SDK 1.8.0 unchanged)
 
