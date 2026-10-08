@@ -3387,7 +3387,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=p1-20261006-1" in (
+    assert "playground.js?v=p1-20261008-cols" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground
@@ -4025,7 +4025,7 @@ def test_runs_table_freezes_the_chosen_identity_columns() -> None:
 
     # JS writes the offsets from the measured widths of the frozen set only,
     # remembers the choice per browser, and offers it in the Columns menu.
-    assert "applyRunsFrozenColumns(table, widths, fitted);" in source
+    assert "applyRunsFrozenColumns(table, widths, fitted, rendered);" in source
     assert "table.style.setProperty(`--runs-col-${column.key}-left`, `${left}px`);" in source
     assert "const RUNS_FROZEN_COLUMNS_STORAGE_KEY = 'qym:runs-frozen-columns';" in source
     assert "renderRunsFrozenColumnsSection(searchValue);" in source
@@ -4034,7 +4034,7 @@ def test_runs_table_freezes_the_chosen_identity_columns() -> None:
     # go (never Run name) without touching the saved choice, re-checked when
     # the table resizes; the Columns menu names them.
     assert "const RUNS_FROZEN_MAX_SHARE = 0.55;" in source
-    fit = source.split("function fitRunsFrozenColumns(widths, available) {", 1)[1].split("\n  }\n", 1)[0]
+    fit = source.split("function fitRunsFrozenColumns(widths, available, rendered = null) {", 1)[1].split("\n  }\n", 1)[0]
     assert "fitted[fitted.length - 1] !== 'run'" in fit
     assert "localStorage" not in fit
     assert "new ResizeObserver(" in source
