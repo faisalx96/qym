@@ -23,7 +23,7 @@ monthly partition overlapping them and log it; recreate monthly ones by hand
 if you need to run that code for long.
 
 Revision ID: 0085
-Revises: 0083
+Revises: 0084
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ from qym_platform.migrations_support import (
 )
 
 revision = "0085"
-down_revision = "0083"
+down_revision = "0084"
 branch_labels = None
 depends_on = None
 

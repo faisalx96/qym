@@ -14,6 +14,7 @@
   <script src="/static/runs_order.js?v=p1-20261006-1"></script>
   <script src="/static/run_details.js?v=p1-20261005"></script>
   <script src="/static/run_experiment_panel.js?v=run-experiment-20261006-1"></script>
+  <script src="/static/run_versioning_details.js?v=rvd-20261008"></script>
   <script src="/static/qym_live.js?v=p1-20261001"></script>
   <script src="/static/trace_viewer.js?v=p1-20261001"></script>
   <script src="/static/latency_traces.js?v=lt-20261008"></script>
@@ -6275,6 +6276,7 @@
   <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
   <link rel="stylesheet" href="/static/latency_traces.css?v=lt-20261008">
   <link rel="stylesheet" href="/static/json_viewer.css?v=jv-20261008">
+  <link rel="stylesheet" href="/static/run_versioning_details.css?v=rvd-20261008">
   <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
@@ -6365,6 +6367,8 @@
 
       <!-- Experiment panel: official runs only (#26) -->
       <div id="run-experiment-panel"></div>
+      <!-- Versioning details: free-form keys from the run's creator / experiment -->
+      <div id="run-versioning-details"></div>
 
       <div id="overview-section">
         <div id="overview-primary-section"></div>
@@ -8825,6 +8829,7 @@
         ensureSectionNav();
         renderSummary();
         renderExperimentPanel();
+        renderVersioningDetails();
         applyScoreLockMode();
         if (!IS_EXPORT && window.QymReviewHistory && RUN_ID) {
           window.QymReviewHistory.load(
@@ -8857,6 +8862,14 @@
           projectSlug: (run.project && run.project.slug) || CURRENT_PROJECT_SLUG,
           isExport: IS_EXPORT,
         });
+      }
+
+      // Free-form versioning_details (0084); empty when the run has none.
+      function renderVersioningDetails() {
+        const container = el('run-versioning-details');
+        if (!container) return;
+        if (!window.QymRunVersioningDetails) { container.innerHTML = ''; return; }
+        window.QymRunVersioningDetails.render(container, state.run || {});
       }
 
       // Latency and traces loads its trace timings once per page load (and

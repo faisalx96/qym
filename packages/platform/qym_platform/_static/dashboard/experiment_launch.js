@@ -420,6 +420,7 @@
       changedOnly: false,
       priority: '',
       name: '',
+      versioningText: '', // "key=value" lines → the request's versioning_details (0084)
       preview: null,
       maxJobs: null, // run limit from the last dry run (#34)
       previewError: '',
@@ -1414,6 +1415,7 @@
         notes,
       };
       st.name = String(data.name || '').slice(0, 200);
+      st.versioningText = versioningText(data.versioning_details);
       if (data.priority) st.priority = data.priority;
       st.selected = envIds;
       st.base = 'clone';
@@ -1476,6 +1478,31 @@
       return JSON.stringify(value === undefined ? null : value);
     }
 
+    // ── Versioning details (copied into every launched run, 0084) ───────
+    /** {details, errors} from "key=value" lines; blank lines are skipped. */
+    function parseVersioning(text) {
+      const details = {};
+      const errors = [];
+      String(text || '').split('\n').forEach((line, index) => {
+        if (!line.trim()) return;
+        const at = line.indexOf('=');
+        const key = at > 0 ? line.slice(0, at).trim() : '';
+        if (!key) errors.push('Line ' + (index + 1) + ': write key=value.');
+        else if (key.length > 100) errors.push('Line ' + (index + 1) + ': keys are at most 100 characters.');
+        else details[key] = line.slice(at + 1).trim();
+      });
+      if (Object.keys(details).length > 50) errors.push('At most 50 versioning details.');
+      return { details, errors };
+    }
+
+    /** "key=value" lines for a stored versioning_details object (non-strings as JSON). */
+    function versioningText(details) {
+      if (!isPlainObject(details)) return '';
+      return Object.keys(details).sort().filter((k) => details[k] != null)
+        .map((k) => k + '=' + (typeof details[k] === 'string' ? details[k] : JSON.stringify(details[k])))
+        .join('\n');
+    }
+
     function buildRequest(dryRun) {
       const spec = buildSpec();
       const refs = {};
@@ -1496,6 +1523,8 @@
         save_to_project_models: save,
       };
       if (st.priority) body.priority = st.priority;
+      const versioning = parseVersioning(st.versioningText).details;
+      if (Object.keys(versioning).length) body.versioning_details = versioning;
       return body;
     }
 
@@ -1516,6 +1545,7 @@
         pointer: '/env_overrides' + p, environment_id: id, rule: 'not_in_environment', message: notInEnvMessage(p, id),
       })));
       if (!st.name.trim() && !editor) errors.push({ pointer: '#name', message: 'Name the experiment.' });
+      if (!editor) parseVersioning(st.versioningText).errors.forEach((message) => errors.push({ pointer: '#versioning-details', message }));
       if (advanced) advanced.localErrors().forEach((e) => errors.push(e));
       if (sweeps) sweeps.localErrors().forEach((e) => errors.push(e));
       if (editor) editorErrors().forEach((e) => errors.push(e));
@@ -3014,9 +3044,20 @@
         'aria-label': 'Experiment name', 'data-xl-pointer': '#name', value: st.name,
         onInput: (e) => { st.name = e.target.value; schedulePreview({ specChanged: false }); },
       });
+      const versioning = el('textarea', {
+        className: 'xl-textarea', rows: '3', spellcheck: 'false', placeholder: 'agent_version=v2\nprompt=p-17',
+        'aria-label': 'Versioning details', 'data-xl-pointer': '#versioning-details',
+        onInput: (e) => { st.versioningText = e.target.value; schedulePreview({ specChanged: false }); },
+      });
+      versioning.value = st.versioningText;
       const children = [
         el('div', null, [el('span', { className: 'xl-label', text: 'Name' }), name]),
         el('div', null, [el('span', { className: 'xl-label', text: 'Priority' }), select]),
+        el('div', null, [
+          el('span', { className: 'xl-label', text: 'Versioning details (optional)' }),
+          versioning,
+          el('div', { className: 'xl-hint', text: 'One key=value per line. Every run of this experiment records them under Versioning details.' }),
+        ]),
       ];
       if (st.priority === 'HIGH') {
         children.push(el('div', { className: 'xl-callout xl-callout--warning', role: 'note', 'data-xl-high-warning': '1' },

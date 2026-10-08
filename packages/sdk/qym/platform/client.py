@@ -1140,7 +1140,10 @@ class PlatformClient:
         dataset_version_id: Optional[str] = None,
         dataset_alias: Optional[str] = None,
         timeout: Optional[float] = None,
+        versioning_details: Optional[Dict[str, Any]] = None,
     ) -> PlatformRunHandle:
+        """``POST /v1/runs``. ``versioning_details`` is a free-form JSON object
+        stored on the run (platforms before it ignore the field)."""
         payload = {
             "external_run_id": external_run_id,
             "task": task,
@@ -1154,6 +1157,8 @@ class PlatformClient:
             "dataset_version_id": dataset_version_id,
             "dataset_alias": dataset_alias,
         }
+        if versioning_details:
+            payload["versioning_details"] = versioning_details
         data = _post_json(
             f"{self.platform_url}/v1/runs",
             payload,
@@ -1180,8 +1185,8 @@ class PlatformClient:
         ``["agent_version=v1.12"]``): a repeated key matches any of its values,
         different keys must all match. Invalid values raise ``ValueError`` before
         any request. Each run dict carries ``origin``, ``experiment`` (``{id,
-        name, job_id}`` for official runs, ``None`` for local ones) and
-        ``versioning``.
+        name, job_id}`` for official runs, ``None`` for local ones),
+        ``versioning`` and ``versioning_details`` (the run's free-form keys).
         """
         from ..cli._platform_api import PlatformAPIClient
 

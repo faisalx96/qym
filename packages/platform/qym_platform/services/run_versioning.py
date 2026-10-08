@@ -15,6 +15,12 @@ versioning changes requeues its run (``dashboard_outbox``).
 Filters are ``{key: [values]}``: values of one key are alternatives (OR) and
 keys must all match (AND). ``__empty__`` matches runs without the key and
 ``__none__`` matches nothing, like the other dashboard facets.
+
+``versioning_details`` is different: a free-form JSON object the run's creator
+supplies (``EvaluatorConfig.versioning_details``, ``--versioning-detail``) and
+an experiment adds to the runs it launches. It is stored as-is on the run (and
+the experiment) and shown, not filtered: :func:`normalize_versioning_details`
+only bounds and validates it.
 """
 
 from __future__ import annotations
@@ -65,6 +71,54 @@ def normalize_versioning(raw: Any) -> Dict[str, str]:
         if text and len(text) <= MAX_VALUE_LENGTH:
             result[name] = text
     return result
+
+
+MAX_DETAIL_KEYS = 50
+MAX_DETAILS_CHARS = 16_000
+
+
+def normalize_versioning_details(raw: Any) -> Dict[str, Any]:
+    """A validated copy of a ``versioning_details`` object. Raises ``ValueError``.
+
+    ``None`` is ``{}``. Keys are trimmed, non-blank strings of at most
+    ``MAX_KEY_LENGTH`` characters; ``None`` values are dropped. Values may be any
+    JSON (other values become strings). At most ``MAX_DETAIL_KEYS`` keys and
+    ``MAX_DETAILS_CHARS`` characters of compact JSON.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise ValueError("versioning_details must be a JSON object")
+    result: Dict[str, Any] = {}
+    for key, value in raw.items():
+        name = key.strip() if isinstance(key, str) else ""
+        if not name or len(name) > MAX_KEY_LENGTH:
+            raise ValueError(
+                "versioning_details keys must be non-blank strings of at most "
+                f"{MAX_KEY_LENGTH} characters"
+            )
+        if value is not None:
+            result[name] = value
+    if len(result) > MAX_DETAIL_KEYS:
+        raise ValueError(f"versioning_details has more than {MAX_DETAIL_KEYS} keys")
+    try:
+        text = json.dumps(result, separators=(",", ":"), default=str, allow_nan=False)
+    except ValueError:
+        raise ValueError("versioning_details must be valid JSON (no NaN)") from None
+    if len(text) > MAX_DETAILS_CHARS:
+        raise ValueError(
+            f"versioning_details is larger than {MAX_DETAILS_CHARS} characters of JSON"
+        )
+    return json.loads(text)
+
+
+def merge_versioning_details(*layers: Any) -> Dict[str, Any]:
+    """Stored ``versioning_details`` objects merged; later layers win per key."""
+    merged: Dict[str, Any] = {}
+    for layer in layers:
+        if isinstance(layer, Mapping):
+            merged.update(layer)
+    return merged
 
 
 def resolve_job_versioning(
@@ -268,6 +322,8 @@ def project_versioning_values(
 
 __all__ = [
     "EMPTY",
+    "merge_versioning_details",
+    "normalize_versioning_details",
     "normalize_versioning",
     "parse_versioning_filter",
     "parse_versioning_params",

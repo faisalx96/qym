@@ -17,7 +17,8 @@ put in ``run_metadata.qym_launch.token``:
 
 On success the run gets ``origin = official``, ``experiment_job_id`` and
 ``owner_user_id = experiment.created_by_user_id``; ``created_by_user_id`` stays the
-ingest principal for audit. Anything else leaves the run ``local``.
+ingest principal for audit. The experiment's ``versioning_details`` are merged into
+the run's (the experiment's value wins for a key both set). Anything else leaves the run ``local``.
 
 Ingest principal. The dispatcher sends ``qym_api_key``, the creator's per-experiment
 key (``eval_submitter_keys``), so a conforming worker creates the run as the creator:
@@ -51,6 +52,7 @@ from qym_platform.db.models import (
 )
 from qym_platform.services.eval_config import RESERVED_METADATA_PREFIX
 from qym_platform.services.eval_experiments import verify_launch_token
+from qym_platform.services.run_versioning import merge_versioning_details
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +197,11 @@ def link_official_run(
     db.expire(job, ["run_id", "run_linked_at"])
     run.origin = RunOrigin.OFFICIAL
     run.experiment_job_id = job.id
+    if experiment.versioning_details:
+        # The experiment's keys win: they are what the launch form recorded.
+        run.versioning_details = merge_versioning_details(
+            run.versioning_details, experiment.versioning_details
+        )
     if experiment.created_by_user_id:
         run.owner_user_id = experiment.created_by_user_id
     return True

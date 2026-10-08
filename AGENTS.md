@@ -92,12 +92,16 @@ All commands support `--json` (structured JSON to stdout, human text to stderr).
 qym run list [--limit 50] [--task TEXT] [--model TEXT] [--status TEXT] [--origin official|local|all] [--versioning KEY=VALUE ...] --json
 #   each run carries origin ("official"|"local"), experiment ({id, name, job_id} or null)
 #   and versioning (the Evaluation Service's versioning_metadata, any key; {} when none)
-qym run get <run_id> --json
+#   and versioning_details (free-form keys from the run's creator / experiment; {} when none)
+qym run get <run_id> --json   # run.versioning_details
 qym run failed <run_id> --json
 qym run compare <id1> <id2> --json
 
 # Execute evaluations
-qym run create --task-file FILE --task-function NAME --dataset NAME --metrics LIST
+qym run create --task-file FILE --task-function NAME --dataset NAME --metrics LIST \
+  [--versioning-detail KEY=VALUE ...] [--versioning-details JSON]
+#   stored on the run as versioning_details (EvaluatorConfig.versioning_details);
+#   KEY=VALUE wins over the JSON object, which wins over --config
 
 # Metrics
 qym metric list --json

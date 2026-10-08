@@ -105,7 +105,7 @@ The combined migration chain has one head, `0085`, following `0050` through
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0083` are quick DDL or small job/queue inserts. `0085`
+Migrations `0058`–`0084` are quick DDL or small job/queue inserts. `0085`
 switches `spans` to daily partitions; it locks `spans` for an instant only to
 drop still-empty monthly partitions that start after today.
 

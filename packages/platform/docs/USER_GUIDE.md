@@ -156,6 +156,7 @@ The run page leads with **Overview**, followed by repeat analysis when applicabl
 ### Overview and filters
 
 - Summary cards show scores, pass rates, latency, status, and run metadata.
+- **Versioning details** lists the run's free-form version keys, one row per key: what the SDK sent (`versioning_details` in the evaluator config, `--versioning-detail KEY=VALUE` on the CLI) plus, for an official run, its experiment's keys. The panel is hidden when the run has none.
 - All metadata-category cards remain visible so changing a filter does not hide the other available categories.
 - Metric chips cycle through **any → passed → failed**. Active metric conditions are combined with AND.
 - Metadata and review filters narrow the same item list.
@@ -361,7 +362,7 @@ Open **Experiments → New experiment**. The form has one section per step and a
    - **Evaluation inputs**: the `evaluator.config` fields (`samples`, `report_k`, timeouts, retries, and so on) and custom **Run metadata** keys. Keys starting with `qym_` are reserved. The platform fills `run_name`, `live_mode` (always `platform`), and the model from the `primary` slot, and shows them read-only.
    - **Role overrides**: one row per role in the schema (`main`, `router`, …) with `endpoint`, `temperature`, `max_tokens`, and the other role fields. An empty cell keeps the service default.
    - **Raw JSON**: the whole configuration document, kept in sync with the form. Keys never appear here; model slots show a `connection_id` or a secret reference.
-7. **Priority and name**: **Environment default**, `LOW`, `NORMAL`, or `HIGH`, and the **Experiment name**.
+7. **Priority and name**: **Environment default**, `LOW`, `NORMAL`, or `HIGH`, the **Experiment name**, and optional **Versioning details**: one `key=value` per line. Every run the experiment launches records them under **Versioning details** (they win over keys the run sent itself), and **Clone** / **Rerun with this config** copy them. The API takes them as `versioning_details` (a JSON object) on `POST /v1/projects/{id}/experiments`.
 
 The **Preview** validates the configuration against every selected environment as you edit, lists the generated run names (`{experiment name} · {swept values}`, plus the environment name when you launch on several), and enables **Launch** once the configuration is valid. A setting that one of the selected environments does not have is an error for that environment; reset the field or deselect the environment.
 
@@ -487,7 +488,7 @@ qym run list --versioning agent_version=v1.12 --versioning agent_version=v1.13
 qym run list --versioning prompt_version=__empty__
 ```
 
-Each JSON row carries `versioning`, for example `{"agent_version": "v1.12", "kb_version": "381"}`, or `{}`. The API equivalents are `GET /api/runs?versioning=agent_version%3Dv1.12` and `GET /v1/projects/{id}/experiments?versioning=agent_version%3Dv1.12`. Dashboard API calls take `"versioning": {"agent_version": ["v1.12"]}` in their `filters`.
+Each JSON row carries `versioning`, for example `{"agent_version": "v1.12", "kb_version": "381"}`, or `{}`, and `versioning_details`, the run's free-form keys from the SDK or its experiment (shown, not filtered). The API equivalents are `GET /api/runs?versioning=agent_version%3Dv1.12` and `GET /v1/projects/{id}/experiments?versioning=agent_version%3Dv1.12`. Dashboard API calls take `"versioning": {"agent_version": ["v1.12"]}` in their `filters`.
 
 ## Connect the SDK and CLI
 

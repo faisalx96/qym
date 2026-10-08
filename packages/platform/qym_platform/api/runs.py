@@ -2490,7 +2490,12 @@ def _published_run_rows(db: Session, run_ids: List[str]) -> Dict[str, Dict[str, 
     )
 
     return {
-        dimension.run_key: {**(dimension.descriptor or {}), **(summary.data or {})}
+        dimension.run_key: {
+            # Descriptors published before 0084 lack versioning_details.
+            "versioning_details": {},
+            **(dimension.descriptor or {}),
+            **(summary.data or {}),
+        }
         for dimension, summary in db.query(DashboardRunDimension, DashboardRunSummary)
         .join(
             DashboardRunSummary,
@@ -3142,6 +3147,7 @@ def legacy_list_runs(
             else None,
             **run_origin_fields(r, experiment_refs),
             "versioning": job_versioning.get(r.experiment_job_id or "", {}),
+            "versioning_details": dict(r.versioning_details or {}),
             "ingest_incomplete": runs_list_ingest_flag(r.run_metadata),
         }
 
@@ -4412,6 +4418,8 @@ def _build_run_data(
                 # None for local runs). The panel also carries #18's {id, name,
                 # job_id} experiment ref, which compare.html links with.
                 **_run_origin_and_panel(db, run, principal),
+                # Free-form versioning from the run's creator and its experiment.
+                "versioning_details": dict(run.versioning_details or {}),
             },
             "snapshot": {
                 "rows": ui_rows,
@@ -4458,6 +4466,9 @@ def export_run_html(
         encoding="utf-8"
     )
     latency_traces_css = (dashboard_dir / "latency_traces.css").read_text(encoding="utf-8")
+    versioning_details_css = (dashboard_dir / "run_versioning_details.css").read_text(
+        encoding="utf-8"
+    )
     ui_components_js = (dashboard_dir / "ui_components.js").read_text(encoding="utf-8")
     metrics_js = (dashboard_dir / "metrics.js").read_text(encoding="utf-8")
     safe_js = (dashboard_dir / "qym_safe.js").read_text(encoding="utf-8")
@@ -4491,6 +4502,12 @@ def export_run_html(
     run_html = re.sub(
         r'\s*<link\s+rel="stylesheet"\s+href="/static/json_viewer\.css(?:\?[^"]*)?">\s*',
         lambda _match: f"<style>\n{json_viewer_css}\n</style>",
+        run_html,
+        count=1,
+    )
+    run_html = re.sub(
+        r'\s*<link\s+rel="stylesheet"\s+href="/static/run_versioning_details\.css(?:\?[^"]*)?">\s*',
+        lambda _match: f"<style>\n{versioning_details_css}\n</style>",
         run_html,
         count=1,
     )
@@ -4528,13 +4545,14 @@ def export_run_html(
         )
 
     # The run page's own helpers (failure reasons, sticky section nav, the
-    # Response time charts of Latency and traces) work offline, so the export
-    # keeps them.
+    # Response time charts of Latency and traces, the versioning details) work
+    # offline, so the export keeps them.
     for page_script in (
         "item_reasons.js",
         "run_section_nav.js",
         "latency_traces.js",
         "json_viewer.js",
+        "run_versioning_details.js",
     ):
         page_script_js = (dashboard_dir / page_script).read_text(encoding="utf-8")
         run_html = re.sub(

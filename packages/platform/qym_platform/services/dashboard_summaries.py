@@ -1046,6 +1046,7 @@ def _sync_dimension(db, run_id, version):
             run, experiment_refs_for_jobs(db, [run.experiment_job_id])
         ),
         "versioning": versioning,
+        "versioning_details": dict(run.versioning_details or {}),
         **dataset,
     }
     # Unchanged unless a name changes, so the search index over it keeps
