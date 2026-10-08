@@ -65,19 +65,14 @@ def upgrade() -> None:
         server_default="unknown",
     )
     if sqlite:
-        # SQLite can't ALTER ADD CONSTRAINT: batch mode recreates the table.
-        with op.batch_alter_table("eval_environments") as batch_op:
-            batch_op.add_column(
-                sa.Column("current_evaluator_schema_id", sa.String(36), nullable=True)
-            )
-            batch_op.add_column(status)
-            batch_op.create_foreign_key(
-                CURRENT_FK,
-                TABLE,
-                ["current_evaluator_schema_id"],
-                ["id"],
-                ondelete="SET NULL",
-            )
+        # SQLite can't ALTER ADD CONSTRAINT, but a NULL column may carry an inline
+        # REFERENCES clause; this avoids rebuilding a table other tables point at.
+        op.execute(
+            "ALTER TABLE eval_environments ADD COLUMN current_evaluator_schema_id "
+            f"VARCHAR(36) CONSTRAINT {CURRENT_FK} REFERENCES {TABLE} (id) "
+            "ON DELETE SET NULL"
+        )
+        op.add_column("eval_environments", status)
         return
     op.add_column(
         "eval_environments",
@@ -97,8 +92,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     sqlite = op.get_bind().dialect.name == "sqlite"
     if sqlite:
+        # The inline FK is reflected without a name; dropping its column in batch
+        # mode (a table rebuild) drops it too.
         with op.batch_alter_table("eval_environments") as batch_op:
-            batch_op.drop_constraint(CURRENT_FK, type_="foreignkey")
             batch_op.drop_column("evaluator_schema_status")
             batch_op.drop_column("current_evaluator_schema_id")
     else:

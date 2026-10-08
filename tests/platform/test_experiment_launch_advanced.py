@@ -241,11 +241,14 @@ def test_panel_descriptor_covers_every_evaluator_config_field():
     assert editable == set(EVALUATOR_INPUT_FIELDS)
     assert owned == set(PLATFORM_OWNED_CONFIG_FIELDS)
     # Every field of the static model is either editable, platform-owned or metadata.
-    assert editable | owned | {"run_metadata"} == names
+    # versioning_details is platform-owned but only in v1.1 schemas (not the mirror).
+    assert editable | (owned & names) | {"run_metadata"} == names
+    assert owned - names == {"versioning_details"}
+    assert panel["source"] == "static" and panel["environments"] == []
     assert not editable & owned
     for name in editable:
         assert fields["/" + name]["read_only"] is False, name
-    for name in owned:
+    for name in owned & names:
         assert fields["/" + name]["read_only"] is True, name
     assert panel["reserved_metadata_prefix"] == "qym_"
     assert panel["platform_metadata_keys"] == list(PLATFORM_METADATA_KEYS)
