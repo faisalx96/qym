@@ -129,6 +129,10 @@ from qym_platform.services.eval_remote_queue import refresh_snapshot_on_view
 from qym_platform.settings import PlatformSettings
 from sqlalchemy.orm import Session, sessionmaker
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 _PREFIX = "/v1/projects/{project_id}/eval-queue"
@@ -394,6 +398,7 @@ def cancel_queue_jobs(
         else {}
     )
     db.commit()
+    logger.info("Queue cancel by user %s in project %s: %s", principal.user.id, project_id, _counts(outcomes))
     return {"outcomes": outcomes, "counts": _counts(outcomes)}
 
 
@@ -422,6 +427,12 @@ async def cancel_orphan_remote_jobs(
     finally:
         await client.aclose()
     db.commit()
+    logger.info(
+        "Orphan remote job cancel on environment %s: %s (%d error(s))",
+        env.id,
+        _counts(outcomes),
+        len(errors or []),
+    )
     if env.is_active:
         background_tasks.add_task(
             refresh_snapshot_on_view,

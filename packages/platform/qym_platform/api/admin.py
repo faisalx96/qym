@@ -14,6 +14,10 @@ from qym_platform.deps import get_db
 from qym_platform.services import maintenance
 from qym_platform.settings import PlatformSettings
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 _STATS_CACHE: Dict[str, Any] = {"at": 0.0, "value": None}
@@ -77,6 +81,7 @@ def maintenance_overview(
         try:
             _STATS_CACHE["value"] = collect(db.get_bind(), top=12, sample_pct=1.0)
         except Exception as exc:  # noqa: BLE001 - stats are best effort (sqlite in tests)
+            logger.warning("Admin database stats unavailable", exc_info=True)
             _STATS_CACHE["value"] = {"error": str(exc).splitlines()[0]}
         _STATS_CACHE["at"] = now
     pool = db.get_bind().pool
@@ -128,8 +133,10 @@ def maintenance_enqueue(
     try:
         job = maintenance.enqueue(db, kind, params, requested_by=principal.user.id)
     except ValueError as exc:
+        logger.info("Maintenance job %s not queued: %s", kind, exc)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.commit()
+    logger.info("Maintenance job %s (%s) queued by admin %s", job.id, kind, principal.user.id)
     return job.as_dict()
 
 
@@ -140,6 +147,7 @@ def maintenance_start(job_id: str, db: Session = Depends(get_db), principal: Pri
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     db.commit()
+    logger.info("Maintenance job %s start requested by admin %s", job_id, principal.user.id)
     return job.as_dict()
 
 
@@ -150,4 +158,5 @@ def maintenance_cancel(job_id: str, db: Session = Depends(get_db), principal: Pr
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     db.commit()
+    logger.info("Maintenance job %s cancel requested by admin %s", job_id, principal.user.id)
     return job.as_dict()

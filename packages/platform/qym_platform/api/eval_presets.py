@@ -34,6 +34,10 @@ from qym_platform.services.eval_presets import PresetError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 _PREFIX = "/v1/projects/{project_id}/eval-environments/{env_id}/presets"
@@ -148,6 +152,7 @@ def create_preset(
         raise _http(exc)
     _commit(db)
     db.refresh(preset)
+    logger.info("Evaluation preset %s created in project %s", preset.id, project_id)
     payload = _preset_payload(
         db,
         env,
@@ -278,6 +283,7 @@ def publish_preset_version(
         raise _http(exc)
     _commit(db)
     db.refresh(preset)
+    logger.info("Evaluation preset %s version %s published", preset.id, getattr(version, "id", None))
     return {
         "preset": _preset_payload(
             db, env, preset, user_id=principal.user.id, is_manager=is_manager

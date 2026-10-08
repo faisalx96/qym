@@ -39,6 +39,10 @@ from qym_platform.security import hash_password, verify_password
 from qym_platform.settings import PlatformSettings
 
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 
@@ -147,6 +151,7 @@ def _verified_local_credential(
         throttle.cancel(attempt)
         raise
     if credential is None or not password_ok:
+        logger.info("password sign-in failed")
         throttle.failed(attempt)
         raise _invalid_credentials()
     throttle.succeeded(attempt)
@@ -249,6 +254,7 @@ def auth_login_password(
     credential.last_login_at = datetime.utcnow()
     db.commit()
     set_authenticated_session(db, request, user, "local_password")
+    logger.info("user %s signed in with a password", user.id)
     return {"ok": True, "next": _resolve_next(request)}
 
 
@@ -291,6 +297,7 @@ def auth_change_password(
     # A bulk UPDATE skips the ORM password hook, so end the other sessions here.
     end_user_sessions(db, user.id)
     db.commit()
+    logger.info("user %s changed their password; other sessions ended", user.id)
     set_authenticated_session(db, request, user, "local_password")
     return {"ok": True, "next": _resolve_next(request)}
 
@@ -357,8 +364,10 @@ def auth_signup_password(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
+        logger.info("sign-up raced with an existing account")
         raise HTTPException(status_code=409, detail="An account with this email already exists") from exc
     db.refresh(user)
+    logger.info("user %s signed up with a password", user.id)
     set_authenticated_session(db, request, user, "local_password")
     return {"ok": True, "next": _resolve_next(request)}
 
@@ -382,6 +391,7 @@ def bootstrap_admin(
 ) -> Dict[str, Any]:
     settings = PlatformSettings()
     if not settings.admin_bootstrap_token or req.bootstrap_token != settings.admin_bootstrap_token:
+        logger.warning("admin bootstrap refused: invalid bootstrap token")
         raise HTTPException(status_code=403, detail="Invalid bootstrap token")
 
     user = db.query(User).filter(User.id == principal.user.id).first()
@@ -395,4 +405,5 @@ def bootstrap_admin(
     user.role = UserRole.ADMIN
     db.commit()
     db.refresh(user)
+    logger.info("user %s claimed the first admin role with the bootstrap token", user.id)
     return {"ok": True, "user_id": user.id, "role": user.role.value}

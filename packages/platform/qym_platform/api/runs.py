@@ -197,8 +197,10 @@ from qym_platform.services.root_cause_categories import (
     normalize_root_causes,
     patch_issue_categories,
 )
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
 
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -1945,6 +1947,7 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
             if run.run_metadata.get("total_items") is not None:
                 expected_total = int(run.run_metadata["total_items"])
         except Exception:
+            logger.debug("Run %s has an unreadable total_items", run.id, exc_info=True)
             expected_total = None
 
     # Avg latency across all items that have latency
@@ -2067,6 +2070,7 @@ def _live_run_summary(
             if run.run_metadata.get("total_items") is not None:
                 expected_total = int(run.run_metadata["total_items"])
         except Exception:
+            logger.debug("Run %s has an unreadable total_items", run.id, exc_info=True)
             expected_total = None
 
     completed_count = int(item_agg.get("completed") or 0)
@@ -3011,6 +3015,7 @@ def legacy_list_runs(
                 if r.run_metadata.get("total_items") is not None:
                     expected_total = int(r.run_metadata["total_items"])
             except Exception:
+                logger.debug("Run %s has an unreadable total_items", r.id, exc_info=True)
                 expected_total = None
 
         metrics = list(r.metrics or [])
@@ -5114,6 +5119,7 @@ def delete_run_pass(
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     sync_run_scores(db, run)  # re-score: refresh the best-run index
     db.commit()
+    logger.info("Run %s pass %s deleted by user %s", run.id, pass_number, principal.user.id)
     return result
 
 
@@ -5173,6 +5179,9 @@ def delete_run_passes(
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     sync_run_scores(db, run)  # re-score: refresh the best-run index
     db.commit()
+    logger.info(
+        "Run %s passes %s deleted by user %s", run.id, sorted(pass_numbers), principal.user.id
+    )
     return {
         "ok": True,
         "run_id": run.id,
@@ -6945,6 +6954,8 @@ def force_stop_run(
         "can_force_stop": False,
     }
     db.commit()
+    if stopped:
+        logger.info("Run %s force-stopped by admin %s", run.id, principal.user.id)
     return result
 
 
@@ -6993,6 +7004,7 @@ def delete_run(
     )
     db.add(audit)
     db.commit()
+    logger.info("Run %s deleted (moved to Trash) by user %s", run.id, principal.user.id)
 
     return {
         "ok": True,
@@ -7058,6 +7070,12 @@ def restore_run(
                 _restore_deleted_run(db, run, principal)
                 restored.append(run_id)
         db.commit()
+        logger.info(
+            "Runs restored by admin %s: %d restored, %d skipped",
+            principal.user.id,
+            len(restored),
+            len(skipped),
+        )
         return {"ok": True, "restored": restored, "skipped": skipped}
 
     run_id = request.get("run_id")
@@ -7077,6 +7095,7 @@ def restore_run(
 
     _restore_deleted_run(db, run, principal)
     db.commit()
+    logger.info("Run %s restored by admin %s", run.id, principal.user.id)
 
     return {"ok": True}
 
@@ -7168,6 +7187,7 @@ def submit_run(
     run = lock_review_run(db, run_id)
     _submit_locked(db, principal, run, _submit_comment(body))
     db.commit()
+    logger.info("Run %s submitted for review by user %s", run.id, principal.user.id)
     return {"ok": True, "status": run.status}
 
 
@@ -7232,6 +7252,7 @@ def submit_runs(
                 headers=exc.headers,
             ) from exc
     db.commit()
+    logger.info("%d runs submitted for review by user %s", len(runs), principal.user.id)
     return {
         "ok": True,
         "submitted": [run.id for run in runs],
@@ -7287,6 +7308,8 @@ def transfer_run_ownership(
             )
         )
     db.commit()
+    if previous != user_id:
+        logger.info("Run %s ownership transferred to user %s", run.id, user_id)
     return {
         "ok": True,
         "run_id": run.id,
@@ -7366,6 +7389,13 @@ def _decide_run(
     )
     _publish_dashboard_review_state(db, run, approval)
     db.commit()
+    logger.info(
+        "Run %s review %s by user %s (status -> %s)",
+        run.id,
+        action,
+        principal.user.id,
+        getattr(run.status, "value", run.status),
+    )
     return {"ok": True, "status": run.status}
 
 
