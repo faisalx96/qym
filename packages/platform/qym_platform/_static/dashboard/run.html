@@ -20,6 +20,7 @@
   <script src="/static/review_history.js?v=p1-20261001"></script>
   <script src="/static/item_reasons.js?v=p1-20261001"></script>
   <script src="/static/run_section_nav.js?v=p1-20261001-2"></script>
+  <script src="/static/json_viewer.js?v=jv-20261008"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     .run-container {
@@ -730,6 +731,7 @@
       white-space: nowrap;
       line-height: 1.2;
     }
+    .context-cell-val--json { display: flex; min-width: 0; }
     .context-section-empty {
       padding: 0 16px 12px;
       color: var(--text-muted);
@@ -6272,6 +6274,7 @@
   </style>
   <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
   <link rel="stylesheet" href="/static/latency_traces.css?v=lt-20261008">
+  <link rel="stylesheet" href="/static/json_viewer.css?v=jv-20261008">
   <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
@@ -10118,13 +10121,13 @@
         Object.entries(config).forEach(([key, value]) => {
           if (hiddenConfigKeys.has(key) || value == null || value === '') return;
           seenKeys.add(String(key).toLowerCase());
-          entries.push({ key: key, value: stringify(value), group: 'Config' });
+          entries.push({ key: key, value: stringify(value), raw: value, group: 'Config' });
         });
 
         Object.entries(metadata).forEach(([key, value]) => {
           if (hiddenMetadataKeys.has(key) || value == null || value === '') return;
           if (seenKeys.has(String(key).toLowerCase())) return;
-          entries.push({ key: key, value: stringify(value), group: 'Metadata' });
+          entries.push({ key: key, value: stringify(value), raw: value, group: 'Metadata' });
         });
 
         if (!entries.length) {
@@ -10135,10 +10138,16 @@
         const cellsHtml = entries.map((entry) => {
           const keyLabel = formatFieldLabel(entry.key);
           const sourceLabel = entry.group === 'Metadata' ? 'Metadata' : 'Config';
+          // Objects, arrays and JSON strings get a compact preview that
+          // opens the JSON viewer; scalars stay plain text.
+          const jsonPreview = window.QymJsonViewer ? QymJsonViewer.previewHtml(entry.raw, { title: keyLabel }) : '';
+          const valueHtml = jsonPreview
+            ? '<div class="context-cell-val context-cell-val--json">' + jsonPreview + '</div>'
+            : '<div class="context-cell-val" title="' + escapeAttr(entry.value) + '">' + escapeHtml(entry.value) + '</div>';
           return '<div class="context-cell">' +
             '<div class="context-cell-text">' +
               '<div class="context-cell-key">' + escapeHtml(keyLabel + ' • ' + sourceLabel) + '</div>' +
-              '<div class="context-cell-val" title="' + escapeAttr(entry.value) + '">' + escapeHtml(entry.value) + '</div>' +
+              valueHtml +
             '</div>' +
           '</div>';
         }).join('');

@@ -4474,6 +4474,13 @@ def export_run_html(
         run_html,
         count=1,
     )
+    json_viewer_css = (dashboard_dir / "json_viewer.css").read_text(encoding="utf-8")
+    run_html = re.sub(
+        r'\s*<link\s+rel="stylesheet"\s+href="/static/json_viewer\.css(?:\?[^"]*)?">\s*',
+        lambda _match: f"<style>\n{json_viewer_css}\n</style>",
+        run_html,
+        count=1,
+    )
 
     # Inline the shared escaping/text layer first: every other script uses it.
     run_html = re.sub(
@@ -4510,7 +4517,12 @@ def export_run_html(
     # The run page's own helpers (failure reasons, sticky section nav, the
     # Response time charts of Latency and traces) work offline, so the export
     # keeps them.
-    for page_script in ("item_reasons.js", "run_section_nav.js", "latency_traces.js"):
+    for page_script in (
+        "item_reasons.js",
+        "run_section_nav.js",
+        "latency_traces.js",
+        "json_viewer.js",
+    ):
         page_script_js = (dashboard_dir / page_script).read_text(encoding="utf-8")
         run_html = re.sub(
             r'\s*<script\s+src="/static/'
