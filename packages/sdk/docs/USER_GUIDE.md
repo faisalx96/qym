@@ -997,7 +997,7 @@ print(f"Total items: {results.total_items}")
 3. **Dashboard appears** showing live progress (TUI + platform streaming)
 4. **Items run in parallel** (controlled by `max_concurrency`), with automatic retries on technical failures (up to `max_retries`, default 2); `BusinessRuleError` stops immediately
 5. **LLM calls traced** — supported LLM calls are captured as spans when tracing is enabled
-6. **Metrics score** each output
+6. **Metrics score** each output in a separate metric queue: a task worker hands its output to the queue and immediately starts the next item, so slow metrics (e.g. LLM judges) never hold up task execution. The queue scores up to `metric_concurrency` items at once (see [Metric concurrency](#metric-concurrency)); an item counts as complete — in progress, results, checkpoint and on the platform — only once it is scored, and the run finishes only after the queue drains
 7. **Results save** to CSV automatically and stream to the platform (if `QYM_API_KEY` is set)
 8. **Traces viewable** in the platform's embedded trace viewer (if `QYM_API_KEY` is set)
 
@@ -1637,6 +1637,8 @@ evaluator = Evaluator(
     config={
         # Execution
         "max_concurrency": 10,     # Parallel items (default: 10)
+        "metric_concurrency": 10,  # Items scored at once by the metric queue (default: QYM_METRIC_CONCURRENCY, else max_concurrency)
+        "max_metric_concurrency": 1, # Metrics run in parallel for ONE item (default: 1)
         "timeout": 300.0,          # Seconds per item (default: 300)
         "max_retries": 2,          # Retry failed items (default: 2, exponential backoff + jitter)
         "samples": 1,              # Repeat every item k times as ONE run; reports Pass@k/Pass^k (see Repeat Runs)
@@ -1665,6 +1667,35 @@ evaluator = Evaluator(
     }
 )
 ```
+
+### Metric concurrency
+
+Metrics run in their own queue, separate from task execution. When a task
+finishes, its output goes to the metric queue and the task worker picks up the
+next item right away; metric workers score queued outputs in the background.
+Two limits apply:
+
+| Setting | Controls | Default |
+|---|---|---|
+| `max_concurrency` | Tasks running at once | `10` |
+| `metric_concurrency` / `QYM_METRIC_CONCURRENCY` | Items being scored at once | `max_concurrency` |
+| `max_metric_concurrency` | Metrics running in parallel for one item | `1` |
+
+```bash
+# Score at most 4 items at a time (e.g. to respect an LLM judge's rate limit)
+export QYM_METRIC_CONCURRENCY=4
+```
+
+`config["metric_concurrency"]` wins over the env var; an invalid env value
+(not a positive integer) is ignored with a warning. Synchronous metrics run in
+their own thread pool, so they never take threads from synchronous tasks.
+
+An item is reported complete — progress, results, checkpoint row and the
+platform's `item_completed` event — only after all its metrics are scored, and
+the run (and each repeat pass) finishes only once the metric queue has
+drained. A graceful stop still scores outputs whose tasks already ran; a hard
+interrupt (Ctrl-C) gives in-flight scoring `interrupt_grace_seconds`, then
+reports outputs still waiting for metrics as cancelled so a resume reruns them.
 
 ### run() Options
 

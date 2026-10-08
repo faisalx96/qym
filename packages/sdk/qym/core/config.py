@@ -13,6 +13,13 @@ class EvaluatorConfig(BaseModel):
     run_name: Optional[str] = None
     task_name: Optional[str] = None  # #15: Override the auto-derived task name
     max_concurrency: int = Field(default=10, ge=1)
+    # Metrics run in their own queue, separate from task execution: a task
+    # worker hands its output to the metric queue and immediately picks up the
+    # next item. ``metric_concurrency`` is how many items are scored at the
+    # same time (``max_metric_concurrency`` still caps the metrics running in
+    # parallel for ONE item). Unset: the ``QYM_METRIC_CONCURRENCY`` env var,
+    # else ``max_concurrency``.
+    metric_concurrency: Optional[int] = Field(default=None, ge=1)
     max_metric_concurrency: int = Field(default=1, ge=1)
     timeout: Optional[float] = Field(default=300, gt=0)
     # Hard wall-clock cap per metric attempt. Timed-out attempts retry according

@@ -331,6 +331,8 @@ class MultiModelRunner:
         semaphore = asyncio.Semaphore(max_parallel_runs) if max_parallel_runs else None
 
         # Size the thread pool to match actual parallelism so sync tasks don't queue.
+        # Sync metrics don't share it: each Evaluator scores through its own
+        # metric queue and thread pool (metric_concurrency x max_metric_concurrency).
         # Effective parallel models = min(num_specs, max_parallel_runs or num_specs)
         num_specs = len(self.specs)
         effective_parallel = (
