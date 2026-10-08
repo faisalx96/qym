@@ -342,7 +342,7 @@ def test_a_chart_click_filter_shows_in_the_filters_panel_and_removes_from_there(
 
     # A second filter set from the page joins it while the panel is open.
     page.keyboard.press("Escape")
-    page.locator(".dist-chart-col[data-lat-min]").first.click()
+    page.locator("#latency-traces-panel .lt-hist__bar:not(.is-empty)").first.click()
     page.locator("#btn-item-filters").click()
     assert chips.count() == 2
     assert page.locator("#active-filter-count").inner_text().strip() == "2"

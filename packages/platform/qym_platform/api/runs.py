@@ -4444,6 +4444,7 @@ def export_run_html(
     ui_components_css_content = (dashboard_dir / "ui_components.css").read_text(
         encoding="utf-8"
     )
+    latency_traces_css = (dashboard_dir / "latency_traces.css").read_text(encoding="utf-8")
     ui_components_js = (dashboard_dir / "ui_components.js").read_text(encoding="utf-8")
     metrics_js = (dashboard_dir / "metrics.js").read_text(encoding="utf-8")
     safe_js = (dashboard_dir / "qym_safe.js").read_text(encoding="utf-8")
@@ -4464,6 +4465,12 @@ def export_run_html(
     run_html = re.sub(
         r'\s*<link\s+rel="stylesheet"\s+href="/static/ui_components\.css(?:\?[^"]*)?">\s*',
         lambda _match: f"<style>\n{ui_components_css_content}\n</style>",
+        run_html,
+        count=1,
+    )
+    run_html = re.sub(
+        r'\s*<link\s+rel="stylesheet"\s+href="/static/latency_traces\.css(?:\?[^"]*)?">\s*',
+        lambda _match: f"<style>\n{latency_traces_css}\n</style>",
         run_html,
         count=1,
     )
@@ -4500,9 +4507,10 @@ def export_run_html(
             count=1,
         )
 
-    # The run page's own helpers (failure reasons, sticky section nav) work
-    # offline, so the export keeps them.
-    for page_script in ("item_reasons.js", "run_section_nav.js"):
+    # The run page's own helpers (failure reasons, sticky section nav, the
+    # Response time charts of Latency and traces) work offline, so the export
+    # keeps them.
+    for page_script in ("item_reasons.js", "run_section_nav.js", "latency_traces.js"):
         page_script_js = (dashboard_dir / page_script).read_text(encoding="utf-8")
         run_html = re.sub(
             r'\s*<script\s+src="/static/'

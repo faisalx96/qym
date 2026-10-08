@@ -1,5 +1,5 @@
 """The run page redraws only what changed and keeps the reader still (C028),
-follows a running run (C039), shows only captured trace stats (C143), and the
+follows a running run (C039), shows only captured trace kinds (C143), and the
 analyzer loads one sample's rows in place (C027).
 
 These drive the shipped run.html / analyzer.html with production scripts and
@@ -423,35 +423,6 @@ def test_category_controls_near_the_page_end_keep_their_section_still(browser):
         view.close()
 
 
-def test_collapsing_a_step_latency_phase_near_the_page_end_keeps_its_header_still(browser):
-    view = RunPage(browser, count=4)
-    try:
-        view.page.set_viewport_size({"width": 1440, "height": 1700})
-        view.goto()
-        page = view.page
-        header = '#step-latency-panel [data-sl-collapse="p:task"]'
-        page.wait_for_selector(header)
-        page.locator(header).click()
-        page.wait_for_selector(header + '[aria-expanded="true"]')
-        page.wait_for_timeout(1200)
-        # The panel sits in Latency and traces now, not at the page end:
-        # bring its header near the bottom of the screen, where a shrinking
-        # panel used to pull the page.
-        page.evaluate("""(sel) => {
-          const host = document.querySelector('.run-container');
-          const top = document.querySelector(sel).getBoundingClientRect().top;
-          host.scrollTop += top - (window.innerHeight - 220);
-        }""", header)
-        page.wait_for_timeout(150)
-        before = _on_screen(view, header)
-        page.locator(header).click()
-        page.wait_for_selector(header + '[aria-expanded="false"]')
-        page.wait_for_timeout(100)
-        assert abs(view.top(header) - before) < 2
-    finally:
-        view.close()
-
-
 def test_live_refresh_during_a_text_search_keeps_the_cards(browser):
     """A live refresh forgets earlier search answers, so the redraw waits on a
     new search. It used to lose its in-place option there and rebuild every
@@ -583,133 +554,6 @@ def test_export_keeps_the_bodies_of_items_opened_in_place(browser):
         view.close()
 
 
-def test_folded_trace_tiles_never_paint_on_a_redraw(browser):
-    """Per-agent latency tiles fold into Trace latency. They used to fold on a
-    250 ms timer, so each overview redraw showed them, then took them away."""
-    view = _trace_stats_page(
-        browser,
-        {
-            "has_spans": True,
-            "avg_tokens": 1510,
-            "avg_llm_calls": 2.1,
-            "avg_tool_calls": 2.4,
-            "tool_success_rate": 0.94,
-            "avg_llm_ms": 1040,
-            "avg_tool_ms": 470,
-            "avg_top_level_chain_ms": 2110,
-            "outer_scope_parent_spans": [
-                {"name": "planner", "avg_ms": 800},
-                {"name": "writer", "avg_ms": 900},
-            ],
-        },
-    )
-    try:
-        page = view.page
-        visible_folded = """() => [...document.querySelectorAll('.system-trace-card .trace-pill')]
-              .filter(pill => /^Avg (planner|writer) latency$/.test(pill.querySelector('.trace-pill-label').textContent))
-              .filter(pill => pill.offsetHeight > 0).length"""
-        page.wait_for_function(f"({visible_folded})() === 0")
-        page.wait_for_selector(".metric-bool-seg[data-bool-filter]")
-        # Redraw the overview with a filter and look in the same task, before
-        # any timer can run.
-        shown = page.evaluate(f"""() => {{
-              document.querySelector('.metric-bool-seg[data-bool-filter]').click();
-              return ({visible_folded})();
-            }}""")
-        assert shown == 0
-    finally:
-        view.close()
-
-
-def _trace_stats_page(browser, trace_stats):
-    view = RunPage(browser)
-    view.data["run-1"]["run"]["trace_stats"] = trace_stats
-    view.goto()
-    view.page.wait_for_selector(".system-trace-card")
-    return view
-
-
-def test_trace_stats_show_only_what_was_captured(browser):
-    view = _trace_stats_page(
-        browser,
-        {
-            "has_spans": True,
-            "avg_tokens": 0,
-            "avg_llm_calls": 0.0,
-            "avg_tool_calls": 0.0,
-            "tool_success_rate": None,
-            "avg_llm_ms": None,
-            "avg_tool_ms": None,
-            "avg_retriever_ms": None,
-            "avg_top_level_chain_ms": 1200,
-            "avg_evaluator_ms": 300,
-        },
-    )
-    try:
-        card = view.page.locator(".system-trace-card")
-        labels = card.locator(".trace-pill-label").all_text_contents()
-        assert labels == ["Avg Trace Latency", "Avg Evaluator Latency"]
-        note = card.locator(".trace-not-captured")
-        assert "LLM and tool spans were not captured for this run" in note.inner_text()
-        assert "#sdk-guide/results" in note.locator("a").get_attribute("href")
-        # Each kind keeps its glyph; colour comes from its tone class, never
-        # an inline style.
-        assert card.locator(".trace-pill-icon").all_text_contents() == ["⛓", "★"]
-        assert card.locator(".trace-pill--trace").count() == 1
-        assert card.locator(".trace-pill--evaluator").count() == 1
-        assert card.locator(".trace-pill-val[style]").count() == 0
-    finally:
-        view.close()
-
-
-def test_trace_stats_keep_captured_llm_and_tool_tiles(browser):
-    view = _trace_stats_page(
-        browser,
-        {
-            "has_spans": True,
-            "avg_tokens": 1510,
-            "avg_llm_calls": 2.1,
-            "avg_tool_calls": 2.4,
-            "tool_success_rate": 0.94,
-            "avg_llm_ms": 1040,
-            "avg_tool_ms": 470,
-            "avg_retriever_ms": None,
-            "avg_top_level_chain_ms": 2110,
-            "avg_evaluator_ms": None,
-        },
-    )
-    try:
-        card = view.page.locator(".system-trace-card")
-        assert card.locator(".trace-pill-label").all_text_contents() == [
-            "Avg Tokens",
-            "Avg LLM Calls",
-            "Avg LLM Latency",
-            "Avg Tool Calls",
-            "Avg Tool Latency",
-            "Tool Success",
-            "Avg Trace Latency",
-        ]
-        assert card.locator(".trace-not-captured").count() == 0
-        # Tiles sit by kind, each in its own colour.
-        tones = card.locator(".trace-pill").evaluate_all(
-            "pills => pills.map(p => [...p.classList].find(c => c.startsWith('trace-pill--')))"
-        )
-        assert tones == [
-            "trace-pill--tokens", "trace-pill--llm", "trace-pill--llm",
-            "trace-pill--tool", "trace-pill--tool", "trace-pill--success", "trace-pill--trace",
-        ]
-        # Seven tiles leave no empty cell: every row reaches the strip's edge.
-        assert card.locator(".trace-pills-row").evaluate(
-            """row => [...row.children].every(pill => {
-              const box = pill.getBoundingClientRect(), strip = row.getBoundingClientRect();
-              const last = [...row.children].filter(o => Math.abs(o.getBoundingClientRect().top - box.top) < 2).pop();
-              return Math.abs(last.getBoundingClientRect().right - strip.right) < 3;
-            })"""
-        )
-    finally:
-        view.close()
-
-
 def test_execution_context_has_no_decorative_dots(browser):
     view = RunPage(browser)
     view.data["run-1"]["run"]["config"] = {"temperature": 0.2, "max_retries": 2}
@@ -717,42 +561,6 @@ def test_execution_context_has_no_decorative_dots(browser):
         view.goto()
         assert view.page.locator(".context-cell").count() == 2
         assert view.page.locator(".context-cell-dot").count() == 0
-    finally:
-        view.close()
-
-
-def test_step_latency_opens_on_collapsed_phases_on_the_run_page(browser):
-    view = RunPage(browser)
-    try:
-        view.goto()
-        page = view.page
-        panel = page.locator("#step-latency-panel")
-        page.wait_for_selector("#step-latency-panel .sl-plot svg")
-        # No section disclosure: the controls and plot always show (C143).
-        assert panel.locator("[data-sl-disclosure]").count() == 0
-        assert panel.locator(".sl-controls").is_visible()
-        assert "1 step" in panel.locator(".sl-summary").inner_text()
-        # A card of Latency and traces, titled like Trace stats and right
-        # under it; no section of its own.
-        assert page.locator("#run-section-steps").count() == 0
-        assert page.evaluate("""() => {
-          const panel = document.getElementById('step-latency-panel');
-          const trace = document.querySelector('.system-trace-card');
-          return !!panel.closest('.system-metrics-section')
-            && (!trace || trace.closest('.system-trace-row').nextElementSibling === panel);
-        }""")
-        assert panel.locator(".sl-card-title").inner_text() == "Step latency"
-        for label in ("Step latency distributions", "Show distributions", "Hide distributions"):
-            assert label not in panel.inner_text()
-        header = panel.locator('[data-sl-collapse="p:task"]')
-        assert header.get_attribute("aria-expanded") == "false"
-        assert "lookup" not in panel.locator(".sl-plot").text_content()
-        header.click()
-        page.wait_for_function(
-            "() => document.querySelector('#step-latency-panel .sl-plot').textContent.includes('lookup')"
-        )
-        # Expanding used the data already loaded.
-        assert len(view.latency_selections()) == 1
     finally:
         view.close()
 
@@ -1054,3 +862,131 @@ def test_analyzer_loads_one_sample_and_switches_in_place(browser):
         assert not errors, errors
     finally:
         context.close()
+
+
+def _timing(phase, kind, step_type, n, median, *, model=None, errors=0, tokens=0):
+    return {
+        "phase": phase, "kind": kind, "step_type": step_type, "model": model, "agent": None,
+        "n": n, "error_count": errors, "mean_ms": median * 1.05, "median_ms": median, "std_ms": 0,
+        "p5_ms": median * 0.4, "p25_ms": median * 0.7, "p75_ms": median * 1.3, "p95_ms": median * 1.8,
+        "min_ms": median * 0.3, "max_ms": median * 2, "cv": 0,
+        "tokens_total": tokens, "tokens_prompt": 0, "tokens_completion": 0,
+    }
+
+
+def _site_timings(groups, traces=10):
+    """A step-latency answer in the call-site rollup (rollup=site)."""
+    def phase(name, mean):
+        return {"phase": name, "n": traces, "error_count": 0, "mean_ms": mean, "median_ms": mean,
+                "p5_ms": mean * 0.5, "p25_ms": mean * 0.8, "p75_ms": mean * 1.2, "p95_ms": mean * 1.5,
+                "tokens_total": 0}
+    return {
+        "run_ids": ["run-1"], "rollup": "site", "passes": [], "trace_count": traces, "groups": groups,
+        "phases": [phase("task", 3000.0), phase("eval", 1000.0)],
+        "traces": {"n": traces - 1, "error_count": 1, "mean_ms": 4200.0},
+        "agents": [],
+    }
+
+
+TRACE_TIMINGS = _site_timings([
+    _timing("task", "LLM", "ChatCompletion", 20, 900.0, model="m1", tokens=12000),
+    _timing("task", "TOOL", "lookup", 15, 120.0, errors=2),
+    _timing("eval", "LLM", "metric:accuracy", 10, 700.0, model="judge-1", tokens=4000),
+])
+
+
+def _trace_timings_page(browser, payload, **kwargs):
+    view = RunPage(browser, **kwargs)
+    view.data["run-1"]["run"]["trace_stats"] = {"has_spans": True}
+    asked = []
+
+    def answer(route):
+        asked.append(parse_qs(urlparse(route.request.url).query))
+        route.fulfill(json=payload)
+
+    view.page.route("**/api/runs/step-latency**", answer)
+    view.asked = asked
+    view.goto()
+    view.page.wait_for_selector('#latency-traces-panel [data-lt="steps"] .lt-row[data-id^="p:"]')
+    return view
+
+
+def test_latency_and_traces_draw_each_kind_and_open_on_collapsed_phases(browser):
+    view = _trace_timings_page(browser, TRACE_TIMINGS)
+    try:
+        page = view.page
+        panel = page.locator("#latency-traces-panel")
+        # One section (no Step latency section of its own), drawn in place.
+        assert page.locator("#run-section-steps").count() == 0
+        assert page.evaluate(
+            "() => !!document.getElementById('latency-traces-panel').closest('.system-metrics-section')"
+        )
+        titles = panel.locator(".lt-card__title").all_text_contents()
+        assert titles == ["Latency distribution", "Quality vs latency", "Time budget", "Step timings"]
+        # Call sites by span name and model; the request asked for them.
+        assert view.asked and view.asked[0]["rollup"] == ["site"]
+        # Only captured kinds get a panel, eval judges after the agent's own.
+        names = panel.locator(".lt-kind__name").all_text_contents()
+        assert names == ["LLM", "Tools", "Eval"]
+        assert panel.locator(".lt-note").count() == 0
+        summary = panel.locator('[data-lt="budget-summary"]').inner_text()
+        assert "4.2" in summary and "10 traces" in summary and "1 failed" in summary
+        # A stat opens its breakdown by tool.
+        panel.locator('.lt-kstat[data-family="TOOL"][data-key="success"]').click()
+        breakdown = panel.locator(".lt-breakdown").inner_text()
+        assert "Failure rate by tool" in breakdown and "lookup" in breakdown
+        # Step timings open on collapsed phases; opening one uses the data
+        # already loaded.
+        task = panel.locator('[data-toggle="p:task"]')
+        assert task.get_attribute("aria-expanded") == "false"
+        assert "lookup" not in panel.locator('[data-lt="steps"]').inner_text()
+        task.click()
+        page.wait_for_function(
+            "() => document.querySelector('#latency-traces-panel [data-lt=\"steps\"]').textContent.includes('lookup')"
+        )
+        steps = panel.locator('[data-lt="steps"]').inner_text()
+        assert "ChatCompletion" in steps and "m1" in steps
+        assert len(view.asked) == 1
+        assert not view.errors, view.errors
+    finally:
+        view.close()
+
+
+def test_trace_panels_show_only_what_was_captured(browser):
+    view = _trace_timings_page(browser, _site_timings([
+        _timing("eval", "OTHER", "metric:accuracy", 10, 300.0),
+    ]))
+    try:
+        panel = view.page.locator("#latency-traces-panel")
+        assert panel.locator(".lt-kind__name").all_text_contents() == ["Eval"]
+        note = panel.locator(".lt-note")
+        assert "LLM and tool spans were not captured for this run" in note.inner_text()
+        assert "#sdk-guide/results" in note.locator("a").get_attribute("href")
+    finally:
+        view.close()
+
+
+def test_collapsing_a_step_timings_group_near_the_page_end_keeps_its_header_still(browser):
+    view = _trace_timings_page(browser, TRACE_TIMINGS, count=4)
+    try:
+        page = view.page
+        page.set_viewport_size({"width": 1440, "height": 1700})
+        header = '#latency-traces-panel [data-toggle="p:task"]'
+        page.locator(header).click()
+        page.wait_for_selector(header + '[aria-expanded="true"]')
+        page.wait_for_timeout(600)
+        # Bring the header near the bottom of the screen, where a shrinking
+        # panel used to pull the page.
+        page.evaluate("""(sel) => {
+          const host = document.querySelector('.run-container');
+          const top = document.querySelector(sel).getBoundingClientRect().top;
+          host.scrollTop += top - (window.innerHeight - 220);
+        }""", header)
+        page.wait_for_timeout(150)
+        before = _on_screen(view, header)
+        page.locator(header).click()
+        page.wait_for_selector(header + '[aria-expanded="false"]')
+        page.wait_for_timeout(100)
+        assert abs(view.top(header) - before) < 2
+    finally:
+        view.close()

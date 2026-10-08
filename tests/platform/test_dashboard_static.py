@@ -1239,20 +1239,10 @@ def test_run_detail_includes_non_redundant_intelligence_charts() -> None:
     assert "max-width: var(--analysis-matrix-max-width);" in correlation_chart_rule
     assert "margin-inline: 0;" in correlation_chart_rule
     assert "Metric Relationship" in active
-    assert "Quality–Latency Frontier" in active
-    assert "Fast + strong zone" in active
-    assert "Slow + weak zone" in active
-    assert "Dot size = retries" in active
-    assert "ri-frontier-line p95" in active
-    assert "p95 latency" in active
-    assert "Latency median" in active
-    assert "medianQuality" in active
-    assert "ri-frontier-outlier" in active
-    assert "outlierItems" in active
-    assert "const p95X = plotRight - outlierBandWidth;" in active
-    assert "Dashed = medians · dotted = p95 latency" not in active
+    # Quality vs latency lives in the Latency and traces module now.
+    assert "Quality–Latency Frontier" not in active
+    assert "ri-frontier" not in source
     assert 'r="3.5" fill="var(--chart-1)"' in active
-    assert "const radius = 3.5 + Math.min(2" in active
     assert 'stroke-width="1.5"' in active
     assert "Repeat Stability" not in active
     assert "Score Estimate by Pass Count" not in active
@@ -1287,33 +1277,26 @@ def test_run_detail_includes_non_redundant_intelligence_charts() -> None:
     assert "systemCards + intelligenceCharts" in source
     assert "const analysisCharts = buildDeepAnalysisCharts(rows);" in source
     assert "const intelligenceCharts = analysisCharts.deepAnalysisHtml;" in source
-    assert "const frontierPanel = analysisCharts.frontierPanel;" in source
-    assert "relationshipPanels.concat(frontierPanel" not in active
-    assert "return { deepAnalysisHtml, frontierPanel };" in active
+    assert "frontierPanel" not in source
+    assert "return { deepAnalysisHtml };" in active
     assert 'class="ri-grid deep-analysis-grid"' in active
     assert 'relationshipPanels.push(\'<div class="ri-panel">' in active
-    assert 'frontierPanel = \'<div class="ri-panel system-frontier-panel">' in active
     assert "radar" not in source.lower()
+    # Latency and traces: one section header, then the module's panel, which
+    # moves into each new section and gets the filtered rows (C028).
     assert "runSectionHeadHtml('latency', 'Latency and traces'," in source
-    assert "Response latency, quality tradeoffs and trace-level execution behavior." in source
-    assert "const latencyPanels = (latencyCard || '') + (frontierPanel || '');" in source
-    assert "'<div class=\"system-metrics-grid\">' + latencyPanels + '</div>'" in source
-    assert "'<div class=\"system-trace-row\">' + traceCard + '</div>'" in source
-    assert 'class="metric-card system-latency-card"' in source
-    assert 'class="metric-card system-trace-card"' in source
-    system_grid = _rule(source, ".system-metrics-grid {")
-    assert "grid-template-columns: 1fr 1fr;" in system_grid
-    system_grid_children = _rule(
-        source, ".system-metrics-grid > :is(.ri-panel, .metric-card) {"
-    )
-    assert "grid-column: auto;" in system_grid_children
-    assert "align-self: stretch;" in system_grid_children
-    trace_strip = _rule(
-        source, ".system-trace-row .trace-pills-row.qym-stat-strip {"
-    )
-    # Tiles wrap and the last row stretches: no empty cells.
-    assert "flex-wrap: wrap;" in trace_strip
-    assert "grid-template-columns" not in trace_strip
+    assert "How long each item takes end to end, and where every trace spends that time." in source
+    assert "'<div data-latency-traces-slot></div>'" in source
+    assert '<div id="latency-traces-panel"></div>' in source
+    assert "updateLatencyTraces(filteredItemsOverride, deepSection.querySelector('[data-lt-aside]'))" in source
+    assert "QymLatencyTraces.mount(panel, { runId: RUN_ID, passNumber: state.viewPass || null, offline: IS_EXPORT });" in source
+    assert "window.QymLatencyTraces.reload({ quiet: true })" in source
+    assert re.search(r'<script src="/static/latency_traces\.js\?v=[^"]+"></script>', source)
+    assert re.search(r'<link rel="stylesheet" href="/static/latency_traces\.css\?v=[^"]+">', source)
+    # The old cards and the step latency panel are gone from the run page.
+    for gone in ("system-latency-card", "system-trace-card", "trace-pill", "system-metrics-grid",
+                 "step_latency.js", "step-latency-panel", "QymStepLatency", "latency-ruler"):
+        assert gone not in source, gone
     assert "Qym Metrics" not in source
     assert "system-metrics-label" not in source
 
@@ -2256,9 +2239,6 @@ def test_operational_statistics_use_connected_strip_contract() -> None:
         "overview-summary-value qym-stat-strip__value",
         "metric-numeric-stats qym-stat-strip",
         "metric-num-stat qym-stat-strip__item",
-        "trace-pill qym-stat-strip__item",
-        "trace-pill-label qym-stat-strip__label",
-        "trace-pill-val qym-stat-strip__value",
     ):
         assert contract in run
     assert "overview-summary-text" not in run
