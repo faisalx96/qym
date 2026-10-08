@@ -123,7 +123,7 @@ def launch(browser):  # noqa: F811
 def _settings(launch):
     page = launch.page
     page.locator('[data-xl-view="entry"] [data-xl-start="official"]').click()
-    launch.customize("config")
+    launch.customize("env")
     for details in page.locator("details[data-xl-group]").all():
         details.evaluate("d => { d.open = true; }")
     return page

@@ -167,7 +167,7 @@
 .xl-entry-status { display: flex; flex: 1 1 200px; align-items: center; gap: var(--space-sm); min-width: 0; font-size: var(--font-base); color: var(--text-secondary); }
 
 /* ── Customize: step-by-step wizard ── */
-.xl-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-sm); margin: 0 0 var(--space-md); padding: 0; list-style: none; }
+.xl-steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-sm); margin: 0 0 var(--space-md); padding: 0; list-style: none; }
 .xl-step-btn { display: grid; gap: var(--space-xs); width: 100%; padding: 0; border: 0; background: none; color: var(--text-muted); font: inherit; font-size: var(--font-base); text-align: left; cursor: pointer; }
 .xl-step-bar { display: block; height: 4px; border-radius: 2px; background: var(--border-default); }
 .xl-step-btn--done .xl-step-bar, .xl-step-btn--current .xl-step-bar { background: var(--accent-primary); }
@@ -183,7 +183,8 @@
   .xl-entry-where, .xl-start-grid, .xl-start-grid--compact, .xl-steps { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ── Customize tabs: Setup (the wizard) and Evaluation config ── */
-.xl-tabs { margin-bottom: var(--space-md); }
-.xl-tab { display: inline-flex; align-items: center; gap: var(--space-xs); }
-.xl-tab-panel[hidden], .xl-steps[hidden], .xl-tab > [hidden] { display: none; }
+/* Changed-settings badge on the Environment / Evaluation configurations steps. */
+.xl-step-label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+.xl-step-label > [hidden] { display: none; }
+/* The review step: the review panel, then the Raw JSON card. */
+.xl-step-group[data-xl-step-group] > .xl-preview + [data-xl-advanced-slot="json"] { margin-top: var(--space-md); }

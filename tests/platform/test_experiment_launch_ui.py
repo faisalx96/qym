@@ -406,24 +406,35 @@ def test_entry_screen_then_a_wizard_and_an_evaluation_config_tab():
     assert "text: 'Customize →'" in MODULE
     for kind in ("'official'", "'best_run'", "'clone'", "'saved'", "'blank'"):
         assert f"kind: {kind}" in MODULE, kind
-    # Customize: a Setup tab (four steps) and an Evaluation config tab that holds
-    # the overrides, role overrides, sweeps and the panel (inputs, Raw JSON).
+    # Customize: one six-step wizard (B24). Environment configurations (overrides,
+    # role overrides, sweeps) and Evaluation configurations (evaluation inputs)
+    # follow Models; Raw JSON is on the review step.
     wizard = MODULE[MODULE.index("    function wizardGroups(") :]
     wizard = wizard[: wizard.index("    function setStep(")]
-    steps = wizard[wizard.index("      return {\n        1: [") : wizard.index("    function configGroup()")]
+    steps = wizard[wizard.index("      return Object.assign({\n        1: [") : wizard.index("    function stepChangeCount(")]
     order = [steps.index(f"section('{key}'") for key in ("run", "environments", "dataset", "base", "models")]
     assert order == sorted(order)
     assert "section('settings'" not in steps
-    config = wizard[wizard.index("    function configGroup()") :]
-    for host in ("section('settings'", "'data-xl-sweeps': '1'", "'data-xl-advanced': '1'"):
-        assert host in config, host
-    for label in ("Where it runs", "Starting point", "Models", "Review and launch", "Setup", "Evaluation config"):
-        assert f"label: '{label}'" in MODULE, label
+    shared = wizard[wizard.index("      const shared = {") : wizard.index("      if (editor) {")]
+    env = shared[shared.index("[ENV_STEP]: [") : shared.index("[EVAL_STEP]: [")]
+    for host in ("section('settings'", "'data-xl-advanced-slot': 'roles'", "'data-xl-sweeps': '1'"):
+        assert host in env, host
+    evaluation = shared[shared.index("[EVAL_STEP]: [") : shared.index("[REVIEW_STEP]: [")]
+    assert "'data-xl-advanced': '1'" in evaluation
+    assert "'data-xl-advanced-slot': 'json'" in shared[shared.index("[REVIEW_STEP]: [") :]
+    labels = (
+        "Where it runs", "Starting point", "Models", "Environment configurations",
+        "Evaluation configurations", "Review and launch",
+    )
+    positions = [MODULE.index(f"label: '{label}' }}", MODULE.index("{ id: 1, label: 'Where it runs'")) for label in labels]
+    assert positions == sorted(positions)
+    assert "const ENV_STEP = 4;" in MODULE and "const EVAL_STEP = 5;" in MODULE
     assert "Settings (optional)" not in MODULE
-    assert "role: 'tablist'" in MODULE and "role: 'tabpanel'" in MODULE
-    assert "className: 'qym-tabs xl-tabs'" in MODULE
-    # A problem on the hidden tab opens that tab first.
-    assert "if (panel && panel.hidden) setTab(" in MODULE
+    # No Setup / Evaluation config tabs any more.
+    for gone in ("role: 'tablist'", "role: 'tabpanel'", "xl-tabs", "setTab(", "data-xl-tab", "'Evaluation config'"):
+        assert gone not in MODULE, gone
+    # Changed values are a badge on steps 4 and 5.
+    assert "'data-xl-step-count': String(id)" in MODULE
     # A problem in a hidden step (or off the entry screen) opens where it is fixed.
     assert "if (group && group.hidden) setStep(" in MODULE
     assert "if (!editor && st.view === 'entry' && !entryHolds(error.pointer))" in MODULE

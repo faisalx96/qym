@@ -6,11 +6,12 @@
  *   window.QymExperimentLaunch.mount({ root, project, me, slug, onLaunched, onCancel })
  *     → { teardown }
  *
- * Customize has two tabs (qym-tabs): "Setup", the step-by-step wizard (where it
- * runs, starting point, models, review), and "Evaluation config", every value the
- * evaluation runs with: the generated env_overrides form, role overrides, sweeps,
- * evaluation inputs (evaluator.config, run_metadata) and Raw JSON. A starting
- * point (preset, run, clone) fills both; what the tabs show is what is sent.
+ * Customize is one six-step wizard (B24): 1 Where it runs, 2 Starting point,
+ * 3 Models, 4 Environment configurations (the generated env_overrides form, role
+ * overrides, sweeps), 5 Evaluation configurations (evaluation inputs:
+ * evaluator.config, run_metadata) and 6 Review and launch (the review panel and
+ * the Raw JSON document). A starting point (preset, run, clone) fills every step;
+ * what the steps show is what is sent.
  *
  * One page with a sticky preview: name and priority (HIGH is gated) first, then
  * environments ("+ New environment" opens the QymEvalEnvironments add dialog
@@ -69,7 +70,7 @@
  * A swept value is stored as its spec value {"sweep": [...]}: in st.values, in
  * st.bindings as { kind: 'raw', value: {sweep: [binding, ...]} }, or in the
  * Advanced panel's evaluator config; linked groups are st.links. So buildSpec()
- * sends sweeps as they are, and the Raw JSON tab round-trips them. The preview
+ * sends sweeps as they are, and the Raw JSON card round-trips them. The preview
  * shows "N runs to launch" and Launch is disabled over the run limit.
  *
  * Advanced panel (#24): experiment_launch_advanced.js (window.QymLaunchAdvanced)
@@ -102,7 +103,7 @@
   const STYLESHEETS = [
     'static/eval_environments.css?v=eval-environments-20261004-2',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
-    'static/experiment_launch.css?v=experiment-launch-20261008-global-model',
+    'static/experiment_launch.css?v=experiment-launch-20261008-config-steps',
     'static/experiment_launch_json.css?v=experiment-launch-json-20261003-2',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20261008-1',
     'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
@@ -419,7 +420,6 @@
       groupOpen: {}, // settings group id → true once the user opened it (closed by default)
       view: 'entry', // 'entry' (pick a starting point) or 'customize' (the step-by-step wizard)
       step: 1, // the wizard's current step (WIZARD_STEPS)
-      tab: 'setup', // Customize tab: 'setup' (the wizard) or 'config' (Evaluation config)
       recent: null, // recent experiments for the "Copy an experiment" card
       search: '',
       changedOnly: false,
@@ -814,7 +814,7 @@
       st.globalModel = commonEndpointBinding();
     }
 
-    /** Endpoints that only have raw values under Evaluation config (no slot yet). */
+    /** Endpoints that only have raw values under Environment configurations (no slot yet). */
     function rawEndpointNames() {
       const fields = union().fields;
       const collection = Object.keys(fields).find((p) => fields[p].kind === 'collection' && fields[p].key_param === 'endpoint');
@@ -1957,8 +1957,6 @@
       if (advanced) advanced.reveal(error.pointer);
       let target = findTarget(error.pointer);
       if (target && (editor || st.view === 'customize')) {
-        const panel = target.closest('[data-xl-tab-panel]');
-        if (panel && panel.hidden) setTab(panel.getAttribute('data-xl-tab-panel'));
         const group = target.closest('[data-xl-step-group]');
         if (group && group.hidden) setStep(Number(group.getAttribute('data-xl-step-group')));
       }
@@ -2274,9 +2272,9 @@
     }
 
     // ── Section: models ─────────────────────────────────────────────────
-    /** Where env_overrides are edited: the Evaluation config tab. */
+    /** Where env_overrides are edited: the Environment configurations step. */
     function overridesLocation() {
-      return 'Evaluation config';
+      return 'Environment configurations (step 4)';
     }
 
     function renderModels() {
@@ -2960,7 +2958,7 @@
     }
 
     function renderRoleTable(model, table, bound) {
-      // With the Advanced panel, roles are edited in its Role overrides tab only.
+      // With the Advanced panel, roles are edited in its Role overrides card only.
       if (advanced) return advanced.roleTableSummary(model, table);
       const cols = roleColumns(model, table);
       const head = el('tr', null, [el('th', { text: table.row_param || 'role' })].concat(cols.map((c) => el('th', { className: 'xl-mono', text: c.label }))));
@@ -3187,15 +3185,10 @@
       updateBaseMeta();
     }
 
-    /** Changed settings on the Evaluation config tab (and a collapsed Advanced summary). */
+    /** Changed values on the configuration steps (and a collapsed Advanced summary). */
     function updateAdvancedCount() {
       const changed = countChanged();
-      const count = root.querySelector('[data-xl-config-count]');
-      if (count) {
-        count.hidden = !changed;
-        count.textContent = String(changed);
-        count.title = changed + ' setting' + (changed === 1 ? '' : 's') + ' changed from the starting point';
-      }
+      updateStepBadges();
       const summary = root.querySelector('[data-xl-advanced-count]');
       if (!summary) return;
       summary.hidden = !changed;
@@ -3810,36 +3803,56 @@
       );
     }
 
-    // ── Customize: the Setup wizard and the Evaluation config tab ───────
+    // ── Customize: the step-by-step wizard ──────────────────────────────
+    // Environment configurations (overrides, role overrides, sweeps) and
+    // Evaluation configurations (evaluation inputs) follow Models; the last step
+    // reviews (and launches or saves) and holds the Raw JSON document (B24).
     const WIZARD_STEPS = editor ? [
       // The default preset editor (#30): the same wizard over one environment.
       { id: 1, label: 'Dataset' },
       { id: 2, label: 'Compared with' },
       { id: 3, label: 'Models' },
-      { id: 4, label: 'Review and ' + (opts.saveVerb || 'publish') },
+      { id: 4, label: 'Environment configurations' },
+      { id: 5, label: 'Evaluation configurations' },
+      { id: 6, label: 'Review and ' + (opts.saveVerb || 'publish') },
     ] : [
       { id: 1, label: 'Where it runs' },
       { id: 2, label: 'Starting point' },
       { id: 3, label: 'Models' },
-      { id: 4, label: 'Review and launch' },
+      { id: 4, label: 'Environment configurations' },
+      { id: 5, label: 'Evaluation configurations' },
+      { id: 6, label: 'Review and launch' },
     ];
+    const ENV_STEP = 4;
+    const EVAL_STEP = 5;
     // The last step reviews (and launches or saves); the preview moves into it.
     const REVIEW_STEP = WIZARD_STEPS.length;
-    const TABS = [
-      { id: 'setup', label: 'Setup' },
-      { id: 'config', label: 'Evaluation config' },
-    ];
 
     function wizardGroups(newEnvButton) {
+      // Steps 4 to 6 are the same in both modes.
+      const shared = {
+        // Environment overrides, the Advanced panel's Role overrides card right
+        // under the overrides it belongs to, then sweeps (#34, launch form only).
+        [ENV_STEP]: [
+          section('settings', null, 'Environment overrides', editor
+            ? 'Generated from the environment schema. Only changed values are saved.'
+            : 'Generated from the environment schema. Only changed values are sent.'),
+          el('div', { 'data-xl-advanced-slot': 'roles', hidden: true }),
+          editor ? null : el('div', { 'data-xl-sweeps': '1', hidden: true }),
+        ],
+        // The Advanced panel host: its Evaluation inputs card.
+        [EVAL_STEP]: [el('div', { 'data-xl-advanced': '1', hidden: true })],
+        // The review panel moves in first (placePreview); the Raw JSON card follows.
+        [REVIEW_STEP]: [el('div', { 'data-xl-advanced-slot': 'json', hidden: true })],
+      };
       if (editor) {
-        return {
+        return Object.assign({
           1: [section('dataset', null, 'Dataset', 'Optional. A launch from this configuration without a dataset asks for one.')],
           2: [section('base', null, 'Compared with', 'The configuration your changes are counted against.')],
           3: [section('models', null, 'Models', 'Bind each LLM group to a project model, or leave it to the environment.')],
-          4: [],
-        };
+        }, shared);
       }
-      return {
+      return Object.assign({
         1: [
           section('run', null, 'Name and priority', 'HIGH preempts other users\' jobs and needs a project manager.'),
           section('environments', null, 'Environments', 'Where the jobs run. Each selected environment gets one job.', newEnvButton),
@@ -3847,36 +3860,34 @@
         ],
         2: [section('base', null, 'Start from', 'Pick the configuration to begin with. You can still change anything afterwards.')],
         3: [section('models', null, 'Models', 'Bind each LLM group to a project model, a temporary model, or leave it to the environment.')],
-        4: [],
-      };
+      }, shared);
     }
 
-    /** The Evaluation config tab: every evaluation setting, filled from the starting point. */
-    function configGroup() {
-      return [
-        section('settings', null, 'Environment overrides', editor
-          ? 'Generated from the environment schema. Only changed values are saved.'
-          : 'Generated from the environment schema. Only changed values are sent.'),
-        // The Advanced panel's Role overrides card right under the overrides it
-        // belongs to, sweeps (#34, launch form only), then its other cards
-        // (Evaluation inputs, Raw JSON).
-        el('div', { 'data-xl-advanced-slot': 'roles', hidden: true }),
-        editor ? null : el('div', { 'data-xl-sweeps': '1', hidden: true }),
-        el('div', { 'data-xl-advanced': '1', hidden: true }),
-      ];
+    /** Changed values shown on a step: env_overrides (4) or evaluation inputs (5). */
+    function stepChangeCount(id) {
+      if (id === ENV_STEP) return countChanged();
+      if (id === EVAL_STEP) return advanced && advanced.changedCount ? advanced.changedCount() : 0;
+      return 0;
     }
 
-    function tabBar() {
-      const changed = countChanged();
-      return el('div', { className: 'qym-tabs xl-tabs', role: 'tablist', 'aria-label': editor ? 'Configuration' : 'Experiment', 'data-xl-tabs': '1' }, TABS.map((tab) => el('button', {
-        type: 'button', role: 'tab', id: 'xl-tab-' + tab.id, className: 'qym-tabs__tab xl-tab' + (st.tab === tab.id ? ' active' : ''),
-        'aria-selected': st.tab === tab.id ? 'true' : 'false', 'aria-controls': 'xl-tabpanel-' + tab.id,
-        tabindex: st.tab === tab.id ? '0' : '-1', 'data-xl-tab': tab.id,
-        onClick: () => setTab(tab.id),
-      }, [tab.label, tab.id === 'config' ? el('span', {
-        className: 'qym-tag qym-tag--count', 'data-xl-config-count': '1', hidden: !changed, text: String(changed),
-        title: changed + ' setting' + (changed === 1 ? '' : 's') + ' changed from the starting point',
-      }) : null])));
+    function stepCountBadge(id) {
+      if (id !== ENV_STEP && id !== EVAL_STEP) return null;
+      const badge = el('span', { className: 'qym-tag qym-tag--count', 'data-xl-step-count': String(id) });
+      updateStepBadge(badge);
+      return badge;
+    }
+
+    function updateStepBadge(badge) {
+      const id = Number(badge.getAttribute('data-xl-step-count'));
+      const changed = stepChangeCount(id);
+      const what = id === EVAL_STEP ? 'evaluation input' : 'setting';
+      badge.hidden = !changed;
+      badge.textContent = String(changed);
+      badge.title = changed + ' ' + what + (changed === 1 ? '' : 's') + ' changed from the starting point';
+    }
+
+    function updateStepBadges() {
+      root.querySelectorAll('[data-xl-step-count]').forEach(updateStepBadge);
     }
 
     function renderWizardLayout(newEnvButton) {
@@ -3885,21 +3896,7 @@
         className: 'xl-step-group', 'data-xl-step-group': String(step.id), hidden: step.id !== st.step,
       }, groups[step.id]));
       const nav = el('div', { className: 'xl-step-nav', 'data-xl-step-nav': '1' });
-      const panel = (id, children) => el('div', {
-        id: 'xl-tabpanel-' + id, className: 'xl-tab-panel', role: 'tabpanel', 'aria-labelledby': 'xl-tab-' + id,
-        'data-xl-tab-panel': id, hidden: st.tab !== id,
-      }, children);
-      const configNav = el('div', { className: 'xl-step-nav', 'data-xl-config-nav': '1' }, [
-        el('button', { type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-config-back': '1', text: 'Back to setup', onClick: () => setTab('setup') }),
-        el('button', {
-          type: 'button', className: 'qym-inline-action qym-inline-action--accent', 'data-xl-config-review': '1',
-          text: 'Continue to ' + WIZARD_STEPS[REVIEW_STEP - 1].label.toLowerCase(), onClick: () => setStep(REVIEW_STEP),
-        }),
-      ]);
-      const main = el('div', { className: 'xl-main' }, [
-        panel('setup', groupNodes.concat([nav])),
-        panel('config', configGroup().concat([configNav])),
-      ]);
+      const main = el('div', { className: 'xl-main' }, groupNodes.concat([nav]));
       // The review panel: launch (or, in the editor, notes and save).
       const panelTitle = editor ? (opts.saveLabel || 'Save') : 'Review';
       const preview = el('aside', { className: 'xl-preview', 'aria-label': panelTitle }, [
@@ -3919,7 +3916,9 @@
         el('button', {
           type: 'button', className: 'xl-step-btn', 'data-xl-step': String(step.id),
           onClick: () => setStep(step.id),
-        }, [el('span', { className: 'xl-step-bar' }), el('span', { className: 'xl-step-label' }, [el('span', { className: 'xl-mono', text: String(step.id) }), ' ' + step.label])]),
+        }, [el('span', { className: 'xl-step-bar' }), el('span', { className: 'xl-step-label' }, [
+          el('span', { className: 'xl-mono', text: String(step.id) }), ' ' + step.label, stepCountBadge(step.id),
+        ])]),
       ])));
       const header = editor ? [
         backLink(opts.backLabel || '← Back', () => { if (opts.onCancel) opts.onCancel(); }),
@@ -3938,7 +3937,7 @@
       ];
       root.replaceChildren(el('div', {
         className: 'xl-page', 'data-xl-launch-form': '1', 'data-xl-view': 'customize', 'data-xl-mode': editor ? 'editor' : null,
-      }, header.concat([tabBar(), steps, el('div', { className: 'xl-layout' }, [main, side])])));
+      }, header.concat([steps, el('div', { className: 'xl-layout' }, [main, side])])));
       if (!editor) renderEnvironments();
       renderDataset();
       renderBase();
@@ -3946,47 +3945,25 @@
       renderSettings();
       if (!editor) renderRun();
       renderPreview();
-      const tab = st.tab;
-      setStep(st.step); // builds the step navigation (and shows Setup)
-      if (tab === 'config') setTab('config');
-    }
-
-    /** Shows a Customize tab: "Setup" (the wizard) or "Evaluation config". */
-    function setTab(tab) {
-      st.tab = tab === 'config' ? 'config' : 'setup';
-      const page = root.querySelector('[data-xl-view="customize"]');
-      if (!page) return;
-      page.querySelectorAll('[data-xl-tab]').forEach((button) => {
-        const on = button.getAttribute('data-xl-tab') === st.tab;
-        button.classList.toggle('active', on);
-        button.setAttribute('aria-selected', on ? 'true' : 'false');
-        button.setAttribute('tabindex', on ? '0' : '-1');
-      });
-      page.querySelectorAll('[data-xl-tab-panel]').forEach((panel) => {
-        panel.hidden = panel.getAttribute('data-xl-tab-panel') !== st.tab;
-      });
-      const steps = page.querySelector('[data-xl-steps]');
-      if (steps) steps.hidden = st.tab !== 'setup';
-      placePreview(page);
+      setStep(st.step); // builds the step navigation
     }
 
     /** The preview sits in the side column, except on the review step (main column). */
     function placePreview(page) {
       const review = page.querySelector('[data-xl-step-group="' + REVIEW_STEP + '"]');
       const side = page.querySelector('[data-xl-side]');
-      const inReview = st.tab === 'setup' && st.step === REVIEW_STEP;
-      if (inReview) review.appendChild(hosts.preview);
+      const inReview = st.step === REVIEW_STEP;
+      if (inReview) review.insertBefore(hosts.preview, review.firstChild);
       else side.appendChild(hosts.preview);
       side.hidden = inReview;
       page.querySelector('.xl-layout').classList.toggle('xl-layout--wide', inReview);
     }
 
-    /** Shows one wizard step (on the Setup tab); the review step takes the preview into the main column. */
+    /** Shows one wizard step; the review step takes the preview into the main column. */
     function setStep(n) {
       st.step = Math.min(Math.max(1, n), WIZARD_STEPS.length);
       const page = root.querySelector('[data-xl-view="customize"]');
       if (!page) return;
-      if (st.tab !== 'setup') setTab('setup');
       page.querySelectorAll('[data-xl-step-group]').forEach((group) => {
         group.hidden = Number(group.getAttribute('data-xl-step-group')) !== st.step;
       });
@@ -4002,10 +3979,10 @@
       nav.replaceChildren(
         st.step > 1 ? el('button', { type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-step-back': '1', text: 'Back', onClick: () => setStep(st.step - 1) }) : el('span'),
         st.step < WIZARD_STEPS.length ? el('div', { className: 'xl-row' }, [
-          // Before the review: the evaluation settings are one tab away (optional).
-          st.step === REVIEW_STEP - 1 ? el('button', {
-            type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-open-config': '1',
-            text: 'Evaluation config', onClick: () => setTab('config'),
+          // The configuration steps are optional: Models on can skip to the review.
+          st.step >= ENV_STEP - 1 && st.step < REVIEW_STEP - 1 ? el('button', {
+            type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-skip-review': '1',
+            text: 'Skip to review', onClick: () => setStep(REVIEW_STEP),
           }) : null,
           el('button', {
             type: 'button', className: 'qym-inline-action qym-inline-action--accent', 'data-xl-step-next': '1',
@@ -4146,6 +4123,7 @@
         versioningDetails: () => parseVersioning(st.versioningText).details,
         rerender: () => { renderDataset(); renderModels(); renderSettings(); renderRun(); renderPreview(); },
         renderDataset, renderPreview, schedulePreview, updateChangedCount,
+        updateStepBadges, // the evaluation inputs changed (step 5 badge)
         sweeps, // #34: null when sweeps are off
       };
     }

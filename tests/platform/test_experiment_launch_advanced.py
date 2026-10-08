@@ -142,10 +142,14 @@ def test_module_mounts_three_separate_cards():
     # Unrelated parts: one card each, no tabs and no disclosure of their own.
     assert "role: 'tablist'" not in MODULE and "el('details'" not in MODULE
     assert "'data-xa-section': section.id" in MODULE
-    # Role overrides sit under the form's environment overrides.
-    assert "[data-xl-advanced-slot=\"roles\"]" in MODULE
-    # One Evaluation config tab, shared by the launch form and the editor.
+    # Role overrides sit under the form's environment overrides (step 4) and Raw
+    # JSON on the review step; Evaluation inputs stay in the host (step 5).
+    assert "['roles', 'json'].forEach((id) =>" in MODULE
+    assert "'[data-xl-advanced-slot=\"' + id + '\"]'" in MODULE
+    # One set of slots, shared by the launch form and the editor.
     assert LAUNCH.count("'data-xl-advanced-slot': 'roles'") == 1
+    assert LAUNCH.count("'data-xl-advanced-slot': 'json'") == 1
+    assert LAUNCH.count("'data-xl-advanced': '1'") == 1
 
 
 def test_evaluation_inputs_tab():

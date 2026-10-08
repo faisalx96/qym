@@ -301,8 +301,8 @@ def test_global_model_sweep_links_every_endpoint_into_one_axis(launch):
     assert spec["slot_bindings"] == {PRIMARY: sweep, FAST: sweep}
     assert spec["links"] == LINKED
     assert launch.state(PRIMARY) == launch.state(FAST) == "follows"
-    # Two linked endpoints sweep together: 2 runs, not 2 × 2.
-    page.locator('[data-xl-tab="config"]').click()
+    # Two linked endpoints sweep together: 2 runs, not 2 × 2 (Sweeps, step 4).
+    launch.step("env")
     page.wait_for_function(
         "() => /= 2 runs?$/.test(document.querySelector('[data-xs-math]').textContent.trim())"
     )
@@ -358,11 +358,11 @@ def test_raw_endpoints_get_a_slot_and_the_global_model(launch):
     assert spec["env_overrides"]["LLM_OVERRIDES"]["endpoints"]["slow"] == {"timeout": 30}
 
 
-def test_evaluation_config_tab_still_shows_bound_endpoint_fields(launch):
+def test_environment_configurations_step_still_shows_bound_endpoint_fields(launch):
     launch.open()
     launch.models()
     page = launch.page
     page.locator("[data-xl-global-select]").select_option("c1")
-    page.locator('[data-xl-tab="config"]').click()
-    assert page.locator('[data-xl-tab-panel="config"]').is_visible()
+    launch.step("env")
+    assert page.locator('[data-xl-step-group="4"]').is_visible()
     assert page.locator("[data-xl-global-model]").is_hidden()

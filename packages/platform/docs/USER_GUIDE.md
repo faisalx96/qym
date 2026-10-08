@@ -343,11 +343,13 @@ If a bound connection is deleted or made unavailable before its job is sent, the
 
 ### Launching an experiment
 
-Open **Experiments → New experiment**. The form has one section per step and a live **Preview** on the side:
+Open **Experiments → New experiment**. The first screen picks where the experiment runs and its starting point; **Launch as is** launches it, and **Customize →** opens a wizard of six steps, one shown at a time, with a live **Preview** on the side. Click a step at the top to jump to it, or use **Continue to …**; from **Models** on, **Skip to review** jumps to the last step. Edits are kept when you move between steps and when you go back to the first screen.
 
-1. **Environments**: one or more. Each selected environment gets one job per configuration. **+ New environment** opens the environment dialog.
-2. **Dataset**: a **Project dataset** (optionally pinned to a version or alias) or a **Custom string** sent as `evaluator.dataset`. Runs on a custom string are never ranked as best runs.
-3. **Start from**: the base configuration that your edits are layered on.
+1. **Where it runs**
+   - **Name and priority**: **Environment default**, `LOW`, `NORMAL`, or `HIGH`, the **Experiment name**, and optional **Versioning details**: one `key=value` per line. Every run the experiment launches records them under **Versioning details**, and **Clone** / **Rerun with this config** copy them. An Evaluation Service v1.1 also receives them (as `evaluator.config.versioning_details`) and records them with its own `agent_version`, `image_version` and `kb_version`; there the service's value wins for a key both set (`kb_version` is always the KB the job used). On an older service they are added when the run arrives, and the experiment's value wins. The API takes them as `versioning_details` (a JSON object) on `POST /v1/projects/{id}/experiments`.
+   - **Environments**: one or more. Each selected environment gets one job per configuration. **+ New environment** opens the environment dialog.
+   - **Dataset**: a **Project dataset** (optionally pinned to a version or alias) or a **Custom string** sent as `evaluator.dataset`. Runs on a custom string are never ranked as best runs.
+2. **Starting point** (**Start from**): the base configuration that your edits are layered on.
 
    | Base | Loads |
    |---|---|
@@ -358,13 +360,15 @@ Open **Experiments → New experiment**. The form has one section per step and a
    | **Clone** | An earlier experiment, from its **Clone** action or from **Rerun with this config** on a run page. |
 
    A changed setting shows a dot and can be reset to the base value. The header counts the **Diff vs base**. **Reset all to base** drops every edit, and **Switch base** keeps the edits that also exist on the new base. When a base was authored on an older schema, settings that no longer exist are dropped and listed ("Some settings are no longer supported").
-4. **Models**: one card per confirmed slot.
-5. **Settings**: the generated form, grouped, with **Search settings** and **Changed only**. Only changed values are sent; an unset field shows "Inherited from environment".
-6. **Advanced**: collapsed by default, with three tabs.
-   - **Evaluation inputs**: the `evaluator.config` fields (`samples`, `report_k`, `metric_concurrency`, timeouts, retries, and so on) and custom **Run metadata** keys. The fields come from the selected environments' evaluator schema, so a field the service adds appears without a qym update; for a service older than v1.1 the card shows the standard inputs. The fields work like the settings: a value that does not fit its field (say, text in a number field) is edited as JSON, a value no field shows is listed under **Other values** where you can edit or remove it, and a field one of the selected environments does not have is tagged "not in …". Keys starting with `qym_` are reserved. The platform fills `run_name`, `live_mode` (always `platform`), the model from the `primary` slot and, for v1.1 services, `versioning_details` from **Versioning details**, and shows them read-only.
+3. **Models**: one card per confirmed slot.
+4. **Environment configurations**: what the environment runs with (`env_overrides`).
+   - **Environment overrides**: the generated form, grouped, with **Search settings** and **Changed only**. Only changed values are sent; an unset field shows "Inherited from environment".
    - **Role overrides**: one row per role in the schema (`main`, `router`, …) with `endpoint`, `temperature`, `max_tokens`, and the other role fields. An empty cell keeps the service default.
-   - **Raw JSON**: the whole configuration document, kept in sync with the form. Keys never appear here; model slots show a `connection_id` or a secret reference.
-7. **Priority and name**: **Environment default**, `LOW`, `NORMAL`, or `HIGH`, the **Experiment name**, and optional **Versioning details**: one `key=value` per line. Every run the experiment launches records them under **Versioning details**, and **Clone** / **Rerun with this config** copy them. An Evaluation Service v1.1 also receives them (as `evaluator.config.versioning_details`) and records them with its own `agent_version`, `image_version` and `kb_version`; there the service's value wins for a key both set (`kb_version` is always the KB the job used). On an older service they are added when the run arrives, and the experiment's value wins. The API takes them as `versioning_details` (a JSON object) on `POST /v1/projects/{id}/experiments`.
+   - **Sweeps**: the swept fields and linked groups (see below).
+5. **Evaluation configurations**: the **Evaluation inputs**: the `evaluator.config` fields (`samples`, `report_k`, `metric_concurrency`, timeouts, retries, and so on) and custom **Run metadata** keys. The fields come from the selected environments' evaluator schema, so a field the service adds appears without a qym update; for a service older than v1.1 the card shows the standard inputs. The fields work like the settings: a value that does not fit its field (say, text in a number field) is edited as JSON, a value no field shows is listed under **Other values** where you can edit or remove it, and a field one of the selected environments does not have is tagged "not in …". Keys starting with `qym_` are reserved. The platform fills `run_name`, `live_mode` (always `platform`), the model from the `primary` slot and, for v1.1 services, `versioning_details` from **Versioning details**, and shows them read-only.
+6. **Review and launch**: the review (the preview, now in the main column) and **Launch**, followed by **Raw JSON**: the whole configuration document, kept in sync with the form. Keys never appear here; model slots show a `connection_id` or a secret reference. Edits apply when you leave the editor (or click **Apply**) and show up in steps 4 and 5; a document that does not parse or validate is not applied, and the error is shown in the card.
+
+Steps 4 and 5 show a count of the values changed from the starting point. When the preview reports a problem, clicking it opens the step that holds the field.
 
 The **Preview** validates the configuration against every selected environment as you edit, lists the generated run names (`{experiment name} · {swept values}`, plus the environment name when you launch on several), and enables **Launch** once the configuration is valid. A setting that one of the selected environments does not have is an error for that environment; reset the field or deselect the environment.
 
@@ -419,7 +423,7 @@ The experiment status summarizes its jobs: `QUEUED`, `RUNNING`, `COMPLETED` (all
 
 Each environment can have **Official defaults**: a curated, versioned configuration that is the default base of every launch on it. Open it from the environment drawer in **Project Settings → Environments**.
 
-- Only project managers publish. **Edit and publish** opens the launch form without sweeps. Publishing requires release notes ("What changed and why") and creates the next version. Earlier versions never change and stay in the **Version history**.
+- Only project managers publish. **Edit and publish** opens the launch form without sweeps, in six steps: **Dataset**, **Compared with**, **Models**, **Environment configurations**, **Evaluation configurations**, and **Review and publish** (with **Raw JSON**). Publishing requires release notes ("What changed and why") and creates the next version. Earlier versions never change and stay in the **Version history**.
 - **Run official defaults**, on the environment row and in the launch form, launches a one-job experiment from the latest version.
 - Official defaults cannot hold temporary models. Rebind those slots to project models before **Publish** is enabled.
 - **Saved presets** are named starting points that any member can save, for example from a matrix cell. Open one with **Open in launch form**.

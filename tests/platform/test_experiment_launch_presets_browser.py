@@ -1,5 +1,6 @@
 """Presets in the new-experiment form, in a real browser: every value a saved
-preset holds shows on the Evaluation config tab, and what is shown is sent."""
+preset holds shows on the Environment / Evaluation configurations steps, and
+what is shown is sent."""
 
 from __future__ import annotations
 
@@ -119,13 +120,12 @@ def _value(page, pointer):
     return page.locator(f'[data-xl-pointer="{pointer}"]').first.input_value()
 
 
-def test_saved_preset_fills_every_field_of_the_evaluation_config_tab(launch):
+def test_saved_preset_fills_every_field_of_the_configuration_steps(launch):
     launch.open()
     page = launch.page
     launch.pick_saved_preset()
-    launch.customize("config")
-    tab = page.locator('[data-xl-tab-panel="config"]')
-    assert tab.is_visible()
+    launch.customize("env")
+    assert page.locator('[data-xl-step-group="4"]').is_visible()
     # Environment overrides: scalars, enums, booleans and nested values.
     page.wait_for_selector('[data-xl-pointer="/env_overrides/MILVUS_SEARCH_THRESHOLD"]', state="attached")
     assert _value(page, "/env_overrides/MILVUS_SEARCH_THRESHOLD") == "0.7"
@@ -138,10 +138,13 @@ def test_saved_preset_fills_every_field_of_the_evaluation_config_tab(launch):
     page.wait_for_selector('[data-xa-panel="roles"] [data-xa-row]')
     assert roles.get_by_label("main · temperature", exact=True).input_value() == "0.2"
     # The preset's values are the starting point, not changes.
-    count = page.locator("[data-xl-config-count]")
-    assert count.is_hidden() and count.text_content() == "0"
+    for step in ("4", "5"):
+        count = page.locator(f'[data-xl-step-count="{step}"]')
+        assert count.is_hidden() and count.text_content() == "0"
     # Evaluation inputs: evaluator.config, run_metadata and report_k.
+    launch.step("eval")
     inputs = page.locator('[data-xa-panel="inputs"]')
+    assert page.locator('[data-xl-step-group="5"]').is_visible()
     page.wait_for_selector('[data-xa-field="samples"]')
     assert inputs.locator('[data-xa-field="samples"] input').input_value() == "3"
     assert inputs.locator('[data-xa-field="max_retries"] input').input_value() == "4"
@@ -151,8 +154,8 @@ def test_saved_preset_fills_every_field_of_the_evaluation_config_tab(launch):
     meta = rows.evaluate_all("rs => rs.map(r => Array.from(r.querySelectorAll('input')).map(i => i.value))")
     assert meta == [["team", "rag"], ["tier", "2"]]
     assert "evaluator.report_k = 2" in inputs.locator("[data-xa-extras]").inner_text()
-    # What the tab shows is what is sent.
-    page.locator('[data-xl-tab="setup"]').click()
+    # What the steps show is what is sent.
+    launch.step(1)
     page.locator('[data-xl-entry-name], [data-xl-pointer="#name"]').first.fill("x")
     spec = launch.last_spec()
     assert spec["env_overrides"] == PRESET_DOC["env_overrides"]
@@ -164,7 +167,7 @@ def test_clearing_a_preset_input_removes_it_and_edits_survive_leaving_customize(
     launch.open()
     page = launch.page
     launch.pick_saved_preset()
-    launch.customize("config")
+    launch.customize("eval")
     inputs = page.locator('[data-xa-panel="inputs"]')
     page.wait_for_selector('[data-xa-field="samples"]')
     # Cleared: no longer sent (it used to come back from the preset).
@@ -174,10 +177,22 @@ def test_clearing_a_preset_input_removes_it_and_edits_survive_leaving_customize(
     spec = launch.last_spec()
     assert "samples" not in spec["evaluator"]["config"]
     assert spec["evaluator"]["config"]["max_retries"] == 5
-    # Start screen and back: the panel is rebuilt with the same edits.
+    # The step badge counts the changed evaluation inputs.
+    page.wait_for_function(
+        "() => document.querySelector('[data-xl-step-count=\"5\"]').textContent === '2'"
+    )
+    assert page.locator('[data-xl-step-count="5"]').is_visible()
+    assert page.locator('[data-xl-step-count="4"]').is_hidden()
+    # Other steps and back: the edits stay.
+    launch.step("env")
+    launch.step(1)
+    launch.step("eval")
+    assert inputs.locator('[data-xa-field="samples"] input').input_value() == ""
+    assert inputs.locator('[data-xa-field="max_retries"] input').input_value() == "5"
+    # Start screen and back: the panel is rebuilt with the same edits, on step 5.
     page.locator(".xl-back").click()
     page.locator("[data-xl-customize]").click()
-    page.wait_for_selector('[data-xl-tab-panel="config"]:not([hidden]) [data-xa-field="samples"]')
+    page.wait_for_selector('[data-xl-step-group="5"]:not([hidden]) [data-xa-field="samples"]')
     assert inputs.locator('[data-xa-field="samples"] input').input_value() == ""
     assert inputs.locator('[data-xa-field="max_retries"] input').input_value() == "5"
     # Reset puts the preset's value back.
@@ -189,8 +204,10 @@ def test_raw_json_can_remove_a_preset_input(launch):
     launch.open()
     page = launch.page
     launch.pick_saved_preset()
-    launch.customize("config")
-    page.wait_for_selector('[data-xa-field="samples"]')
+    launch.customize("review")
+    page.wait_for_selector('[data-xa-field="samples"]', state="attached")
+    # Raw JSON sits on the review step, after the review panel.
+    assert page.locator('[data-xl-step-group="6"] [data-xa-section="json"]').is_visible()
     doc = copy.deepcopy(PRESET_DOC)
     del doc["evaluator"]["config"]["max_retries"]
     del doc["evaluator"]["report_k"]
@@ -212,6 +229,50 @@ def test_raw_json_can_remove_a_preset_input(launch):
     assert "max_retries" not in spec["evaluator"]["config"]
     assert "report_k" not in spec["evaluator"]
     assert spec["evaluator"]["config"]["samples"] == 3
+    # Applying keeps the user on the review step.
+    assert page.locator('[data-xl-step-group="6"]').is_visible()
+    # The fields of step 5 show the applied document.
+    launch.step("eval")
+    assert inputs.locator('[data-xa-field="max_retries"] input').input_value() == ""
+
+
+def _set_json(page, text):
+    textarea = page.locator('[data-xa-panel="json"] textarea')
+    if textarea.count():
+        textarea.fill(text)
+    else:
+        page.locator('[data-xa-panel="json"] .cm-content').click()
+        page.keyboard.press("Control+A")
+        page.keyboard.insert_text(text)
+    page.locator("[data-xa-json-apply]").click()
+
+
+def test_raw_json_edits_flow_into_the_configuration_steps_and_errors_stay_on_review(launch):
+    launch.open()
+    page = launch.page
+    launch.pick_saved_preset()
+    launch.customize("review")
+    page.wait_for_selector('[data-xa-panel="json"] .cm-content, [data-xa-panel="json"] textarea')
+    # A setting changed in Raw JSON shows on step 4 (and counts there).
+    doc = copy.deepcopy(PRESET_DOC)
+    doc["env_overrides"]["SQL_RESULT_LIMIT"] = 75
+    _set_json(page, json.dumps(doc))
+    page.wait_for_function(
+        "() => document.querySelector('[data-xl-pointer=\"/env_overrides/SQL_RESULT_LIMIT\"]').value === '75'"
+    )
+    assert page.locator('[data-xl-step-count="4"]').text_content() == "1"
+    assert page.locator('[data-xl-step-group="6"]').is_visible()
+    # A parse error is shown in the Raw JSON card and the user stays on review.
+    _set_json(page, "{ not json")
+    page.wait_for_selector("[data-xa-json-errors]")
+    assert page.locator('[data-xl-step-group="6"]').is_visible()
+    assert page.locator('[data-xl-step-group="6"] [data-xa-json-errors]').is_visible()
+    # Its entry in the review panel focuses the editor, still on review.
+    page.locator('[data-xl-step-group="6"] .xl-preview').get_by_text("Raw JSON not applied", exact=False).first.click()
+    assert page.locator('[data-xl-step-group="6"]').is_visible()
+    # Step 4 kept the last applied value.
+    launch.step("env")
+    assert _value(page, "/env_overrides/SQL_RESULT_LIMIT") == "75"
 
 
 def test_a_changed_schema_reloads_the_preset_onto_it(launch):
@@ -225,7 +286,7 @@ def test_a_changed_schema_reloads_the_preset_onto_it(launch):
     launch.release_refresh()
     # The preset is re-mapped onto the new schema (fetched again), values intact.
     launch.wait(lambda: launch.version_loads > loads)
-    launch.customize("config")
+    launch.customize("env")
     page.wait_for_selector('[data-xl-pointer="/env_overrides/MILVUS_SEARCH_THRESHOLD"]', state="attached")
     assert _value(page, "/env_overrides/MILVUS_SEARCH_THRESHOLD") == "0.7"
 
@@ -291,7 +352,7 @@ def test_a_preset_input_from_the_evaluator_schema_is_shown_and_sent(evaluator_la
     launch.open()
     page = launch.page
     launch.pick_saved_preset()
-    launch.customize("config")
+    launch.customize("eval")
     field = page.locator(
         '[data-xa-config="environment"] [data-xl-pointer="/evaluator/config/metric_concurrency"]'
     )
