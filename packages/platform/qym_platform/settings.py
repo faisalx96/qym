@@ -169,6 +169,8 @@ class PlatformSettings(BaseSettings):
     # Retention (days). 0 disables. Derived tables are never pruned.
     span_retention_days: int = Field(default=60, ge=0)
     deleted_run_grace_days: int = Field(default=30, ge=0)
+    # Daily ``spans`` partitions are kept created this many days ahead.
+    span_partition_days_ahead: int = Field(default=14, ge=1, le=366)
 
     # Ingest storage policy
     # Spans are stored in full. The ceiling only guards against a runaway

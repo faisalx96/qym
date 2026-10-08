@@ -88,6 +88,7 @@ def maintenance_overview(
             "event_log_mode": settings.event_log_mode,
             "span_retention_days": settings.span_retention_days,
             "deleted_run_grace_days": settings.deleted_run_grace_days,
+            "span_partition_days_ahead": settings.span_partition_days_ahead,
         },
         "workers": _worker_state(request, settings, db),
         "pool": pool.status() if hasattr(pool, "status") else None,

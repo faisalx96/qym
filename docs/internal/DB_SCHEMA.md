@@ -49,7 +49,7 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 
 ## Traces and review
 
-- `spans`: normalized OpenTelemetry spans, unique per `(run, span_id)`.
+- `spans`: normalized OpenTelemetry spans, unique per `(run, span_id)`. On PostgreSQL range-partitioned by `run_created_at`: daily partitions `spans_yYYYYmMMdDD` (from migration `0085`), monthly `spans_yYYYYmMM` ones created earlier, and `spans_default`; raw-trace retention drops whole partitions (see `OPERATIONS.md`, "Span partitions").
 - `run_trace_aggregates`: cached per-trace timing, token, cost, type, and error summaries.
 - `root_cause_revisions`: append-only item-level root-cause/solution revisions.
 - `review_corrections`: active review candidates, snapshots, confidence, source, review status/comment, and supersession links.
