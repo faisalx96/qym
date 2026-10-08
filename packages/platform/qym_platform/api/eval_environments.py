@@ -1043,7 +1043,12 @@ async def refresh_environment_schema(
     _record_health(env, ok=True)
     _commit(db)
     slots = list_model_slots(db, schema.id)
-    logger.info("Evaluation environment %s schema refreshed (changed=%s)", env.id, changed)
+    logger.info(
+        "Evaluation environment %s schema refreshed (env_overrides_changed=%s, evaluator_changed=%s)",
+        env.id,
+        env_changed,
+        evaluator_block["changed"],
+    )
     return {
         # Either schema: the launch form reloads its forms and re-maps its base.
         "changed": env_changed or evaluator_block["changed"],
