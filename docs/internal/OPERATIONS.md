@@ -46,7 +46,9 @@ sure one process runs a given job.
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
 | `QYM_DB_LOCK_TIMEOUT_MS` | `5000` | Lock-wait guard (all roles) |
-| `QYM_REQUEST_TIMING` | `false` | `Server-Timing` header + per-request log line |
+| `QYM_REQUEST_TIMING` | `false` | `Server-Timing` header + per-request log line (logger `qym_platform.middleware.timing`, was `qym.timing`) |
+| `QYM_LOG_LEVEL` | `INFO` | Platform log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). See "Logging" |
+| `QYM_LOG_FORMAT` | `text` | `text` or `json` (one JSON object per line). See "Logging" |
 | `QYM_MAX_UPLOAD_BYTES` | `104857600` (100 MB) | Largest file a dataset or run upload may carry. Larger multipart bodies get 413 before they are parsed (so they never reach `/tmp`); a multipart request without `Content-Length` gets 411 |
 | `QYM_PLATFORM_EVENT_SPILL_BYTES` | `0` in the image (SDK default 256 MB) | Disk overflow for run-event streams. `0` never spills: events wait in memory (16 MB) instead of being written to `/tmp` |
 | `QYM_PLATFORM_REQUEST_TIMEOUT` | `60` | SDK client timeout (s) for a mid-run event batch POST. Keep it above the platform's statement timeout (30 s) so the SDK never re-sends a batch the server is still applying |
@@ -54,6 +56,44 @@ sure one process runs a given job.
 | `QYM_PLATFORM_FLUSH_INTERVAL` | `1.0` | SDK cadence (s) for flushing a partly filled batch. It stretches up to 5 s while POSTs take over 1 s; full batches (200 events / 2 MB) still go at once |
 | `QYM_PLATFORM_MAX_FIELD_BYTES` | `262144` (256 KB) | Largest string (task output, input, span attribute) the SDK uploads in a run event; longer ones are cut and marked `…[truncated by qym: N bytes omitted]`, and the event payload carries `_qym_truncated`. `0` disables the cap. Local results keep full values |
 | `INSIGHTOR_TIMINGS_FILE` | unset | Opt-in JSONL file for `insightor_eval.py` timings. Unset, timings are DEBUG log lines; point it at a mounted volume if you need the file |
+
+## Logging
+
+Every platform module logs through `qym_platform.log` (`logger =
+get_logger(__name__)`), so all records sit under the `qym_platform` logger tree
+(for example `qym_platform.services.eval_dispatcher`). Each process configures
+logging once at start: the API, ingestion and workers app factories,
+`python -m qym_platform.worker`, `python -m qym_platform.serve` and the
+`qym-platform` CLI. Output goes to stderr (container logs).
+
+- **Level**: `QYM_LOG_LEVEL` (default `INFO`). Lifecycle and state changes
+  (runs created/stopped, jobs claimed/finished, workers started/stopped,
+  migrations) log at INFO, recoverable problems at WARNING, failures at ERROR
+  with their full traceback. Per-item ingest detail is DEBUG only.
+- **Format**: `QYM_LOG_FORMAT=text` (default) prints
+  `<time> <LEVEL> <logger> [<request id>] <message>` and the traceback below it.
+  `QYM_LOG_FORMAT=json` prints one object per line with `timestamp` (UTC),
+  `level`, `logger`, `message`, `service` (`QYM_SERVICE`, else `QYM_ROLE`),
+  `request_id` (during an HTTP request), `exc_info` (the traceback as one
+  string) and any structured fields such as `run_id`. With `json`, uvicorn's
+  own `uvicorn` / `uvicorn.access` lines use the same format; Alembic's
+  migration output does too.
+- **Request ids**: every HTTP response carries `X-Request-ID`. A caller's
+  `X-Request-ID` (up to 128 characters of `A-Z a-z 0-9 . _ : -`) is kept,
+  otherwise a new id is generated; every log line written while the request runs
+  carries it, so an ingress or SDK id can be followed into the platform logs.
+- **Unhandled errors**: an exception that escapes a route is logged once by
+  `qym_platform.middleware.request_context` as `unhandled error method=… path=…
+  request_id=… status=500` with its traceback. The response body is unchanged
+  (`Internal Server Error`); uvicorn may print its own `Exception in ASGI
+  application` line as well.
+- **Secrets**: lines are redacted before they are written. Bearer/Basic
+  credentials, `Authorization` headers, `…api_key=`, `…token=`, `…secret=`,
+  `password=` style pairs (in text, JSON or Python reprs), passwords in URLs
+  (`postgresql://user:…@host`), launch tokens (`qlt_…`) and `sk-…` keys become
+  `[REDACTED]`, in messages, structured fields and tracebacks. Code still must
+  not log credentials or request bodies on purpose; the filter is the safety
+  net.
 
 ## Container filesystem (read-only)
 
