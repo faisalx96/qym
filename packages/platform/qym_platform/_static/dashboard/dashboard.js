@@ -303,6 +303,37 @@
     { key: GROUP_RELIABILITY_COLUMN_KEY, label: 'Reliability' },
   ];
   const RUNS_TABLE_BASE_COLUMN_COUNT = 12;
+  // Runs table columns the Columns menu shows and hides (Runs table only),
+  // in table order. Their keys share state.visibleMetrics with the metric
+  // columns; the prefix keeps them apart from any metric name. Actions holds
+  // the row's controls and always shows.
+  const RUNS_BASE_DISPLAY_COLUMNS = [
+    { column: 'run', label: 'Run name' },
+    { column: 'status', label: 'Status' },
+    { column: 'task', label: 'Task' },
+    { column: 'model', label: 'Model' },
+    { column: 'dataset', label: 'Dataset' },
+    { column: 'owner', label: 'Owner' },
+    { column: 'time', label: 'Date' },
+    { column: 'analysis', label: 'Analysis' },
+    { column: 'experiment', label: 'Experiment' },
+    { column: 'version', label: 'Version' },
+    { column: 'duration', label: 'Duration' },
+  ].map(col => Object.assign(col, { key: `__runs_col_${col.column}__` }));
+  const RUNS_BASE_COLUMN_KEYS = RUNS_BASE_DISPLAY_COLUMNS.map(col => col.key);
+  const RUNS_RUN_NAME_COLUMN_KEY = RUNS_BASE_DISPLAY_COLUMNS[0].key;
+  // Column ('run', 'task', ...) of each Runs column the reader hid.
+  function hiddenRunsBaseColumns() {
+    const vis = state.visibleMetrics;
+    if (vis === null) return [];
+    return RUNS_BASE_DISPLAY_COLUMNS.filter(col => !vis.has(col.key)).map(col => col.column);
+  }
+  // Is a Runs column laid out? A hidden Run name keeps its selection
+  // checkbox while rows are being selected (see the hidden-column CSS).
+  function isRunsColumnRendered(column, hidden = hiddenRunsBaseColumns()) {
+    if (!hidden.includes(column)) return true;
+    return column === 'run' && !!state.selectMode;
+  }
   const MODELS_VIEW_SCORE_STAT_KEYS = ['passAtK', 'passHatK', 'maxAtK', 'consistency', 'reliability', 'avgScore', 'failedCount', 'totalRetries', 'avgLatency', 'medianLatency', 'correctDistribution'];
   const MODELS_VIEW_NUMERIC_STAT_KEYS = ['avgScore', 'minScore', 'maxAtK', 'stddevScore', 'totalScoreSum', 'failedCount', 'totalRetries', 'avgLatency', 'medianLatency'];
   function _traceMetricsForRuns(runs = null) {
@@ -348,12 +379,17 @@
     const systemCols = Number(visibleSystemColumnCount) || 0;
     const traceMetricCols = Number(visibleTraceMetricCount) || 0;
     const traceCols = traceMetricCols > 0 ? traceMetricCols + 1 : 0; // +1 separator
-    return RUNS_TABLE_BASE_COLUMN_COUNT + metricCols + systemCols + traceCols;
+    // A hidden Run name still counts: select mode shows it again without a
+    // re-render, and a span one column too wide is harmless.
+    const hiddenCols = hiddenRunsBaseColumns().filter(column => column !== 'run').length;
+    return RUNS_TABLE_BASE_COLUMN_COUNT - hiddenCols + metricCols + systemCols + traceCols;
   }
 
   function getMetricDisplayName(metricKey) {
     const groupColumn = GROUP_DISPLAY_COLUMNS.find(col => col.key === metricKey);
     if (groupColumn) return groupColumn.label;
+    const runsColumn = RUNS_BASE_DISPLAY_COLUMNS.find(col => col.key === metricKey);
+    if (runsColumn) return runsColumn.label;
     const systemColumn = SYSTEM_DISPLAY_COLUMNS.find(col => col.key === metricKey);
     if (systemColumn) return systemColumn.label;
     const traceMetric = TRACE_METRICS.find(tm => tm.key === metricKey);
@@ -1159,8 +1195,11 @@
 
   function setVisibleMetricsForAvailable(availableMetrics, checkedMetrics) {
     const availableSet = new Set(availableMetrics || []);
+    // The Runs columns are always known, so a choice made in another view
+    // (which does not offer them) never hides them.
     const knownMetrics = Array.from(new Set([
       ...state.allMetrics,
+      ...RUNS_BASE_COLUMN_KEYS,
       ...(availableMetrics || []),
       ...(state.visibleMetrics ? [...state.visibleMetrics] : []),
     ]));
@@ -1169,27 +1208,54 @@
       ? knownMetrics.filter(m => !availableSet.has(m) && state.visibleMetrics.has(m))
       : knownMetrics.filter(m => !availableSet.has(m));
 
-    const merged = new Set([...preserved, ...checkedMetrics]);
+    const checked = new Set(checkedMetrics);
+    // At least one column stays: a Runs table with every offered column
+    // unchecked (None, or the last box cleared) keeps Run name.
+    if (availableSet.has(RUNS_RUN_NAME_COLUMN_KEY) && !(availableMetrics || []).some(m => checked.has(m))) {
+      checked.add(RUNS_RUN_NAME_COLUMN_KEY);
+    }
+    const merged = new Set([...preserved, ...checked]);
     state.visibleMetrics = merged.size === knownMetrics.length ? null : merged;
+  }
+
+  // Saved column choice. Version 2 also lists the Runs columns (Run name,
+  // Status, ...). A version 1 choice (a bare array, saved before those
+  // columns could be hidden) only listed metric columns: it reads back with
+  // every Runs column shown.
+  const METRIC_VISIBILITY_STORAGE_KEY = 'qym_visible_metrics';
+  const METRIC_VISIBILITY_STORAGE_VERSION = 2;
+  function readSavedMetricVisibility(raw) {
+    let saved = null;
+    try {
+      saved = JSON.parse(raw || 'null');
+    } catch (e) {
+      return null;
+    }
+    if (Array.isArray(saved)) return [...saved, ...RUNS_BASE_COLUMN_KEYS];
+    if (saved && typeof saved === 'object' && Array.isArray(saved.visible)) return saved.visible;
+    return null;
   }
 
   function saveMetricVisibility() {
     try {
       if (!state.visibleMetrics) {
-        sessionStorage.removeItem('qym_visible_metrics');
+        sessionStorage.removeItem(METRIC_VISIBILITY_STORAGE_KEY);
       } else {
-        sessionStorage.setItem('qym_visible_metrics', JSON.stringify([...state.visibleMetrics]));
+        sessionStorage.setItem(METRIC_VISIBILITY_STORAGE_KEY, JSON.stringify({
+          version: METRIC_VISIBILITY_STORAGE_VERSION,
+          visible: [...state.visibleMetrics],
+        }));
       }
     } catch (e) {}
   }
 
   function loadMetricVisibility() {
     try {
-      const saved = sessionStorage.getItem('qym_visible_metrics');
+      const saved = sessionStorage.getItem(METRIC_VISIBILITY_STORAGE_KEY);
       if (saved) {
-        const arr = JSON.parse(saved);
+        const arr = readSavedMetricVisibility(saved);
         if (Array.isArray(arr)) {
-          const allowedMetrics = _allMetricsWithTrace(state.flatRuns, state.allMetrics);
+          const allowedMetrics = [..._allMetricsWithTrace(state.flatRuns, state.allMetrics), ...RUNS_BASE_COLUMN_KEYS];
           const valid = arr.filter(m => allowedMetrics.includes(m));
           if (valid.length > 0 && valid.length < allowedMetrics.length) {
             state.visibleMetrics = new Set(valid);
@@ -1210,7 +1276,9 @@
     const traceMetrics = _traceMetricsForRuns(runs);
     const groupColumns = shouldShowGroupedRunColumnOptions() ? GROUP_DISPLAY_COLUMNS : [];
     const systemColumns = SYSTEM_DISPLAY_COLUMNS;
+    const runsColumns = state.currentView === 'table' ? RUNS_BASE_DISPLAY_COLUMNS : [];
     const metricOptions = [
+      ...runsColumns.map(col => col.key),
       ...(availableMetrics || []),
       ...groupColumns.map(col => col.key),
       ...systemColumns.map(col => col.key),
@@ -1260,6 +1328,14 @@
         '<button class="ms-action-btn qym-dropdown__action" id="mv-select-all">All</button>' +
         '<button class="ms-action-btn qym-dropdown__action" id="mv-select-none">None</button>' +
       '</div>' +
+      (runsColumns.length > 0 ?
+        '<div class="mv-trace-label">Run columns</div>' +
+        runsColumns.map(col => {
+          const checked = allVisible || visibleMetrics.has(col.key) ? 'checked' : '';
+          const hidden = searchValue && !col.label.toLowerCase().includes(searchValue.toLowerCase()) ? ' style="display:none"' : '';
+          return `<label class="multi-select-option qym-dropdown__option"${hidden}><input type="checkbox" ${checked} data-mv-metric="${escapeHtml(col.key)}" /><span>${escapeHtml(col.label)}</span></label>`;
+        }).join('') +
+        ((availableMetrics || []).length > 0 ? '<div class="mv-trace-separator"></div><div class="mv-trace-label">Metrics</div>' : '') : '') +
       availableMetrics.map(m => {
         const checked = allVisible || visibleMetrics.has(m) ? 'checked' : '';
         const hidden = searchValue && !getMetricDisplayName(m).toLowerCase().includes(searchValue.toLowerCase()) ? ' style="display:none"' : '';
@@ -3810,12 +3886,37 @@
     syncRunsFrozenColumnControls();
   }
 
+  // Hidden Runs columns (Display > Columns > Run columns) are named on the
+  // table, and CSS takes their cells out of every row. Their frozen choice
+  // is kept for when they show again.
+  function syncRunsHiddenColumns() {
+    const table = document.querySelector('.runs-table');
+    if (!table) return;
+    const hidden = hiddenRunsBaseColumns().join(' ');
+    if ((table.dataset.hiddenColumns || '') !== hidden) {
+      if (hidden) table.dataset.hiddenColumns = hidden;
+      else delete table.dataset.hiddenColumns;
+    }
+    syncRunsFrozenColumnControls();
+    scheduleRunsStickyColumnSizing();
+  }
+
   function syncRunsFrozenColumnControls() {
     const dropdown = el('metric-visibility-dropdown');
     if (!dropdown) return;
     const frozen = new Set(getRunsFrozenColumns());
+    const hidden = hiddenRunsBaseColumns();
     dropdown.querySelectorAll('input[data-frozen-column]').forEach(cb => {
       cb.checked = frozen.has(cb.dataset.frozenColumn);
+      // A hidden column cannot be frozen until it shows again.
+      const isHidden = hidden.includes(cb.dataset.frozenColumn);
+      cb.disabled = isHidden;
+      const option = cb.closest('label');
+      if (option) {
+        option.classList.toggle('mv-frozen-option--hidden', isHidden);
+        if (isHidden) option.title = 'Hidden column: show it under Run columns to freeze it';
+        else option.removeAttribute('title');
+      }
     });
     // aria-disabled, not disabled: focus stays on the button after a reset.
     const reset = dropdown.querySelector('#mv-frozen-reset');
@@ -3838,8 +3939,8 @@
   // until the block fits. The saved choice is not changed, so a wider window
   // freezes them again. Returns the columns to freeze now and those let go.
   const RUNS_FROZEN_MAX_SHARE = 0.55;
-  function fitRunsFrozenColumns(widths, available) {
-    const fitted = getRunsFrozenColumns().slice();
+  function fitRunsFrozenColumns(widths, available, rendered = null) {
+    const fitted = getRunsFrozenColumns().filter(key => !rendered || rendered.has(key));
     const unfrozen = [];
     if (!(available > 0)) return { fitted, unfrozen };
     let total = fitted.reduce((sum, key) => sum + (widths[key] || 0), 0);
@@ -3863,18 +3964,23 @@
   // the measured width of the frozen columns before it. A frozen column with
   // a scrolling column (or the table's data) to its right is an edge and
   // casts the separator shadow.
-  function applyRunsFrozenColumns(table, widths, frozenKeys) {
+  // Hidden columns take no room: offsets and edges skip them, so the block
+  // closes up around them.
+  function applyRunsFrozenColumns(table, widths, frozenKeys, rendered = null) {
     const frozen = new Set(frozenKeys);
     const edges = [];
     let left = 0;
-    RUNS_IDENTITY_COLUMNS.forEach((column, index) => {
-      if (!frozen.has(column.key)) {
+    const columns = RUNS_IDENTITY_COLUMNS.filter(column => !rendered || rendered.has(column.key));
+    RUNS_IDENTITY_COLUMNS.forEach(column => {
+      if (!frozen.has(column.key) || !columns.includes(column)) {
         table.style.removeProperty(`--runs-col-${column.key}-left`);
-        return;
       }
+    });
+    columns.forEach((column, index) => {
+      if (!frozen.has(column.key)) return;
       table.style.setProperty(`--runs-col-${column.key}-left`, `${left}px`);
       left += widths[column.key] || 0;
-      const next = RUNS_IDENTITY_COLUMNS[index + 1];
+      const next = columns[index + 1];
       if (!next || !frozen.has(next.key)) edges.push(column.key);
     });
     table.dataset.frozenColumns = RUNS_IDENTITY_COLUMNS
@@ -3971,10 +4077,14 @@
       table.classList.add('runs-table--measuring-sticky-columns');
       const computed = getComputedStyle(table);
       const measured = [];
+      const hidden = hiddenRunsBaseColumns();
+      const rendered = new Set(RUNS_IDENTITY_COLUMNS
+        .map(config => config.key)
+        .filter(key => isRunsColumnRendered(key, hidden)));
       try {
         RUNS_IDENTITY_COLUMNS.forEach(config => {
           const header = table.querySelector(`thead ${config.selector}`);
-          if (!header) return;
+          if (!header || !rendered.has(config.key)) return;
           const naturalWidth = Math.ceil(header.getBoundingClientRect().width);
           const minWidth = Number.parseFloat(computed.getPropertyValue(config.minVar));
           const maxWidth = config.maxVar
@@ -3996,8 +4106,8 @@
       });
       // A table that does not scroll sideways shows every column either way.
       const scrolls = !!scroller && scroller.scrollWidth > scroller.clientWidth + 1;
-      const { fitted, unfrozen } = fitRunsFrozenColumns(widths, scrolls ? scroller.clientWidth : 0);
-      applyRunsFrozenColumns(table, widths, fitted);
+      const { fitted, unfrozen } = fitRunsFrozenColumns(widths, scrolls ? scroller.clientWidth : 0, rendered);
+      applyRunsFrozenColumns(table, widths, fitted, rendered);
       if (unfrozen.join(' ') !== (state.runsUnfrozenToFit || []).join(' ')) {
         state.runsUnfrozenToFit = unfrozen;
         syncRunsFrozenColumnControls();
@@ -4293,6 +4403,7 @@
 
     // Update header with dynamic metric columns
     updateTableHeader(metricsToShow);
+    syncRunsHiddenColumns();
     const headerRow = el('table-header-row');
     if (headerRow) {
       const latencyHeader = headerRow.querySelector('.col-latency');

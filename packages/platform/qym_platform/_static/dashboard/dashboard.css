@@ -3484,6 +3484,37 @@ button.legend-item {
   pointer-events: none;
 }
 
+/* ── Hidden columns: the Runs columns unchecked under Display > Columns >
+   Run columns, named in the table's data-hidden-columns. Their cells leave
+   every row (runs, passes, headers), and scheduleRunsStickyColumnSizing()
+   skips them, so the frozen offsets close up with no gap. ── */
+.runs-table[data-hidden-columns~="status"] .col-status,
+.runs-table[data-hidden-columns~="task"] .col-task,
+.runs-table[data-hidden-columns~="model"] .col-model,
+.runs-table[data-hidden-columns~="dataset"] .col-dataset,
+.runs-table[data-hidden-columns~="owner"] .col-owner,
+.runs-table[data-hidden-columns~="time"] .col-time,
+.runs-table[data-hidden-columns~="analysis"] .col-analysis,
+.runs-table[data-hidden-columns~="experiment"] .col-experiment,
+.runs-table[data-hidden-columns~="version"] .col-version,
+.runs-table[data-hidden-columns~="duration"] .col-duration,
+.table-container:not(.select-mode) .runs-table[data-hidden-columns~="run"] .col-run {
+  display: none;
+}
+/* A hidden Run name keeps only its selection checkbox while runs are being
+   selected, so rows stay selectable. */
+.table-container.select-mode .runs-table[data-hidden-columns~="run"] {
+  --runs-col-run-min-width: 0px;
+  --runs-col-run-max-width: 120px;
+}
+.table-container.select-mode .runs-table[data-hidden-columns~="run"] :is(
+  .run-header-content,
+  .run-cell-content
+) > :not(.run-select-control),
+.table-container.select-mode .runs-table[data-hidden-columns~="run"] tr.pass-member .col-run > :not(.run-select-control) {
+  display: none;
+}
+
 /* Opaque backgrounds for sticky cells — must cover scrolling content */
 .runs-table tbody tr td.col-select,
 .runs-table tbody tr td.col-status,
@@ -10638,6 +10669,12 @@ td.col-trace-metric-value {
 }
 .mv-frozen-fit[hidden] {
   display: none;
+}
+/* A hidden column's Frozen columns option: it can be frozen again once it
+   shows (Run columns above). */
+.mv-frozen-option--hidden {
+  color: var(--text-dim);
+  cursor: default;
 }
 
 /* ─── Responsive ─── */
