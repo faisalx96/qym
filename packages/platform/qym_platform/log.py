@@ -126,8 +126,9 @@ _TEXT_SECRET_PATTERNS = (
     re.compile(r"(?i)([\"']?\b" + _SECRET_KEY + r"\b[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])[^\s\"',;}&)]+"),
     # Credentials in URLs: scheme://user:password@host
     re.compile(r"(?i)(\b[a-z][a-z0-9+.\-]*://[^\s:/@]+:)[^\s@/]+(?=@)"),
-    # Recognizable token shapes: launch tokens, OpenAI-style keys.
+    # Recognizable token shapes: launch tokens, dataset read tokens, OpenAI-style keys.
     re.compile(r"()\bqlt_[A-Za-z0-9_\-]{8,}"),
+    re.compile(r"()\bqym_dr_[A-Za-z0-9_\-]{8,}"),
     re.compile(r"()\bsk-[A-Za-z0-9_\-]{16,}"),
 )
 _SENSITIVE_FIELD = re.compile(r"(?i)(api[_\-]?key|apikey|secret|secret_key|private_key|password|passwd|token|authorization|cookie)$")

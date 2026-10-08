@@ -175,6 +175,7 @@ def test_log_exception_level_and_context_fields(caplog):
         ("client_secret: s3cr3t", "s3cr3t"),
         ("postgresql://qym:dbpass@db/qym", "dbpass"),
         ("launch qlt_abcdefghijklmnop", "qlt_abcdefghijklmnop"),
+        ("read token qym_dr_abcdefghijklmnop", "qym_dr_abcdefghijklmnop"),
         ("key sk-abcdefghijklmnopqrstuvwx", "sk-abcdefghijklmnopqrstuvwx"),
     ],
 )
