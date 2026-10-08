@@ -406,6 +406,31 @@ and drop `tabBar()`/`setTab()`.
 
 ---
 
+### B20. Any schema shape and any value is shown in the launch form (Implemented)
+
+**Decision.** The form descriptor (`eval_schema_form.py`) never drops a field.
+Nodes without `type` get one from their keywords. Unions it cannot map to one
+widget become `json` fields with `accepts` (the JSON types they take). Arrays
+report `item_type`. Objects that have properties and also allow extra keys
+(`additionalProperties` true/schema, or `patternProperties`) get an
+`additional_pointer`, which `match_pointer` uses. In the launch form:
+- A value that does not fit its widget (an object in a number field, `"yes"` in
+  a boolean, a value outside an enum) is edited as JSON instead of being hidden.
+- A `json` field that accepts strings keeps text that isn't JSON as a string. Text
+  starting with `{`, `[` or `"` must still be valid JSON, so typos aren't sent.
+- Extra keys of open objects are listed, and can be added and removed.
+- Values that no setting can show appear in an **Other values** group, open by
+  default, where they can be edited as JSON or removed.
+
+**Trade-offs.** Preset remaps now keep extra keys of open objects; before, they
+were dropped as "no longer in the schema". A base config's keys that are unknown
+to every selected environment are still dropped, with a note, as before.
+
+**To reverse.** Drop `additional_pointer` from the descriptor and the
+`editEntry`/`renderExtraKeys`/`renderUnmatched` paths in `experiment_launch.js`.
+
+---
+
 ## C. Operational follow-ups (not blocking)
 
 - **C1. Browser verification.** No browser or node was available, so all new UI was
