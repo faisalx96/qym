@@ -26,11 +26,9 @@
   var CHEVRON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg>';
   var DEFAULT_DEPTH = 2;
 
+  // qym_safe.js loads before this file on every page that uses the viewer.
   function escapeHtml(value) {
-    if (window.QymSafe && window.QymSafe.escapeHtml) return window.QymSafe.escapeHtml(value);
-    return String(value == null ? "" : value)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    return window.QymSafe.escapeHtml(value);
   }
 
   function isContainer(value) {
