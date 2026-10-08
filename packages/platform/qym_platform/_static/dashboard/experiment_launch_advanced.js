@@ -29,9 +29,17 @@
  * Three separate cards (no tabs; they are unrelated). In the launch form they sit
  * inside, and follow, the "Advanced configuration" disclosure, and Role overrides
  * goes to the form's [data-xl-advanced-slot="roles"] under Environment overrides:
- *   1. Evaluation inputs: the static EvaluatorRequestConfig descriptor from
- *      GET /v1/projects/{pid}/experiments/evaluator-config (D5), a run_metadata
- *      key/value editor (qym_* reserved) and the platform-owned fields, read-only.
+ *   1. Evaluation inputs: the evaluator.config descriptor from
+ *      GET /v1/projects/{pid}/experiments/evaluator-config?environment_id=… (D5),
+ *      built from the selected environments' evaluator schemas (guide v1.1 §3.4,
+ *      GET /evals/evaluator/schema). An environment whose service predates it
+ *      (404) gets the static EvaluatorRequestConfig, so the card always renders.
+ *      Fields use the launch form's widgets and any-value rules (B20): a value
+ *      that does not fit its widget is edited as JSON, a key no field shows is
+ *      listed under "Other values", and a field some environment lacks is tagged
+ *      "not in …". The panel is re-fetched when the selection or an
+ *      environment's evaluator schema changes. Also a run_metadata key/value
+ *      editor (qym_* reserved) and the platform-owned fields, read-only.
  *   2. Role overrides: the complete per-role table (rows = schema roles), with
  *      "Overridden only" and search. The Settings form shows a summary instead.
  *   3. Raw JSON: a CodeMirror editor over the §8.1 document built by
@@ -115,9 +123,25 @@
     try { return JSON.parse(raw); } catch (_) { return raw; }
   }
 
-  /** Scalar type check against a descriptor entry; null when valid. */
+  function jsonType(value) {
+    if (value === null) return 'null';
+    if (Array.isArray(value)) return 'array';
+    if (typeof value === 'number') return Number.isInteger(value) ? 'integer' : 'number';
+    return typeof value; // boolean | string | object
+  }
+
+  /** Type check against a descriptor entry; null when valid. */
   function typeProblem(entry, value) {
     const type = entry.type;
+    if (type === 'array') return Array.isArray(value) ? null : 'Must be a list';
+    if (type === 'object') return isPlainObject(value) ? null : 'Must be an object';
+    if (type === 'json') {
+      const accepts = entry.accepts;
+      if (!accepts || !accepts.length) return null;
+      const kind = jsonType(value);
+      const ok = accepts.indexOf(kind) >= 0 || (kind === 'integer' && accepts.indexOf('number') >= 0);
+      return ok ? null : 'Must be ' + accepts.join(' or ');
+    }
     if (type === 'integer') return typeof value === 'number' && Number.isInteger(value) ? null : 'Must be a whole number';
     if (type === 'number') return typeof value === 'number' && Number.isFinite(value) ? null : 'Must be a number';
     if (type === 'boolean') return typeof value === 'boolean' ? null : 'Must be true or false';
@@ -153,6 +177,8 @@
       open: false, // the cards are shown (always, unless a host disclosure is closed)
       panel: null, // loaded /experiments/evaluator-config payload
       panelError: '',
+      panelKey: null, // environments (and their evaluator schema hashes) it was loaded for
+      panelGeneration: 0,
       config: {}, // evaluator.config field → value (user fields only)
       invalid: {}, // evaluator.config field → { message, raw }
       meta: [], // [{ id, key, raw }] custom run_metadata rows
@@ -187,9 +213,24 @@
     const nested = host.parentElement ? host.parentElement.closest('details') : null;
 
     // ── Descriptor ─────────────────────────────────────────────────────────
+    /** What the panel depends on, or null while a selected environment's form loads. */
+    function panelKey() {
+      const ids = st.selected.slice();
+      if (ids.some((id) => !st.envData[id] || st.envData[id].loading)) return null;
+      return ids.map((id) => {
+        const evaluator = st.envData[id].evaluator;
+        return id + ':' + ((evaluator && evaluator.schema_hash) || (evaluator && evaluator.status) || '');
+      }).join(',');
+    }
+
     async function loadPanel() {
-      const res = await api.request(api.projectPath('/experiments/evaluator-config'));
-      if (!adv.active) return;
+      const key = panelKey();
+      if (key === null) return; // loaded again once the environments' forms are in
+      adv.panelKey = key;
+      const generation = ++adv.panelGeneration;
+      const query = st.selected.map((id) => 'environment_id=' + encodeURIComponent(id)).join('&');
+      const res = await api.request(api.projectPath('/experiments/evaluator-config') + (query ? '?' + query : ''));
+      if (!adv.active || generation !== adv.panelGeneration) return;
       if (res.ok && res.data && res.data.descriptor) {
         adv.panel = res.data;
         adv.panelError = '';
@@ -197,6 +238,13 @@
         adv.panelError = (res.data && typeof res.data.detail === 'string' && res.data.detail) || 'Failed to load the evaluation inputs';
       }
       if (adv.open) renderInputs();
+      updateCounts();
+    }
+
+    /** Re-fetch the panel when the selection or an evaluator schema changed. */
+    function syncPanel() {
+      const key = panelKey();
+      if (key !== null && key !== adv.panelKey) loadPanel();
     }
 
     function configEntry(name) {
@@ -204,7 +252,28 @@
       return (fields && fields['/' + name]) || null;
     }
     function platformOwnedConfig() {
-      return (adv.panel && adv.panel.platform_owned && adv.panel.platform_owned.config) || ['run_name', 'live_mode', 'model', 'models', 'model_full'];
+      return (adv.panel && adv.panel.platform_owned && adv.panel.platform_owned.config) || ['run_name', 'live_mode', 'model', 'models', 'model_full', 'versioning_details'];
+    }
+    function panelEnvName(id) {
+      const env = ((adv.panel && adv.panel.environments) || []).find((e) => e.environment_id === id);
+      return env ? env.name : (api.envName ? api.envName(id) : id);
+    }
+    /** Environment ids whose evaluator schema lacks a field (several environments only). */
+    function missingEnvs(name) {
+      const missing = adv.panel && adv.panel.missing;
+      return (missing && has(missing, name) && missing[name]) || [];
+    }
+    /** evaluator.config keys with a value that no field of the panel shows (B20). */
+    function unmatchedConfig() {
+      if (!adv.panel) return [];
+      const shown = adv.panel.fields || [];
+      const owned = platformOwnedConfig();
+      const names = [];
+      Object.keys(baseConfig()).concat(Object.keys(adv.config), Object.keys(adv.invalid)).forEach((name) => {
+        if (names.indexOf(name) >= 0 || name === 'run_metadata' || owned.indexOf(name) >= 0 || shown.indexOf(name) >= 0) return;
+        if (configValue(name) !== undefined || has(adv.invalid, name)) names.push(name);
+      });
+      return names.sort();
     }
     function platformOwnedEvaluator() {
       return (adv.panel && adv.panel.platform_owned && adv.panel.platform_owned.evaluator) || ['model'];
@@ -513,29 +582,58 @@
       };
     }
 
-    function configField(name) {
-      const entry = configEntry(name);
-      if (!entry) return null;
+    /** The entry a value is edited with: its own, or JSON when the value does not fit (B20). */
+    function configEditEntry(own, name) {
+      if (own.type === 'json' || !api.jsonFallback || !api.fitsWidget) return own;
+      const invalid = has(adv.invalid, name) ? adv.invalid[name] : null;
+      if (invalid ? !invalid.json : api.fitsWidget(own, configValue(name))) return own;
+      return api.jsonFallback(own);
+    }
+
+    function parseConfigValue(entry, raw) {
+      return api.parseInput ? api.parseInput(entry, raw) : parseConfigInput(entry, raw);
+    }
+
+    function configField(name, override) {
+      const own = override || configEntry(name);
+      if (!own) return null;
+      const entry = configEditEntry(own, name);
       const pointer = '/evaluator/config/' + name;
       const locked = name === 'dataset_alias' && pickerAlias();
       const wrapper = el('div', { className: 'xl-field', 'data-xa-field': name });
       const id = 'xa-f-' + name;
       const common = { id, 'data-xl-pointer': pointer, 'aria-label': entry.label || name, disabled: locked, title: locked ? 'Set by the dataset picker' : null };
-      const sweepable = !!api.sweeps && !locked && name !== 'dataset_alias' && name !== 'dataset_version';
+      const scalar = ['boolean', 'integer', 'number', 'string', 'enum'].indexOf(entry.type) >= 0;
+      const sweepable = !!api.sweeps && !locked && scalar && name !== 'dataset_alias' && name !== 'dataset_version';
       const target = configTarget(name);
+      const current = configValue(name);
       let control;
-      if (sweepable && isSweep(configValue(name))) {
+      if (isSweep(current) && !sweepable) {
+        // A swept value this field cannot sweep (e.g. a JSON field): launched as is.
+        control = el('input', Object.assign({ className: 'qym-control qym-input xl-wide xl-mono', type: 'text' }, common, { disabled: true, title: 'Swept values; they are launched as they are' }));
+        control.value = 'Sweep: ' + current.sweep.map((v) => (api.formatValue ? api.formatValue(v) : JSON.stringify(v))).join(', ');
+      } else if (sweepable && isSweep(current)) {
         control = api.sweeps.editor({
           entry, pointer, label: entry.label || name, get: target.get, set: target.set,
           onChange: () => { markConfigField(wrapper, name); updateCounts(); api.schedulePreview(); },
         });
       } else if (entry.type === 'boolean') {
-        const current = configValue(name);
         control = el('select', Object.assign({ className: 'qym-control qym-select xl-wide' }, common), [
           el('option', { value: '', text: entry.has_default ? 'Default (' + JSON.stringify(entry.default) + ')' : 'Service default' }),
           el('option', { value: 'true', selected: current === true, text: 'true' }),
           el('option', { value: 'false', selected: current === false, text: 'false' }),
         ]);
+      } else if (entry.type === 'enum') {
+        const values = entry.enum || [];
+        control = el('select', Object.assign({ className: 'qym-control qym-select xl-wide' }, common),
+          [el('option', { value: '', text: entry.has_default ? 'Default (' + JSON.stringify(entry.default) + ')' : 'Service default' })]
+            .concat(values.map((v, i) => el('option', { value: String(i), selected: current !== undefined && sameJson(current, v), text: typeof v === 'string' ? v : JSON.stringify(v) }))));
+      } else if (entry.type === 'json' || entry.type === 'array' || entry.type === 'object') {
+        control = el('textarea', Object.assign({
+          className: 'xl-textarea', spellcheck: 'false', placeholder: formatDefault(entry),
+          'data-xa-json': entry.fallback ? entry.fallback : '1',
+        }, common));
+        control.value = has(adv.invalid, name) ? adv.invalid[name].raw : current === undefined ? '' : JSON.stringify(current, null, 2);
       } else {
         const numeric = entry.type === 'integer' || entry.type === 'number';
         control = el('input', Object.assign({
@@ -543,15 +641,14 @@
           type: 'text', inputmode: numeric ? 'decimal' : null, spellcheck: 'false',
           placeholder: locked ? 'Set by the dataset picker' : formatDefault(entry),
         }, common));
-        const current = configValue(name);
         control.value = has(adv.invalid, name) ? adv.invalid[name].raw : current !== undefined && !locked ? String(current) : '';
       }
       const error = el('div', { className: 'xl-error-text', role: 'alert', text: has(adv.invalid, name) ? adv.invalid[name].message : '' });
-      if (!control.hasAttribute('data-xs-sweep')) control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', () => {
-        const parsed = parseConfigInput(entry, control.value);
+      if (!control.hasAttribute('data-xs-sweep') && !control.disabled) control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', () => {
+        const parsed = parseConfigValue(entry, control.value);
         delete adv.invalid[name];
         if (parsed.unset) setConfig(name, undefined);
-        else if (parsed.error) { delete adv.config[name]; adv.invalid[name] = { message: parsed.error, raw: control.value }; }
+        else if (parsed.error) { delete adv.config[name]; adv.invalid[name] = { message: parsed.error, raw: control.value, json: !!entry.fallback }; }
         else setConfig(name, parsed.value);
         error.textContent = has(adv.invalid, name) ? adv.invalid[name].message : '';
         markConfigField(wrapper, name);
@@ -561,31 +658,74 @@
       const reset = el('button', {
         type: 'button', className: 'xl-link-btn xl-reset', text: 'Reset',
         onClick: () => {
-          const swept = isSweep(configValue(name));
           delete adv.config[name]; // back to the starting point's value, if any
           delete adv.invalid[name];
-          if (swept || isSweep(configValue(name)) || control.tagName === 'SELECT') { renderInputs(); updateCounts(); api.schedulePreview(); return; }
-          control.value = configValue(name) !== undefined && !locked ? String(configValue(name)) : '';
-          error.textContent = '';
-          markConfigField(wrapper, name);
+          // The widget may change (a select, JSON, a sweep): draw the card again.
+          renderInputs();
           updateCounts();
           api.schedulePreview();
         },
       });
+      const remove = override ? el('button', {
+        type: 'button', className: 'xl-link-btn', text: 'Remove', 'data-xa-other-remove': name,
+        onClick: () => {
+          delete adv.invalid[name];
+          setConfig(name, undefined);
+          renderInputs();
+          updateCounts();
+          api.schedulePreview();
+        },
+      }) : null;
+      const missing = missingEnvs(name);
       wrapper.appendChild(el('div', { className: 'xl-field-head' }, [
         el('span', { className: 'xl-dot', 'aria-hidden': 'true' }),
         el('label', { className: 'xl-field-label', for: id, text: entry.label || name }),
         el('span', { className: 'xl-field-name', text: name }),
+      ].concat(missing.map((envId) => api.tag('not in ' + panelEnvName(envId), 'warning'))).concat([
         el('span', { className: 'xl-spacer' }),
-        sweepable && !isSweep(configValue(name)) ? api.sweeps.toggle({ entry, label: entry.label || name, get: target.get, set: target.set }) : null,
-        reset,
-      ]));
+        sweepable && !isSweep(current) ? api.sweeps.toggle({ entry, label: entry.label || name, get: target.get, set: target.set }) : null,
+        remove || reset,
+      ])));
       wrapper.appendChild(control);
-      const hint = boundsHint(entry);
+      const hint = api.hintText ? api.hintText(entry) : boundsHint(entry);
       if (hint) wrapper.appendChild(el('div', { className: 'xl-hint', text: hint }));
       wrapper.appendChild(error);
+      if (missing.length && configValue(name) !== undefined) {
+        // Sent to every selected environment: the ones without it reject the launch.
+        wrapper.appendChild(el('div', { className: 'xl-error-text', role: 'alert', 'data-xa-env-error': '1', text: missing.map((envId) => name + ' is not in environment "' + panelEnvName(envId) + '"').join(' ') }));
+      }
       markConfigField(wrapper, name);
+      if (missing.length && configValue(name) !== undefined) wrapper.classList.add('xl-field--error');
       return wrapper;
+    }
+
+    /** "Other values": evaluator.config keys no field shows, edited as JSON or removed (B20). */
+    function otherValuesBlock() {
+      const names = unmatchedConfig();
+      if (!names.length) return null;
+      const fields = names.map((name) => configField(name, {
+        name, label: name, type: 'json', widget: 'json', accepts: null, has_default: false,
+        description: 'A value the selected environments\' evaluator schema has no input for; edited as JSON. Remove it, or the launch is refused.',
+      }));
+      return el('div', { className: 'xl-object', 'data-xa-other': '1' }, [
+        el('div', { className: 'xl-object-title' }, [el('span', { text: 'Other values' }), api.tag(String(names.length), 'count')]),
+        el('div', { className: 'xl-hint', text: 'From the starting point or Raw JSON, but not in the selected environments\' evaluator schema.' }),
+        el('div', { className: 'xl-fields' }, fields),
+      ]);
+    }
+
+    /** Where the fields come from: the environments' evaluator schema or the standard set. */
+    function panelSourceNote() {
+      const envs = (adv.panel && adv.panel.environments) || [];
+      if (!envs.length) return null;
+      const statics = envs.filter((e) => e.source === 'static').map((e) => e.name);
+      if (!statics.length) {
+        return el('div', { className: 'xl-hint', 'data-xa-source': 'environment', text: 'Fields come from the evaluator schema of ' + envs.map((e) => e.name).join(', ') + '.' });
+      }
+      const verb = statics.length === 1 ? ' does' : ' do';
+      return el('div', { className: 'xl-callout', role: 'note', 'data-xa-source': adv.panel.source }, [
+        el('div', { text: statics.join(', ') + verb + ' not publish an evaluator schema (Evaluation Service before v1.1), so the standard inputs are used' + (statics.length < envs.length ? ' for ' + (statics.length === 1 ? 'it' : 'them') : '') + '.' }),
+      ]);
     }
 
     function updateMetadataErrors() {
@@ -654,6 +794,13 @@
         ['model_full', 'Not sent', 'Owned by the platform'],
         ['run_metadata.qym_*', 'qym_launch, qym_config', 'Written at launch'],
       ];
+      const present = (adv.panel && adv.panel.platform_owned_present) || [];
+      if (api.mode !== 'editor' && present.indexOf('versioning_details') >= 0) {
+        // B22: the experiment's Versioning details, for environments that accept them.
+        const details = api.versioningDetails ? api.versioningDetails() : {};
+        const count = Object.keys(details).length;
+        rows.push(['versioning_details', count ? count + (count === 1 ? ' key' : ' keys') : 'None set', 'From Versioning details (Setup)']);
+      }
       return el('dl', { className: 'xa-owned', 'data-xa-owned': '1' }, [].concat.apply([], rows.map(([name, value, note]) => [
         el('dt', { className: 'xl-mono', text: name }),
         el('dd', null, [el('span', { className: 'xa-owned-value', text: value }), el('span', { className: 'xl-hint', text: ' · ' + note })]),
@@ -672,12 +819,15 @@
       if (adv.panelError) children.push(el('div', { className: 'xl-callout xl-callout--error', role: 'alert', text: adv.panelError }));
       if (!adv.panel && !adv.panelError) children.push(el('div', { className: 'xl-hint', text: 'Loading evaluation inputs…' }));
       if (adv.panel) {
-        const fields = (adv.panel.fields || []).map(configField).filter(Boolean);
-        children.push(el('div', { className: 'xl-object' }, [
+        const fields = (adv.panel.fields || []).map((name) => configField(name)).filter(Boolean);
+        children.push(el('div', { className: 'xl-object', 'data-xa-config': adv.panel.source || 'static' }, [
           el('div', { className: 'xl-object-title' }, [el('span', { text: 'Evaluator config' }), el('span', { className: 'xl-field-name', text: 'evaluator.config' })]),
           el('div', { className: 'xl-hint', text: 'Sent as evaluator.config (EvaluatorRequestConfig). Empty fields keep the service default.' }),
+          panelSourceNote(),
           el('div', { className: 'xl-fields' }, fields),
         ]));
+        const other = otherValuesBlock();
+        if (other) children.push(other);
         children.push(metadataEditor());
       }
       const extras = [];
@@ -1034,7 +1184,11 @@
           return;
         }
         const entry = configEntry(name);
-        if (!entry) { errors.push({ pointer, message: 'Unknown key (EvaluatorRequestConfig rejects extra keys)' }); return; }
+        if (!entry) {
+          const environment = adv.panel && adv.panel.source && adv.panel.source !== 'static';
+          errors.push({ pointer, message: environment ? 'Not in the selected environments\' evaluator schema' : 'Unknown key (EvaluatorRequestConfig rejects extra keys)' });
+          return;
+        }
         if (value == null) return;
         if (isSweep(value)) {
           if (name === 'dataset_alias' || name === 'dataset_version') { errors.push({ pointer, message: DATASET_SWEEP_MESSAGE }); return; }
@@ -1231,6 +1385,7 @@
     function refresh() {
       adv.frame = null;
       if (!adv.active) return;
+      syncPanel();
       adv.summaries = adv.summaries.filter((node) => node.isConnected);
       adv.summaries.forEach((node) => { node.textContent = summaryText(node._xaTable); });
       updateCounts();
