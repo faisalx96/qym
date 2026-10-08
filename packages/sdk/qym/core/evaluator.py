@@ -90,6 +90,36 @@ from ..platform.defaults import DEFAULT_PLATFORM_URL
 _METRIC_ERROR_STATUSES = frozenset(METRIC_ERROR_STATUSES)
 
 
+METRIC_CONCURRENCY_ENV = "QYM_METRIC_CONCURRENCY"
+
+
+def _resolve_metric_concurrency(config: EvaluatorConfig) -> int:
+    """Return how many items the metric queue scores at once.
+
+    ``config.metric_concurrency`` wins; else a positive integer in
+    ``QYM_METRIC_CONCURRENCY``; else ``config.max_concurrency``. An invalid
+    env value is ignored with a warning rather than failing the run.
+    """
+    explicit = getattr(config, "metric_concurrency", None)
+    if explicit is not None:
+        return max(1, int(explicit))
+    raw = os.environ.get(METRIC_CONCURRENCY_ENV, "").strip()
+    if raw:
+        try:
+            value = int(raw)
+        except ValueError:
+            value = 0
+        if value >= 1:
+            return value
+        logger.warning(
+            "Ignoring %s=%r: expected a positive integer; using max_concurrency (%s).",
+            METRIC_CONCURRENCY_ENV,
+            raw,
+            config.max_concurrency,
+        )
+    return max(1, int(config.max_concurrency or 1))
+
+
 def _utc_now_str() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -220,6 +250,10 @@ class ItemSpans:
             span.end()
         except Exception:
             pass
+        if token is None:
+            # The span's context was already detached (see
+            # ``suspend_eval_context``); nothing to restore here.
+            return
         try:
             _ctx.detach(token)
         except Exception:
@@ -263,6 +297,35 @@ class ItemSpans:
             self.eval_span = None
             self.eval_token = None
 
+    def suspend_eval_context(self):
+        """Detach the eval span from the current context, keeping it open.
+
+        A task worker calls this before handing the item to the metric queue:
+        the eval span's context token belongs to the task worker's Task and
+        must be detached there, or the next item's spans would nest under it.
+        ``resume_eval_context`` re-attaches the span in the metric worker.
+        """
+        if self.eval_span is None or self.eval_token is None:
+            return
+        try:
+            from opentelemetry import context as _ctx
+
+            _ctx.detach(self.eval_token)
+        except Exception:
+            pass
+        self.eval_token = None
+
+    def resume_eval_context(self):
+        """Re-attach a suspended eval span as the current span (metric worker)."""
+        if self.eval_span is None or self.eval_token is not None:
+            return
+        try:
+            from opentelemetry import context as _ctx, trace as _trace
+
+            self.eval_token = _ctx.attach(_trace.set_span_in_context(self.eval_span))
+        except Exception:
+            self.eval_token = None
+
     def end_all(self, error=None):
         """End all open spans (for error cleanup)."""
         self.end_task(error=error)
@@ -293,6 +356,24 @@ class TaskAttemptResult:
     @property
     def latency_ms(self) -> float:
         return float(self.latency_s * 1000.0)
+
+
+@dataclass
+class PendingItemScore:
+    """A task output waiting in the metric queue to be scored.
+
+    Produced by the task phase (``Evaluator._run_item_task``) and consumed
+    by the metric phase (``Evaluator._score_item``). The item counts as in
+    flight until it is scored and emitted.
+    """
+
+    index: int
+    item: Any
+    tracker: Any
+    attempt: TaskAttemptResult
+    retry_count: int
+    item_started_at_ms: int
+    item_started_monotonic: float
 
 
 class TaskExecutionTimeoutError(Exception):
@@ -581,6 +662,12 @@ class Evaluator:
         # Configuration shortcuts
         self.max_concurrency = self.config.max_concurrency
         self.max_metric_concurrency = self.config.max_metric_concurrency
+        # Items scored at the same time by the metric queue (separate from
+        # the task workers). Config wins, then QYM_METRIC_CONCURRENCY, then
+        # max_concurrency.
+        self.metric_concurrency = _resolve_metric_concurrency(self.config)
+        # Set by _arun for the run's duration (sync metric thread pool).
+        self._metric_executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
         self.timeout = self.config.timeout
         self.metric_timeout = self.config.metric_timeout
         self.metric_max_retries = self.config.metric_max_retries
@@ -759,6 +846,7 @@ class Evaluator:
             "config": {
                 "max_concurrency": self.max_concurrency,
                 "max_metric_concurrency": self.max_metric_concurrency,
+                "metric_concurrency": self.metric_concurrency,
                 "timeout": self.timeout,
                 "input_mapping": dict(self.input_mapping),
                 "run_metadata": self.run_metadata,
@@ -1458,6 +1546,18 @@ class Evaluator:
                 dashboard.bind(live)
 
             work_queue: asyncio.Queue = asyncio.Queue()
+            # Task outputs waiting to be scored. Unbounded on purpose: task
+            # workers must never wait on metrics (the outputs are kept for the
+            # result anyway, so queuing them costs no extra memory of note).
+            metric_queue: asyncio.Queue = asyncio.Queue()
+            metric_worker_tasks: List[asyncio.Task] = []
+            # Sync metrics get their own thread pool, sized to the most metric
+            # calls that can run at once, so they never take the threads sync
+            # tasks run on.
+            self._metric_executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=self.metric_concurrency * self.max_metric_concurrency,
+                thread_name_prefix="qym-metric",
+            )
             write_queue: asyncio.Queue = asyncio.Queue()
             interrupted = False
 
@@ -1480,6 +1580,149 @@ class Evaluator:
                     md["dataset_version_id"] = self._platform_dataset_version_id
                 return md
 
+            async def _emit_last_resort_failure(
+                idx: int, item_id: str, pass_number: int, exc: BaseException
+            ) -> None:
+                # Last-resort: emit item_failed to the platform since the
+                # phase's own error handling must have crashed.
+                try:
+                    ps = getattr(self, "_platform_stream", None)
+                    if ps is not None:
+                        await _emit_platform_event(
+                            ps,
+                            "item_failed",
+                            {
+                                "item_id": str(item_id),
+                                "index": int(idx),
+                                "pass_number": pass_number,
+                                "error": str(exc),
+                            },
+                        )
+                except Exception:
+                    pass
+
+            def _record_outcome(
+                idx: int, item_id: str, item: Any, pass_number: int, eval_result: Any
+            ) -> Dict[str, Any]:
+                """Add an item's final outcome to the result; return its checkpoint row."""
+                if isinstance(eval_result, Exception):
+                    error_msg = str(eval_result)
+                    if self.samples > 1:
+                        result.add_pass_error(
+                            item_id, pass_number, error_msg, time_seconds=0.0
+                        )
+                    else:
+                        result.add_error(item_id, error_msg, time_seconds=0.0)
+                    return serialize_checkpoint_row(
+                        pass_number=pass_number,
+                        dataset_name=self.dataset_name,
+                        run_name=self.run_name,
+                        run_metadata=_checkpoint_run_metadata(),
+                        run_config={
+                            "max_concurrency": self.max_concurrency,
+                            "max_metric_concurrency": self.max_metric_concurrency,
+                            "timeout": self.timeout,
+                        },
+                        trace_id="",
+                        item_id=item_id,
+                        item_input=item.input,
+                        item_metadata=getattr(item, "metadata", {}),
+                        output=f"ERROR: {error_msg}",
+                        expected_output=getattr(item, "expected_output", None),
+                        time_seconds=0.0,
+                        task_started_at_ms=None,
+                        scores={m: "N/A" for m in metric_names},
+                        metric_meta={},
+                    )
+                if isinstance(eval_result, dict) and "_error" in eval_result:
+                    error_msg = str(eval_result.get("_error", "error"))
+                    if self.samples > 1:
+                        result.add_pass_error(
+                            item_id,
+                            pass_number,
+                            error_msg,
+                            eval_result.get("_trace_id"),
+                            task_started_at_ms=eval_result.get("task_started_at_ms"),
+                            time_seconds=eval_result.get("time"),
+                        )
+                    else:
+                        result.add_error(
+                            item_id,
+                            error_msg,
+                            eval_result.get("_trace_id"),
+                            task_started_at_ms=eval_result.get("task_started_at_ms"),
+                            time_seconds=eval_result.get("time"),
+                        )
+                    return serialize_checkpoint_row(
+                        pass_number=pass_number,
+                        dataset_name=self.dataset_name,
+                        run_name=self.run_name,
+                        run_metadata=_checkpoint_run_metadata(),
+                        run_config={
+                            "max_concurrency": self.max_concurrency,
+                            "max_metric_concurrency": self.max_metric_concurrency,
+                            "timeout": self.timeout,
+                        },
+                        trace_id=eval_result.get("_trace_id") or "",
+                        item_id=item_id,
+                        item_input=item.input,
+                        item_metadata=getattr(item, "metadata", {}),
+                        output=f"ERROR: {error_msg}",
+                        expected_output=getattr(item, "expected_output", None),
+                        time_seconds=float(eval_result.get("time", 0.0) or 0.0),
+                        task_started_at_ms=eval_result.get("task_started_at_ms"),
+                        scores={m: "N/A" for m in metric_names},
+                        metric_meta={},
+                    )
+                if isinstance(eval_result.get("item_metadata"), dict):
+                    result.add_metadata(item_id, eval_result["item_metadata"])
+                if self.samples > 1:
+                    eval_result["pass_number"] = pass_number
+                    result.add_pass_result(item_id, pass_number, eval_result)
+                else:
+                    result.add_result(item_id, eval_result)
+                scores = eval_result.get("scores", {})
+                metric_meta: Dict[str, Dict[str, Any]] = {}
+                score_row: Dict[str, Any] = {}
+                for m in metric_names:
+                    score_row[m], meta = checkpoint_score(scores.get(m))
+                    if meta:
+                        metric_meta[m] = meta
+                return serialize_checkpoint_row(
+                    pass_number=pass_number,
+                    dataset_name=self.dataset_name,
+                    run_name=self.run_name,
+                    run_metadata=_checkpoint_run_metadata(),
+                    run_config={
+                        "max_concurrency": self.max_concurrency,
+                        "max_metric_concurrency": self.max_metric_concurrency,
+                        "timeout": self.timeout,
+                    },
+                    trace_id=eval_result.get("trace_id") or "",
+                    item_id=item_id,
+                    item_input=item.input,
+                    item_metadata=eval_result.get(
+                        "item_metadata",
+                        getattr(item, "metadata", {}),
+                    ),
+                    output=eval_result.get("output"),
+                    expected_output=eval_result.get("expected"),
+                    time_seconds=float(eval_result.get("time", 0.0) or 0.0),
+                    task_started_at_ms=eval_result.get("task_started_at_ms"),
+                    scores=score_row,
+                    metric_meta=metric_meta,
+                )
+
+            async def _finish_item(
+                idx: int, item_id: str, item: Any, pass_number: int, eval_result: Any
+            ) -> None:
+                row = _record_outcome(idx, item_id, item, pass_number, eval_result)
+                if checkpoint_writer:
+                    await write_queue.put(row)
+
+            # Task workers: run the task, hand a successful output to the
+            # metric queue and immediately take the next item. Metrics never
+            # run inline here, so a slow metric cannot hold a task slot.
             async def _worker():
                 nonlocal interrupted
                 while True:
@@ -1493,143 +1736,55 @@ class Evaluator:
                         work_queue.task_done()
                         break
                     try:
-                        eval_result = await self._evaluate_item(idx, item, tracker)
+                        outcome = await self._run_item_task(idx, item, tracker)
+                    except Exception as e:
+                        outcome = e
+                        await _emit_last_resort_failure(idx, item_id, pass_number, e)
+                    if isinstance(outcome, PendingItemScore):
+                        metric_queue.put_nowait((entry, outcome))
+                    else:
+                        await _finish_item(idx, item_id, item, pass_number, outcome)
+                    work_queue.task_done()
+
+            # Metric workers: score queued task outputs, at most
+            # ``metric_concurrency`` items at a time. An item is completed
+            # (platform event, progress, result, checkpoint) only once scored.
+            # A graceful stop (should_stop) still drains this queue: those
+            # tasks already ran, so their outputs are scored and kept.
+            async def _metric_worker():
+                while True:
+                    job = await metric_queue.get()
+                    if job is None:
+                        metric_queue.task_done()
+                        break
+                    entry, pending = job
+                    idx, item_id, item, pass_number = entry
+                    try:
+                        eval_result = await self._score_item(pending)
                     except Exception as e:
                         eval_result = e
-                        # Last-resort: emit item_failed to the platform since
-                        # _evaluate_item's own error handling must have crashed.
-                        try:
-                            ps = getattr(self, "_platform_stream", None)
-                            if ps is not None:
-                                await _emit_platform_event(
-                                    ps,
-                                    "item_failed",
-                                    {
-                                        "item_id": str(item_id),
-                                        "index": int(idx),
-                                        "pass_number": pass_number,
-                                        "error": str(e),
-                                    },
-                                )
-                        except Exception:
-                            pass
+                        await _emit_last_resort_failure(idx, item_id, pass_number, e)
+                    await _finish_item(idx, item_id, item, pass_number, eval_result)
+                    metric_queue.task_done()
 
-                    if isinstance(eval_result, Exception):
-                        error_msg = str(eval_result)
-                        if self.samples > 1:
-                            result.add_pass_error(
-                                item_id, pass_number, error_msg, time_seconds=0.0
-                            )
-                        else:
-                            result.add_error(item_id, error_msg, time_seconds=0.0)
-                        row = serialize_checkpoint_row(
-                            pass_number=pass_number,
-                            dataset_name=self.dataset_name,
-                            run_name=self.run_name,
-                            run_metadata=_checkpoint_run_metadata(),
-                            run_config={
-                                "max_concurrency": self.max_concurrency,
-                                "max_metric_concurrency": self.max_metric_concurrency,
-                                "timeout": self.timeout,
-                            },
-                            trace_id="",
-                            item_id=item_id,
-                            item_input=item.input,
-                            item_metadata=getattr(item, "metadata", {}),
-                            output=f"ERROR: {error_msg}",
-                            expected_output=getattr(item, "expected_output", None),
-                            time_seconds=0.0,
-                            task_started_at_ms=None,
-                            scores={m: "N/A" for m in metric_names},
-                            metric_meta={},
+            async def _abandon_queued_scores() -> None:
+                # Interrupt: outputs still waiting for metrics are reported as
+                # cancelled (never left as ghost items) and are not recorded,
+                # so a resume reruns them.
+                while True:
+                    try:
+                        job = metric_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    if job is not None:
+                        _entry, pending = job
+                        await self._emit_item_cancelled(
+                            pending.index,
+                            pending.item,
+                            pending.attempt.spans,
+                            pending.tracker,
                         )
-                    elif isinstance(eval_result, dict) and "_error" in eval_result:
-                        error_msg = str(eval_result.get("_error", "error"))
-                        if self.samples > 1:
-                            result.add_pass_error(
-                                item_id,
-                                pass_number,
-                                error_msg,
-                                eval_result.get("_trace_id"),
-                                task_started_at_ms=eval_result.get(
-                                    "task_started_at_ms"
-                                ),
-                                time_seconds=eval_result.get("time"),
-                            )
-                        else:
-                            result.add_error(
-                                item_id,
-                                error_msg,
-                                eval_result.get("_trace_id"),
-                                task_started_at_ms=eval_result.get(
-                                    "task_started_at_ms"
-                                ),
-                                time_seconds=eval_result.get("time"),
-                            )
-                        row = serialize_checkpoint_row(
-                            pass_number=pass_number,
-                            dataset_name=self.dataset_name,
-                            run_name=self.run_name,
-                            run_metadata=_checkpoint_run_metadata(),
-                            run_config={
-                                "max_concurrency": self.max_concurrency,
-                                "max_metric_concurrency": self.max_metric_concurrency,
-                                "timeout": self.timeout,
-                            },
-                            trace_id=eval_result.get("_trace_id") or "",
-                            item_id=item_id,
-                            item_input=item.input,
-                            item_metadata=getattr(item, "metadata", {}),
-                            output=f"ERROR: {error_msg}",
-                            expected_output=getattr(item, "expected_output", None),
-                            time_seconds=float(eval_result.get("time", 0.0) or 0.0),
-                            task_started_at_ms=eval_result.get("task_started_at_ms"),
-                            scores={m: "N/A" for m in metric_names},
-                            metric_meta={},
-                        )
-                    else:
-                        if isinstance(eval_result.get("item_metadata"), dict):
-                            result.add_metadata(item_id, eval_result["item_metadata"])
-                        if self.samples > 1:
-                            eval_result["pass_number"] = pass_number
-                            result.add_pass_result(item_id, pass_number, eval_result)
-                        else:
-                            result.add_result(item_id, eval_result)
-                        scores = eval_result.get("scores", {})
-                        metric_meta: Dict[str, Dict[str, Any]] = {}
-                        score_row: Dict[str, Any] = {}
-                        for m in metric_names:
-                            score_row[m], meta = checkpoint_score(scores.get(m))
-                            if meta:
-                                metric_meta[m] = meta
-                        row = serialize_checkpoint_row(
-                            pass_number=pass_number,
-                            dataset_name=self.dataset_name,
-                            run_name=self.run_name,
-                            run_metadata=_checkpoint_run_metadata(),
-                            run_config={
-                                "max_concurrency": self.max_concurrency,
-                                "max_metric_concurrency": self.max_metric_concurrency,
-                                "timeout": self.timeout,
-                            },
-                            trace_id=eval_result.get("trace_id") or "",
-                            item_id=item_id,
-                            item_input=item.input,
-                            item_metadata=eval_result.get(
-                                "item_metadata",
-                                getattr(item, "metadata", {}),
-                            ),
-                            output=eval_result.get("output"),
-                            expected_output=eval_result.get("expected"),
-                            time_seconds=float(eval_result.get("time", 0.0) or 0.0),
-                            task_started_at_ms=eval_result.get("task_started_at_ms"),
-                            scores=score_row,
-                            metric_meta=metric_meta,
-                        )
-
-                    if checkpoint_writer:
-                        await write_queue.put(row)
-                    work_queue.task_done()
+                    metric_queue.task_done()
 
             writer_task = (
                 asyncio.create_task(_write_loop()) if checkpoint_writer else None
@@ -1697,12 +1852,41 @@ class Evaluator:
                     await work_queue.put(entry)
                 for _ in range(self.max_concurrency):
                     await work_queue.put(None)
+                pass_metric_workers = [
+                    asyncio.create_task(_metric_worker())
+                    for _ in range(self.metric_concurrency)
+                ]
+                metric_worker_tasks.clear()
+                metric_worker_tasks.extend(pass_metric_workers)
                 pass_workers = [
                     asyncio.create_task(_worker()) for _ in range(self.max_concurrency)
                 ]
                 worker_tasks.clear()
                 worker_tasks.extend(pass_workers)
                 await asyncio.gather(*pass_workers)
+                # Every task of the pass has run; the pass (and the run) ends
+                # only once the metric queue has drained.
+                for _ in pass_metric_workers:
+                    metric_queue.put_nowait(None)
+                await asyncio.gather(*pass_metric_workers)
+
+            async def _stop_workers(
+                tasks: List[asyncio.Task], queue: asyncio.Queue, timeout: float
+            ) -> None:
+                for _ in tasks:
+                    queue.put_nowait(None)
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(*tasks, return_exceptions=True),
+                        timeout=max(timeout, 0.0),
+                    )
+                except asyncio.TimeoutError:
+                    for task in tasks:
+                        task.cancel()
+                except asyncio.CancelledError:
+                    for task in tasks:
+                        task.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
 
             try:
                 for _pass_number in range(1, self.samples + 1):
@@ -1714,6 +1898,9 @@ class Evaluator:
             except (KeyboardInterrupt, asyncio.CancelledError) as exc:
                 interrupted = True
                 cancel_exc = exc
+                grace_deadline = (
+                    time.monotonic() + self.config.interrupt_grace_seconds
+                )
                 # Stop scheduling new work
                 while not work_queue.empty():
                     try:
@@ -1721,20 +1908,20 @@ class Evaluator:
                         work_queue.task_done()
                     except Exception:
                         break
-                for _ in worker_tasks:
-                    await work_queue.put(None)
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*worker_tasks, return_exceptions=True),
-                        timeout=self.config.interrupt_grace_seconds,
-                    )
-                except asyncio.TimeoutError:
-                    for task in worker_tasks:
-                        task.cancel()
-                except asyncio.CancelledError:
-                    for task in worker_tasks:
-                        task.cancel()
-                    await asyncio.gather(*worker_tasks, return_exceptions=True)
+                # In-flight tasks get the grace period first; whatever they
+                # hand to the metric queue meanwhile is abandoned below.
+                await _stop_workers(
+                    worker_tasks, work_queue, grace_deadline - time.monotonic()
+                )
+                await _abandon_queued_scores()
+                # Items already being scored finish within what is left of
+                # the grace period; past it they are cancelled (and reported
+                # as such by _score_item).
+                await _stop_workers(
+                    metric_worker_tasks,
+                    metric_queue,
+                    grace_deadline - time.monotonic(),
+                )
             finally:
                 if writer_task:
                     await write_queue.join()
@@ -1742,6 +1929,10 @@ class Evaluator:
                     await writer_task
                 if checkpoint_writer:
                     checkpoint_writer.close()
+                metric_executor = getattr(self, "_metric_executor", None)
+                self._metric_executor = None
+                if metric_executor is not None:
+                    metric_executor.shutdown(wait=False)
 
             if interrupted:
                 result.interrupted = True
@@ -2139,9 +2330,18 @@ class Evaluator:
             ctx = contextvars.copy_context()
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
-                None, lambda: ctx.run(metric, *args, **kwargs)
+                self._metric_executor_or_none(),
+                lambda: ctx.run(metric, *args, **kwargs),
             )
         return result
+
+    def _metric_executor_or_none(self) -> Optional[concurrent.futures.Executor]:
+        """Thread pool for sync metrics; ``None`` = the loop's default pool.
+
+        ``_arun`` gives sync metrics their own pool so a slow sync metric
+        never takes a thread a sync task needs.
+        """
+        return getattr(self, "_metric_executor", None)
 
     def _get_score_type(self, score: Any) -> str:
         """Determine score data type."""
@@ -2606,14 +2806,18 @@ class Evaluator:
                             logger.warning(warning_msg)
                             self._notify_observer("on_warning", message=warning_msg)
             else:
-                return await asyncio.to_thread(
-                    self._compute_metric_sync,
-                    m_func,
-                    output,
-                    expected,
-                    item.input,
-                    task_metadata,
-                    getattr(item, "metadata", {}) or {},
+                ctx = contextvars.copy_context()
+                return await asyncio.get_running_loop().run_in_executor(
+                    self._metric_executor_or_none(),
+                    lambda: ctx.run(
+                        self._compute_metric_sync,
+                        m_func,
+                        output,
+                        expected,
+                        item.input,
+                        task_metadata,
+                        getattr(item, "metadata", {}) or {},
+                    ),
                 )
 
         try:
@@ -3066,7 +3270,26 @@ class Evaluator:
         )
 
     async def _evaluate_item(self, index: int, item: Any, tracker: "ProgressObserver"):
-        """Evaluate a single item: create spans, run task, compute metrics, emit results."""
+        """Evaluate a single item: run its task, then score it, in one call.
+
+        The run loop in ``_arun`` drives the two phases separately (task
+        workers and the metric queue); this composes them for callers that
+        evaluate one item at a time.
+        """
+        outcome = await self._run_item_task(index, item, tracker)
+        if isinstance(outcome, PendingItemScore):
+            return await self._score_item(outcome)
+        return outcome
+
+    async def _run_item_task(
+        self, index: int, item: Any, tracker: "ProgressObserver"
+    ) -> Union["PendingItemScore", Dict[str, Any]]:
+        """Task phase: run the task (with retries) for one item.
+
+        Returns a ``PendingItemScore`` when the task succeeded — the item is
+        not finished until ``_score_item`` scores it — or the final error
+        result dict when the task failed (the failure is already emitted).
+        """
         _item_finished = False
         active_spans = ItemSpans()
         active_attempt: Optional[TaskAttemptResult] = None
@@ -3115,6 +3338,62 @@ class Evaluator:
                 active_spans.end_task(output=success_attempt.output)
             except Exception:
                 pass
+            # Hand-off: detach the eval span's context in THIS Task (where it
+            # was attached) so the next item's spans don't nest under it. The
+            # metric worker re-attaches it before scoring.
+            active_spans.suspend_eval_context()
+            _item_finished = True
+            return PendingItemScore(
+                index=index,
+                item=item,
+                tracker=tracker,
+                attempt=success_attempt,
+                retry_count=retry_count,
+                item_started_at_ms=item_started_at_ms,
+                item_started_monotonic=item_started_monotonic,
+            )
+
+        except Exception as e:
+            await self._handle_item_error(
+                index,
+                item,
+                e,
+                active_spans,
+                tracker,
+                attempt=active_attempt,
+                retry_count=active_retry_count,
+            )
+            _item_finished = True
+            return {
+                "_error": str(e),
+                "_trace_id": active_spans.trace_id,
+                "time": active_attempt.latency_s if active_attempt else None,
+                "task_started_at_ms": active_attempt.task_started_at_ms
+                if active_attempt
+                else None,
+            }
+        finally:
+            # Guard against CancelledError / KeyboardInterrupt leaving items
+            # in limbo with no output, no error, and no trace in the platform.
+            if not _item_finished:
+                await self._emit_item_cancelled(index, item, active_spans, tracker)
+
+    async def _score_item(self, pending: "PendingItemScore") -> Dict[str, Any]:
+        """Metric phase: score a task output and emit the item's completion.
+
+        Runs in a metric worker (or inline from ``_evaluate_item``). The item
+        is emitted as completed — with its scores — only here, so the platform
+        never sees an item result without its metric scores.
+        """
+        index = pending.index
+        item = pending.item
+        tracker = pending.tracker
+        success_attempt = pending.attempt
+        retry_count = pending.retry_count
+        active_spans = success_attempt.spans
+        _item_finished = False
+        try:
+            active_spans.resume_eval_context()
             scores = await self._compute_metrics(
                 index,
                 item,
@@ -3130,10 +3409,10 @@ class Evaluator:
             _item_finished = True
 
             # End OTel spans HERE, in the outer Task. These calls detach tokens
-            # that were attached by _compute_metrics (line 1781) in this same
-            # Task — they MUST NOT be moved inside asyncio.shield, because the
-            # shielded task runs with a copied contextvars.Context and OTel
-            # token detach across Task boundaries raises ValueError.
+            # that were attached by _compute_metrics / resume_eval_context in
+            # this same Task — they MUST NOT be moved inside asyncio.shield,
+            # because the shielded task runs with a copied contextvars.Context
+            # and OTel token detach across Task boundaries raises ValueError.
             try:
                 active_spans.end_metrics(scores=scores)
             except Exception:
@@ -3155,8 +3434,8 @@ class Evaluator:
                     retry_count,
                     active_spans,
                     tracker,
-                    item_started_at_ms,
-                    item_started_monotonic,
+                    pending.item_started_at_ms,
+                    pending.item_started_monotonic,
                 )
             )
 
@@ -3186,52 +3465,62 @@ class Evaluator:
                 e,
                 active_spans,
                 tracker,
-                attempt=active_attempt,
-                retry_count=active_retry_count,
+                attempt=success_attempt,
+                retry_count=retry_count,
             )
             _item_finished = True
             return {
                 "_error": str(e),
                 "_trace_id": active_spans.trace_id,
-                "time": active_attempt.latency_s if active_attempt else None,
-                "task_started_at_ms": active_attempt.task_started_at_ms
-                if active_attempt
-                else None,
+                "time": success_attempt.latency_s,
+                "task_started_at_ms": success_attempt.task_started_at_ms,
             }
         finally:
-            # Guard against CancelledError / KeyboardInterrupt leaving items
-            # in limbo with no output, no error, and no trace in the platform.
             if not _item_finished:
-                # Emit FIRST — most important
-                try:
-                    ps = getattr(self, "_platform_stream", None)
-                    if ps is not None:
-                        item_id = getattr(item, "id", None) or f"item_{index}"
-                        await _emit_platform_event(
-                            ps,
-                            "item_failed",
-                            {
-                                "item_id": str(item_id),
-                                "index": int(index),
-                                "pass_number": self._current_pass,
-                                "error": "Cancelled",
-                                "latency_ms": None,
-                                "trace_id": active_spans.trace_id,
-                                "trace_url": active_spans.trace_url,
-                                "task_started_at_ms": None,
-                                "retry_count": 0,
-                            },
-                        )
-                except Exception:
-                    pass
-                try:
-                    tracker.fail_item(index, "Cancelled", elapsed_time=None)
-                except Exception:
-                    pass
-                try:
-                    active_spans.end_all(error="Cancelled")
-                except Exception:
-                    pass
+                await self._emit_item_cancelled(index, item, active_spans, tracker)
+
+    async def _emit_item_cancelled(
+        self,
+        index: int,
+        item: Any,
+        spans: ItemSpans,
+        tracker: "ProgressObserver",
+    ) -> None:
+        """Mark an item that was cancelled before it finished as failed."""
+        # Emit FIRST — most important
+        try:
+            ps = getattr(self, "_platform_stream", None)
+            if ps is not None:
+                item_id = getattr(item, "id", None) or f"item_{index}"
+                await _emit_platform_event(
+                    ps,
+                    "item_failed",
+                    {
+                        "item_id": str(item_id),
+                        "index": int(index),
+                        "pass_number": self._current_pass,
+                        "error": "Cancelled",
+                        "latency_ms": None,
+                        "trace_id": spans.trace_id,
+                        "trace_url": spans.trace_url,
+                        "task_started_at_ms": None,
+                        "retry_count": 0,
+                    },
+                )
+        except Exception:
+            pass
+        try:
+            tracker.fail_item(index, "Cancelled", elapsed_time=None)
+        except Exception:
+            pass
+        try:
+            self._notify_observer("on_item_error", item_index=index, error="Cancelled")
+        except Exception:
+            pass
+        try:
+            spans.end_all(error="Cancelled")
+        except Exception:
+            pass
 
     def _compute_metric_sync(
         self,
