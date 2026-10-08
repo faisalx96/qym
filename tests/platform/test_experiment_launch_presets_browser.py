@@ -228,3 +228,76 @@ def test_a_changed_schema_reloads_the_preset_onto_it(launch):
     launch.customize("config")
     page.wait_for_selector('[data-xl-pointer="/env_overrides/MILVUS_SEARCH_THRESHOLD"]', state="attached")
     assert _value(page, "/env_overrides/MILVUS_SEARCH_THRESHOLD") == "0.7"
+
+
+# ------------------------------------------------------- evaluator schema (v1.1)
+
+
+class EvaluatorPresetFixture(PresetFixture):
+    """The environment publishes ``GET /evals/evaluator/schema`` (guide v1.1)."""
+
+    def __init__(self, browser):
+        from pathlib import Path
+
+        self.evaluator_schema = json.loads(
+            (Path(__file__).parent / "fixtures" / "eval_evaluator_schema.json").read_text()
+        )
+        super().__init__(browser)
+
+    def route(self, route):
+        from qym_platform.services.eval_config import EvaluatorPanelSource
+
+        url = urlparse(route.request.url)
+        if url.path == "/v1/projects/p/experiments/evaluator-config":
+            ids = [p.split("=", 1)[1] for p in url.query.split("&") if p]
+            route.fulfill(
+                json=evaluator_inputs_panel(
+                    [
+                        EvaluatorPanelSource(i, "Staging", self.evaluator_schema, "eh1")
+                        for i in ids
+                    ]
+                )
+            )
+        elif url.path == base_url_of_version():
+            self.version_loads += 1
+            doc = copy.deepcopy(PRESET_DOC)
+            doc["evaluator"]["config"]["metric_concurrency"] = 6
+            route.fulfill(
+                json={
+                    "version": {"id": "v1", "version": 1, "notes": "", "warnings": []},
+                    "remap": {"config": doc, "dropped": [], "errors": [], "summary": None},
+                }
+            )
+        else:
+            super().route(route)
+
+
+def base_url_of_version():
+    return "/v1/projects/p/eval-environments/e1/presets/s1/versions/1"
+
+
+@pytest.fixture
+def evaluator_launch(browser):  # noqa: F811
+    view = EvaluatorPresetFixture(browser)
+    try:
+        yield view
+    finally:
+        view.context.close()
+        assert not view.errors
+
+
+def test_a_preset_input_from_the_evaluator_schema_is_shown_and_sent(evaluator_launch):
+    launch = evaluator_launch
+    launch.open()
+    page = launch.page
+    launch.pick_saved_preset()
+    launch.customize("config")
+    field = page.locator(
+        '[data-xa-config="environment"] [data-xl-pointer="/evaluator/config/metric_concurrency"]'
+    )
+    field.wait_for()
+    assert field.input_value() == "6"
+    # The preset's value is the starting point, sent as is, and editable.
+    assert launch.last_spec()["evaluator"]["config"]["metric_concurrency"] == 6
+    field.fill("8")
+    assert launch.last_spec()["evaluator"]["config"]["metric_concurrency"] == 8

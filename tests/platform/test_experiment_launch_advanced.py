@@ -150,7 +150,9 @@ def test_module_mounts_three_separate_cards():
 
 def test_evaluation_inputs_tab():
     assert "api.projectPath('/experiments/evaluator-config')" in MODULE
-    assert "(adv.panel.fields || []).map(configField)" in MODULE
+    # The selected environments' evaluator schemas (guide v1.1 §3.4).
+    assert "'environment_id=' + encodeURIComponent(id)" in MODULE
+    assert "(adv.panel.fields || []).map((name) => configField(name))" in MODULE
     assert "'data-xl-pointer': pointer" in MODULE  # errors focus the field
     assert "'/evaluator/config/' + name" in MODULE
     # run_metadata editor: JSON values, reserved prefix refused locally.

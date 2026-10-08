@@ -471,6 +471,77 @@ To let run-supplied keys win, swap the merge order in
 
 ---
 
+### B22. The evaluator schema is fetched per environment like env_overrides (Implemented)
+
+**Decision.** Integration guide v1.1 adds `GET /evals/evaluator/schema` (§3.4). qym
+treats it like the env-overrides schema:
+
+- **Storage.** A separate immutable history, `eval_environment_evaluator_schemas`
+  (migration 0086, unique per environment and sha256), and
+  `eval_environments.current_evaluator_schema_id` plus `evaluator_schema_status`
+  (`unknown` / `available` / `unsupported`). It is not folded into the env-overrides
+  row, whose hash presets and jobs pin.
+- **Fetch.** Environment creation, **Test** and schema refresh read both schemas. A
+  404 or 405 means an older service: status `unsupported`, no current evaluator
+  schema, and the platform's static `EvaluatorRequestConfig` mirror is used. Any other
+  failure keeps what is stored and is reported as `evaluator.error`; it never fails the
+  refresh or the create. Refresh stays open to any project member (B18).
+- **Change detection.** The refresh answer's `changed` is true when either schema
+  changed (`env_overrides_changed` and an `evaluator` block with its own
+  `added`/`removed`/`changed_types` tell them apart). The launch form then reloads its
+  forms and re-fetches the starting point with `remap=current` (B19). A first fetch on
+  an older service (`unknown` -> `unsupported`) is not a change.
+- **Documents keep one `schema_hash`** (the env-overrides one). Evaluator drift is
+  handled by always validating, and re-mapping, against the environment's *current*
+  evaluator schema: `remap` drops `evaluator.config` keys it rejects and lists them
+  in `dropped`, even when the env-overrides hash is unchanged.
+- **Validation** uses the environment's schema, closed like env_overrides: an unknown
+  `evaluator.config` key is `not_in_environment` (also on the static mirror when an
+  environment is named), an unknown top-level `evaluator` key stays `unknown_key`
+  (the service would silently drop it). The `report_k <= samples` check uses the
+  schema's `samples` default.
+- **Static mirror stays v1.0.** `metric_concurrency` and `versioning_details` are
+  **not** added to the static `EvaluatorRequestConfig`: an older service is
+  `extra="forbid"` and would answer 422. `metric_concurrency` therefore appears in
+  the form only for v1.1 environments, placed after `max_concurrency`.
+- **Form.** `GET …/experiments/evaluator-config?environment_id=…` (repeatable) returns
+  the union of the selected environments' descriptors, built by
+  `eval_schema_form.build_form_descriptor`, with `missing` (field -> environments that
+  lack it) and per-environment `source`. Without ids, or for older services, it is the
+  static mirror. The Evaluation inputs card uses the launch form's own `parseInput`,
+  `fitsWidget`, `jsonFallback` and `hintText` (B20): enums are selects, unions and
+  objects JSON, a value that does not fit is edited as JSON, keys no field shows are
+  listed under **Other values** (edit or remove), and fields some environment lacks are
+  tagged "not in …".
+- **`versioning_details`.** It is platform-owned in `evaluator.config` (a document
+  that sets it is refused, like `run_name`). At launch the experiment's details
+  (B21) are written to `evaluator.config.versioning_details` for each environment
+  whose evaluator schema declares the key, and shown in the dry-run body and the
+  card's "Set by the platform" list. At link time, when the job's request carried
+  them, **the run's value wins** (the service merged them over its own
+  `agent_version`/`image_version`/`kb_version`, and `kb_version` must stay the KB
+  actually served); the experiment's keys only fill gaps. For jobs on older services
+  the experiment still wins, as in B21.
+
+**Why.** The card used to hardcode the v1.0 inputs, so new service keys needed a qym
+release and removed keys made launches fail with a 422. Keeping the v1.0 mirror as the
+fallback means nothing changes for services that have not upgraded.
+
+**Trade-offs.** Retrying a job reuses its stored request body, so a retry after the
+service was downgraded could still send `versioning_details` and get a 422; launch
+again instead. The diff count ("N changes on top") still ignores evaluation inputs
+(B19). Platform-owned fields are fixed by name; a new platform-sensitive key the
+service adds would show as an editable input until it is added to
+`PLATFORM_OWNED_CONFIG_FIELDS`.
+
+**To reverse.** Stop calling `_fetch_evaluator_schema` in `api/eval_environments.py`
+(every environment then stays on the static mirror), or drop the `environment_id`
+query in `experiment_launch_advanced.js` `loadPanel()` to show the static card. To
+let the experiment win again at link time, remove the `sent_versioning_details`
+branch in `eval_run_linking.link_official_run`.
+
+---
+
 ## C. Operational follow-ups (not blocking)
 
 - **C1. Browser verification.** No browser or node was available, so all new UI was
