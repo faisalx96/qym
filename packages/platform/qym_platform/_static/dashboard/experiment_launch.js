@@ -1009,12 +1009,7 @@
           sweeps ? el('button', {
             type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-global-sweep': '1',
             title: 'Run the experiment once per model, every endpoint on the same model', text: '+ models',
-            onClick: () => {
-              let first = null;
-              if (g && g.kind === 'connection') first = { connection_id: g.id };
-              else if (g && g.kind === 'temporary') first = deepCopy(g.binding);
-              setGlobalModel({ kind: 'raw', value: { sweep: first ? [first] : [] } });
-            },
+            onClick: () => setGlobalModel(sweeps.sweepBinding(g)),
           }) : null,
         ]));
       }

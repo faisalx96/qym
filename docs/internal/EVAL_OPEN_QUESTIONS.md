@@ -471,6 +471,56 @@ To let run-supplied keys win, swap the merge order in
 
 ---
 
+### B22. Global model on the launch form's Models step (Implemented)
+
+**Decision.** A "Global model" control sits at the top of the Models step. Its
+value is a **slot binding** (a project model, a temporary model, or a model
+sweep), the same thing an endpoint card picks. So "the model" of an endpoint
+means its whole connection: the `model`, `base_url` and `api_key` fields of
+`LLM_OVERRIDES.endpoints.<name>` (and any extra key sets of that slot). Setting
+it binds every `endpoint:<name>` slot at once. Roles (`main`, `router`, …) point
+at endpoints, so they follow without changes. `flat:*` slots such as
+`VIZ_LLM_MODEL` are not endpoints and keep their own model. Endpoints that only
+have raw values (no confirmed slot) are added as this-experiment endpoints first,
+like "+ Add LLM endpoint", and then bound. An endpoint added after the global
+model is set starts on it.
+
+- **Divergence.** An endpoint changed afterwards is tagged "custom", and the
+  others are tagged "follows global". The control lists which endpoints are which
+  and offers "Apply to all endpoints". **A later global change overwrites every
+  endpoint, custom ones too**, and the control says so. This is the simple,
+  expected behaviour: one control with one meaning ("every endpoint uses this").
+  Keeping custom endpoints would need hidden per-endpoint state that a preset or
+  clone could not carry.
+- **Clearing** only forgets the global value. Every endpoint keeps its binding.
+- **No new spec field.** The spec still holds only `slot_bindings` (and
+  `links`). The global value is derived back whenever `st.bindings` is replaced
+  as a whole (a preset, clone or rerun, best run, reset, or Raw JSON): if every
+  endpoint has the same binding, that binding is the global model. So
+  presets, clones and the API need no change, and older presets whose endpoints
+  share a model show it as global.
+- **Temporary model.** One key ref (`{"$secret": ref}`) is shared by every
+  endpoint, and the key is sent once in `secrets`. Unbinding one endpoint keeps the
+  key while another binding still uses it. A cloned global temporary model asks
+  for its key once, at the global control. "Save to project models" is offered
+  only on an endpoint card, so the model isn't saved once per endpoint.
+- **Sweeps.** "+ models" on the global control sweeps every endpoint over the
+  same list and links all endpoints into one axis (N runs, not N^k). Presets
+  can't hold sweeps (§9), so a global sweep round-trips through clone/rerun and
+  Raw JSON: endpoints with the same sweep, linked together, show as a global
+  sweep. Unlinked identical sweeps are a grid, so they show no global value.
+
+**Trade-offs.** A project model is offered globally only when every endpoint can
+use it. A mixed state (global set, some endpoints custom) isn't stored. After a
+reload, the global value is shown only if every endpoint shares one binding.
+
+**To reverse.** Remove `globalModelControl()` and its helpers ("Global model"
+section in `experiment_launch.js`), the `globalState` tag in `modelCard()` and
+the `parts.binding/setBinding/connections` overrides in
+`experiment_launch_sweeps.js` `modelCard()`.
+
+---
+
 ## C. Operational follow-ups (not blocking)
 
 - **C1. Browser verification.** No browser or node was available, so all new UI was

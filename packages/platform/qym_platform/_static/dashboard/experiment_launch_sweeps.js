@@ -5,7 +5,7 @@
  * form is mounted with `sweeps: false` (e.g. the official-defaults editor mode):
  *
  *   window.QymLaunchSweeps.mount(host, api)
- *     → { sweepable, toggle, editor, modelToggle, modelCard, checkValues,
+ *     → { sweepable, toggle, editor, modelToggle, modelCard, sweepBinding, checkValues,
  *         bindingKey, checkLinks, localErrors, jobEstimate, previewAxes,
  *         onSpecChange, teardown }
  *
@@ -592,6 +592,14 @@
       return el('div', { className: 'xl-model-card xs-model-card', 'data-xl-model-card': slot.slot_key, 'data-xs-model-sweep': '1' }, children);
     }
 
+    /** A model sweep starting from a form binding (the launch form's global "+ models"). */
+    function sweepBinding(b) {
+      let first = null;
+      if (b && b.kind === 'connection') first = { connection_id: b.id };
+      else if (b && b.kind === 'temporary') first = clone(b.binding);
+      return { kind: 'raw', value: { sweep: first ? [first] : [] } };
+    }
+
     /** The form binding for one swept value (collapsing a model sweep). */
     function singleBinding(item) {
       if (!isPlainObject(item) || item.inherit === true) return null;
@@ -751,7 +759,7 @@
     host.className = 'xs-host';
     render();
     return {
-      sweepable, toggle, editor, modelToggle, modelCard, checkValues, bindingKey, checkLinks,
+      sweepable, toggle, editor, modelToggle, modelCard, sweepBinding, checkValues, bindingKey, checkLinks,
       localErrors, jobEstimate, previewAxes, onSpecChange, teardown,
     };
   }
