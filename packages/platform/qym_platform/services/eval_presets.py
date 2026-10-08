@@ -65,6 +65,10 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 OFFICIAL_DEFAULT_NAME = "Official defaults"
 MAX_NAME_LENGTH = 200
 MAX_NOTES_LENGTH = 5000
@@ -430,6 +434,7 @@ def _flush(db: Session, conflict: str) -> None:
     try:
         db.flush()
     except IntegrityError:
+        logger.info("eval preset write conflicted: %s", conflict)
         db.rollback()
         raise PresetError(409, conflict)
 

@@ -85,6 +85,10 @@ from .eval_config import (  # _PLACEHOLDER: the one placeholder grammar
 from .eval_schema_form import escape_pointer_segment
 from .llm_connections import list_experiment_connections
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 WAIT_REASON_MAX = 200  # EvalExperimentJob.wait_reason is String(200)
 KEY_ROLE = "api_key"
 BASE_URL_ROLE = "base_url"
@@ -403,7 +407,11 @@ def resolve_slot_bindings(
             if sends_key_field and has_key and decrypt:
                 try:
                     api_key = decrypt_llm_api_key(conn.llm_api_key_encrypted, settings)
-                except Exception:  # never surface the cause: it may echo the token
+                except Exception as exc:  # never surface the cause: it may echo the token
+                    # Type name only, no traceback: the cause may carry key material.
+                    logger.warning(
+                        "model slot %s: API key could not be decrypted (%s)", slot_key, type(exc).__name__
+                    )
                     problem(
                         slot_key,
                         "key_unavailable",
@@ -468,7 +476,10 @@ def resolve_slot_bindings(
             if decrypt:
                 try:
                     api_key = secret_lookup(ref) if secret_lookup else None
-                except Exception:  # the hook's error may carry the secret blob
+                except Exception as exc:  # the hook's error may carry the secret blob
+                    logger.warning(
+                        "model slot %s: temporary key lookup failed (%s)", slot_key, type(exc).__name__
+                    )
                     api_key = None
                 if not isinstance(api_key, str) or not api_key:
                     problem(

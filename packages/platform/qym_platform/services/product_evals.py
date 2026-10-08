@@ -423,6 +423,7 @@ def _load_script(script_path: Path) -> Any:
     try:
         spec.loader.exec_module(module)
     except Exception:
+        logger.exception("could not load product eval preset script %s", script_path)
         sys.modules.pop(module_name, None)
         raise
     return module
@@ -764,11 +765,13 @@ class ProductEvalJobManager:
                 resolved_run_count,
             )
         except Exception:
+            logger.exception("product eval %s could not be queued", job.job_id)
             with self._lock:
                 self._jobs.pop(job.job_id, None)
             job.mark(status="FAILED", error="The eval could not be queued.")
             raise
         job._future = future
+        logger.info("product eval %s queued (preset=%s)", job.job_id, preset.name)
         return job
 
     def _enqueue(
@@ -900,11 +903,13 @@ class ProductEvalJobManager:
                 run_count,
             )
         except Exception:
+            logger.exception("queued product eval %s could not be started", job.job_id)
             with self._lock:
                 self._jobs.pop(job.job_id, None)
             job.mark(status="FAILED", error="The eval could not be started.")
             raise
         job._future = future
+        logger.info("started queued product eval %s (preset=%s)", job.job_id, preset.name)
         return job
 
     def get(self, job_id: str, db: Any = None) -> Optional[Any]:

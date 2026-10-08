@@ -1146,6 +1146,10 @@ class EvalDispatcher:
                     )
                 except LaunchTokenUnavailable:
                     del prep
+                    logger.warning(
+                        "eval job %s: launch token unavailable (QYM_LLM_CONFIG_ENCRYPTION_KEY unset); deferring",
+                        job.id,
+                    )
                     self._defer(
                         job,
                         ENV_PAUSE_RECHECK_SECONDS,
@@ -1336,6 +1340,7 @@ class EvalDispatcher:
             except EnvAuthError:
                 # Stay SUBMITTING: the remote job may exist, so the check must
                 # still run before any resubmit once the key works again.
+                logger.warning("eval job %s: reconcile refused the environment API key; pausing", job_id)
                 self._with_job(job_id, self._pause_submitting)
                 return
             except EvalServiceError as exc:
@@ -1427,8 +1432,10 @@ class EvalDispatcher:
                 try:
                     remote = self._await(client.get(remote_job_id))
                 except EnvAuthError:
+                    logger.warning("eval job %s: poll refused the environment API key", job_id)
                     remote_error = "auth"
                 except RemoteNotFound:
+                    logger.warning("eval job %s: remote job %s not found", job_id, remote_job_id)
                     remote_error = "not_found"
                 except EvalServiceError as exc:
                     logger.info(

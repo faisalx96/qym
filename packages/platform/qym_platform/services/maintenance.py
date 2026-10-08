@@ -224,8 +224,10 @@ def run_job(job_id: str, session_factory: Callable[[], Session], engine: Engine,
                 if done or (time.perf_counter() - started) >= step_budget_seconds:
                     break
         except JobLeaseLost:
+            logger.warning("maintenance job %s (%s) lost its lease; another worker resumes it", job_id, ctx.kind)
             return "lease_lost"
         except JobCancelled:
+            logger.info("maintenance job %s (%s) cancelled", job_id, ctx.kind)
             status = "cancelled"
         except Exception as exc:  # noqa: BLE001 - recorded on the job row
             logger.exception("maintenance job %s (%s) failed", job_id, ctx.kind)
@@ -258,6 +260,7 @@ def run_job(job_id: str, session_factory: Callable[[], Session], engine: Engine,
                 status = "succeeded"
             db.commit()
             if status != "running":
+                logger.info("maintenance job %s (%s) finished: %s", job_id, ctx.kind, status)
                 return status
 
 
@@ -743,7 +746,9 @@ def _in_own_transaction(ctx: JobContext, work: Callable[[Session], Any], *, atte
                 return result
         except OperationalError as exc:
             if attempt + 1 >= attempts:
+                logger.exception("maintenance step failed after %d attempts", attempts)
                 raise
+            logger.warning("maintenance step retry %d/%d", attempt + 1, attempts, exc_info=True)
             ctx.log(f"retrying after {type(getattr(exc, 'orig', exc)).__name__}")
             time.sleep(0.2 * (attempt + 1))
     return None
@@ -1247,6 +1252,7 @@ def _ensure_pg_trgm(ctx: JobContext, index: str) -> bool:
         with ctx.autocommit() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
     except Exception as exc:  # noqa: BLE001 - see above
+        logger.warning("pg_trgm unavailable; %s skipped", index, exc_info=True)
         ctx.log(f"{index} skipped: pg_trgm is not available ({type(exc).__name__}); search still works without it")
         return False
     return True
@@ -1406,6 +1412,7 @@ def _backfill_dashboard_overview(ctx: JobContext) -> bool:
                 conn.execute(text("ANALYZE dashboard_run_overview"))
                 conn.execute(text("ANALYZE dashboard_run_dimensions"))
         except Exception as exc:  # noqa: BLE001 - autovacuum analyzes later anyway
+            logger.warning("ANALYZE of the dashboard overview tables failed", exc_info=True)
             ctx.log(f"analyze skipped ({type(exc).__name__}); autovacuum will analyze later")
         ctx.progress["phase"] = "done"
         ctx.progress["message"] = f"done: {ctx.progress['runs_stored']:,} runs stored"

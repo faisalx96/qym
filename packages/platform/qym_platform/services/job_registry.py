@@ -125,6 +125,7 @@ def _engine_of_session(db: Any) -> Optional[Engine]:
     try:
         return shared_engine(db.get_bind())
     except Exception:  # pragma: no cover - unbound session
+        logger.debug("session has no bound engine", exc_info=True)
         return None
 
 
@@ -289,7 +290,7 @@ class JobRegistry:
                     self._insert(conn, handle, handle.describe(), payload=payload)
                 return
             except IntegrityError:
-                pass
+                logger.debug("background job %s/%s already claimed; re-reading", handle.kind, handle.describe().scope_id)
             desc = handle.describe()
             with handle.engine.begin() as conn:
                 row = conn.execute(

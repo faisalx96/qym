@@ -426,6 +426,7 @@ class RemoteQueueSnapshotter:
         try:
             db.commit()
         except IntegrityError:  # another worker inserted it first
+            logger.debug("remote queue snapshot written concurrently by another worker")
             db.rollback()
 
     def _is_fresh(self, db: Session, environment_id: str) -> bool:
@@ -474,6 +475,7 @@ class RemoteQueueSnapshotter:
         try:
             db.commit()
         except IntegrityError:  # another worker inserted it first
+            logger.debug("remote queue snapshot row inserted concurrently by another worker")
             db.rollback()
             return None
         return now

@@ -181,7 +181,8 @@ def _usable_token(
         return None
     try:
         token = decrypt_llm_api_key(blob, settings)
-    except Exception:  # noqa: BLE001 - never surface key material
+    except Exception as exc:  # noqa: BLE001 - never surface key material
+        logger.warning("submitter key %s could not be decrypted (%s)", row.id, type(exc).__name__)
         return None
     if api_key_prefix(token) != row.prefix:
         return None
@@ -356,6 +357,7 @@ def _forget_verified_keys() -> None:
     try:
         from ..auth import clear_api_key_cache
     except Exception:  # noqa: BLE001 - auth unavailable (e.g. a bare tool process)
+        logger.debug("API key verification cache unavailable", exc_info=True)
         return
     clear_api_key_cache()
 
