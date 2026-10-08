@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 
 from qym_platform.datetime_utils import ensure_utc, utc_now
 from qym_platform.db.models import Run, RunWorkflowStatus
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
 
 
 RUN_STATUS_REASON_LEASE_TIMEOUT = "lease_timeout"
@@ -81,6 +84,8 @@ def mark_run_running(run: Run) -> None:
         return
     if run.status in TERMINAL_RUN_STATUSES and not should_reopen_from_live_event(run):
         return
+    if run.status in TERMINAL_RUN_STATUSES:
+        logger.info("run %s reopened by a live event (was %s, %s)", run.id, run.status, run.status_reason)
     run.status = RunWorkflowStatus.RUNNING
     run.status_reason = None
     run.ended_at = None
@@ -97,10 +102,13 @@ def mark_run_terminal(
         and status != RunWorkflowStatus.STOPPED
     ):
         return
+    previous = run.status
     run.status = status
     run.status_reason = None
     normalized = ensure_utc(ended_at) or utc_now()
     run.ended_at = normalized.replace(tzinfo=None)
+    if previous != status:
+        logger.info("run %s marked %s (was %s)", run.id, status, previous)
 
 
 def is_stale_running_run(
@@ -139,6 +147,12 @@ def reconcile_stale_running_run(
     run.status = RunWorkflowStatus.STOPPED
     run.status_reason = RUN_STATUS_REASON_LEASE_TIMEOUT
     run.ended_at = last_seen.replace(tzinfo=None)
+    logger.info(
+        "run %s stopped: no events for %ss (last seen %s)",
+        run.id,
+        timeout_seconds,
+        last_seen.isoformat(),
+    )
     return True
 
 

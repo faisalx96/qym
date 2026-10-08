@@ -25,7 +25,10 @@ from sqlalchemy.orm import Session
 
 from qym_platform.datetime_utils import utc_now_naive
 from qym_platform.db.models import DatasetReadToken
+from qym_platform.log import get_logger
 from qym_platform.security import hash_api_key, verify_api_key
+
+logger = get_logger(__name__)
 
 HEADER = "X-Qym-Dataset-Read-Token"
 TOKEN_PREFIX = "qym_dr_"
@@ -57,6 +60,12 @@ def issue_token(db: Session, *, project_id: str, name: str, created_by_user_id: 
     db.add(row)
     db.commit()
     db.refresh(row)
+    logger.info(
+        "dataset read token %s issued for project %s by user %s",
+        row.id,
+        project_id,
+        created_by_user_id,
+    )
     return row, token
 
 
@@ -64,6 +73,7 @@ def revoke_token(db: Session, row: DatasetReadToken) -> None:
     row.revoked_at = utc_now_naive()
     db.commit()
     clear_cache()
+    logger.info("dataset read token %s of project %s revoked", row.id, row.project_id)
 
 
 def token_grants_project(db: Session, token: Optional[str], project_id: str) -> bool:
