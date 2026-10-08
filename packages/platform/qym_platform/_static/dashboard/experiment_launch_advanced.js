@@ -4,7 +4,7 @@
  * Mounted by experiment_launch.js into its [data-xl-advanced] host:
  *
  *   window.QymLaunchAdvanced.mount(host, api)
- *     → { decorateSpec, localErrors, onSpecChange, reveal, roleTableSummary, open, resetInputs, teardown }
+ *     → { decorateSpec, localErrors, onSpecChange, reveal, roleTableSummary, open, resetInputs, changedCount, teardown }
  *
  * `api` is the launch form's advancedApi(): its state (st) and helpers. There is
  * one source of truth: env_overrides stay in st.values, bindings in st.bindings,
@@ -26,9 +26,13 @@
  * and model slots become chips and multi-selects, and "links" becomes st.links.
  * Without it (a form mounted with `sweeps: false`) sweeps are refused here.
  *
- * Three separate cards (no tabs; they are unrelated). In the launch form they sit
- * inside, and follow, the "Advanced configuration" disclosure, and Role overrides
- * goes to the form's [data-xl-advanced-slot="roles"] under Environment overrides:
+ * Three separate cards (no tabs; they are unrelated), spread over the launch
+ * form's wizard steps (B24) through slots anywhere in the form's layout:
+ * Role overrides goes to [data-xl-advanced-slot="roles"] (step 4, Environment
+ * configurations, under Environment overrides), Raw JSON to
+ * [data-xl-advanced-slot="json"] (the review step), and Evaluation inputs stays
+ * in the host (step 5, Evaluation configurations). A card without a slot stays
+ * in the host:
  *   1. Evaluation inputs: the evaluator.config descriptor from
  *      GET /v1/projects/{pid}/experiments/evaluator-config?environment_id=… (D5),
  *      built from the selected environments' evaluator schemas (guide v1.1 §3.4,
@@ -1334,6 +1338,23 @@
       nodes.counts.inputs.textContent = String(inputs);
       const loading = !st.selected.length || st.selected.some((id) => !st.envData[id] || st.envData[id].loading);
       nodes.counts.roles.textContent = loading ? '0' : String(overriddenRoleCount());
+      if (api.updateStepBadges) api.updateStepBadges();
+    }
+
+    /** Evaluation inputs changed from the starting point (the launch form's step badge). */
+    function changedCount() {
+      const names = {};
+      Object.keys(adv.config).concat(Object.keys(adv.invalid)).forEach((name) => {
+        if (configChanged(name)) names[name] = true;
+      });
+      const meta = metadataState();
+      const metaChanged = meta.errors.length > 0 || !sameJson(meta.values, nonReservedMeta(baseMeta()));
+      return Object.keys(names).length + (metaChanged ? 1 : 0);
+    }
+    function nonReservedMeta(values) {
+      const out = {};
+      Object.keys(values).forEach((key) => { if (!isReservedKey(key)) out[key] = values[key]; });
+      return out;
     }
 
     function renderSection(id) {
@@ -1423,18 +1444,22 @@
           el('div', { className: 'xl-card-body' }, [nodes.panels[section.id]]),
         ]);
       });
-      // Role overrides go to the form's roles slot (under Environment overrides) when
-      // it has one; the other cards go to the host.
-      const scope = host.parentElement || host;
-      const rolesSlot = scope.querySelector('[data-xl-advanced-slot="roles"]');
-      if (rolesSlot) {
-        rolesSlot.className = 'xa-host';
-        rolesSlot.hidden = false;
-        rolesSlot.replaceChildren(nodes.cards.roles);
-        nodes.rolesSlot = rolesSlot;
-      }
+      // Role overrides and Raw JSON go to the form's slots (wizard steps) when it
+      // has them, looked up in the whole layout (it may not be attached yet); the
+      // other cards go to the host.
+      let scope = host;
+      while (scope.parentElement) scope = scope.parentElement;
+      nodes.slots = {};
+      ['roles', 'json'].forEach((id) => {
+        const slot = scope.querySelector('[data-xl-advanced-slot="' + id + '"]');
+        if (!slot) return;
+        slot.className = 'xa-host';
+        slot.hidden = false;
+        slot.replaceChildren(nodes.cards[id]);
+        nodes.slots[id] = slot;
+      });
       host.className = 'xa-host';
-      host.replaceChildren.apply(host, SECTIONS.filter((section) => !(rolesSlot && section.id === 'roles')).map((section) => nodes.cards[section.id]));
+      host.replaceChildren.apply(host, SECTIONS.filter((section) => !nodes.slots[section.id]).map((section) => nodes.cards[section.id]));
       // Inside the launch form's "Advanced configuration" the cards follow that
       // disclosure; elsewhere (the default preset editor) they are always shown.
       adv.open = nested ? nested.open : true;
@@ -1463,12 +1488,12 @@
       json.view = null;
       json.textarea = null;
       adv.summaries = [];
-      if (nodes.rolesSlot) { nodes.rolesSlot.replaceChildren(); nodes.rolesSlot.hidden = true; }
+      Object.keys(nodes.slots || {}).forEach((id) => { nodes.slots[id].replaceChildren(); nodes.slots[id].hidden = true; });
     }
 
     build();
     loadPanel();
-    return { decorateSpec, localErrors, onSpecChange, reveal, roleTableSummary, open, resetInputs, teardown };
+    return { decorateSpec, localErrors, onSpecChange, reveal, roleTableSummary, open, resetInputs, changedCount, teardown };
   }
 
   window.QymLaunchAdvanced = { mount };
