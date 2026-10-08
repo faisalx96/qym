@@ -167,10 +167,13 @@ class LaunchFixture:
             )
 
     def customize(self, step):
-        """Entry screen → Customize, on wizard step `step`."""
+        """Entry screen → Customize, on wizard step `step` or the "config" tab."""
         self.page.locator("[data-xl-customize]").click()
         self.page.wait_for_selector('[data-xl-view="customize"]')
-        self.page.locator(f'[data-xl-step="{step}"]').click()
+        if step == "config":
+            self.page.locator('[data-xl-tab="config"]').click()
+        else:
+            self.page.locator(f'[data-xl-step="{step}"]').click()
 
     def wait(self, predicate, timeout=10):
         """Polls a Python-side condition (route counters) while the page runs."""
@@ -208,18 +211,24 @@ def test_entry_screen_then_customize_wizard(launch):
     assert (
         entry.locator('[data-xl-start="blank"]').get_attribute("aria-pressed") == "true"
     )
-    # Customize: five steps, one shown at a time.
+    # Customize: two tabs; Setup has four steps, one shown at a time.
     entry.locator("[data-xl-customize]").click()
     wizard = page.locator('[data-xl-view="customize"]')
     wizard.wait_for()
-    assert wizard.locator("[data-xl-step]").count() == 5
+    tabs = wizard.locator("[data-xl-tab]").evaluate_all(
+        "ns => ns.map(n => [n.dataset.xlTab, n.getAttribute('aria-selected')])"
+    )
+    assert tabs == [["setup", "true"], ["config", "false"]]
+    assert wizard.locator("[data-xl-step]").count() == 4
     visible = "ns => ns.filter(n => !n.hidden).map(n => n.dataset.xlStepGroup)"
     assert wizard.locator("[data-xl-step-group]").evaluate_all(visible) == ["1"]
     wizard.locator("[data-xl-step-next]").click()
     assert wizard.locator("[data-xl-step-group]").evaluate_all(visible) == ["2"]
-    # Settings: overrides, role overrides, sweeps, evaluation inputs, raw JSON.
-    wizard.locator('[data-xl-step="4"]').click()
-    step = wizard.locator('[data-xl-step-group="4"]')
+    # Evaluation config: overrides, role overrides, sweeps, evaluation inputs, raw JSON.
+    wizard.locator('[data-xl-tab="config"]').click()
+    assert wizard.locator("[data-xl-steps]").is_hidden()
+    assert wizard.locator('[data-xl-tab-panel="setup"]').is_hidden()
+    step = wizard.locator('[data-xl-tab-panel="config"]')
     assert step.locator("details:not([data-xl-group])").count() == 0
     order = step.locator(
         "[data-xl-section], [data-xa-section], [data-xl-sweeps]"
@@ -229,8 +238,10 @@ def test_entry_screen_then_customize_wizard(launch):
     assert order == ["settings", "roles", "sweeps", "inputs", "json"]
     page.wait_for_selector('[data-xa-panel="roles"] [data-xa-row]')
     # Review and launch takes the preview into the main column.
-    wizard.locator('[data-xl-step="5"]').click()
-    assert wizard.locator('[data-xl-step-group="5"] .xl-preview').count() == 1
+    assert wizard.locator("[data-xl-side] .xl-preview").count() == 1
+    wizard.locator("[data-xl-config-review]").click()
+    assert wizard.locator('[data-xl-tab="setup"]').get_attribute("aria-selected") == "true"
+    assert wizard.locator('[data-xl-step-group="4"] .xl-preview').count() == 1
     assert wizard.locator("[data-xl-side]").is_hidden()
     # Back to the entry screen keeps the choices.
     wizard.locator(".xl-back").click()
@@ -251,7 +262,7 @@ def test_a_problem_outside_the_entry_screen_opens_its_step(launch):
 def test_all_roles_sets_a_column_on_every_role_shown(launch):
     launch.open()
     page = launch.page
-    launch.customize(4)
+    launch.customize("config")
     panel = page.locator('[data-xa-panel="roles"]')
     page.wait_for_selector('[data-xa-panel="roles"] [data-xa-row]')
     all_temperature = panel.get_by_label("All roles · temperature", exact=True)
@@ -341,7 +352,7 @@ def test_members_also_get_the_refresh(launch):
 def test_all_entries_sets_a_setting_on_every_collection_entry(launch):
     launch.open()
     page = launch.page
-    launch.customize(4)
+    launch.customize("config")
     settings = page.locator('[data-xl-section="settings"]')
     page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
     settings.locator("details[data-xl-group]").evaluate_all(
@@ -362,7 +373,7 @@ def test_all_entries_sets_a_setting_on_every_collection_entry(launch):
 def test_settings_groups_stay_closed_unless_the_user_opens_them(launch):
     launch.open()
     page = launch.page
-    launch.customize(4)
+    launch.customize("config")
     settings = page.locator('[data-xl-section="settings"]')
     page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
     groups = settings.locator("details[data-xl-group]")
@@ -371,10 +382,11 @@ def test_settings_groups_stay_closed_unless_the_user_opens_them(launch):
     # The user opens one; a re-render (e.g. a schema refresh) keeps exactly that.
     first = groups.first.get_attribute("data-xl-group")
     groups.first.locator("summary").click()
+    page.locator('[data-xl-tab="setup"]').click()
     page.locator('[data-xl-step="1"]').click()
     page.locator('[data-xl-env="e1"]').uncheck()
     page.locator('[data-xl-env="e1"]').check()
-    page.locator('[data-xl-step="4"]').click()
+    page.locator('[data-xl-tab="config"]').click()
     page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
     states = dict(
         settings.locator("details[data-xl-group]").evaluate_all(
@@ -498,14 +510,14 @@ def test_typing_the_name_keeps_focus_and_does_not_rebuild_the_form(launch):
         "document.activeElement === window.__name"
         " && document.querySelector('[data-xl-entry-name]') === window.__name"
     )
-    # Customize: typing the name leaves the (hidden) Settings step alone.
+    # Customize: typing the name leaves the (hidden) Evaluation config tab alone.
     launch.customize(1)
     page.wait_for_selector('[data-xa-panel="roles"] [data-xa-row]', state="attached")
     page.evaluate("""() => {
           window.__added = 0;
           new MutationObserver((ms) => {
             window.__added += ms.reduce((n, m) => n + m.addedNodes.length, 0);
-          }).observe(document.querySelector('[data-xl-step-group="4"]'),
+          }).observe(document.querySelector('[data-xl-tab-panel="config"]'),
                      { childList: true, subtree: true });
         }""")
     field = page.locator('[data-xl-pointer="#name"]')

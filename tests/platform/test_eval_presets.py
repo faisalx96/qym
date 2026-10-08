@@ -853,3 +853,26 @@ def test_version_read_can_remap_onto_current_schema(client, env, session_factory
     with session_factory() as s:
         version = s.get(EvalConfigPresetVersion, preset["current_version_id"])
         assert version.config == stored
+
+
+def test_saved_preset_round_trips_every_evaluation_value(client, env):
+    """What the launch form saves is what it loads back (Evaluation config tab):
+    nested overrides, role cells, evaluator.config inputs, run_metadata, report_k."""
+    doc = _doc()
+    doc["evaluator"]["report_k"] = 2
+    doc["evaluator"]["config"].update(
+        {"max_retries": 4, "force_model_override": True, "timeout": 120.5}
+    )
+    doc["evaluator"]["config"]["run_metadata"] = {"team": "rag", "tier": 2}
+    doc["env_overrides"]["BRIEF_ENABLED"] = False
+    doc["env_overrides"]["SQL_RESULT_LIMIT"] = 50
+    res = _create(client, env["id"], email=MEMBER, name="Everything", config=doc)
+    assert res.status_code == 200, res.text
+    preset = res.json()["preset"]
+    url = _presets_url(env["id"], f"/{preset['id']}/versions/1?remap=current")
+    body = client.get(url, headers=_headers(MEMBER)).json()
+    remapped = body["remap"]
+    assert remapped["dropped"] == [] and remapped["errors"] == []
+    for section in ("evaluator", "slot_bindings", "env_overrides"):
+        assert remapped["config"][section] == doc[section], section
+        assert body["version"]["config"][section] == doc[section], section

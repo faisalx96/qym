@@ -365,6 +365,45 @@ a manager can confirm them, as before.
 **To reverse.** Restore `_require_project_manager` in `refresh_environment_schema`
 and skip `refreshEnvSchema` for non-managers in `experiment_launch.js`.
 
+### B19. Evaluation config gets its own tab; preset inputs are shown and editable (Implemented)
+
+**Decision.** Customize (and the default preset editor, which is the same form) has
+two `qym-tabs`: **Setup**, the wizard, now four steps (where it runs / dataset,
+starting point, models, review), and **Evaluation config**, which holds everything
+the evaluation runs with: environment overrides, role overrides, sweeps (launch form
+only), evaluation inputs (`evaluator.config`, `run_metadata`) and Raw JSON. The tab
+shows a count of settings changed from the starting point. The entry screen is
+unchanged. A validation error on the hidden tab switches to that tab.
+
+A starting point's `evaluator.config` is now shown in the Evaluation inputs fields,
+and its `run_metadata` keys appear as rows. Edits are stored on top of the base:
+a value, or `null` for a base input the user cleared. The base's `report_k` is
+listed under "Also sent" and can be removed. This means what the tab shows is what
+is launched, and what the preset editor saves.
+
+**Bugs fixed.**
+- The Evaluation inputs card showed nothing from the preset, but still sent its
+  values. A preset input could not be cleared, and Raw JSON could not remove it,
+  because the base was merged back in.
+- The Advanced panel's edits (inputs, run_metadata rows, Raw JSON extras) were lost
+  when the user went Customize → Start → Customize, because the panel was
+  re-mounted with empty state. They are now kept in `st.advancedSaved`.
+- A second `loadEnvData` call while a load was running returned at once. The base
+  could then be mapped onto a half-loaded form: JSON settings were split into
+  unknown pointers and silently pruned, and settings were dropped as "not in any
+  selected environment". The call now returns the running load, and `loadBase`
+  waits for every selected form.
+- When a schema refresh found a new schema after a preset had loaded, the preset
+  stayed re-mapped onto the old schema. Now the base is fetched again
+  (`remap=current`), and edits are kept.
+
+**Trade-offs.** The "Settings" wizard step is gone. Links to it now say
+"Evaluation config". The diff count ("N changes on top") still counts settings,
+models and dataset only, not evaluation inputs.
+
+**To reverse.** Put `configGroup()` back as wizard step 4 in `experiment_launch.js`
+and drop `tabBar()`/`setTab()`.
+
 ---
 
 ## C. Operational follow-ups (not blocking)

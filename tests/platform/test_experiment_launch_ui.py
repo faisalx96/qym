@@ -396,7 +396,7 @@ JSON_STYLES = (DASHBOARD / "experiment_launch_json.css").read_text(encoding="utf
 SETTINGS_PAGE = (DASHBOARD / "project_settings.html").read_text(encoding="utf-8")
 
 
-def test_entry_screen_then_a_five_step_wizard():
+def test_entry_screen_then_a_wizard_and_an_evaluation_config_tab():
     # Entry (option E): environment, dataset, starting-point cards, Launch as is / Customize.
     entry = MODULE[MODULE.index("    function renderEntryLayout(") :]
     entry = entry[: entry.index("    async function loadRecent()")]
@@ -406,19 +406,24 @@ def test_entry_screen_then_a_five_step_wizard():
     assert "text: 'Customize →'" in MODULE
     for kind in ("'official'", "'best_run'", "'clone'", "'saved'", "'blank'"):
         assert f"kind: {kind}" in MODULE, kind
-    # Customize (option A): five steps; settings hold overrides, sweeps, the panel.
+    # Customize: a Setup tab (four steps) and an Evaluation config tab that holds
+    # the overrides, role overrides, sweeps and the panel (inputs, Raw JSON).
     wizard = MODULE[MODULE.index("    function wizardGroups(") :]
     wizard = wizard[: wizard.index("    function setStep(")]
-    wizard = wizard[wizard.index("      return {\n        1: [") :]
-    order = [
-        wizard.index(f"section('{key}'")
-        for key in ("run", "environments", "dataset", "base", "models", "settings")
-    ]
+    steps = wizard[wizard.index("      return {\n        1: [") : wizard.index("    function configGroup()")]
+    order = [steps.index(f"section('{key}'") for key in ("run", "environments", "dataset", "base", "models")]
     assert order == sorted(order)
-    for host in ("'data-xl-sweeps': '1'", "'data-xl-advanced': '1'"):
-        assert host in wizard, host
-    for label in ("Where it runs", "Starting point", "Models", "Settings (optional)", "Review and launch"):
+    assert "section('settings'" not in steps
+    config = wizard[wizard.index("    function configGroup()") :]
+    for host in ("section('settings'", "'data-xl-sweeps': '1'", "'data-xl-advanced': '1'"):
+        assert host in config, host
+    for label in ("Where it runs", "Starting point", "Models", "Review and launch", "Setup", "Evaluation config"):
         assert f"label: '{label}'" in MODULE, label
+    assert "Settings (optional)" not in MODULE
+    assert "role: 'tablist'" in MODULE and "role: 'tabpanel'" in MODULE
+    assert "className: 'qym-tabs xl-tabs'" in MODULE
+    # A problem on the hidden tab opens that tab first.
+    assert "if (panel && panel.hidden) setTab(" in MODULE
     # A problem in a hidden step (or off the entry screen) opens where it is fixed.
     assert "if (group && group.hidden) setStep(" in MODULE
     assert "if (!editor && st.view === 'entry' && !entryHolds(error.pointer))" in MODULE
