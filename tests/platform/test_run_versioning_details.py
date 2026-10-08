@@ -149,6 +149,39 @@ def test_official_run_merges_the_experiments_keys(client, sessions, seed):
     }
 
 
+def test_details_sent_to_the_service_let_the_run_win(client, sessions, seed):
+    """B22: the job sent evaluator.config.versioning_details (guide v1.1), so the
+    service merged them already and owns kb_version: the run's value wins and the
+    experiment's keys only fill gaps."""
+    from qym_platform.db.models import EvalExperimentJob
+
+    with sessions() as db:
+        experiment = db.get(EvalExperiment, seed["experiment_id"])
+        experiment.versioning_details = {"kb_version": "exp-kb", "suite": "nightly"}
+        job = db.get(EvalExperimentJob, seed["job_id"])
+        body = dict(job.request_body or {})
+        evaluator = dict(body.get("evaluator") or {})
+        config = dict(evaluator.get("config") or {})
+        config["versioning_details"] = {"kb_version": "exp-kb", "suite": "nightly"}
+        evaluator["config"] = config
+        body["evaluator"] = evaluator
+        job.request_body = body
+        db.commit()
+    res = _create(
+        client,
+        {"kb_version": "served-kb-17", "agent_version": "a1"},
+        launch=_launch(seed),
+    )
+    assert res.status_code == 200, res.text
+    run = _run(sessions, res.json()["run_id"])
+    assert run.experiment_job_id == seed["job_id"]
+    assert run.versioning_details == {
+        "kb_version": "served-kb-17",
+        "agent_version": "a1",
+        "suite": "nightly",
+    }
+
+
 def test_local_run_never_gets_experiment_keys(client, sessions, seed):
     with sessions() as db:
         db.get(EvalExperiment, seed["experiment_id"]).versioning_details = {"suite": "x"}
