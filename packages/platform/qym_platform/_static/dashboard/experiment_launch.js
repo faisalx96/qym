@@ -102,7 +102,7 @@
   const STYLESHEETS = [
     'static/eval_environments.css?v=eval-environments-20261004-2',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
-    'static/experiment_launch.css?v=experiment-launch-20261008-1',
+    'static/experiment_launch.css?v=experiment-launch-20261008-global-model',
     'static/experiment_launch_json.css?v=experiment-launch-json-20261003-2',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20261008-1',
     'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
@@ -404,6 +404,11 @@
       bindings: {}, // slot_key → {kind:'connection', id} | {kind:'temporary', binding, secretRef, save}
       secrets: {}, // temporary-model keys {ref: key}: memory only
       tempFormFor: null,
+      // Global model (every LLM endpoint at once): a form binding like st.bindings'
+      // values, or null. Derived again from the endpoints whenever st.bindings is
+      // replaced as a whole (a base, clone, reset or Raw JSON): see syncGlobalModel().
+      globalModel: null,
+      globalBindingsRef: null, // the st.bindings object globalModel was derived for
       values: {}, // env_overrides pointer → value
       invalid: {}, // env_overrides pointer → {message, raw}: a value that did not parse
       addedKeys: {}, // collection pointer → [keys]
@@ -728,6 +733,8 @@
         if (!st.active) return;
         button.disabled = false;
         if (!added.length) { error.textContent = 'None of the selected environments can add this endpoint.'; return; }
+        // A new endpoint starts on the global model, like every other endpoint.
+        if (st.globalModel) bindGlobalTo(endpointSlots().filter((s) => added.indexOf(s.slot_key.slice('endpoint:'.length)) >= 0));
         renderModels();
         renderSettings();
         renderPreviewSoon();
@@ -754,6 +761,307 @@
           ? 'Adds an LLM endpoint to this experiment only: bind a model to it, then point roles at it under Role overrides.'
           : 'The selected environments have no LLM endpoints to add to.' }),
       ]);
+    }
+
+    // ── Global model: one model for every LLM endpoint ──────────────────
+    // A model here is a slot binding (project model, temporary model or a model
+    // sweep): it fills each endpoint's model, base URL and API key fields, like
+    // picking it on every endpoint card. Roles (main, router, ...) follow the
+    // endpoint they point at, so they need nothing. Flat slots (e.g. VIZ_LLM_*)
+    // are not endpoints and keep their own model. Nothing new is stored: the spec
+    // only holds slot_bindings, and the global value is derived back from them
+    // (all endpoints share one binding) whenever a base, clone, reset or Raw JSON
+    // replaces st.bindings. Changing it overwrites every endpoint, custom ones
+    // too; clearing it leaves the endpoints as they are.
+    const GLOBAL_KEY = '__global';
+
+    function endpointSlots() {
+      return unionSlots().filter((s) => s.kind === 'endpoint');
+    }
+
+    function slotPointer(slotKey) {
+      return '/slot_bindings/' + escSeg(slotKey);
+    }
+
+    function followsGlobal(slotKey) {
+      return !!st.globalModel && bindingKey(st.bindings[slotKey]) === bindingKey(st.globalModel);
+    }
+
+    /** The binding every endpoint shares (a sweep only when linked), else null. */
+    function commonEndpointBinding() {
+      const slots = endpointSlots();
+      const first = slots.length ? st.bindings[slots[0].slot_key] : null;
+      if (!first) return null;
+      const key = bindingKey(first);
+      if (slots.some((s) => bindingKey(st.bindings[s.slot_key]) !== key)) return null;
+      if (first.kind === 'raw') {
+        if (!isSweepValue(first.value)) return null;
+        // Independent model sweeps on several endpoints are a grid, not one global sweep.
+        const pointers = slots.map((s) => slotPointer(s.slot_key));
+        const linked = slots.length === 1 || (st.links || []).some((g) => Array.isArray(g) && pointers.every((p) => g.indexOf(p) >= 0));
+        if (!linked) return null;
+      }
+      return deepCopy(first);
+    }
+
+    /** Derive the global model again after st.bindings was replaced as a whole. */
+    function syncGlobalModel() {
+      if (st.globalBindingsRef === st.bindings) return;
+      if (st.selected.some((id) => !st.envData[id] || st.envData[id].loading)) return;
+      st.globalBindingsRef = st.bindings;
+      st.globalModel = commonEndpointBinding();
+    }
+
+    /** Endpoints that only have raw values under Evaluation config (no slot yet). */
+    function rawEndpointNames() {
+      const fields = union().fields;
+      const collection = Object.keys(fields).find((p) => fields[p].kind === 'collection' && fields[p].key_param === 'endpoint');
+      if (!collection) return [];
+      const depth = splitPointer(collection).length;
+      const slotted = unionSlots().map((s) => s.slot_key);
+      const names = [];
+      const add = (name) => {
+        if (name && names.indexOf(name) < 0 && slotted.indexOf('endpoint:' + name) < 0) names.push(name);
+      };
+      Object.keys(st.values).forEach((p) => {
+        if (p.indexOf(collection + '/') === 0) add(splitPointer(p)[depth]);
+      });
+      (st.addedKeys[collection] || []).forEach(add);
+      return names;
+    }
+
+    /** Bind the global model to `slots`; a global sweep links all following endpoints. */
+    function bindGlobalTo(slots) {
+      slots.forEach((slot) => {
+        st.bindings[slot.slot_key] = deepCopy(st.globalModel);
+        slot.pointers.forEach((pointer) => {
+          delete st.values[pointer];
+          delete st.invalid[pointer];
+        });
+      });
+      if (st.globalModel.kind === 'raw' && isSweepValue(st.globalModel.value)) {
+        const pointers = endpointSlots().filter((s) => followsGlobal(s.slot_key)).map((s) => slotPointer(s.slot_key));
+        if (pointers.length > 1) {
+          // One axis: the endpoints' sweeps run zipped, with whatever was linked to them.
+          const others = [];
+          const groups = (st.links || []).filter((g) => {
+            if (!Array.isArray(g) || !g.some((p) => pointers.indexOf(p) >= 0)) return true;
+            g.forEach((p) => { if (pointers.indexOf(p) < 0 && others.indexOf(p) < 0) others.push(p); });
+            return false;
+          });
+          st.links = groups.concat([pointers.concat(others)]);
+        }
+      }
+      pruneSecrets();
+    }
+
+    /** Set (every endpoint gets it) or clear (endpoints keep their models) the global model. */
+    async function setGlobalModel(binding) {
+      st.tempFormFor = null;
+      if (!binding) {
+        st.globalModel = null;
+        pruneSecrets();
+        renderModels();
+        return;
+      }
+      st.globalModel = deepCopy(binding);
+      const raw = rawEndpointNames();
+      if (raw.length) {
+        await ensureExtraEndpoints(raw);
+        if (!st.active) return;
+      }
+      bindGlobalTo(endpointSlots());
+      renderModels();
+      renderSettings();
+      updateBaseMeta();
+      schedulePreview();
+    }
+
+    /** "Single model" on a global sweep that starts with Inherit: the endpoints inherit. */
+    function inheritEverywhere() {
+      endpointSlots().filter((s) => followsGlobal(s.slot_key)).forEach((s) => { delete st.bindings[s.slot_key]; });
+      st.globalModel = null;
+      pruneSecrets();
+      renderModels();
+      renderSettings();
+      updateBaseMeta();
+      schedulePreview();
+    }
+
+    /** Project models for the global picker: usable only when every endpoint can use them. */
+    function globalConnections(slots) {
+      const byId = {};
+      const list = [];
+      slots.forEach((slot) => slotConnections(slot).forEach((conn) => {
+        if (!byId[conn.id]) {
+          byId[conn.id] = Object.assign({}, conn, { reasons: [], seen: 0 });
+          list.push(byId[conn.id]);
+        }
+        const merged = byId[conn.id];
+        merged.seen += 1;
+        if (!conn.available) {
+          merged.available = false;
+          merged.reasons = merged.reasons.concat(conn.reasons.map((r) => (slots.length > 1 ? slot.label + ': ' : '') + r));
+        }
+      }));
+      list.forEach((conn) => {
+        if (conn.seen < slots.length) {
+          conn.available = false;
+          conn.reasons.push('Not offered for every endpoint');
+        }
+      });
+      return list;
+    }
+
+    /** A global temporary model from a base has no key: one key for every endpoint. */
+    function globalReenterKey() {
+      const keys = temporaryKeys();
+      if (!keys.allowed) return el('div', { className: 'xl-hint', text: 'Its API key was not copied. ' + keys.reason });
+      const input = el('input', {
+        className: 'qym-control qym-input xl-grow', type: 'password', autocomplete: 'off', spellcheck: 'false',
+        placeholder: 'API key', 'aria-label': 'API key for the global model', 'data-xl-global-key': '1',
+      });
+      const use = el('button', {
+        type: 'button', className: 'qym-inline-action qym-inline-action--neutral', text: 'Use key',
+        onClick: () => {
+          const key = input.value.trim();
+          input.value = '';
+          if (!key) return;
+          const ref = 'tmp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+          st.secrets[ref] = key; // memory only, like keys typed in the temporary-model form
+          const withKey = (b) => {
+            b.binding = { temporary: Object.assign({}, b.binding.temporary, { api_key: { $secret: ref } }) };
+            b.secretRef = ref;
+          };
+          endpointSlots().forEach((slot) => {
+            const b = st.bindings[slot.slot_key];
+            if (followsGlobal(slot.slot_key) && b.kind === 'temporary' && !b.secretRef) withKey(b);
+          });
+          withKey(st.globalModel);
+          renderModels();
+          schedulePreview();
+        },
+      });
+      return el('div', { className: 'xl-model-key' }, [
+        el('div', { className: 'xl-hint', text: 'Its API key was not copied. Enter it once for every endpoint, or launch without a key.' }),
+        el('div', { className: 'xl-row' }, [input, use]),
+      ]);
+    }
+
+    /** The global picker: Inherit-free select, "+ Temporary model" and "+ models". */
+    function globalPicker(slots, head, fills) {
+      const g = st.globalModel;
+      const children = [];
+      const select = el('select', {
+        className: 'qym-control qym-select xl-wide', 'aria-label': 'Global model', 'data-xl-global-select': '1',
+        onChange: (e) => {
+          const value = e.target.value;
+          if (value === '') setGlobalModel(null);
+          else if (value !== '__current') setGlobalModel({ kind: 'connection', id: value });
+        },
+      });
+      select.appendChild(el('option', { value: '', selected: !g, text: 'None: pick a model per endpoint' }));
+      const group = el('optgroup', { label: 'Project models' });
+      const connections = globalConnections(slots);
+      connections.forEach((conn) => {
+        const label = conn.name + (conn.model ? ' · ' + conn.model : '') + (conn.available ? '' : ' — ' + conn.reasons.join('; '));
+        group.appendChild(el('option', {
+          value: conn.id, disabled: !conn.available,
+          selected: !!(g && g.kind === 'connection' && g.id === conn.id), text: label,
+        }));
+      });
+      if (!connections.length) group.appendChild(el('option', { value: '', disabled: true, text: 'No project models are available for experiments' }));
+      select.appendChild(group);
+      const t = g && g.kind === 'temporary' ? (g.binding && g.binding.temporary) || {} : null;
+      if (t) select.appendChild(el('option', { value: '__current', selected: true, text: 'Temporary: ' + (t.label || t.model) }));
+      children.push(head, el('div', { className: 'xl-hint', text: 'Sets the ' + fills + ' at once. Roles use the model of the endpoint they point at.' }), select);
+      if (t) {
+        children.push(el('div', { className: 'xl-model-bound' }, [
+          tag('temporary', 'accent'),
+          el('span', { className: 'xl-mono', text: t.model || '' }),
+          t.base_url ? el('span', { className: 'xl-hint xl-mono', text: t.base_url }) : null,
+          g.secretRef ? null : tag('no API key', null),
+        ]));
+        if (!g.secretRef && !editor) children.push(globalReenterKey());
+      }
+      if (st.tempFormFor === GLOBAL_KEY && window.QymTemporaryModel) {
+        const keys = temporaryKeys();
+        children.push(window.QymTemporaryModel.createForm({
+          keysAllowed: keys.allowed,
+          keysReason: keys.reason,
+          canSaveToProject: false, // saved from one endpoint card, not once per endpoint
+          onAdd: (result) => {
+            if (result.secretRef && result.apiKey) st.secrets[result.secretRef] = result.apiKey;
+            setGlobalModel({ kind: 'temporary', binding: result.binding, secretRef: result.secretRef, save: false });
+          },
+          onCancel: () => { st.tempFormFor = null; renderModels(); },
+        }));
+        return children;
+      }
+      const allowTemporary = window.QymTemporaryModel && !(editor && opts.allowTemporary === false);
+      if (allowTemporary || sweeps) {
+        children.push(el('div', { className: 'xl-row' }, [
+          allowTemporary ? el('button', {
+            type: 'button', className: 'qym-inline-action qym-inline-action--neutral', text: '+ Temporary model',
+            'data-xl-global-temporary': '1',
+            onClick: () => { st.tempFormFor = GLOBAL_KEY; renderModels(); },
+          }) : null,
+          sweeps ? el('button', {
+            type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-global-sweep': '1',
+            title: 'Run the experiment once per model, every endpoint on the same model', text: '+ models',
+            onClick: () => {
+              let first = null;
+              if (g && g.kind === 'connection') first = { connection_id: g.id };
+              else if (g && g.kind === 'temporary') first = deepCopy(g.binding);
+              setGlobalModel({ kind: 'raw', value: { sweep: first ? [first] : [] } });
+            },
+          }) : null,
+        ]));
+      }
+      return children;
+    }
+
+    /** The "Global model" control at the top of the Models step. */
+    function globalModelControl() {
+      const slots = endpointSlots();
+      if (!slots.length) return null;
+      const g = st.globalModel;
+      const following = slots.filter((s) => followsGlobal(s.slot_key));
+      const custom = g ? slots.filter((s) => !followsGlobal(s.slot_key)) : [];
+      const head = el('div', { className: 'xl-model-head' }, [
+        el('span', { className: 'xl-model-title', text: 'Global model' }),
+        g ? tag(following.length + ' of ' + slots.length + ' endpoint' + (slots.length === 1 ? '' : 's'), 'count', 'Endpoints that use the global model') : null,
+        el('span', { className: 'xl-spacer' }),
+        g ? el('button', {
+          type: 'button', className: 'xl-link-btn', text: 'Clear', 'data-xl-global-clear': '1',
+          title: 'Stop using a global model; every endpoint keeps its current model',
+          onClick: () => setGlobalModel(null),
+        }) : null,
+      ]);
+      const fills = 'model, base URL and API key of every LLM endpoint';
+      // A global model sweep is the sweeps module's model card, writing to the global model.
+      const globalSlot = { slot_key: GLOBAL_KEY, label: 'Global model', kind: 'endpoint', envs: st.selected.slice(), field_map: {}, pointers: [] };
+      const sweptCard = g && g.kind === 'raw' && sweeps ? sweeps.modelCard(globalSlot, {
+        head, fills, binding: g, connections: globalConnections(slots),
+        setBinding: (next) => (next ? setGlobalModel(next) : inheritEverywhere()),
+      }) : null;
+      const children = sweptCard ? [sweptCard] : globalPicker(slots, head, fills);
+      if (g) {
+        const names = (list) => list.map((s) => s.label).join(', ');
+        children.push(el('div', { className: 'xl-global-status' }, [
+          el('div', { className: 'xl-hint', 'data-xl-global-status': '1', text: custom.length
+            ? 'Follows the global model: ' + (names(following) || 'none') + '. Custom: ' + names(custom) + '.'
+            : 'Every endpoint follows the global model.' }),
+          el('div', { className: 'xl-hint', text: 'Changing the global model sets every endpoint again, custom ones too. Clearing it keeps each endpoint\'s model.' }),
+          custom.length ? el('div', { className: 'xl-row' }, [el('button', {
+            type: 'button', className: 'xl-link-btn', 'data-xl-global-apply': '1', text: 'Apply to all endpoints',
+            onClick: () => setGlobalModel(st.globalModel),
+          })]) : null,
+        ]));
+      } else {
+        children.push(el('div', { className: 'xl-hint', text: 'Pick a model to use it on every endpoint; single endpoints can still be changed below.' }));
+      }
+      return el('div', { className: 'xl-global-model', 'data-xl-global-model': '1', role: 'group', 'aria-label': 'Global model' }, children);
     }
 
     /** Pointers filled by a bound slot → the slot label (those inputs are locked). */
@@ -788,10 +1096,22 @@
     /** Unbind a slot and forget its keys, except the refs in `keep`. */
     function clearBinding(slotKey, keep) {
       const current = st.bindings[slotKey];
+      // A global temporary model shares one key ref across endpoints: keep refs still in use.
+      const used = refsInUse(slotKey);
       bindingSecretRefs(current).forEach((ref) => {
-        if (!keep || keep.indexOf(ref) < 0) delete st.secrets[ref];
+        if ((!keep || keep.indexOf(ref) < 0) && !used[ref]) delete st.secrets[ref];
       });
       delete st.bindings[slotKey];
+    }
+
+    /** Key refs held by the other slots' bindings and by the global model. */
+    function refsInUse(exceptKey) {
+      const refs = {};
+      Object.keys(st.bindings).forEach((k) => {
+        if (k !== exceptKey) bindingSecretRefs(st.bindings[k]).forEach((ref) => { refs[ref] = true; });
+      });
+      bindingSecretRefs(st.globalModel).forEach((ref) => { refs[ref] = true; });
+      return refs;
     }
 
     function setBinding(slotKey, binding) {
@@ -1138,10 +1458,7 @@
 
     /** Keys of temporary models no binding uses any more are forgotten. */
     function pruneSecrets() {
-      const refs = {};
-      Object.keys(st.bindings).forEach((k) => {
-        bindingSecretRefs(st.bindings[k]).forEach((ref) => { refs[ref] = true; });
-      });
+      const refs = refsInUse(null);
       Object.keys(st.secrets).forEach((ref) => { if (!refs[ref]) delete st.secrets[ref]; });
     }
 
@@ -2000,6 +2317,9 @@
           const err = st.envData[id] && st.envData[id].optionsError;
           if (err) children.push(el('div', { className: 'xl-error-text', text: err + ' (' + envName(id) + ')' }));
         });
+        syncGlobalModel();
+        const global = globalModelControl();
+        if (global) children.push(global);
         children.push(el('div', { className: 'xl-models' }, slots.map(modelCard)));
       }
       if (st.selected.length && !st.selected.some((id) => !st.envData[id] || st.envData[id].loading)) children.push(addEndpointControls());
@@ -2039,12 +2359,21 @@
       const connections = slotConnections(slot);
       const missing = st.selected.filter((id) => slot.envs.indexOf(id) < 0 && st.envData[id] && st.envData[id].form);
       const changed = bindingChanged(slot.slot_key);
+      let globalState = null; // "follows global" / "custom" once a global model is set
+      if (st.globalModel && slot.kind === 'endpoint') {
+        const follows = followsGlobal(slot.slot_key);
+        globalState = follows
+          ? tag('follows global', 'accent', 'Uses the global model')
+          : tag('custom', 'warning', 'Differs from the global model; changing the global model sets it again');
+        globalState.setAttribute('data-xl-global-state', follows ? 'follows' : 'custom');
+      }
       const head = el('div', { className: 'xl-model-head' }, [
         changed ? el('span', { className: 'xl-dot', title: 'Changed from the starting point', 'data-xl-binding-changed': '1' }) : null,
         el('span', { className: 'xl-model-title', text: slot.label }),
         tag(slot.slot_key, 'data'),
         slot.required ? tag('required', 'role') : null,
         slot.extra ? tag('this experiment', 'accent', 'Added on this page; not saved on the environment') : null,
+        globalState,
       ].concat(missing.map((id) => tag('not in ' + envName(id), 'warning'))).concat(changed || slot.extra ? [
         el('span', { className: 'xl-spacer' }),
         slot.extra ? el('button', {

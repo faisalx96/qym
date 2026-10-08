@@ -61,6 +61,9 @@
 .xl-model-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
 .xl-model-title { font-size: var(--font-md); font-weight: 600; color: var(--text-primary); margin-right: var(--space-xs); }
 .xl-model-bound { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+/* Global model (every LLM endpoint at once), above the endpoint cards. */
+.xl-global-model { display: grid; gap: var(--space-sm); margin-bottom: var(--space-sm); padding: var(--space-md); border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-surface); }
+.xl-global-status { display: grid; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--border-subtle); }
 
 /* Settings form */
 .xl-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }

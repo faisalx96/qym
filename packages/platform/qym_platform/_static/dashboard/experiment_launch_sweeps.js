@@ -497,24 +497,29 @@
       });
     }
 
-    function setItems(slot, items, focusKey) {
-      api.setBinding(slot.slot_key, { kind: 'raw', value: { sweep: items } });
+    function setItems(slot, items, focusKey, set) {
+      (set || ((value) => api.setBinding(slot.slot_key, value)))({ kind: 'raw', value: { sweep: items } });
       if (!focusKey) return;
       const node = Array.from(api.root.querySelectorAll('[data-xs-model-item]'))
         .find((n) => n.getAttribute('data-xs-model-item') === slot.slot_key + '|' + focusKey);
       if (node) node.focus();
     }
 
-    /** The card body of a swept slot, or null when the slot is not swept. */
+    /**
+     * The card body of a swept slot, or null when the slot is not swept. The launch
+     * form's global model (every endpoint at once) passes parts.binding, parts.setBinding
+     * and parts.connections instead of a slot of st.bindings.
+     */
     function modelCard(slot, parts) {
-      const b = st.bindings[slot.slot_key];
+      const b = parts.binding !== undefined ? parts.binding : st.bindings[slot.slot_key];
+      const set = parts.setBinding || ((value) => api.setBinding(slot.slot_key, value));
       if (!b || b.kind !== 'raw' || !isSweep(b.value)) return null;
       const items = Array.isArray(b.value.sweep) ? b.value.sweep : [];
       const keys = items.map(bindingKey);
       const chosen = (key) => keys.indexOf(key) >= 0;
       const toggleItem = (key, item) => {
         const next = chosen(key) ? items.filter((x) => bindingKey(x) !== key) : items.concat([item]);
-        setItems(slot, next, key);
+        setItems(slot, next, key, set);
       };
       const chip = (key, item, text, extra) => el('button', Object.assign({
         type: 'button', className: 'qym-chip xs-chip', 'aria-pressed': chosen(key) ? 'true' : 'false',
@@ -522,7 +527,7 @@
         onClick: () => toggleItem(key, item),
       }, extra || {}), [el('span', { text })]);
 
-      const connections = api.slotConnections(slot);
+      const connections = parts.connections || api.slotConnections(slot);
       const chips = [chip('inherit', { inherit: true }, 'Inherit', { title: 'The worker\'s own setting' })];
       connections.forEach((conn) => {
         const key = 'c:' + conn.id;
@@ -542,7 +547,7 @@
           !temporary ? api.tag('not available', 'warning') : null,
           el('button', {
             type: 'button', className: 'qym-chip__remove xs-chip-remove', 'aria-label': 'Remove ' + bindingText(slot, item), text: '×',
-            onClick: () => setItems(slot, items.filter((x) => bindingKey(x) !== key)),
+            onClick: () => setItems(slot, items.filter((x) => bindingKey(x) !== key), null, set),
           }),
         ]));
       });
@@ -566,7 +571,7 @@
             if (result.secretRef && result.apiKey) api.rememberSecret(result.secretRef, result.apiKey);
             // The same model again replaces the earlier one (and its key).
             const key = bindingKey(result.binding);
-            setItems(slot, chosen(key) ? items.map((x) => (bindingKey(x) === key ? result.binding : x)) : items.concat([result.binding]));
+            setItems(slot, chosen(key) ? items.map((x) => (bindingKey(x) === key ? result.binding : x)) : items.concat([result.binding]), null, set);
           },
           onCancel: () => { xs.tempFormFor = null; api.renderModels(); },
         }));
@@ -581,7 +586,7 @@
         el('button', {
           type: 'button', className: 'xl-link-btn', 'data-xs-model-single': slot.slot_key, text: 'Single model',
           title: 'Stop sweeping: keep the first model',
-          onClick: () => api.setBinding(slot.slot_key, singleBinding(items[0])),
+          onClick: () => set(singleBinding(items[0])),
         }),
       ]));
       return el('div', { className: 'xl-model-card xs-model-card', 'data-xl-model-card': slot.slot_key, 'data-xs-model-sweep': '1' }, children);
