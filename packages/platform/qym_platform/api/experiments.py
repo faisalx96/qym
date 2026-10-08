@@ -136,6 +136,7 @@ from qym_platform.services.eval_model_slots import (
     list_model_slots,
 )
 from qym_platform.services.run_versioning import (
+    normalize_versioning_details,
     parse_versioning_params,
     project_versioning_values,
     versioning_conditions,
@@ -196,6 +197,9 @@ class ExperimentCreateRequest(BaseModel):
     secrets: Dict[str, Any] = Field(default_factory=dict, repr=False)
     # Slot keys whose temporary model is saved as a project connection (#12).
     save_to_project_models: List[str] = Field(default_factory=list, max_length=50)
+    # Copied into each launched run's ``versioning_details`` (0084). ``Any`` so a
+    # malformed value gets our message (normalize_versioning_details).
+    versioning_details: Any = None
 
     @field_validator("name")
     @classmethod
@@ -934,6 +938,7 @@ def _serialize_experiment(
         "environment_ids": list(experiment.environment_ids or []),
         "base_source": strip_secret_refs(experiment.base_source or {}),
         "spec": strip_secret_refs(experiment.spec or {}),
+        "versioning_details": dict(experiment.versioning_details or {}),
         "priority": experiment.priority.value,
         "preemption_acknowledged_at": to_api_timestamp(
             experiment.preemption_acknowledged_at
@@ -1070,6 +1075,10 @@ def create_experiment(
                     "configured"
                 ),
             )
+    try:
+        versioning_details = normalize_versioning_details(req.versioning_details)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     envs = _load_environments(db, project_id, req.environment_ids)
     priority = _resolve_priority(db, principal, project_id, envs, req.priority)
     base_source = _base_source(db, project_id, req, envs)
@@ -1193,6 +1202,7 @@ def create_experiment(
         environment_ids=[env.id for env in envs],
         base_source=base_source,
         spec=strip_secret_refs(stored_spec),
+        versioning_details=versioning_details or None,
         secrets_encrypted=_encrypted_secrets(referenced_secrets(spec, req.secrets)),
         priority=priority,
         preemption_acknowledged_at=now if priority == EvalPriority.HIGH else None,
@@ -1634,6 +1644,7 @@ def clone_experiment(
         "cloned_base_source": strip_secret_refs(experiment.base_source or {}),
         "priority": experiment.priority.value,
         "spec": strip_secret_refs(experiment.spec or {}),
+        "versioning_details": dict(experiment.versioning_details or {}),
     }
     if job is None:
         return prefill

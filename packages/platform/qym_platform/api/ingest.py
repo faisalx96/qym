@@ -114,6 +114,7 @@ from qym_platform.services.eval_run_linking import (
     merge_run_metadata,
     strip_launch_token,
 )
+from qym_platform.services.run_versioning import normalize_versioning_details
 from qym_platform.services.eval_run_scores import (
     SCORABLE_RUN_STATUSES,
     sync_run_scores,
@@ -635,6 +636,9 @@ class CreateRunRequest(BaseModel):
     dataset_alias: Optional[str] = None
     run_metadata: Dict[str, Any] = Field(default_factory=dict)
     run_config: Dict[str, Any] = Field(default_factory=dict)
+    # Free-form versioning keys (services/run_versioning.normalize_versioning_details).
+    # ``Any`` so a malformed value gets our 422 message, not a validation echo.
+    versioning_details: Any = None
 
 
 _PAYLOAD_TYPE = {
@@ -1003,6 +1007,12 @@ def create_run(
     require_api_key_scope(principal, "runs:write")
     if not principal.project_id:
         raise HTTPException(status_code=403, detail="API key is not bound to a project")
+    try:
+        versioning_details = normalize_versioning_details(
+            strip_launch_token(req.versioning_details)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     dataset_id = req.dataset_id
     dataset_version_id = req.dataset_version_id
     if not dataset_version_id and (dataset_id or req.dataset_alias):
@@ -1043,6 +1053,7 @@ def create_run(
         # The launch token is read once (below) and never stored.
         run_metadata=strip_launch_token(req.run_metadata),
         run_config=strip_launch_token(req.run_config),
+        versioning_details=versioning_details or None,
         samples=_samples_from_config(req.run_config),
         status=RunWorkflowStatus.RUNNING,
         started_at=utc_now_naive(),
@@ -2763,6 +2774,16 @@ def _upload_run_sync(
             run.run_config = _sanitize_for_json(
                 strip_launch_token(source_run.get("config") or {})
             )
+            try:
+                run.versioning_details = (
+                    normalize_versioning_details(
+                        strip_launch_token(source_run.get("versioning_details"))
+                    )
+                    or None
+                )
+            except ValueError:
+                # A post-hoc upload keeps its rows; bad details are left out.
+                run.versioning_details = None
             try:
                 run.samples = max(1, int(source_run.get("samples") or 1))
             except (TypeError, ValueError):

@@ -759,6 +759,10 @@ class EvalExperiment(Base):
         BIG_JSON, default=dict, nullable=False
     )
     spec: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict, nullable=False)
+    # Keys copied into every launched run's ``versioning_details`` (0084).
+    versioning_details: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
     secrets_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # The creator's dedicated qym API key, sent as ``qym_api_key`` on every submit
     # (migration 0077, ``services/eval_submitter_keys``). The id outlives revocation;
@@ -1138,6 +1142,12 @@ class Run(Base):
     metrics: Mapped[list[str]] = mapped_column(JSON, default=list)
     run_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     run_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # Free-form versioning the run's creator supplied, plus the launching
+    # experiment's keys (0084; services/run_versioning.normalize_versioning_details).
+    # NULL on runs created before it, read as {}.
+    versioning_details: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
     # Repeat runs: how many passes evaluate each item (1 = classic run).
     samples: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     # "official" only when ingest verified an Evaluation Service launch token.

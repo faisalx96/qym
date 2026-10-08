@@ -94,6 +94,7 @@ class EvaluationResult:
         run_metadata: Optional[Dict[str, Any]] = None,
         run_config: Optional[Dict[str, Any]] = None,
         metric_specs: Optional[Dict[str, Any]] = None,
+        versioning_details: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize results container.
@@ -105,11 +106,14 @@ class EvaluationResult:
             metric_specs: Metric name -> ``MetricSpec`` (or its dict form).
                 The declared ``direction`` decides how errors count, and
                 ``pass_threshold`` the default Pass@k threshold.
+            versioning_details: The run's free-form versioning keys
+                (``EvaluatorConfig.versioning_details``).
         """
         self.dataset_name = dataset_name
         self.run_name = run_name
         self.metrics = metrics
         self.run_metadata = run_metadata or {}
+        self.versioning_details = dict(versioning_details or {})
         self.run_config = run_config or {}
         self._metric_specs: Dict[str, Any] = dict(metric_specs or {})
         self.start_time = datetime.now()
@@ -681,6 +685,7 @@ class EvaluationResult:
             'metrics': self.metrics,
             'metric_specs': metric_specs,
             'metric_stats': metric_stats,
+            'versioning_details': dict(self.versioning_details),
             'langfuse_url': self.langfuse_url,
             'inputs': self.inputs,
             'metadatas': self.metadatas,

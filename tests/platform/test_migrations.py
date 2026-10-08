@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0083"]
+    assert heads == ["0084"]
 
 
 def test_operations_docs_name_the_current_migration_head() -> None:
@@ -850,6 +850,7 @@ LATER_REVISIONS = (
     ),
     ("eval_environments", "max_inflight_jobs", "0080_drop_eval_inflight_cap.py", False),
     ("eval_model_slots", "extra_field_maps", "0081_eval_slot_extra_field_maps.py", True),
+    ("eval_experiments", "versioning_details", "0084_run_versioning_details.py", True),
 )
 
 
@@ -2034,3 +2035,52 @@ def test_slot_extra_field_maps_round_trips(monkeypatch: pytest.MonkeyPatch) -> N
         }
         assert "extra_field_maps" not in columns
     engine.dispose()
+
+
+def _versioning_details_prerequisites(engine: sa.engine.Engine) -> None:
+    metadata = sa.MetaData()
+    for table in ("runs", "eval_experiments"):
+        sa.Table(table, metadata, sa.Column("id", sa.String(36), primary_key=True))
+    metadata.create_all(engine)
+
+
+def _run_versioning_details_round_trip(connection, monkeypatch) -> None:
+    migration = _load_migration("0084_run_versioning_details.py")
+    assert (migration.revision, migration.down_revision) == ("0084", "0083")
+
+    def columns(table):
+        return {c["name"]: c for c in sa.inspect(connection).get_columns(table)}
+
+    connection.execute(sa.text("INSERT INTO runs (id) VALUES ('r1')"))
+    monkeypatch.setattr(
+        migration, "op", Operations(MigrationContext.configure(connection))
+    )
+    migration.upgrade()
+    for table in ("runs", "eval_experiments"):
+        assert columns(table)["versioning_details"]["nullable"]
+    connection.execute(
+        sa.text("UPDATE runs SET versioning_details = :v"), {"v": '{"agent": "v2"}'}
+    )
+    migration.downgrade()
+    for table in ("runs", "eval_experiments"):
+        assert "versioning_details" not in columns(table)
+    assert connection.execute(sa.text("SELECT id FROM runs")).scalar_one() == "r1"
+
+
+def test_run_versioning_details_migration_round_trips(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """0084 adds nullable ``versioning_details`` to runs and experiments."""
+    engine = sa.create_engine("sqlite://")
+    _versioning_details_prerequisites(engine)
+    with engine.begin() as connection:
+        _run_versioning_details_round_trip(connection, monkeypatch)
+    engine.dispose()
+
+
+def test_run_versioning_details_migration_postgres_round_trips(
+    monkeypatch: pytest.MonkeyPatch, postgres_engine: sa.engine.Engine
+) -> None:
+    _versioning_details_prerequisites(postgres_engine)
+    with postgres_engine.begin() as connection:
+        _run_versioning_details_round_trip(connection, monkeypatch)

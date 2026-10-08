@@ -1273,8 +1273,39 @@ qym run create \
     --no-tui \                         # Disable terminal dashboard
     --quiet \                          # Only show final summary
     --git-branch main \                # Override auto-detected git branch
-    --git-commit abc1234               # Override auto-detected git commit
+    --git-commit abc1234 \             # Override auto-detected git commit
+    --versioning-detail agent_version=v2 \  # Versioning detail (repeatable)
+    --versioning-details '{"kb_version": 381}'  # Versioning details as JSON
 ```
+
+### Versioning details
+
+`versioning_details` records which versions of your system a run evaluated: any
+keys you choose (`agent_version`, `prompt`, `kb_version`, …) with any JSON
+values. Set it in the config (`"versioning_details": {...}`), in a runs config
+file, or on the command line:
+
+```bash
+qym run create --task-file agent.py --task-function my_task \
+  --dataset qa-dataset --metrics exact_match \
+  --versioning-details '{"kb_version": 381}' \
+  --versioning-detail agent_version=v2 --versioning-detail prompt=p-17
+```
+
+`--versioning-detail KEY=VALUE` (repeatable) sets a string value and wins over
+the same key in `--versioning-details JSON`, which wins over `--config`. Keys
+are non-blank strings of at most 100 characters; at most 50 keys and 16,000
+characters of JSON; `null` values are dropped. The details are sent when the
+platform run is created, kept on the local result (`result.versioning_details`,
+`to_dict()`), shown under **Versioning details** on the run page, and returned
+by `qym run get <id> --json` (`run.versioning_details`) and `qym run list
+--json` (each row's `versioning_details`, `{}` when none). A run launched by a
+platform experiment also gets the experiment's versioning details (the
+experiment's value wins for a key both set).
+
+They are not the Evaluation Service's `versioning_metadata` (`versioning` in
+`qym run list --json`, filterable with `--versioning`): details are only shown,
+not filtered.
 
 ### Other Run Commands
 
@@ -1651,6 +1682,10 @@ evaluator = Evaluator(
         # Version tracking (auto-detected from git by default)
         "git_branch": "main",       # Override auto-detected git branch
         "git_commit": "abc1234",    # Override auto-detected git commit
+        "versioning_details": {     # Free-form versions of what you evaluated
+            "agent_version": "v2",  # (any keys, any JSON values; shown on the
+            "kb_version": 381,      #  run page and in `qym run get/list --json`)
+        },
 
         # Tracing
         "otel_enabled": True,       # Enable auto-instrumentation (default: True)

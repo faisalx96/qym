@@ -365,6 +365,44 @@ a manager can confirm them, as before.
 **To reverse.** Restore `_require_project_manager` in `refresh_environment_schema`
 and skip `refreshEnvSchema` for non-managers in `experiment_launch.js`.
 
+### B19. Free-form `versioning_details` on runs and experiments (Implemented)
+
+**Decision.** Runs get a `versioning_details` JSON column (migration 0084), set by
+whoever creates the run: `EvaluatorConfig.versioning_details`, the CLI's
+`--versioning-detail KEY=VALUE` / `--versioning-details JSON`, sent on
+`POST /v1/runs` (and read from a platform snapshot on `runs:upload`). Experiments
+get the same column, filled from the launch form's "Versioning details"
+(`key=value` lines) or the API's `versioning_details`. When ingest links an
+official run, the experiment's keys are merged into the run's, and **the
+experiment's value wins** for a key both set. It is returned by run detail
+(`run.versioning_details`), run list rows, the dashboard descriptor, experiment
+detail and the clone prefill, and shown as key/value rows on the run page.
+
+It is kept **separate** from the Evaluation Service's `versioning_metadata`
+(`versioning`, B14): that one is reported by the service after the job and is
+filterable; `versioning_details` is supplied by the user up front and only shown.
+
+Bounds (SDK and platform): keys are non-blank strings of at most 100 characters,
+at most 50 keys and 16,000 characters of compact JSON, `null` values dropped;
+values may be any JSON. An invalid object is a 422 on `POST /v1/runs` and on
+experiment create (also on dry run); the SDK refuses it at config time.
+
+**Why.** The experiment's launch form is the source of truth for runs it launches
+(the Evaluation Service's SDK can't receive extra config keys: the platform's
+`EvaluatorRequestConfig` mirror is `extra="forbid"`), so the mapping is done
+server-side at link time. Not filtering keeps the change to one nullable column
+per table, with no projection table or backfill.
+
+**Trade-offs.** Swept values are not copied into `versioning_details` automatically
+(they stay in the Experiment panel's "Swept params"). Launch-form values are
+strings; a cloned non-string value comes back as its JSON text. Old dashboard
+descriptors lack the key until republished; the run list fills `{}`.
+
+**To reverse / extend.** To make details filterable, merge them into the
+`versioning` mapping in `dashboard_summaries._sync_dimension` (and requeue runs).
+To let run-supplied keys win, swap the merge order in
+`eval_run_linking.link_official_run`.
+
 ---
 
 ## C. Operational follow-ups (not blocking)

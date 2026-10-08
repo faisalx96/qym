@@ -1061,6 +1061,7 @@ class Evaluator:
             run_name=self.run_name,
             metrics=list(self.metrics.keys()),
             run_metadata=self.run_metadata.copy(),
+            versioning_details=dict(self.config.versioning_details or {}),
             run_config={
                 "max_concurrency": self.max_concurrency,
                 "max_metric_concurrency": self.max_metric_concurrency,
@@ -1186,6 +1187,9 @@ class Evaluator:
                         dataset_version_id=self._platform_dataset_version_id,
                         dataset_alias=getattr(self.dataset, "alias", None),
                         timeout=getattr(self.config, "platform_timeout", 5.0),
+                        versioning_details=dict(
+                            self.config.versioning_details or {}
+                        ),
                     )
                 except Exception as exc:
                     error_text = (
