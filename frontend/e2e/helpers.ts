@@ -83,7 +83,7 @@ export async function createUser(
 function runEvent(runId: string, type: string, payload: Record<string, unknown>, sequence: number): string {
   return JSON.stringify({
     schema_version: 1,
-    event_id: `${runId}-${sequence}-${Math.random().toString(36).slice(2, 8)}`,
+    event_id: crypto.randomUUID(),
     sequence,
     sent_at: new Date().toISOString(),
     type,

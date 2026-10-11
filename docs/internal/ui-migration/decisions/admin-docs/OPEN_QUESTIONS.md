@@ -59,3 +59,17 @@ Dated lines; each is a decision the admin-docs agent made without a human.
    server endpoint if the docs grow.
 2. `tests/platform/test_design_language.py` still freezes `docs.css` sizes; delete with
    the vanilla docs page at cutover.
+
+## Design decision (playbook step 3) and foundation primitive changes
+
+- 2026-10-11 — **Admin: variant `tabs`** (UX_DECISION.md: tabs 27 vs rail 20 vs sections 20 of 30);
+  **Docs: variant `hybrid`** (nav · article · sticky TOC with a results-popover combobox; 25 vs 23 vs 21).
+  Tab is the path segment `/admin/:tab`; stat strip shown on the Runs tab only; row actions are ghost
+  buttons, red only in the terminal confirm and on the irreversible-job submit.
+- 2026-10-11 — **Foundation primitive changes**: `SearchField` gained `inputProps` (combobox
+  role/aria on the input); `Textarea` now sets `isInvalid` from `errorMessage` (like `TextField`;
+  the error was never shown); `ArchiveProjectDialog` gained `onArchived`.
+- 2026-10-11 — Force stop is hidden on terminal runs (STOPPED/COMPLETED/FAILED) even when the
+  server still says `can_force_stop` (it does for just-stopped runs).
+- Not tested under QYM_AUTH_MODE=none: member forbidden state and reset password (covered by
+  `e2e/admin/proxy.spec.ts` with `QYM_E2E_AUTH_MODE=proxy_headers`, run on its own with a fresh DB).
