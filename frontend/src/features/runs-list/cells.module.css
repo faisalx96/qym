@@ -1,0 +1,242 @@
+/* Cell recipes for the runs-list mocks (DESIGN_LANGUAGE §3 data table). */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--text-muted);
+}
+
+.modelMark {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chart-1);
+  box-shadow: 0 0 0 2px var(--bg-surface);
+}
+
+.modelMark[data-size='md'] {
+  width: 10px;
+  height: 10px;
+}
+
+.modelMark[data-shape='square'] {
+  border-radius: 2px;
+}
+
+.modelMark[data-shape='diamond'] {
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0.85);
+}
+
+.modelMark[data-series='1'] { background: var(--chart-1); }
+.modelMark[data-series='2'] { background: var(--chart-2); }
+.modelMark[data-series='3'] { background: var(--chart-3); }
+.modelMark[data-series='4'] { background: var(--chart-4); }
+.modelMark[data-series='5'] { background: var(--chart-5); }
+.modelMark[data-series='6'] { background: var(--chart-6); }
+.modelMark[data-series='7'] { background: var(--chart-7); }
+.modelMark[data-series='8'] { background: var(--chart-8); }
+
+.model {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.modelName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--success-dim);
+  color: var(--accent-primary);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.ownerName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dataset {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.progressTrack {
+  display: inline-block;
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  background: var(--info);
+}
+
+.signals {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-xs);
+  height: 20px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  line-height: 1;
+  cursor: default;
+}
+
+.signal:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.signal[data-tone='error'] { color: var(--error); }
+.signal[data-tone='metric'] { color: var(--metric-error); }
+.signal[data-tone='info'] { color: var(--info); }
+.signal[data-tone='warning'] { color: var(--warning); }
+
+.metric {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.metricGlyph[data-tone='error'] {
+  color: var(--error);
+  font-size: var(--font-sm);
+}
+
+.numeric {
+  display: inline-flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.runName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chevron {
+  flex: none;
+}
+
+.chevronSpacer {
+  display: inline-block;
+  flex: none;
+  width: var(--control-height);
+}
+
+.runLink {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 2px;
+}
+
+.runLink:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
+.runLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.analyze,
+.analyzeQuiet {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--accent-tertiary-soft);
+  text-decoration: none;
+  white-space: nowrap;
+  border-radius: 2px;
+}
+
+.analyzeQuiet {
+  color: var(--text-muted);
+}
+
+.analyze:hover,
+.analyzeQuiet:hover {
+  text-decoration: underline;
+  color: var(--text-primary);
+}
+
+.analyze:focus-visible,
+.analyzeQuiet:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}

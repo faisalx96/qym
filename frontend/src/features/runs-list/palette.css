@@ -1,0 +1,12 @@
+/*
+ * Categorical series slots 6-8 for model colours (dataviz skill, validated with
+ * scripts/validate_palette.js --mode dark --surface #1a1a28 beside the pinned
+ * --chart-1..5: worst adjacent CVD ΔE 8.4, normal-vision 19.4, contrast ≥ 3:1).
+ * Slots 1-5 stay the legacy --chart-1..5 tokens (pinned by the design test).
+ * Beyond 8 series the hue wraps and the legend adds a marker shape (decision §9.7).
+ */
+:root {
+  --chart-6: #ea580c;
+  --chart-7: #6366f1;
+  --chart-8: #0d9488;
+}

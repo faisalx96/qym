@@ -1,0 +1,19 @@
+/* Selection action cluster (status bar inline, or bottom sheet in the rail variant). */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.count {
+  white-space: nowrap;
+}
+
+.guidance {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+

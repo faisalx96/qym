@@ -1,0 +1,59 @@
+/* Runs status bar (option A placement: pager pinned inside the bar). */
+.bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-md);
+  min-height: var(--status-bar-height);
+  padding: 0 var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+}
+
+.bar[data-pinned] {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  box-shadow: 0 -6px 16px var(--bg-void);
+}
+
+.left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  overflow: hidden;
+}
+
+.center {
+  display: flex;
+  justify-content: center;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.updated {
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px) {
+  .bar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .right {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+}

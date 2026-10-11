@@ -1,0 +1,330 @@
+/* Charts page: task cards with dense dataset tabs, mini-bar grid table (dataviz mark specs). */
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg) var(--space-xl);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 26px;
+  padding: 0 var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.legendItem[data-hovered] {
+  background: var(--bg-hover);
+}
+
+.legendItem:not([data-selected]) {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.legendItem[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.legendCount {
+  color: var(--text-muted);
+}
+
+.card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.cardTitle {
+  margin: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.toolbarLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 650;
+}
+
+.tableWrap {
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.table thead th {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 650;
+  text-align: start;
+  padding: 0 var(--space-sm);
+  height: 28px;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table thead th:first-child {
+  width: var(--chart-first-col-width);
+}
+
+.th[data-align='end'] {
+  text-align: end;
+}
+
+.th[data-sorted] {
+  color: var(--accent-primary);
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.sortButton[data-hovered] {
+  color: var(--text-primary);
+}
+
+.sortButton[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.sortGlyph {
+  color: var(--text-dim); /* decorative sort hint */
+}
+
+.sortGlyph[data-active] {
+  color: var(--accent-primary);
+}
+
+.table td,
+.table th[scope='row'] {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  font-weight: 400;
+  text-align: start;
+  padding: 0 var(--space-sm);
+  height: 34px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.screen[data-density='compact'] .table td,
+.screen[data-density='compact'] .table th[scope='row'] {
+  height: 30px;
+}
+
+.td[data-align='end'] {
+  text-align: end;
+}
+
+.tr:hover td,
+.tr:hover th[scope='row'] {
+  background: var(--bg-hover);
+}
+
+.tr[data-in-group] th[scope='row'] {
+  padding-inline-start: calc(var(--space-lg) + var(--space-md));
+}
+
+.groupRow td,
+.groupRow th[scope='row'] {
+  background: var(--bg-elevated);
+}
+
+.rowHeadInner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.rowLink {
+  flex: none;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.rowLink:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
+.rowLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.rowDate {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.groupToggle {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.groupToggle[data-hovered] {
+  color: var(--accent-primary);
+}
+
+.groupToggle[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+}
+
+.statButton {
+  padding: 0 var(--space-xs);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+  border-radius: 2px;
+}
+
+.statButton[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+}
+
+.bar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-width: 0;
+}
+
+.barTrack {
+  flex: 1;
+  height: 10px;
+  min-width: 40px;
+  border-radius: 2px;
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--chart-1);
+  box-shadow: 2px 0 0 var(--bg-surface);
+}
+
+.bar[data-muted] .barFill {
+  background: var(--border-strong);
+}
+
+.barFill[data-series='1'] { background: var(--chart-1); }
+.barFill[data-series='2'] { background: var(--chart-2); }
+.barFill[data-series='3'] { background: var(--chart-3); }
+.barFill[data-series='4'] { background: var(--chart-4); }
+.barFill[data-series='5'] { background: var(--chart-5); }
+.barFill[data-series='6'] { background: var(--chart-6); }
+.barFill[data-series='7'] { background: var(--chart-7); }
+.barFill[data-series='8'] { background: var(--chart-8); }
+
+.barLabel {
+  flex: none;
+  min-width: 44px;
+  text-align: end;
+  color: var(--text-secondary);
+}
+
+.barError {
+  color: var(--metric-error);
+  font-size: var(--font-sm);
+}
+
+.empty {
+  color: var(--text-muted);
+}
+
+.emptyCell {
+  padding: var(--space-lg) !important;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}

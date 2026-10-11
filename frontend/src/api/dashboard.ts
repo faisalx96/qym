@@ -63,7 +63,7 @@ export function fetchRunsPage(body: RunsBody, signal?: AbortSignal): Promise<Run
 
 export interface UseRunsPageOptions {
   enabled?: boolean;
-  refetchInterval?: number | false;
+  refetchInterval?: number | false | (() => number | false);
   keepPrevious?: boolean;
 }
 
