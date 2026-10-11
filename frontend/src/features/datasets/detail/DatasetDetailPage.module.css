@@ -1,0 +1,64 @@
+/* Dataset hero extras: composes PageHeader/VersionSwitcher/Button/IconButton. */
+.titleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.descButton {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.descButton:not(:disabled):hover {
+  color: var(--text-secondary);
+  text-decoration: underline dotted;
+}
+
+.descButton:disabled {
+  cursor: default;
+}
+
+.descButton:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.inlineLink {
+  font-family: var(--font-mono);
+  color: var(--accent-secondary);
+}
+
+.noVersions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xl) var(--space-lg);
+  text-align: center;
+}
+
+.noVersionsActions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}

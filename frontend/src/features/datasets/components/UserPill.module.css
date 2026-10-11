@@ -1,0 +1,37 @@
+/* Owner pill (.owner-avatar / .owner-name): elevated tag with an initials avatar. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 20px;
+  padding: 2px var(--space-sm) 2px 2px;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.label {
+  padding-inline-start: var(--space-xs);
+  color: var(--text-muted);
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-primary);
+  color: var(--bg-void);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.name {
+  font-weight: 600;
+  color: var(--text-primary);
+}

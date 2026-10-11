@@ -1,0 +1,155 @@
+/* Item field panel (.dsx-code editor + .dsx-jtok palette): composes Tag/IconButton/CopyButton/SegmentedControl. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.headLeft,
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.label {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.editorWrap {
+  position: relative;
+}
+
+.textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  max-height: 55vh;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  unicode-bidi: plaintext;
+  text-align: start;
+  tab-size: 2;
+}
+
+.panel[data-expanded] .textarea,
+.panel[data-expanded] .pre {
+  max-height: none;
+}
+
+.textarea:hover {
+  border-color: var(--border-strong);
+}
+
+.textarea:focus-visible {
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.textarea[aria-invalid='true'] {
+  border-color: var(--error);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--text-dim); /* decorative */
+}
+
+.status[data-state='changed'] .dot {
+  background: var(--warning);
+}
+
+.status[data-state='same'] .dot {
+  background: var(--success);
+}
+
+.status[data-state='error'] {
+  color: var(--error);
+}
+
+.status[data-state='error'] .dot {
+  background: var(--error);
+}
+
+.pre {
+  margin: 0;
+  max-height: 55vh;
+  overflow: auto;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+.pre[data-compact] {
+  max-height: 180px;
+}
+
+.pre[dir='rtl'] {
+  line-height: 1.7;
+}
+
+.tokKey {
+  color: var(--accent-secondary);
+}
+
+.tokStr {
+  color: var(--accent-primary);
+}
+
+.tokNum {
+  color: var(--accent-tertiary);
+}
+
+.tokLit {
+  color: var(--warning);
+}

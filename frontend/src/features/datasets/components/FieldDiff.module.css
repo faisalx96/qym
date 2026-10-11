@@ -1,0 +1,88 @@
+/* Diff panes (.dsx-diff-pane, .dsx-diff-added-tok / -removed-tok). */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.fieldHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.fieldName {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.panes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+
+.panes[data-single] {
+  grid-template-columns: 1fr;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.paneLabel {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.pre {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+.pane[data-tone='before'] .pre {
+  border-left-color: var(--error);
+}
+
+.pane[data-tone='after'] .pre {
+  border-left-color: var(--success);
+}
+
+.added {
+  background: var(--success-dim);
+  color: var(--text-primary);
+  border-radius: 2px;
+}
+
+.removed {
+  background: var(--error-dim);
+  color: var(--text-primary);
+  text-decoration: line-through;
+  border-radius: 2px;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-style: italic;
+}

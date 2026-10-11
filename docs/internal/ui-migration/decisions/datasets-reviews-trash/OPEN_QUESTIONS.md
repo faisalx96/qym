@@ -2,7 +2,7 @@
 
 One dated line per decision the component agent made without a human.
 
-- 2026-10-11 — `frontend/src/lib/` was never committed on `ui/foundation` (root `.gitignore` `lib/` rule). Copied it from the foundation worktree onto this branch and added `!frontend/src/lib/` to `.gitignore`. The reviewer should land the same fix on `ui/foundation`.
+- 2026-10-11 — `frontend/src/lib/` was never committed on `ui/foundation` (root `.gitignore` `lib/` rule). Copied it from the foundation worktree onto this branch and added `!frontend/**/lib/` to `.gitignore` (the rule also swallowed `features/*/lib/`). The reviewer should land the same fix on `ui/foundation`.
 - 2026-10-11 — Catalog sort goes into the URL as `?sort=` (client-side; `GET /v1/datasets` has no sort). Default `updated_desc` is omitted from the URL.
 - 2026-10-11 — Items `?page=` stays 0-based (deep-link compatibility); page size is `?size=` (not persisted), default 50.
 - 2026-10-11 — Reviews sort moves from `localStorage['qym.reviews.sort']` into `?sort=` (shareable links). Default `oldest` is omitted. The old key is not read.

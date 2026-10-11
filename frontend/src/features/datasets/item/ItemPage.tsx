@@ -1,0 +1,271 @@
+/**
+ * Item page (brief 07 §2.7): `?item=<id>&tab=details|runs|history`. Details
+ * edits on drafts with the Text/JSON contract and sends only touched fields;
+ * Prev/Next follow the list order (search/sort/label) via /neighbors.
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useBlocker } from 'react-router-dom';
+import { useDatasetItem, useDeleteItem, useItemNeighbors, usePatchItem, type Dataset, type DatasetItem, type DatasetVersion, type ItemBody } from '@/api/datasets';
+import { ApiError } from '@/lib/http';
+import { useDelayedPending } from '@/lib/pending';
+import { fullWidth } from '@/features/shell/layout';
+import { Button, ConfirmDialog, CopyButton, ErrorState, Icon, LinkButton, PageHeader, Skeleton, TabPanel, Tabs, Tag, useToast } from '@/ui';
+import { CreateDraftDialog } from '../components/dialogs';
+import { FieldEditor, fieldStatus, initialFieldState, type FieldState } from '../components/FieldEditor';
+import { formatDate, relativeTime } from '../lib/itemValue';
+import { ITEM_TABS, datasetPath, parseDatasetRoute, type ItemTab } from '../lib/route';
+import { ItemHistoryTab } from './ItemHistoryTab';
+import { ItemRunsTab } from './ItemRunsTab';
+import styles from './ItemPage.module.css';
+
+export interface ItemPageProps {
+  slug: string;
+  dataset: Dataset;
+  versions: DatasetVersion[];
+  version: DatasetVersion;
+  itemId: string;
+  readOnly: boolean;
+}
+
+export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }: ItemPageProps) {
+  const [params] = useSearchParams();
+  const route = parseDatasetRoute(dataset.slug, params);
+  const navigate = useNavigate();
+  const toast = useToast();
+  const visible = dataset.items_visible;
+  const itemQuery = useDatasetItem(slug, dataset.slug, version.version, itemId, visible);
+  const neighbors = useItemNeighbors(slug, dataset.slug, version.version, itemId, { search: route.search || undefined, sort: route.sort || undefined, label: route.label || undefined }, visible);
+  const patch = usePatchItem(slug, dataset.slug, version.version);
+  const del = useDeleteItem(slug, dataset.slug, version.version);
+  const showSkeleton = useDelayedPending(itemQuery.isPending && visible);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const editable = version.status === 'draft' && !readOnly;
+  const item = itemQuery.data;
+
+  const tab: ItemTab = ITEM_TABS.includes(route.itemTab) ? route.itemTab : 'details';
+  const linkTo = useCallback(
+    (updates: Record<string, string | null>) => {
+      const next = new URLSearchParams(params);
+      for (const [k, v] of Object.entries(updates)) {
+        if (v === null) next.delete(k);
+        else next.set(k, v);
+      }
+      return `${datasetPath(slug, dataset.slug)}?${next.toString()}`;
+    },
+    [params, slug, dataset.slug],
+  );
+
+  // Editor state keyed by item so switching items resets it.
+  const [edit, setEdit] = useState<{ key: string; input: FieldState; expected: FieldState; metadata: FieldState } | null>(null);
+  const editKey = item ? `${item.item_id}:${item.updated_at}` : '';
+  const state = useMemo(
+    () =>
+      edit && edit.key === editKey
+        ? edit
+        : item
+          ? { key: editKey, input: initialFieldState(item.input), expected: initialFieldState(item.expected_output), metadata: initialFieldState(item.metadata, true) }
+          : null,
+    [edit, editKey, item],
+  );
+  const statuses = useMemo(
+    () =>
+      item && state
+        ? {
+            input: fieldStatus(item.input, state.input),
+            expected: fieldStatus(item.expected_output, state.expected),
+            metadata: fieldStatus(item.metadata, state.metadata, true),
+          }
+        : null,
+    [item, state],
+  );
+  const dirty = Boolean(statuses && (statuses.input.touched || statuses.expected.touched || statuses.metadata.touched));
+  const valid = Boolean(statuses && statuses.input.ok && statuses.expected.ok && statuses.metadata.ok);
+
+  // Unsaved-changes guard: in-app navigation and tab close.
+  const blocker = useBlocker(editable && dirty);
+  useEffect(() => {
+    if (!editable || !dirty) return;
+    const onUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [editable, dirty]);
+
+  async function save() {
+    if (!item || !state || !statuses || !valid) return;
+    const body: ItemBody = {};
+    if (statuses.input.touched) body.input = statuses.input.value;
+    if (statuses.expected.touched) body.expected_output = statuses.expected.value;
+    if (statuses.metadata.touched) body.metadata = (statuses.metadata.value ?? {}) as Record<string, unknown>;
+    try {
+      const r = await patch.mutateAsync({ itemId: item.item_id, body });
+      setEdit(null);
+      toast.show(`Item ${r.item.item_id} saved`, { tone: 'success' });
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
+    }
+  }
+
+  // Ctrl/⌘+S saves.
+  useEffect(() => {
+    if (!editable) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (dirty && valid) void save();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editable, dirty, valid, state]);
+
+  if (!visible) {
+    return (
+      <div className={fullWidth}>
+        <ErrorState error={{ status: 403 }} title="Private test set" message="Item contents are hidden from non-admins." />
+      </div>
+    );
+  }
+  if (showSkeleton && !item) return <div className={fullWidth}><Skeleton kind="lines" rows={6} label="Loading item" /></div>;
+  if (itemQuery.isError) {
+    return (
+      <div className={fullWidth}>
+        <ErrorState error={itemQuery.error} title="Couldn’t load this item" notFoundMessage={`No item “${itemId}” in ${version.version}.`} onRetry={() => void itemQuery.refetch()} />
+        <LinkButton to={linkTo({ item: null, tab: 'items' })} variant="ghost">
+          ← Back to items
+        </LinkButton>
+      </div>
+    );
+  }
+  if (!item || !state) return null;
+
+  const title = /^item-\d+$/.test(item.item_id) ? `Item #${item.index}` : item.item_id;
+  const prev = neighbors.data?.previous ?? null;
+  const next = neighbors.data?.next ?? null;
+
+  return (
+    <div className={fullWidth} data-item-page={item.item_id}>
+      <PageHeader
+        title={
+          <span className={styles.titleRow}>
+            <span dir="ltr">{title}</span>
+            <CopyButton text={item.item_id} label="Copy item ID" />
+          </span>
+        }
+        meta={[
+          `index ${item.index}`,
+          `updated ${relativeTime(item.updated_at)}`,
+          `created ${formatDate(item.created_at, 'date')}`,
+          <span key="id" className={styles.mono}>
+            id {item.item_id}
+          </span>,
+          <Tag key="v" kind="version">
+            {version.version} {version.status}
+          </Tag>,
+          ...(neighbors.data ? [`${neighbors.data.index + 1} of ${neighbors.data.total.toLocaleString()} in this view`] : []),
+        ]}
+        actions={
+          <div className={styles.actions}>
+            {version.status !== 'draft' && !readOnly ? (
+              <Button variant="accent" onPress={() => setDraftOpen(true)} data-testid="create-draft-to-edit">
+                Create draft to edit
+              </Button>
+            ) : null}
+            {editable ? (
+              <Button variant="danger" onPress={() => setConfirmDelete(true)} data-testid="delete-item">
+                Delete
+              </Button>
+            ) : null}
+            <LinkButton to={prev ? linkTo({ item: prev.item_id }) : ''} variant="neutral" aria-disabled={!prev || undefined} data-testid="item-prev" icon={<Icon name="prev" size={12} />} onClick={(e) => !prev && e.preventDefault()}>
+              Previous
+            </LinkButton>
+            <LinkButton to={next ? linkTo({ item: next.item_id }) : ''} variant="neutral" aria-disabled={!next || undefined} data-testid="item-next" onClick={(e) => !next && e.preventDefault()}>
+              Next <Icon name="next" size={12} />
+            </LinkButton>
+            {editable ? (
+              <Button variant="primary" onPress={() => void save()} isDisabled={!dirty || !valid} loading={patch.isPending} data-testid="save-item">
+                Save changes
+              </Button>
+            ) : null}
+          </div>
+        }
+      />
+      <Tabs label="Item sections" items={[{ id: 'details', label: 'Details' }, { id: 'runs', label: 'Runs', count: item.run_count }, { id: 'history', label: 'History' }]} selected={tab} onSelect={(id) => navigate(linkTo({ tab: id === 'details' ? null : id }))}>
+        <TabPanel id="details">
+          <div className={styles.panels}>
+            <div className={styles.mainCol}>
+              <FieldEditor label="Input" value={item.input} editable={editable} state={state.input} onChange={(s) => setEdit({ ...state, input: s })} />
+              <FieldEditor label="Expected output" value={item.expected_output} editable={editable} state={state.expected} onChange={(s) => setEdit({ ...state, expected: s })} />
+            </div>
+            <div className={styles.sideCol}>
+              <FieldEditor label="Metadata" value={item.metadata} editable={editable} jsonOnly state={state.metadata} onChange={(s) => setEdit({ ...state, metadata: s })} />
+              {item.labels?.length ? (
+                <div className={styles.labels}>
+                  {item.labels.map((l) => (
+                    <Tag key={l} kind="data">
+                      {l}
+                    </Tag>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </TabPanel>
+        <TabPanel id="runs">
+          <ItemRunsTab slug={slug} dataset={dataset} version={version} itemId={item.item_id} />
+        </TabPanel>
+        <TabPanel id="history">
+          <ItemHistoryTab slug={slug} dataset={dataset} version={version} item={item} editable={editable} />
+        </TabPanel>
+      </Tabs>
+
+      <CreateDraftDialog
+        open={draftOpen}
+        onOpenChange={setDraftOpen}
+        slug={slug}
+        dataset={dataset}
+        versions={versions}
+        current={version}
+        onCreated={(v) => navigate(linkTo({ v: v.version }))}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete item ${item.item_id}?`}
+        description="The item is removed from this draft. Published versions keep their copy."
+        confirmLabel="Delete item"
+        tone="danger"
+        onConfirm={async () => {
+          try {
+            await del.mutateAsync(item.item_id);
+            toast.show(`Item ${item.item_id} deleted`, { tone: 'success' });
+            setEdit(null);
+            navigate(next ? linkTo({ item: next.item_id }) : prev ? linkTo({ item: prev.item_id }) : linkTo({ item: null, tab: 'items' }));
+          } catch (e) {
+            toast.show(e instanceof ApiError ? e.detail || e.message : 'Delete failed', { tone: 'error' });
+            throw e;
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(o) => !o && blocker.state === 'blocked' && blocker.reset()}
+        title="Discard unsaved changes?"
+        description="This item has edits that are not saved."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        tone="danger"
+        onConfirm={() => {
+          setEdit(null);
+          if (blocker.state === 'blocked') blocker.proceed();
+        }}
+      />
+    </div>
+  );
+}
+
+export type { DatasetItem };
