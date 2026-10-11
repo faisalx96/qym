@@ -80,11 +80,11 @@ describe('metrics', () => {
     expect(metricDirection(null)).toBeNull();
   });
   it('scores rows with errors by direction', () => {
-    expect(getRowScore({ metric_values: [0.5], task_error: 'x' }, 0, null, 'maximize')).toEqual({
+    expect(getRowScore({ metric_values: [0.5], status: 'error' }, 0, null, 'maximize')).toEqual({
       score: 0,
       isError: true,
     });
-    expect(getRowScore({ metric_values: [0.5], task_error: 'x' }, 0, null, 'minimize')).toEqual({
+    expect(getRowScore({ metric_values: [0.5], status: 'error' }, 0, null, 'minimize')).toEqual({
       score: null,
       isError: true,
     });

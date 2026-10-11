@@ -1,0 +1,363 @@
+/* Trace drawer: tree + waterfall on the left, span details on the right. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  height: 100%;
+  min-height: 0;
+  padding: var(--space-md);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.chips,
+.attempts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+  gap: var(--space-md);
+  flex: 1;
+  min-height: 0;
+}
+
+.treePane,
+.detailPane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  min-height: 0;
+}
+
+.detailPane {
+  overflow-y: auto;
+}
+
+.treeTools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.search {
+  flex: 1;
+}
+
+.searchInput {
+  width: 100%;
+  padding-block: var(--space-xs);
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+}
+
+.searchInput:focus-visible {
+  outline: 2px solid var(--accent-primary);
+}
+
+.tool {
+  padding-block: var(--space-xs);
+  padding: 0 var(--space-sm);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.tool:hover {
+  color: var(--accent-primary);
+}
+
+.tool:focus-visible,
+.toggle:focus-visible,
+.more:focus-visible {
+  outline: 2px solid var(--accent-primary);
+}
+
+.tree {
+  flex: 1;
+  min-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-base);
+}
+
+.tree:focus-visible {
+  outline: 2px solid var(--accent-primary);
+}
+
+.vrow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px minmax(60px, 120px);
+  align-items: center;
+  gap: var(--space-sm);
+  height: 100%;
+  padding: 0 var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.row[data-selected] {
+  background: var(--bg-active);
+}
+
+.row[data-failed] {
+  opacity: 0.85;
+}
+
+.rowMain {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.toggle {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.glyph {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: var(--font-sm);
+  font-weight: 700;
+  color: var(--bg-void);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.sub {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.dur {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  text-align: end;
+  color: var(--text-secondary);
+}
+
+.bar {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-elevated);
+}
+
+.barFill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.detailHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.spanName {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.exception {
+  padding: var(--space-sm);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  border-inline-start: 3px solid var(--error);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.pane {
+  padding-top: var(--space-sm);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.msg,
+.doc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.msg[data-role='user'] {
+  border-inline-start: 3px solid var(--info);
+}
+
+.msg[data-role='assistant'] {
+  border-inline-start: 3px solid var(--accent-primary);
+}
+
+.msg[data-role='system'] {
+  border-inline-start: 3px solid var(--border-strong);
+}
+
+.role,
+.label {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.docHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.toolCall {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.reasoning {
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.longText {
+  position: relative;
+}
+
+.longHead {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.clamp {
+  max-height: 14em;
+  overflow: hidden;
+}
+
+.more {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-xs);
+  margin: 0;
+}
+
+.kv > div {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: var(--space-sm);
+}
+
+.kv dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}

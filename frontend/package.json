@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite --port 5800 --strictPort",
     "build": "tsc -b && vite build",
@@ -22,6 +24,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "5.104.1",
+    "@tanstack/react-virtual": "3.14.13",
     "react": "18.3.1",
     "react-aria-components": "1.22.1",
     "react-dom": "18.3.1",
