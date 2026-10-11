@@ -9,7 +9,8 @@ import { useAuth } from './AuthContext';
 import { constrained } from './layout';
 
 interface CompactRun {
-  run_id?: string;
+  /** `?view=compact` answers `{run: {project: {slug}}, snapshot}`. */
+  run?: { project?: { slug?: string } | null } | null;
   project?: { slug?: string } | null;
   project_slug?: string | null;
 }
@@ -32,10 +33,14 @@ export function LegacyRunRedirect() {
     let cancelled = false;
     api
       .get<CompactRun>(`/api/runs/${runId.split('/').map(encodeURIComponent).join('/')}?view=compact`)
-      .then((run) => {
+      .then((res) => {
         if (cancelled) return;
         const slug =
-          run.project?.slug ?? run.project_slug ?? readLocal(KEYS.lastProjectSlug) ?? me.projects[0]?.slug;
+          res.run?.project?.slug ??
+          res.project?.slug ??
+          res.project_slug ??
+          readLocal(KEYS.lastProjectSlug) ??
+          me.projects[0]?.slug;
         if (slug) setState({ slug });
         else setState({ error: new Error('No project context for this run') });
       })
