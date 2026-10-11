@@ -60,7 +60,7 @@ export function UserMenu({ compact, placement = 'bottom end', className }: UserM
       trigger={
         <AriaButton
           className={[styles.trigger, className].filter(Boolean).join(' ')}
-          aria-label={`Account menu for ${me.display_name || me.email}`}
+          aria-label={compact ? `${me.display_name || me.email} — account menu` : undefined}
           data-user-menu
           data-compact={compact ? '' : undefined}
         >

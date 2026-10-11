@@ -116,7 +116,7 @@ function ShellFrame() {
         data-user-role={me.role}
       >
         <div className={styles.sidebarTop}>
-          <Link to="/" className={styles.brand} aria-label="qym — Projects">
+          <Link to="/" className={styles.brand} title="Projects">
             <span className={styles.brandMark} aria-hidden="true">
               ق
             </span>

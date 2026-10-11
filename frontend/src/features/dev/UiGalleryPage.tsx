@@ -370,7 +370,10 @@ export default function UiGalleryPage() {
               { id: 'a', label: 'arabic-qa', count: 120 },
               { id: 'b', label: 'english-qa', count: 48 },
             ]}
-          />
+          >
+            <TabPanel id="a">arabic-qa items</TabPanel>
+            <TabPanel id="b">english-qa items</TabPanel>
+          </Tabs>
         </Case>
         <Case label="Pagination">
           <div ref={scrollRef}>

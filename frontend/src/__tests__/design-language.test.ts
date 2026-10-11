@@ -186,7 +186,7 @@ describe('primitive module contracts', () => {
       'height: var(--control-height)',
       'border-radius: var(--control-radius)',
       'background: var(--accent-primary)',
-      'color: var(--error)',
+      'var(--error)',
     ],
     IconButton: [
       'width: var(--control-height)',

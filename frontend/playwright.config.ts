@@ -13,6 +13,9 @@ const repo = path.resolve(here, '..');
 const PLATFORM_PORT = process.env.QYM_PLATFORM_PORT ?? '8800';
 const VITE_PORT = process.env.QYM_VITE_PORT ?? '5800';
 const AUTH_MODE = process.env.QYM_E2E_AUTH_MODE ?? 'none';
+// Defaults the specs and the platform both read (override from the shell when needed).
+process.env.QYM_ADMIN_BOOTSTRAP_TOKEN ??= 'e2e-bootstrap';
+process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY ??= 'nhrVWj9_tg4JBetyZrLyHLQTy9-5DTMysJYeRSS5flY=';
 const dbFile = path.join(here, '.qym-e2e.db');
 const venvPython = path.join(repo, '.venv', 'bin', 'python');
 
@@ -46,6 +49,8 @@ export default defineConfig({
         AUTH_MODE === 'none' ? '' : 'QYM_AUTH_LOCAL_ENABLED=true QYM_AUTH_SESSION_SECRET=e2e-secret',
         `QYM_DATABASE_URL=sqlite:///${dbFile}`,
         `QYM_ENVIRONMENT=test`,
+        `QYM_ADMIN_BOOTSTRAP_TOKEN=${process.env.QYM_ADMIN_BOOTSTRAP_TOKEN}`,
+        `QYM_LLM_CONFIG_ENCRYPTION_KEY=${process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY}`,
         `QYM_BASE_URL=${BASE_URL}`,
         `QYM_ROLE=api`,
         `${venvPython} -m uvicorn qym_platform.main:app --port ${PLATFORM_PORT} --log-level warning`,
@@ -57,7 +62,7 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: `QYM_PLATFORM_PORT=${PLATFORM_PORT} QYM_VITE_PORT=${VITE_PORT} npx vite --port ${VITE_PORT} --strictPort --host 127.0.0.1`,
+      command: `QYM_PLATFORM_PORT=${PLATFORM_PORT} QYM_VITE_PORT=${VITE_PORT} ${AUTH_MODE === 'none' ? '' : 'QYM_AUTH_MODE=proxy_headers QYM_AUTH_LOCAL_ENABLED=true'} npx vite --port ${VITE_PORT} --strictPort --host 127.0.0.1`,
       url: `${BASE_URL}/app/__ui`,
       reuseExistingServer: false,
       timeout: 120_000,

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/http';
+import { meKey } from './me';
 import type {
   AnalysisPrompts,
   ApiKey,
@@ -46,7 +47,11 @@ export function useAddMember(projectId: string) {
   return useMutation({
     mutationFn: (body: { user_id: string; role: 'MEMBER' | 'MANAGER' }) =>
       api.post<Member>(`/v1/projects/${projectId}/members`, body),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: k.members(projectId) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: k.members(projectId) });
+      void qc.invalidateQueries({ queryKey: ['project'], predicate: (q) => q.queryKey.length === 2 });
+      void qc.invalidateQueries({ queryKey: meKey });
+    },
   });
 }
 
@@ -72,6 +77,8 @@ export function useRemoveMember(projectId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: k.members(projectId) });
       void qc.invalidateQueries({ queryKey: k.apiKeys(projectId) });
+      void qc.invalidateQueries({ queryKey: ['project'], predicate: (q) => q.queryKey.length === 2 });
+      void qc.invalidateQueries({ queryKey: meKey });
     },
   });
 }

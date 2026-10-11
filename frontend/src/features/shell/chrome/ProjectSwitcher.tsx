@@ -54,7 +54,6 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
       >
         <AriaButton
           className={[styles.trigger, className].filter(Boolean).join(' ')}
-          aria-label={current ? `Switch project (current: ${current.name})` : 'Choose a project'}
           data-project-switcher
           data-compact={compact ? '' : undefined}
         >
@@ -81,9 +80,11 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
             <ul className={styles.list} role="listbox" aria-label="Projects">
               {list.length === 0 ? <li className={styles.empty}>No matching projects</li> : null}
               {list.map((p) => (
-                <li key={p.id} role="option" aria-selected={current?.id === p.id}>
+                <li key={p.id} role="none">
                   <button
                     type="button"
+                    role="option"
+                    aria-selected={current?.id === p.id}
                     className={styles.option}
                     onClick={() => choose(p)}
                     data-switch-to={p.slug}
