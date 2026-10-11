@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import case, event, insert, or_, select
+from sqlalchemy import case, event, insert, or_, select, update
 from sqlalchemy.orm import Session
 
 from qym_platform.services.run_means import is_item_edit, is_metric_error
@@ -493,6 +493,16 @@ def _before_flush(session, flush_context, instances):
     changed = new.union(session.dirty).union(deleted)
     from qym_platform.db.models import RunEvent
 
+    from qym_platform.db.models import (
+        DatasetAlias,
+        DatasetVersion,
+        EvalExperimentJob,
+        Run,
+        User,
+    )
+    from sqlalchemy import inspect
+
+    status_changes = set()
     for obj in changed:
         if isinstance(obj, RunEvent) and obj in new:
             if not projects_execution_event(obj.type, obj.payload):
@@ -503,14 +513,15 @@ def _before_flush(session, flush_context, instances):
             or session.is_modified(obj, include_collections=False)
         ):
             pending.append((obj, obj in deleted, obj in new))
+            if isinstance(obj, Run) and obj not in new and obj not in deleted:
+                attrs = inspect(obj).attrs
+                if (
+                    attrs.status.history.has_changes()
+                    or attrs.status_reason.history.has_changes()
+                ):
+                    status_changes.add(obj.id)
     session.info["dashboard_source_changes"] = pending
-    from qym_platform.db.models import (
-        DatasetAlias,
-        DatasetVersion,
-        EvalExperimentJob,
-        User,
-    )
-    from sqlalchemy import inspect
+    session.info["dashboard_run_status_changes"] = status_changes
 
     users, versions, jobs = set(), set(), set()
     for obj in changed:
@@ -619,6 +630,87 @@ def _after_flush(session, flush_context):
                 obj.id for obj, _, fresh in pending if fresh and isinstance(obj, Run)
             },
         )
+    publish_run_status(
+        session.connection(), session.info.pop("dashboard_run_status_changes", ())
+    )
+
+
+LIVE_RUN_STATUSES = ("RUNNING", "PENDING")
+
+
+def publish_run_status(connection, run_ids):
+    """Mirror a run's workflow status into its published list row at once.
+
+    ``Run.status`` moves synchronously (final event, lease timeout, force
+    stop, a cancelled job), but the runs list and overview read the published
+    dimension row, which the summary worker republishes later, after every
+    pending event of the run (and, for a terminal run, its whole backfill).
+    Until then the list said RUNNING while the run page said COMPLETED. Like
+    a review decision (``api.runs._publish_dashboard_review_state``), the
+    status is written to the row here, in the source transaction, after
+    ``enqueue_snapshots`` locked the partition row the worker serializes on;
+    the worker publishes the same value later. The status is a cheap, exact
+    dimension: the numbers keep their last publication.
+    """
+    from qym_platform.db.dashboard_models import DashboardRunDimension as Dimension
+    from qym_platform.db.models import EvalExperimentJob, EvalJobStatus, Run
+
+    ids = sorted(set(run_ids))
+    if not ids:
+        return
+    runs = {
+        run_id: (str(getattr(status, "value", status) or ""), reason, job_id)
+        for run_id, status, reason, job_id in connection.execute(
+            select(Run.id, Run.status, Run.status_reason, Run.experiment_job_id).where(
+                Run.id.in_(ids)
+            )
+        )
+    }
+    rows = connection.execute(
+        select(Dimension.run_key, Dimension.status, Dimension.descriptor)
+        .where(Dimension.run_key.in_(list(runs)))
+        .with_for_update()
+    ).all()
+    if not rows:
+        return
+    # A user cancelled the run's job; it stops once the Evaluation Service
+    # confirms (the runs list shows "Stopping…" meanwhile).
+    live_jobs = {
+        job_id
+        for status, _, job_id in runs.values()
+        if job_id and status in LIVE_RUN_STATUSES
+    }
+    cancelling = (
+        set(
+            connection.execute(
+                select(EvalExperimentJob.id).where(
+                    EvalExperimentJob.id.in_(live_jobs),
+                    EvalExperimentJob.status == EvalJobStatus.CANCELLING,
+                )
+            ).scalars()
+        )
+        if live_jobs
+        else set()
+    )
+    for run_key, published, descriptor in rows:
+        status, reason, job_id = runs[run_key]
+        fields = {
+            "status": status,
+            "status_reason": reason,
+            "stop_requested": bool(
+                status in LIVE_RUN_STATUSES and job_id and job_id in cancelling
+            ),
+        }
+        descriptor = descriptor or {}
+        if published == status and all(
+            descriptor.get(key) == value for key, value in fields.items()
+        ):
+            continue
+        connection.execute(
+            update(Dimension.__table__)
+            .where(Dimension.run_key == run_key)
+            .values(status=status, descriptor={**descriptor, **fields})
+        )
 
 
 def _bulk_source_mutation(state):
@@ -629,6 +721,8 @@ def _bulk_source_mutation(state):
     mapper = state.bind_mapper
     if mapper is None or mapper.class_ not in _source_types():
         return
+    from qym_platform.db.models import Run
+
     model = mapper.class_
     session = state.session
     where = state.statement.whereclause
@@ -661,6 +755,11 @@ def _bulk_source_mutation(state):
     connection = session.connection()
     for start in range(0, len(changes), BULK_SNAPSHOT_CHUNK):
         enqueue_snapshots(connection, changes[start : start + BULK_SNAPSHOT_CHUNK])
+    if state.is_update and model is Run:
+        # A guarded bulk stop (eval_experiments.stop_linked_run): publish the
+        # new status now, like the ORM path does.
+        for start in range(0, len(ids), BULK_SNAPSHOT_CHUNK):
+            publish_run_status(connection, ids[start : start + BULK_SNAPSHOT_CHUNK])
     return result
 
 
