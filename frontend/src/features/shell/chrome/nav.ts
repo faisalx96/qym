@@ -25,9 +25,28 @@ export function projectNav(slug: string): NavItem[] {
     { id: 'charts', label: 'Charts', icon: 'chart', to: projectPath(slug, 'charts') },
     { id: 'runs', label: 'Runs', icon: 'list', to: projectPath(slug), activeFor: ['run-detail', 'compare'] },
     { id: 'models', label: 'Models', icon: 'grid', to: projectPath(slug, 'models') },
-    { id: 'experiments', label: 'Experiments', icon: 'flask', to: projectPath(slug, 'experiments'), activeFor: ['experiments-queue', 'environments'] },
-    { id: 'analysis', label: 'Auto-analysis', icon: 'sparkles', to: projectPath(slug, 'analysis'), hiddenWhenArchived: true, activeFor: ['analyzer'] },
-    { id: 'reviews', label: 'Reviews', icon: 'review', to: projectPath(slug, 'reviews'), hiddenWhenArchived: true },
+    {
+      id: 'experiments',
+      label: 'Experiments',
+      icon: 'flask',
+      to: projectPath(slug, 'experiments'),
+      activeFor: ['experiments-queue', 'environments'],
+    },
+    {
+      id: 'analysis',
+      label: 'Auto-analysis',
+      icon: 'sparkles',
+      to: projectPath(slug, 'analysis'),
+      hiddenWhenArchived: true,
+      activeFor: ['analyzer'],
+    },
+    {
+      id: 'reviews',
+      label: 'Reviews',
+      icon: 'review',
+      to: projectPath(slug, 'reviews'),
+      hiddenWhenArchived: true,
+    },
     { id: 'datasets', label: 'Datasets', icon: 'database', to: projectPath(slug, 'datasets') },
     { id: 'settings', label: 'Project settings', icon: 'settings', to: projectPath(slug, 'settings') },
   ];
@@ -97,7 +116,13 @@ export function parseRoute(pathname: string): RouteContext {
   }
   if (path === '/') return { page: 'projects', projectSlug: null, runId: null, label: 'Projects' };
   const run = /^\/run\/(.+?)(\/analyzer)?$/.exec(path);
-  if (run) return { page: run[2] ? 'analyzer' : 'run-detail', projectSlug: null, runId: decodeURIComponent(run[1]!), label: 'Run' };
+  if (run)
+    return {
+      page: run[2] ? 'analyzer' : 'run-detail',
+      projectSlug: null,
+      runId: decodeURIComponent(run[1]!),
+      label: 'Run',
+    };
   const head = path.split('/')[1] ?? '';
   const page = head === 'docs-guide' || head === 'docs' ? 'docs' : head || 'not-found';
   return { page, projectSlug: null, runId: null, label: PAGE_LABELS[page] ?? 'Not found' };

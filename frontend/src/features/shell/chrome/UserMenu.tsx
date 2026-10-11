@@ -42,14 +42,28 @@ export function UserMenu({ compact, placement = 'bottom end', className }: UserM
       }
       items={[
         { id: 'profile', label: 'Profile', icon: <Icon name="user" size={12} /> },
-        ...(sessionAuth ? [{ id: 'logout', label: 'Sign out', icon: <Icon name="logout" size={12} />, separatorBefore: true }] : []),
+        ...(sessionAuth
+          ? [
+              {
+                id: 'logout',
+                label: 'Sign out',
+                icon: <Icon name="logout" size={12} />,
+                separatorBefore: true,
+              },
+            ]
+          : []),
       ]}
       onAction={(id) => {
         if (id === 'profile') navigate('/profile');
         if (id === 'logout') logout.mutate();
       }}
       trigger={
-        <AriaButton className={[styles.trigger, className].filter(Boolean).join(' ')} aria-label={`Account menu for ${me.display_name || me.email}`} data-user-menu data-compact={compact ? '' : undefined}>
+        <AriaButton
+          className={[styles.trigger, className].filter(Boolean).join(' ')}
+          aria-label={`Account menu for ${me.display_name || me.email}`}
+          data-user-menu
+          data-compact={compact ? '' : undefined}
+        >
           <span className={styles.avatar} aria-hidden="true">
             {initials(me.display_name, me.email)}
           </span>

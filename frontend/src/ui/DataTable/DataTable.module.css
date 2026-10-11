@@ -112,6 +112,11 @@
   z-index: 2;
 }
 
+.th:last-child .resizer {
+  inset-inline-end: 0;
+  width: 7px;
+}
+
 .resizer::after {
   content: '';
   position: absolute;

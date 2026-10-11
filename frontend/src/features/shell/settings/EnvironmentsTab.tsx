@@ -9,7 +9,8 @@ export function EnvironmentsTab() {
       title="Environments — coming soon"
       body={
         <>
-          The eval environments panel is being rebuilt by the <Tag kind="data">06-experiments-eval-queue</Tag> area agent. Use the legacy settings page meanwhile.
+          The eval environments panel is being rebuilt by the <Tag kind="data">06-experiments-eval-queue</Tag>{' '}
+          area agent. Use the legacy settings page meanwhile.
         </>
       }
     />

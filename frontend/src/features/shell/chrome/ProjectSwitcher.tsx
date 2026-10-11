@@ -30,7 +30,8 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
   const list = useMemo(() => {
-    const all = current && !me.projects.some((p) => p.id === current.id) ? [current, ...me.projects] : me.projects;
+    const all =
+      current && !me.projects.some((p) => p.id === current.id) ? [current, ...me.projects] : me.projects;
     const q = query.trim().toLowerCase();
     return q ? all.filter((p) => p.name.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q)) : all;
   }, [me.projects, current, query]);
@@ -51,8 +52,17 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
           if (!o) setQuery('');
         }}
       >
-        <AriaButton className={[styles.trigger, className].filter(Boolean).join(' ')} aria-label={current ? `Switch project (current: ${current.name})` : 'Choose a project'} data-project-switcher data-compact={compact ? '' : undefined}>
-          {current ? <Identicon seed={current.slug} cell={5} gap={2} chip /> : <Icon name="folder" size={14} />}
+        <AriaButton
+          className={[styles.trigger, className].filter(Boolean).join(' ')}
+          aria-label={current ? `Switch project (current: ${current.name})` : 'Choose a project'}
+          data-project-switcher
+          data-compact={compact ? '' : undefined}
+        >
+          {current ? (
+            <Identicon seed={current.slug} cell={5} gap={2} chip />
+          ) : (
+            <Icon name="folder" size={14} />
+          )}
           <span className={styles.triggerName}>{current ? current.name : 'Projects'}</span>
           {current && !current.is_active ? <Badge tone="warning">archived</Badge> : null}
           <Icon name="chevron-down" size={12} />
@@ -60,13 +70,24 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
         <Popover placement="bottom start" offset={6} className={styles.popover}>
           <Dialog aria-label="Switch project" className={styles.dialog}>
             <div className={styles.search}>
-              <SearchField label="Search projects" placeholder="Search projects" value={query} onChange={setQuery} autoFocus />
+              <SearchField
+                label="Search projects"
+                placeholder="Search projects"
+                value={query}
+                onChange={setQuery}
+                autoFocus
+              />
             </div>
             <ul className={styles.list} role="listbox" aria-label="Projects">
               {list.length === 0 ? <li className={styles.empty}>No matching projects</li> : null}
               {list.map((p) => (
                 <li key={p.id} role="option" aria-selected={current?.id === p.id}>
-                  <button type="button" className={styles.option} onClick={() => choose(p)} data-switch-to={p.slug}>
+                  <button
+                    type="button"
+                    className={styles.option}
+                    onClick={() => choose(p)}
+                    data-switch-to={p.slug}
+                  >
                     <Identicon seed={p.slug} cell={5} gap={2} chip />
                     <span className={styles.optionText}>
                       <Text variant="sm" as="span" tone="primary" weight={600} truncate>

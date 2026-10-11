@@ -1,0 +1,114 @@
+/* Command palette: top-anchored dialog with a combobox and grouped listbox. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh var(--space-lg) var(--space-lg);
+  background: rgba(10, 10, 16, 0.6);
+}
+
+.modal {
+  width: 560px;
+  max-width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  box-shadow: var(--shadow-dialog);
+  outline: none;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+  outline: none;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+}
+
+.input {
+  flex: 1;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  outline: none;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-xs);
+  list-style: none;
+}
+
+.groupList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  padding: var(--space-sm) var(--space-sm) var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--dropdown-option-height);
+  padding: 0 var(--space-sm);
+  border-radius: var(--control-radius);
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+  cursor: pointer;
+}
+
+.option svg {
+  color: var(--text-muted);
+  flex: none;
+}
+
+.option[aria-selected='true'] {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.optionLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hint {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.empty {
+  padding: var(--space-md);
+  color: var(--text-muted);
+  font-size: var(--font-base);
+}

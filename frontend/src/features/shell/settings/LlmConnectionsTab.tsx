@@ -1,9 +1,27 @@
 import { useState } from 'react';
-import { useLlmConnectionAction, useLlmConnections, useSaveLlmConnection, type LlmConnectionBody } from '@/api/projectSettings';
+import {
+  useLlmConnectionAction,
+  useLlmConnections,
+  useSaveLlmConnection,
+  type LlmConnectionBody,
+} from '@/api/projectSettings';
 import type { LlmConnection } from '@/api/types';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
-import { Button, Checkbox, ConfirmDialog, DataTable, ErrorState, Skeleton, Stack, Tag, Text, TextField, useToast, type Column } from '@/ui';
+import {
+  Button,
+  Checkbox,
+  ConfirmDialog,
+  DataTable,
+  ErrorState,
+  Skeleton,
+  Stack,
+  Tag,
+  Text,
+  TextField,
+  useToast,
+  type Column,
+} from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
 
@@ -28,7 +46,10 @@ export function LlmConnectionsTab() {
       const r = (await action.mutateAsync({ id: c.id, action: 'test' })) as { model?: string };
       toast.show(`“${c.name}” connected · ${r.model ?? c.llm_model}`, { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || 'Connection failed' : 'Connection failed', { tone: 'error', timeout: 8000 });
+      toast.show(e instanceof ApiError ? e.detail || 'Connection failed' : 'Connection failed', {
+        tone: 'error',
+        timeout: 8000,
+      });
     } finally {
       setTesting(null);
     }
@@ -50,7 +71,13 @@ export function LlmConnectionsTab() {
     },
     { id: 'model', label: 'Model', width: 160, mono: true, cell: (c) => c.llm_model },
     { id: 'endpoint', label: 'Endpoint', width: 240, mono: true, cell: (c) => c.llm_base_url },
-    { id: 'key', label: 'Key', width: 110, mono: true, cell: (c) => (c.llm_api_key_set ? c.llm_api_key_hint || '••••' : '—') },
+    {
+      id: 'key',
+      label: 'Key',
+      width: 110,
+      mono: true,
+      cell: (c) => (c.llm_api_key_set ? c.llm_api_key_hint || '••••' : '—'),
+    },
     {
       id: 'actions',
       label: 'Actions',
@@ -65,7 +92,14 @@ export function LlmConnectionsTab() {
           {canEdit ? (
             <>
               {!c.is_default ? (
-                <Button variant="neutral" onPress={() => action.mutateAsync({ id: c.id, action: 'set-default' }).then(() => toast.show('Default connection updated', { tone: 'success' }))}>
+                <Button
+                  variant="neutral"
+                  onPress={() =>
+                    action
+                      .mutateAsync({ id: c.id, action: 'set-default' })
+                      .then(() => toast.show('Default connection updated', { tone: 'success' }))
+                  }
+                >
                   Set default
                 </Button>
               ) : null}
@@ -91,17 +125,35 @@ export function LlmConnectionsTab() {
   return (
     <Stack gap="lg">
       {list.isError ? (
-        <ErrorState error={list.error} title="Couldn’t load connections" onRetry={() => list.refetch()} compact />
+        <ErrorState
+          error={list.error}
+          title="Couldn’t load connections"
+          onRetry={() => list.refetch()}
+          compact
+        />
       ) : list.isPending ? (
         showSkeleton ? (
           <Skeleton kind="table" rows={2} />
         ) : null
       ) : (
-        <DataTable aria-label="LLM connections" columns={columns} rows={list.data} rowKey={(c) => c.id} storageKey="settings-llm" emptyState="No LLM connections yet. Add one to run auto-analysis and experiments." />
+        <DataTable
+          aria-label="LLM connections"
+          columns={columns}
+          rows={list.data}
+          rowKey={(c) => c.id}
+          storageKey="settings-llm"
+          emptyState="No LLM connections yet. Add one to run auto-analysis and experiments."
+        />
       )}
       {canEdit && !showForm ? (
         <div>
-          <Button variant="accent" onPress={() => { setEditing(null); setShowForm(true); }}>
+          <Button
+            variant="accent"
+            onPress={() => {
+              setEditing(null);
+              setShowForm(true);
+            }}
+          >
             Add connection
           </Button>
         </div>
@@ -117,7 +169,9 @@ export function LlmConnectionsTab() {
               toast.show(editing ? 'Connection updated' : 'Connection added', { tone: 'success' });
               setShowForm(false);
             } catch (e) {
-              toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', { tone: 'error' });
+              toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
+                tone: 'error',
+              });
             }
           }}
         />
@@ -144,7 +198,17 @@ export function LlmConnectionsTab() {
   );
 }
 
-function ConnectionForm({ initial, busy, onCancel, onSubmit }: { initial: LlmConnection | null; busy: boolean; onCancel: () => void; onSubmit: (body: LlmConnectionBody) => void }) {
+function ConnectionForm({
+  initial,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  initial: LlmConnection | null;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (body: LlmConnectionBody) => void;
+}) {
   const [name, setName] = useState(initial?.name ?? '');
   const [baseUrl, setBaseUrl] = useState(initial?.llm_base_url ?? '');
   const [model, setModel] = useState(initial?.llm_model ?? '');
@@ -156,7 +220,13 @@ function ConnectionForm({ initial, busy, onCancel, onSubmit }: { initial: LlmCon
       data-llm-form
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({ name: name.trim(), llm_base_url: baseUrl.trim(), llm_model: model.trim(), llm_api_key: key ? key : initial ? KEEP : '', available_for_experiments: forExperiments });
+        onSubmit({
+          name: name.trim(),
+          llm_base_url: baseUrl.trim(),
+          llm_model: model.trim(),
+          llm_api_key: key ? key : initial ? KEEP : '',
+          available_for_experiments: forExperiments,
+        });
       }}
     >
       <div className={styles.cardHeader}>
@@ -165,9 +235,24 @@ function ConnectionForm({ initial, busy, onCancel, onSubmit }: { initial: LlmCon
       <div className={styles.cardBody}>
         <div className={styles.formRow}>
           <TextField label="Name" value={name} onChange={setName} isRequired placeholder="OpenAI prod" />
-          <TextField label="Base URL" value={baseUrl} onChange={setBaseUrl} isRequired mono placeholder="https://api.openai.com/v1" />
+          <TextField
+            label="Base URL"
+            value={baseUrl}
+            onChange={setBaseUrl}
+            isRequired
+            mono
+            placeholder="https://api.openai.com/v1"
+          />
           <TextField label="Model" value={model} onChange={setModel} isRequired mono placeholder="gpt-4.1" />
-          <TextField label="API key" type="password" value={key} onChange={setKey} mono placeholder={initial?.llm_api_key_set ? `Keep current (${initial.llm_api_key_hint})` : 'sk-…'} autoComplete="new-password" />
+          <TextField
+            label="API key"
+            type="password"
+            value={key}
+            onChange={setKey}
+            mono
+            placeholder={initial?.llm_api_key_set ? `Keep current (${initial.llm_api_key_hint})` : 'sk-…'}
+            autoComplete="new-password"
+          />
         </div>
         <Checkbox isSelected={forExperiments} onChange={setForExperiments}>
           Available for experiments (otherwise analysis only)
@@ -177,7 +262,12 @@ function ConnectionForm({ initial, busy, onCancel, onSubmit }: { initial: LlmCon
         <Button variant="neutral" onPress={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" loading={busy} isDisabled={!name.trim() || !baseUrl.trim() || !model.trim()}>
+        <Button
+          type="submit"
+          variant="primary"
+          loading={busy}
+          isDisabled={!name.trim() || !baseUrl.trim() || !model.trim()}
+        >
           {initial ? 'Save changes' : 'Add connection'}
         </Button>
       </div>

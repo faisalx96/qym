@@ -21,7 +21,10 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
     if (route.page === 'run-detail' && route.runId) {
       crumbs.push({ label: 'Runs', to: projectPath(project.slug) }, { label: route.runId, mono: true });
     } else if (route.page === 'analyzer' && route.runId) {
-      crumbs.push({ label: route.runId, to: projectPath(project.slug, `runs/${route.runId}`), mono: true }, { label: 'Auto-analysis' });
+      crumbs.push(
+        { label: route.runId, to: projectPath(project.slug, `runs/${route.runId}`), mono: true },
+        { label: 'Auto-analysis' },
+      );
     } else if (route.page === 'experiments-queue') {
       crumbs.push({ label: 'Experiments', to: projectPath(project.slug, 'experiments') }, { label: 'Queue' });
     } else {
@@ -54,7 +57,11 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
                   {c.label}
                 </Link>
               ) : (
-                <span className={styles.current} aria-current={last ? 'page' : undefined} data-mono={c.mono ? '' : undefined}>
+                <span
+                  className={styles.current}
+                  aria-current={last ? 'page' : undefined}
+                  data-mono={c.mono ? '' : undefined}
+                >
                   {c.label}
                 </span>
               )}

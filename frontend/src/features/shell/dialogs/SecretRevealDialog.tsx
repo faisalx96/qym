@@ -12,7 +12,14 @@ export interface SecretRevealDialogProps {
 }
 
 /** Shows a one-time secret (API key, read token, temporary password) with Copy. */
-export function SecretRevealDialog({ open, onClose, title, secret, noun, description }: SecretRevealDialogProps) {
+export function SecretRevealDialog({
+  open,
+  onClose,
+  title,
+  secret,
+  noun,
+  description,
+}: SecretRevealDialogProps) {
   const toast = useToast();
   return (
     <Dialog
@@ -31,8 +38,19 @@ export function SecretRevealDialog({ open, onClose, title, secret, noun, descrip
           {noun}
         </Text>
         <div className={styles.row}>
-          <input id="secret-reveal" className={styles.secret} readOnly value={secret ?? ''} onFocus={(e) => e.target.select()} data-secret />
-          <CopyButton text={secret ?? ''} label={`Copy ${noun}`} onCopied={() => toast.show(`${noun} copied`, { tone: 'success' })} />
+          <input
+            id="secret-reveal"
+            className={styles.secret}
+            readOnly
+            value={secret ?? ''}
+            onFocus={(e) => e.target.select()}
+            data-secret
+          />
+          <CopyButton
+            text={secret ?? ''}
+            label={`Copy ${noun}`}
+            onCopied={() => toast.show(`${noun} copied`, { tone: 'success' })}
+          />
         </div>
       </Stack>
     </Dialog>

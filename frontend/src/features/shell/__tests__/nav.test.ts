@@ -9,7 +9,10 @@ describe('parseRoute', () => {
     expect(parseRoute('/projects/demo')).toMatchObject({ page: 'runs', projectSlug: 'demo' });
     expect(parseRoute('/projects/demo/settings')).toMatchObject({ page: 'settings', label: 'Settings' });
     expect(parseRoute('/projects/demo/runs/a/b/c')).toMatchObject({ page: 'run-detail', runId: 'a/b/c' });
-    expect(parseRoute('/projects/demo/runs/a%2Fb/analyzer')).toMatchObject({ page: 'analyzer', runId: 'a/b' });
+    expect(parseRoute('/projects/demo/runs/a%2Fb/analyzer')).toMatchObject({
+      page: 'analyzer',
+      runId: 'a/b',
+    });
     expect(parseRoute('/projects/demo/experiments/queue')).toMatchObject({ page: 'experiments-queue' });
     expect(parseRoute('/projects/demo/datasets/x/y')).toMatchObject({ page: 'datasets' });
     expect(parseRoute('/')).toMatchObject({ page: 'projects' });
@@ -21,8 +24,18 @@ describe('parseRoute', () => {
     const nav = projectNav('demo');
     const runs = nav.find((n) => n.id === 'runs')!;
     expect(isNavActive(runs, 'run-detail')).toBe(true);
-    expect(isNavActive(nav.find((n) => n.id === 'experiments')!, 'experiments-queue')).toBe(true);
-    expect(isNavActive(nav.find((n) => n.id === 'analysis')!, 'analyzer')).toBe(true);
+    expect(
+      isNavActive(
+        nav.find((n) => n.id === 'experiments')!,
+        'experiments-queue',
+      ),
+    ).toBe(true);
+    expect(
+      isNavActive(
+        nav.find((n) => n.id === 'analysis')!,
+        'analyzer',
+      ),
+    ).toBe(true);
     expect(isNavActive(runs, 'charts')).toBe(false);
   });
 });

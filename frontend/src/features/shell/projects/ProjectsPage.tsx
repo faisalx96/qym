@@ -27,7 +27,9 @@ export function ProjectsPage() {
   const [creating, setCreating] = useState(false);
   const projects = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? me.projects.filter((p) => p.name.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q)) : me.projects;
+    return q
+      ? me.projects.filter((p) => p.name.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q))
+      : me.projects;
   }, [me.projects, query]);
   const canCreate = canCreateProject(me);
 
@@ -38,9 +40,20 @@ export function ProjectsPage() {
         description={`${me.projects.length} project${me.projects.length === 1 ? '' : 's'} you belong to`}
         actions={
           <>
-            <SearchField label="Search projects" placeholder="Search projects" value={query} onChange={setQuery} width={240} />
+            <SearchField
+              label="Search projects"
+              placeholder="Search projects"
+              value={query}
+              onChange={setQuery}
+              width={240}
+            />
             {canCreate ? (
-              <Button variant="primary" icon={<Icon name="plus" size={12} />} onPress={() => setCreating(true)} data-new-project>
+              <Button
+                variant="primary"
+                icon={<Icon name="plus" size={12} />}
+                onPress={() => setCreating(true)}
+                data-new-project
+              >
                 New project
               </Button>
             ) : null}
@@ -51,8 +64,18 @@ export function ProjectsPage() {
         <EmptyState
           icon={<Icon name="folder" />}
           title="No projects yet"
-          body={canCreate ? 'Create a project to start collecting runs.' : 'Ask a project manager or an admin to add you to a project.'}
-          action={canCreate ? <Button variant="primary" onPress={() => setCreating(true)}>New project</Button> : undefined}
+          body={
+            canCreate
+              ? 'Create a project to start collecting runs.'
+              : 'Ask a project manager or an admin to add you to a project.'
+          }
+          action={
+            canCreate ? (
+              <Button variant="primary" onPress={() => setCreating(true)}>
+                New project
+              </Button>
+            ) : undefined
+          }
         />
       ) : projects.length === 0 ? (
         <EmptyState compact title="No matching projects" body={`Nothing matches “${query}”.`} />

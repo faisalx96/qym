@@ -20,7 +20,9 @@ export function GeneralTab() {
       const updated = await rename.mutateAsync({ name: name.trim() });
       toast.show(`Renamed to ${updated.name}`, { tone: 'success' });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || 'Could not rename' : 'Could not rename', { tone: 'error' });
+      toast.show(e instanceof ApiError ? e.detail || 'Could not rename' : 'Could not rename', {
+        tone: 'error',
+      });
     }
   }
 
@@ -42,7 +44,12 @@ export function GeneralTab() {
               { key: 'members', label: 'Members', value: project.member_count },
               { key: 'runs', label: 'Runs', value: project.run_count },
               { key: 'status', label: 'Status', value: project.is_active ? 'Active' : 'Archived' },
-              { key: 'created', label: 'Created', value: new Date(project.created_at).toLocaleDateString(), mono: true },
+              {
+                key: 'created',
+                label: 'Created',
+                value: new Date(project.created_at).toLocaleDateString(),
+                mono: true,
+              },
             ]}
           />
         </div>
@@ -55,7 +62,9 @@ export function GeneralTab() {
               <Text variant="md" id="general-name">
                 Name
               </Text>
-              <Text variant="sm">Shown in the sidebar, breadcrumbs and run pages. The slug does not change.</Text>
+              <Text variant="sm">
+                Shown in the sidebar, breadcrumbs and run pages. The slug does not change.
+              </Text>
             </div>
           </div>
           <div className={styles.cardBody}>
@@ -67,7 +76,12 @@ export function GeneralTab() {
               }}
             >
               <TextField label="Project name" hideLabel value={name} onChange={setName} width={320} />
-              <Button type="submit" variant="primary" isDisabled={!name.trim() || name.trim() === project.name} loading={rename.isPending}>
+              <Button
+                type="submit"
+                variant="primary"
+                isDisabled={!name.trim() || name.trim() === project.name}
+                loading={rename.isPending}
+              >
                 Save
               </Button>
             </form>
@@ -82,7 +96,9 @@ export function GeneralTab() {
               <Text variant="md" id="general-rules">
                 Correction review rules
               </Text>
-              <Text variant="sm">Who may approve corrections and whether the author can review their own.</Text>
+              <Text variant="sm">
+                Who may approve corrections and whether the author can review their own.
+              </Text>
             </div>
           </div>
           <div className={styles.cardBody}>
@@ -107,13 +123,21 @@ export function GeneralTab() {
               <Button
                 variant="primary"
                 loading={rules.isPending}
-                isDisabled={approvers === project.correction_approvers && differentReviewer === project.correction_require_different_reviewer}
+                isDisabled={
+                  approvers === project.correction_approvers &&
+                  differentReviewer === project.correction_require_different_reviewer
+                }
                 onPress={async () => {
                   try {
-                    await rules.mutateAsync({ correction_approvers: approvers, correction_require_different_reviewer: differentReviewer });
+                    await rules.mutateAsync({
+                      correction_approvers: approvers,
+                      correction_require_different_reviewer: differentReviewer,
+                    });
                     toast.show('Review rules saved', { tone: 'success' });
                   } catch (e) {
-                    toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', { tone: 'error' });
+                    toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
+                      tone: 'error',
+                    });
                   }
                 }}
               >

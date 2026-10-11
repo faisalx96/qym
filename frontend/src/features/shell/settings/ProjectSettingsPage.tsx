@@ -12,7 +12,15 @@ import { EnvironmentsTab } from './EnvironmentsTab';
 import { PromptsTab } from './PromptsTab';
 import { DangerZoneTab } from './DangerZoneTab';
 
-export const SETTINGS_TABS = ['general', 'members', 'apikeys', 'llm', 'environments', 'prompts', 'danger'] as const;
+export const SETTINGS_TABS = [
+  'general',
+  'members',
+  'apikeys',
+  'llm',
+  'environments',
+  'prompts',
+  'danger',
+] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 /** /projects/:slug/settings?tab=… — the tab is persistent URL state (brief 01 §9.6). */
@@ -65,7 +73,12 @@ export function ProjectSettingsPage() {
           ),
         ]}
       />
-      <Tabs label="Settings sections" items={items} selected={selected} onSelect={(id) => replaceUrlQuery({ tab: id === 'general' ? null : id })}>
+      <Tabs
+        label="Settings sections"
+        items={items}
+        selected={selected}
+        onSelect={(id) => replaceUrlQuery({ tab: id === 'general' ? null : id })}
+      >
         <TabPanel id="general">
           <GeneralTab />
         </TabPanel>

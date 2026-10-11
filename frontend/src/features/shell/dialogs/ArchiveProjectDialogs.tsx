@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchArchivePreview, fetchDeletionPreview, fetchUnarchivePreview, useArchiveProject, useDeleteProject, useUnarchiveProject } from '@/api/projects';
+import {
+  fetchArchivePreview,
+  fetchDeletionPreview,
+  fetchUnarchivePreview,
+  useArchiveProject,
+  useDeleteProject,
+  useUnarchiveProject,
+} from '@/api/projects';
 import type { ArchivePreview, DeletionPreview, Project, UnarchivePreview } from '@/api/types';
 import { ApiError } from '@/lib/http';
 import { ConfirmDialog, useToast, type ConfirmWarning } from '@/ui';
@@ -32,7 +39,9 @@ function ArchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDialo
     ? {
         lead: `${preview.running_count} run${preview.running_count === 1 ? ' is' : 's are'} still running`,
         text: 'They will be stopped.',
-        items: preview.running_runs.slice(0, 5).map((r) => ({ title: r.run_name || r.run_id, meta: r.started_at })),
+        items: preview.running_runs
+          .slice(0, 5)
+          .map((r) => ({ title: r.run_name || r.run_id, meta: r.started_at })),
         more: Math.max(0, preview.running_count - 5),
       }
     : undefined;
@@ -42,7 +51,10 @@ function ArchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDialo
       onOpenChange={onOpenChange}
       title={`Archive “${project.name}”?`}
       tone="danger"
-      description={['Members keep read access; nothing can be changed until an admin unarchives it.', 'API keys stop working.']}
+      description={[
+        'Members keep read access; nothing can be changed until an admin unarchives it.',
+        'API keys stop working.',
+      ]}
       warning={warning}
       confirmLabel="Archive project"
       onConfirm={async () => {
@@ -87,7 +99,10 @@ function UnarchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDia
               lead: `${keys} API key${keys === 1 ? '' : 's'} will work again`,
               items: preview!.active_api_keys.slice(0, 5).map((k) => ({
                 title: k.name,
-                meta: typeof k.creator === 'string' ? k.creator : (k.creator?.display_name ?? k.creator?.email ?? ''),
+                meta:
+                  typeof k.creator === 'string'
+                    ? k.creator
+                    : (k.creator?.display_name ?? k.creator?.email ?? ''),
               })),
               more: Math.max(0, keys - 5),
             }
@@ -95,7 +110,9 @@ function UnarchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDia
       }
       confirmLabel="Unarchive"
       altLabel={keys ? 'Revoke keys first' : undefined}
-      onAlternative={keys ? () => navigate(`${projectPath(project.slug, 'settings')}?tab=apikeys`) : undefined}
+      onAlternative={
+        keys ? () => navigate(`${projectPath(project.slug, 'settings')}?tab=apikeys`) : undefined
+      }
       onConfirm={async () => {
         try {
           await unarchive.mutateAsync(project);
@@ -123,7 +140,17 @@ function DeleteProjectDialogInner({ project, open, onOpenChange, onArchiveInstea
   useEffect(() => {
     fetchDeletionPreview(project.id)
       .then(setPreview)
-      .catch((e) => setPreview({ project_id: project.id, name: project.name, slug: project.slug, archived: !project.is_active, counts: {}, can_delete: false, blocked_reason: errorText(e) }));
+      .catch((e) =>
+        setPreview({
+          project_id: project.id,
+          name: project.name,
+          slug: project.slug,
+          archived: !project.is_active,
+          counts: {},
+          can_delete: false,
+          blocked_reason: errorText(e),
+        }),
+      );
   }, [project]);
   const counts = Object.entries(preview?.counts ?? {}).filter(([, n]) => n > 0);
   if (preview && !preview.can_delete) {
@@ -151,7 +178,14 @@ function DeleteProjectDialogInner({ project, open, onOpenChange, onArchiveInstea
       title={`Delete “${project.name}”?`}
       tone="danger"
       description="This permanently deletes the project and everything in it. This cannot be undone."
-      warning={counts.length ? { lead: 'This will also delete', items: counts.map(([k, n]) => ({ title: k.replace(/_/g, ' '), meta: String(n) })) } : undefined}
+      warning={
+        counts.length
+          ? {
+              lead: 'This will also delete',
+              items: counts.map(([k, n]) => ({ title: k.replace(/_/g, ' '), meta: String(n) })),
+            }
+          : undefined
+      }
       requireText={project.name}
       inputLabel={`Type “${project.name}” to confirm`}
       confirmLabel="Delete project"

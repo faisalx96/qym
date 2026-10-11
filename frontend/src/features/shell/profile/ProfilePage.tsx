@@ -6,7 +6,20 @@ import { useDocumentTitle } from '../hooks';
 import { constrained } from '../layout';
 import { projectPath } from '@/app/routes';
 import { api, ApiError } from '@/lib/http';
-import { Button, DataTable, Identicon, KeyValueGrid, PageHeader, SectionHeader, Stack, Tag, Text, TextField, useToast, type Column } from '@/ui';
+import {
+  Button,
+  DataTable,
+  Identicon,
+  KeyValueGrid,
+  PageHeader,
+  SectionHeader,
+  Stack,
+  Tag,
+  Text,
+  TextField,
+  useToast,
+  type Column,
+} from '@/ui';
 import type { Project } from '@/api/types';
 import styles from './ProfilePage.module.css';
 
@@ -58,7 +71,15 @@ export function ProfilePage() {
                 { key: 'display_name', label: 'Display name', value: me.display_name || '—' },
                 { key: 'email', label: 'Email', value: me.email, mono: true },
                 { key: 'role', label: 'Global role', value: <Tag kind="role">{me.role}</Tag> },
-                { key: 'default', label: 'Default project', value: me.default_project ? <Link to={projectPath(me.default_project.slug)}>{me.default_project.name}</Link> : '—' },
+                {
+                  key: 'default',
+                  label: 'Default project',
+                  value: me.default_project ? (
+                    <Link to={projectPath(me.default_project.slug)}>{me.default_project.name}</Link>
+                  ) : (
+                    '—'
+                  ),
+                },
                 { key: 'auth', label: 'Sign-in method', value: me.auth_type?.replace(/_/g, ' ') ?? '—' },
               ]}
             />
@@ -66,8 +87,18 @@ export function ProfilePage() {
         </section>
         {me.can_bootstrap_admin && !isAdmin ? <BootstrapAdminPanel onGranted={refetch} /> : null}
         <section>
-          <SectionHeader title="Projects" description={`${me.projects.length} project${me.projects.length === 1 ? '' : 's'}`} />
-          <DataTable aria-label="Your projects" columns={COLUMNS} rows={me.projects} rowKey={(p) => p.id} storageKey="profile-projects" emptyState="You are not a member of any project yet." />
+          <SectionHeader
+            title="Projects"
+            description={`${me.projects.length} project${me.projects.length === 1 ? '' : 's'}`}
+          />
+          <DataTable
+            aria-label="Your projects"
+            columns={COLUMNS}
+            rows={me.projects}
+            rowKey={(p) => p.id}
+            storageKey="profile-projects"
+            emptyState="You are not a member of any project yet."
+          />
         </section>
       </Stack>
     </div>
@@ -79,17 +110,26 @@ function BootstrapAdminPanel({ onGranted }: { onGranted: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   const grant = useMutation({
-    mutationFn: () => api.post<{ ok: boolean; role: string }>('/v1/auth/bootstrap-admin', { bootstrap_token: token }),
+    mutationFn: () =>
+      api.post<{ ok: boolean; role: string }>('/v1/auth/bootstrap-admin', { bootstrap_token: token }),
     onSuccess: () => {
       toast.show('Admin access granted. Refreshing…', { tone: 'success' });
       setTimeout(() => window.location.reload(), 600);
       onGranted();
     },
-    onError: (e) => setError(e instanceof ApiError ? e.detail || (e.status === 409 ? 'An admin already exists.' : 'Invalid token.') : String(e)),
+    onError: (e) =>
+      setError(
+        e instanceof ApiError
+          ? e.detail || (e.status === 409 ? 'An admin already exists.' : 'Invalid token.')
+          : String(e),
+      ),
   });
   return (
     <section data-bootstrap-admin>
-      <SectionHeader title="Grant admin access" description="Enter the bootstrap token from QYM_ADMIN_BOOTSTRAP_TOKEN to become the first administrator." />
+      <SectionHeader
+        title="Grant admin access"
+        description="Enter the bootstrap token from QYM_ADMIN_BOOTSTRAP_TOKEN to become the first administrator."
+      />
       <form
         className={styles.bootstrapForm}
         onSubmit={(e) => {
@@ -98,7 +138,16 @@ function BootstrapAdminPanel({ onGranted }: { onGranted: () => void }) {
           grant.mutate();
         }}
       >
-        <TextField label="Bootstrap token" hideLabel placeholder="Bootstrap token" value={token} onChange={setToken} mono width={320} errorMessage={error ?? undefined} />
+        <TextField
+          label="Bootstrap token"
+          hideLabel
+          placeholder="Bootstrap token"
+          value={token}
+          onChange={setToken}
+          mono
+          width={320}
+          errorMessage={error ?? undefined}
+        />
         <Button type="submit" variant="primary" isDisabled={!token.trim()} loading={grant.isPending}>
           Grant admin
         </Button>

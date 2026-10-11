@@ -12,8 +12,15 @@ export interface MockRoute {
   component: LazyExoticComponent<ComponentType> | ComponentType;
 }
 
-export const mockRoutes: MockRoute[] = [];
+// `var` + lazy init on purpose: the register files imported at the bottom of this
+// module import `registerMock` back from here, so they evaluate BEFORE this body
+// runs; a `const` would still be in its temporal dead zone at that point.
+// eslint-disable-next-line no-var
+export var mockRoutes: MockRoute[];
+mockRoutes ??= [];
 
 export function registerMock(route: MockRoute): void {
-  mockRoutes.push(route);
+  (mockRoutes ??= []).push(route);
 }
+// Area agents append one line per area, e.g.
+// import '@/features/runs/__mocks__/register';

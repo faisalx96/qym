@@ -46,7 +46,10 @@
   border-radius: 3px;
 }
 
-.link:hover { color: var(--text-primary); text-decoration: none; }
+.link:hover {
+  color: var(--text-primary);
+  text-decoration: none;
+}
 
 .current {
   color: var(--text-primary);

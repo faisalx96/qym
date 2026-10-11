@@ -1,9 +1,28 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { fetchRemovalPreview, useAddMember, useMemberCandidates, useMembers, useRemoveMember, useUpdateMemberRole } from '@/api/projectSettings';
+import {
+  fetchRemovalPreview,
+  useAddMember,
+  useMemberCandidates,
+  useMembers,
+  useRemoveMember,
+  useUpdateMemberRole,
+} from '@/api/projectSettings';
 import type { Member, MemberCandidate, RemovalPreview } from '@/api/types';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
-import { Button, ConfirmDialog, DataTable, ErrorState, Select, Skeleton, Stack, Tag, Text, useToast, type Column } from '@/ui';
+import {
+  Button,
+  ConfirmDialog,
+  DataTable,
+  ErrorState,
+  Select,
+  Skeleton,
+  Stack,
+  Tag,
+  Text,
+  useToast,
+  type Column,
+} from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
@@ -36,7 +55,14 @@ export function MembersTab() {
       cell: (m) =>
         canManage && !readOnly ? (
           <span className={styles.inlineActions}>
-            <Select label={`Role for ${m.email}`} hideLabel items={ROLE_ITEMS} value={pendingRoles[m.user_id] ?? m.role} onChange={(k) => setPendingRoles((p) => ({ ...p, [m.user_id]: k as Role }))} width={120} />
+            <Select
+              label={`Role for ${m.email}`}
+              hideLabel
+              items={ROLE_ITEMS}
+              value={pendingRoles[m.user_id] ?? m.role}
+              onChange={(k) => setPendingRoles((p) => ({ ...p, [m.user_id]: k as Role }))}
+              width={120}
+            />
             {pendingRoles[m.user_id] && pendingRoles[m.user_id] !== m.role ? (
               <Button
                 variant="accent"
@@ -51,7 +77,10 @@ export function MembersTab() {
                     });
                     toast.show('Role saved', { tone: 'success' });
                   } catch (e) {
-                    toast.show(e instanceof ApiError ? e.detail || 'Could not save role' : 'Could not save role', { tone: 'error' });
+                    toast.show(
+                      e instanceof ApiError ? e.detail || 'Could not save role' : 'Could not save role',
+                      { tone: 'error' },
+                    );
                   }
                 }}
               >
@@ -79,7 +108,15 @@ export function MembersTab() {
               try {
                 setRemoving({ member: m, preview: await fetchRemovalPreview(project.id, m.user_id) });
               } catch {
-                setRemoving({ member: m, preview: { project_id: project.id, user_id: m.user_id, owned_runs: 0, owned_deleted_runs: 0 } });
+                setRemoving({
+                  member: m,
+                  preview: {
+                    project_id: project.id,
+                    user_id: m.user_id,
+                    owned_runs: 0,
+                    owned_deleted_runs: 0,
+                  },
+                });
               }
             }}
           >
@@ -95,13 +132,25 @@ export function MembersTab() {
     <Stack gap="lg">
       {canManage && !readOnly ? <AddMemberBar projectId={project.id} existing={members.data ?? []} /> : null}
       {members.isError ? (
-        <ErrorState error={members.error} title="Couldn’t load members" onRetry={() => members.refetch()} compact />
+        <ErrorState
+          error={members.error}
+          title="Couldn’t load members"
+          onRetry={() => members.refetch()}
+          compact
+        />
       ) : members.isPending ? (
         showSkeleton ? (
           <Skeleton kind="table" rows={3} />
         ) : null
       ) : (
-        <DataTable aria-label="Members" columns={columns} rows={members.data} rowKey={(m) => m.user_id} storageKey="settings-members" emptyState="No members yet." />
+        <DataTable
+          aria-label="Members"
+          columns={columns}
+          rows={members.data}
+          rowKey={(m) => m.user_id}
+          storageKey="settings-members"
+          emptyState="No members yet."
+        />
       )}
       {removing ? (
         <ConfirmDialog
@@ -109,12 +158,20 @@ export function MembersTab() {
           onOpenChange={(o) => !o && setRemoving(null)}
           title={`Remove ${removing.member.display_name || removing.member.email}?`}
           tone="danger"
-          description={['Their API keys for this project are revoked.', removing.preview?.owned_runs ? `They own ${removing.preview.owned_runs} run${removing.preview.owned_runs === 1 ? '' : 's'} here.` : 'They own no runs in this project.']}
+          description={[
+            'Their API keys for this project are revoked.',
+            removing.preview?.owned_runs
+              ? `They own ${removing.preview.owned_runs} run${removing.preview.owned_runs === 1 ? '' : 's'} here.`
+              : 'They own no runs in this project.',
+          ]}
           note={
             removing.preview?.owned_runs ? (
               <Select
                 label="Transfer their runs to"
-                items={[{ key: '', label: 'Keep the runs (no transfer)' }, ...others.map((m) => ({ key: m.user_id, label: m.display_name || m.email }))]}
+                items={[
+                  { key: '', label: 'Keep the runs (no transfer)' },
+                  ...others.map((m) => ({ key: m.user_id, label: m.display_name || m.email })),
+                ]}
                 value={transferTo ?? ''}
                 onChange={(k) => setTransferTo(k ? String(k) : null)}
               />
@@ -123,7 +180,10 @@ export function MembersTab() {
           confirmLabel="Remove member"
           onConfirm={async () => {
             try {
-              await removeMember.mutateAsync({ userId: removing.member.user_id, transferTo: transferTo ?? undefined });
+              await removeMember.mutateAsync({
+                userId: removing.member.user_id,
+                transferTo: transferTo ?? undefined,
+              });
               toast.show('Member removed', { tone: 'info' });
             } catch (e) {
               throw new Error(e instanceof ApiError ? e.detail || 'Could not remove' : String(e));
@@ -174,7 +234,10 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
           setPicked(null);
           setQuery('');
         } catch (err) {
-          toast.show(err instanceof ApiError ? err.detail || 'Could not add member' : 'Could not add member', { tone: 'error' });
+          toast.show(
+            err instanceof ApiError ? err.detail || 'Could not add member' : 'Could not add member',
+            { tone: 'error' },
+          );
         }
       }}
     >
@@ -238,7 +301,13 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
           </ul>
         ) : null}
       </div>
-      <Select label="Role" items={ROLE_ITEMS} value={role} onChange={(k) => setRole((k as Role) ?? 'MEMBER')} width={130} />
+      <Select
+        label="Role"
+        items={ROLE_ITEMS}
+        value={role}
+        onChange={(k) => setRole((k as Role) ?? 'MEMBER')}
+        width={130}
+      />
       <Button type="submit" variant="primary" isDisabled={!picked} loading={add.isPending}>
         Add
       </Button>

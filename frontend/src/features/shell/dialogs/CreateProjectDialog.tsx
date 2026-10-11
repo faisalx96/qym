@@ -35,16 +35,26 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
       submittingLabel="Creating…"
       fields={[
         { name: 'name', label: 'Name', required: true, autoFocus: true, placeholder: 'Customer support bot' },
-        { name: 'slug', label: 'Slug', mono: true, placeholder: 'customer-support-bot', help: 'Lowercase letters, digits and dashes.' },
+        {
+          name: 'slug',
+          label: 'Slug',
+          mono: true,
+          placeholder: 'customer-support-bot',
+          help: 'Lowercase letters, digits and dashes.',
+        },
       ]}
       onChange={(values, changed) => {
         if (changed === 'slug') slugEdited.current = true;
-        if (changed === 'name' && !slugEdited.current) return { ...values, slug: slugify(String(values.name)) };
+        if (changed === 'name' && !slugEdited.current)
+          return { ...values, slug: slugify(String(values.name)) };
         return undefined;
       }}
       onSubmit={async (values) => {
         try {
-          const project = await create.mutateAsync({ name: String(values.name).trim(), slug: String(values.slug).trim() || undefined });
+          const project = await create.mutateAsync({
+            name: String(values.name).trim(),
+            slug: String(values.slug).trim() || undefined,
+          });
           toast.show(`Created ${project.name}`, { tone: 'success' });
           navigate(projectPath(project.slug));
         } catch (e) {

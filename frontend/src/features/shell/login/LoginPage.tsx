@@ -53,7 +53,12 @@ export function LoginPage() {
             <Skeleton kind="lines" rows={4} label="Loading sign-in options" />
           ) : null
         ) : providers.isError ? (
-          <ErrorState error={providers.error} title="Couldn’t load sign-in options" onRetry={() => providers.refetch()} compact />
+          <ErrorState
+            error={providers.error}
+            title="Couldn’t load sign-in options"
+            onRetry={() => providers.refetch()}
+            compact
+          />
         ) : (
           <LoginBody providers={providers.data.providers} localAuth={providers.data.local_auth} next={next} />
         )}
@@ -62,7 +67,15 @@ export function LoginPage() {
   );
 }
 
-function LoginBody({ providers, localAuth, next }: { providers: AuthProvider[]; localAuth: { enabled: boolean; signup_enabled: boolean }; next: string }) {
+function LoginBody({
+  providers,
+  localAuth,
+  next,
+}: {
+  providers: AuthProvider[];
+  localAuth: { enabled: boolean; signup_enabled: boolean };
+  next: string;
+}) {
   const enabled = providers.filter((p) => p.enabled);
   const [mode, setMode] = useState<Mode>('signin');
   if (!localAuth.enabled && enabled.length === 0) {
@@ -72,8 +85,18 @@ function LoginBody({ providers, localAuth, next }: { providers: AuthProvider[]; 
         compact
         icon={<Icon name="shield" />}
         title="No login methods are configured"
-        body={authMode === 'none' ? 'This deployment signs everyone in automatically; open the app directly.' : 'Ask the platform administrator to enable password sign-in or an identity provider.'}
-        action={authMode === 'none' ? <Button variant="primary" onPress={() => window.location.assign(next)}>Open qym</Button> : undefined}
+        body={
+          authMode === 'none'
+            ? 'This deployment signs everyone in automatically; open the app directly.'
+            : 'Ask the platform administrator to enable password sign-in or an identity provider.'
+        }
+        action={
+          authMode === 'none' ? (
+            <Button variant="primary" onPress={() => window.location.assign(next)}>
+              Open qym
+            </Button>
+          ) : undefined
+        }
       />
     );
   }
@@ -81,12 +104,23 @@ function LoginBody({ providers, localAuth, next }: { providers: AuthProvider[]; 
     <Stack gap="lg">
       {localAuth.enabled ? (
         <>
-          {mode === 'change-password' ? null : mode === 'signup' ? <SignupForm next={next} onBack={() => setMode('signin')} /> : <PasswordForm next={next} onNeedsChange={() => setMode('change-password')} />}
-          {mode === 'change-password' ? <ChangePasswordForm next={next} onBack={() => setMode('signin')} /> : null}
+          {mode === 'change-password' ? null : mode === 'signup' ? (
+            <SignupForm next={next} onBack={() => setMode('signin')} />
+          ) : (
+            <PasswordForm next={next} onNeedsChange={() => setMode('change-password')} />
+          )}
+          {mode === 'change-password' ? (
+            <ChangePasswordForm next={next} onBack={() => setMode('signin')} />
+          ) : null}
           {mode === 'signin' && localAuth.signup_enabled ? (
             <Text variant="sm" as="p" className={styles.switch}>
               New to qym?{' '}
-              <button type="button" className={styles.link} onClick={() => setMode('signup')} data-signup-toggle>
+              <button
+                type="button"
+                className={styles.link}
+                onClick={() => setMode('signup')}
+                data-signup-toggle
+              >
                 Create an account
               </button>
             </Text>
@@ -101,7 +135,12 @@ function LoginBody({ providers, localAuth, next }: { providers: AuthProvider[]; 
       {enabled.length ? (
         <Stack gap="sm" data-providers>
           {enabled.map((p) => (
-            <a key={p.id} className={styles.provider} href={`${platformUrl(`/v1/auth/login/${encodeURIComponent(p.id)}`)}?next=${encodeURIComponent(next)}`} data-provider={p.id}>
+            <a
+              key={p.id}
+              className={styles.provider}
+              href={`${platformUrl(`/v1/auth/login/${encodeURIComponent(p.id)}`)}?next=${encodeURIComponent(next)}`}
+              data-provider={p.id}
+            >
               <Icon name="external" size={14} />
               <span>Continue with {p.label}</span>
             </a>
@@ -114,7 +153,12 @@ function LoginBody({ providers, localAuth, next }: { providers: AuthProvider[]; 
 
 function StatusLine({ status }: { status: Status | null }) {
   return (
-    <p className={styles.status} role={status?.tone === 'error' ? 'alert' : 'status'} data-tone={status?.tone} aria-live="polite">
+    <p
+      className={styles.status}
+      role={status?.tone === 'error' ? 'alert' : 'status'}
+      data-tone={status?.tone}
+      aria-live="polite"
+    >
       {status?.text ?? ''}
     </p>
   );
@@ -132,7 +176,11 @@ function PasswordForm({ next, onNeedsChange }: { next: string; onNeedsChange: ()
     setBusy(true);
     setStatus(null);
     try {
-      const res = await api.post<{ ok: boolean; next?: string }>(`/v1/auth/login/password?next=${encodeURIComponent(next)}`, { email: email.trim(), password }, { silent401: true });
+      const res = await api.post<{ ok: boolean; next?: string }>(
+        `/v1/auth/login/password?next=${encodeURIComponent(next)}`,
+        { email: email.trim(), password },
+        { silent401: true },
+      );
       window.location.assign(sameOriginTarget(res.next, next));
     } catch (err) {
       if (err instanceof ApiError && err.status === 403 && err.code === 'password_change_required') {
@@ -141,7 +189,11 @@ function PasswordForm({ next, onNeedsChange }: { next: string; onNeedsChange: ()
         onNeedsChange();
         return;
       }
-      const text = err instanceof ApiError ? err.detail || (err.status === 429 ? 'Too many attempts. Try again later.' : 'Invalid email or password') : 'The server could not be reached.';
+      const text =
+        err instanceof ApiError
+          ? err.detail ||
+            (err.status === 429 ? 'Too many attempts. Try again later.' : 'Invalid email or password')
+          : 'The server could not be reached.';
       setStatus({ tone: 'error', text });
       setPassword('');
       setClearKey((k) => k + 1);
@@ -152,8 +204,29 @@ function PasswordForm({ next, onNeedsChange }: { next: string; onNeedsChange: ()
 
   return (
     <form className={styles.form} onSubmit={submit} data-password-form>
-      <TextField label="Email" type="email" name="email" size="auth" value={email} onChange={setEmail} autoComplete="username" isRequired autoFocus />
-      <TextField key={clearKey} label="Password" type="password" name="password" size="auth" value={password} onChange={setPassword} autoComplete="current-password" isRequired autoFocus={clearKey > 0} />
+      <TextField
+        label="Email"
+        type="email"
+        name="email"
+        size="auth"
+        value={email}
+        onChange={setEmail}
+        autoComplete="username"
+        isRequired
+        autoFocus
+      />
+      <TextField
+        key={clearKey}
+        label="Password"
+        type="password"
+        name="password"
+        size="auth"
+        value={password}
+        onChange={setPassword}
+        autoComplete="current-password"
+        isRequired
+        autoFocus={clearKey > 0}
+      />
       <StatusLine status={status} />
       <Button type="submit" variant="primary" size="md" loading={busy} className={styles.submit}>
         Sign in
@@ -168,16 +241,24 @@ function ChangePasswordForm({ next, onBack }: { next: string; onBack: () => void
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<Status | null>({ tone: 'info', text: 'Your password was reset. Choose a new one to continue.' });
+  const [status, setStatus] = useState<Status | null>({
+    tone: 'info',
+    text: 'Your password was reset. Choose a new one to continue.',
+  });
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (password !== confirm) return setStatus({ tone: 'error', text: 'The passwords do not match.' });
     if (password.length < 8) return setStatus({ tone: 'error', text: 'Use at least 8 characters.' });
-    if (password === temporary) return setStatus({ tone: 'error', text: 'Choose a password different from the temporary one.' });
+    if (password === temporary)
+      return setStatus({ tone: 'error', text: 'Choose a password different from the temporary one.' });
     setBusy(true);
     try {
-      const res = await api.post<{ ok: boolean; next?: string }>(`/v1/auth/password/change?next=${encodeURIComponent(next)}`, { email, current_password: temporary, new_password: password }, { silent401: true });
+      const res = await api.post<{ ok: boolean; next?: string }>(
+        `/v1/auth/password/change?next=${encodeURIComponent(next)}`,
+        { email, current_password: temporary, new_password: password },
+        { silent401: true },
+      );
       sessionStorage.removeItem('qym:login-temp');
       window.location.assign(sameOriginTarget(res.next, next));
     } catch (err) {
@@ -187,7 +268,13 @@ function ChangePasswordForm({ next, onBack }: { next: string; onBack: () => void
         setTimeout(onBack, 1200);
         return;
       }
-      setStatus({ tone: 'error', text: err instanceof ApiError ? err.detail || 'Could not change the password.' : 'The server could not be reached.' });
+      setStatus({
+        tone: 'error',
+        text:
+          err instanceof ApiError
+            ? err.detail || 'Could not change the password.'
+            : 'The server could not be reached.',
+      });
     } finally {
       setBusy(false);
     }
@@ -199,8 +286,25 @@ function ChangePasswordForm({ next, onBack }: { next: string; onBack: () => void
         Choose a new password
       </Text>
       <TextField label="Email" type="email" size="auth" value={email} isReadOnly autoComplete="username" />
-      <TextField label="New password" type="password" size="auth" value={password} onChange={setPassword} autoComplete="new-password" isRequired autoFocus />
-      <TextField label="Confirm new password" type="password" size="auth" value={confirm} onChange={setConfirm} autoComplete="new-password" isRequired />
+      <TextField
+        label="New password"
+        type="password"
+        size="auth"
+        value={password}
+        onChange={setPassword}
+        autoComplete="new-password"
+        isRequired
+        autoFocus
+      />
+      <TextField
+        label="Confirm new password"
+        type="password"
+        size="auth"
+        value={confirm}
+        onChange={setConfirm}
+        autoComplete="new-password"
+        isRequired
+      />
       <StatusLine status={status} />
       <Button type="submit" variant="primary" size="md" loading={busy} className={styles.submit}>
         Change password and sign in
@@ -225,10 +329,20 @@ function SignupForm({ next, onBack }: { next: string; onBack: () => void }) {
     setBusy(true);
     setStatus(null);
     try {
-      const res = await api.post<{ ok: boolean; next?: string }>(`/v1/auth/signup/password?next=${encodeURIComponent(next)}`, { email: email.trim(), password, display_name: displayName.trim() }, { silent401: true });
+      const res = await api.post<{ ok: boolean; next?: string }>(
+        `/v1/auth/signup/password?next=${encodeURIComponent(next)}`,
+        { email: email.trim(), password, display_name: displayName.trim() },
+        { silent401: true },
+      );
       window.location.assign(sameOriginTarget(res.next, next));
     } catch (err) {
-      setStatus({ tone: 'error', text: err instanceof ApiError ? err.detail || 'Could not create the account.' : 'The server could not be reached.' });
+      setStatus({
+        tone: 'error',
+        text:
+          err instanceof ApiError
+            ? err.detail || 'Could not create the account.'
+            : 'The server could not be reached.',
+      });
     } finally {
       setBusy(false);
     }
@@ -239,9 +353,33 @@ function SignupForm({ next, onBack }: { next: string; onBack: () => void }) {
       <Text variant="md" as="h2">
         Create an account
       </Text>
-      <TextField label="Display name" size="auth" value={displayName} onChange={setDisplayName} autoComplete="name" autoFocus />
-      <TextField label="Email" type="email" size="auth" value={email} onChange={setEmail} autoComplete="username" isRequired />
-      <TextField label="Password" type="password" size="auth" value={password} onChange={setPassword} autoComplete="new-password" isRequired help="At least 8 characters." />
+      <TextField
+        label="Display name"
+        size="auth"
+        value={displayName}
+        onChange={setDisplayName}
+        autoComplete="name"
+        autoFocus
+      />
+      <TextField
+        label="Email"
+        type="email"
+        size="auth"
+        value={email}
+        onChange={setEmail}
+        autoComplete="username"
+        isRequired
+      />
+      <TextField
+        label="Password"
+        type="password"
+        size="auth"
+        value={password}
+        onChange={setPassword}
+        autoComplete="new-password"
+        isRequired
+        help="At least 8 characters."
+      />
       <StatusLine status={status} />
       <Button type="submit" variant="primary" size="md" loading={busy} className={styles.submit}>
         Create account

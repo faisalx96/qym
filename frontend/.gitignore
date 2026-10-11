@@ -8,3 +8,4 @@ blob-report/
 .qym-dev.db
 *.db-journal
 .vite/
+*.tsbuildinfo

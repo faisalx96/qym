@@ -33,7 +33,9 @@ export function useSidebarCollapsed(): [boolean, () => void, boolean] {
 }
 
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => (typeof window !== 'undefined' ? window.matchMedia(query).matches : false));
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : false,
+  );
   useEffect(() => {
     const mql = window.matchMedia(query);
     const on = () => setMatches(mql.matches);

@@ -29,7 +29,10 @@ export function TopbarStatsProvider({ children }: { children: ReactNode }) {
 }
 
 /** Pages publish their KPIs into the topbar; cleared when the page unmounts. */
-export function useTopbarStats(stats: TopbarStat[] | null, options: { scope?: string; scopeTitle?: string } = {}): void {
+export function useTopbarStats(
+  stats: TopbarStat[] | null,
+  options: { scope?: string; scopeTitle?: string } = {},
+): void {
   const ctx = useContext(TopbarStatsContext);
   const { scope, scopeTitle } = options;
   useEffect(() => {
