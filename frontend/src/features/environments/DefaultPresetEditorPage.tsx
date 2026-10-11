@@ -12,6 +12,7 @@ import {
   useCreatePreset,
   usePublishPresetVersion,
   presetsKey,
+  fetchPresets,
   type PresetConfig,
 } from '@/api/evalEnvironments';
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
@@ -29,6 +30,12 @@ import { ConfirmDialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton
 import { EditorEntry } from './editor/EditorEntry';
 import { PublishPane, type PublishPaneProps } from './editor/PublishPane';
 import { runPublish } from './editor/publish';
+import { publishFailure } from '@/features/experiments/launch/model';
+
+const conflictOutcome = (message: string) => ({
+  kind: 'conflict' as const,
+  message: (publishFailure(409, message, []) as { message: string }).message,
+});
 
 const SECTIONS: SectionId[] = ['models', 'settings', 'evaluation', 'raw'];
 
@@ -106,6 +113,26 @@ function EditorBody({
     if (!ok) return;
     setSaving(true);
     setFailure(null);
+    // The publish endpoint appends a version whatever the editor started from, so a tab that went
+    // stale would silently overwrite a newer version: compare with the server first.
+    try {
+      const latest = (await fetchPresets(projectId, envId)).presets.find((p) => p.kind === 'official');
+      const now = latest?.current_version?.version ?? null;
+      if (now !== editor.currentVersion) {
+        setSaving(false);
+        void qc.invalidateQueries({ queryKey: presetsKey(projectId, envId) });
+        setFailure(
+          conflictOutcome(
+            now == null
+              ? 'The default preset was removed meanwhile'
+              : `v${now} of the default preset was published meanwhile`,
+          ),
+        );
+        return;
+      }
+    } catch {
+      // The publish itself reports a network or permission problem.
+    }
     const outcome = await runPublish(
       {
         create: (body) => create.mutateAsync(body),

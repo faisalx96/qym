@@ -332,6 +332,10 @@ export interface PresetList {
 
 export const presetsKey = (projectId: string, envId: string) => ['eval-presets', projectId, envId] as const;
 
+export function fetchPresets(projectId: string, envId: string): Promise<PresetList> {
+  return api.get<PresetList>(`${envBase(projectId, envId)}/presets`);
+}
+
 export function usePresets(projectId: string | undefined, envId: string | undefined) {
   return useQuery({
     queryKey: presetsKey(projectId ?? '', envId ?? ''),
