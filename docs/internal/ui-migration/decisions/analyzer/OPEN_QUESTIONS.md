@@ -11,3 +11,8 @@
 - 2026-10-11 Q10 footer: plain `--bg-surface` bar with a border, no blur or translucent rgba.
 - 2026-10-11 Compare/legacy URLs: `/run/:id/analyzer`, `/projects/:slug/runs/:id/analyzer` redirect to `/projects/:slug/analysis?run=ID` (query kept); wired in router.tsx, not in the run-detail area's code.
 - 2026-10-11 Test infra: e2e platform gets `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true` and a stub OpenAI-compatible server (`frontend/scripts/stub_llm.py`); `QYM_ROLE=api` dropped from the Playwright env (as in ui/overview-runs-list) so job workers run.
+- 2026-10-12 Layout: guided flow (Configure, Preview, Run, Review) won the UX review (tie with rail, broken by J1/Fields/job-visibility); see UX_DECISION.md. Must-fixes applied: sticky job bar on every area, one progressbar/status, tests targets listed on the Run step, honest step notes, focus moved to the job bar, preview scrolled to the item message, Checkbox hidden-input anchor, vertical Tabs selectors scoped.
+- 2026-10-12 Rule version lineage graph (NICE) not built; versions list shows state, rule count, author and age.
+- 2026-10-12 Step is kept in the URL (`?step=`) next to `run/pass/metric/scope`; harmless extra param.
+- 2026-10-12 Foundation primitives touched: Tabs.module.css (vertical selectors now child combinators so nested horizontal Tabs are unaffected), Checkbox.module.css (position: relative on the label). Not fixed: SegmentedControl pill under dir=rtl (physical offset).
+- 2026-10-12 Dropped as agreed: compare-page modal, root-cause dashboard, regex "Fields:" badges, restore/permanent delete of rule versions.

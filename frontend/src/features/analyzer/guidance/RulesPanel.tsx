@@ -27,7 +27,7 @@ import {
   Text,
   useToast,
 } from '@/ui';
-import { estimateTokens, useDraftRules } from '../useDraftRules';
+import { useDraftRules } from '../useDraftRules';
 import { useRuleGenerator } from '../useRuleGenerator';
 import { RuleEditor } from './RuleEditor';
 import { CompareDialog, MergeDialog, PublishDialog } from './VersionDialogs';
@@ -364,12 +364,10 @@ function VersionWorkspace({
   const editable = version.status === 'draft' && canManage;
   const draft = useDraftRules(scope, version, editable);
   const settled = draft.state === 'idle' || draft.state === 'saved';
-  const tokens = estimateTokens(draft.rules);
   return (
     <div className={s.main}>
       <SectionHeader
         title={`Rules in v${version.version}`}
-        description={`${draft.rules.length} ${draft.rules.length === 1 ? 'rule' : 'rules'} · ~${tokens.toLocaleString()} prompt tokens`}
         aside={
           <div className={s.sourceRow}>
             <Badge tone={editable ? 'warning' : 'neutral'}>{editable ? 'Editable draft' : version.status === 'draft' ? 'Draft (read-only)' : 'Read-only'}</Badge>
