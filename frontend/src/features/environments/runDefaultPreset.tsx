@@ -20,7 +20,13 @@ import { usePromiseConfirm } from './usePromiseConfirm';
 export const PREEMPTION_ACK_REQUIRED = 'preemption_acknowledgement_required';
 
 export function canRunDefaultPreset(env: EvalEnvironment | undefined | null): boolean {
-  return Boolean(env && env.is_active && env.current_schema_id && env.official_preset_id && env.official_preset_version != null);
+  return Boolean(
+    env &&
+    env.is_active &&
+    env.current_schema_id &&
+    env.official_preset_id &&
+    env.official_preset_version != null,
+  );
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -32,7 +38,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
  * A temporary binding found here is stale data (publishing refuses them, a key is never
  * stored in a preset): the launch form opens instead, where the key can be entered.
  */
-export function launchBlocker(envName: string, version: PresetVersion, remap: RemapResult | null | undefined): string | null {
+export function launchBlocker(
+  envName: string,
+  version: PresetVersion,
+  remap: RemapResult | null | undefined,
+): string | null {
   const label = `Default preset v${version.version}`;
   if (!remap || remap.ok === false || (remap.errors ?? []).length) {
     return `${label} needs changes for the current schema of “${envName}”.`;
@@ -44,7 +54,9 @@ export function launchBlocker(envName: string, version: PresetVersion, remap: Re
   if (Object.values(bindings).some((b) => isObject(b) && b.temporary)) {
     return `${label} uses a temporary model, which needs its API key.`;
   }
-  const missing = (version.warnings ?? []).find((w) => w && (w.rule === 'connection_missing' || w.rule === 'connection_unavailable'));
+  const missing = (version.warnings ?? []).find(
+    (w) => w && (w.rule === 'connection_missing' || w.rule === 'connection_unavailable'),
+  );
   if (missing) return missing.message || 'A model of the default preset is not available.';
   return null;
 }
@@ -81,7 +93,13 @@ export function useRunDefaultPreset({ projectId, slug, canManage, onLaunched }: 
       try {
         let view;
         try {
-          view = await fetchPresetVersionView(projectId, env.id, env.official_preset_id!, env.official_preset_version!, true);
+          view = await fetchPresetVersionView(
+            projectId,
+            env.id,
+            env.official_preset_id!,
+            env.official_preset_version!,
+            true,
+          );
         } catch (error) {
           toast.show(errorMessage(error) || 'Could not load the default preset', { tone: 'error' });
           return;
@@ -92,7 +110,10 @@ export function useRunDefaultPreset({ projectId, slug, canManage, onLaunched }: 
         if ((remap.dropped ?? []).length) {
           const ok = await ask({
             title: 'Launch the default preset?',
-            description: [remap.summary || 'Some settings are no longer supported.', 'Those settings keep the environment’s own values.'],
+            description: [
+              remap.summary || 'Some settings are no longer supported.',
+              'Those settings keep the environment’s own values.',
+            ],
             confirmLabel: 'Launch anyway',
             cancelLabel: 'Don’t launch',
           });
@@ -105,13 +126,23 @@ export function useRunDefaultPreset({ projectId, slug, canManage, onLaunched }: 
           base_source: { kind: 'official', preset_version_id: version.id },
         };
         const confirmHigh = (lines: string[]) =>
-          ask({ title: 'Launch at HIGH priority?', description: lines, confirmLabel: 'Launch at HIGH', cancelLabel: 'Don’t launch', tone: 'danger' });
+          ask({
+            title: 'Launch at HIGH priority?',
+            description: lines,
+            confirmLabel: 'Launch at HIGH',
+            cancelLabel: 'Don’t launch',
+            tone: 'danger',
+          });
         if (env.default_priority === 'HIGH') {
-          if (!canManage) return review(`“${env.name}” launches at HIGH by default, which needs a project manager; pick a priority.`);
+          if (!canManage)
+            return review(
+              `“${env.name}” launches at HIGH by default, which needs a project manager; pick a priority.`,
+            );
           if (!(await confirmHigh([highPriorityWarning(env.name)]))) return;
           body.acknowledge_preemption = true;
         }
-        const send = () => api.post<{ id?: string }>(`/v1/projects/${encodeURIComponent(projectId)}/experiments`, body);
+        const send = () =>
+          api.post<{ id?: string }>(`/v1/projects/${encodeURIComponent(projectId)}/experiments`, body);
         let launched: { id?: string } | null = null;
         let failure: unknown = null;
         try {
@@ -137,7 +168,10 @@ export function useRunDefaultPreset({ projectId, slug, canManage, onLaunched }: 
           return;
         }
         const errors = failure instanceof ApiError && failure.status === 422 ? errorList(failure) : [];
-        if (errors.length) return review(`Default preset v${version.version} does not validate: ${errors[0]!.message || 'invalid value'}.`);
+        if (errors.length)
+          return review(
+            `Default preset v${version.version} does not validate: ${errors[0]!.message || 'invalid value'}.`,
+          );
         toast.show(errorMessage(failure) || 'Failed to launch the default preset', { tone: 'error' });
       } finally {
         setBusyId(null);

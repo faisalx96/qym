@@ -3,10 +3,22 @@
  * descriptor fields can fill a role, and the reducer behind the cards. Mirrors the rules of
  * `services/eval_model_slots.py`: a field fills one role of one key set of one slot.
  */
-import type { DescriptorEntry, EvalSlot, FormDescriptor, KeySet, SlotPayload, SlotRole, SlotStatus } from '@/api/evalEnvironments';
+import type {
+  DescriptorEntry,
+  EvalSlot,
+  FormDescriptor,
+  KeySet,
+  SlotPayload,
+  SlotRole,
+  SlotStatus,
+} from '@/api/evalEnvironments';
 
 export const ROLES: SlotRole[] = ['model', 'base_url', 'api_key'];
-export const ROLE_LABELS: Record<SlotRole, string> = { model: 'Model', base_url: 'Base URL', api_key: 'API key' };
+export const ROLE_LABELS: Record<SlotRole, string> = {
+  model: 'Model',
+  base_url: 'Base URL',
+  api_key: 'API key',
+};
 
 // Mirrors DEFAULT_SLOT_RULES in services/eval_model_slots.py.
 const ROLE_RULES: Record<SlotRole, { names: string[]; suffixes: string[]; types: string[] }> = {
@@ -92,7 +104,8 @@ export function endpointCandidates(d: FormDescriptor, endpointKey: string, role:
   const collection = endpointCollection(d);
   const item = collection?.item_pointer ? fields[collection.item_pointer] : undefined;
   if (!collection || !item) return [];
-  const rank = (e: DescriptorEntry) => (ROLE_RULES[role].names.includes(String(e.name).toLowerCase()) ? 0 : 1);
+  const rank = (e: DescriptorEntry) =>
+    ROLE_RULES[role].names.includes(String(e.name).toLowerCase()) ? 0 : 1;
   return (item.children ?? [])
     .map((p) => fields[p])
     .filter((e): e is DescriptorEntry => roleFits(e, role))
@@ -104,7 +117,8 @@ export function endpointCandidates(d: FormDescriptor, endpointKey: string, role:
 export function flatCandidates(d: FormDescriptor, role: SlotRole): string[] {
   const fields = fieldsOf(d);
   const suffixes = ROLE_RULES[role].suffixes;
-  const rank = (e: DescriptorEntry) => (suffixes.some((s) => String(e.name).toUpperCase().endsWith(s)) ? 0 : 1);
+  const rank = (e: DescriptorEntry) =>
+    suffixes.some((s) => String(e.name).toUpperCase().endsWith(s)) ? 0 : 1;
   return (d.root ?? [])
     .map((p) => fields[p])
     .filter((e): e is DescriptorEntry => roleFits(e, role))
@@ -262,7 +276,14 @@ export type SlotAction =
   | { type: 'general'; message: string };
 
 export function initSlotState(slots: EvalSlot[] = []): SlotEditorState {
-  return { slots: slots.map(normalizeSlot), removed: [], errors: {}, general: '', generalReload: false, notice: '' };
+  return {
+    slots: slots.map(normalizeSlot),
+    removed: [],
+    errors: {},
+    general: '',
+    generalReload: false,
+    notice: '',
+  };
 }
 
 function clearErrors(state: SlotEditorState, slotKey?: string): SlotEditorState {
@@ -273,19 +294,30 @@ function clearErrors(state: SlotEditorState, slotKey?: string): SlotEditorState 
 
 export function slotReducer(state: SlotEditorState, action: SlotAction): SlotEditorState {
   const update = (key: string, fn: (s: EditSlot) => EditSlot): SlotEditorState =>
-    clearErrors({ ...state, slots: state.slots.map((s) => (s.slot_key === key ? fn(s) : s)), notice: '' }, key);
+    clearErrors(
+      { ...state, slots: state.slots.map((s) => (s.slot_key === key ? fn(s) : s)), notice: '' },
+      key,
+    );
   switch (action.type) {
     case 'reset':
       return { ...initSlotState(action.slots), notice: action.notice ?? '' };
     case 'rename':
-      return { ...state, slots: state.slots.map((s) => (s.slot_key === action.slotKey ? { ...s, label: action.label } : s)) };
+      return {
+        ...state,
+        slots: state.slots.map((s) => (s.slot_key === action.slotKey ? { ...s, label: action.label } : s)),
+      };
     case 'setRole':
       return update(action.slotKey, (s) => {
-        const sets = keySets(s).map((set, i) => (i === action.setIdx ? { ...set, [action.role]: action.pointer } : set));
+        const sets = keySets(s).map((set, i) =>
+          i === action.setIdx ? { ...set, [action.role]: action.pointer } : set,
+        );
         return { ...s, field_map: sets[0]!, extra_field_maps: sets.slice(1) };
       });
     case 'addSet':
-      return update(action.slotKey, (s) => ({ ...s, extra_field_maps: [...s.extra_field_maps, emptyKeySet()] }));
+      return update(action.slotKey, (s) => ({
+        ...s,
+        extra_field_maps: [...s.extra_field_maps, emptyKeySet()],
+      }));
     case 'removeSet':
       return update(action.slotKey, (s) => ({
         ...s,
@@ -311,7 +343,12 @@ export function slotReducer(state: SlotEditorState, action: SlotAction): SlotEdi
       const merged: EditSlot = {
         ...dst,
         transport_fields: transport,
-        extra_field_maps: [...dst.extra_field_maps, ...keySets(src).filter((set) => set.model).map(normalizeKeySet)],
+        extra_field_maps: [
+          ...dst.extra_field_maps,
+          ...keySets(src)
+            .filter((set) => set.model)
+            .map(normalizeKeySet),
+        ],
       };
       const next = clearErrors(
         { ...state, slots: state.slots.filter((s) => s !== src).map((s) => (s === dst ? merged : s)) },
@@ -328,7 +365,12 @@ export function slotReducer(state: SlotEditorState, action: SlotAction): SlotEdi
       const slot = state.slots.find((s) => s.slot_key === action.slotKey);
       if (!slot || slot.required) return state;
       return clearErrors(
-        { ...state, slots: state.slots.filter((s) => s !== slot), removed: [...state.removed, slot], notice: '' },
+        {
+          ...state,
+          slots: state.slots.filter((s) => s !== slot),
+          removed: [...state.removed, slot],
+          notice: '',
+        },
         slot.slot_key,
       );
     }
@@ -337,7 +379,10 @@ export function slotReducer(state: SlotEditorState, action: SlotAction): SlotEdi
       if (!slot) return state;
       const removed = state.removed.filter((s) => s !== slot);
       if (state.slots.some((s) => s.slot_key === slot.slot_key)) {
-        return { ...state, general: `A slot ${slot.slot_key} already exists; remove it first to restore the old one.` };
+        return {
+          ...state,
+          general: `A slot ${slot.slot_key} already exists; remove it first to restore the old one.`,
+        };
       }
       // Fields another slot claimed meanwhile cannot be shared.
       const used = usedPointers(state.slots);
@@ -346,7 +391,9 @@ export function slotReducer(state: SlotEditorState, action: SlotAction): SlotEdi
         base_url: set.base_url && !used.has(set.base_url) ? set.base_url : null,
         api_key: set.api_key && !used.has(set.api_key) ? set.api_key : null,
       });
-      const transport = Object.fromEntries(Object.entries(slot.transport_fields).filter(([, p]) => !used.has(p)));
+      const transport = Object.fromEntries(
+        Object.entries(slot.transport_fields).filter(([, p]) => !used.has(p)),
+      );
       const restored: EditSlot = {
         ...slot,
         field_map: strip(slot.field_map),
@@ -366,7 +413,12 @@ export function slotReducer(state: SlotEditorState, action: SlotAction): SlotEdi
         undefined,
       );
     case 'setErrors':
-      return { ...state, errors: action.errors, general: action.general, generalReload: Boolean(action.reload) };
+      return {
+        ...state,
+        errors: action.errors,
+        general: action.general,
+        generalReload: Boolean(action.reload),
+      };
     case 'general':
       return { ...state, general: action.message, generalReload: false };
     default:
@@ -382,11 +434,14 @@ export function distributeSlotErrors(
   const byKey: Record<string, string[]> = {};
   const general: string[] = [];
   for (const e of errors) {
-    if (e.slot_key && slots.some((s) => s.slot_key === e.slot_key)) (byKey[e.slot_key] ??= []).push(e.message);
+    if (e.slot_key && slots.some((s) => s.slot_key === e.slot_key))
+      (byKey[e.slot_key] ??= []).push(e.message);
     else if (e.message) general.push(e.message);
   }
   return {
     errors: byKey,
-    general: general.join(' ') || (Object.keys(byKey).length ? 'Fix the highlighted slots, then confirm again.' : ''),
+    general:
+      general.join(' ') ||
+      (Object.keys(byKey).length ? 'Fix the highlighted slots, then confirm again.' : ''),
   };
 }

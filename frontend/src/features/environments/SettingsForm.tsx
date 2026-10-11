@@ -73,7 +73,10 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
       draft.base_url !== a.base_url ||
       draft.api_key !== '' ||
       draft.ranking_metric !== a.ranking_metric ||
-      !(Object.is(draft.ranking_k, a.ranking_k) || (Number.isNaN(draft.ranking_k) && Number.isNaN(a.ranking_k))) ||
+      !(
+        Object.is(draft.ranking_k, a.ranking_k) ||
+        (Number.isNaN(draft.ranking_k) && Number.isNaN(a.ranking_k))
+      ) ||
       draft.max_priority !== a.max_priority ||
       draft.default_priority !== a.default_priority ||
       draft.keysTouched
@@ -91,7 +94,10 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
     const baseUrl = draft.base_url.trim();
     if (!name) next.name = 'A name is required.';
     if (!baseUrl) next.base_url = 'A base URL is required.';
-    if (!Number.isNaN(draft.ranking_k) && (!Number.isInteger(draft.ranking_k) || draft.ranking_k < 1 || draft.ranking_k > 1000)) {
+    if (
+      !Number.isNaN(draft.ranking_k) &&
+      (!Number.isInteger(draft.ranking_k) || draft.ranking_k < 1 || draft.ranking_k > 1000)
+    ) {
       next.ranking_k = 'k must be a whole number from 1 to 1000.';
     }
     setErrors(next);
@@ -128,7 +134,9 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
   async function doDelete() {
     try {
       const r = await remove.mutateAsync();
-      toast.show(r.deleted ? `Deleted “${env.name}”` : `“${env.name}” is in use, so it was disabled`, { tone: 'success' });
+      toast.show(r.deleted ? `Deleted “${env.name}”` : `“${env.name}” is in use, so it was disabled`, {
+        tone: 'success',
+      });
       onDeleted();
     } catch (e) {
       setGeneral(mapEnvironmentError(e).general || 'Could not delete the environment.');
@@ -165,7 +173,11 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
           />
         </div>
       </Section>
-      <Section id="env-policies" title="Policies" description="Limits applied to experiments launched on this environment.">
+      <Section
+        id="env-policies"
+        title="Policies"
+        description="Limits applied to experiments launched on this environment."
+      >
         <div className={styles.formGrid}>
           <Select
             label="Max priority"
@@ -205,7 +217,11 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
         </div>
       </Section>
       {canEdit ? (
-        <Section id="env-connection" title="Connection" description="Changing the URL or key resets health until the next test.">
+        <Section
+          id="env-connection"
+          title="Connection"
+          description="Changing the URL or key resets health until the next test."
+        >
           <TextField
             label="Name"
             value={draft.name}
@@ -229,7 +245,11 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
             autoComplete="new-password"
             value={draft.api_key}
             maxLength={4096}
-            placeholder={env.api_key_set ? `Leave blank to keep ${env.api_key_hint || 'the stored key'}` : 'Paste the service API key'}
+            placeholder={
+              env.api_key_set
+                ? `Leave blank to keep ${env.api_key_hint || 'the stored key'}`
+                : 'Paste the service API key'
+            }
             errorMessage={errors.api_key}
             onChange={(v) => patch({ api_key: v }, 'api_key')}
           />

@@ -271,7 +271,11 @@ export interface VersioningDetails {
   fetched_at: string | null;
 }
 
-export function useVersioningDetails(projectId: string | undefined, envId: string | undefined, enabled = true) {
+export function useVersioningDetails(
+  projectId: string | undefined,
+  envId: string | undefined,
+  enabled = true,
+) {
   return useQuery({
     queryKey: ['eval-versioning-details', projectId ?? '', envId ?? ''],
     enabled: Boolean(projectId && envId && enabled),
@@ -336,7 +340,11 @@ export function usePresets(projectId: string | undefined, envId: string | undefi
   });
 }
 
-export function usePresetVersions(projectId: string | undefined, envId: string | undefined, presetId: string | null | undefined) {
+export function usePresetVersions(
+  projectId: string | undefined,
+  envId: string | undefined,
+  presetId: string | null | undefined,
+) {
   return useQuery({
     queryKey: ['eval-preset-versions', projectId ?? '', envId ?? '', presetId ?? ''],
     enabled: Boolean(projectId && envId && presetId),
@@ -383,7 +391,14 @@ export function usePresetVersionView(
   remapCurrent = false,
 ) {
   return useQuery({
-    queryKey: ['eval-preset-version', projectId ?? '', envId ?? '', presetId ?? '', version ?? 0, remapCurrent],
+    queryKey: [
+      'eval-preset-version',
+      projectId ?? '',
+      envId ?? '',
+      presetId ?? '',
+      version ?? 0,
+      remapCurrent,
+    ],
     enabled: Boolean(projectId && envId && presetId && version),
     queryFn: () => fetchPresetVersionView(projectId!, envId!, presetId!, version!, remapCurrent),
   });

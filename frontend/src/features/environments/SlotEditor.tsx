@@ -39,7 +39,10 @@ import {
 
 const NONE = '__none__';
 
-const STATUS_TAGS: Record<string, { label: string; tone?: 'success' | 'info' | 'warning'; kind?: 'accent'; title?: string }> = {
+const STATUS_TAGS: Record<
+  string,
+  { label: string; tone?: 'success' | 'info' | 'warning'; kind?: 'accent'; title?: string }
+> = {
   confirmed: { label: 'Confirmed', tone: 'success' },
   proposed: { label: 'Proposed', tone: 'info' },
   stale: { label: 'Stale', tone: 'warning', title: 'Its fields changed in the new schema' },
@@ -75,7 +78,11 @@ export const EMPTY_SLOT_SOURCE: SlotEditorSource = {
   descriptor: { root: [], fields: {}, groups: [], warnings: [] },
 };
 
-export function useSlotEditor(projectId: string, envId: string, source: SlotEditorSource = EMPTY_SLOT_SOURCE): SlotEditorController {
+export function useSlotEditor(
+  projectId: string,
+  envId: string,
+  source: SlotEditorSource = EMPTY_SLOT_SOURCE,
+): SlotEditorController {
   const [state, dispatch] = useReducer(slotReducer, source.slots, initSlotState);
   const [schemaId, setSchemaId] = useState(source.schemaId);
   const [descriptor, setDescriptor] = useState(source.descriptor);
@@ -107,7 +114,8 @@ export function useSlotEditor(projectId: string, envId: string, source: SlotEdit
           type: 'setErrors',
           errors: {},
           general: errorMessage(error) || 'Could not confirm the slots.',
-          reload: error instanceof ApiError && (error.status === 409 || errorCode(error) === 'schema_changed'),
+          reload:
+            error instanceof ApiError && (error.status === 409 || errorCode(error) === 'schema_changed'),
         });
       }
       return null;
@@ -169,11 +177,26 @@ export function useSlotEditor(projectId: string, envId: string, source: SlotEdit
     [descriptor, state.slots],
   );
 
-  return { state, dispatch, descriptor, busy: saveMutation.isPending, save, reload, load, addEndpoint, addFlat, adding };
+  return {
+    state,
+    dispatch,
+    descriptor,
+    busy: saveMutation.isPending,
+    save,
+    reload,
+    load,
+    addEndpoint,
+    addFlat,
+    adding,
+  };
 }
 
 /** Fresh slots and descriptor for an editor (never seeded from a stale cache). */
-export function useSlotEditorSource(projectId: string | undefined, envId: string | undefined, enabled: boolean) {
+export function useSlotEditorSource(
+  projectId: string | undefined,
+  envId: string | undefined,
+  enabled: boolean,
+) {
   return useQuery({
     queryKey: ['eval-slot-editor-source', projectId ?? '', envId ?? ''],
     enabled: Boolean(projectId && envId && enabled),
@@ -218,14 +241,20 @@ function RoleCell({
     return (
       <div className={styles.role}>
         <span className={styles.roleName}>{name}</span>
-        {value ? <span className={styles.pointer}>{value}</span> : <span className={styles.unmapped}>Not mapped</span>}
+        {value ? (
+          <span className={styles.pointer}>{value}</span>
+        ) : (
+          <span className={styles.unmapped}>Not mapped</span>
+        )}
       </div>
     );
   }
   const candidates = candidatesFor(editor.state.slots, editor.descriptor, slot, role, setIdx);
   if (value && !candidates.includes(value)) candidates.unshift(value);
   const items = [
-    ...(role === 'model' && value ? [] : [{ key: NONE, label: role === 'model' ? 'Pick a model field…' : 'Not mapped' }]),
+    ...(role === 'model' && value
+      ? []
+      : [{ key: NONE, label: role === 'model' ? 'Pick a model field…' : 'Not mapped' }]),
     ...candidates.map((p) => ({ key: p, label: p })),
   ];
   return (
@@ -255,9 +284,14 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
   const slot = useMemo(() => normalizeSlot(input), [input]);
   const sets = keySets(slot);
   const status = STATUS_TAGS[slot.status];
-  const mergeTargets = editor && !slot.required ? editor.state.slots.filter((s) => s.slot_key !== slot.slot_key) : [];
+  const mergeTargets =
+    editor && !slot.required ? editor.state.slots.filter((s) => s.slot_key !== slot.slot_key) : [];
   return (
-    <article className={styles.card} data-slot-key={slot.slot_key} data-error={errors.length ? '' : undefined}>
+    <article
+      className={styles.card}
+      data-slot-key={slot.slot_key}
+      data-error={errors.length ? '' : undefined}
+    >
       <header className={styles.header}>
         {editor ? (
           <TextField
@@ -308,7 +342,10 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
         ))}
         {editor ? (
           <div>
-            <Button variant="neutral" onPress={() => editor.dispatch({ type: 'addSet', slotKey: slot.slot_key })}>
+            <Button
+              variant="neutral"
+              onPress={() => editor.dispatch({ type: 'addSet', slotKey: slot.slot_key })}
+            >
               + Add another set of keys
             </Button>
           </div>
@@ -344,11 +381,16 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
               placeholder="Move keys into group…"
               value={null}
               items={mergeTargets.map((s) => ({ key: s.slot_key, label: s.label || s.slot_key }))}
-              onChange={(key) => key && editor.dispatch({ type: 'merge', srcKey: slot.slot_key, dstKey: String(key) })}
+              onChange={(key) =>
+                key && editor.dispatch({ type: 'merge', srcKey: slot.slot_key, dstKey: String(key) })
+              }
             />
           ) : null}
           {!slot.required ? (
-            <Button variant="danger" onPress={() => editor.dispatch({ type: 'remove', slotKey: slot.slot_key })}>
+            <Button
+              variant="danger"
+              onPress={() => editor.dispatch({ type: 'remove', slotKey: slot.slot_key })}
+            >
               Remove group
             </Button>
           ) : null}
@@ -520,8 +562,8 @@ function LoadedDialog({
       }
     >
       <p className={styles.hint}>
-        Each group is one LLM you pick a model for when launching. A group can fill several sets of keys: the model picked
-        for it is written into every set. Fields in no group stay plain inputs.
+        Each group is one LLM you pick a model for when launching. A group can fill several sets of keys: the
+        model picked for it is written into every set. Fields in no group stay plain inputs.
       </p>
       <SlotEditor controller={controller} />
     </Dialog>
@@ -536,7 +578,12 @@ export function SlotEditorDialog(props: SlotEditorDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={`LLM model groups · ${env.name}`} size="data">
       {source.isError ? (
-        <ErrorState error={source.error} title="Could not load the LLM settings" onRetry={() => void source.refetch()} compact />
+        <ErrorState
+          error={source.error}
+          title="Could not load the LLM settings"
+          onRetry={() => void source.refetch()}
+          compact
+        />
       ) : (
         <Skeleton kind="cards" count={2} label="Loading LLM settings" />
       )}

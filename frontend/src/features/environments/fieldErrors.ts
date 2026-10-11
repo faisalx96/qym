@@ -2,14 +2,24 @@
 import { ApiError } from '@/lib/http';
 import { errorMessage } from '@/api/evalCommon';
 
-export type EnvironmentField = 'name' | 'base_url' | 'api_key' | 'ranking_metric' | 'ranking_k' | 'max_priority' | 'default_priority';
+export type EnvironmentField =
+  'name' | 'base_url' | 'api_key' | 'ranking_metric' | 'ranking_k' | 'max_priority' | 'default_priority';
 export type FieldErrors = Partial<Record<EnvironmentField, string>>;
 
-const FIELDS: EnvironmentField[] = ['name', 'base_url', 'api_key', 'ranking_metric', 'ranking_k', 'max_priority', 'default_priority'];
+const FIELDS: EnvironmentField[] = [
+  'name',
+  'base_url',
+  'api_key',
+  'ranking_metric',
+  'ranking_k',
+  'max_priority',
+  'default_priority',
+];
 
 function fieldFromText(message: string): EnvironmentField | null {
   const text = message.toLowerCase();
-  if (/\b(base )?url\b|https:\/\/|query string|registered in another project|host/.test(text)) return 'base_url';
+  if (/\b(base )?url\b|https:\/\/|query string|registered in another project|host/.test(text))
+    return 'base_url';
   if (/api key|key encryption|whitespace or control/.test(text)) return 'api_key';
   if (/default priority/.test(text)) return 'default_priority';
   if (/max(imum)? priority|priority/.test(text)) return 'max_priority';

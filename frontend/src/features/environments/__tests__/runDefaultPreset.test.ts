@@ -16,7 +16,10 @@ const version = (warnings: PresetVersion['warnings'] = []): PresetVersion => ({
   published_at: '2026-01-01T00:00:00Z',
 });
 const remap = (over: Partial<RemapResult> = {}): RemapResult => ({
-  config: { evaluator: { dataset: 'golden' }, slot_bindings: { 'endpoint:primary': { connection_id: 'c1' } } },
+  config: {
+    evaluator: { dataset: 'golden' },
+    slot_bindings: { 'endpoint:primary': { connection_id: 'c1' } },
+  },
   dropped: [],
   errors: [],
   ok: true,
@@ -28,7 +31,9 @@ describe('launchBlocker (one-click default preset preflight)', () => {
     expect(launchBlocker('staging', version(), remap())).toBeNull();
   });
   it('blocks on remap errors or a missing remap', () => {
-    expect(launchBlocker('staging', version(), remap({ errors: [{ message: 'x' }] }))).toMatch(/needs changes/);
+    expect(launchBlocker('staging', version(), remap({ errors: [{ message: 'x' }] }))).toMatch(
+      /needs changes/,
+    );
     expect(launchBlocker('staging', version(), remap({ ok: false }))).toMatch(/needs changes/);
     expect(launchBlocker('staging', version(), null)).toMatch(/needs changes/);
   });
@@ -36,16 +41,25 @@ describe('launchBlocker (one-click default preset preflight)', () => {
     expect(launchBlocker('staging', version(), remap({ config: { evaluator: {} } }))).toMatch(/dataset/);
   });
   it('blocks on a temporary model', () => {
-    const r = remap({ config: { evaluator: { dataset: 'g' }, slot_bindings: { a: { temporary: { model: 'm' } } } } });
+    const r = remap({
+      config: { evaluator: { dataset: 'g' }, slot_bindings: { a: { temporary: { model: 'm' } } } },
+    });
     expect(launchBlocker('staging', version(), r)).toMatch(/temporary model/);
   });
   it('blocks on an unavailable connection warning', () => {
-    expect(launchBlocker('staging', version([{ rule: 'connection_missing', message: 'Model gone' }]), remap())).toBe('Model gone');
+    expect(
+      launchBlocker('staging', version([{ rule: 'connection_missing', message: 'Model gone' }]), remap()),
+    ).toBe('Model gone');
   });
 });
 
 describe('canRunDefaultPreset', () => {
-  const env = { is_active: true, current_schema_id: 's', official_preset_id: 'p', official_preset_version: 1 } as EvalEnvironment;
+  const env = {
+    is_active: true,
+    current_schema_id: 's',
+    official_preset_id: 'p',
+    official_preset_version: 1,
+  } as EvalEnvironment;
   it('needs an active env with a schema and a published default', () => {
     expect(canRunDefaultPreset(env)).toBe(true);
     expect(canRunDefaultPreset({ ...env, is_active: false })).toBe(false);

@@ -58,9 +58,23 @@ export function TemporaryModelForm({
   }
 
   return (
-    <form className={styles.form} role="group" aria-label="Temporary model" autoComplete="off" noValidate onSubmit={submit}>
+    <form
+      className={styles.form}
+      role="group"
+      aria-label="Temporary model"
+      autoComplete="off"
+      noValidate
+      onSubmit={submit}
+    >
       <TextField label="Label" placeholder="mini trial" value={label} onChange={setLabel} maxLength={200} />
-      <TextField label="Model" placeholder="gpt-4o-mini" value={model} onChange={setModel} maxLength={200} isRequired />
+      <TextField
+        label="Model"
+        placeholder="gpt-4o-mini"
+        value={model}
+        onChange={setModel}
+        maxLength={200}
+        isRequired
+      />
       <TextField
         label="Base URL"
         mono

@@ -197,7 +197,8 @@ export interface RunsPageResponse {
 
 export function flattenRunsPage(tasks: RunsPageResponse['tasks']): ModelRun[] {
   const rows: ModelRun[] = [];
-  for (const byModel of Object.values(tasks ?? {})) for (const runs of Object.values(byModel)) rows.push(...runs);
+  for (const byModel of Object.values(tasks ?? {}))
+    for (const runs of Object.values(byModel)) rows.push(...runs);
   return rows.sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
 }
 

@@ -6,7 +6,12 @@ import { countFields } from './slotLogic';
 import styles from './FormPreview.module.css';
 
 function tagsFor(entry: DescriptorEntry) {
-  const kind = entry.kind === 'collection' ? 'map' : entry.kind === 'role_table' ? 'role table' : entry.widget || entry.type;
+  const kind =
+    entry.kind === 'collection'
+      ? 'map'
+      : entry.kind === 'role_table'
+        ? 'role table'
+        : entry.widget || entry.type;
   return (
     <>
       {kind ? <Tag kind="data">{kind}</Tag> : null}
@@ -17,13 +22,25 @@ function tagsFor(entry: DescriptorEntry) {
   );
 }
 
-function FieldRow({ fields, pointer, depth, seen }: { fields: Record<string, DescriptorEntry>; pointer: string; depth: number; seen: Set<string> }) {
+function FieldRow({
+  fields,
+  pointer,
+  depth,
+  seen,
+}: {
+  fields: Record<string, DescriptorEntry>;
+  pointer: string;
+  depth: number;
+  seen: Set<string>;
+}) {
   const entry = fields[pointer];
   if (!entry || seen.has(pointer) || depth > 8) return null;
   seen.add(pointer);
   const name = entry.kind === 'role_table' ? `{${entry.row_param || 'role'}}` : entry.name;
   const label = entry.label && entry.label !== entry.name ? entry.label : '';
-  const bounds = Object.entries(entry.bounds ?? {}).map(([k, v]) => `${k} ${String(v)}`).join(', ');
+  const bounds = Object.entries(entry.bounds ?? {})
+    .map(([k, v]) => `${k} ${String(v)}`)
+    .join(', ');
   const extras: ReactNode[] = [];
   if (Array.isArray(entry.enum) && entry.enum.length) {
     extras.push(
@@ -32,7 +49,12 @@ function FieldRow({ fields, pointer, depth, seen }: { fields: Record<string, Des
       </span>,
     );
   }
-  if (bounds) extras.push(<span key="bounds" className={styles.mono}>{bounds}</span>);
+  if (bounds)
+    extras.push(
+      <span key="bounds" className={styles.mono}>
+        {bounds}
+      </span>,
+    );
   if (entry.kind === 'collection') {
     const required = (entry.required_keys ?? []).join(', ');
     extras.push(

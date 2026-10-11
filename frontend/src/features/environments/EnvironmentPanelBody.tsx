@@ -37,14 +37,26 @@ export function EnvironmentPanelBody({ environmentId, onClose, onDeleted }: Envi
       />
     );
   }
-  if (query.isPending) return showSkeleton ? <Skeleton kind="cards" count={3} label="Loading environment" /> : null;
+  if (query.isPending)
+    return showSkeleton ? <Skeleton kind="cards" count={3} label="Loading environment" /> : null;
 
   const env = query.data;
   return (
     <div className={styles.body} data-env-body={env.id}>
       <StatusSection projectId={project.id} env={env} canEdit={canEdit} />
-      <SchemaSection projectId={project.id} env={env} canEdit={canEdit} onNeedsGrouping={() => setSlotsOpen(true)} />
-      <SlotsSection projectId={project.id} env={env} canEdit={canEdit} dialogOpen={slotsOpen} onDialogOpenChange={setSlotsOpen} />
+      <SchemaSection
+        projectId={project.id}
+        env={env}
+        canEdit={canEdit}
+        onNeedsGrouping={() => setSlotsOpen(true)}
+      />
+      <SlotsSection
+        projectId={project.id}
+        env={env}
+        canEdit={canEdit}
+        dialogOpen={slotsOpen}
+        onDialogOpenChange={setSlotsOpen}
+      />
       <PresetsSection projectId={project.id} slug={slug} env={env} canEdit={canEdit} />
       <SettingsForm
         key={env.id}

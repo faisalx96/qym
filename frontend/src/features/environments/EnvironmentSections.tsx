@@ -40,7 +40,8 @@ export function StatusSection({ projectId, env, canEdit }: BaseProps) {
             : `“${env.name}” is healthy`,
           { tone: 'success' },
         );
-      } else toast.show(`“${env.name}” failed: ${r.error || 'unreachable'}`, { tone: 'error', timeout: 8000 });
+      } else
+        toast.show(`“${env.name}” failed: ${r.error || 'unreachable'}`, { tone: 'error', timeout: 8000 });
     } catch (e) {
       toast.show(errorMessage(e) || 'Test failed', { tone: 'error', timeout: 8000 });
     }
@@ -80,11 +81,17 @@ export function StatusSection({ projectId, env, canEdit }: BaseProps) {
         <dt>Health</dt>
         <dd>
           <HealthCell env={env} />
-          {env.health_status === 'error' && env.health_error ? <div className={styles.errorText}>{env.health_error}</div> : null}
+          {env.health_status === 'error' && env.health_error ? (
+            <div className={styles.errorText}>{env.health_error}</div>
+          ) : null}
         </dd>
         <dt>API key</dt>
         <dd>
-          {env.api_key_set ? <span className={styles.mono}>{env.api_key_hint || 'set'}</span> : <Tag tone="warning">Not set</Tag>}
+          {env.api_key_set ? (
+            <span className={styles.mono}>{env.api_key_hint || 'set'}</span>
+          ) : (
+            <Tag tone="warning">Not set</Tag>
+          )}
         </dd>
         <dt>Default preset</dt>
         <dd>
@@ -115,27 +122,41 @@ export function SchemaDiffBlock({ diff }: { diff: SchemaDiff }) {
   const lines: { kind: 'added' | 'removed' | 'changed'; mark: string; text: string; meta?: string }[] = [
     ...diff.added.map((p) => ({ kind: 'added' as const, mark: '+', text: p })),
     ...diff.removed.map((p) => ({ kind: 'removed' as const, mark: '−', text: p })),
-    ...diff.changed_types.map((c) => ({ kind: 'changed' as const, mark: '~', text: c.pointer, meta: `${c.from} → ${c.to}` })),
+    ...diff.changed_types.map((c) => ({
+      kind: 'changed' as const,
+      mark: '~',
+      text: c.pointer,
+      meta: `${c.from} → ${c.to}`,
+    })),
   ];
   return (
     <div className={styles.diff} role="status">
       <div className={styles.diffSummary}>
-        {first ? 'First schema stored' : 'Schema changed'} · <span className={styles.mono}>{shortHash(diff.schema_hash)}</span> ·{' '}
-        {diff.added.length} added · {diff.removed.length} removed · {diff.changed_types.length} type changes
+        {first ? 'First schema stored' : 'Schema changed'} ·{' '}
+        <span className={styles.mono}>{shortHash(diff.schema_hash)}</span> · {diff.added.length} added ·{' '}
+        {diff.removed.length} removed · {diff.changed_types.length} type changes
       </div>
       <ul className={styles.diffList}>
         {lines.slice(0, DIFF_LIMIT).map((l, i) => (
           <li key={i} data-kind={l.kind}>
-            <span aria-hidden="true">{l.mark}</span> {l.text} {l.meta ? <span className={styles.muted}>{l.meta}</span> : null}
+            <span aria-hidden="true">{l.mark}</span> {l.text}{' '}
+            {l.meta ? <span className={styles.muted}>{l.meta}</span> : null}
           </li>
         ))}
-        {lines.length > DIFF_LIMIT ? <li className={styles.muted}>and {lines.length - DIFF_LIMIT} more</li> : null}
+        {lines.length > DIFF_LIMIT ? (
+          <li className={styles.muted}>and {lines.length - DIFF_LIMIT} more</li>
+        ) : null}
       </ul>
     </div>
   );
 }
 
-export function SchemaSection({ projectId, env, canEdit, onNeedsGrouping }: BaseProps & { onNeedsGrouping?: () => void }) {
+export function SchemaSection({
+  projectId,
+  env,
+  canEdit,
+  onNeedsGrouping,
+}: BaseProps & { onNeedsGrouping?: () => void }) {
   const form = useEnvironmentForm(projectId, env.id);
   const refresh = useRefreshSchema(projectId, env.id);
   const toast = useToast();
@@ -217,14 +238,20 @@ export function SlotsSection({
       }
     >
       {slots.isError ? (
-        <ErrorState error={slots.error} title="Could not load the LLM groups" onRetry={() => void slots.refetch()} compact />
+        <ErrorState
+          error={slots.error}
+          title="Could not load the LLM groups"
+          onRetry={() => void slots.refetch()}
+          compact
+        />
       ) : slots.isPending ? (
         <Skeleton kind="cards" count={2} label="Loading LLM groups" />
       ) : (
         <>
           {needs ? (
             <div className={styles.callout} data-tone="warning" role="note">
-              Group LLM settings to pick project models. Until then the launch form shows LLM fields as raw inputs.
+              Group LLM settings to pick project models. Until then the launch form shows LLM fields as raw
+              inputs.
             </div>
           ) : null}
           {slots.data.slots.length ? (
@@ -235,7 +262,12 @@ export function SlotsSection({
         </>
       )}
       {canEdit ? (
-        <SlotEditorDialog projectId={projectId} env={env} open={dialogOpen} onOpenChange={onDialogOpenChange} />
+        <SlotEditorDialog
+          projectId={projectId}
+          env={env}
+          open={dialogOpen}
+          onOpenChange={onDialogOpenChange}
+        />
       ) : null}
     </Section>
   );

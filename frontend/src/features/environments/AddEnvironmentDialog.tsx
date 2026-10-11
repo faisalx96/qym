@@ -28,7 +28,13 @@ export function AddEnvironmentDialog(props: AddEnvironmentDialogProps) {
   return <AddEnvironmentDialogInner key={props.open ? 'open' : 'closed'} {...props} />;
 }
 
-function AddEnvironmentDialogInner({ projectId, open, onOpenChange, onCreated, onGotoApiKeys }: AddEnvironmentDialogProps) {
+function AddEnvironmentDialogInner({
+  projectId,
+  open,
+  onOpenChange,
+  onCreated,
+  onGotoApiKeys,
+}: AddEnvironmentDialogProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [env, setEnv] = useState<EvalEnvironment | null>(null);
   const [initialSlots, setInitialSlots] = useState<EvalSlot[]>([]);
@@ -64,7 +70,11 @@ function AddEnvironmentDialogInner({ projectId, open, onOpenChange, onCreated, o
       return;
     }
     try {
-      const r = await create.mutateAsync({ name: name.trim(), base_url: baseUrl.trim(), api_key: apiKey.trim() });
+      const r = await create.mutateAsync({
+        name: name.trim(),
+        base_url: baseUrl.trim(),
+        api_key: apiKey.trim(),
+      });
       setApiKey(''); // the key now lives only (encrypted) on the server
       setEnv(r.environment);
       setInitialSlots(r.slots ?? []);
@@ -135,7 +145,12 @@ function AddEnvironmentDialogInner({ projectId, open, onOpenChange, onCreated, o
     >
       <ol className={styles.steps} aria-label="Steps">
         {STEPS.map((label, i) => (
-          <li key={label} className={styles.step} aria-current={step === i + 1 ? 'step' : undefined} data-done={step > i + 1 ? '' : undefined}>
+          <li
+            key={label}
+            className={styles.step}
+            aria-current={step === i + 1 ? 'step' : undefined}
+            data-done={step > i + 1 ? '' : undefined}
+          >
             <span className={styles.stepNum}>{i + 1}</span>
             {label}
           </li>
@@ -144,15 +159,24 @@ function AddEnvironmentDialogInner({ projectId, open, onOpenChange, onCreated, o
       {step === 1 ? (
         <form className={styles.form} autoComplete="off" noValidate onSubmit={(e) => void connect(e)}>
           <div className={styles.callout} role="note">
-            <strong>Ingest with this project&apos;s key.</strong> The deployment must send its runs to qym with an API key of{' '}
-            <em>this</em> project (<code>QYM_API_KEY</code>), otherwise its results land in another project.{' '}
+            <strong>Ingest with this project&apos;s key.</strong> The deployment must send its runs to qym
+            with an API key of <em>this</em> project (<code>QYM_API_KEY</code>), otherwise its results land in
+            another project.{' '}
             {onGotoApiKeys ? (
               <Button variant="ghost" onPress={onGotoApiKeys}>
                 Create a project API key
               </Button>
             ) : null}
           </div>
-          <TextField label="Name" placeholder="e.g. staging" value={name} onChange={setName} maxLength={200} isRequired autoFocus />
+          <TextField
+            label="Name"
+            placeholder="e.g. staging"
+            value={name}
+            onChange={setName}
+            maxLength={200}
+            isRequired
+            autoFocus
+          />
           <TextField
             label="Base URL"
             mono
@@ -164,8 +188,8 @@ function AddEnvironmentDialogInner({ projectId, open, onOpenChange, onCreated, o
             isRequired
             help={
               <>
-                Include the service&apos;s <code>EVAL_SERVER_PREFIX</code>; qym appends <code>/evals</code>. A URL registered in
-                another project is refused.
+                Include the service&apos;s <code>EVAL_SERVER_PREFIX</code>; qym appends <code>/evals</code>. A
+                URL registered in another project is refused.
               </>
             }
           />
@@ -189,7 +213,12 @@ function AddEnvironmentDialogInner({ projectId, open, onOpenChange, onCreated, o
         </form>
       ) : step === 2 ? (
         form.isError ? (
-          <ErrorState error={form.error} title="Could not load the generated form" onRetry={() => void form.refetch()} compact />
+          <ErrorState
+            error={form.error}
+            title="Could not load the generated form"
+            onRetry={() => void form.refetch()}
+            compact
+          />
         ) : descriptor ? (
           <FormPreview descriptor={descriptor} />
         ) : (
@@ -198,8 +227,8 @@ function AddEnvironmentDialogInner({ projectId, open, onOpenChange, onCreated, o
       ) : (
         <>
           <p className={styles.intro}>
-            One card per LLM the service can call. Confirm the grouping so the launch form can bind project models to each slot;
-            fields left out stay plain inputs.
+            One card per LLM the service can call. Confirm the grouping so the launch form can bind project
+            models to each slot; fields left out stay plain inputs.
           </p>
           <SlotEditor controller={editor} />
         </>

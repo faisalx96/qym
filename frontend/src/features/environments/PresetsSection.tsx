@@ -17,14 +17,20 @@ import { absTime, relTime, shortHash } from './format';
 import styles from './EnvironmentPage.module.css';
 import { Section } from './Section';
 
-const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
 /** env_overrides -> [["A.B", value]] for the read-only view. */
-export function flattenSettings(node: unknown, prefix = '', out: [string, unknown][] = []): [string, unknown][] {
+export function flattenSettings(
+  node: unknown,
+  prefix = '',
+  out: [string, unknown][] = [],
+): [string, unknown][] {
   if (!isObject(node)) return out;
   for (const [key, value] of Object.entries(node)) {
     const name = prefix ? `${prefix}.${key}` : key;
-    if (isObject(value) && !(Object.keys(value).length === 1 && Array.isArray(value.sweep))) flattenSettings(value, name, out);
+    if (isObject(value) && !(Object.keys(value).length === 1 && Array.isArray(value.sweep)))
+      flattenSettings(value, name, out);
     else out.push([name, value]);
   }
   return out;
@@ -60,7 +66,8 @@ function KvList({ rows }: { rows: [string, unknown][] }) {
     <ul className={styles.kvList}>
       {rows.map(([name, value]) => (
         <li key={name}>
-          <span className={styles.kvName}>{name}</span> = <span className={styles.kvValue}>{formatValue(value)}</span>
+          <span className={styles.kvName}>{name}</span> ={' '}
+          <span className={styles.kvValue}>{formatValue(value)}</span>
         </li>
       ))}
     </ul>
@@ -68,14 +75,22 @@ function KvList({ rows }: { rows: [string, unknown][] }) {
 }
 
 /** Read-only view of one stored version (history is never edited). */
-export function VersionView({ version, modelNames }: { version: PresetVersion; modelNames: Record<string, string> }) {
+export function VersionView({
+  version,
+  modelNames,
+}: {
+  version: PresetVersion;
+  modelNames: Record<string, string>;
+}) {
   const config: PresetConfig = isObject(version.config) ? version.config : {};
   const evaluator = isObject(config.evaluator) ? config.evaluator : {};
   const bindings = isObject(config.slot_bindings) ? config.slot_bindings : {};
   const models = Object.entries(bindings).map(([key, b]) => {
     let text = 'Inherit';
-    if (isObject(b) && typeof b.connection_id === 'string') text = modelNames[b.connection_id] || (typeof b.name === 'string' ? b.name : b.connection_id);
-    else if (isObject(b) && isObject(b.temporary)) text = `Temporary: ${String(b.temporary.label || b.temporary.model || key)}`;
+    if (isObject(b) && typeof b.connection_id === 'string')
+      text = modelNames[b.connection_id] || (typeof b.name === 'string' ? b.name : b.connection_id);
+    else if (isObject(b) && isObject(b.temporary))
+      text = `Temporary: ${String(b.temporary.label || b.temporary.model || key)}`;
     return `${key}: ${text}`;
   });
   const inputs = isObject(evaluator.config) ? flattenSettings(evaluator.config) : [];
@@ -134,7 +149,11 @@ function VersionItem({
 }) {
   const [opened, setOpened] = useState(false);
   return (
-    <details className={styles.version} data-version={version.version} onToggle={(e) => e.currentTarget.open && setOpened(true)}>
+    <details
+      className={styles.version}
+      data-version={version.version}
+      onToggle={(e) => e.currentTarget.open && setOpened(true)}
+    >
       <summary className={styles.versionSummary}>
         <Tag kind="version">v{version.version}</Tag>
         {isCurrent ? <Tag tone="success">current</Tag> : null}
@@ -181,21 +200,33 @@ export function PresetsSection({
   const presets = usePresets(projectId, env.id);
   const options = useModelOptions(projectId, env.id);
   const official = presets.data?.presets.find((p) => p.kind === 'official') ?? null;
-  const saved = useMemo(() => (presets.data?.presets ?? []).filter((p) => p.kind === 'saved'), [presets.data]);
+  const saved = useMemo(
+    () => (presets.data?.presets ?? []).filter((p) => p.kind === 'saved'),
+    [presets.data],
+  );
   const versions = usePresetVersions(projectId, env.id, official?.id);
   const modelNames = useMemo(
     () => Object.fromEntries((options.data?.connections ?? []).map((c) => [c.connection_id, c.name])),
     [options.data],
   );
-  const canPublish = Boolean(presets.data?.can_publish_official) && (official ? official.can_publish !== false : true) && canEdit;
+  const canPublish =
+    Boolean(presets.data?.can_publish_official) &&
+    (official ? official.can_publish !== false : true) &&
+    canEdit;
   const writable = canPublish && env.is_active !== false;
   const current = official?.current_version ?? null;
-  const edit = (query: Record<string, string | undefined> = {}) => navigate(defaultPresetEditPath(slug, env.id, query));
+  const edit = (query: Record<string, string | undefined> = {}) =>
+    navigate(defaultPresetEditPath(slug, env.id, query));
 
   if (presets.isError) {
     return (
       <Section id="env-presets" title="Presets">
-        <ErrorState error={presets.error} title="Failed to load presets" onRetry={() => void presets.refetch()} compact />
+        <ErrorState
+          error={presets.error}
+          title="Failed to load presets"
+          onRetry={() => void presets.refetch()}
+          compact
+        />
       </Section>
     );
   }
@@ -261,12 +292,16 @@ export function PresetsSection({
   const officialBody: ReactNode = (
     <>
       {!presets.data.can_publish_official ? (
-        <p className={styles.muted}>Only project managers publish the default preset. You can view every version.</p>
+        <p className={styles.muted}>
+          Only project managers publish the default preset. You can view every version.
+        </p>
       ) : env.is_active === false ? (
         <p className={styles.muted}>Re-enable this environment to publish.</p>
       ) : null}
       {!current ? (
-        <div className={styles.empty}>No default preset yet. Launches on this environment start from Blank.</div>
+        <div className={styles.empty}>
+          No default preset yet. Launches on this environment start from Blank.
+        </div>
       ) : (
         <>
           <dl className={styles.kv}>
@@ -290,7 +325,12 @@ export function PresetsSection({
               Version history <Tag kind="count">{versions.data?.versions.length ?? 0}</Tag>
             </div>
             {versions.isError ? (
-              <ErrorState error={versions.error} title="Failed to load the version history" onRetry={() => void versions.refetch()} compact />
+              <ErrorState
+                error={versions.error}
+                title="Failed to load the version history"
+                onRetry={() => void versions.refetch()}
+                compact
+              />
             ) : (
               (versions.data?.versions ?? []).map((v) => (
                 <VersionItem
@@ -331,7 +371,14 @@ export function PresetsSection({
         description="Named starting points saved on this environment. Open one in the launch form to start from it."
       >
         {saved.length ? (
-          <DataTable aria-label="Saved presets" columns={savedColumns} rows={saved} rowKey={(p) => p.id} minWidth={640} stickyHeader={false} />
+          <DataTable
+            aria-label="Saved presets"
+            columns={savedColumns}
+            rows={saved}
+            rowKey={(p) => p.id}
+            minWidth={640}
+            stickyHeader={false}
+          />
         ) : (
           <div className={styles.empty}>No saved presets yet.</div>
         )}

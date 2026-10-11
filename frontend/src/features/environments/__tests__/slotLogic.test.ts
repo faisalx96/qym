@@ -14,7 +14,12 @@ import {
   toPayload,
 } from '../slotLogic';
 
-const field = (pointer: string, name: string, type = 'string', extra: Partial<DescriptorEntry> = {}): DescriptorEntry => ({
+const field = (
+  pointer: string,
+  name: string,
+  type = 'string',
+  extra: Partial<DescriptorEntry> = {},
+): DescriptorEntry => ({
   pointer,
   name,
   kind: 'field',
@@ -27,7 +32,12 @@ const descriptor: FormDescriptor = {
   groups: [],
   warnings: [],
   fields: {
-    '/LLM_OVERRIDES': { pointer: '/LLM_OVERRIDES', name: 'LLM_OVERRIDES', kind: 'object', children: ['/LLM_OVERRIDES/endpoints'] },
+    '/LLM_OVERRIDES': {
+      pointer: '/LLM_OVERRIDES',
+      name: 'LLM_OVERRIDES',
+      kind: 'object',
+      children: ['/LLM_OVERRIDES/endpoints'],
+    },
     '/LLM_OVERRIDES/endpoints': {
       pointer: '/LLM_OVERRIDES/endpoints',
       name: 'endpoints',
@@ -47,9 +57,16 @@ const descriptor: FormDescriptor = {
         '/LLM_OVERRIDES/endpoints/{endpoint}/base_url',
       ],
     },
-    '/LLM_OVERRIDES/endpoints/{endpoint}/timeout': field('/LLM_OVERRIDES/endpoints/{endpoint}/timeout', 'timeout', 'integer'),
+    '/LLM_OVERRIDES/endpoints/{endpoint}/timeout': field(
+      '/LLM_OVERRIDES/endpoints/{endpoint}/timeout',
+      'timeout',
+      'integer',
+    ),
     '/LLM_OVERRIDES/endpoints/{endpoint}/model': field('/LLM_OVERRIDES/endpoints/{endpoint}/model', 'model'),
-    '/LLM_OVERRIDES/endpoints/{endpoint}/base_url': field('/LLM_OVERRIDES/endpoints/{endpoint}/base_url', 'base_url'),
+    '/LLM_OVERRIDES/endpoints/{endpoint}/base_url': field(
+      '/LLM_OVERRIDES/endpoints/{endpoint}/base_url',
+      'base_url',
+    ),
     '/VIZ_LLM_MODEL': field('/VIZ_LLM_MODEL', 'VIZ_LLM_MODEL'),
     '/VIZ_LLM_BASE_URL': field('/VIZ_LLM_BASE_URL', 'VIZ_LLM_BASE_URL'),
     '/VIZ_LLM_TIMEOUT': field('/VIZ_LLM_TIMEOUT', 'VIZ_LLM_TIMEOUT', 'integer'),
@@ -61,7 +78,11 @@ const primary: EvalSlot = {
   slot_key: 'endpoint:primary',
   kind: 'endpoint',
   label: 'Primary',
-  field_map: { model: '/LLM_OVERRIDES/endpoints/primary/model', base_url: '/LLM_OVERRIDES/endpoints/primary/base_url', api_key: null },
+  field_map: {
+    model: '/LLM_OVERRIDES/endpoints/primary/model',
+    base_url: '/LLM_OVERRIDES/endpoints/primary/base_url',
+    api_key: null,
+  },
   transport_fields: { timeout: '/LLM_OVERRIDES/endpoints/primary/timeout' },
   extra_field_maps: [],
   required: true,
@@ -85,8 +106,12 @@ describe('descriptor helpers', () => {
   it('lists endpoint candidates for a role, best name first', () => {
     // Any string field fits the model role; the one named `model` comes first.
     expect(endpointCandidates(descriptor, 'fast', 'model')[0]).toBe('/LLM_OVERRIDES/endpoints/fast/model');
-    expect(endpointCandidates(descriptor, 'fast', 'base_url')[0]).toBe('/LLM_OVERRIDES/endpoints/fast/base_url');
-    expect(endpointCandidates(descriptor, 'fast', 'model')).not.toContain('/LLM_OVERRIDES/endpoints/fast/timeout');
+    expect(endpointCandidates(descriptor, 'fast', 'base_url')[0]).toBe(
+      '/LLM_OVERRIDES/endpoints/fast/base_url',
+    );
+    expect(endpointCandidates(descriptor, 'fast', 'model')).not.toContain(
+      '/LLM_OVERRIDES/endpoints/fast/timeout',
+    );
   });
   it('offers only unassigned flat model fields', () => {
     const state = initSlotState([primary, viz]);
@@ -107,7 +132,13 @@ describe('slot reducer', () => {
   it('renames and clears the slot errors', () => {
     let s = initSlotState([primary]);
     s = slotReducer(s, { type: 'setErrors', errors: { 'endpoint:primary': ['bad'] }, general: 'x' });
-    s = slotReducer(s, { type: 'setRole', slotKey: 'endpoint:primary', setIdx: 0, role: 'api_key', pointer: '/k' });
+    s = slotReducer(s, {
+      type: 'setRole',
+      slotKey: 'endpoint:primary',
+      setIdx: 0,
+      role: 'api_key',
+      pointer: '/k',
+    });
     expect(s.errors['endpoint:primary']).toBeUndefined();
     expect(s.slots[0]!.field_map.api_key).toBe('/k');
     s = slotReducer(s, { type: 'rename', slotKey: 'endpoint:primary', label: 'Main' });
@@ -117,7 +148,13 @@ describe('slot reducer', () => {
   it('adds and removes extra key sets (set 0 is the field map)', () => {
     let s = initSlotState([viz]);
     s = slotReducer(s, { type: 'addSet', slotKey: 'flat:VIZ_LLM' });
-    s = slotReducer(s, { type: 'setRole', slotKey: 'flat:VIZ_LLM', setIdx: 1, role: 'model', pointer: '/CHART_LLM_MODEL' });
+    s = slotReducer(s, {
+      type: 'setRole',
+      slotKey: 'flat:VIZ_LLM',
+      setIdx: 1,
+      role: 'model',
+      pointer: '/CHART_LLM_MODEL',
+    });
     expect(keySets(s.slots[0]!)).toHaveLength(2);
     expect(slotsMissingModel(s.slots)).toHaveLength(0);
     s = slotReducer(s, { type: 'removeSet', slotKey: 'flat:VIZ_LLM', setIdx: 1 });
@@ -159,7 +196,13 @@ describe('slot reducer', () => {
   });
 
   it('merges a slot into another as an extra key set and keeps transport conflicts out', () => {
-    const chart: EvalSlot = { ...viz, slot_key: 'flat:CHART_LLM', label: 'Chart', field_map: { model: '/CHART_LLM_MODEL', base_url: null, api_key: null }, transport_fields: { timeout: '/CHART_LLM_TIMEOUT', max_attempts: '/CHART_MAX' } };
+    const chart: EvalSlot = {
+      ...viz,
+      slot_key: 'flat:CHART_LLM',
+      label: 'Chart',
+      field_map: { model: '/CHART_LLM_MODEL', base_url: null, api_key: null },
+      transport_fields: { timeout: '/CHART_LLM_TIMEOUT', max_attempts: '/CHART_MAX' },
+    };
     let s = initSlotState([viz, chart]);
     s = slotReducer(s, { type: 'merge', srcKey: 'flat:CHART_LLM', dstKey: 'flat:VIZ_LLM' });
     expect(s.slots).toHaveLength(1);
@@ -180,11 +223,17 @@ describe('slot reducer', () => {
 
   it('refuses a duplicate flat group', () => {
     const state = initSlotState([viz]);
-    expect(flatSlotFromField(state.slots, descriptor, '/VIZ_LLM_MODEL')).toEqual({ error: 'A slot flat:VIZ_LLM already exists.' });
+    expect(flatSlotFromField(state.slots, descriptor, '/VIZ_LLM_MODEL')).toEqual({
+      error: 'A slot flat:VIZ_LLM already exists.',
+    });
   });
 
   it('builds the PUT payload with trimmed labels', () => {
-    const s = slotReducer(initSlotState([viz]), { type: 'rename', slotKey: 'flat:VIZ_LLM', label: '  Viz  ' });
+    const s = slotReducer(initSlotState([viz]), {
+      type: 'rename',
+      slotKey: 'flat:VIZ_LLM',
+      label: '  Viz  ',
+    });
     expect(toPayload(s.slots)[0]).toMatchObject({ slot_key: 'flat:VIZ_LLM', kind: 'flat', label: 'Viz' });
   });
 });
@@ -198,6 +247,8 @@ describe('server error distribution', () => {
     ]);
     expect(r.errors).toEqual({ 'flat:VIZ_LLM': ['model missing'] });
     expect(r.general).toBe('schema too old');
-    expect(distributeSlotErrors(s.slots, [{ slot_key: 'flat:VIZ_LLM', message: 'm' }]).general).toMatch(/Fix the highlighted/);
+    expect(distributeSlotErrors(s.slots, [{ slot_key: 'flat:VIZ_LLM', message: 'm' }]).general).toMatch(
+      /Fix the highlighted/,
+    );
   });
 });

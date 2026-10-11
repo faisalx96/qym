@@ -20,15 +20,30 @@ export function EnvironmentPage({ environmentId }: { environmentId: string }) {
       <PageHeader
         title={env?.name ?? 'Environment'}
         description={env?.base_url}
-        meta={env && !env.is_active ? [<Tag key="off" tone="warning">Disabled</Tag>] : undefined}
+        meta={
+          env && !env.is_active
+            ? [
+                <Tag key="off" tone="warning">
+                  Disabled
+                </Tag>,
+              ]
+            : undefined
+        }
         actions={
-          <LinkButton to={environmentsPath(slug)} icon={<Icon name="prev" size={12} />} className={styles.pageBack}>
+          <LinkButton
+            to={environmentsPath(slug)}
+            icon={<Icon name="prev" size={12} />}
+            className={styles.pageBack}
+          >
             All environments
           </LinkButton>
         }
         tabs={<ExperimentsTabs current="environments" />}
       />
-      <EnvironmentPanelBody environmentId={environmentId} onDeleted={() => navigate(environmentsPath(slug))} />
+      <EnvironmentPanelBody
+        environmentId={environmentId}
+        onDeleted={() => navigate(environmentsPath(slug))}
+      />
     </div>
   );
 }

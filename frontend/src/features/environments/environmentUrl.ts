@@ -12,7 +12,9 @@ export function normalizeEnvironmentUrl(value: string): string {
   let url = String(value || '').trim();
   try {
     const parsed = new URL(url);
-    const defaultPort = (parsed.protocol === 'https:' && parsed.port === '443') || (parsed.protocol === 'http:' && parsed.port === '80');
+    const defaultPort =
+      (parsed.protocol === 'https:' && parsed.port === '443') ||
+      (parsed.protocol === 'http:' && parsed.port === '80');
     const port = parsed.port && !defaultPort ? `:${parsed.port}` : '';
     url = `${parsed.protocol}//${parsed.hostname.toLowerCase()}${port}${parsed.pathname}`;
   } catch {
@@ -27,8 +29,10 @@ export function urlMoved(next: string, stored: string): boolean {
   return normalizeEnvironmentUrl(next) !== normalizeEnvironmentUrl(stored);
 }
 
-export const KEYS_HELP = 'Send project LLM connection API keys to this service when a slot is bound to a connection.';
-export const KEYS_HELP_MOVED = 'Turned off because the URL changed. Tick it again to send connection keys to the new host.';
+export const KEYS_HELP =
+  'Send project LLM connection API keys to this service when a slot is bound to a connection.';
+export const KEYS_HELP_MOVED =
+  'Turned off because the URL changed. Tick it again to send connection keys to the new host.';
 
 export interface ConnectionKeysView {
   /** What the checkbox shows. */

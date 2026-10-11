@@ -1,0 +1,343 @@
+/* Models page: filter row, controls, model cards, ranking, run-selection dialog. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.bar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.controls {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.grow {
+  flex: 1;
+}
+
+.muted {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 26em), 1fr));
+  gap: var(--space-md);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  min-width: 0;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  min-width: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cardName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot {
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: var(--radius-pill);
+  flex: none;
+}
+
+.cardRuns {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.runsCount {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.warnGlyph {
+  color: var(--warning);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5em, 1fr));
+  gap: var(--space-sm);
+  margin: 0;
+}
+
+.tile {
+  padding: var(--space-sm);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  min-width: 0;
+}
+
+.tileLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.tileValue {
+  margin: var(--space-xs) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.tileValue[data-band='1'] {
+  color: var(--score-1);
+}
+.tileValue[data-band='2'] {
+  color: var(--score-2);
+}
+.tileValue[data-band='3'] {
+  color: var(--score-3);
+}
+.tileValue[data-band='4'] {
+  color: var(--score-4);
+}
+.tileValue[data-band='5'] {
+  color: var(--score-5);
+}
+.tileValue[data-alert] {
+  color: var(--warning);
+}
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: auto;
+}
+
+/* correct distribution */
+.dist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+.distBar {
+  display: flex;
+  gap: 2px;
+  height: var(--chip-height);
+}
+
+.distSeg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-basis: 0;
+  min-width: var(--space-sm);
+  overflow: hidden;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 1.1;
+  color: var(--bg-void);
+}
+
+.distSeg[data-tone='none'] {
+  background: var(--error);
+}
+.distSeg[data-tone='some'] {
+  background: var(--warning);
+}
+.distSeg[data-tone='all'] {
+  background: var(--success);
+}
+
+.distCount {
+  font-weight: 650;
+}
+
+.distRuns {
+  display: none;
+}
+
+.distLegend {
+  display: flex;
+  gap: var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.distLegend span::before {
+  content: '■ ';
+}
+
+.distLegend [data-tone='none']::before {
+  color: var(--error);
+}
+.distLegend [data-tone='some']::before {
+  color: var(--warning);
+}
+.distLegend [data-tone='all']::before {
+  color: var(--success);
+}
+
+/* ranking */
+.ranking {
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.rankTitle {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rankList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rankItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.rank {
+  min-width: 2ch;
+  font-family: var(--font-mono);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.status {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* run selection dialog */
+.selHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.selCount {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.selCount[data-limit] {
+  color: var(--warning);
+}
+
+.selList {
+  margin: 0 0 var(--space-sm);
+  padding: 0;
+  list-style: none;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.selGroup {
+  padding: var(--space-sm);
+  border-bottom: 1px solid var(--border-default);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.selItem {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  padding: var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.selItem[data-selected] {
+  background: var(--bg-elevated);
+}
+
+.selName {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+}
+
+.selMeta {
+  display: inline-flex;
+  gap: var(--space-sm);
+  margin-inline-start: auto;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.selScore {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}

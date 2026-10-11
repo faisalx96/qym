@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { batchStatGroups, flattenRunsPage, type StatGroup } from '../dashboardModels';
 
-const group = (key: string, n: number): StatGroup => ({ key, runs: Array.from({ length: n }, (_, i) => `${key}-${i}`) });
+const group = (key: string, n: number): StatGroup => ({
+  key,
+  runs: Array.from({ length: n }, (_, i) => `${key}-${i}`),
+});
 
 describe('batchStatGroups', () => {
   it('keeps one batch when within limits', () => {
@@ -28,7 +31,9 @@ describe('batchStatGroups', () => {
 describe('flattenRunsPage', () => {
   it('flattens task -> model -> runs, newest first', () => {
     const run = (id: string, timestamp: string) => ({ run_id: id, task_name: 't', timestamp });
-    const rows = flattenRunsPage({ t: { m1: [run('a', '2026-01-01'), run('c', '2026-03-01')], m2: [run('b', '2026-02-01')] } });
+    const rows = flattenRunsPage({
+      t: { m1: [run('a', '2026-01-01'), run('c', '2026-03-01')], m2: [run('b', '2026-02-01')] },
+    });
     expect(rows.map((r) => r.run_id)).toEqual(['c', 'b', 'a']);
   });
 });

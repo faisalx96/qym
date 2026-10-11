@@ -7,19 +7,35 @@ import { validateTemporaryModel } from '../temporaryModel';
 describe('validateTemporaryModel', () => {
   const base = { label: '', model: 'gpt-x', base_url: '', api_key: '' };
   it('needs a model and defaults the label to it', () => {
-    expect(validateTemporaryModel({ ...base, model: ' ' }, { keysAllowed: true, allowHttp: false }).ok).toBe(false);
+    expect(validateTemporaryModel({ ...base, model: ' ' }, { keysAllowed: true, allowHttp: false }).ok).toBe(
+      false,
+    );
     const r = validateTemporaryModel(base, { keysAllowed: true, allowHttp: false });
     expect(r.ok && r.value.label).toBe('gpt-x');
   });
   it('requires https unless private URLs are allowed', () => {
-    expect(validateTemporaryModel({ ...base, base_url: 'http://a.example/v1' }, { keysAllowed: true, allowHttp: false }).ok).toBe(false);
-    expect(validateTemporaryModel({ ...base, base_url: 'http://a.example/v1/' }, { keysAllowed: true, allowHttp: true }).ok).toBe(true);
-    expect(validateTemporaryModel({ ...base, base_url: 'ftp://x' }, { keysAllowed: true, allowHttp: true }).ok).toBe(false);
+    expect(
+      validateTemporaryModel(
+        { ...base, base_url: 'http://a.example/v1' },
+        { keysAllowed: true, allowHttp: false },
+      ).ok,
+    ).toBe(false);
+    expect(
+      validateTemporaryModel(
+        { ...base, base_url: 'http://a.example/v1/' },
+        { keysAllowed: true, allowHttp: true },
+      ).ok,
+    ).toBe(true);
+    expect(
+      validateTemporaryModel({ ...base, base_url: 'ftp://x' }, { keysAllowed: true, allowHttp: true }).ok,
+    ).toBe(false);
   });
   it('drops the key when keys are not accepted and needs url+key to save to project', () => {
     const r = validateTemporaryModel({ ...base, api_key: 'sk-1' }, { keysAllowed: false, allowHttp: false });
     expect(r.ok && r.value.api_key).toBe('');
-    expect(validateTemporaryModel({ ...base, saveToProject: true }, { keysAllowed: true, allowHttp: false }).ok).toBe(false);
+    expect(
+      validateTemporaryModel({ ...base, saveToProject: true }, { keysAllowed: true, allowHttp: false }).ok,
+    ).toBe(false);
   });
 });
 

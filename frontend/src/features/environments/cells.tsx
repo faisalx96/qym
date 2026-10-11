@@ -8,7 +8,12 @@ export function HealthCell({ env, showTime = true }: { env: EvalEnvironment; sho
   const status = env.health_status === 'ok' ? 'ok' : env.health_status === 'error' ? 'error' : 'unknown';
   const label = status === 'ok' ? 'Healthy' : status === 'error' ? 'Error' : 'Unknown';
   const checked = relTime(env.health_checked_at);
-  const title = status === 'error' && env.health_error ? env.health_error : checked ? `Checked ${checked}` : 'Not checked yet';
+  const title =
+    status === 'error' && env.health_error
+      ? env.health_error
+      : checked
+        ? `Checked ${checked}`
+        : 'Not checked yet';
   return (
     <div className={styles.healthCell}>
       <span className={styles.health} data-status={status} title={title}>
@@ -58,6 +63,11 @@ export function SlotsStatusTag({ env }: { env: EvalEnvironment }) {
 
 export function DefaultPresetTag({ env }: { env: EvalEnvironment }) {
   const version = env.official_preset_version;
-  if (version == null) return <span className={styles.empty} title="No default preset published yet">—</span>;
+  if (version == null)
+    return (
+      <span className={styles.empty} title="No default preset published yet">
+        —
+      </span>
+    );
   return <Tag kind="version">v{version}</Tag>;
 }

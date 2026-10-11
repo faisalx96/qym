@@ -18,7 +18,15 @@ export interface EnvironmentsListProps {
   storageKey?: string;
 }
 
-export function EnvironmentsList({ projectId, slug, canManage, readOnly, onOpen, onAdd, storageKey }: EnvironmentsListProps) {
+export function EnvironmentsList({
+  projectId,
+  slug,
+  canManage,
+  readOnly,
+  onOpen,
+  onAdd,
+  storageKey,
+}: EnvironmentsListProps) {
   const list = useEvalEnvironments(projectId);
   const showSkeleton = useDelayedPending(list.isPending);
   const test = useTestEnvironment(projectId);
@@ -40,8 +48,16 @@ export function EnvironmentsList({ projectId, slug, canManage, readOnly, onOpen,
     }
   }
 
-  if (list.isError) return <ErrorState error={list.error} title="Could not load environments" onRetry={() => void list.refetch()} />;
-  if (list.isPending) return showSkeleton ? <Skeleton kind="table" rows={4} label="Loading environments" /> : null;
+  if (list.isError)
+    return (
+      <ErrorState
+        error={list.error}
+        title="Could not load environments"
+        onRetry={() => void list.refetch()}
+      />
+    );
+  if (list.isPending)
+    return showSkeleton ? <Skeleton kind="table" rows={4} label="Loading environments" /> : null;
 
   const envs = list.data;
   if (!envs.length) {
@@ -54,7 +70,13 @@ export function EnvironmentsList({ projectId, slug, canManage, readOnly, onOpen,
             ? 'Add one to launch experiments against an Evaluation Service deployment.'
             : 'A project manager can add one.'
         }
-        action={canEdit && onAdd ? <Button variant="primary" size="md" onPress={onAdd}>+ Add environment</Button> : undefined}
+        action={
+          canEdit && onAdd ? (
+            <Button variant="primary" size="md" onPress={onAdd}>
+              + Add environment
+            </Button>
+          ) : undefined
+        }
       />
     );
   }
@@ -96,7 +118,12 @@ export function EnvironmentsList({ projectId, slug, canManage, readOnly, onOpen,
     { id: 'schema', label: 'Schema', width: 130, cell: (env) => <SchemaCell env={env} /> },
     { id: 'groups', label: 'LLM groups', width: 130, cell: (env) => <SlotsStatusTag env={env} /> },
     { id: 'default', label: 'Default preset', width: 140, cell: (env) => <DefaultPresetTag env={env} /> },
-    { id: 'cap', label: 'Priority cap', width: 125, cell: (env) => <Tag kind="data">{env.max_priority || '—'}</Tag> },
+    {
+      id: 'cap',
+      label: 'Priority cap',
+      width: 125,
+      cell: (env) => <Tag kind="data">{env.max_priority || '—'}</Tag>,
+    },
     {
       id: 'actions',
       label: 'Actions',
@@ -115,11 +142,20 @@ export function EnvironmentsList({ projectId, slug, canManage, readOnly, onOpen,
               Run default preset
             </Button>
           ) : null}
-          <Button variant="neutral" onPress={() => onOpen(env)} aria-label={`${canManage ? 'Manage' : 'View'} ${env.name}`}>
+          <Button
+            variant="neutral"
+            onPress={() => onOpen(env)}
+            aria-label={`${canManage ? 'Manage' : 'View'} ${env.name}`}
+          >
             {canManage ? 'Manage' : 'View'}
           </Button>
           {canEdit ? (
-            <Button variant="neutral" loading={testingId === env.id} onPress={() => void runTest(env)} aria-label={`Test ${env.name}`}>
+            <Button
+              variant="neutral"
+              loading={testingId === env.id}
+              onPress={() => void runTest(env)}
+              aria-label={`Test ${env.name}`}
+            >
               Test
             </Button>
           ) : null}
