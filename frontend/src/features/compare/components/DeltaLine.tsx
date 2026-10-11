@@ -18,14 +18,16 @@ function CohortVerdict() {
   }, [model, cohorts, ctx]);
   if (!cohorts) return null;
   if (!summary) return <Text variant="sm" tone="muted">Sweep needs a pass/fail metric with a declared direction.</Text>;
-  const n = summary.noise?.passAtK ?? null;
+  const avg = summary.noise?.avgAtK ?? null;
+  const n = avg ?? summary.noise?.passAtK ?? null;
+  const label = avg ? `Avg@${cohorts.k}` : `Pass@${cohorts.k}`;
   const verdict = n?.verdict ?? 'within_noise';
   const tone = verdict === 'improved' ? 'success' : verdict === 'regressed' ? 'danger' : undefined;
   const word = verdict === 'improved' ? 'improved' : verdict === 'regressed' ? 'regressed' : 'within noise';
   return (
     <span className={styles.verdict}>
       <Tag kind="data" tone={tone}>
-        {verdict === 'improved' ? '▲' : verdict === 'regressed' ? '▼' : '≈'} {cohorts.rightLabel} vs {cohorts.leftLabel}: Pass@{cohorts.k}{' '}
+        {verdict === 'improved' ? '▲' : verdict === 'regressed' ? '▼' : '≈'} {cohorts.rightLabel} vs {cohorts.leftLabel}: {label}{' '}
         {n ? `${n.delta >= 0 ? '+' : '−'}${Math.abs(n.delta * 100).toFixed(1)}` : '—'} pts, {word}
       </Tag>
       <Button size="sm" variant="neutral" onPress={() => c.setView({ tab: 'sweep' })}>

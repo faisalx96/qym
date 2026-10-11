@@ -25,6 +25,8 @@ export interface IssueDialogProps {
   /** Project slug (category catalog); undefined outside a project route. */
   slug: string | undefined;
   passRevision: number;
+  /** Called with the updated row after a successful save / delete. */
+  onSaved?: (row: Row | undefined) => void;
 }
 
 function uuid(): string {
@@ -36,7 +38,7 @@ function uuid(): string {
       });
 }
 
-export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber, runId, slug, passRevision }: IssueDialogProps) {
+export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber, runId, slug, passRevision, onSaved }: IssueDialogProps) {
   const catalog = useCategoryCatalogQuery(slug, open);
   const mutation = useIssueAction(runId);
   const [category, setCategory] = useState(issue?.category ?? '');
@@ -116,7 +118,8 @@ export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber
     }
     setMessage('');
     mutation.mutate(body(action), {
-      onSuccess: () => {
+      onSuccess: (res) => {
+        onSaved?.(res?.row);
         if (again) reset();
         else onOpenChange(false);
       },

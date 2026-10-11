@@ -1,0 +1,42 @@
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.count {
+  margin-inline-start: auto;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.display {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 16rem;
+  max-height: 24rem;
+  overflow-y: auto;
+  padding: var(--space-md);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

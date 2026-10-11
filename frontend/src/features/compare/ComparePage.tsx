@@ -5,16 +5,18 @@
  * `/projects/:slug/compare` share this page; the URL is the whole state.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { useDocumentTitle, useOptionalProject } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
+import { platformUrl } from '@/lib/runtime';
 import { KEYS, readLocal } from '@/lib/storage';
-import { EmptyState, ErrorState, PageHeader, SegmentedControl, Skeleton, Stack, useToast } from '@/ui';
+import { EmptyState, ErrorState, LinkButton, PageHeader, SegmentedControl, Skeleton, Stack, useToast } from '@/ui';
 import { CompareCtx, type CompareValue } from './CompareContext';
 import { DeltaLine } from './components/DeltaLine';
 import { ItemsSection } from './components/items/ItemsSection';
+import { ItemsUiHost } from './components/items/ItemsUi';
 import { Notices } from './components/Notices';
 import { AnalyticsPanel } from './components/panel/AnalyticsPanel';
 import { SelectionBar } from './components/SelectionBar';
@@ -116,6 +118,7 @@ function CompareLoaded({ c, model, slug }: { c: CompareController; model: Compar
   };
   const sweep = c.view.tab === 'sweep' && !!c.cohorts;
   const first = model.runs[0]?.run;
+  const location = useLocation();
   return (
     <CompareCtx.Provider value={value}>
       <MissingToast missing={c.missing} />
@@ -124,17 +127,23 @@ function CompareLoaded({ c, model, slug }: { c: CompareController; model: Compar
         description="Scan the items that changed; the analytics follow your filter."
         meta={[`${info.columns.length} column${info.columns.length === 1 ? '' : 's'}`, first?.dataset_name ?? '', `${model.itemIds.length} aligned items`].filter(Boolean)}
         actions={
-          c.cohorts ? (
-            <SegmentedControl<'compare' | 'sweep'>
-              label="View"
-              value={sweep ? 'sweep' : 'compare'}
-              onChange={(v) => c.setView({ tab: v })}
-              options={[
-                { value: 'compare', label: 'Compare' },
-                { value: 'sweep', label: 'Sweep' },
-              ]}
-            />
-          ) : undefined
+          <>
+            {c.cohorts ? (
+              <SegmentedControl<'compare' | 'sweep'>
+                label="View"
+                value={sweep ? 'sweep' : 'compare'}
+                onChange={(v) => c.setView({ tab: v })}
+                options={[
+                  { value: 'compare', label: 'Compare' },
+                  { value: 'sweep', label: 'Sweep' },
+                ]}
+              />
+            ) : null}
+            {/* The self-contained HTML export is not rebuilt (OPEN_QUESTIONS Q7): the legacy page still has it. */}
+            <LinkButton href={`${platformUrl('/compare')}${location.search}`} title="Opens the legacy compare page, which can export a self-contained HTML copy">
+              Legacy page (HTML export)
+            </LinkButton>
+          </>
         }
       />
       <Stack gap="sm">
@@ -144,16 +153,18 @@ function CompareLoaded({ c, model, slug }: { c: CompareController; model: Compar
         <SelectionBar />
         {sweep ? null : <DeltaLine info={info} analyticsOpen={panel} onToggleAnalytics={() => setPanel((p) => !p)} />}
       </div>
-      {sweep ? (
-        <SweepView />
-      ) : (
-        <div className={styles.body} data-panel={panel ? '' : undefined}>
-          <main className={styles.main} aria-label="Items">
-            <ItemsSection />
-          </main>
-          {panel ? <AnalyticsPanel /> : null}
-        </div>
-      )}
+      <ItemsUiHost>
+        {sweep ? (
+          <SweepView />
+        ) : (
+          <div className={styles.body} data-panel={panel ? '' : undefined}>
+            <main className={styles.main} aria-label="Items">
+              <ItemsSection />
+            </main>
+            {panel ? <AnalyticsPanel /> : null}
+          </div>
+        )}
+      </ItemsUiHost>
     </CompareCtx.Provider>
   );
 }
