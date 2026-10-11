@@ -131,9 +131,7 @@
      SFMono-Regular reach SF Mono in Safari, Menlo is the face Chrome on
      macOS can actually see (without it the generic 'monospace' falls back to
      Courier), Consolas covers Windows and Liberation Mono covers Linux. */
-  --font-mono:
-    'Qym Arabic', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, 'JetBrains Mono', 'Fira Code', Consolas,
-    'Liberation Mono', monospace;
+  --font-mono: 'Qym Arabic', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', monospace;
   --font-sans: 'Qym Arabic', -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
 }
 
