@@ -39,6 +39,7 @@ from qym_platform.db.models import (
     Run,
     RunEvent,
     RunOrigin,
+    RunWorkflowStatus,
     User,
     UserRole,
 )
@@ -638,3 +639,166 @@ def test_merge_run_metadata_protects_reserved_keys():
         "qym_launch": {"job_id": "j"},
         "b": 2,
     }
+
+
+# ------------------------------------------------------------------ re-runs (duplicates)
+#
+# The Evaluation Service can run the same job twice (Celery redelivery after a
+# worker was lost or killed by the task time limit, Beat re-enqueueing a PENDING
+# job, a manual re-run). Both SDK processes send the same launch token. When the
+# first run is dead, the re-run must become the official one instead of a local
+# twin; while the first run is alive (or finished) the re-run stays local, flagged.
+
+from datetime import datetime, timedelta
+
+from qym_platform.services.run_lifecycle import (
+    RUN_STATUS_REASON_CANCELLED_BY_USER,
+    RUN_STATUS_REASON_LEASE_TIMEOUT,
+    RUN_STATUS_REASON_SUPERSEDED,
+    RUN_STATUS_REASON_UPLOAD_INCOMPLETE,
+)
+
+
+def _set_run(sessions, run_id, **fields):
+    with sessions() as db:
+        run = db.get(Run, run_id)
+        for key, value in fields.items():
+            setattr(run, key, value)
+        db.commit()
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        pytest.param(
+            {"last_event_at": datetime.utcnow() - timedelta(hours=1)},
+            id="running-but-stale",
+        ),
+        pytest.param(
+            {
+                "status": RunWorkflowStatus.STOPPED,
+                "status_reason": RUN_STATUS_REASON_LEASE_TIMEOUT,
+            },
+            id="stopped-lease-timeout",
+        ),
+        pytest.param(
+            {
+                "status": RunWorkflowStatus.STOPPED,
+                "status_reason": RUN_STATUS_REASON_UPLOAD_INCOMPLETE,
+            },
+            id="stopped-upload-incomplete",
+        ),
+        pytest.param({"status": RunWorkflowStatus.FAILED}, id="failed"),
+    ],
+)
+def test_rerun_after_dead_official_run_supersedes_it(client, sessions, seed, fields):
+    first = _create(client, _launch(seed))
+    _set_run(sessions, first, **fields)
+
+    second = _create(client, _launch(seed))
+
+    new = _run(sessions, second)
+    assert new.origin == RunOrigin.OFFICIAL
+    assert new.experiment_job_id == seed["job_id"]
+    assert new.owner_user_id == "creator"
+    assert new.run_metadata["qym_launch"]["supersedes_run_id"] == first
+    assert _job(sessions, seed["job_id"]).run_id == second
+
+    old = _run(sessions, first)
+    assert old.origin == RunOrigin.OFFICIAL  # history: it was the first attempt
+    assert old.run_metadata["qym_launch"]["superseded_by_run_id"] == second
+    if fields.get("status") == RunWorkflowStatus.FAILED:
+        assert old.status == RunWorkflowStatus.FAILED
+    else:
+        assert old.status == RunWorkflowStatus.STOPPED
+        assert old.status_reason == RUN_STATUS_REASON_SUPERSEDED
+        assert old.ended_at is not None
+    _assert_no_token_stored(sessions)
+
+
+def test_zombie_events_do_not_reopen_a_superseded_run(client, sessions, seed):
+    first = _create(client, _launch(seed))
+    _set_run(sessions, first, last_event_at=datetime.utcnow() - timedelta(hours=1))
+    second = _create(client, _launch(seed))
+    assert _run(sessions, first).status_reason == RUN_STATUS_REASON_SUPERSEDED
+
+    response = _send(
+        client,
+        first,
+        [
+            _event(first, 1, "run_heartbeat", {}),
+            _event(
+                first,
+                2,
+                "run_completed",
+                {"ended_at": "2026-03-23T01:00:00Z", "status": "COMPLETED"},
+            ),
+        ],
+    )
+    assert response.status_code == 200, response.text
+    old = _run(sessions, first)
+    assert old.status == RunWorkflowStatus.STOPPED
+    assert old.status_reason == RUN_STATUS_REASON_SUPERSEDED
+    assert _job(sessions, seed["job_id"]).run_id == second
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        pytest.param({}, id="running-and-alive"),
+        pytest.param({"status": RunWorkflowStatus.COMPLETED}, id="completed"),
+        pytest.param(
+            {
+                "status": RunWorkflowStatus.STOPPED,
+                "status_reason": RUN_STATUS_REASON_CANCELLED_BY_USER,
+            },
+            id="cancelled",
+        ),
+    ],
+)
+def test_rerun_while_official_run_is_alive_or_done_is_a_flagged_local_twin(
+    client, sessions, seed, fields
+):
+    first = _create(client, _launch(seed))
+    _set_run(sessions, first, **fields)
+
+    second = _create(client, _launch(seed))
+
+    twin = _run(sessions, second)
+    assert twin.origin == RunOrigin.LOCAL
+    assert twin.experiment_job_id is None
+    launch = twin.run_metadata["qym_launch"]
+    assert launch["link_outcome"] == "already_linked"
+    assert launch["linked_run_id"] == first
+    assert "token" not in launch
+    assert _job(sessions, seed["job_id"]).run_id == first
+    old = _run(sessions, first)
+    assert old.origin == RunOrigin.OFFICIAL
+    assert old.status == fields.get("status", RunWorkflowStatus.RUNNING)
+    _assert_no_token_stored(sessions)
+
+
+def test_link_outcome_is_recorded_for_every_local_verdict(client, sessions, seed):
+    linked = _create(client, _launch(seed))
+    assert _run(sessions, linked).run_metadata["qym_launch"]["link_outcome"] == "linked"
+    bad_token = _create(client, _launch(seed, token="wrong"))
+    assert (
+        _run(sessions, bad_token).run_metadata["qym_launch"]["link_outcome"]
+        == "token_mismatch"
+    )
+    unknown = _create(client, _launch(seed, job_id="no-such-job"))
+    assert (
+        _run(sessions, unknown).run_metadata["qym_launch"]["link_outcome"]
+        == "unknown_job"
+    )
+
+
+def test_superseded_run_page_label_names_the_official_run(client, sessions, seed):
+    from qym_platform.api.runs import _status_reason_label
+
+    first = _create(client, _launch(seed))
+    _set_run(sessions, first, last_event_at=datetime.utcnow() - timedelta(hours=1))
+    second = _create(client, _launch(seed))
+    with sessions() as db:
+        label = _status_reason_label(db, db.get(Run, first))
+    assert label is not None and second in label

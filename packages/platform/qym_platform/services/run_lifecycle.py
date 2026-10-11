@@ -21,6 +21,10 @@ RUN_STATUS_REASONS_CANCELLED = frozenset(
 # The Evaluation Service finished the job but the run never received its final
 # event and is missing items (eval_dispatcher settle sweep).
 RUN_STATUS_REASON_UPLOAD_INCOMPLETE = "upload_incomplete"
+# A dead official run (stale, lease-timeout/upload-incomplete STOPPED) whose job was
+# re-run: ingest linked the re-run instead (eval_run_linking). Not a soft stop: late
+# events from the first worker must not reopen it or move the job's link back.
+RUN_STATUS_REASON_SUPERSEDED = "superseded"
 # Stops inferred by the platform rather than reported by the run: a later live
 # event reopens the run and a later terminal event replaces them.
 SOFT_STOP_REASONS = frozenset(
