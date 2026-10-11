@@ -1,0 +1,59 @@
+/* Topbar breadcrumbs (shell.css .topbar-breadcrumbs). */
+.nav {
+  min-width: 0;
+}
+
+.list {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.item:first-child .sep {
+  display: none;
+}
+
+.sep {
+  color: var(--text-dim); /* decorative separator */
+  flex: none;
+}
+
+.link,
+.current {
+  font-size: var(--shell-font-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-radius: 3px;
+}
+
+.link:hover { color: var(--text-primary); text-decoration: none; }
+
+.current {
+  color: var(--text-primary);
+}
+
+.link[data-mono],
+.current[data-mono] {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
