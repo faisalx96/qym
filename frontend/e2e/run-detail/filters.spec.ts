@@ -127,6 +127,8 @@ test.describe('rule builder (scenario 5)', () => {
     await page.getByRole('option', { name: /^Latency/ }).click();
     await dlg.getByTestId('rule-condition').nth(1).getByRole('button', { name: 'Operator' }).click();
     await page.getByRole('option', { name: '>', exact: true }).click();
+    console.log('FILT pre', await page.getByRole('dialog').count());
+    await dlg.getByTestId('rule-condition').nth(1).getByRole('textbox').click(); console.log('FILT click', await page.getByRole('dialog').count());
     await dlg.getByTestId('rule-condition').nth(1).getByRole('textbox').fill('1000');
     await expect.poll(() => params(page).get('filters') ?? '').toContain('latency');
     const raw = params(page).get('filters')!;
@@ -136,6 +138,7 @@ test.describe('rule builder (scenario 5)', () => {
     await page.reload();
     await expect(page.getByTestId('items-count')).toBeVisible();
     expect((await itemsCount(page))[0]).toBe(n);
+    for (const t of [0,50,100,200,400,800]) { await page.waitForTimeout(t); console.log('FILT', t, await page.getByTestId('open-filters').innerText(), await page.getByRole('dialog').count(), params(page).get('filters')); }
     await expect(page.getByTestId('open-filters')).toContainText('Filters (2)');
   });
 
@@ -146,6 +149,7 @@ test.describe('rule builder (scenario 5)', () => {
     const [n] = await itemsCount(page);
     expect(n).toBeGreaterThan(0);
     expect(n).toBeLessThan(240);
+    for (const t of [0,50,100,200,400,800]) { await page.waitForTimeout(t); console.log('FILT', t, await page.getByTestId('open-filters').innerText(), await page.getByRole('dialog').count(), params(page).get('filters')); }
     await expect(page.getByTestId('open-filters')).toContainText('Filters (2)');
     const chip = page.getByRole('button', { name: /Remove filter 2 rules/ });
     await expect(chip).toBeVisible();

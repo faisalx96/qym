@@ -15,7 +15,9 @@ const traceButton = (page: Page, n: number) =>
 const drawer = (page: Page) => page.getByRole('dialog', { name: 'Trace' });
 
 test.describe('trace drawer (scenario 8, J6.4)', () => {
-  test('opens from the row, lists spans, sets ?trace=, and Esc closes it and returns focus', async ({ page }) => {
+  test('opens from the row, lists spans, sets ?trace=, and Esc closes it and returns focus', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic);
     const trigger = traceButton(page, 4);
     await trigger.click();
@@ -99,7 +101,10 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     await openRun(page, s.slug, classic);
     await traceButton(page, 4).click();
     const detail = page.getByRole('region', { name: 'Span details' });
-    await page.getByRole('tree', { name: 'Span tree' }).getByRole('treeitem', { name: /ChatOpenAI/ }).click();
+    await page
+      .getByRole('tree', { name: 'Span tree' })
+      .getByRole('treeitem', { name: /ChatOpenAI/ })
+      .click();
     await expect(detail.getByRole('tab', { name: 'Messages' })).toBeVisible();
     await detail.getByRole('tab', { name: 'Raw' }).click();
     await expect(detail.getByRole('tabpanel')).toBeVisible();
@@ -118,9 +123,9 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     await expect(page.getByLabel('Trace summary')).toContainText('2 attempts');
     const tree = page.getByRole('tree', { name: 'Span tree' });
     await expect(tree.getByText(/^try \d+$/).first()).toBeVisible();
-    const all = await tree.getByRole('treeitem').count();
     await attempts.getByRole('button', { name: 'Attempt 2' }).click();
-    await expect.poll(() => tree.getByRole('treeitem').count()).toBeLessThan(all);
+    // a single attempt has no merged failed try, so the `try N` marker is gone
+    await expect(tree.getByText(/^try \d+$/)).toHaveCount(0);
   });
 
   test('?trace= deep link opens the drawer on load; ?trace_pass= is honoured', async ({ page }) => {
@@ -140,7 +145,10 @@ test.describe('trace drawer (scenario 8, J6.4)', () => {
     await card.getByRole('button', { name: 'Trace', exact: true }).click();
     await expect(drawer(page)).toBeVisible();
     expect(params(page).get('trace')).toBe('item-0004');
-    await expect(card.getByRole('link', { name: 'Open in Langfuse' })).toHaveAttribute('href', /langfuse\.example/);
+    await expect(card.getByRole('link', { name: 'Open in Langfuse' })).toHaveAttribute(
+      'href',
+      /langfuse\.example/,
+    );
   });
 
   test('a failing trace request shows an error with Retry', async ({ page }) => {
@@ -169,7 +177,9 @@ test.describe('latency and traces panel (J5)', () => {
     await expect(page.getByRole('region', { name: 'Steps' })).toBeVisible();
   });
 
-  test('a histogram bar sets a latency filter chip; clearing the chip restores the table', async ({ page }) => {
+  test('a histogram bar sets a latency filter chip; clearing the chip restores the table', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic, 'panel=latency');
     const bars = page.getByRole('group', { name: /Latency histogram/ }).getByRole('button');
     await bars.nth(8).click(); // 2.25s to 2.5s: 26 items
