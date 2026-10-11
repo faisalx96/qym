@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import fs from 'node:fs';
 
 /**
  * E2E against the real FastAPI platform on SQLite with QYM_AUTH_MODE=none,
@@ -17,7 +18,9 @@ const AUTH_MODE = process.env.QYM_E2E_AUTH_MODE ?? 'none';
 process.env.QYM_ADMIN_BOOTSTRAP_TOKEN ??= 'e2e-bootstrap';
 process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY ??= 'nhrVWj9_tg4JBetyZrLyHLQTy9-5DTMysJYeRSS5flY=';
 const dbFile = path.join(here, '.qym-e2e.db');
-const venvPython = path.join(repo, '.venv', 'bin', 'python');
+// Worktrees have no .venv of their own: honour QYM_PYTHON, else the repo venv, else the active python.
+const repoVenv = path.join(repo, '.venv', 'bin', 'python');
+const venvPython = process.env.QYM_PYTHON ?? (fs.existsSync(repoVenv) ? repoVenv : 'python');
 
 export const BASE_URL = `http://127.0.0.1:${VITE_PORT}`;
 export const APP = '/app';
@@ -52,7 +55,8 @@ export default defineConfig({
         `QYM_ADMIN_BOOTSTRAP_TOKEN=${process.env.QYM_ADMIN_BOOTSTRAP_TOKEN}`,
         `QYM_LLM_CONFIG_ENCRYPTION_KEY=${process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY}`,
         `QYM_BASE_URL=${BASE_URL}`,
-        `QYM_ROLE=api`,
+        // analyzer e2e points a project LLM connection at a local stub server (http://127.0.0.1)
+        `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true`,
         `${venvPython} -m uvicorn qym_platform.main:app --port ${PLATFORM_PORT} --log-level warning`,
       ].join(' '),
       url: `http://127.0.0.1:${PLATFORM_PORT}/healthz`,
