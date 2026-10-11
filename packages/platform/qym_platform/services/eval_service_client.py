@@ -84,11 +84,21 @@ _RETRYABLE_STATUS_CODES = {408, 425, 429}
 
 
 class EvalServiceError(Exception):
-    """Base error for Evaluation Service calls. Messages are always redacted."""
+    """Base error for Evaluation Service calls. Messages are always redacted.
 
-    def __init__(self, message: str, *, status_code: Optional[int] = None) -> None:
+    ``detail`` is the service's redacted ``detail`` string when it sent one.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: Optional[int] = None,
+        detail: Optional[str] = None,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.detail = detail
 
 
 class EnvAuthError(EvalServiceError):
@@ -136,6 +146,17 @@ class RequestRejected(EvalServiceError):
 
 class RetryableError(EvalServiceError):
     """Transport failure, timeout, or a 5xx/429 answer; safe to retry later."""
+
+
+class VersioningUnavailable(EvalServiceError):
+    """``GET /evals/versioning-details/current`` answered 503 (guide v1.2 §3.5).
+
+    The service is up but could not read its KB version; ``detail`` says why
+    (e.g. ``could not read KB version: ...``).
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail, status_code=503, detail=detail)
 
 
 # --------------------------------------------------------------------------- #
@@ -397,6 +418,35 @@ class EvalServiceClient:
             raise
         return _redact_schema(data)
 
+    async def versioning_details_current(self) -> Optional[Dict[str, Any]]:
+        """``GET /evals/versioning-details/current`` (guide v1.2 §3.5).
+
+        The versioning details a job started now would record
+        (``agent_version`` / ``image_version`` / ``kb_version``; ``None`` = not set
+        in this environment), redacted. ``None`` when the service does not have the
+        endpoint (404/405: services older than v1.2). A 503 (the KB could not be
+        read) raises :class:`VersioningUnavailable` with the service's reason; other
+        failures raise as usual.
+        """
+        try:
+            data = await self._request("GET", "/evals/versioning-details/current")
+        except RemoteNotFound:
+            return None
+        except EvalServiceError as exc:
+            if exc.status_code == 405:
+                return None
+            if exc.status_code == 503:
+                raise VersioningUnavailable(
+                    exc.detail or "Evaluation service could not read its versions"
+                ) from None
+            raise
+        if not isinstance(data, Mapping):
+            raise EvalServiceError(
+                "Evaluation service returned invalid versioning details",
+                status_code=200,
+            )
+        return redact_payload(dict(data))
+
     # -- transport ----------------------------------------------------------- #
 
     async def _request(
@@ -507,7 +557,9 @@ def _handle_response(
         )
     if status >= 500 or status in _RETRYABLE_STATUS_CODES:
         raise RetryableError(
-            f"Evaluation service returned HTTP {status}", status_code=status
+            f"Evaluation service returned HTTP {status}",
+            status_code=status,
+            detail=safe_detail,
         )
     raise EvalServiceError(
         f"Evaluation service returned HTTP {status}"

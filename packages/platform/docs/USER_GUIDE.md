@@ -360,7 +360,7 @@ Open **Experiments → New experiment**. The first screen picks where the experi
    | **Clone** | An earlier experiment, from its **Clone** action or from **Rerun with this config** on a run page. |
 
    A changed setting shows a dot and can be reset to the base value. The header counts the **Diff vs base**. **Reset all to base** drops every edit, and **Switch base** keeps the edits that also exist on the new base. When a base was authored on an older schema, settings that no longer exist are dropped and listed ("Some settings are no longer supported").
-3. **Models**: one card per confirmed slot.
+3. **Models**: one card per confirmed slot. Above the cards, **Current versions** shows, for each selected environment, what a run started now would record as its versioning details: `agent`, `image` and `kb` (a key the service has not set shows "not set"). It is read live from the environment (`GET /evals/versioning-details/current`, Evaluation Service integration guide v1.2) when the step opens and again on **Refresh**; an environment on an older service shows "Not supported", and a service that cannot read its KB shows "Couldn't read" with the reason. The API equivalent is `GET /v1/projects/{id}/eval-environments/{env_id}/versioning-details` (`status` is `ok`, `unsupported` or `error`).
 4. **Environment configurations**: what the environment runs with (`env_overrides`).
    - **Environment overrides**: the generated form, grouped, with **Search settings** and **Changed only**. Only changed values are sent; an unset field shows "Inherited from environment".
    - **Role overrides**: one row per role in the schema (`main`, `router`, …) with `endpoint`, `temperature`, `max_tokens`, and the other role fields. An empty cell keeps the service default.

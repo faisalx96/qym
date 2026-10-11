@@ -23,6 +23,7 @@ Evaluation Service experiments get a schema-driven launch form, runs carry free-
 - **Any schema shape.** Settings without a declared type, unions, open objects and mixed enums are detected and shown; nothing is dropped. A value that doesn't fit its field is edited as JSON, extra keys can be added and removed, and values no field covers appear under **Other values**.
 - **Global model.** The Models step has a global model that sets every LLM endpoint at once (roles follow their endpoint). Endpoints changed afterwards are marked custom; a later global change overwrites all of them. A global model sweep is one axis, so two models give two runs.
 - **Versioning details.** The launch form has a **Versioning details** box; the keys are stored on the experiment, kept by Rerun and merged into each linked run.
+- **Current versions on the Models step.** For each selected environment, the Models step shows the `agent`, `image` and `kb` versions a run started now would record, read live from the Evaluation Service's `GET /evals/versioning-details/current` (integration guide v1.2), with **Refresh**. Older services show "Not supported"; a service that cannot read its KB shows the reason. New read-only route `GET /v1/projects/{id}/eval-environments/{env_id}/versioning-details`.
 
 ### Runs
 

@@ -34,6 +34,7 @@
  *   GET  /v1/projects/{pid}/eval-environments/{eid}/form           descriptor
  *   GET  /v1/projects/{pid}/eval-environments/{eid}/model-slots    slots
  *   GET  /v1/projects/{pid}/eval-environments/{eid}/model-options  project models
+ *   GET  /v1/projects/{pid}/eval-environments/{eid}/versioning-details  current versions (Models step)
  *   GET  /v1/datasets?project_slug=  and  /v1/datasets/{name}/versions
  *   POST /v1/projects/{pid}/experiments  (dry_run for the preview)
  *   GET  /v1/projects/{pid}/eval-environments/{eid}/presets         official + saved
@@ -103,7 +104,7 @@
   const STYLESHEETS = [
     'static/eval_environments.css?v=eval-environments-20261004-2',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
-    'static/experiment_launch.css?v=experiment-launch-20261008-config-steps',
+    'static/experiment_launch.css?v=experiment-launch-20261011-env-versions',
     'static/experiment_launch_json.css?v=experiment-launch-json-20261003-2',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20261008-1',
     'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
@@ -382,6 +383,10 @@
       selected: [],
       envData: {}, // id → { loading, form, formError, slots, needsConfirmation, options, optionsError }
       envLoads: {}, // id → the promise of its latest loadEnvData()
+      // id → { loading, status: 'ok'|'unsupported'|'error', details, error, fetchedAt }:
+      // the environment's current versioning details (guide v1.2 §3.5), read once
+      // the Models step is shown and again on Refresh (never on a re-render).
+      envVersions: {},
       datasets: null,
       datasetsError: '',
       datasetMode: 'project',
@@ -2301,6 +2306,10 @@
         }
         children.push(banner);
       }
+      if (st.selected.length) {
+        children.push(envVersionsBlock());
+        ensureEnvVersions();
+      }
       const slots = unionSlots();
       if (!st.selected.length) {
         children.push(el('div', { className: 'xl-hint', text: 'Pick an environment to see its model slots.' }));
@@ -2320,6 +2329,94 @@
       }
       if (st.selected.length && !st.selected.some((id) => !st.envData[id] || st.envData[id].loading)) children.push(addEndpointControls());
       body.replaceChildren.apply(body, children);
+    }
+
+    // ── Models: current versions of the selected environments ───────────
+    // What a job started now would record as versioning_details (guide v1.2 §3.5):
+    // agent_version / image_version / kb_version, read live from each environment.
+    const VERSION_KEYS = ['agent_version', 'image_version', 'kb_version'];
+    const VERSION_LABELS = { agent_version: 'agent', image_version: 'image', kb_version: 'kb' };
+
+    /** Reads one environment's versions; a cached answer is kept unless `force`. */
+    function loadEnvVersions(id, force) {
+      const cached = st.envVersions[id];
+      if (cached && (cached.loading || !force)) return;
+      const entry = { loading: true, status: '', details: {}, error: '', fetchedAt: '' };
+      st.envVersions[id] = entry;
+      renderEnvVersions();
+      request(envPath(id, '/versioning-details')).then((res) => {
+        if (!st.active || st.envVersions[id] !== entry) return;
+        st.envVersions[id] = res.ok ? {
+          loading: false,
+          status: res.data.status === 'ok' || res.data.status === 'unsupported' ? res.data.status : 'error',
+          details: res.data.versioning_details && typeof res.data.versioning_details === 'object' ? res.data.versioning_details : {},
+          error: res.data.error || '',
+          fetchedAt: res.data.fetched_at || '',
+        } : { loading: false, status: 'error', details: {}, error: errorMessage(res.data, 'The request failed'), fetchedAt: '' };
+        renderEnvVersions();
+      });
+    }
+
+    /** Starts the reads the Models step needs (only while it is the shown step). */
+    function ensureEnvVersions() {
+      if (st.step !== MODELS_STEP || !hosts.models) return;
+      st.selected.forEach((id) => loadEnvVersions(id, false));
+    }
+
+    function versionDisplay(value) {
+      if (typeof value === 'object') { try { return JSON.stringify(value); } catch (_) { return String(value); } }
+      return String(value);
+    }
+
+    function envVersionRow(id) {
+      const entry = st.envVersions[id];
+      const status = !entry || entry.loading ? 'loading' : entry.status;
+      const row = el('div', { className: 'xl-env-version', 'data-xl-env-version': id, 'data-xl-env-version-status': status }, [
+        el('span', { className: 'xl-env-version-name', text: envName(id) }),
+      ]);
+      if (status === 'loading') {
+        row.appendChild(el('span', { className: 'xl-hint', text: 'Reading…' }));
+      } else if (status === 'unsupported') {
+        row.appendChild(el('span', { className: 'xl-hint', text: 'Not supported by this environment (its Evaluation Service is older than v1.2).' }));
+      } else if (status === 'ok') {
+        const details = entry.details || {};
+        const keys = VERSION_KEYS.concat(Object.keys(details).filter((key) => VERSION_KEYS.indexOf(key) < 0).sort());
+        row.appendChild(el('dl', { className: 'xl-env-version-list' }, keys.map((key) => el('div', { className: 'xl-env-version-item', 'data-xl-version-key': key }, [
+          el('dt', { className: 'xl-env-version-key', text: VERSION_LABELS[key] || key }),
+          details[key] == null
+            ? el('dd', { className: 'xl-env-version-unset', text: 'not set' })
+            : el('dd', { className: 'xl-env-version-value xl-mono', text: versionDisplay(details[key]) }),
+        ]))));
+      } else {
+        row.appendChild(el('span', { className: 'xl-error-text', text: 'Couldn\'t read: ' + (entry.error || 'unknown error') }));
+      }
+      return row;
+    }
+
+    function fillEnvVersions(block) {
+      const loading = st.selected.some((id) => st.envVersions[id] && st.envVersions[id].loading);
+      block.replaceChildren.apply(block, [el('div', { className: 'xl-env-versions-head' }, [
+        el('span', { className: 'xl-env-versions-title', text: 'Current versions' }),
+        el('span', { className: 'xl-hint', text: 'What a run started now records as its versioning details.' }),
+        el('span', { className: 'xl-spacer' }),
+        el('button', {
+          type: 'button', className: 'xl-link-btn', text: 'Refresh', 'data-xl-env-versions-refresh': '1', disabled: loading,
+          onClick: () => st.selected.forEach((id) => loadEnvVersions(id, true)),
+        }),
+      ])].concat(st.selected.map(envVersionRow)));
+    }
+
+    /** The block renderModels() places above the model cards; updated in place. */
+    function envVersionsBlock() {
+      const block = el('div', { className: 'xl-env-versions', 'data-xl-env-versions': '1', role: 'group', 'aria-label': 'Current versions' });
+      fillEnvVersions(block);
+      return block;
+    }
+
+    /** Re-renders only the versions block, so open model forms keep their state. */
+    function renderEnvVersions() {
+      const block = hosts.models && hosts.models.querySelector('[data-xl-env-versions]');
+      if (block) fillEnvVersions(block);
     }
 
     /** A temporary model from a base (clone or preset) comes without its key (§7.5). */
@@ -3823,6 +3920,7 @@
       { id: 5, label: 'Evaluation configurations' },
       { id: 6, label: 'Review and launch' },
     ];
+    const MODELS_STEP = 3;
     const ENV_STEP = 4;
     const EVAL_STEP = 5;
     // The last step reviews (and launches or saves); the preview moves into it.
@@ -3975,6 +4073,7 @@
         else button.removeAttribute('aria-current');
       });
       placePreview(page);
+      ensureEnvVersions();
       const nav = page.querySelector('[data-xl-step-nav]');
       nav.replaceChildren(
         st.step > 1 ? el('button', { type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-step-back': '1', text: 'Back', onClick: () => setStep(st.step - 1) }) : el('span'),

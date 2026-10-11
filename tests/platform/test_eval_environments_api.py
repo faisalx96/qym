@@ -75,6 +75,10 @@ class FakeService:
         # evaluator_status forces another answer (e.g. 500).
         self.evaluator_schema = None
         self.evaluator_status = None
+        # GET /evals/versioning-details/current (guide v1.2 §3.5): None = an older
+        # service (404); versioning_error answers 503 with that detail.
+        self.versioning = None
+        self.versioning_error = None
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -94,6 +98,12 @@ class FakeService:
             if self.evaluator_schema is None:
                 return httpx.Response(404, json={"detail": "Not Found"})
             return httpx.Response(200, json=self.evaluator_schema)
+        if path.endswith("/evals/versioning-details/current"):
+            if self.versioning_error is not None:
+                return httpx.Response(503, json={"detail": self.versioning_error})
+            if self.versioning is None:
+                return httpx.Response(404, json={"detail": "Not Found"})
+            return httpx.Response(200, json=self.versioning)
         if path.endswith("/evals"):
             return httpx.Response(
                 200, json={"total": 0, "limit": 1, "offset": 0, "items": []}
@@ -712,6 +722,98 @@ def test_refresh_auth_failure_maps_to_400(client, service):
     )
     assert res.status_code == 400
     assert KEY not in res.text
+
+
+# --------------------------------------------------------------------------- versioning details
+
+
+def test_versioning_details_read_live_and_null_keys_dropped(client, service):
+    env_id = _created(client)["environment"]["id"]
+    service.versioning = {
+        "agent_version": "v2.4.0",
+        "image_version": None,
+        "kb_version": "4b0535c",
+    }
+    path = _url(suffix=f"/{env_id}/versioning-details")
+    res = client.get(path, headers=_headers(MEMBER))
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["status"] == "ok"
+    assert body["versioning_details"] == {
+        "agent_version": "v2.4.0",
+        "kb_version": "4b0535c",
+    }
+    assert body["error"] is None
+    assert body["fetched_at"]
+    assert body["environment_id"] == env_id
+    assert KEY not in res.text
+    # Read live: a change on the service shows on the next call.
+    service.versioning["kb_version"] = "5c1a2b3"
+    again = client.get(path, headers=_headers(MEMBER)).json()
+    assert again["versioning_details"]["kb_version"] == "5c1a2b3"
+    read = [
+        r
+        for r in service.requests
+        if r.url.path.endswith("/versioning-details/current")
+    ]
+    assert len(read) == 2
+    assert read[0].headers["authorization"] == f"Bearer {KEY}"
+
+
+def test_versioning_details_unsupported_on_older_services(client, service):
+    env_id = _created(client)["environment"]["id"]
+    body = client.get(
+        _url(suffix=f"/{env_id}/versioning-details"), headers=_headers(MEMBER)
+    ).json()
+    assert body["status"] == "unsupported"
+    assert body["versioning_details"] == {}
+    assert body["error"] is None
+
+
+def test_versioning_details_503_reports_the_reason(client, service):
+    env_id = _created(client)["environment"]["id"]
+    service.versioning_error = f"could not read KB version: db down api_key={KEY}"
+    res = client.get(
+        _url(suffix=f"/{env_id}/versioning-details"), headers=_headers(MEMBER)
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "error"
+    assert body["error"].startswith("could not read KB version: db down")
+    assert KEY not in res.text
+    assert body["versioning_details"] == {}
+
+
+def test_versioning_details_auth_and_transport_failures_are_reported(
+    client, service, session_factory
+):
+    env_id = _created(client)["environment"]["id"]
+    path = _url(suffix=f"/{env_id}/versioning-details")
+    service.valid_keys = set()
+    body = client.get(path, headers=_headers(MEMBER)).json()
+    assert body["status"] == "error"
+    assert "rejected the environment API key" in body["error"]
+    service.valid_keys = {KEY}
+    service.down = True
+    body = client.get(path, headers=_headers(MEMBER)).json()
+    assert body["status"] == "error"
+    assert body["error"]
+    # Nothing is recorded on the environment: health is left to Test / refresh.
+    with session_factory() as s:
+        assert s.get(EvalEnvironment, env_id).health_status == "ok"
+
+
+def test_versioning_details_needs_project_access(client, service):
+    env_id = _created(client)["environment"]["id"]
+    service.versioning = {"agent_version": "v1"}
+    res = client.get(
+        _url(suffix=f"/{env_id}/versioning-details"), headers=_headers(OUTSIDER)
+    )
+    assert res.status_code in (403, 404)
+    res = client.get(
+        _url(P2, suffix=f"/{env_id}/versioning-details"), headers=_headers(OUTSIDER)
+    )
+    assert res.status_code == 404
 
 
 # --------------------------------------------------------------------------- form / slots
