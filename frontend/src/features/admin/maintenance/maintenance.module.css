@@ -1,0 +1,103 @@
+/* Admin maintenance: summary grid, stats tables, enqueue form, jobs table, log drawer. */
+.jobForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.jobFields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-sm);
+}
+
+.params {
+  flex: 1 1 260px;
+  min-width: 200px;
+}
+
+.jobHelp {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--badge-height);
+}
+
+.summaryCard {
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.statsError {
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--warning);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+}
+
+.statsError code {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.tables {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-lg);
+}
+
+@media (max-width: 1000px) {
+  .tables {
+    grid-template-columns: 1fr;
+  }
+}
+
+.log {
+  margin: 0;
+  padding: var(--space-md);
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.logMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.rowActions {
+  display: inline-flex;
+  gap: var(--space-xs);
+}
+
+.polling {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.errorText {
+  color: var(--error);
+}
+
+.workers {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}

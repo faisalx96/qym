@@ -285,6 +285,8 @@ describe('primitive module contracts', () => {
       if (/height:\s*var\(--control-height\)/.test(text))
         problems.push(`${rel(file)}: control height belongs to a primitive`);
       if (/--font-xs/.test(text)) problems.push(`${rel(file)}: --font-xs is badge chrome (use Badge/Tag)`);
+      if (/--docs-(?:font|body)/.test(text) && !rel(file).startsWith('features/docs/'))
+        problems.push(`${rel(file)}: --docs-* tokens are the docs prose exception (DESIGN_LANGUAGE §5)`);
       if (
         /border-radius:\s*var\(--radius-pill\)[^}]*cursor:\s*pointer|cursor:\s*pointer[^}]*border-radius:\s*var\(--radius-pill\)/s.test(
           text,

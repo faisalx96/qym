@@ -174,3 +174,29 @@
   --skeleton-min: 400ms;
   --arrive-fade: 200ms;
 }
+
+/* ── Docs prose scale (DESIGN_LANGUAGE.md §5, sanctioned exception) ─────────
+   Long-form reading pages keep a larger independent heading/body scale and a
+   brighter body colour; labels still use the shared ramp and code the shared
+   --code-* palette. Only features/docs may use these. */
+:root {
+  --docs-font-h1: 28px;
+  --docs-font-h2: 20px;
+  --docs-font-h3: 16px;
+  --docs-font-lead: 16px;
+  --docs-font-body: 15px;
+  --docs-font-small: 13px;
+  --docs-font-code: 13px;
+  --docs-body: #d3d3df;
+  --docs-label: var(--text-muted);
+  --docs-nav-width: 264px;
+  --docs-toc-width: 220px;
+  --docs-content-max: 780px;
+  /* Syntax palette (was scoped to .docs-page in docs.css). */
+  --code-comment: #8a8aa0;
+  --code-keyword: #c792ea;
+  --code-string: #98c379;
+  --code-number: #d19a66;
+  --code-builtin: #61afef;
+  --code-class: #e5c07b;
+}

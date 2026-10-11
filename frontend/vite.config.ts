@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
+import { docsContentPlugin } from './plugins/docs-content';
 
 // The platform may be mounted under QYM_ROOT_PATH (e.g. /qym). The served
 // index.html gets `<base href="{root}/app/">`, so every asset URL is relative
@@ -42,7 +43,7 @@ function devPublicUnderApp(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), devPublicUnderApp()],
+  plugins: [react(), devPublicUnderApp(), docsContentPlugin()],
   base: './',
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   css: { modules: { localsConvention: 'camelCaseOnly' } },
@@ -57,6 +58,7 @@ export default defineConfig({
           react: ['react', 'react-dom', 'react-router-dom'],
           query: ['@tanstack/react-query'],
           aria: ['react-aria-components'],
+          'docs-runtime': ['hast-util-to-jsx-runtime'],
         },
       },
     },

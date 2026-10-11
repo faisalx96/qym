@@ -13,6 +13,25 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+DOCS_IA = ROOT / "frontend" / "src" / "features" / "docs" / "ia.json"
+
+
+def _ia_pages() -> list[tuple[str, str]]:
+    """(section, page) pairs from the React docs IA (frontend/src/features/docs/ia.json)."""
+    import json
+
+    data = json.loads(_read(DOCS_IA))
+    return [(s["id"], p["id"]) for s in data["sections"] for p in s["pages"]]
+
+
+def test_react_docs_ia_only_references_existing_pages() -> None:
+    pages = _ia_pages()
+    assert len(pages) == 27
+    assert len(set(pages)) == len(pages)
+    for section_id, page_id in pages:
+        assert (DASHBOARD_DOCS / section_id / f"{page_id}.html").is_file(), (section_id, page_id)
+
+
 def test_in_app_docs_navigation_only_references_existing_pages() -> None:
     source = _read(DASHBOARD_DOCS.parent / "docs.js")
     section_pattern = re.compile(
@@ -33,6 +52,8 @@ def test_in_app_docs_navigation_only_references_existing_pages() -> None:
     assert ("platform-guide", "projects-data-review") in pages
     for section_id, page_id in pages:
         assert (DASHBOARD_DOCS / section_id / f"{page_id}.html").is_file()
+    # The vanilla docs.js and the React ia.json describe the same pages until the cutover.
+    assert pages == _ia_pages()
 
 
 def test_platform_guides_describe_current_project_and_repeat_model() -> None:

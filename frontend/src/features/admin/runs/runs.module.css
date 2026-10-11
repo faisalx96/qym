@@ -1,0 +1,48 @@
+/* Admin runs tables: run cell (name + task meta), stop button, section cards. */
+.runCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.runLink {
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  text-decoration: none;
+}
+
+.runLink:hover {
+  text-decoration: underline;
+}
+
+.meta {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.project {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.stopButton {
+  color: var(--error);
+}
+
+.statusLine {
+  min-height: 1.5em;
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+}
+
+.statusLine[data-tone='danger'] {
+  color: var(--error);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
