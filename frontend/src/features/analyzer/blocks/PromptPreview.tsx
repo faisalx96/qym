@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, CopyButton, EmptyState, ErrorState, Eyebrow, Skeleton, Switch, Tag, Text } from '@/ui';
 import { fieldsSent } from '../model/settings';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
@@ -7,6 +7,13 @@ import s from './blocks.module.css';
 /** Role-labelled messages, copy, char count, context toggles, fields sent. No LLM call is made. */
 export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxHeight?: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const chars = ws.preview.characters;
+  // The item data (where a mapping edit shows up) is in the last message: keep it in view after each update.
+  useEffect(() => {
+    const el = box.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chars]);
   const { preview, settings, update, focus } = ws;
   const fields = fieldsSent(ws.cfg);
   return (
@@ -46,7 +53,7 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
         <>
           {/* Scrollable region: focusable so keyboard users can scroll it. */}
           {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
-          <div className={s.messages} data-expanded={expanded || !maxHeight ? '' : undefined} tabIndex={0} role="region" aria-label="Prompt messages">
+          <div ref={box} className={s.messages} data-expanded={expanded || !maxHeight ? '' : undefined} tabIndex={0} role="region" aria-label="Prompt messages">
             {preview.messages.map((m, i) => (
               <article key={i} className={s.message}>
                 <header className={s.messageHead}>

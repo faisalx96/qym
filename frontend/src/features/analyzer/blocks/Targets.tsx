@@ -137,7 +137,7 @@ export function TargetList({ ws }: { ws: RunWorkspace }) {
                         <Chip
                           isSelected={ws.focusKey === key}
                           onChange={() => ws.setFocusKey(key)}
-                          aria-label={`Preview ${metric} for ${row.item_id}${score != null ? `, score ${score.toFixed(2)}` : ''}`}
+                          aria-label={`${metric}${score != null ? ` ${score.toFixed(2)}` : ''}, preview target of ${row.item_id}`}
                         >
                           {`${metric}${score != null ? ` ${score.toFixed(2)}` : ''}`}
                         </Chip>

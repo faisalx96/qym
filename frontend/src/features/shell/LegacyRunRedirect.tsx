@@ -4,6 +4,7 @@ import { api } from '@/lib/http';
 import { KEYS, readLocal } from '@/lib/storage';
 import { useDelayedPending } from '@/lib/pending';
 import { runPath } from '@/app/routes';
+import { analysisUrl } from '@/features/analyzer/RunAnalyzerRedirect';
 import { ErrorState, Skeleton } from '@/ui';
 import { useAuth } from './AuthContext';
 import { constrained } from './layout';
@@ -51,8 +52,10 @@ export function LegacyRunRedirect() {
   }, [runId, me.projects]);
 
   if (state.slug) {
-    const target =
-      runPath(state.slug, runId) + (analyzer ? '/analyzer' : '') + location.search + location.hash;
+    // /run/:id/analyzer lands on the analysis workspace (?run=); everything else is the run page.
+    const target = analyzer
+      ? analysisUrl(state.slug, runId, location.search) + location.hash
+      : runPath(state.slug, runId) + location.search + location.hash;
     return <Navigate to={target} replace />;
   }
   if (state.error) {

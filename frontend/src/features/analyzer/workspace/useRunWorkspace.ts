@@ -7,13 +7,12 @@ import {
   usePromptPreview,
   useTestItems,
   type AnalysisConfig,
-  type AnalysisJob,
   type AnalysisResultPayload,
   type PlaygroundConfigPayload,
 } from '@/api/analysis';
 import { ApiError } from '@/lib/http';
 import { useDebounced } from '../useDebounced';
-import { useAnalysisRunner } from '../useAnalysisRunner';
+import type { RunnerState } from '../useAnalysisRunner';
 import {
   STD_VARIABLES,
   pathsToTree,
@@ -56,7 +55,7 @@ export interface WorkspaceInit {
   preselectMetric: string | null;
 }
 
-export function useRunWorkspace({ runId, data, config, preselectMetric }: WorkspaceInit, onJobFinished?: (job: AnalysisJob) => void) {
+export function useRunWorkspace({ runId, data, config, preselectMetric }: WorkspaceInit, runner: RunnerState) {
   const [settings, setSettings] = useState<AnalyzerSettings>(() =>
     defaultSettings({
       metrics: data.metricNames,
@@ -128,7 +127,6 @@ export function useRunWorkspace({ runId, data, config, preselectMetric }: Worksp
   const previewPending = previewKey !== debouncedKey || preview.isFetching;
 
   /* job */
-  const runner = useAnalysisRunner(runId, data.pass, onJobFinished);
   const busy = runner.busy || testing;
   const llmReady = config.llm_configured && Boolean(connectionId) && config.can_operate_analyzer;
 

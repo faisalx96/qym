@@ -12,6 +12,8 @@ import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
 import { RouteError } from '@/features/shell/RouteError';
 import { ComingSoon } from '@/features/dev/ComingSoon';
+import { AnalyzerPage } from '@/features/analyzer';
+import { RunAnalyzerRedirect } from '@/features/analyzer/RunAnalyzerRedirect';
 
 const C = ROUTES.projectChildren;
 
@@ -27,10 +29,17 @@ const projectChildren: RouteObject[] = [
   { path: C.environments, element: <ComingSoon brief="06-experiments-eval-queue" title="Environments" /> },
   { path: C.datasets, element: <ComingSoon brief="07-datasets-reviews-trash" title="Datasets" /> },
   { path: C.datasetsSplat, element: <ComingSoon brief="07-datasets-reviews-trash" title="Dataset" /> },
-  { path: C.analysis, element: <ComingSoon brief="08-playground" title="Auto-analysis" /> },
+  { path: C.analysis, element: <AnalyzerPage /> },
   { path: C.reviews, element: <ComingSoon brief="07-datasets-reviews-trash" title="Reviews" /> },
   { path: C.settings, element: <ProjectSettingsPage /> },
-  { path: C.runs_detail, element: <ComingSoon brief="04-run-detail" title="Run" /> },
+  {
+    path: C.runs_detail,
+    element: (
+      <RunAnalyzerRedirect>
+        <ComingSoon brief="04-run-detail" title="Run" />
+      </RunAnalyzerRedirect>
+    ),
+  },
 ];
 
 const devRoutes: RouteObject[] = isDev

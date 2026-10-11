@@ -1,7 +1,8 @@
+import { useEffect, useRef } from 'react';
 import type { AnalysisJob } from '@/api/analysis';
 import { runPath } from '@/app/routes';
 import { Badge, Button, LinkButton, Tag, Text } from '@/ui';
-import type { RunWorkspace } from '../workspace/useRunWorkspace';
+import type { RunnerState } from '../useAnalysisRunner';
 import s from './blocks.module.css';
 
 const PHASE: Record<string, string> = {
@@ -45,9 +46,30 @@ export function summarize(job: AnalysisJob) {
  * Job status. `bar` = single-line persistent bar (status + progress + Cancel);
  * `card` = full card with the completion summary (error-code groups, View run).
  */
-export function JobStatus({ ws, slug, runId, mode }: { ws: RunWorkspace; slug: string; runId: string; mode: 'bar' | 'card' }) {
-  const { runner } = ws;
+export function JobStatus({
+  runner,
+  slug,
+  runId,
+  mode,
+  onReview,
+}: {
+  runner: RunnerState;
+  slug: string;
+  runId: string;
+  mode: 'bar' | 'card';
+  onReview?: () => void;
+}) {
   const job = runner.job;
+  const region = useRef<HTMLDivElement>(null);
+  const jobId = job?.job_id;
+  // Move focus to the status region when a job starts (the Analyze button just got disabled).
+  useEffect(() => {
+    if (jobId && mode === 'bar') region.current?.focus();
+  }, [jobId, mode]);
+  const cancelling = runner.cancelling;
+  useEffect(() => {
+    if (cancelling) region.current?.focus();
+  }, [cancelling]);
   if (!job) return null;
   const live = job.status === 'queued' || job.status === 'running' || job.status === 'cancelling';
   const sum = summarize(job);
@@ -59,7 +81,7 @@ export function JobStatus({ ws, slug, runId, mode }: { ws: RunWorkspace; slug: s
 
   if (mode === 'bar') {
     return (
-      <div className={s.jobBar} role="region" aria-label="Analysis job" data-status={job.status}>
+      <div ref={region} tabIndex={-1} className={s.jobBar} role="region" aria-label="Analysis job" data-status={job.status}>
         <Badge tone={tone} dot>
           {statusText}
         </Badge>
@@ -79,6 +101,11 @@ export function JobStatus({ ws, slug, runId, mode }: { ws: RunWorkspace; slug: s
           </Button>
         ) : (
           <>
+            {onReview ? (
+              <Button size="sm" variant="accent" onPress={onReview}>
+                Review results
+              </Button>
+            ) : null}
             <LinkButton to={runPath(slug, runId)} size="sm">
               View run
             </LinkButton>
