@@ -77,8 +77,8 @@ def _compute_run_config_id(config: Dict[str, Any]) -> str:
 
 from ..utils.errors import DatasetNotFoundError, NonRetryableError
 
-# UIServer has been removed - platform streaming is now required
-# from ..server.app import UIServer  # DEPRECATED
+# The offline viewer (EvaluatorConfig.local_ui / `qym run create --local-ui`)
+# imports ..server lazily in _arun; platform streaming stays the default.
 import json
 import logging
 
@@ -1197,10 +1197,34 @@ class Evaluator:
 
         # Initialize progress tracker
         metric_names = list(self.metrics.keys())
-        tracker = ProgressTracker(items, metric_names)
+        self._ui_server = None
+        if getattr(self.config, "local_ui", False):
+            from ..server import LiveTracker, UIServer
+
+            try:
+                ui_server = UIServer(port=int(getattr(self.config, "ui_port", 0) or 0))
+                ui_server.start()
+                run_info["status"] = "RUNNING"
+                run_info["started_at"] = run_info.get("started_at") or _utc_now_str()
+                ui_server.run_state.set_run_info(run_info)
+                tracker = LiveTracker(items, metric_names, ui_server)
+                self._ui_server = ui_server
+                self.local_ui_url = ui_server.url
+                console.print(f"[blue]Local viewer:[/blue] {ui_server.url}")
+                if getattr(self.config, "local_ui_open", False):
+                    import webbrowser
+
+                    webbrowser.open(ui_server.url)
+            except OSError as exc:
+                self._notify_observer(
+                    "on_warning", message=f"Local viewer disabled: {exc}"
+                )
+                tracker = ProgressTracker(items, metric_names)
+        else:
+            tracker = ProgressTracker(items, metric_names)
 
         # Live UI setup (platform streaming required):
-        # Local UIServer has been removed - all live viewing is via the platform
+        # Live viewing: the platform, or the offline viewer when config.local_ui is set
         html_url = None
         self._platform_stream = None
         otel_stream_token = None
@@ -1214,8 +1238,8 @@ class Evaluator:
             import warnings
 
             warnings.warn(
-                "live_mode='local' is deprecated - local UIServer has been removed. "
-                "Please configure platform streaming (QYM_API_KEY) or use TUI only.",
+                "live_mode='local' is deprecated and shows nothing; set "
+                "local_ui=True (CLI: --local-ui) for the offline viewer.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -1986,6 +2010,20 @@ class Evaluator:
             result.last_saved_path = checkpoint_path
         # Mark evaluation as finished
         result.finish()
+        ui_server = getattr(self, "_ui_server", None)
+        if ui_server is not None:
+            try:
+                tracker.close()
+                ui_server.run_state.set_run_info(
+                    {
+                        **ui_server.run_state.get_run_info(),
+                        "status": "STOPPED" if getattr(result, "interrupted", False) else "COMPLETED",
+                        "ended_at": _utc_now_str(),
+                    }
+                )
+                ui_server.finish()
+            except Exception:
+                logger.exception("Could not finalise the local viewer")
 
         if self._platform_dataset_id:
             result.run_metadata["dataset_id"] = self._platform_dataset_id

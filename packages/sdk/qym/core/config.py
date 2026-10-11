@@ -109,7 +109,9 @@ class EvaluatorConfig(BaseModel):
     dataset_alias: Optional[str] = None
     
     # UI settings
-    ui_port: int = 0
+    local_ui: bool = False  # serve the offline results viewer for this run
+    local_ui_open: bool = False  # open the browser when the viewer starts
+    ui_port: int = 0  # port for the local viewer (0 = pick a free one)
     cli_invocation: Optional[str] = None
     
     # Output settings
