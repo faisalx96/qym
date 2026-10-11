@@ -17,3 +17,4 @@ Each line: date · question (brief 03 §9 number when it applies) · decision ·
 - 2026-10-11 · §9.11 · One toast system: the shell `useToast()` (top-right).
 - 2026-10-11 · charts library · Recharts 3.10.1 pinned (exact) for the Overview trend (line + run bars, accessibilityLayer); the Charts page keeps plain-div mini bars (the brief allows it; no axes needed, keeps the table semantics).
 - 2026-10-11 · seeding · `frontend/scripts/seed_runs.py` (stdlib, API only) and `e2e/helpers.ts seedRuns()` push runs through `/v1/runs` + `/v1/runs/{id}/events`; official-origin runs need an experiment launch token and are not seeded (the Origin filter is still exercised with `local`).
+- 2026-10-11 · foundation gap · `frontend/playwright.config.ts` hardcoded `<repo>/.venv/bin/python`, which a worktree does not have. It now honours `QYM_PYTHON`, then the repo venv, then the active `python`.
