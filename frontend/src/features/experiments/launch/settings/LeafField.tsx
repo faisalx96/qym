@@ -384,8 +384,8 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
         <div className={styles.cellRow}>
           {control}
           {dot}
-          {sweepBtn}
           {reset}
+          {sweepBtn}
         </div>
         {node.missingEnvs.length ? tags : null}
         {errorsEl}
@@ -408,8 +408,8 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
         {tags}
         <span className={styles.spacer} />
         {editAsFields}
-        {sweepBtn}
         {reset}
+        {sweepBtn}
         {removeBtn}
       </div>
       {control}
