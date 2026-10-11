@@ -4,7 +4,7 @@
  * Shift+A bulk approve, / focus search, ? help, Esc closes/cancels. Keys are
  * ignored while typing in a field or when a dialog is open.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export interface QueueKeyHandlers {
   next: () => void;
@@ -31,9 +31,26 @@ function dialogOpen(): boolean {
   return Boolean(document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]'));
 }
 
-export function useQueueKeys(h: QueueKeyHandlers, enabled = true): void {
+export function useQueueKeys(handlers: QueueKeyHandlers, enabled = true): void {
+  const ref = useRef(handlers);
+  useEffect(() => {
+    ref.current = handlers;
+  });
   useEffect(() => {
     if (!enabled) return;
+    const h: QueueKeyHandlers = {
+      next: () => ref.current.next(),
+      prev: () => ref.current.prev(),
+      approve: () => ref.current.approve(),
+      reject: () => ref.current.reject(),
+      edit: () => ref.current.edit(),
+      toggle: () => ref.current.toggle(),
+      select: () => ref.current.select(),
+      bulkApprove: () => ref.current.bulkApprove(),
+      focusSearch: () => ref.current.focusSearch(),
+      help: () => ref.current.help(),
+      escape: () => ref.current.escape(),
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'Escape') {
@@ -108,7 +125,7 @@ export function useQueueKeys(h: QueueKeyHandlers, enabled = true): void {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [h, enabled]);
+  }, [enabled]);
 }
 
 export const SHORTCUTS: { keys: string[]; label: string }[] = [

@@ -1,0 +1,102 @@
+/* Issue columns and edit form. */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.issue {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-inline-start-width: 3px;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.list[data-tone='human'] .issue {
+  border-inline-start-color: var(--accent-primary);
+}
+
+.list[data-tone='ai'] .issue {
+  border-inline-start-color: var(--accent-tertiary);
+}
+
+.issueHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.issueNum {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.finding {
+  margin: 0;
+  font-size: var(--font-base);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.why summary {
+  cursor: pointer;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.why p {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+}
+
+.fieldset legend {
+  padding: 0 var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: var(--space-sm);
+  align-items: end;
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.grow {
+  flex: 1;
+}
