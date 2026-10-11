@@ -63,7 +63,7 @@
 }
 
 .button[data-variant='danger'] {
-  color: color-mix(in srgb, var(--error) 80%, var(--text-primary));
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
   background: color-mix(in srgb, var(--error) 12%, transparent);
 }
 .button[data-variant='danger'][data-hovered] {

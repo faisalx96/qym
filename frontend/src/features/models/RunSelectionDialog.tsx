@@ -100,7 +100,7 @@ function Body({
                     isDisabled={!checked && atLimit}
                     onChange={(on) => toggle(run.run_id, on)}
                   >
-                    <span className={styles.selName}>{run.run_name ?? run.run_id}</span>
+                    <span className={styles.selName}>{run.run_name || run.run_id}</span>
                   </Checkbox>
                   <span className={styles.selMeta}>
                     {new Date(run.timestamp).toLocaleString()}

@@ -6,7 +6,12 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Key } from 'react-aria-components';
 import { errorMessage } from '@/api/evalCommon';
-import { useCancelRemoteJobs, useRemoteQueue, type RemoteEnvironment, type RemoteItem } from '@/api/evalQueue';
+import {
+  useCancelRemoteJobs,
+  useRemoteQueue,
+  type RemoteEnvironment,
+  type RemoteItem,
+} from '@/api/evalQueue';
 import { useProjectContext } from '@/features/shell';
 import { Button, DataTable, ErrorState, Icon, Skeleton, Tag, Text, useToast, type Column } from '@/ui';
 import { experimentPath } from '../paths';
@@ -32,10 +37,18 @@ export function RemoteQueueSection({
   const panelId = 'remote-queue-panel';
   return (
     <section className={styles.card} aria-label="Remote queue">
-      <button type="button" className={styles.toggle} aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((o) => !o)}>
+      <button
+        type="button"
+        className={styles.toggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((o) => !o)}
+      >
         <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />
         <span className={styles.title}>Remote queue</span>
-        <span className={styles.sub}>What the Evaluation Service holds, including jobs this project no longer tracks.</span>
+        <span className={styles.sub}>
+          What the Evaluation Service holds, including jobs this project no longer tracks.
+        </span>
         {open && data ? (
           <span className={styles.tags}>
             {orphans ? <Tag tone="warning">{plural(orphans, 'orphan')}</Tag> : null}
@@ -46,10 +59,21 @@ export function RemoteQueueSection({
       {open ? (
         <div id={panelId} className={styles.body}>
           {query.isPending ? <Skeleton kind="table" count={3} label="Loading remote queue" /> : null}
-          {query.isError ? <ErrorState error={query.error} title="Couldn’t load the remote queue" onRetry={() => void query.refetch()} /> : null}
+          {query.isError ? (
+            <ErrorState
+              error={query.error}
+              title="Couldn’t load the remote queue"
+              onRetry={() => void query.refetch()}
+            />
+          ) : null}
           {data?.environments.length === 0 ? <Text tone="secondary">No active environments.</Text> : null}
           {data?.environments.map((env) => (
-            <RemoteEnv key={env.environment_id} projectId={projectId} env={env} canCancel={data.can_cancel_orphans} />
+            <RemoteEnv
+              key={env.environment_id}
+              projectId={projectId}
+              env={env}
+              canCancel={data.can_cancel_orphans}
+            />
           ))}
         </div>
       ) : null}
@@ -57,13 +81,23 @@ export function RemoteQueueSection({
   );
 }
 
-function RemoteEnv({ projectId, env, canCancel }: { projectId: string; env: RemoteEnvironment; canCancel: boolean }) {
+function RemoteEnv({
+  projectId,
+  env,
+  canCancel,
+}: {
+  projectId: string;
+  env: RemoteEnvironment;
+  canCancel: boolean;
+}) {
   const { slug } = useProjectContext();
   const toast = useToast();
   const cancel = useCancelRemoteJobs(projectId);
   const [selected, setSelected] = useState<Set<Key>>(new Set());
   const [confirm, setConfirm] = useState(false);
-  const ids = [...selected].map(String).filter((id) => env.items.some((i) => i.remote_job_id === id && (i.orphan || i.stale)));
+  const ids = [...selected]
+    .map(String)
+    .filter((id) => env.items.some((i) => i.remote_job_id === id && (i.orphan || i.stale)));
   const columns: Column<RemoteItem>[] = [
     {
       id: 'job',
@@ -74,7 +108,11 @@ function RemoteEnv({ projectId, env, canCancel }: { projectId: string; env: Remo
       cell: (i) => (
         <div className={styles.cell}>
           <span>{i.remote_job_id}</span>
-          {i.run_name ? <Text variant="sm" tone="muted">{i.run_name}</Text> : null}
+          {i.run_name ? (
+            <Text variant="sm" tone="muted">
+              {i.run_name}
+            </Text>
+          ) : null}
         </div>
       ),
     },
@@ -97,7 +135,12 @@ function RemoteEnv({ projectId, env, canCancel }: { projectId: string; env: Remo
         ),
     },
     { id: 'user', label: 'Service user', width: 140, cell: (i) => i.user_id ?? '—' },
-    { id: 'age', label: 'Age', width: 90, cell: (i) => <span title={absTime(i.created_at)}>{relTime(i.created_at)}</span> },
+    {
+      id: 'age',
+      label: 'Age',
+      width: 90,
+      cell: (i) => <span title={absTime(i.created_at)}>{relTime(i.created_at)}</span>,
+    },
   ];
   const stale = env.items.some((i) => i.stale);
   return (
@@ -126,21 +169,35 @@ function RemoteEnv({ projectId, env, canCancel }: { projectId: string; env: Remo
         aria-label={`Remote jobs on ${env.environment_name}`}
         emptyState={<Text tone="secondary">The service holds no queued or running jobs.</Text>}
       />
-      {!canCancel ? <Text variant="sm" tone="muted">Only a project manager can cancel orphan and stale jobs.</Text> : null}
+      {!canCancel ? (
+        <Text variant="sm" tone="muted">
+          Only a project manager can cancel orphan and stale jobs.
+        </Text>
+      ) : null}
       {confirm ? (
         <CancelSplitDialog
           open
           onOpenChange={(o) => !o && setConfirm(false)}
           title={`Cancel ${plural(ids.length, 'remote job')} on ${env.environment_name}?`}
-          description={['These jobs are cancelled directly on the Evaluation Service. The call is audit-logged.']}
+          description={[
+            'These jobs are cancelled directly on the Evaluation Service. The call is audit-logged.',
+          ]}
           sections={remoteSections(env.items, ids)}
           actionable={ids.length}
           confirmLabel={`Cancel ${plural(ids.length, 'remote job')}`}
           onConfirm={async (reason) => {
             try {
-              const res = await cancel.mutateAsync({ environment_id: env.environment_id, remote_job_ids: ids, ...(reason ? { reason } : {}) });
-              const summary = Object.entries(res.counts).map(([k, v]) => `${v} ${titleCase(k).toLowerCase()}`).join(', ');
-              toast.show(summary || 'Nothing to cancel', { tone: Object.keys(res.errors).length ? 'error' : 'success' });
+              const res = await cancel.mutateAsync({
+                environment_id: env.environment_id,
+                remote_job_ids: ids,
+                ...(reason ? { reason } : {}),
+              });
+              const summary = Object.entries(res.counts)
+                .map(([k, v]) => `${v} ${titleCase(k).toLowerCase()}`)
+                .join(', ');
+              toast.show(summary || 'Nothing to cancel', {
+                tone: Object.keys(res.errors).length ? 'error' : 'success',
+              });
               setSelected(new Set());
             } catch (e) {
               toast.show(errorMessage(e), { tone: 'error' });

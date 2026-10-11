@@ -130,7 +130,8 @@
 }
 
 .tileValue[data-band='1'] {
-  color: var(--score-1);
+  /* --score-1 alone is 4.2:1 on the card; a touch of the primary text color clears AA */
+  color: color-mix(in srgb, var(--score-1) 85%, var(--text-primary));
 }
 .tileValue[data-band='2'] {
   color: var(--score-2);

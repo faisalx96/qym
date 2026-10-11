@@ -1,14 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import type { QueueJob } from '@/api/evalQueue';
-import { elapsedSeconds, formatElapsed, jobSections, outcomeSummary, remoteSections, runProgress, splitJobs } from '../lib';
+import {
+  elapsedSeconds,
+  formatElapsed,
+  jobSections,
+  outcomeSummary,
+  remoteSections,
+  runProgress,
+  splitJobs,
+} from '../lib';
 
 function job(over: Partial<QueueJob>): QueueJob {
   return {
-    id: 'j', experiment_id: 'x', experiment_name: 'exp', environment_id: 'e', environment_name: 'staging',
-    combo_index: 0, attempt: 0, run_name: null, params: {}, priority: 'NORMAL', status: 'QUEUED', wait_reason: null,
-    error: null, queue_position: 1, created_by_user_id: null, created_by_email: null, created_at: '2026-01-01T00:00:00Z',
-    next_attempt_at: null, submitted_at: null, cancel_requested_at: null, remote_job_id: null, remote_status: null,
-    can_cancel: true, run: null, ...over,
+    id: 'j',
+    experiment_id: 'x',
+    experiment_name: 'exp',
+    environment_id: 'e',
+    environment_name: 'staging',
+    combo_index: 0,
+    attempt: 0,
+    run_name: null,
+    params: {},
+    priority: 'NORMAL',
+    status: 'QUEUED',
+    wait_reason: null,
+    error: null,
+    queue_position: 1,
+    created_by_user_id: null,
+    created_by_email: null,
+    created_at: '2026-01-01T00:00:00Z',
+    next_attempt_at: null,
+    submitted_at: null,
+    cancel_requested_at: null,
+    remote_job_id: null,
+    remote_status: null,
+    can_cancel: true,
+    run: null,
+    ...over,
   };
 }
 
@@ -36,8 +64,28 @@ describe('splitJobs', () => {
 describe('remoteSections', () => {
   it('separates orphans from stale jobs', () => {
     const items = [
-      { remote_job_id: 'r1', status: 'RUNNING', priority: null, user_id: null, created_at: null, run_name: null, orphan: true, stale: false, match: null },
-      { remote_job_id: 'r2', status: 'RUNNING', priority: null, user_id: null, created_at: null, run_name: null, orphan: false, stale: true, match: { job_id: 'j', experiment_id: 'x', experiment_name: 'E', status: 'FAILED' } },
+      {
+        remote_job_id: 'r1',
+        status: 'RUNNING',
+        priority: null,
+        user_id: null,
+        created_at: null,
+        run_name: null,
+        orphan: true,
+        stale: false,
+        match: null,
+      },
+      {
+        remote_job_id: 'r2',
+        status: 'RUNNING',
+        priority: null,
+        user_id: null,
+        created_at: null,
+        run_name: null,
+        orphan: false,
+        stale: true,
+        match: { job_id: 'j', experiment_id: 'x', experiment_name: 'E', status: 'FAILED' },
+      },
     ];
     const s = remoteSections(items, ['r1', 'r2']);
     expect(s.map((x) => x.key)).toEqual(['orphans', 'stale']);
@@ -59,7 +107,16 @@ describe('summaries', () => {
   });
   it('progress is null without a total', () => {
     expect(runProgress(job({}))).toBeNull();
-    const run = { id: 'r', status: 'RUNNING', status_reason: null, started_at: null, last_event_at: null, items_done: 5, items_total: 10, deleted: false };
+    const run = {
+      id: 'r',
+      status: 'RUNNING',
+      status_reason: null,
+      started_at: null,
+      last_event_at: null,
+      items_done: 5,
+      items_total: 10,
+      deleted: false,
+    };
     expect(runProgress(job({ run }))).toBe(0.5);
   });
 });

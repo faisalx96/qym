@@ -58,6 +58,7 @@
   background: rgba(245, 158, 11, 0.14);
 }
 .tag[data-tone='danger'] {
-  color: var(--error);
+  /* --error alone is 4.2:1 on its own tint; mixing in the primary text color clears AA */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
   background: rgba(239, 68, 68, 0.14);
 }

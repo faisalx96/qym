@@ -2,7 +2,8 @@
 import { useNavigate } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { useProjectContext } from '@/features/shell';
-import { Tabs } from '@/ui';
+import { TabPanel, Tabs } from '@/ui';
+import styles from './ExperimentsTabs.module.css';
 
 export type ExperimentsSection = 'experiments' | 'queue' | 'environments';
 
@@ -24,6 +25,11 @@ export function ExperimentsTabs({ current }: { current: ExperimentsSection }) {
         { id: 'queue', label: 'Queue' },
         { id: 'environments', label: 'Environments' },
       ]}
-    />
+    >
+      {/* The page itself is the panel's content; an empty panel keeps aria-controls resolvable. */}
+      <TabPanel id={current} className={styles.panel}>
+        {null}
+      </TabPanel>
+    </Tabs>
   );
 }

@@ -27,7 +27,22 @@ import { errorMessage } from '@/api/evalCommon';
 import { runPath } from '@/app/routes';
 import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { Badge, Button, Checkbox, EmptyState, ErrorState, Icon, PageHeader, Select, Skeleton, Tag, Text, useToast, type BadgeTone, type Column } from '@/ui';
+import {
+  Badge,
+  Button,
+  Checkbox,
+  EmptyState,
+  ErrorState,
+  Icon,
+  PageHeader,
+  Select,
+  Skeleton,
+  Tag,
+  Text,
+  useToast,
+  type BadgeTone,
+  type Column,
+} from '@/ui';
 import { DataTable } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { experimentPath } from '../paths';
@@ -58,7 +73,10 @@ const STATUS_TONE: Record<string, BadgeTone> = {
   CANCELLING: 'warning',
 };
 
-type DialogState = Pick<CancelSplitDialogProps, 'title' | 'description' | 'sections' | 'actionable' | 'confirmLabel'> & {
+type DialogState = Pick<
+  CancelSplitDialogProps,
+  'title' | 'description' | 'sections' | 'actionable' | 'confirmLabel'
+> & {
   body: { job_ids: string[] } | { experiment_id: string; statuses: string[] };
 };
 
@@ -81,7 +99,9 @@ export function QueuePage() {
   const query = useQueue(pid, filters, poll);
   const next = useBackoffInterval(true, {
     dataUpdatedAt: query.dataUpdatedAt,
-    resetKey: (query.data?.jobs ?? []).map((j) => `${j.id}:${j.status}:${j.queue_position}:${j.run?.items_done ?? ''}`).join('|'),
+    resetKey: (query.data?.jobs ?? [])
+      .map((j) => `${j.id}:${j.status}:${j.queue_position}:${j.run?.items_done ?? ''}`)
+      .join('|'),
   });
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the interval derives from the query's own result
   useEffect(() => setPoll(next), [next]);
@@ -100,22 +120,32 @@ export function QueuePage() {
 
   const jobs = useMemo(() => query.data?.jobs ?? [], [query.data]);
   // Selections of jobs that left the queue drop out here instead of in an effect.
-  const selected = useMemo(() => new Set([...selectedRaw].filter((k) => jobs.some((j) => j.id === k))), [selectedRaw, jobs]);
-  const stats = useMemo(() => (query.data ? [{ value: query.data.total, label: 'jobs' }] : null), [query.data]);
+  const selected = useMemo(
+    () => new Set([...selectedRaw].filter((k) => jobs.some((j) => j.id === k))),
+    [selectedRaw, jobs],
+  );
+  const stats = useMemo(
+    () => (query.data ? [{ value: query.data.total, label: 'jobs' }] : null),
+    [query.data],
+  );
   useTopbarStats(stats);
 
   const experimentItems = useMemo(() => {
     const byId = new Map<string, string>();
     (experiments.data?.experiments ?? []).forEach((x) => byId.set(x.id, x.name));
     jobs.forEach((j) => byId.set(j.experiment_id, j.experiment_name));
-    if (filters.experiment && !byId.has(filters.experiment)) byId.set(filters.experiment, 'Selected experiment');
+    if (filters.experiment && !byId.has(filters.experiment))
+      byId.set(filters.experiment, 'Selected experiment');
     return [{ key: '', label: 'All experiments' }, ...[...byId].map(([key, label]) => ({ key, label }))];
   }, [experiments.data, jobs, filters.experiment]);
   const envItems = [
     { key: '', label: 'All environments' },
     ...(envs.data ?? []).map((e) => ({ key: e.id, label: e.is_active ? e.name : `${e.name} (disabled)` })),
   ];
-  const statusItems = [{ key: '', label: 'All statuses' }, ...QUEUE_STATUSES.map((s) => ({ key: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))];
+  const statusItems = [
+    { key: '', label: 'All statuses' },
+    ...QUEUE_STATUSES.map((s) => ({ key: s, label: s.charAt(0) + s.slice(1).toLowerCase() })),
+  ];
 
   const selectedJobs = jobs.filter((j) => selected.has(j.id));
   const cancellableJobs = jobs.filter((j) => j.can_cancel && j.status !== 'CANCELLING');
@@ -167,7 +197,13 @@ export function QueuePage() {
   };
 
   const columns: Column<QueueJob>[] = [
-    { id: 'pos', label: '#', width: 48, mono: true, cell: (j) => (j.queue_position ? String(j.queue_position) : '—') },
+    {
+      id: 'pos',
+      label: '#',
+      width: 48,
+      mono: true,
+      cell: (j) => (j.queue_position ? String(j.queue_position) : '—'),
+    },
     {
       id: 'job',
       label: 'Experiment',
@@ -204,7 +240,9 @@ export function QueuePage() {
         return (
           <span className={styles.envCell}>
             {j.environment_name}
-            {env && env.health_status && env.health_status !== 'ok' ? <Badge tone="warning">{env.health_status}</Badge> : null}
+            {env && env.health_status && env.health_status !== 'ok' ? (
+              <Badge tone="warning">{env.health_status}</Badge>
+            ) : null}
           </span>
         );
       },
@@ -220,21 +258,45 @@ export function QueuePage() {
       ),
     },
     { id: 'creator', label: 'Created by', width: 120, cell: (j) => j.created_by_email ?? '—' },
-    { id: 'age', label: 'Age', width: 80, cell: (j) => <span title={absTime(j.created_at)}>{relTime(j.created_at, now)}</span> },
-    { id: 'elapsed', label: 'Elapsed', width: 80, mono: true, cell: (j) => formatElapsed(elapsedSeconds(j, now)) },
+    {
+      id: 'age',
+      label: 'Age',
+      width: 80,
+      cell: (j) => <span title={absTime(j.created_at)}>{relTime(j.created_at, now)}</span>,
+    },
+    {
+      id: 'elapsed',
+      label: 'Elapsed',
+      width: 80,
+      mono: true,
+      cell: (j) => formatElapsed(elapsedSeconds(j, now)),
+    },
     {
       id: 'progress',
       label: 'Run progress',
       width: 150,
       cell: (j) => {
-        if (!j.run) return <Text variant="sm" tone="muted">Not started</Text>;
-        if (j.run.deleted) return <Text variant="sm" tone="muted">Run deleted</Text>;
+        if (!j.run)
+          return (
+            <Text variant="sm" tone="muted">
+              Not started
+            </Text>
+          );
+        if (j.run.deleted)
+          return (
+            <Text variant="sm" tone="muted">
+              Run deleted
+            </Text>
+          );
         const p = runProgress(j);
         return (
           <div className={styles.cell}>
             <ProgressBar value={p} label={`${jobLabel(j)} progress`} />
             <span className={styles.progressText}>
-              {j.run.items_total ? `${j.run.items_done ?? 0}/${j.run.items_total}` : `${j.run.items_done ?? 0} items`} ·{' '}
+              {j.run.items_total
+                ? `${j.run.items_done ?? 0}/${j.run.items_total}`
+                : `${j.run.items_done ?? 0} items`}{' '}
+              ·{' '}
               <Link to={runPath(slug, j.run.id)} className={styles.link}>
                 run
               </Link>
@@ -250,16 +312,25 @@ export function QueuePage() {
       width: 110,
       cell: (j) =>
         j.status === 'CANCELLING' ? (
-          <Text variant="sm" tone="muted">Stopping…</Text>
+          <Text variant="sm" tone="muted">
+            Stopping…
+          </Text>
         ) : (
-          <Button size="sm" variant="danger" isDisabled={!j.can_cancel || readOnly} onPress={() => openCancel([j], `Cancel ${jobLabel(j)}?`)}>
+          <Button
+            size="sm"
+            variant="danger"
+            isDisabled={!j.can_cancel || readOnly}
+            onPress={() => openCancel([j], `Cancel ${jobLabel(j)}?`)}
+          >
             Cancel
           </Button>
         ),
     },
   ];
 
-  const filtered = Boolean(filters.environment || filters.statuses?.length || filters.mine || filters.experiment);
+  const filtered = Boolean(
+    filters.environment || filters.statuses?.length || filters.mine || filters.experiment,
+  );
   const environments = query.data?.environments ?? [];
 
   return (
@@ -269,12 +340,23 @@ export function QueuePage() {
         description="Jobs waiting for or running on this project’s Evaluation Service environments, in dispatch order."
         meta={[
           query.data ? `${plural(query.data.total, 'job')}` : '',
-          query.dataUpdatedAt ? <span key="r">refreshed {relTime(new Date(query.dataUpdatedAt).toISOString(), now)}</span> : '',
+          query.dataUpdatedAt ? (
+            <span key="r">refreshed {relTime(new Date(query.dataUpdatedAt).toISOString(), now)}</span>
+          ) : (
+            ''
+          ),
         ].filter(Boolean)}
         tabs={<ExperimentsTabs current="queue" />}
       />
       <div className={styles.filters} role="group" aria-label="Queue filters">
-        <Select label="Environment" items={envItems} value={filters.environment ?? ''} onChange={(k) => replaceUrlQuery({ environment: k ? String(k) : null })} searchable={false} width={190} />
+        <Select
+          label="Environment"
+          items={envItems}
+          value={filters.environment ?? ''}
+          onChange={(k) => replaceUrlQuery({ environment: k ? String(k) : null })}
+          searchable={false}
+          width={190}
+        />
         <Select
           label="Status"
           items={statusItems}
@@ -283,7 +365,13 @@ export function QueuePage() {
           searchable={false}
           width={160}
         />
-        <Select label="Experiment" items={experimentItems} value={filters.experiment ?? ''} onChange={(k) => replaceUrlQuery({ experiment: k ? String(k) : null })} width={240} />
+        <Select
+          label="Experiment"
+          items={experimentItems}
+          value={filters.experiment ?? ''}
+          onChange={(k) => replaceUrlQuery({ experiment: k ? String(k) : null })}
+          width={240}
+        />
         <Checkbox isSelected={filters.mine} onChange={(v) => replaceUrlQuery({ mine: v })}>
           Only my jobs
         </Checkbox>
@@ -295,7 +383,11 @@ export function QueuePage() {
       {showSkeleton ? (
         <Skeleton kind="table" count={6} label="Loading queue" />
       ) : query.isError && !query.data ? (
-        <ErrorState error={query.error} title="Couldn’t load the queue" onRetry={() => void query.refetch()} />
+        <ErrorState
+          error={query.error}
+          title="Couldn’t load the queue"
+          onRetry={() => void query.refetch()}
+        />
       ) : query.data ? (
         <>
           <ul className={styles.envCards} aria-label="Environments">
@@ -310,14 +402,29 @@ export function QueuePage() {
               <Text variant="md" weight={600}>
                 {selected.size ? `${selected.size} selected` : 'Our jobs'}
               </Text>
-              <Button size="sm" variant="neutral" isDisabled={!cancellableJobs.length} onPress={() => setSelected(new Set(cancellableJobs.map((j) => j.id)))}>
+              <Button
+                size="sm"
+                variant="neutral"
+                isDisabled={!cancellableJobs.length}
+                onPress={() => setSelected(new Set(cancellableJobs.map((j) => j.id)))}
+              >
                 Select all I can cancel ({cancellableJobs.length})
               </Button>
-              <Button size="sm" variant="danger" isDisabled={!selected.size || readOnly} onPress={() => openCancel(selectedJobs)}>
+              <Button
+                size="sm"
+                variant="danger"
+                isDisabled={!selected.size || readOnly}
+                onPress={() => openCancel(selectedJobs)}
+              >
                 Cancel selected ({selected.size})
               </Button>
               {filters.experiment ? (
-                <Button size="sm" variant="neutral" isDisabled={readOnly} onPress={() => void openCancelQueuedInExperiment()}>
+                <Button
+                  size="sm"
+                  variant="neutral"
+                  isDisabled={readOnly}
+                  onPress={() => void openCancelQueuedInExperiment()}
+                >
                   Cancel all queued in experiment
                 </Button>
               ) : null}
@@ -339,8 +446,23 @@ export function QueuePage() {
                   compact
                   icon={<Icon name="clock" />}
                   title={filtered ? 'No jobs match these filters' : 'The queue is empty'}
-                  body={filtered ? 'Clear a filter to see more jobs.' : 'Launched experiments appear here until they finish.'}
-                  action={filtered ? <Button variant="neutral" onPress={() => replaceUrlQuery({ environment: null, status: null, mine: null, experiment: null })}>Clear filters</Button> : undefined}
+                  body={
+                    filtered
+                      ? 'Clear a filter to see more jobs.'
+                      : 'Launched experiments appear here until they finish.'
+                  }
+                  action={
+                    filtered ? (
+                      <Button
+                        variant="neutral"
+                        onPress={() =>
+                          replaceUrlQuery({ environment: null, status: null, mine: null, experiment: null })
+                        }
+                      >
+                        Clear filters
+                      </Button>
+                    ) : undefined
+                  }
                 />
               }
             />
@@ -384,7 +506,7 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
         </Text>
         {!env.is_active ? <Tag>Disabled</Tag> : null}
         <Badge tone={healthy ? 'success' : env.health_status === 'unknown' ? 'neutral' : 'warning'} dot>
-          {healthy ? 'Healthy' : env.health_status ?? 'Unknown'}
+          {healthy ? 'Healthy' : (env.health_status ?? 'Unknown')}
         </Badge>
       </div>
       <div className={styles.counts}>
@@ -392,9 +514,17 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
         <Stat label="Queued" value={env.queued} />
         <Stat label="Blocked" value={env.blocked} warn />
       </div>
-      {!healthy && env.health_error ? <p className={styles.note2}>Dispatch is paused until the health check passes: {env.health_error}</p> : null}
-      {env.stale_remote ? <p className={styles.note2}>{env.stale_remote} stale jobs still running on the service.</p> : null}
-      {env.high_active ? <p className={styles.high}>A HIGH-priority job is active on {env.name}. Other jobs wait until it finishes.</p> : null}
+      {!healthy && env.health_error ? (
+        <p className={styles.note2}>Dispatch is paused until the health check passes: {env.health_error}</p>
+      ) : null}
+      {env.stale_remote ? (
+        <p className={styles.note2}>{env.stale_remote} stale jobs still running on the service.</p>
+      ) : null}
+      {env.high_active ? (
+        <p className={styles.high}>
+          A HIGH-priority job is active on {env.name}. Other jobs wait until it finishes.
+        </p>
+      ) : null}
     </section>
   );
 }

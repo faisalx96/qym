@@ -232,7 +232,7 @@ function MatrixCell({
           variant="neutral"
           isDisabled={Boolean(presetReason) || !canControl}
           onPress={() => flows.savePreset(job)}
-          aria-label={`Save ${comboLabel} on ${env.name} as preset`}
+          aria-label={`Save as preset: ${comboLabel} on ${env.name}`}
           data-exp-save-preset={job.id}
         >
           Save as preset
@@ -242,7 +242,7 @@ function MatrixCell({
             variant="neutral"
             isDisabled={Boolean(presetReason)}
             onPress={() => onPromote(job)}
-            aria-label={`Promote ${comboLabel} on ${env.name} to default preset`}
+            aria-label={`Promote to default preset: ${comboLabel} on ${env.name}`}
             data-exp-promote={job.id}
           >
             Promote to default preset
