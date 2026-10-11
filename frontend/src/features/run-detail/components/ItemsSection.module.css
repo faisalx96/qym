@@ -1,0 +1,49 @@
+/* Items section frame. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+  scroll-margin-top: var(--space-md);
+}
+
+.head {
+  min-width: 0;
+}
+
+.aside {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.stats {
+  display: inline-flex;
+}
+
+@media (max-width: 1100px) {
+  .stats {
+    display: none;
+  }
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}

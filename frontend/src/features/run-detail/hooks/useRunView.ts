@@ -25,6 +25,8 @@ export interface RunViewApi {
   defs: FieldDef[];
   selectedMetric: string | null;
   setView: (patch: Partial<RunView> | ((prev: RunView) => Partial<RunView>)) => void;
+  /** Replace the whole view (chip removal). */
+  replaceView: (next: RunView) => void;
   setFilters: (patch: Partial<PageFilters> | ((prev: PageFilters) => Partial<PageFilters>)) => void;
   clearFilters: () => void;
   /** Non-view params the page also owns. */
@@ -32,7 +34,8 @@ export interface RunViewApi {
   traceParam: string | null;
   listParam: string | null;
   setItemParam: (itemId: string | null) => void;
-  setTraceParam: (itemId: string | null) => void;
+  setTraceParam: (itemId: string | null, pass?: number | null) => void;
+  tracePassParam: number | null;
 }
 
 export function readPassParam(params: URLSearchParams): number | null {
@@ -101,9 +104,13 @@ export function useRunView(model: RunModel): RunViewApi {
   }, [decodeCtx, view, write]);
 
   const setParam = useCallback(
-    (key: 'item' | 'trace', value: string | null) => {
+    (key: 'item' | 'trace', value: string | null, tracePass: number | null = null) => {
       setParams(
-        (prev) => applyQueryUpdates(prev, { [key]: value, ...(key === 'item' ? { item_id: null } : {}) }),
+        (prev) =>
+          applyQueryUpdates(prev, {
+            [key]: value,
+            ...(key === 'item' ? { item_id: null } : { trace_pass: value ? tracePass : null }),
+          }),
         {
           replace: true,
           preventScrollReset: true,
@@ -120,14 +127,16 @@ export function useRunView(model: RunModel): RunViewApi {
       defs,
       selectedMetric,
       setView,
+      replaceView: write,
       setFilters,
       clearFilters,
       itemParam: params.get('item') ?? params.get('item_id'),
       traceParam: params.get('trace'),
       listParam: params.get('list'),
       setItemParam: (id) => setParam('item', id),
-      setTraceParam: (id) => setParam('trace', id),
+      setTraceParam: (id, pass) => setParam('trace', id, pass ?? null),
+      tracePassParam: Number(params.get('trace_pass')) || null,
     }),
-    [view, ctx, defs, selectedMetric, setView, setFilters, clearFilters, params, setParam],
+    [view, ctx, defs, selectedMetric, setView, write, setFilters, clearFilters, params, setParam],
   );
 }

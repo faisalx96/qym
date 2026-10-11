@@ -12,6 +12,8 @@ export interface ScoreValueProps {
   digits?: number;
   /** Show raw number instead of a percent. */
   raw?: boolean;
+  /** Override the displayed text (e.g. True/False for booleans, formatted numerics). */
+  text?: string;
   className?: string;
 }
 
@@ -34,11 +36,18 @@ export function ScoreValue({
   ci,
   digits = 0,
   raw,
+  text: textOverride,
   className,
 }: ScoreValueProps) {
   const dir = normalize(direction);
   const band = error ? null : metricBand(value, type, dir);
-  const text = error ? 'Error' : raw ? (value ?? '—') : formatPercent(value ?? null, digits);
+  const text = error
+    ? 'Error'
+    : textOverride !== undefined
+      ? textOverride
+      : raw
+        ? (value ?? '—')
+        : formatPercent(value ?? null, digits);
   return (
     <span
       className={[styles.score, className].filter(Boolean).join(' ')}

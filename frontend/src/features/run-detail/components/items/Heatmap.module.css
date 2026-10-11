@@ -1,0 +1,91 @@
+/* Item × pass heatmap. */
+.wrap {
+  min-width: 0;
+}
+
+.scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.row {
+  display: grid;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0 var(--space-sm);
+}
+
+.th {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--space-xs) 0;
+}
+
+.body {
+  position: relative;
+}
+
+.body .row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.id {
+  color: var(--text-muted);
+}
+
+.cell {
+  width: 100%;
+  height: 24px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.cell:focus-visible {
+  outline: 2px solid var(--accent-primary);
+}
+
+.cell[data-band='1'] {
+  background: color-mix(in srgb, var(--score-1) 35%, var(--bg-elevated));
+}
+.cell[data-band='2'] {
+  background: color-mix(in srgb, var(--score-2) 35%, var(--bg-elevated));
+}
+.cell[data-band='3'] {
+  background: color-mix(in srgb, var(--score-3) 35%, var(--bg-elevated));
+}
+.cell[data-band='4'] {
+  background: color-mix(in srgb, var(--score-4) 35%, var(--bg-elevated));
+}
+.cell[data-band='5'] {
+  background: color-mix(in srgb, var(--score-5) 35%, var(--bg-elevated));
+}
+
+.cell[data-error='task'] {
+  color: var(--error);
+}
+
+.cell[data-error='metric'] {
+  color: var(--metric-error);
+}

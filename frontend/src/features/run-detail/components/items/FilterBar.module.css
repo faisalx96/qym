@@ -1,0 +1,28 @@
+/* Single filter surface above the item table. */
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.display {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 260px;
+  padding: var(--space-md);
+}
