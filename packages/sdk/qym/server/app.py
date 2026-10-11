@@ -227,6 +227,9 @@ class UIServer:
                     with server.clients_lock:
                         if client in server.clients:
                             server.clients.remove(client)
+                    # "Connection: keep-alive" above would otherwise leave the socket open
+                    # after the stream ends, so browsers never see the drop and never reconnect
+                    self.close_connection = True
 
             def do_POST(self) -> None:  # noqa: N802
                 if urlparse(self.path).path != "/api/runs/update_metric":

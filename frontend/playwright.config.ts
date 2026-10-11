@@ -24,6 +24,7 @@ export const APP = '/app';
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: '**/sdk-viewer/**', // own config: playwright.sdk.config.ts
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,

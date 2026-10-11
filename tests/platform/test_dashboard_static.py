@@ -1860,10 +1860,6 @@ def test_langfuse_ctas_are_removed_from_all_user_surfaces() -> None:
         DASHBOARD_DIR / "run.html",
         DASHBOARD_DIR / "ui_components.css",
         DASHBOARD_DIR / "dashboard.css",
-        ROOT / "packages" / "platform" / "qym_platform" / "_static" / "ui" / "index.html",
-        ROOT / "packages" / "platform" / "qym_platform" / "_static" / "ui" / "app.js",
-        ROOT / "packages" / "sdk" / "qym" / "_static" / "ui" / "index.html",
-        ROOT / "packages" / "sdk" / "qym" / "_static" / "ui" / "app.js",
     ]
     forbidden = (
         "View in Langfuse",

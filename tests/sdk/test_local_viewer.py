@@ -233,6 +233,23 @@ class TestLiveTracker:
         assert row["output_full"] == "pending" and "[dim]" not in json.dumps(row)
 
 
+class TestStreamLifecycle:
+    def test_stream_socket_closes_when_the_server_stops_without_done(self, server):
+        """A dropped server must be visible to the browser (EventSource error -> reconnect banner)."""
+        import socket
+
+        sock = socket.create_connection((server.host, server.port), timeout=5)
+        sock.sendall(b"GET /api/rows/stream HTTP/1.1\r\nHost: x\r\n\r\n")
+        assert b"text/event-stream" in sock.recv(512)
+        server._stop.set()  # what an abrupt stop does, without the `done` event
+        sock.settimeout(5)
+        try:
+            while sock.recv(4096):
+                pass  # EOF (b"") means the server closed the connection
+        finally:
+            sock.close()
+
+
 class TestEvaluatorLocalUi:
     def test_local_ui_serves_the_live_run_and_marks_it_completed(self, static_dir, tmp_path):
         ds = tmp_path / "ds.csv"
@@ -249,6 +266,9 @@ class TestEvaluatorLocalUi:
             assert srv is not None and evaluator.local_ui_url == srv.url
             status, run = _json(srv, "/api/run")
             assert status == 200 and run["status"] == "COMPLETED" and run["ended_at"]
+            # both timestamps are UTC ("Z"): the viewer's elapsed time is their difference
+            assert run["started_at"].endswith("Z") and run["ended_at"].endswith("Z")
+            assert run["started_at"] <= run["ended_at"]
             snap = _json(srv, "/api/snapshot")[1]
             assert snap["stats"]["completed"] == 2 and snap["metric_names"] == ["exact_match"]
         finally:

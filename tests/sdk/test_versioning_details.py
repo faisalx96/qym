@@ -198,7 +198,7 @@ def test_run_create_passes_versioning_details_to_the_evaluator(tmp_path, monkeyp
         def __init__(self, task, dataset, metrics, config, model=None):
             seen.update(config)
 
-        def run(self, show_progress=True, show_table=True):
+        def run(self, show_tui=True):
             return FakeResult()
 
     monkeypatch.setattr("qym.core.evaluator.Evaluator", FakeEvaluator)

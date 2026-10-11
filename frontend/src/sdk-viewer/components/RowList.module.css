@@ -80,6 +80,10 @@
 .table tbody tr[aria-selected='true'] {
   background: var(--bg-active);
 }
+/* The status badge's tone text (e.g. green) falls under 4.5:1 on the selected-row background. */
+.table tbody tr[aria-selected='true'] [data-tone] {
+  color: var(--text-primary);
+}
 .table tbody tr:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: -2px;
@@ -96,8 +100,9 @@
 .text {
   overflow: hidden;
 }
+/* Lightened red: plain --error is under 4.5:1 on the hovered and selected row backgrounds. */
 .text[data-err] {
-  color: var(--error);
+  color: color-mix(in srgb, var(--error) 60%, var(--text-primary));
 }
 .clamp {
   display: block;

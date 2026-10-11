@@ -68,6 +68,12 @@ function ScoreEditor({
   const cell = metricCell(value);
   const initial = cell.num === null ? '' : String(cell.num);
   const [draft, setDraft] = useState(initial);
+  // The stored score changed under us (our own save, via the refreshed row): show it.
+  const [seen, setSeen] = useState(initial);
+  if (seen !== initial) {
+    setSeen(initial);
+    setDraft(initial);
+  }
   const [status, setStatus] = useState<{ kind: 'idle' | 'saving' | 'saved' | 'error'; text?: string }>({
     kind: 'idle',
   });
@@ -210,7 +216,9 @@ export const Detail = forwardRef<HTMLElement, DetailProps>(function Detail(
         <ul className={s.metrics}>
           {metricNames.map((name, k) => {
             const cell = metricCell(row.metric_values[k]);
-            const meta = Object.entries(row.metric_meta[name] ?? {}).filter(([, v]) => String(v).trim() !== '');
+            const meta = Object.entries(row.metric_meta[name] ?? {}).filter(
+              ([, v]) => String(v).trim() !== '',
+            );
             return (
               <li key={name}>
                 <div className={s.metricRow}>
@@ -226,7 +234,7 @@ export const Detail = forwardRef<HTMLElement, DetailProps>(function Detail(
                 ))}
                 {canEdit && !failed ? (
                   <ScoreEditor
-                    key={`${row.index}:${name}:${row.metric_values[k] ?? ''}`}
+                    key={`${row.index}:${name}`}
                     name={name}
                     value={row.metric_values[k]}
                     disabled={false}

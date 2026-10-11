@@ -1205,7 +1205,8 @@ class Evaluator:
                 ui_server = UIServer(port=int(getattr(self.config, "ui_port", 0) or 0))
                 ui_server.start()
                 run_info["status"] = "RUNNING"
-                run_info["started_at"] = run_info.get("started_at") or _utc_now_str()
+                # result.start_time is naive local time; the viewer parses UTC (ended_at is UTC)
+                run_info["started_at"] = _utc_now_str()
                 ui_server.run_state.set_run_info(run_info)
                 tracker = LiveTracker(items, metric_names, ui_server)
                 self._ui_server = ui_server
