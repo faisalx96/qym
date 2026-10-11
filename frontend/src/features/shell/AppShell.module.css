@@ -296,6 +296,10 @@
   .topbarEnd [data-topbar-stats] {
     display: none;
   }
+  /* The palette button is nowrap: never squeeze its container, let the breadcrumbs give way. */
+  .topbarEnd {
+    flex: none;
+  }
   .paletteLabel {
     display: none;
   }
