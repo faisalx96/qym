@@ -20,7 +20,7 @@ import { pluralize, relativeTime } from '../lib/itemValue';
 import { comparePath, datasetPath, parseDatasetRoute, type DetailTab } from '../lib/route';
 import { PRODUCTION_RULE, isProduction, resolveActiveVersion } from '../lib/versions';
 import { UploadWizard, type WizardMode } from '../wizard/UploadWizard';
-import { ItemsTab } from './ItemsTab';
+import { ItemsWorkspace } from './ItemsWorkspace';
 import { LineageTab } from './LineageTab';
 import { RunsTab } from './RunsTab';
 import { SettingsTab } from './SettingsTab';
@@ -119,6 +119,7 @@ function DetailBody({ slug, dataset, versions, active, tab, readOnly }: { slug: 
   const ref = dataset.slug;
   const isDraft = active?.status === 'draft';
   const canWrite = !readOnly;
+  const contentAccess = dataset.items_visible;
   const canSetProd = dataset.permissions.can_set_production;
 
   const hrefFor = (v: DatasetVersion) => {
@@ -138,7 +139,7 @@ function DetailBody({ slug, dataset, versions, active, tab, readOnly }: { slug: 
     }
   }
 
-  const primaryActions = !canWrite ? null : !active ? (
+  const primaryActions = !canWrite || !contentAccess ? null : !active ? (
     <Button variant="primary" icon={<Icon name="plus" size={12} />} onPress={() => setDialog('draft')} data-testid="create-first-draft">
       Create first draft
     </Button>
@@ -252,7 +253,7 @@ function DetailBody({ slug, dataset, versions, active, tab, readOnly }: { slug: 
       <Tabs label="Dataset sections" items={tabItems} selected={tab} onSelect={(id) => navigate({ search: `?${withTab(search, id)}` })}>
         <TabPanel id="items">
           {active ? (
-            <ItemsTab slug={slug} dataset={dataset} version={active} readOnly={readOnly} onAddItem={() => setAddItemOpen(true)} onImport={() => setWizard('add-to-draft')} />
+            <ItemsWorkspace slug={slug} dataset={dataset} version={active} readOnly={readOnly} onAddItem={() => setAddItemOpen(true)} onImport={() => setWizard('add-to-draft')} />
           ) : (
             <NoVersions canWrite={canWrite} onCreate={() => setDialog('draft')} onImport={() => setWizard('new-version')} />
           )}

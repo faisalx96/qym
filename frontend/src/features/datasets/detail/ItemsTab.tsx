@@ -28,9 +28,11 @@ export interface ItemsTabProps {
   selection?: { selected: Set<Key>; onChange: (keys: Set<Key>) => void; mode?: 'multiple' | 'single' };
   /** Row activation (Enter / click on the row body). Defaults to opening the item page. */
   onOpenItem?: (item: DatasetItem) => void;
+  /** Rows currently shown (for pane prev/next). */
+  onRows?: (rows: DatasetItem[]) => void;
 }
 
-export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport, selection, onOpenItem }: ItemsTabProps) {
+export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport, selection, onOpenItem, onRows }: ItemsTabProps) {
   const [params, setParams] = useSearchParams();
   const route = parseDatasetRoute(dataset.slug, params);
   const navigate = useNavigate();
@@ -71,6 +73,9 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
   const items = useMemo(() => query.data?.items ?? [], [query.data]);
   const metrics = query.data?.metric_names ?? [];
   const directions = query.data?.metric_directions ?? {};
+  useEffect(() => {
+    onRows?.(items);
+  }, [items, onRows]);
   const hasUserIds = useMemo(() => items.some((i) => i.item_id && !/^item-\d+$/.test(i.item_id)), [items]);
   const sort = parseItemSort(route.sort);
 

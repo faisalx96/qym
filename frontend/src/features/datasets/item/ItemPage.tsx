@@ -3,16 +3,17 @@
  * edits on drafts with the Text/JSON contract and sends only touched fields;
  * Prev/Next follow the list order (search/sort/label) via /neighbors.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBlocker } from 'react-router-dom';
-import { useDatasetItem, useDeleteItem, useItemNeighbors, usePatchItem, type Dataset, type DatasetItem, type DatasetVersion, type ItemBody } from '@/api/datasets';
+import { useDatasetItem, useDeleteItem, useItemNeighbors, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { fullWidth } from '@/features/shell/layout';
 import { Button, ConfirmDialog, CopyButton, ErrorState, Icon, LinkButton, PageHeader, Skeleton, TabPanel, Tabs, Tag, useToast } from '@/ui';
 import { CreateDraftDialog } from '../components/dialogs';
-import { FieldEditor, fieldStatus, initialFieldState, type FieldState } from '../components/FieldEditor';
+import { FieldEditor } from '../components/FieldEditor';
+import { useItemEditor } from './useItemEditor';
 import { formatDate, relativeTime } from '../lib/itemValue';
 import { ITEM_TABS, datasetPath, parseDatasetRoute, type ItemTab } from '../lib/route';
 import { ItemHistoryTab } from './ItemHistoryTab';
@@ -36,7 +37,6 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
   const visible = dataset.items_visible;
   const itemQuery = useDatasetItem(slug, dataset.slug, version.version, itemId, visible);
   const neighbors = useItemNeighbors(slug, dataset.slug, version.version, itemId, { search: route.search || undefined, sort: route.sort || undefined, label: route.label || undefined }, visible);
-  const patch = usePatchItem(slug, dataset.slug, version.version);
   const del = useDeleteItem(slug, dataset.slug, version.version);
   const showSkeleton = useDelayedPending(itemQuery.isPending && visible);
   const [draftOpen, setDraftOpen] = useState(false);
@@ -57,31 +57,11 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
     [params, slug, dataset.slug],
   );
 
-  // Editor state keyed by item so switching items resets it.
-  const [edit, setEdit] = useState<{ key: string; input: FieldState; expected: FieldState; metadata: FieldState } | null>(null);
-  const editKey = item ? `${item.item_id}:${item.updated_at}` : '';
-  const state = useMemo(
-    () =>
-      edit && edit.key === editKey
-        ? edit
-        : item
-          ? { key: editKey, input: initialFieldState(item.input), expected: initialFieldState(item.expected_output), metadata: initialFieldState(item.metadata, true) }
-          : null,
-    [edit, editKey, item],
-  );
-  const statuses = useMemo(
-    () =>
-      item && state
-        ? {
-            input: fieldStatus(item.input, state.input),
-            expected: fieldStatus(item.expected_output, state.expected),
-            metadata: fieldStatus(item.metadata, state.metadata, true),
-          }
-        : null,
-    [item, state],
-  );
-  const dirty = Boolean(statuses && (statuses.input.touched || statuses.expected.touched || statuses.metadata.touched));
-  const valid = Boolean(statuses && statuses.input.ok && statuses.expected.ok && statuses.metadata.ok);
+  const editor = useItemEditor(slug, dataset.slug, version.version, item);
+  const { state, dirty, valid } = editor;
+  const setEdit = (v: null) => {
+    if (v === null) editor.reset();
+  };
 
   // Unsaved-changes guard: in-app navigation and tab close.
   const blocker = useBlocker(editable && dirty);
@@ -95,15 +75,9 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
   }, [editable, dirty]);
 
   async function save() {
-    if (!item || !state || !statuses || !valid) return;
-    const body: ItemBody = {};
-    if (statuses.input.touched) body.input = statuses.input.value;
-    if (statuses.expected.touched) body.expected_output = statuses.expected.value;
-    if (statuses.metadata.touched) body.metadata = (statuses.metadata.value ?? {}) as Record<string, unknown>;
     try {
-      const r = await patch.mutateAsync({ itemId: item.item_id, body });
-      setEdit(null);
-      toast.show(`Item ${r.item.item_id} saved`, { tone: 'success' });
+      const saved = await editor.save();
+      if (saved) toast.show(`Item ${saved.item_id} saved`, { tone: 'success' });
     } catch (e) {
       toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
     }
@@ -187,7 +161,7 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
               Next <Icon name="next" size={12} />
             </LinkButton>
             {editable ? (
-              <Button variant="primary" onPress={() => void save()} isDisabled={!dirty || !valid} loading={patch.isPending} data-testid="save-item">
+              <Button variant="primary" onPress={() => void save()} isDisabled={!dirty || !valid} loading={editor.saving} data-testid="save-item">
                 Save changes
               </Button>
             ) : null}
@@ -198,11 +172,11 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
         <TabPanel id="details">
           <div className={styles.panels}>
             <div className={styles.mainCol}>
-              <FieldEditor label="Input" value={item.input} editable={editable} state={state.input} onChange={(s) => setEdit({ ...state, input: s })} />
-              <FieldEditor label="Expected output" value={item.expected_output} editable={editable} state={state.expected} onChange={(s) => setEdit({ ...state, expected: s })} />
+              <FieldEditor label="Input" value={item.input} editable={editable} state={state.input} onChange={(s) => editor.set('input', s)} />
+              <FieldEditor label="Expected output" value={item.expected_output} editable={editable} state={state.expected} onChange={(s) => editor.set('expected', s)} />
             </div>
             <div className={styles.sideCol}>
-              <FieldEditor label="Metadata" value={item.metadata} editable={editable} jsonOnly state={state.metadata} onChange={(s) => setEdit({ ...state, metadata: s })} />
+              <FieldEditor label="Metadata" value={item.metadata} editable={editable} jsonOnly state={state.metadata} onChange={(s) => editor.set('metadata', s)} />
               {item.labels?.length ? (
                 <div className={styles.labels}>
                   {item.labels.map((l) => (
