@@ -50,7 +50,7 @@ Start the platform (from the worktree root):
 
 ```bash
 QYM_AUTH_MODE=none QYM_DATABASE_URL=sqlite:///$PWD/.qym-dev.db QYM_ENVIRONMENT=development \
-  uvicorn qym_platform.app:app --port <PORT>
+  uvicorn qym_platform.main:app --port <PORT>
 ```
 
 Seed data through the API or `packages/platform/qym_platform/tools/` import scripts;
@@ -116,3 +116,17 @@ is gitignored. Do not touch the main checkout.
   `node_modules`.
 - If blocked by a foundation gap, add the primitive in `frontend/src/ui/` on
   your branch and note it in your report (the reviewer will dedupe).
+
+## Foundation facts (ui/foundation, read `frontend/README.md` there first)
+
+- Router basename is `{root}/app`; routes live in `frontend/src/app/routes.ts` and
+  `router.tsx`; replace the `ComingSoon` placeholder for your area's routes.
+- Primitives: `frontend/src/ui` (46 components, gallery at `/app/__ui` in dev).
+  Lib: `frontend/src/lib` (apiFetch/ApiError, metrics, text/RTL,
+  useSearchParamsState, run-status bus, polling, useDelayedPending).
+  API hooks go in `frontend/src/api/<area>.ts`.
+- Dev DB: `frontend/scripts/dev_db.py` (ORM create_all; alembic cannot build SQLite).
+- Playwright config already starts platform + Vite; override ports with the env
+  vars documented in the README so parallel agents do not collide.
+- Shell layout decision: persistent sidebar (variant A) + Ctrl/Cmd+K palette.
+  Do not re-open it; design your area's content region within it.
