@@ -85,6 +85,7 @@ from qym_platform.services.eval_service_client import (
     RemoteNotFound,
     RequestRejected,
     RetryableError,
+    VersioningUnavailable,
     redact_text,
 )
 from qym_platform.settings import PlatformSettings
@@ -1087,6 +1088,56 @@ def get_environment_form(
             "schema_id": evaluator.id if evaluator else None,
             "schema_hash": evaluator.schema_hash if evaluator else None,
         },
+    }
+
+
+@router.get(_PREFIX + "/{env_id}/versioning-details")
+async def get_environment_versioning_details(
+    project_id: str,
+    env_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+    client_factory: EvalClientFactory = Depends(get_eval_client_factory),
+) -> Dict[str, Any]:
+    """What a job started now would record as ``versioning_details`` (guide v1.2 §3.5).
+
+    Read live from ``GET /evals/versioning-details/current`` on every call: the
+    new-experiment page shows it on the Models step for each selected environment.
+    Any project member may read it (the call only reads the service; nothing is
+    stored, and the health status is left to **Test** and schema refresh).
+
+    ``status`` is ``ok`` (``versioning_details`` holds the non-null keys),
+    ``unsupported`` (a service older than v1.2 has no such endpoint) or ``error``
+    (``error`` says why: the service could not read its KB version, is unreachable,
+    or rejected the key). Always 200 so the page can show the state in place.
+    """
+    _require_project_access(db, principal, project_id)
+    settings = PlatformSettings()
+    env = _get_environment(db, project_id, env_id)
+    api_key = _stored_key(env, settings)
+    client = client_factory(env.base_url, api_key)
+    status = "ok"
+    details: Dict[str, Any] = {}
+    error: Optional[str] = None
+    try:
+        data = await client.versioning_details_current()
+    except VersioningUnavailable as exc:
+        status, error = "error", _safe_message(exc, api_key)
+    except _REMOTE_ERRORS as exc:
+        status, error = "error", _remote_http_error(exc, api_key).detail
+    else:
+        if data is None:
+            status = "unsupported"
+        else:
+            details = {key: value for key, value in data.items() if value is not None}
+    finally:
+        await client.aclose()
+    return {
+        "environment_id": env.id,
+        "status": status,
+        "versioning_details": details,
+        "error": error,
+        "fetched_at": to_api_timestamp(utc_now_naive()),
     }
 
 

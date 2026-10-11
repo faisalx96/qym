@@ -29,6 +29,7 @@ from qym_platform.services.eval_service_client import (
     RemoteNotFound,
     RequestRejected,
     RetryableError,
+    VersioningUnavailable,
 )
 
 BASE_URL = "https://eval.example.com/prefix"
@@ -291,6 +292,66 @@ def test_evaluator_schema_other_failures_raise(status, error):
         _run(
             lambda request: httpx.Response(status, json={"detail": "x"}),
             lambda client: client.evaluator_schema(),
+        )
+
+
+def test_versioning_details_current_is_fetched_and_nulls_kept():
+    """Guide v1.2 §3.5: GET /evals/versioning-details/current, null = not set."""
+    result, requests = _run(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "agent_version": "v2.4.0",
+                "image_version": None,
+                "kb_version": "4b0535c",
+            },
+        ),
+        lambda client: client.versioning_details_current(),
+    )
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/prefix/evals/versioning-details/current"
+    assert requests[0].headers["authorization"] == f"Bearer {ENV_KEY}"
+    assert result == {
+        "agent_version": "v2.4.0",
+        "image_version": None,
+        "kb_version": "4b0535c",
+    }
+
+
+@pytest.mark.parametrize("status", [404, 405])
+def test_versioning_details_current_is_none_on_older_services(status):
+    result, requests = _run(
+        lambda request: httpx.Response(status, json={"detail": "Not Found"}),
+        lambda client: client.versioning_details_current(),
+    )
+    assert result is None
+    assert len(requests) == 1
+
+
+def test_versioning_details_current_503_carries_the_reason():
+    exc = _raises(
+        lambda request: httpx.Response(
+            503,
+            json={
+                "detail": f"could not read KB version: db down api_key={PROVIDER_KEY}"
+            },
+        ),
+        lambda client: client.versioning_details_current(),
+        VersioningUnavailable,
+    )
+    assert exc.status_code == 503
+    assert exc.detail.startswith("could not read KB version: db down")
+    _assert_no_secrets(str(exc), exc.detail)
+
+
+@pytest.mark.parametrize(
+    "status, error", [(401, EnvAuthError), (500, RetryableError)]
+)
+def test_versioning_details_current_other_failures_raise(status, error):
+    with pytest.raises(error):
+        _run(
+            lambda request: httpx.Response(status, json={"detail": "x"}),
+            lambda client: client.versioning_details_current(),
         )
 
 
