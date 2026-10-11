@@ -563,3 +563,12 @@ button.chip:focus-visible,
   background: var(--bg-elevated);
   font-weight: 600;
 }
+
+.cellRow .control {
+  flex: 1 1 96px;
+  min-width: 96px;
+}
+
+.table td {
+  min-width: 140px;
+}
