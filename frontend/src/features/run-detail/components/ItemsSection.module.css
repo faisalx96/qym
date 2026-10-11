@@ -1,5 +1,6 @@
 /* Items section frame. */
 .section {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
@@ -22,7 +23,7 @@
   display: inline-flex;
 }
 
-@media (max-width: 1100px) {
+@container (max-width: 920px) {
   .stats {
     display: none;
   }

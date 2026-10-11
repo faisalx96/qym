@@ -90,7 +90,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
           value={query}
           onChange={setQuery}
           onClear={() => setQuery('')}
-          width="28ch"
+          width="22ch"
         />
         {metricItems.length > 1 ? (
           <Select
@@ -153,7 +153,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
           )}
           value={view.sort}
           onChange={(k) => k && api.setView({ sort: String(k) as SortBy })}
-          width="14ch"
+          width="12ch"
         />
         <Popover
           label="Display"

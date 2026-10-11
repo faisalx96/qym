@@ -203,16 +203,20 @@ export function Scatter({
   yLabel,
   onPick,
   fmt,
+  fmtX,
+  fmtY,
 }: {
   points: ScatterPoint[];
   xLabel: string;
   yLabel: string;
   onPick: (id: string) => void;
   fmt: (v: number) => string;
+  fmtX?: (v: number) => string;
+  fmtY?: (v: number) => string;
 }) {
   const W = 300;
   const H = 220;
-  const pad = { l: 36, r: 8, t: 8, b: 28 };
+  const pad = { l: 46, r: 8, t: 8, b: 28 };
   const shown = useMemo(
     () =>
       points.length > 1500 ? points.filter((_, i) => i % Math.ceil(points.length / 1500) === 0) : points,
@@ -248,10 +252,10 @@ export function Scatter({
             textAnchor="end"
             dominantBaseline="middle"
           >
-            {fmt(y0 + t * (y1 - y0))}
+            {(fmtY ?? fmt)(y0 + t * (y1 - y0))}
           </text>
           <text className={styles.tick} x={sx(x0 + t * (x1 - x0))} y={H - pad.b + 14} textAnchor="middle">
-            {fmt(x0 + t * (x1 - x0))}
+            {(fmtX ?? fmt)(x0 + t * (x1 - x0))}
           </text>
         </g>
       ))}
@@ -264,7 +268,7 @@ export function Scatter({
           r={3.5}
           onClick={() => onPick(p.id)}
         >
-          <title>{`${p.id}: ${fmt(p.x)}, ${fmt(p.y)}`}</title>
+          <title>{`${p.id}: ${(fmtX ?? fmt)(p.x)}, ${(fmtY ?? fmt)(p.y)}`}</title>
         </circle>
       ))}
       <text className={styles.axisTitle} x={(W + pad.l) / 2} y={H - 2} textAnchor="middle">
