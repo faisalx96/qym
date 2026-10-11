@@ -660,7 +660,12 @@ export function normalizeTrace(data: TracePayload): NormalizedTrace {
     trace_id: lastAttempt.trace_id || data.item?.trace_id || '',
     trace_url: lastAttempt.trace_url || data.item?.trace_url || '',
   };
-  const combined = attempts.length > 1 ? buildRetriedTree(attempts) : null;
+  // buildRetriedTree splices failed spans into the final attempt's tree, so it gets fresh copies:
+  // a single-attempt view must keep showing only that attempt.
+  const combined =
+    attempts.length > 1
+      ? buildRetriedTree(attempts.map((a) => ({ ...a, tree: buildTree(a.spans) })))
+      : null;
   if (combined) detectRetries(combined);
   return { item, attempts, lastAttempt, combined };
 }

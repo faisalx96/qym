@@ -187,7 +187,7 @@ const ItemRow = memo(function ItemRow({
             </span>
           );
         })}
-        <span role="cell" className={styles.cellLatency}>
+        <span role="cell" className={styles.cellLatency} data-cell="latency">
           {row.latency_ms ? formatLatency(row.latency_ms) : '—'}
           {retries > 0 ? (
             <span className={styles.retry} title={`${retries} retr${retries === 1 ? 'y' : 'ies'}`}>

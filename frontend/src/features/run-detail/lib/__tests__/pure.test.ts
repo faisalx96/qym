@@ -581,3 +581,29 @@ describe('row identity across refetch', () => {
     expect(patched.snapshot.rows[0]!.__details_loaded).toBe(true);
   });
 });
+
+describe('normalizeTrace retried items', () => {
+  const span = (id: string, name: string, parent: string | null, status = 'OK', t = 0) => ({
+    trace_id: 't',
+    span_id: id,
+    parent_span_id: parent,
+    name,
+    status,
+    start_time_ns: t,
+    end_time_ns: t + 1e6,
+  });
+  it('keeps each single attempt free of the merged failed try', () => {
+    const norm = normalizeTrace({
+      item: { run_id: 'r', item_id: 'i', trace_id: 't', trace_url: '', retry_count: 1 },
+      summary: {},
+      spans: [],
+      attempts: [
+        { attempt_number: 1, status: 'failed', is_last_attempt: false, spans: [span('a', 'root', null, 'OK'), span('b', 'llm', 'a', 'ERROR', 1e6)] },
+        { attempt_number: 2, status: 'completed', is_last_attempt: true, spans: [span('c', 'root', null), span('d', 'llm', 'c', 'OK', 2e6)] },
+      ],
+    } as never);
+    expect(norm.combined!.nodes.length).toBe(3);
+    expect(norm.attempts[1]!.tree.nodes.length).toBe(2);
+    expect(flattenTree(norm.attempts[1]!.tree.roots).length).toBe(1);
+  });
+});

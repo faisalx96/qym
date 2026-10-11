@@ -81,15 +81,25 @@ export async function ensureProject(
   name: string,
   slug: string,
 ): Promise<{ id: string; slug: string }> {
-  try {
-    return await call<{ id: string; slug: string }>(client, 'POST', '/v1/projects', { name, slug });
-  } catch {
-    return call<{ id: string; slug: string }>(
-      client,
-      'GET',
-      `/v1/projects/by-slug/${encodeURIComponent(slug)}`,
-    );
+  // The dev SQLite database can answer 5xx ("database is locked") while other workers write:
+  // retry the create, and only look the project up by slug when it already exists (409).
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await call<{ id: string; slug: string }>(client, 'POST', '/v1/projects', { name, slug });
+    } catch (err) {
+      lastError = err;
+      if (String(err).includes('-> 409')) {
+        return call<{ id: string; slug: string }>(
+          client,
+          'GET',
+          `/v1/projects/by-slug/${encodeURIComponent(slug)}`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+    }
   }
+  throw lastError;
 }
 
 export async function createApiKey(client: SeedClient, projectId: string): Promise<string> {
