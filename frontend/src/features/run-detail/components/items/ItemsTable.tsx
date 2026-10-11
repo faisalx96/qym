@@ -126,14 +126,16 @@ const ItemRow = memo(function ItemRow({
         aria-rowindex={index + 2}
         data-failed={status.kind === 'error' || undefined}
       >
-        <button
-          type="button"
-          className={styles.rowButton}
-          aria-expanded={open}
-          aria-controls={open ? bodyId : undefined}
-          aria-label={`${open ? 'Close' : 'Open'} item #${row.index + 1}`}
-          onClick={() => ui.toggleExpanded(row.item_id)}
-        />
+        <span role="cell" className={styles.rowButtonCell}>
+          <button
+            type="button"
+            className={styles.rowButton}
+            aria-expanded={open}
+            aria-controls={open ? bodyId : undefined}
+            aria-label={`${open ? 'Close' : 'Open'} item #${row.index + 1}`}
+            onClick={() => ui.toggleExpanded(row.item_id)}
+          />
+        </span>
         <span role="cell" className={styles.cellExpand} aria-hidden="true">
           <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />
         </span>
@@ -205,8 +207,10 @@ const ItemRow = memo(function ItemRow({
         </span>
       </div>
       {open ? (
-        <div id={bodyId} className={styles.card}>
-          <ItemCard row={row} />
+        <div role="row">
+          <div role="cell" id={bodyId} className={styles.card}>
+            <ItemCard row={row} />
+          </div>
         </div>
       ) : null}
     </div>

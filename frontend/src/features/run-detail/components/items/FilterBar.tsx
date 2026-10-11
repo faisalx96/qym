@@ -51,6 +51,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
   const { api, model, items, payload } = useRunPage();
   const { view, defs, selectedMetric } = api;
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [draft, setDraft] = useState<FilterGroup | null>(null);
   const [displayOpen, setDisplayOpen] = useState(false);
   const [query, setQuery] = useSyncedInput(view.q, (q) => api.setView({ q }), 250);
   const metric = selectedMetric;
@@ -127,7 +128,10 @@ export function FilterBar({ display }: { display: DisplayState }) {
           label="Filter rules"
           placement="bottom start"
           isOpen={rulesOpen}
-          onOpenChange={setRulesOpen}
+          onOpenChange={(o) => {
+            setRulesOpen(o);
+            if (!o) setDraft(null);
+          }}
           trigger={
             <Button
               size="sm"
@@ -140,9 +144,12 @@ export function FilterBar({ display }: { display: DisplayState }) {
           }
         >
           <RuleBuilder
-            rules={view.filters.rules}
+            rules={draft ?? view.filters.rules}
             defs={defs}
-            onChange={(rules: FilterGroup) => api.setFilters({ rules })}
+            onChange={(rules: FilterGroup) => {
+              setDraft(rules);
+              api.setFilters({ rules });
+            }}
           />
         </Popover>
         <Select

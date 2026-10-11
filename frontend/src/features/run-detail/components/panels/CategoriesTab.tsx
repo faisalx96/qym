@@ -64,9 +64,13 @@ export function CategoriesTab() {
             </span>
           </h3>
           {b.groups.map((g) => {
-            const on =
-              filters.categories[b.key]?.length === 1 &&
-              filters.categories[b.key]![0]!.toLowerCase() === g.value.toLowerCase();
+            const current =
+              b.key === 'complexity'
+                ? filters.complexity
+                : b.key === 'domain'
+                  ? filters.domain
+                  : (filters.categories[b.key] ?? null);
+            const on = current?.length === 1 && current[0]!.toLowerCase() === g.value.toLowerCase();
             return (
               <button
                 key={g.value}
@@ -75,10 +79,15 @@ export function CategoriesTab() {
                 aria-pressed={on}
                 data-testid="category-row"
                 onClick={() => {
-                  const categories = { ...filters.categories };
-                  if (on) delete categories[b.key];
-                  else categories[b.key] = [g.value];
-                  api.setFilters({ categories });
+                  if (b.key === 'complexity') api.setFilters({ complexity: on ? null : [g.value] });
+                  else if (b.key === 'domain')
+                    api.setFilters({ domain: on ? null : [g.value], domainMode: 'include', domainOnly: [] });
+                  else {
+                    const categories = { ...filters.categories };
+                    if (on) delete categories[b.key];
+                    else categories[b.key] = [g.value];
+                    api.setFilters({ categories });
+                  }
                 }}
               >
                 <span className={styles.rowHead}>

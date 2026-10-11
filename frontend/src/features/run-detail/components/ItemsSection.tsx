@@ -176,7 +176,7 @@ export function ItemsSection({
                     variant="neutral"
                     icon={<Icon name="chart" size={12} />}
                     onPress={onOpenPanel}
-                    aria-controls="analysis-panel"
+                    aria-controls={panelOpen && wide ? 'analysis-panel' : undefined}
                     aria-expanded={panelOpen && wide}
                   >
                     Analysis
@@ -203,9 +203,8 @@ export function ItemsSection({
           <Heatmap
             items={items}
             onOpen={(itemId, pass) => {
-              api.replaceView({ ...view, view: 'cards', page: 1 });
+              api.replaceView({ ...view, view: 'cards', page: 1 }, { item: itemId });
               setExpanded((prev) => new Set(prev).add(itemId));
-              setItemParam(itemId);
               void pass;
             }}
           />

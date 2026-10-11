@@ -45,12 +45,14 @@ export function DeepTab() {
           role="grid"
           aria-label="Pearson correlation matrix"
         >
-          <span />
-          {names.map((n) => (
-            <span key={n} role="columnheader" className={styles.matrixHead} title={n}>
-              {n}
-            </span>
-          ))}
+          <div role="row" style={{ display: 'contents' }}>
+            <span role="presentation" />
+            {names.map((n) => (
+              <span key={n} role="columnheader" className={styles.matrixHead} title={n}>
+                {n}
+              </span>
+            ))}
+          </div>
           {names.map((rowName, i) => (
             <div key={rowName} role="row" style={{ display: 'contents' }}>
               <span role="rowheader" className={styles.matrixHead} title={rowName}>

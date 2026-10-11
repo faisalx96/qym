@@ -26,7 +26,7 @@ export interface RunViewApi {
   selectedMetric: string | null;
   setView: (patch: Partial<RunView> | ((prev: RunView) => Partial<RunView>)) => void;
   /** Replace the whole view (chip removal). */
-  replaceView: (next: RunView) => void;
+  replaceView: (next: RunView, extra?: QueryUpdates) => void;
   setFilters: (patch: Partial<PageFilters> | ((prev: PageFilters) => Partial<PageFilters>)) => void;
   clearFilters: () => void;
   /** Non-view params the page also owns. */

@@ -660,7 +660,9 @@ export function normalizeTrace(data: TracePayload): NormalizedTrace {
     trace_id: lastAttempt.trace_id || data.item?.trace_id || '',
     trace_url: lastAttempt.trace_url || data.item?.trace_url || '',
   };
-  return { item, attempts, lastAttempt, combined: attempts.length > 1 ? buildRetriedTree(attempts) : null };
+  const combined = attempts.length > 1 ? buildRetriedTree(attempts) : null;
+  if (combined) detectRetries(combined);
+  return { item, attempts, lastAttempt, combined };
 }
 
 export function aggregateStats(nodes: SpanNode[]): { totalTokens: number; totalCost: number } {

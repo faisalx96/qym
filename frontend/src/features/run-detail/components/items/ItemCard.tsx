@@ -1,6 +1,5 @@
 /** Expanded item: bodies (lazy), metadata, output, trace chips, metrics; repeat items show one column per pass. */
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
 import { formatLatency, isItemTaskError } from '@/lib/metrics';
 import { Button, CopyButton, Icon, LinkButton, Tag, TextBlock } from '@/ui';
 import { bodyText, formatCompact, formatStartedAt, itemLink } from '../../lib/itemText';
@@ -68,7 +67,6 @@ export function TraceChips({ stats, retries }: { stats: RowTraceStats | null | u
 export function ItemCard({ row }: { row: Row }) {
   const { payload, model, api, items } = useRunPage();
   const ui = useItemsUi();
-  const location = useLocation();
   const lazy = payload.snapshot.detail_mode === 'lazy';
   const loaded = row.__details_loaded === true || !lazy;
   const state = ui.details.stateOf(row.item_id);
@@ -98,7 +96,7 @@ export function ItemCard({ row }: { row: Row }) {
       </div>
     );
   }
-  const link = itemLink(location.pathname, row.item_id, model.viewPass, window.location.origin);
+  const link = itemLink(window.location.pathname, row.item_id, model.viewPass, window.location.origin);
   const input = bodyText(row.input_full ?? row.input ?? row.input_preview);
   const expected = bodyText(row.expected_full ?? row.expected);
   const output = isItemTaskError(row)
