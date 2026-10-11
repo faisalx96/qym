@@ -104,7 +104,7 @@ Import that registration file once from `src/app/mocks.ts` (append an `import
 '@/features/<area>/__mocks__/register'` line) and open
 `/app/__mock/<area>/<variant>` on the dev server. Mocks render inside nothing
 but the providers, so wrap them in `<AppShell>` chrome yourself if the variant
-needs it (`import { ShellFrame } from '@/features/shell'`). Mock routes are
+needs it (compose chrome from `@/features/shell/chrome/*`). Mock routes are
 only registered when `import.meta.env.DEV` and are deleted once implemented.
 
 ## Writing an e2e test
