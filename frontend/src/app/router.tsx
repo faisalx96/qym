@@ -12,6 +12,7 @@ import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
 import { RouteError } from '@/features/shell/RouteError';
 import { ComingSoon } from '@/features/dev/ComingSoon';
+import { TrashPage } from '@/features/trash/TrashPage';
 import { DatasetsRoutes } from '@/features/datasets/DatasetsRoutes';
 
 const C = ROUTES.projectChildren;
@@ -61,10 +62,7 @@ export const routes: RouteObject[] = [
           { path: ROUTES.profile, element: <ProfilePage /> },
           { path: ROUTES.admin, element: <ComingSoon brief="09-admin-docs" title="Admin" /> },
           { path: ROUTES.adminSplat, element: <ComingSoon brief="09-admin-docs" title="Admin" /> },
-          {
-            path: ROUTES.trash,
-            element: <ComingSoon brief="07-datasets-reviews-trash" title="Deleted runs" />,
-          },
+          { path: ROUTES.trash, element: <TrashPage /> },
           { path: ROUTES.compare, element: <ComingSoon brief="05-compare-analyzer" title="Compare" /> },
           { path: ROUTES.reviews, element: <ComingSoon brief="07-datasets-reviews-trash" title="Reviews" /> },
           { path: ROUTES.docs, element: <ComingSoon brief="09-admin-docs" title="Docs" /> },
