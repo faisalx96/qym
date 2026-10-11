@@ -1,0 +1,12 @@
+/* Shell chrome tokens (shell.css 7-22). Chrome runs 2px larger than page type.
+   Never redefine --font-* here (DESIGN_LANGUAGE.md §1 "Shell chrome scale"). */
+:root {
+  --sidebar-w: 192px;
+  --sidebar-collapsed-w: 56px;
+  --topbar-h: 50px;
+  --shell-font-xs: 12px;
+  --shell-font-sm: 13px;
+  --shell-font-base: 14px;
+  --shell-font-md: 15px;
+  --shell-font-lg: 17px;
+}

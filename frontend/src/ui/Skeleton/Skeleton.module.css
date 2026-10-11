@@ -1,0 +1,91 @@
+/* Skeleton bones with shimmer (shell.css 905-1028). */
+.skeleton {
+  display: block;
+  --bone: linear-gradient(90deg, var(--bg-elevated) 0%, var(--bg-hover) 40%, var(--bg-elevated) 80%);
+}
+
+.skeleton[data-kind='value'] {
+  display: inline-block;
+  width: 4em;
+  height: 1em;
+  border-radius: 3px;
+  background: var(--bone);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  vertical-align: middle;
+}
+
+.skeleton[data-kind='chart'] {
+  border-radius: var(--radius-md);
+  background: var(--bone);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.skeleton[data-kind='lines'],
+.skeleton[data-kind='list'] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.bone,
+.row {
+  height: 12px;
+  border-radius: 3px;
+  background: var(--bone);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.skeleton[data-kind='table'] {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.row {
+  height: 30px;
+  border-radius: 0;
+}
+
+.row[data-head] {
+  background: var(--bg-elevated);
+  animation: none;
+}
+
+.skeleton[data-kind='cards'] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-md);
+}
+
+.card {
+  height: 96px;
+  border-radius: var(--radius-md);
+  background: var(--bone);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bone,
+  .row,
+  .card,
+  .skeleton[data-kind='value'],
+  .skeleton[data-kind='chart'] {
+    animation: none;
+  }
+}

@@ -1,0 +1,76 @@
+/* Confirm dialog body: description lines, warning block, items list. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.line {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.warning {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border-inline-start: 3px solid var(--warning);
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
+  color: var(--text-secondary);
+}
+
+.warning[data-tone='danger'] {
+  border-color: var(--error);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.warning strong {
+  color: var(--text-primary);
+}
+
+.itemsLabel {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.items li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+}
+
+.meta {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.note {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font-size: var(--font-sm);
+}

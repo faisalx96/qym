@@ -1,0 +1,53 @@
+/* .qym-score-value + score-1..5 bands with a left bar as the non-colour cue. */
+.score {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  padding-inline-start: var(--space-xs);
+  border-inline-start: 2px solid transparent;
+}
+
+.score[data-band='1'] {
+  color: var(--score-1);
+  border-color: var(--score-1);
+}
+.score[data-band='2'] {
+  color: var(--score-2);
+  border-color: var(--score-2);
+}
+.score[data-band='3'] {
+  color: var(--score-3);
+  border-color: var(--score-3);
+}
+.score[data-band='4'] {
+  color: var(--score-4);
+  border-color: var(--score-4);
+}
+.score[data-band='5'] {
+  color: var(--score-5);
+  border-color: var(--score-5);
+}
+
+.score[data-error] {
+  color: var(--text-muted);
+}
+
+.glyph[data-error='task'] {
+  color: var(--error);
+}
+.glyph[data-error='metric'] {
+  color: var(--metric-error);
+}
+
+.retries {
+  color: var(--info);
+  font-size: var(--font-sm);
+}
+
+.ci {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}

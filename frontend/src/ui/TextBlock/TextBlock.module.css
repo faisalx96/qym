@@ -1,0 +1,51 @@
+/* .qym-text recipe: output blocks with direction, pre-wrap and bidi plaintext. */
+.block {
+  font-size: var(--font-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: start;
+  unicode-bidi: plaintext;
+}
+
+.prose {
+  font-family: var(--font-sans);
+}
+
+.code {
+  font-family: var(--font-mono);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.block :global(.qym-text__pre) {
+  font-family: var(--font-mono);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  padding: var(--space-sm) var(--space-md);
+  margin: var(--space-xs) 0;
+  unicode-bidi: plaintext;
+  overflow-x: auto;
+}
+
+.block :global(.qym-text__code) {
+  font-family: var(--font-mono);
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  padding: 0 var(--space-xs);
+}
+
+.block :global(.qym-text__heading) {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.block :global(.qym-text__link) {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}

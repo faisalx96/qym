@@ -1,0 +1,63 @@
+/* Passive role, provenance, metadata, and count tags — flat rounded squares. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--badge-height);
+  padding: 0 var(--space-sm);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-xs);
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.tag[data-kind='role'],
+.tag[data-kind='count'],
+.tag[data-kind='data'],
+.tag[data-kind='version'] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag[data-kind='role'] {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-primary);
+  background: rgba(0, 212, 170, 0.12);
+}
+
+.tag[data-kind='accent'] {
+  color: var(--accent-primary);
+  background: rgba(0, 212, 170, 0.12);
+}
+
+.tag[data-kind='count'] {
+  color: var(--text-primary);
+}
+
+.tag[data-kind='version'] {
+  color: var(--accent-tertiary-soft);
+  background: rgba(168, 85, 247, 0.14);
+}
+
+.tag[data-tone='success'] {
+  color: var(--success);
+  background: rgba(16, 185, 129, 0.14);
+}
+.tag[data-tone='info'] {
+  color: var(--accent-secondary);
+  background: rgba(0, 168, 255, 0.14);
+}
+.tag[data-tone='warning'] {
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.14);
+}
+.tag[data-tone='danger'] {
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.14);
+}

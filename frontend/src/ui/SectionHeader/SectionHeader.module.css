@@ -1,0 +1,35 @@
+/* Section header / run section head recipes (DESIGN_LANGUAGE §3). */
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+
+.head[data-level='xl'] {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-lg);
+  margin-top: calc(var(--space-xl) * 1.5);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+}
+.description {
+  margin: 0;
+}
+
+.aside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: none;
+}

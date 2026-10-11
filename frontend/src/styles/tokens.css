@@ -1,0 +1,178 @@
+/* Design tokens — carried over VERBATIM from
+   packages/platform/qym_platform/_static/dashboard/dashboard.css (:root, @font-face,
+   RTL leading). Usage rules: docs/DESIGN_LANGUAGE.md. Enforced by
+   src/__tests__/design-language.test.ts. Do not edit values here; add new tokens
+   in the "Added by the React migration" block at the end and log them in
+   docs/internal/ui-migration/decisions/foundation/OPEN_QUESTIONS.md. */
+:root {
+  /* The dashboard is dark only: tell the browser, so anything it draws
+     itself (form controls, <dialog>, scrollbars, popups) comes up dark too,
+     never a white box, even where a page stylesheet is missing or still
+     loading. */
+  color-scheme: dark;
+
+  /* Dark palette with better surface separation */
+  --bg-void: #101018;
+  --bg-base: #14141e;
+  --bg-surface: #1a1a28;
+  --bg-elevated: #222232;
+  --bg-hover: #2a2a3c;
+  --bg-active: #323244;
+
+  /* Text hierarchy — improved contrast.
+     Usage rules:
+     - primary: titles, key values, table content that matters
+     - secondary: body copy, table cells, descriptions
+     - muted: labels, meta, captions, table headers (min color for readable text)
+     - dim: decorative/disabled/placeholder ONLY — never headers, labels, or content */
+  --text-primary: #ededf0; /* 14.7:1 on --bg-surface */
+  --text-secondary: #a8a8ba; /* 7.3:1 on --bg-surface */
+  --text-muted: #9a9ab2; /* 6.3:1 on --bg-surface, 5.7:1 on --bg-elevated */
+  --text-dim: #6b6b80; /* 3.3:1 — below AA, decorative only */
+
+  /* Accent colors */
+  --accent-primary: #00d4aa;
+  --accent-secondary: #00a8ff;
+  --accent-tertiary: #a855f7;
+  --accent-tertiary-soft: #c084fc;
+
+  /* Semantic colors */
+  --success: #10b981;
+  --success-dim: #064e3b;
+  --warning: #f59e0b;
+  --warning-dim: #78350f;
+  --metric-error: #eab308;
+  --error: #ef4444;
+  --error-dim: #7f1d1d;
+  --info: #3b82f6;
+
+  /* 5-color score scale (red → orange → yellow → lime → green) */
+  --score-1: #ef4444; /* 0-39%: red */
+  --score-2: #f97316; /* 40-59%: orange */
+  --score-3: #eab308; /* 60-74%: yellow */
+  --score-4: #84cc16; /* 75-89%: lime */
+  --score-5: #10b981; /* 90-100%: green */
+
+  /* Chart colors */
+  --chart-1: #00d4aa;
+  --chart-2: #00a8ff;
+  --chart-3: #a855f7;
+  --chart-4: #f472b6;
+  --chart-5: #fbbf24;
+
+  /* Borders — more visible */
+  --border-subtle: #252536;
+  --border-default: #333348;
+  --border-strong: #4a4a60;
+
+  /* Spacing — more breathing room */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 14px;
+  --space-lg: 20px;
+  --space-xl: 32px;
+
+  /* Canonical interactive component geometry.
+     One aligned density is used across forms and analysis toolbars. */
+  --control-height: 24px;
+  --control-radius: 5px;
+  --analysis-action-gap: 5px;
+  --analysis-icon-optical-offset: 0.25px;
+  --analysis-action-padding-start: 9px;
+  --analysis-action-padding-end: 11px;
+  --dropdown-radius: 7px;
+  --dropdown-option-height: 32px;
+  --tab-height: 34px;
+  --segment-height: 24px;
+  --badge-height: 20px;
+  --chip-height: 26px;
+  --stat-strip-min-height: 72px;
+  --overview-summary-max-width: 660px;
+  --analysis-matrix-max-width: 720px;
+  --info-marker-size: 12px;
+  --help-tooltip-width: 240px;
+  --status-bar-height: 38px;
+
+  /* Auto-analysis extensions to the upstream component geometry. */
+  --dropdown-width: 240px;
+  --dropdown-max-height: 320px;
+  --example-filter-range-width: 88px;
+  --radius-md: 8px;
+  --radius-pill: 999px;
+  --transition-fast: 150ms ease;
+  --page-constrained-width: 1120px;
+  --settings-prompt-rail-width: 200px;
+  --settings-prompt-tab-width: 240px;
+  --settings-prompt-editor-min-height: 280px;
+
+  /* Type scale — every element maps to one role:
+     xs 10px badge/pill · sm 11px meta/caption/label/table-header ·
+     base 12px body/table-cell/code · md 13px card title/sub-header ·
+     lg 15px section header · xl 18px modal/empty-state title ·
+     title 22px page title · stat 26px stat/hero value.
+     Floor: nothing readable below 11px (10px reserved for badges). */
+  --font-xs: 10px;
+  --font-sm: 11px;
+  --font-base: 12px;
+  --font-md: 13px;
+  --font-lg: 15px;
+  --font-xl: 18px;
+  --font-title: 22px;
+  --font-stat: 26px;
+
+  /* Shared width for the charts view label/control column */
+  --chart-first-col-width: 320px;
+
+  /* Mono font for data. 'Qym Arabic' leads both stacks: its unicode-range
+     limits it to Arabic glyphs, so Latin falls through untouched while any
+     Arabic — prose, code blocks, metric details, table cells — renders in a
+     real Arabic face at a corrected optical size (see @font-face below).
+     Latin resolves to a real system mono on every OS: ui-monospace and
+     SFMono-Regular reach SF Mono in Safari, Menlo is the face Chrome on
+     macOS can actually see (without it the generic 'monospace' falls back to
+     Courier), Consolas covers Windows and Liberation Mono covers Linux. */
+  --font-mono:
+    'Qym Arabic', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, 'JetBrains Mono', 'Fira Code', Consolas,
+    'Liberation Mono', monospace;
+  --font-sans: 'Qym Arabic', -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+}
+
+/* This face applies ONLY to the Arabic Unicode blocks: any Arabic — prose,
+   code blocks, metric details, table cells — renders in a real Arabic sans
+   instead of the browser's thin mono-stack fallback. Rendered size equals
+   the nominal font-size (no scale multiplier). */
+@font-face {
+  font-family: 'Qym Arabic';
+  src: local('Geeza Pro'), local('Segoe UI'), local('Tahoma'), local('Noto Sans Arabic');
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+/* RTL blocks (the renderers stamp dir="rtl" lang="ar" on detected Arabic
+   text, QymSafe.textDirAttrs) get the taller leading the script needs. The
+   :not(#…) adds ID weight so page rules such as `.formatted-string` or
+   `.item-title` (line-height 1.45–1.5) cannot win over it. Blocks that
+   start in Arabic under dir="auto" align to the right on their own. */
+[dir='rtl'],
+[dir='rtl'][lang='ar']:not(#qym-rtl-leading) {
+  line-height: 1.7;
+}
+
+/* ── Added by the React migration (brief 02 §4) ─────────────────────────── */
+:root {
+  --accent-primary-hover: #00e6b8;
+  --error-hover: #dc2626;
+  --focus-ring: 0 0 0 2px rgba(0, 212, 170, 0.15);
+  --shadow-popover: 0 12px 28px rgba(0, 0, 0, 0.38);
+  --shadow-dialog: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --z-dropdown: 100;
+  --z-dialog: 9998;
+  --z-toast: 9999;
+  --z-tooltip: 10000;
+  /* Decorative glyph sizes (empty-state icons, close glyphs): never readable text. */
+  --glyph-md: 20px;
+  --glyph-lg: 48px;
+  /* Skeleton/arrival timing (shell.css --qym-skeleton-wait). */
+  --skeleton-wait: 300ms;
+  --skeleton-min: 400ms;
+  --arrive-fade: 200ms;
+}

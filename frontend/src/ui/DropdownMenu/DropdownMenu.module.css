@@ -1,0 +1,80 @@
+/* Action menu: 32px rows, danger tone in --error. */
+.popover {
+  min-width: 180px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dropdown-radius);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-dropdown);
+  overflow: hidden;
+}
+
+.header {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.menu {
+  padding: var(--space-xs);
+  outline: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--dropdown-option-height);
+  padding: 0 var(--space-sm);
+  border-radius: var(--control-radius);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  text-decoration: none;
+}
+
+.item[data-focused] {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.item[data-tone='danger'] {
+  color: var(--error);
+}
+.item[data-tone='danger'][data-focused] {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.item[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.item[data-focused] .icon {
+  color: inherit;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.description {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.separator {
+  height: 1px;
+  margin: var(--space-xs) 0;
+  background: var(--border-subtle);
+}

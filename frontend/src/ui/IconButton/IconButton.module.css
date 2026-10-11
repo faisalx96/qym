@@ -1,0 +1,50 @@
+/* Compact icon actions — quiet surfaces; only the glyph changes on hover. */
+.iconAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.iconAction[data-hovered] {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent-primary);
+}
+
+.iconAction[data-active] {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent-primary);
+}
+
+.iconAction[data-focus-visible] {
+  background: transparent;
+  box-shadow: none;
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.iconAction[data-tone='danger'][data-hovered],
+.iconAction[data-tone='reject'] {
+  color: var(--error);
+}
+.iconAction[data-tone='approve'] {
+  color: var(--success);
+}
+.iconAction[data-tone='reject'][data-hovered] {
+  color: var(--error-hover);
+}
+
+.iconAction[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

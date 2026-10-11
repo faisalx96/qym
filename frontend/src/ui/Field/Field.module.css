@@ -1,0 +1,43 @@
+/* Shared field chrome: label, help, error (.shell-form-group). Control recipe is in TextField. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.field[data-inline] {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.label[data-hidden] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.help {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.error {
+  font-size: var(--font-sm);
+  color: var(--error);
+}
+
+.required {
+  color: var(--error);
+  margin-inline-start: 2px;
+}

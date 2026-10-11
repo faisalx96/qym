@@ -1,0 +1,62 @@
+/* 6. Interactive filters — rounded outline chips. */
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--chip-height);
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.chip[data-hovered] {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.chip[data-selected] {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: rgba(0, 212, 170, 0.12);
+}
+
+.chip[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.chip[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.chip[data-selected] .count {
+  color: var(--accent-primary);
+}
+
+.remove {
+  margin-inline-start: calc(-1 * var(--space-xs));
+}

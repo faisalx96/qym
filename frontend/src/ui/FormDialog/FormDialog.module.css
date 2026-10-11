@@ -1,0 +1,43 @@
+/* Form dialog body: stacked fields, optional details list, inline error. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.details {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.details li {
+  display: flex;
+  gap: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.details strong {
+  display: block;
+  color: var(--text-primary);
+}
+
+.detailIcon {
+  color: var(--text-muted);
+  padding-top: 2px;
+}
+
+.detailBody {
+  display: block;
+  color: var(--text-muted);
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font-size: var(--font-sm);
+}

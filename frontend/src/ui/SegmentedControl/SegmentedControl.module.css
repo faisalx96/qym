@@ -1,0 +1,76 @@
+/* Segmented control: 24px inset box; the selected option is filled accent. */
+.segmented {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  height: var(--control-height);
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  isolation: isolate;
+}
+
+.segmented[data-ready]::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: var(--qym-segment-x, 0);
+  width: var(--qym-segment-width, 0);
+  border-radius: 3px;
+  background: var(--accent-primary);
+  transition:
+    left var(--transition-fast),
+    width var(--transition-fast);
+  z-index: 0;
+}
+
+.option {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 var(--space-sm);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+  outline: none;
+}
+
+.option[data-hovered] {
+  color: var(--text-primary);
+}
+
+.option[data-selected] {
+  color: var(--bg-void);
+  background: transparent;
+}
+
+.segmented:not([data-ready]) .option[data-selected] {
+  background: var(--accent-primary);
+}
+
+.option[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.option[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segmented[data-ready]::before {
+    transition: none;
+  }
+}

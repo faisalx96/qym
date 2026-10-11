@@ -1,0 +1,55 @@
+/* 5. Passive status/outcome state — tinted outline. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--badge-height);
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: var(--font-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: currentcolor;
+}
+
+.badge[data-tone='success'] {
+  color: var(--success);
+  border-color: var(--success);
+  background: rgba(16, 185, 129, 0.09);
+}
+
+.badge[data-tone='info'] {
+  color: var(--accent-secondary);
+  border-color: var(--accent-secondary);
+  background: rgba(0, 168, 255, 0.09);
+}
+
+.badge[data-tone='danger'] {
+  color: var(--error);
+  border-color: var(--error);
+  background: rgba(239, 68, 68, 0.09);
+}
+
+.badge[data-tone='warning'] {
+  color: var(--warning);
+  border-color: var(--warning);
+  background: rgba(245, 158, 11, 0.09);
+}
+
+.badge[data-tone='neutral'] {
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+}

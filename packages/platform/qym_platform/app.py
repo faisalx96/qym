@@ -30,6 +30,7 @@ from qym_platform.api.insights import router as insights_router
 from qym_platform.api.dashboard import router as dashboard_router
 from qym_platform.api.dashboard_stats import router as dashboard_stats_router
 from qym_platform.api.admin import router as admin_router
+from qym_platform.api.spa import SPA_ASSETS_PREFIX, router as spa_router, spa_dir
 from qym_platform.services.analysis_jobs import (
     analysis_job_manager,
     rule_inference_job_manager,
@@ -238,6 +239,12 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     if ui_dir.exists():
         app.mount("/ui", PrecompressedStaticFiles(directory=str(ui_dir)), name="run_ui_static")
 
+    # React SPA (frontend/, built to _static/app/): hashed assets are mounted
+    # first so they win over the history-API fallback below.
+    spa_assets = spa_dir() / "assets"
+    if spa_assets.exists():
+        app.mount(SPA_ASSETS_PREFIX.rstrip("/"), PrecompressedStaticFiles(directory=str(spa_assets)), name="spa_assets")
+
     app.include_router(auth_router)
     app.include_router(web_router)
     app.include_router(projects_router)
@@ -256,6 +263,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(dashboard_router)
     app.include_router(dashboard_stats_router)
     app.include_router(admin_router)
+    app.include_router(spa_router)
     app.include_router(step_latency_router)
     app.include_router(runs_router)
     serves_ingest = layout.service != "main" or layout.main_include_ingest

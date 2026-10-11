@@ -1,0 +1,16 @@
+/* Uppercase label / eyebrow recipe. */
+.eyebrow {
+  display: inline-block;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.eyebrow[data-tone='danger'] {
+  color: var(--error);
+}
+.eyebrow[data-tone='accent'] {
+  color: var(--accent-primary);
+}
