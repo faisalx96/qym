@@ -452,3 +452,42 @@ class TestSharedComponents:
             assert "DESIGN_LANGUAGE.md" in claude.read_text(
                 encoding="utf-8"
             ), "CLAUDE.md exists but does not point to docs/DESIGN_LANGUAGE.md"
+
+
+# ---------------------------------------------------------------------------
+# Surfaces are always themed. The dashboard is dark only: the document says so
+# (color-scheme), so the browser's own controls, dialogs and scrollbars never
+# come up white where a page stylesheet is missing or still loading, and no
+# stylesheet paints a surface in raw white.
+# ---------------------------------------------------------------------------
+
+# Decorative, translucent or brand marks, never a surface.
+RAW_WHITE_BACKGROUND_ALLOWED = {
+    ("dashboard.css", ".tv-guide.branch[style*=\"tv-guide-color\"]::after"),
+    ("login.html", ".provider-google .provider-icon"),
+}
+RAW_WHITE_BACKGROUND = re.compile(
+    r"([^{}]*)\{[^{}]*?background(?:-color)?\s*:\s*(?:#fff\b|#ffffff\b|white\b)",
+    re.I,
+)
+
+
+def test_root_declares_the_dark_color_scheme() -> None:
+    root = _rule_body((DASHBOARD_DIR / "dashboard.css").read_text(encoding="utf-8"), ":root")
+    assert "color-scheme: dark;" in root
+
+
+def test_no_stylesheet_paints_a_surface_raw_white() -> None:
+    offenders = []
+    for path in _asset_files():
+        if path.suffix == ".js":
+            continue
+        text = path.read_text(encoding="utf-8")
+        for match in RAW_WHITE_BACKGROUND.finditer(text):
+            selector = match.group(1).strip().split("}")[-1].strip().splitlines()[-1].strip()
+            if (path.name, selector) not in RAW_WHITE_BACKGROUND_ALLOWED:
+                offenders.append((path.name, selector))
+    assert not offenders, (
+        "raw white backgrounds (use var(--bg-*) tokens; see DESIGN_LANGUAGE.md): "
+        f"{offenders}"
+    )

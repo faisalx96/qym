@@ -102,8 +102,8 @@
   if (window.QymExperimentLaunch) return;
 
   const STYLESHEETS = [
-    'static/eval_environments.css?v=eval-environments-20261004-2',
-    'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
+    'static/eval_environments.css?v=eval-environments-20261006-1',
+    'static/eval_temporary_model.css?v=eval-temporary-model-20261006-1',
     'static/experiment_launch.css?v=experiment-launch-20261011-env-versions',
     'static/experiment_launch_json.css?v=experiment-launch-json-20261003-2',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20261008-1',

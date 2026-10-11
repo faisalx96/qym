@@ -1215,7 +1215,7 @@
     if (document.querySelector('link[href*="eval_environments.css"]')) return;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = apiUrl('static/eval_environments.css?v=eval-environments-20261004-2');
+    link.href = apiUrl('static/eval_environments.css?v=eval-environments-20261006-1');
     document.head.appendChild(link);
   }
 

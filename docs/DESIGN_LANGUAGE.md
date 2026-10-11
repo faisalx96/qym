@@ -122,6 +122,17 @@ removed on purpose; one token name means one value everywhere.
 8. Hex colors may be hardcoded in JS **only** when concatenated with alpha
    suffixes (e.g. `color + '40'`) where `var()` is impossible — note it with a
    comment.
+9. **Surfaces are always themed.** The dashboard is dark only and `:root`
+   declares `color-scheme: dark`, so anything the browser draws itself (form
+   controls, `<dialog>`, scrollbars, native popups) comes up dark even before a
+   component's stylesheet has loaded. No stylesheet paints a surface in raw
+   `#fff`/`white`; use `var(--bg-*)`. A translucent decorative mark is the
+   only exception, named in the test's allow-list.
+10. **A page's stylesheets travel with it.** Put page CSS in a
+    `<link rel="stylesheet">` in the page's `<head>` with a `?v=` cache key;
+    shell.js carries those links across in-app navigation (as it does
+    `<style>`), waiting for them before the page swaps in. A script that adds
+    a stylesheet at runtime must name the same cache key the pages use.
 
 ---
 

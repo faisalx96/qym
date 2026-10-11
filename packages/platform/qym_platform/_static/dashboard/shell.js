@@ -2008,13 +2008,23 @@
     var content = document.getElementById('shell-content');
     if (!content) throw new Error('No shell-content');
 
-    // Remove old page-specific styles
-    document.querySelectorAll('style[data-shell-page]').forEach(function (s) { s.remove(); });
-
     // Keep route-local rules before the canonical component layer. Appending
     // them to <head> made legacy page CSS win only after client-side
     // navigation, even though a full load had the correct source order.
     var sharedComponentsLink = document.querySelector('link[href*="ui_components.css"]');
+
+    // The page's own stylesheets (<link rel="stylesheet"> in its <head>:
+    // run.html's latency_traces.css, json_viewer.css and
+    // run_versioning_details.css, docs.css, the experiment launch sheets)
+    // used to be dropped here, since only <style> was carried. A run reached
+    // in-app then painted those panels bare, its inputs and buttons in the
+    // browser's white, until a full reload. Add the ones this document does
+    // not hold yet, where a full load would have them, and wait for them
+    // before the content swaps so nothing paints unstyled.
+    await adoptPageStylesheets(collectPageStylesheets(doc, resolveForPage), sharedComponentsLink);
+
+    // Remove old page-specific styles
+    document.querySelectorAll('style[data-shell-page]').forEach(function (s) { s.remove(); });
     newStyles.forEach(function (style) {
       var s = document.createElement('style');
       s.setAttribute('data-shell-page', '1');
@@ -2069,6 +2079,76 @@
 
     document.dispatchEvent(new CustomEvent('qym:shell-ready'));
     return true;
+  }
+
+  // How long a navigation waits for the page's stylesheets before it swaps
+  // the content anyway (they keep loading; the page then styles as they land).
+  var PAGE_STYLESHEET_WAIT_MS = 4000;
+
+  function stylesheetFile(href) {
+    try {
+      return new URL(href, window.location.href).pathname.split('/').pop();
+    } catch (e) {
+      return String(href || '').split('?')[0].split('/').pop();
+    }
+  }
+
+  /** The fetched page's stylesheets, each with whether a full load has it
+   *  before the shared component layer (page CSS) or after it. */
+  function collectPageStylesheets(doc, resolve) {
+    var fetchedShared = doc.querySelector('link[rel="stylesheet"][href*="ui_components.css"]');
+    var sheets = [];
+    doc.querySelectorAll('link[rel="stylesheet"][href]').forEach(function (link) {
+      var href = link.getAttribute('href');
+      var beforeShared = !!fetchedShared && fetchedShared !== link
+        && !!(fetchedShared.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_PRECEDING);
+      sheets.push({ href: resolve(href), file: stylesheetFile(href), beforeShared: beforeShared });
+    });
+    return sheets;
+  }
+
+  /** Adds the stylesheets the document lacks (by file name, so the shared
+   *  layer and sheets another page already loaded are kept once) and resolves
+   *  when they have loaded, or after PAGE_STYLESHEET_WAIT_MS. */
+  function adoptPageStylesheets(sheets, sharedLink) {
+    var present = {};
+    document.querySelectorAll('link[rel="stylesheet"][href]').forEach(function (link) {
+      present[stylesheetFile(link.getAttribute('href'))] = true;
+    });
+    var pending = [];
+    sheets.forEach(function (sheet) {
+      if (!sheet.file || present[sheet.file]) return;
+      present[sheet.file] = true;
+      pending.push(loadPageStylesheet(sheet, sharedLink, 0));
+    });
+    if (!pending.length) return Promise.resolve();
+    return Promise.race([
+      Promise.all(pending),
+      new Promise(function (resolve) { setTimeout(resolve, PAGE_STYLESHEET_WAIT_MS); }),
+    ]);
+  }
+
+  /** One stylesheet, placed as a full load would; a failed load is retried
+   *  once, then reported (the page still swaps, on the base theme). */
+  function loadPageStylesheet(sheet, sharedLink, attempt) {
+    return new Promise(function (resolve) {
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = sheet.href;
+      link.setAttribute('data-shell-page-link', '1');
+      link.onload = function () { resolve(true); };
+      link.onerror = function () {
+        link.remove();
+        if (!attempt) { loadPageStylesheet(sheet, sharedLink, 1).then(resolve); return; }
+        console.error('[QymShell] Page stylesheet failed to load: ' + sheet.href);
+        resolve(false);
+      };
+      if (sheet.beforeShared && sharedLink && sharedLink.parentNode) {
+        sharedLink.parentNode.insertBefore(link, sharedLink);
+      } else {
+        document.head.appendChild(link);
+      }
+    });
   }
 
   function executeScript(info) {

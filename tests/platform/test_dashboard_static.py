@@ -1647,7 +1647,7 @@ def test_shared_ui_component_layer_loads_last_on_platform_pages() -> None:
 def test_shell_navigation_keeps_shared_components_after_page_styles() -> None:
     """SPA navigation must preserve the same CSS cascade as a full load."""
     source = (DASHBOARD_DIR / "shell.js").read_text(encoding="utf-8")
-    style_swap = source.split("// Remove old page-specific styles", 1)[1].split(
+    style_swap = source.split("// Keep route-local rules before the canonical component layer", 1)[1].split(
         "var fragment = document.createDocumentFragment();", 1
     )[0]
 
@@ -3387,7 +3387,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=p1-20261008-cols" in (
+    assert "playground.js?v=p1-20261011-1" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground
@@ -4134,3 +4134,62 @@ def test_pressed_controls_keep_their_place_on_every_page() -> None:
     shell_css = (DASHBOARD_DIR / "shell.css").read_text(encoding="utf-8")
     constrained = shell_css.split(".shell-content > .overview {", 1)[1].split("\n}", 1)[0]
     assert "flex: 1 0 auto;" in constrained
+
+
+def test_shell_navigation_carries_page_stylesheets() -> None:
+    """A page's <link rel="stylesheet"> must survive in-app navigation, as its
+    <style> does, or run.html's panels paint bare (browser-white inputs)."""
+    source = (DASHBOARD_DIR / "shell.js").read_text(encoding="utf-8")
+    swap = source.split("async function swapPage(", 1)[1].split(
+        "content.replaceChildren(fragment);", 1
+    )[0]
+
+    # Added before the content swaps, and awaited so nothing paints unstyled.
+    assert (
+        "await adoptPageStylesheets(collectPageStylesheets(doc, resolveForPage), sharedComponentsLink);"
+        in swap
+    )
+    assert 'doc.querySelectorAll(\'link[rel="stylesheet"][href]\')' in source
+    adopt = source.split("function adoptPageStylesheets(", 1)[1].split("function executeScript(", 1)[0]
+    # Placed where a full load has it: page CSS before the shared layer.
+    assert "sharedLink.parentNode.insertBefore(link, sharedLink);" in adopt
+    assert "document.head.appendChild(link);" in adopt
+    # Kept once by file name, retried once, then reported rather than ignored.
+    assert "present[sheet.file]" in adopt
+    assert "loadPageStylesheet(sheet, sharedLink, 1)" in adopt
+    assert "console.error('[QymShell] Page stylesheet failed to load: '" in adopt
+    assert "PAGE_STYLESHEET_WAIT_MS" in adopt
+
+
+def _page_stylesheet_versions() -> dict[str, set[str]]:
+    """Every ``?v=`` cache key the HTML pages use for each stylesheet."""
+    versions: dict[str, set[str]] = {}
+    for page in sorted(DASHBOARD_DIR.glob("*.html")):
+        source = page.read_text(encoding="utf-8")
+        for name, version in re.findall(
+            r'<link rel="stylesheet" href="[^"]*/([a-z_]+\.css)\?v=([^"]+)"', source
+        ):
+            versions.setdefault(name, set()).add(version)
+    return versions
+
+
+def test_runtime_loaded_stylesheets_exist_with_the_page_cache_key() -> None:
+    """A stylesheet a script adds at runtime must exist and name the same
+    cache key as the pages that link it, or a browser keeps serving the copy
+    it cached under the stale key after a deploy."""
+    page_versions = _page_stylesheet_versions()
+    found = []
+    for script in sorted(DASHBOARD_DIR.glob("*.js")):
+        if script.name in ("codemirror-bundle.js", "docs-hljs.min.js"):
+            continue
+        source = script.read_text(encoding="utf-8")
+        for name, version in re.findall(r"static/([a-z_]+\.css)\?v=([^'\"]+)", source):
+            found.append((script.name, name, version))
+            assert (DASHBOARD_DIR / name).is_file(), (script.name, name)
+            assert version, (script.name, name)
+            linked = page_versions.get(name)
+            if linked:
+                assert linked == {version}, (script.name, name, version, linked)
+    assert found, "no runtime stylesheet loader found"
+    for name, linked in page_versions.items():
+        assert len(linked) == 1, (name, linked)

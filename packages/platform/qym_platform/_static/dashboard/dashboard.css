@@ -6,6 +6,12 @@
    Tokens only — no hardcoded font sizes or text grays.
    Enforced by tests/platform/test_design_language.py. */
 :root {
+  /* The dashboard is dark only: tell the browser, so anything it draws
+     itself (form controls, <dialog>, scrollbars, popups) comes up dark too,
+     never a white box, even where a page stylesheet is missing or still
+     loading. */
+  color-scheme: dark;
+
   /* Dark palette with better surface separation */
   --bg-void: #101018;
   --bg-base: #14141e;
