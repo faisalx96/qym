@@ -81,7 +81,7 @@ export function loadPage(key: string): Promise<DocsPagePayload | null> {
   let p = cache.get(key);
   if (!p) {
     const loader = loaders[key];
-    p = loader ? loader().then((m) => m.default) : Promise.resolve(null);
+    p = loader ? loader().then((m) => m.default as DocsPagePayload | null) : Promise.resolve(null);
     cache.set(key, p);
   }
   return p;
@@ -90,7 +90,7 @@ export function loadPage(key: string): Promise<DocsPagePayload | null> {
 let searchIndex: Promise<SearchRecord[]> | null = null;
 /** Lazy full-text index (titles, headings, body text), loaded on first search. */
 export function loadSearchIndex(): Promise<SearchRecord[]> {
-  searchIndex ??= import('virtual:qym-docs/search').then((m) => m.default);
+  searchIndex ??= import('virtual:qym-docs/search').then((m) => m.default as SearchRecord[]);
   return searchIndex;
 }
 

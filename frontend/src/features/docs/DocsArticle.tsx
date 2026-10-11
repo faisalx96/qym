@@ -27,7 +27,9 @@ function CodeBlock({ 'data-lang': lang = 'code', 'data-highlighted': highlighted
           onCopied={() => toast.show('Copied to clipboard', { tone: 'success' })}
         />
       </div>
-      <pre ref={pre} data-lang={lang} data-highlighted={highlighted} data-wrap={wrap} tabIndex={0}>
+      {/* scrollable code must be keyboard-focusable */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+      <pre ref={pre} data-lang={lang} data-highlighted={highlighted} data-wrap={wrap} tabIndex={0} aria-label={`${lang} code`}>
         {children}
       </pre>
     </div>
@@ -61,7 +63,8 @@ function DocsLink({ href, children, ...rest }: ComponentProps<'a'>) {
 
 function DocsTable(props: ComponentProps<'table'>) {
   return (
-    <div className={styles.tableWrap}>
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+    <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Table">
       <table {...props} />
     </div>
   );

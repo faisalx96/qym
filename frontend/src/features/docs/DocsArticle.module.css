@@ -68,6 +68,11 @@
   opacity: 1;
 }
 
+.anchor:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 .anchor:hover {
   color: var(--accent-primary);
   text-decoration: none;
@@ -175,6 +180,7 @@
   overflow-wrap: anywhere;
 }
 
+.tableWrap:focus-visible,
 .codeblock pre:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: -2px;
