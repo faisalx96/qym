@@ -18,6 +18,9 @@ process.env.QYM_ADMIN_BOOTSTRAP_TOKEN ??= 'e2e-bootstrap';
 process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY ??= 'nhrVWj9_tg4JBetyZrLyHLQTy9-5DTMysJYeRSS5flY=';
 const dbFile = path.join(here, '.qym-e2e.db');
 const venvPython = path.join(repo, '.venv', 'bin', 'python');
+// Stand-in Evaluation Services for the experiments area (frontend/scripts/fake_eval_service.py).
+export const EVAL_PORT_A = Number(PLATFORM_PORT) + 100;
+export const EVAL_PORT_B = Number(PLATFORM_PORT) + 101;
 
 export const BASE_URL = `http://127.0.0.1:${VITE_PORT}`;
 export const APP = '/app';
@@ -39,6 +42,12 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
+    ...[EVAL_PORT_A, EVAL_PORT_B].map((port) => ({
+      command: `${venvPython} ${path.join(here, 'scripts', 'fake_eval_service.py')} ${port}`,
+      url: `http://127.0.0.1:${port}/__control/jobs`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+    })),
     {
       command: [
         `rm -f ${dbFile} ${dbFile}-journal &&`,
@@ -52,7 +61,8 @@ export default defineConfig({
         `QYM_ADMIN_BOOTSTRAP_TOKEN=${process.env.QYM_ADMIN_BOOTSTRAP_TOKEN}`,
         `QYM_LLM_CONFIG_ENCRYPTION_KEY=${process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY}`,
         `QYM_BASE_URL=${BASE_URL}`,
-        `QYM_ROLE=api`,
+        `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true`,
+        `QYM_ROLE=all`,
         `${venvPython} -m uvicorn qym_platform.main:app --port ${PLATFORM_PORT} --log-level warning`,
       ].join(' '),
       url: `http://127.0.0.1:${PLATFORM_PORT}/healthz`,
