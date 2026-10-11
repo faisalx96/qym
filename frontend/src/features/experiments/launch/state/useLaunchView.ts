@@ -14,6 +14,8 @@ import {
   type SecretStore,
   type ServerError,
   changedPointers,
+  editorReviewItems,
+  type RebindItem,
 } from '../model';
 import type { PreviewState, SectionId, SectionSummary } from '../types';
 import { sectionOfItem } from '../types';
@@ -28,24 +30,34 @@ export function useLaunchView(args: {
   preview: PreviewState;
   launchErrors: readonly ServerError[] | null;
   launching: boolean;
+  /** Default-preset editor: launch-only checks are replaced by the editor's (see model/editor.ts). */
+  editor?: { rebind: readonly RebindItem[] } | null;
 }) {
-  const { doc, setDoc, ctx, secrets, preview, launchErrors, launching } = args;
+  const { doc, setDoc, ctx, secrets, preview, launchErrors, launching, editor } = args;
   const raw = useRawJson(doc, setDoc, ctx, secrets);
   const sections = useSections();
-  const review: ReviewState = useMemo(
-    () =>
-      reviewState({
-        doc,
-        ctx,
-        preview: preview.data,
-        previewLoading: preview.loading,
-        previewError: preview.error,
-        launchErrors,
-        launching,
-        rawJsonErrors: raw.state.errors,
-      }),
-    [doc, ctx, preview, launchErrors, launching, raw.state.errors],
-  );
+  const review: ReviewState = useMemo(() => {
+    const base = reviewState({
+      doc,
+      ctx,
+      preview: preview.data,
+      previewLoading: preview.loading,
+      previewError: preview.error,
+      launchErrors,
+      launching,
+      rawJsonErrors: raw.state.errors,
+    });
+    if (!editor) return base;
+    const items = editorReviewItems(base.items, doc, ctx, editor.rebind);
+    return {
+      ...base,
+      items,
+      status: items.length
+        ? `${items.length} problem${items.length === 1 ? '' : 's'} to fix`
+        : 'Ready to publish',
+      canLaunch: doc.environmentIds.length > 0,
+    };
+  }, [doc, ctx, preview, launchErrors, launching, raw.state.errors, editor]);
   const changes = useMemo<Record<SectionId, number>>(
     () => ({
       models: changedSlots(doc).length,

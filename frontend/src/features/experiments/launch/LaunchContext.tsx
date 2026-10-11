@@ -72,9 +72,14 @@
  *                          baseLoading, hasChanges (unsaved-changes guard), canLaunchAsIs,
  *                          multiEnv, isClone, unsavedGuard() (reads refs; false right after a launch).
  *
- * Editor mode (`mode="editor"`, the default-preset editor) is part of the contract (no sweeps, the
- * review becomes "Publish"); the provider does not implement it yet: the flag is exposed so sections
- * can already hide launch-only controls (`mode === 'launch'`).
+ * Editor mode (`mode="editor"` + the provider's `editor={{ environmentId, from?, promote? }}` prop,
+ * mounted by `features/environments/DefaultPresetEditorPage`): one environment, no sweeps, no
+ * temporary models; the base is the environment's current default preset version
+ * (`doc.base.kind === 'official-edit'`), an older version or a promoted configuration is laid on top
+ * as edits. `editor` (EditorApi, model/editor.ts) carries the session (current / next version,
+ * `unchanged`, `rebind` slots, `buildConfig()` for Publish); `review.items` are the editor's own
+ * checks (no name / dataset / sweeps). Sections hide launch-only controls with `mode === 'launch'`;
+ * `launch()` and the dry run are not used.
  */
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { EvalEnvironment } from '@/api/evalCommon';
@@ -85,6 +90,7 @@ import {
   createDocument,
   SecretStore,
   type BaseKind,
+  type EditorApi,
   type EnvData,
   type FormContext,
   type LaunchDocument,
@@ -152,6 +158,8 @@ export interface LaunchFlags {
 
 export interface LaunchContextValue {
   mode: LaunchMode;
+  /** Default-preset editor session (null in launch mode): base version, rebind slots, publish config. */
+  editor: EditorApi | null;
   slug: string;
   projectId: string;
   /** Archived project: nothing can be launched. */
@@ -261,6 +269,7 @@ export function LaunchTestProvider({
   const view = useLaunchView({ doc, setDoc, ctx, secrets, preview, launchErrors, launching: false });
   const value: LaunchContextValue = {
     mode,
+    editor: null,
     slug: 'test',
     projectId: 'p1',
     readOnly: false,

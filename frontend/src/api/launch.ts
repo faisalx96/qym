@@ -23,6 +23,7 @@ import {
   type ModelOptions,
   type ModelSlot,
   type PresetVersionResponse,
+  type PromotePrefillResponse,
 } from '@/features/experiments/launch/model';
 import type { EvalEnvironment } from './evalCommon';
 import type { Preset } from './evalEnvironments';
@@ -140,6 +141,10 @@ export const fetchPresetVersion = (pid: string, eid: string, presetId: string, v
   api.get<PresetVersionResponse>(
     `${env(pid, eid)}/presets/${enc(presetId)}/versions/${version}?remap=current`,
   );
+
+/** GET …/promote-prefill: a saved preset / run / job as a draft default preset (managers; never publishes). */
+export const fetchPromotePrefill = (pid: string, eid: string, kind: 'saved' | 'run' | 'job', id: string) =>
+  api.get<PromotePrefillResponse>(`${env(pid, eid)}/promote-prefill?kind=${enc(kind)}&id=${enc(id)}`);
 
 /** Presets (official + saved) of one environment. */
 export function useEnvPresets(projectId: string | undefined, envId: string | undefined) {

@@ -94,3 +94,4 @@ export * from './settingsTree';
 export * from './spec';
 export * from './validation';
 export * from './rawJson';
+export * from './editor';

@@ -87,8 +87,12 @@ export function buildSpec(doc: LaunchDocument, panel?: EvaluatorPanel | null): L
  * The configuration to save as a preset version (default-preset editor): no dataset
  * key when none, temporary models without a key, and the environment's schema hash.
  */
-export function buildPresetConfig(doc: LaunchDocument, schemaHash?: string | null): LaunchConfig {
-  const spec = buildSpec(doc);
+export function buildPresetConfig(
+  doc: LaunchDocument,
+  schemaHash?: string | null,
+  panel?: EvaluatorPanel | null,
+): LaunchConfig {
+  const spec = buildSpec(doc, panel);
   const evaluator = { ...spec.evaluator };
   if (!evaluator['dataset']) delete evaluator['dataset'];
   const slotBindings: Record<string, JsonValue> = {};

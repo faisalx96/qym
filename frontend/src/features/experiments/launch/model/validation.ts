@@ -140,6 +140,9 @@ function item(
   };
 }
 
+/** Builds a validation item for a pointer (used by the default-preset editor's own checks). */
+export { item as validationItem };
+
 // ── Local errors ─────────────────────────────────────────────────────────
 
 export interface LocalErrorOptions {

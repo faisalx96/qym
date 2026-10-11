@@ -23,6 +23,7 @@ import {
   fetchEvaluatorConfig,
   fetchPresets,
   fetchPresetVersion,
+  fetchPromotePrefill,
   invalidateEnvData,
   launchKeys,
   postExperiment,
@@ -43,6 +44,7 @@ import {
   baseLabel,
   buildContext,
   buildLaunchRequest,
+  buildPresetConfig,
   contextLoading,
   createDocument,
   deriveGlobalModel,
@@ -52,6 +54,9 @@ import {
   emptyBaseInfo,
   evaluatorChangedCount,
   failedBase,
+  layerConfigAsEdits,
+  presetConfigKey,
+  promoteWarningLines,
   highWarnings,
   loadedBaseFromBestRun,
   loadedBaseFromClone,
@@ -73,6 +78,8 @@ import {
   type BaseInfo,
   type BestRunBaseResponse,
   type CloneInfo,
+  type EditorApi,
+  type RebindItem,
   type FormContext,
   type LaunchConfig,
   type LaunchDocument,
@@ -94,9 +101,48 @@ export interface LaunchProviderProps {
   /** `?env= &clone= &job= &base= &preset=` — read once on mount. */
   initialParams?: URLSearchParams;
   /** Called with the new experiment id after a successful launch (the page navigates). */
-  onLaunched: (experimentId: string) => void;
+  onLaunched?: (experimentId: string) => void;
+  /** `mode="editor"`: which environment's default preset is edited, and what is laid on the current version. */
+  editor?: EditorSetup;
   children: ReactNode;
 }
+
+/** The default-preset editor's entry point (`?from=vN`, `?promote=saved|run|job&id=`). */
+export interface EditorSetup {
+  environmentId: string;
+  /** An older version of the default preset to draft from. */
+  from?: number;
+  promote?: { kind: 'saved' | 'run' | 'job'; id: string };
+}
+
+interface EditorLoad {
+  state: 'loading' | 'ready' | 'error';
+  error: string;
+  canPublish: boolean;
+  presetId: string | null;
+  currentVersion: number | null;
+  draftLabel: string | null;
+  promoted: boolean;
+  rebind: RebindItem[];
+  warnings: string[];
+  schemaHash: string | null;
+  baseKey: string;
+}
+
+const EDITOR_LOADING: EditorLoad = {
+  state: 'loading',
+  error: '',
+  canPublish: false,
+  presetId: null,
+  currentVersion: null,
+  draftLabel: null,
+  promoted: false,
+  rebind: [],
+  warnings: [],
+  schemaHash: null,
+  baseKey: '',
+};
+const NO_REBIND: RebindItem[] = [];
 
 const NO_RECORDS: EvalEnvironment[] = [];
 const BASE_KINDS = ['default', 'saved', 'best_run', 'scratch'] as const;
@@ -142,6 +188,7 @@ export function LaunchProvider({
   readOnly,
   initialParams,
   onLaunched,
+  editor: editorSetup,
   children,
 }: LaunchProviderProps) {
   const qc = useQueryClient();
@@ -170,6 +217,7 @@ export function LaunchProvider({
   const [initState, setInitState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [schemaEpoch, setSchemaEpoch] = useState(0);
   const [baseNote, setBaseNote] = useState('');
+  const [editorLoad, setEditorLoad] = useState<EditorLoad>(EDITOR_LOADING);
   const [launching, setLaunching] = useState(false);
   const launchingRef = useRef(false);
   const launchedRef = useRef(false);
@@ -243,6 +291,10 @@ export function LaunchProvider({
     () => (launchFailure && launchFailure.key === dryKey ? launchFailure.errors : []),
     [launchFailure, dryKey],
   );
+  const editorView = useMemo(
+    () => (mode === 'editor' ? { rebind: editorLoad.rebind } : null),
+    [mode, editorLoad.rebind],
+  );
   const view = useLaunchView({
     doc,
     setDoc,
@@ -251,6 +303,7 @@ export function LaunchProvider({
     preview,
     launchErrors: launchErrors.length ? launchErrors : null,
     launching,
+    editor: editorView,
   });
   const latest = useRef({ view, preview, dryKey });
   useEffect(() => {
@@ -500,6 +553,89 @@ export function LaunchProvider({
     }
   }, [buildCtxNow, setDoc, secrets, syncBase, toast]);
 
+  // ── default-preset editor: the current version is the base, drafts are edits ──
+  const loadEditorBase = useCallback(
+    async (setup: EditorSetup, records: EvalEnvironment[]) => {
+      const envId = setup.environmentId;
+      const fail = (error: string) => {
+        if (alive.current) setEditorLoad({ ...EDITOR_LOADING, state: 'error', error });
+      };
+      try {
+        const list = await fetchPresets(projectId, envId);
+        qc.setQueryData(launchKeys.presets(projectId, envId), list);
+        const official = list.presets.find((p) => p.kind === 'official') ?? null;
+        const current = official?.current_version ?? null;
+        const canPublish = list.can_publish_official && official?.can_publish !== false;
+        if (!canPublish) {
+          if (alive.current) setEditorLoad({ ...EDITOR_LOADING, state: 'ready', canPublish: false });
+          return;
+        }
+        let ctxNow = await buildCtxNow([envId], []);
+        const [curRes, fromRes, promoted] = await Promise.all([
+          official && current ? fetchPresetVersion(projectId, envId, official.id, current.version) : null,
+          official && setup.from && setup.from !== current?.version
+            ? fetchPresetVersion(projectId, envId, official.id, setup.from)
+            : null,
+          setup.promote ? fetchPromotePrefill(projectId, envId, setup.promote.kind, setup.promote.id) : null,
+        ]);
+        if (!alive.current) return;
+        if (curRes && !curRes.remap) throw new Error('Failed to load the current version');
+        if (fromRes && !fromRes.remap) throw new Error(`Failed to load v${setup.from}`);
+        const draft = promoted?.config ?? fromRes?.remap?.config ?? null;
+        const extras = Array.from(
+          new Set([
+            ...unconfirmedEndpoints(curRes?.remap?.config ?? {}, ctxNow),
+            ...(draft ? unconfirmedEndpoints(draft, ctxNow) : []),
+          ]),
+        );
+        if (extras.length) ctxNow = await buildCtxNow([envId], extras);
+        if (!alive.current) return;
+        const addable = extras.filter((n) => ctxNow.slots.some((s) => s.slot_key === 'endpoint:' + n));
+        const label = current ? `Default preset v${current.version}` : 'Blank (no default preset yet)';
+        const loaded =
+          official && current && curRes
+            ? loadedBaseFromPreset('default', envId, official, curRes, ctxNow)
+            : scratchBase(ctxNow);
+        loaded.info = { ...loaded.info, kind: 'official-edit', label };
+        const withExtras = addExtraEndpoints({ ...docRef.current, environmentIds: [envId] }, ctxNow, addable);
+        let next = applyBase(withExtras, ctxNow, loaded, secrets).doc;
+        const schemaHash = records.find((e) => e.id === envId)?.schema_hash ?? null;
+        const baseKey = presetConfigKey(next, schemaHash, ctxNow.evaluatorPanel);
+        const warnings = [...loaded.info.warnings];
+        let draftLabel: string | null = null;
+        if (draft) {
+          next = layerConfigAsEdits(next, ctxNow, draft);
+          if (promoted) {
+            draftLabel = promoted.source?.label || 'a configuration';
+            warnings.push(...promoteWarningLines(promoted));
+            if (promoted.remap?.summary) warnings.push(promoted.remap.summary);
+          } else {
+            draftLabel = `v${setup.from}`;
+            if (fromRes?.remap?.summary) warnings.push(`v${setup.from}: ${fromRes.remap.summary}`);
+          }
+        }
+        docRef.current = next;
+        setDocState(next);
+        setEditorLoad({
+          state: 'ready',
+          error: '',
+          canPublish: true,
+          presetId: official?.id ?? null,
+          currentVersion: current?.version ?? null,
+          draftLabel,
+          promoted: Boolean(promoted),
+          rebind: promoted?.unbound ?? NO_REBIND,
+          warnings,
+          schemaHash,
+          baseKey,
+        });
+      } catch (error) {
+        fail(errorMessage(error) || 'Failed to load the default preset');
+      }
+    },
+    [qc, projectId, buildCtxNow, secrets],
+  );
+
   // ── mount: URL params ───────────────────────────────────────────────────
   const started = useRef(false);
   useEffect(() => {
@@ -511,6 +647,16 @@ export function LaunchProvider({
           queryKey: evalEnvironmentsKey(projectId, true),
           queryFn: () => fetchActiveEnvironments(projectId),
         });
+        if (mode === 'editor' && editorSetup) {
+          if (!records.some((r) => r.id === editorSetup.environmentId)) {
+            setEditorLoad({ ...EDITOR_LOADING, state: 'error', error: 'This environment is not available.' });
+          } else {
+            setDoc((d) => ({ ...d, environmentIds: [editorSetup.environmentId] }));
+            await loadEditorBase(editorSetup, records);
+          }
+          if (alive.current) setInitState('ready');
+          return;
+        }
         let patch: Partial<LaunchDocument> = {};
         const cloneId = params.get('clone');
         if (cloneId && mode === 'launch') {
@@ -552,7 +698,7 @@ export function LaunchProvider({
         if (alive.current) setInitState('error');
       }
     })();
-  }, [qc, projectId, params, mode, toast, setDoc]);
+  }, [qc, projectId, params, mode, editorSetup, loadEditorBase, toast, setDoc]);
 
   // ── react to the selection ──────────────────────────────────────────────
   const envSig = doc.environmentIds.join(',');
@@ -721,7 +867,7 @@ export function LaunchProvider({
           void qc.invalidateQueries({ queryKey: ['experiments', projectId] });
           void qc.invalidateQueries({ queryKey: ['eval-queue', projectId] });
           toast.show(`Launched “${body.name}”`, { tone: 'success' });
-          onLaunched(res.id);
+          onLaunched?.(res.id);
           return;
         } catch (error) {
           if (!(error instanceof ApiError)) throw error;
@@ -797,8 +943,33 @@ export function LaunchProvider({
     preview.data != null &&
     preview.data.ok !== false;
 
+  const editorApi = useMemo<EditorApi | null>(() => {
+    if (mode !== 'editor' || !editorSetup) return null;
+    const { baseKey, schemaHash } = editorLoad;
+    return {
+      environmentId: editorSetup.environmentId,
+      state: editorLoad.state,
+      error: editorLoad.error,
+      canPublish: editorLoad.canPublish,
+      presetId: editorLoad.presetId,
+      currentVersion: editorLoad.currentVersion,
+      nextVersion: (editorLoad.currentVersion ?? 0) + 1,
+      draftLabel: editorLoad.draftLabel,
+      promoted: editorLoad.promoted,
+      unchanged:
+        editorLoad.state === 'ready' &&
+        baseKey !== '' &&
+        presetConfigKey(doc, schemaHash, ctx.evaluatorPanel) === baseKey,
+      rebind: editorLoad.rebind,
+      warnings: editorLoad.warnings,
+      schemaHash,
+      buildConfig: () => buildPresetConfig(docRef.current, schemaHash, ctxRef.current.evaluatorPanel),
+    };
+  }, [mode, editorSetup, editorLoad, doc, ctx.evaluatorPanel]);
+
   const value: LaunchContextValue = {
     mode,
+    editor: editorApi,
     slug,
     projectId,
     readOnly,
