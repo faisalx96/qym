@@ -31,6 +31,7 @@ Scripts (`package.json`):
 |---|---|
 | `npm run dev` | Vite dev server (port 5800 by default; `QYM_VITE_PORT`, `QYM_PLATFORM_PORT` override) |
 | `npm run build` | `tsc -b` + Vite build → `packages/platform/qym_platform/_static/app/` (gitignored) |
+| `npm run build:sdk` / `npm run dev:sdk` | Offline SDK viewer (`src/sdk-viewer/`, `vite.sdk.config.ts`) → flat `packages/sdk/qym/_static/ui/` (gitignored); dev proxies `/api` to the SDK server on 8818 |
 | `npm run check` | typecheck + eslint + stylelint + vitest + design-language test — run before every commit |
 | `npm test` / `npm run test:design` | Vitest (jsdom, Testing Library, axe) / only the design-language lint |
 | `npm run e2e` | Playwright: boots the platform (SQLite, `QYM_AUTH_MODE=none`) on 8800 and Vite on 5800, runs `e2e/**` |
