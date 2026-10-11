@@ -1,4 +1,4 @@
-import { Tag } from '@/ui';
+import { Button, Tag } from '@/ui';
 import { SECTION_TITLES, useLaunch, type SectionId } from '../LaunchContext';
 import { useGoToSection } from './goToSection';
 import styles from '../LaunchPage.module.css';
@@ -12,7 +12,13 @@ export function Outline({ sections }: { sections: readonly SectionId[] }) {
       {sections.map((id) => {
         const { changes, problems } = sectionSummary(id);
         return (
-          <button key={id} type="button" className={styles.outlineLink} onClick={() => goTo(id)}>
+          <Button
+            key={id}
+            size="sm"
+            variant="neutral"
+            className={styles.outlineLink}
+            onPress={() => goTo(id)}
+          >
             {SECTION_TITLES[id]}
             {changes ? (
               <Tag kind="count" tone="info" aria-label={`${changes} changed`}>
@@ -24,7 +30,7 @@ export function Outline({ sections }: { sections: readonly SectionId[] }) {
                 {problems.length}
               </Tag>
             ) : null}
-          </button>
+          </Button>
         );
       })}
     </nav>

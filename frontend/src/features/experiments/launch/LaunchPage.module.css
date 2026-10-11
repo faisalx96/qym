@@ -47,27 +47,6 @@
 
 .outlineLink {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-pill);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--font-sm);
-  cursor: pointer;
-}
-
-.outlineLink:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.outlineLink:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
 }
 
 .hint {

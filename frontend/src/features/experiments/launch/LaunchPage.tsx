@@ -81,7 +81,7 @@ function LaunchBody({ onCancel }: { onCancel: () => void }) {
             <RawJsonSection />
           </>
         )}
-        {wide ? null : <ReviewPane onCancel={onCancel} />}
+        {wide ? null : <ReviewPane onCancel={onCancel} hideActions />}
         {wide ? null : <MobileLaunchBar onCancel={onCancel} />}
       </div>
       {wide ? (

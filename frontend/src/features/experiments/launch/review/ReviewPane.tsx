@@ -76,7 +76,7 @@ function ChangesByStep() {
 }
 
 /** The always-visible review: summary, live run count, changes by step, problems, launch actions. */
-export function ReviewPane({ onCancel }: { onCancel: () => void }) {
+export function ReviewPane({ onCancel, hideActions }: { onCancel: () => void; hideActions?: boolean }) {
   const { doc, ctx, review, preview, selectedEnvs, readOnly } = useLaunch();
   const { count } = review;
   const envCount = doc.environmentIds.length;
@@ -164,7 +164,7 @@ export function ReviewPane({ onCancel }: { onCancel: () => void }) {
         </details>
       ) : null}
       {readOnly ? <Callout tone="warning">Archived project: read only.</Callout> : null}
-      <LaunchActions onCancel={onCancel} />
+      {hideActions ? null : <LaunchActions onCancel={onCancel} />}
     </aside>
   );
 }
