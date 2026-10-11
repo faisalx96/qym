@@ -574,6 +574,7 @@ export function LaunchProvider({
       refetchOnWindowFocus: false,
     })),
   });
+  const refreshSig = refreshes.map((r) => `${r.status}:${r.fetchStatus}`).join('|');
   const schemaStatus = useMemo<Record<string, SchemaStatus>>(() => {
     const out: Record<string, SchemaStatus> = {};
     selectedEnvs.forEach((e, i) => {
@@ -586,8 +587,8 @@ export function LaunchProvider({
       };
     });
     return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `refreshes` is a new array each render
-  }, [selectedEnvs, ...refreshes.map((r) => `${r.status}:${r.fetchStatus}`)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `refreshes` is a new array each render; refreshSig keys it
+  }, [selectedEnvs, refreshSig]);
   const handled = useRef(new Set<string>());
   const changedSig = refreshes.map((r, i) => (r.data?.changed ? selectedEnvs[i]?.id : '')).join(',');
   useEffect(() => {

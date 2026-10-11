@@ -191,3 +191,17 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+@media (max-width: 760px) {
+  .panel {
+    padding: var(--space-md);
+  }
+
+  .sectionBody {
+    padding: 0 var(--space-md) var(--space-md);
+  }
+
+  .toggle {
+    padding: var(--space-sm) var(--space-md);
+  }
+}
