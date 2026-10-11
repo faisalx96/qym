@@ -430,7 +430,7 @@ export interface StepLatencyPayload {
     min_ms?: number;
     max_ms?: number;
   } | null;
-  agents?: string[];
+  agents?: Array<StepLatencyGroup & { name?: string }> | string[];
 }
 
 export interface ReviewHistoryEvent {
