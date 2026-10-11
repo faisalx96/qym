@@ -1,0 +1,125 @@
+/* Read-only preview of the launch form generated from the schema (.env-preview). */
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.count {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.meta {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.group {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.groupHeader:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.groupBody {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.field {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  padding-inline-start: calc(var(--space-md) + var(--depth, 0) * var(--space-md));
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.field:last-child {
+  border-bottom: 0;
+}
+
+.fieldMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.name {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.label {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.desc,
+.extra,
+.default {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  flex: none;
+  max-width: 45%;
+}
+
+.warnings {
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border-default));
+  border-radius: var(--control-radius);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.warnings ul {
+  margin: var(--space-xs) 0 0;
+  padding-inline-start: var(--space-lg);
+}
+
+.empty {
+  padding: var(--space-lg);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-base);
+}

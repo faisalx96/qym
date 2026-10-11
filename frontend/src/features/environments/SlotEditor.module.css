@@ -1,0 +1,190 @@
+/* LLM model group cards (.env-slot recipe): one card per LLM the service can call. */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  min-width: 0;
+}
+
+.card[data-error] {
+  border-color: color-mix(in srgb, var(--error) 55%, var(--border-subtle));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.title {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.labelField {
+  flex: 1 1 14em;
+  min-width: 0;
+}
+
+.keysets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.keyset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.keysetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.keysetTitle {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.roles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14em, 1fr));
+  gap: var(--space-sm);
+}
+
+.role {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.roleName {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.pointer {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.unmapped {
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.errors {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  color: var(--error);
+  font-size: var(--font-base);
+}
+
+.callout {
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.callout[data-tone='error'] {
+  border-color: color-mix(in srgb, var(--error) 55%, var(--border-default));
+  color: var(--text-primary);
+}
+
+.removed {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.addRow {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.addRow > :first-child {
+  flex: 1 1 16em;
+  min-width: 0;
+}
+
+.hint {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.empty {
+  padding: var(--space-lg);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-base);
+}
