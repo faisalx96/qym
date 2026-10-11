@@ -22,6 +22,7 @@ const dbFile = path.join(here, '.qym-e2e.db');
 const repoVenv = path.join(repo, '.venv', 'bin', 'python');
 const venvPython = process.env.QYM_PYTHON ?? (fs.existsSync(repoVenv) ? repoVenv : 'python');
 
+export const STUB_LLM_PORT = Number(PLATFORM_PORT) + 1000;
 export const BASE_URL = `http://127.0.0.1:${VITE_PORT}`;
 export const APP = '/app';
 
@@ -42,6 +43,13 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
+    {
+      // OpenAI-compatible stub for the analyzer e2e (no real LLM key needed); see scripts/stub_llm.py.
+      command: `${venvPython} scripts/stub_llm.py --port ${STUB_LLM_PORT} --delay 0.2`,
+      url: `http://127.0.0.1:${STUB_LLM_PORT}/v1/models`,
+      reuseExistingServer: true,
+      timeout: 30_000,
+    },
     {
       command: [
         `rm -f ${dbFile} ${dbFile}-journal &&`,
