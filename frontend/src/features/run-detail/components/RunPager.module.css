@@ -1,0 +1,48 @@
+/* Hero pager capsule: arrows around "N of M" (brief 04 J9). */
+.pager {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  height: var(--control-height);
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--control-radius);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.step:hover {
+  color: var(--accent-primary);
+}
+
+.step:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.step[aria-disabled='true'] {
+  color: var(--text-dim); /* decorative: disabled arrow */
+  cursor: default;
+}
+
+.pos {
+  min-width: 6ch;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.num {
+  color: var(--text-primary);
+}
