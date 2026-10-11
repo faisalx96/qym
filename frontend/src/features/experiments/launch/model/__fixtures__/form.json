@@ -1,0 +1,1857 @@
+{
+ "environment_id": "env-production",
+ "schema_id": "fc697979-fd31-4cb9-88f9-3970b6066ac2",
+ "schema_hash": "249987512336a81162a60ad5f78e6e37732ed487e661228e897eca418ac97c3b",
+ "descriptor": {
+  "descriptor_version": 1,
+  "title": "EnvOverrides",
+  "root": [
+   "/LLM_OVERRIDES",
+   "/ENABLE_RESPONSE_DRAFTING",
+   "/BRIEF_ENABLED",
+   "/SKILL_TRIGGERS_ENABLED",
+   "/ROUTER_SKILL_HINTS_ENABLED",
+   "/SKILL_TOOL_ENABLED",
+   "/VIZ_ENFORCEMENT_ENABLED",
+   "/TABLE_SELECTION_MODE",
+   "/USE_LLM_TABLE_SELECTION",
+   "/RAG_ITERATION",
+   "/MILVUS_SEARCH_THRESHOLD",
+   "/SQL_RESULT_LIMIT",
+   "/CONTEXT_MAX_TOKENS",
+   "/CONTEXT_COMPACT_THRESHOLD",
+   "/CONTEXT_KEEP_RECENT",
+   "/VIZ_LLM_ENABLED",
+   "/VIZ_LLM_TIMEOUT",
+   "/VIZ_LLM_MIN_CONFIDENCE",
+   "/VIZ_LLM_MODEL",
+   "/VIZ_SEMANTIC_INFERENCE_ENABLED",
+   "/VIZ_DATA_TRANSFORM_ENABLED",
+   "/VIZ_MAX_CATEGORIES",
+   "/VIZ_MAX_GROUPS",
+   "/VIZ_DIVERSITY_ENABLED",
+   "/REQUEST_TIMEOUT"
+  ],
+  "fields": {
+   "/LLM_OVERRIDES": {
+    "pointer": "/LLM_OVERRIDES",
+    "name": "LLM_OVERRIDES",
+    "label": "LLM_OVERRIDES",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "object",
+    "type": "object",
+    "widget": "group",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": false,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null,
+    "children": [
+     "/LLM_OVERRIDES/endpoints",
+     "/LLM_OVERRIDES/{role}"
+    ]
+   },
+   "/LLM_OVERRIDES/endpoints": {
+    "pointer": "/LLM_OVERRIDES/endpoints",
+    "name": "endpoints",
+    "label": "Endpoints",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "endpoints"
+    ],
+    "parent": "/LLM_OVERRIDES",
+    "params": [],
+    "kind": "collection",
+    "type": "object",
+    "widget": "collection",
+    "group": "llm_routing",
+    "required": true,
+    "nullable": false,
+    "has_default": false,
+    "default": null,
+    "sweepable": false,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null,
+    "key_param": "endpoint",
+    "item_pointer": "/LLM_OVERRIDES/endpoints/{endpoint}",
+    "children": [
+     "/LLM_OVERRIDES/endpoints/{endpoint}"
+    ],
+    "required_keys": [
+     "primary"
+    ],
+    "min_items": 1,
+    "max_items": null,
+    "key_pattern": null
+   },
+   "/LLM_OVERRIDES/endpoints/{endpoint}": {
+    "pointer": "/LLM_OVERRIDES/endpoints/{endpoint}",
+    "name": "endpoint",
+    "label": "endpoint",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "endpoints",
+     "{endpoint}"
+    ],
+    "parent": "/LLM_OVERRIDES/endpoints",
+    "params": [
+     "endpoint"
+    ],
+    "kind": "object",
+    "type": "object",
+    "widget": "group",
+    "group": "llm_routing",
+    "required": true,
+    "nullable": false,
+    "has_default": false,
+    "default": null,
+    "sweepable": false,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null,
+    "children": [
+     "/LLM_OVERRIDES/endpoints/{endpoint}/model",
+     "/LLM_OVERRIDES/endpoints/{endpoint}/base_url",
+     "/LLM_OVERRIDES/endpoints/{endpoint}/api_key",
+     "/LLM_OVERRIDES/endpoints/{endpoint}/timeout",
+     "/LLM_OVERRIDES/endpoints/{endpoint}/max_attempts",
+     "/LLM_OVERRIDES/endpoints/{endpoint}/max_connections",
+     "/LLM_OVERRIDES/endpoints/{endpoint}/max_keepalive",
+     "/LLM_OVERRIDES/endpoints/{endpoint}/connect_timeout"
+    ]
+   },
+   "/LLM_OVERRIDES/endpoints/{endpoint}/model": {
+    "pointer": "/LLM_OVERRIDES/endpoints/{endpoint}/model",
+    "name": "model",
+    "label": "Model",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "endpoints",
+     "{endpoint}",
+     "model"
+    ],
+    "parent": "/LLM_OVERRIDES/endpoints/{endpoint}",
+    "params": [
+     "endpoint"
+    ],
+    "kind": "field",
+    "type": "string",
+    "widget": "model-name",
+    "group": "llm_routing",
+    "required": true,
+    "nullable": false,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/endpoints/{endpoint}/base_url": {
+    "pointer": "/LLM_OVERRIDES/endpoints/{endpoint}/base_url",
+    "name": "base_url",
+    "label": "Base Url",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "endpoints",
+     "{endpoint}",
+     "base_url"
+    ],
+    "parent": "/LLM_OVERRIDES/endpoints/{endpoint}",
+    "params": [
+     "endpoint"
+    ],
+    "kind": "field",
+    "type": "string",
+    "widget": "url",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/endpoints/{endpoint}/api_key": {
+    "pointer": "/LLM_OVERRIDES/endpoints/{endpoint}/api_key",
+    "name": "api_key",
+    "label": "Api Key",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "endpoints",
+     "{endpoint}",
+     "api_key"
+    ],
+    "parent": "/LLM_OVERRIDES/endpoints/{endpoint}",
+    "params": [
+     "endpoint"
+    ],
+    "kind": "field",
+    "type": "string",
+    "widget": "secret",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": false,
+    "secret": true,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/endpoints/{endpoint}/timeout": {
+    "pointer": "/LLM_OVERRIDES/endpoints/{endpoint}/timeout",
+    "name": "timeout",
+    "label": "Timeout",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "endpoints",
+     "{endpoint}",
+     "timeout"
+    ],
+    "parent": "/LLM_OVERRIDES/endpoints/{endpoint}",
+    "params": [
+     "endpoint"
+    ],
+    "kind": "field",
+    "type": "number",
+    "widget": "number",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "exclusiveMinimum": 0
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/endpoints/{endpoint}/max_attempts": {
+    "pointer": "/LLM_OVERRIDES/endpoints/{endpoint}/max_attempts",
+    "name": "max_attempts",
+    "label": "Max Attempts",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "endpoints",
+     "{endpoint}",
+     "max_attempts"
+    ],
+    "parent": "/LLM_OVERRIDES/endpoints/{endpoint}",
+    "params": [
+     "endpoint"
+    ],
+    "kind": "field",
+    "type": "integer",
+    "widget": "number",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 1
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/endpoints/{endpoint}/max_connections": {
+    "pointer": "/LLM_OVERRIDES/endpoints/{endpoint}/max_connections",
+    "name": "max_connections",
+    "label": "Max Connections",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "endpoints",
+     "{endpoint}",
+     "max_connections"
+    ],
+    "parent": "/LLM_OVERRIDES/endpoints/{endpoint}",
+    "params": [
+     "endpoint"
+    ],
+    "kind": "field",
+    "type": "integer",
+    "widget": "number",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 1
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/endpoints/{endpoint}/max_keepalive": {
+    "pointer": "/LLM_OVERRIDES/endpoints/{endpoint}/max_keepalive",
+    "name": "max_keepalive",
+    "label": "Max Keepalive",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "endpoints",
+     "{endpoint}",
+     "max_keepalive"
+    ],
+    "parent": "/LLM_OVERRIDES/endpoints/{endpoint}",
+    "params": [
+     "endpoint"
+    ],
+    "kind": "field",
+    "type": "integer",
+    "widget": "number",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 0
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/endpoints/{endpoint}/connect_timeout": {
+    "pointer": "/LLM_OVERRIDES/endpoints/{endpoint}/connect_timeout",
+    "name": "connect_timeout",
+    "label": "Connect Timeout",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "endpoints",
+     "{endpoint}",
+     "connect_timeout"
+    ],
+    "parent": "/LLM_OVERRIDES/endpoints/{endpoint}",
+    "params": [
+     "endpoint"
+    ],
+    "kind": "field",
+    "type": "number",
+    "widget": "number",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "exclusiveMinimum": 0
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/{role}": {
+    "pointer": "/LLM_OVERRIDES/{role}",
+    "name": "role",
+    "label": "RoleConfig",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "{role}"
+    ],
+    "parent": "/LLM_OVERRIDES",
+    "params": [
+     "role"
+    ],
+    "kind": "role_table",
+    "type": "object",
+    "widget": "role-table",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": false,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null,
+    "row_param": "role",
+    "ref": "RoleConfig",
+    "rows": [
+     {
+      "key": "main",
+      "pointer": "/LLM_OVERRIDES/main",
+      "label": "main",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "router",
+      "pointer": "/LLM_OVERRIDES/router",
+      "label": "router",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "brief",
+      "pointer": "/LLM_OVERRIDES/brief",
+      "label": "brief",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "drafting",
+      "pointer": "/LLM_OVERRIDES/drafting",
+      "label": "drafting",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "finalize",
+      "pointer": "/LLM_OVERRIDES/finalize",
+      "label": "finalize",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "audit",
+      "pointer": "/LLM_OVERRIDES/audit",
+      "label": "audit",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "compaction",
+      "pointer": "/LLM_OVERRIDES/compaction",
+      "label": "compaction",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "table_selector_rerank",
+      "pointer": "/LLM_OVERRIDES/table_selector_rerank",
+      "label": "table_selector_rerank",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "table_selector_decide",
+      "pointer": "/LLM_OVERRIDES/table_selector_decide",
+      "label": "table_selector_decide",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "report_sub_agent",
+      "pointer": "/LLM_OVERRIDES/report_sub_agent",
+      "label": "report_sub_agent",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "report_definition_sub_agent",
+      "pointer": "/LLM_OVERRIDES/report_definition_sub_agent",
+      "label": "report_definition_sub_agent",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "report_planner",
+      "pointer": "/LLM_OVERRIDES/report_planner",
+      "label": "report_planner",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "report_definition_extractor",
+      "pointer": "/LLM_OVERRIDES/report_definition_extractor",
+      "label": "report_definition_extractor",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "report_summary",
+      "pointer": "/LLM_OVERRIDES/report_summary",
+      "label": "report_summary",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "chart_suggester_detailed",
+      "pointer": "/LLM_OVERRIDES/chart_suggester_detailed",
+      "label": "chart_suggester_detailed",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "chart_suggester_quick",
+      "pointer": "/LLM_OVERRIDES/chart_suggester_quick",
+      "label": "chart_suggester_quick",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "out_of_scope",
+      "pointer": "/LLM_OVERRIDES/out_of_scope",
+      "label": "out_of_scope",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "spatial_join_dedup",
+      "pointer": "/LLM_OVERRIDES/spatial_join_dedup",
+      "label": "spatial_join_dedup",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "spatial_join_infer",
+      "pointer": "/LLM_OVERRIDES/spatial_join_infer",
+      "label": "spatial_join_infer",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "question_alignment",
+      "pointer": "/LLM_OVERRIDES/question_alignment",
+      "label": "question_alignment",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "followup_suggester",
+      "pointer": "/LLM_OVERRIDES/followup_suggester",
+      "label": "followup_suggester",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "input_completion",
+      "pointer": "/LLM_OVERRIDES/input_completion",
+      "label": "input_completion",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "cot_summarizer",
+      "pointer": "/LLM_OVERRIDES/cot_summarizer",
+      "label": "cot_summarizer",
+      "description": null,
+      "required": false,
+      "nullable": true
+     },
+     {
+      "key": "conversation_title",
+      "pointer": "/LLM_OVERRIDES/conversation_title",
+      "label": "conversation_title",
+      "description": null,
+      "required": false,
+      "nullable": true
+     }
+    ],
+    "columns": [
+     "/LLM_OVERRIDES/{role}/endpoint",
+     "/LLM_OVERRIDES/{role}/temperature",
+     "/LLM_OVERRIDES/{role}/max_tokens",
+     "/LLM_OVERRIDES/{role}/reasoning_enabled",
+     "/LLM_OVERRIDES/{role}/reasoning_effort",
+     "/LLM_OVERRIDES/{role}/top_p",
+     "/LLM_OVERRIDES/{role}/seed",
+     "/LLM_OVERRIDES/{role}/response_format"
+    ],
+    "children": [
+     "/LLM_OVERRIDES/{role}/endpoint",
+     "/LLM_OVERRIDES/{role}/temperature",
+     "/LLM_OVERRIDES/{role}/max_tokens",
+     "/LLM_OVERRIDES/{role}/reasoning_enabled",
+     "/LLM_OVERRIDES/{role}/reasoning_effort",
+     "/LLM_OVERRIDES/{role}/top_p",
+     "/LLM_OVERRIDES/{role}/seed",
+     "/LLM_OVERRIDES/{role}/response_format"
+    ]
+   },
+   "/LLM_OVERRIDES/{role}/endpoint": {
+    "pointer": "/LLM_OVERRIDES/{role}/endpoint",
+    "name": "endpoint",
+    "label": "Endpoint",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "{role}",
+     "endpoint"
+    ],
+    "parent": "/LLM_OVERRIDES/{role}",
+    "params": [
+     "role"
+    ],
+    "kind": "field",
+    "type": "string",
+    "widget": "endpoint-ref",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "endpoint_ref"
+    ],
+    "accepts": null,
+    "item_type": null,
+    "ref_collection": "/LLM_OVERRIDES/endpoints"
+   },
+   "/LLM_OVERRIDES/{role}/temperature": {
+    "pointer": "/LLM_OVERRIDES/{role}/temperature",
+    "name": "temperature",
+    "label": "Temperature",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "{role}",
+     "temperature"
+    ],
+    "parent": "/LLM_OVERRIDES/{role}",
+    "params": [
+     "role"
+    ],
+    "kind": "field",
+    "type": "number",
+    "widget": "number-range",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 0,
+     "maximum": 2
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/{role}/max_tokens": {
+    "pointer": "/LLM_OVERRIDES/{role}/max_tokens",
+    "name": "max_tokens",
+    "label": "Max Tokens",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "{role}",
+     "max_tokens"
+    ],
+    "parent": "/LLM_OVERRIDES/{role}",
+    "params": [
+     "role"
+    ],
+    "kind": "field",
+    "type": "integer",
+    "widget": "number",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 1
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/{role}/reasoning_enabled": {
+    "pointer": "/LLM_OVERRIDES/{role}/reasoning_enabled",
+    "name": "reasoning_enabled",
+    "label": "Reasoning Enabled",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "{role}",
+     "reasoning_enabled"
+    ],
+    "parent": "/LLM_OVERRIDES/{role}",
+    "params": [
+     "role"
+    ],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/{role}/reasoning_effort": {
+    "pointer": "/LLM_OVERRIDES/{role}/reasoning_effort",
+    "name": "reasoning_effort",
+    "label": "Reasoning Effort",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "{role}",
+     "reasoning_effort"
+    ],
+    "parent": "/LLM_OVERRIDES/{role}",
+    "params": [
+     "role"
+    ],
+    "kind": "field",
+    "type": "enum",
+    "widget": "select",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": [
+     "low",
+     "medium",
+     "high"
+    ],
+    "value_type": "string",
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/{role}/top_p": {
+    "pointer": "/LLM_OVERRIDES/{role}/top_p",
+    "name": "top_p",
+    "label": "Top P",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "{role}",
+     "top_p"
+    ],
+    "parent": "/LLM_OVERRIDES/{role}",
+    "params": [
+     "role"
+    ],
+    "kind": "field",
+    "type": "number",
+    "widget": "number-range",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 0,
+     "maximum": 1
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/{role}/seed": {
+    "pointer": "/LLM_OVERRIDES/{role}/seed",
+    "name": "seed",
+    "label": "Seed",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "{role}",
+     "seed"
+    ],
+    "parent": "/LLM_OVERRIDES/{role}",
+    "params": [
+     "role"
+    ],
+    "kind": "field",
+    "type": "integer",
+    "widget": "number",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/LLM_OVERRIDES/{role}/response_format": {
+    "pointer": "/LLM_OVERRIDES/{role}/response_format",
+    "name": "response_format",
+    "label": "response_format",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "{role}",
+     "response_format"
+    ],
+    "parent": "/LLM_OVERRIDES/{role}",
+    "params": [
+     "role"
+    ],
+    "kind": "object",
+    "type": "object",
+    "widget": "group",
+    "group": "llm_routing",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": false,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null,
+    "children": [
+     "/LLM_OVERRIDES/{role}/response_format/type"
+    ]
+   },
+   "/LLM_OVERRIDES/{role}/response_format/type": {
+    "pointer": "/LLM_OVERRIDES/{role}/response_format/type",
+    "name": "type",
+    "label": "Type",
+    "description": null,
+    "path": [
+     "LLM_OVERRIDES",
+     "{role}",
+     "response_format",
+     "type"
+    ],
+    "parent": "/LLM_OVERRIDES/{role}/response_format",
+    "params": [
+     "role"
+    ],
+    "kind": "field",
+    "type": "enum",
+    "widget": "select",
+    "group": "llm_routing",
+    "required": true,
+    "nullable": false,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": [
+     "text",
+     "json_object"
+    ],
+    "value_type": "string",
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/ENABLE_RESPONSE_DRAFTING": {
+    "pointer": "/ENABLE_RESPONSE_DRAFTING",
+    "name": "ENABLE_RESPONSE_DRAFTING",
+    "label": "Enable Response Drafting",
+    "description": null,
+    "path": [
+     "ENABLE_RESPONSE_DRAFTING"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "feature_toggles",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/BRIEF_ENABLED": {
+    "pointer": "/BRIEF_ENABLED",
+    "name": "BRIEF_ENABLED",
+    "label": "Brief Enabled",
+    "description": null,
+    "path": [
+     "BRIEF_ENABLED"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "feature_toggles",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/SKILL_TRIGGERS_ENABLED": {
+    "pointer": "/SKILL_TRIGGERS_ENABLED",
+    "name": "SKILL_TRIGGERS_ENABLED",
+    "label": "Skill Triggers Enabled",
+    "description": null,
+    "path": [
+     "SKILL_TRIGGERS_ENABLED"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "feature_toggles",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/ROUTER_SKILL_HINTS_ENABLED": {
+    "pointer": "/ROUTER_SKILL_HINTS_ENABLED",
+    "name": "ROUTER_SKILL_HINTS_ENABLED",
+    "label": "Router Skill Hints Enabled",
+    "description": null,
+    "path": [
+     "ROUTER_SKILL_HINTS_ENABLED"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "feature_toggles",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/SKILL_TOOL_ENABLED": {
+    "pointer": "/SKILL_TOOL_ENABLED",
+    "name": "SKILL_TOOL_ENABLED",
+    "label": "Skill Tool Enabled",
+    "description": null,
+    "path": [
+     "SKILL_TOOL_ENABLED"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "feature_toggles",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/VIZ_ENFORCEMENT_ENABLED": {
+    "pointer": "/VIZ_ENFORCEMENT_ENABLED",
+    "name": "VIZ_ENFORCEMENT_ENABLED",
+    "label": "Viz Enforcement Enabled",
+    "description": null,
+    "path": [
+     "VIZ_ENFORCEMENT_ENABLED"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "feature_toggles",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/TABLE_SELECTION_MODE": {
+    "pointer": "/TABLE_SELECTION_MODE",
+    "name": "TABLE_SELECTION_MODE",
+    "label": "Table Selection Mode",
+    "description": null,
+    "path": [
+     "TABLE_SELECTION_MODE"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "enum",
+    "widget": "select",
+    "group": "rag",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": [
+     "rag",
+     "llm_direct",
+     "pure_llm"
+    ],
+    "value_type": "string",
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/USE_LLM_TABLE_SELECTION": {
+    "pointer": "/USE_LLM_TABLE_SELECTION",
+    "name": "USE_LLM_TABLE_SELECTION",
+    "label": "Use Llm Table Selection",
+    "description": null,
+    "path": [
+     "USE_LLM_TABLE_SELECTION"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "rag",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/RAG_ITERATION": {
+    "pointer": "/RAG_ITERATION",
+    "name": "RAG_ITERATION",
+    "label": "Rag Iteration",
+    "description": null,
+    "path": [
+     "RAG_ITERATION"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "string",
+    "widget": "text",
+    "group": "rag",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "rag_iteration"
+    ],
+    "accepts": null,
+    "item_type": null,
+    "hints": {
+     "values": [
+      "",
+      "latest"
+     ],
+     "pattern": "^[0-9]+$",
+     "text": "Empty for the default, \"latest\", or an iteration number."
+    }
+   },
+   "/MILVUS_SEARCH_THRESHOLD": {
+    "pointer": "/MILVUS_SEARCH_THRESHOLD",
+    "name": "MILVUS_SEARCH_THRESHOLD",
+    "label": "Milvus Search Threshold",
+    "description": null,
+    "path": [
+     "MILVUS_SEARCH_THRESHOLD"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "number",
+    "widget": "number-range",
+    "group": "rag",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 0,
+     "maximum": 1
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/SQL_RESULT_LIMIT": {
+    "pointer": "/SQL_RESULT_LIMIT",
+    "name": "SQL_RESULT_LIMIT",
+    "label": "Sql Result Limit",
+    "description": null,
+    "path": [
+     "SQL_RESULT_LIMIT"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "integer",
+    "widget": "number-range",
+    "group": "sql_runner",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 1,
+     "maximum": 100000
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/CONTEXT_MAX_TOKENS": {
+    "pointer": "/CONTEXT_MAX_TOKENS",
+    "name": "CONTEXT_MAX_TOKENS",
+    "label": "Context Max Tokens",
+    "description": null,
+    "path": [
+     "CONTEXT_MAX_TOKENS"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "integer",
+    "widget": "number",
+    "group": "context",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 1
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/CONTEXT_COMPACT_THRESHOLD": {
+    "pointer": "/CONTEXT_COMPACT_THRESHOLD",
+    "name": "CONTEXT_COMPACT_THRESHOLD",
+    "label": "Context Compact Threshold",
+    "description": null,
+    "path": [
+     "CONTEXT_COMPACT_THRESHOLD"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "number",
+    "widget": "number-range",
+    "group": "context",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 0,
+     "maximum": 1
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/CONTEXT_KEEP_RECENT": {
+    "pointer": "/CONTEXT_KEEP_RECENT",
+    "name": "CONTEXT_KEEP_RECENT",
+    "label": "Context Keep Recent",
+    "description": null,
+    "path": [
+     "CONTEXT_KEEP_RECENT"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "integer",
+    "widget": "number",
+    "group": "context",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 0
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/VIZ_LLM_ENABLED": {
+    "pointer": "/VIZ_LLM_ENABLED",
+    "name": "VIZ_LLM_ENABLED",
+    "label": "Viz Llm Enabled",
+    "description": null,
+    "path": [
+     "VIZ_LLM_ENABLED"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "visualization",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/VIZ_LLM_TIMEOUT": {
+    "pointer": "/VIZ_LLM_TIMEOUT",
+    "name": "VIZ_LLM_TIMEOUT",
+    "label": "Viz Llm Timeout",
+    "description": null,
+    "path": [
+     "VIZ_LLM_TIMEOUT"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "number",
+    "widget": "number",
+    "group": "visualization",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "exclusiveMinimum": 0
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/VIZ_LLM_MIN_CONFIDENCE": {
+    "pointer": "/VIZ_LLM_MIN_CONFIDENCE",
+    "name": "VIZ_LLM_MIN_CONFIDENCE",
+    "label": "Viz Llm Min Confidence",
+    "description": null,
+    "path": [
+     "VIZ_LLM_MIN_CONFIDENCE"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "number",
+    "widget": "number-range",
+    "group": "visualization",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 0,
+     "maximum": 1
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/VIZ_LLM_MODEL": {
+    "pointer": "/VIZ_LLM_MODEL",
+    "name": "VIZ_LLM_MODEL",
+    "label": "Viz Llm Model",
+    "description": null,
+    "path": [
+     "VIZ_LLM_MODEL"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "string",
+    "widget": "model-name",
+    "group": "visualization",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/VIZ_SEMANTIC_INFERENCE_ENABLED": {
+    "pointer": "/VIZ_SEMANTIC_INFERENCE_ENABLED",
+    "name": "VIZ_SEMANTIC_INFERENCE_ENABLED",
+    "label": "Viz Semantic Inference Enabled",
+    "description": null,
+    "path": [
+     "VIZ_SEMANTIC_INFERENCE_ENABLED"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "visualization",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/VIZ_DATA_TRANSFORM_ENABLED": {
+    "pointer": "/VIZ_DATA_TRANSFORM_ENABLED",
+    "name": "VIZ_DATA_TRANSFORM_ENABLED",
+    "label": "Viz Data Transform Enabled",
+    "description": null,
+    "path": [
+     "VIZ_DATA_TRANSFORM_ENABLED"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "visualization",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/VIZ_MAX_CATEGORIES": {
+    "pointer": "/VIZ_MAX_CATEGORIES",
+    "name": "VIZ_MAX_CATEGORIES",
+    "label": "Viz Max Categories",
+    "description": null,
+    "path": [
+     "VIZ_MAX_CATEGORIES"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "integer",
+    "widget": "number",
+    "group": "visualization",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 2
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/VIZ_MAX_GROUPS": {
+    "pointer": "/VIZ_MAX_GROUPS",
+    "name": "VIZ_MAX_GROUPS",
+    "label": "Viz Max Groups",
+    "description": null,
+    "path": [
+     "VIZ_MAX_GROUPS"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "integer",
+    "widget": "number",
+    "group": "visualization",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "minimum": 2
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   },
+   "/VIZ_DIVERSITY_ENABLED": {
+    "pointer": "/VIZ_DIVERSITY_ENABLED",
+    "name": "VIZ_DIVERSITY_ENABLED",
+    "label": "Viz Diversity Enabled",
+    "description": null,
+    "path": [
+     "VIZ_DIVERSITY_ENABLED"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "boolean",
+    "widget": "toggle",
+    "group": "visualization",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {},
+    "pattern": null,
+    "format": null,
+    "quirks": [
+     "real_boolean"
+    ],
+    "accepts": null,
+    "item_type": null
+   },
+   "/REQUEST_TIMEOUT": {
+    "pointer": "/REQUEST_TIMEOUT",
+    "name": "REQUEST_TIMEOUT",
+    "label": "Request Timeout",
+    "description": null,
+    "path": [
+     "REQUEST_TIMEOUT"
+    ],
+    "parent": null,
+    "params": [],
+    "kind": "field",
+    "type": "number",
+    "widget": "number-range",
+    "group": "misc",
+    "required": false,
+    "nullable": true,
+    "has_default": false,
+    "default": null,
+    "sweepable": true,
+    "secret": false,
+    "enum": null,
+    "value_type": null,
+    "bounds": {
+     "maximum": 3600,
+     "exclusiveMinimum": 0
+    },
+    "pattern": null,
+    "format": null,
+    "quirks": [],
+    "accepts": null,
+    "item_type": null
+   }
+  },
+  "groups": [
+   {
+    "id": "llm_routing",
+    "label": "LLM routing",
+    "pointers": [
+     "/LLM_OVERRIDES"
+    ]
+   },
+   {
+    "id": "feature_toggles",
+    "label": "Feature toggles",
+    "pointers": [
+     "/ENABLE_RESPONSE_DRAFTING",
+     "/BRIEF_ENABLED",
+     "/SKILL_TRIGGERS_ENABLED",
+     "/ROUTER_SKILL_HINTS_ENABLED",
+     "/SKILL_TOOL_ENABLED",
+     "/VIZ_ENFORCEMENT_ENABLED"
+    ]
+   },
+   {
+    "id": "rag",
+    "label": "Table selection / RAG",
+    "pointers": [
+     "/TABLE_SELECTION_MODE",
+     "/USE_LLM_TABLE_SELECTION",
+     "/RAG_ITERATION",
+     "/MILVUS_SEARCH_THRESHOLD"
+    ]
+   },
+   {
+    "id": "sql_runner",
+    "label": "SQL runner",
+    "pointers": [
+     "/SQL_RESULT_LIMIT"
+    ]
+   },
+   {
+    "id": "context",
+    "label": "Context management",
+    "pointers": [
+     "/CONTEXT_MAX_TOKENS",
+     "/CONTEXT_COMPACT_THRESHOLD",
+     "/CONTEXT_KEEP_RECENT"
+    ]
+   },
+   {
+    "id": "visualization",
+    "label": "Visualization",
+    "pointers": [
+     "/VIZ_LLM_ENABLED",
+     "/VIZ_LLM_TIMEOUT",
+     "/VIZ_LLM_MIN_CONFIDENCE",
+     "/VIZ_LLM_MODEL",
+     "/VIZ_SEMANTIC_INFERENCE_ENABLED",
+     "/VIZ_DATA_TRANSFORM_ENABLED",
+     "/VIZ_MAX_CATEGORIES",
+     "/VIZ_MAX_GROUPS",
+     "/VIZ_DIVERSITY_ENABLED"
+    ]
+   },
+   {
+    "id": "misc",
+    "label": "Misc",
+    "pointers": [
+     "/REQUEST_TIMEOUT"
+    ]
+   }
+  ],
+  "rules": [
+   {
+    "rule": "required_keys",
+    "pointer": "/LLM_OVERRIDES/endpoints",
+    "keys": [
+     "primary"
+    ]
+   },
+   {
+    "rule": "min_items",
+    "pointer": "/LLM_OVERRIDES/endpoints",
+    "min": 1
+   },
+   {
+    "rule": "endpoint_ref",
+    "pointer": "/LLM_OVERRIDES/{role}/endpoint",
+    "collection": "/LLM_OVERRIDES/endpoints"
+   }
+  ],
+  "warnings": []
+ },
+ "evaluator": {
+  "status": "available",
+  "schema_id": "4214603d-0eb1-453f-a266-6790fcbf6f61",
+  "schema_hash": "81a3a812cfbd3b5b4b06811f2f8115d9fdeac0fded474fd083c80be6585c5c48"
+ }
+}
