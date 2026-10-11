@@ -32,7 +32,7 @@ export function MaintenanceSummary({ data }: { data: MaintenanceOverview }) {
           { key: 'grace', label: 'Deleted-run grace', value: `${s.deleted_run_grace_days} d`, mono: true },
           { key: 'partitions', label: 'Span partitions ahead', value: `${s.span_partition_days_ahead} d`, mono: true },
           { key: 'workers', label: `Workers (${w.loops})`, value: <span className={styles.workers}>{alive(w.summary_worker_alive, 'summary')} {alive(w.maintenance_worker_alive, 'maintenance')}</span> },
-          { key: 'pool', label: 'Pool', value: data.pool ?? '—', mono: true },
+          
         ]}
       />
     </div>

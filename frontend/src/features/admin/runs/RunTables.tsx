@@ -34,7 +34,7 @@ export interface RunTableProps {
 }
 
 function ForceStopCell({ run, stopping, onForceStop }: { run: AdminRunSummary; stopping: boolean; onForceStop?: (r: AdminRunSummary) => void }) {
-  if (!run.can_force_stop || !onForceStop) return null;
+  if (!run.can_force_stop || !onForceStop || /^(STOPPED|COMPLETED|FAILED)$/i.test(run.status)) return null;
   return (
     <Button
       variant="ghost"

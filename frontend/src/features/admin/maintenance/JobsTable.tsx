@@ -117,6 +117,8 @@ export function JobsTable({ jobs }: JobsTableProps) {
                 {shown.error}
               </Text>
             ) : null}
+            {/* scrollable region must be keyboard-focusable (axe scrollable-region-focusable) */}
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
             <pre className={styles.log} tabIndex={0} aria-label="Log output">
               {shown.log || '(no log output yet)'}
             </pre>
