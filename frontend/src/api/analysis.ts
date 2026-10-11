@@ -509,9 +509,11 @@ export function useRuleVersions(scope: AnalysisScope, enabled = true) {
   });
 }
 
-function invalidateRules(qc: QueryClient, scope: AnalysisScope) {
-  void qc.invalidateQueries({ queryKey: ruleVersionsKey(scope) });
-  void qc.invalidateQueries({ queryKey: analysisConfigKey(scope) });
+function invalidateRules(qc: QueryClient, scope: AnalysisScope): Promise<unknown> {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ruleVersionsKey(scope) }),
+    qc.invalidateQueries({ queryKey: analysisConfigKey(scope) }),
+  ]);
 }
 
 export function useCreateDraft(scope: AnalysisScope) {
@@ -635,7 +637,7 @@ export function useMergeVersions(scope: AnalysisScope) {
         resolutions: resolutions ?? {},
       }),
     onSuccess: (_d, vars) => {
-      if (vars.apply) invalidateRules(qc, scope);
+      if (vars.apply) void invalidateRules(qc, scope);
     },
   });
 }
@@ -675,7 +677,8 @@ export function useRuleJob(scope: AnalysisScope, jobId: string | null) {
     queryKey: ['analysis', 'rule-job', scopeKey(scope), jobId],
     queryFn: async () => {
       const job = await api.get<RuleJob>(`${scopeBase(scope)}/analysis-rule-jobs/${jobId}`);
-      if (isJobTerminal(job.status)) invalidateRules(qc, scope);
+      // Wait for the refreshed versions: the editor re-seeds from them as soon as the finished job is seen.
+      if (isJobTerminal(job.status)) await invalidateRules(qc, scope);
       return job;
     },
     enabled: Boolean(jobId),

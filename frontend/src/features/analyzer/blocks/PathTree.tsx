@@ -15,7 +15,7 @@ export function PathTree({
   disabled?: boolean;
 }) {
   return (
-    <ul className={s.tree} role="group">
+    <ul className={s.tree}>
       {nodes.map((node) => {
         const state = nodeState(node, selected);
         const leaves = nodeLeaves(node);
