@@ -123,3 +123,6 @@ frontend/playwright-report*/
 frontend/blob-report/
 frontend/.qym-e2e.db*
 .qym-dev.db*
+
+# frontend source dir named lib (the Python lib/ rule above must not swallow it)
+!frontend/**/lib/

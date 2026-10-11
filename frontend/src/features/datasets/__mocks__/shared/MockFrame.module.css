@@ -1,0 +1,66 @@
+/* Mock-only chrome: a flat topbar standing in for the shell (the real AppShell needs auth). */
+.frame {
+  min-height: 100vh;
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  height: 50px;
+  padding: 0 var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-void);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--shell-font-sm, var(--font-md));
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.crumbs strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.crumbSep {
+  color: var(--text-dim); /* decorative separator */
+}
+
+.spacer {
+  flex: 1;
+}
+
+.variantTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.note {
+  margin: var(--space-md) var(--space-lg) 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--control-radius);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  background: var(--bg-surface);
+}

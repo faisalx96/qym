@@ -1,0 +1,92 @@
+/* Trash (deleted runs): toolbar + DataTable with a sticky Restore column and purge countdown. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.toolbarEnd {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.selection {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.runCell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.runName {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.runId {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.purge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.purge[data-tone='warning'] {
+  color: var(--warning);
+}
+
+.purge[data-tone='danger'] {
+  color: var(--error);
+}
+
+.purgeSub {
+  display: block;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.two {
+  display: flex;
+  flex-direction: column;
+}
+
+.sub {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* Pinned Restore column (primitive gap: DataTable has no pinned-column option). */
+.table :global([role='columnheader']:last-child),
+.table :global([role='gridcell']:last-child) {
+  position: sticky;
+  inset-inline-end: 0;
+  background: var(--bg-surface);
+  box-shadow: -1px 0 0 var(--border-subtle);
+}
+
+.table :global([role='row'][data-purge-soon] [role='gridcell']:first-child) {
+  box-shadow: inset 3px 0 0 var(--warning);
+}
