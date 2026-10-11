@@ -89,7 +89,7 @@ export function RunsPage() {
   // Focus resets on a sort/page change (declared first so a pending keyboard landing wins).
   useEffect(() => {
     if (!pending.current) setFocusedIndex(-1);
-  }, [d.sort, view.page]);  
+  }, [d.sort, view.page]);
 
   // Keyboard focus moved across a page edge: land on the first/last row once the page loads.
   useEffect(() => {
@@ -289,7 +289,10 @@ export function RunsPage() {
             ) : (
               <>
                 Push a run with the SDK, or read{' '}
-                <Link to={`${ROUTES.docs}#get-started/first-run`} className={styles.inlineLink}>how to log your first run</Link>.
+                <Link to={`${ROUTES.docs}#get-started/first-run`} className={styles.inlineLink}>
+                  how to log your first run
+                </Link>
+                .
               </>
             )
           }
