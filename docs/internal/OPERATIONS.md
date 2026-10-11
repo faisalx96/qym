@@ -738,6 +738,33 @@ Evaluation Service ─► runs the qym SDK with live_mode=platform
 qym ingest: verifies the one-time launch token → run origin = official, run ↔ job link
 ```
 
+**Duplicate runs (one official + one local for the same job).** The service can run a
+job's SDK process twice with the same launch token: Celery redelivers a task whose
+worker was lost or killed by the task time limit (`task_acks_late` /
+`task_reject_on_worker_lost`, hard limit 7200s by default), Beat re-enqueues a
+`PENDING` job every 60s, a job is re-run by hand, or the job's evaluator config lists
+several `models` (the SDK then creates one run per model, all with the same token).
+Ingest links exactly one run per job. Since the re-run handling in
+`services/eval_run_linking.py`: if the linked run is dead (`FAILED`, `STOPPED` with
+`lease_timeout` / `upload_incomplete`, soft-deleted, or `RUNNING` with no event for
+`QYM_RUN_STALE_TIMEOUT_SECONDS`) the re-run takes the link and becomes **official**;
+the dead run is closed `STOPPED` / `superseded` and both runs record the hand-over in
+`run_metadata.qym_launch` (`supersedes_run_id` / `superseded_by_run_id`). If the linked
+run is alive or finished, the re-run stays **local** and is flagged with
+`run_metadata.qym_launch.link_outcome = "already_linked"` and `linked_run_id`. To find
+duplicates: `SELECT id, origin, status, created_at, run_metadata->'qym_launch' FROM runs
+WHERE run_metadata->'qym_launch'->>'job_id' = '<job id>'` (ingest also logs
+`job … is already linked to run … stored as a local duplicate`). Twins created within
+seconds of each other and with different `model` values point at a multi-model config;
+a twin created about `task_time_limit` (or a broker visibility timeout) after the first
+run points at Celery redelivery — raise the service's task time limit above the
+longest run, or disable late acks for `run_eval_job`. A twin whose `link_outcome` is
+`token_mismatch` or `unknown_job` means the worker ingested with stale metadata or
+against another platform/database (service split: ingestion must share
+`QYM_DATABASE_URL` with main). Keep `QYM_EVAL_JOB_TIMEOUT_SECONDS` above the longest
+run: a `TIMED_OUT` job is no longer polled, so a run finishing after it stays official
+but the job's status is never updated from it.
+
 Two background threads carry the integration. They run next to the dashboard summary
 and maintenance loops:
 

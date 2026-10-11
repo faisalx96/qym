@@ -87,6 +87,7 @@ from qym_platform.services.run_lifecycle import (
     RUN_STATUS_REASON_ADMIN_FORCE_STOP,
     RUN_STATUS_REASON_LEASE_TIMEOUT,
     RUN_STATUS_REASON_UPLOAD_INCOMPLETE,
+    RUN_STATUS_REASON_SUPERSEDED,
     RUN_STATUS_REASONS_CANCELLED,
     can_force_stop_run,
     is_run_force_stopped,
@@ -1658,6 +1659,15 @@ def _status_reason_label(db: Session, run: Run) -> Optional[str]:
             "The Evaluation Service finished the job, but some of this run's "
             "events never arrived"
         )
+    if reason == RUN_STATUS_REASON_SUPERSEDED:
+        launch = (
+            run.run_metadata.get("qym_launch")
+            if isinstance(run.run_metadata, dict)
+            else None
+        )
+        successor = launch.get("superseded_by_run_id") if isinstance(launch, dict) else None
+        label = "The evaluation job was re-run after this run went quiet"
+        return f"{label}; run {successor} is the official run" if successor else label
     if reason in RUN_STATUS_REASONS_CANCELLED:
         from qym_platform.db.models import EvalExperimentJob
 
