@@ -55,3 +55,15 @@ Dated lines; each is a decision the foundation agent made without a human.
    — admin-docs area to decide; both paths are registered.
 3. Under `QYM_AUTH_MODE=proxy_headers` without local auth the SPA's 401 panel can
    only say "identity missing"; should the platform expose a help URL in the bootstrap?
+
+## Design decision (playbook step 3)
+
+- 2026-10-11 — **Shell navigation model: Variant A, persistent sidebar** (UX_DECISION.md in
+  this folder: A 24 vs B topbar 23 vs C palette 19; identical mouse step counts, A has no
+  variant-specific axe hits and matches the existing mental model). C's Ctrl/Cmd+K command
+  palette was carried over as an additive feature (projects, pages, actions); B's icon-only
+  avatar trigger is used ≤760px. The 15 adjustments in UX_DECISION.md are implemented in
+  `frontend/src/features/shell/AppShell.tsx` and the primitives.
+- 2026-10-11 — Known pre-existing failure on `UI-redesign`:
+  `tests/platform/test_p1_navigation_browser.py::test_spa_navigation_leaves_no_listeners_or_stale_handlers`
+  fails identically on the untouched branch (vanilla shell listener count); not touched here.
