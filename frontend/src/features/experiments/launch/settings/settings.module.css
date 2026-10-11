@@ -1,0 +1,565 @@
+/* Environment configurations + Sweeps: the settings tree, native controls on the 24px recipe, chips. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.toolbarSearch {
+  flex: 1 1 200px;
+  max-width: 320px;
+  min-width: 160px;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.group {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-base);
+  min-width: 0;
+}
+
+.groupHead {
+  margin: 0;
+  font: inherit;
+}
+
+.groupToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-md);
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.groupToggle:hover {
+  background: var(--bg-hover);
+}
+
+.groupToggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.chevron {
+  display: inline-flex;
+  color: var(--text-dim); /* decorative glyph */
+}
+
+.groupBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-xs) var(--space-md) var(--space-md);
+  min-width: 0;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-md);
+  color: var(--text-muted);
+  font-size: var(--font-base);
+}
+
+/* A field: label row, control, hint, errors */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.fieldHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  min-height: var(--control-height);
+}
+
+.label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.labelMono {
+  font-family: var(--font-mono);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--info);
+  flex: none;
+}
+
+.control {
+  width: 100%;
+  min-width: 0;
+  height: var(--control-height);
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  line-height: 1;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.control[data-mono] {
+  font-family: var(--font-mono);
+}
+
+.control:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.control:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.control[aria-invalid='true'] {
+  border-color: var(--error);
+}
+
+.control:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+select.control {
+  padding-inline-end: var(--space-xs);
+}
+
+textarea.control {
+  height: auto;
+  min-height: 64px;
+  padding: var(--space-xs) var(--space-sm);
+  line-height: 1.4;
+  resize: vertical;
+  font-family: var(--font-mono);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--error);
+  overflow-wrap: anywhere;
+}
+
+.linkBtn {
+  padding: 0 var(--space-xs);
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-sm);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  border-radius: var(--control-radius);
+}
+
+.linkBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.linkBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.linkBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Settings layout: fields in a responsive grid, objects/collections as nested blocks */
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+  min-width: 0;
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  min-height: var(--control-height);
+}
+
+.blockTitle {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.blockTitleMono {
+  font-family: var(--font-mono);
+}
+
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.addInput {
+  flex: 0 1 220px;
+  min-width: 120px;
+}
+
+.allBlock {
+  border-style: dashed;
+}
+
+/* Role tables */
+.tableWrap {
+  overflow-x: auto;
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-base);
+}
+
+.table th {
+  padding: var(--space-xs) var(--space-sm);
+  text-align: start;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--space-xs) var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+  vertical-align: top;
+  min-width: 96px;
+}
+
+.table td.roleName {
+  min-width: 120px;
+  color: var(--text-primary);
+  font-size: var(--font-base);
+}
+
+.roleNameInner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  min-height: var(--control-height);
+}
+
+.allRow td {
+  background: var(--bg-elevated);
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cellRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.cellDash {
+  color: var(--text-muted);
+}
+
+/* Chips */
+.sweep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid color-mix(in srgb, var(--info) 40%, var(--border-default));
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  min-width: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 22px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+button.chip {
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+button.chip[aria-pressed='true'] {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 14%, var(--bg-surface));
+}
+
+button.chip:focus-visible,
+.chipRemove:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.chipRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.chipRemove:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.sweepRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.sweepInput {
+  flex: 0 1 180px;
+  min-width: 100px;
+}
+
+.rangeInput {
+  flex: 0 1 80px;
+  min-width: 64px;
+}
+
+/* Sweeps section */
+.math {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.axes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.axis {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  align-items: start;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+}
+
+.axisBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.axisMember {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.axisName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.axisPointer {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 400;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Structured JSON editor */
+.json {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  min-width: 0;
+}
+
+.jsonNested {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-inline-start: 2px solid var(--border-default);
+  min-width: 0;
+}
+
+.jsonEntry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.jsonKey {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.jsonItemRow {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.jsonIndex {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.allLabel {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.groupBodyInner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.table th.roleName {
+  min-width: 120px;
+  font-size: var(--font-base);
+  font-weight: 400;
+  color: var(--text-primary);
+  background: none;
+  white-space: normal;
+}
+
+.allRow th.roleName {
+  background: var(--bg-elevated);
+  font-weight: 600;
+}
