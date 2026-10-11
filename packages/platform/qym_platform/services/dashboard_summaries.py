@@ -1035,6 +1035,7 @@ def _sync_dimension(db, run_id, version):
         "owner": owner_info,
         "approval": approval_info,
         "status": dimension.status,
+        "status_reason": run.status_reason,
         # A user cancelled the run's job; it stops once the Evaluation
         # Service confirms (the runs list shows "Stopping…" meanwhile).
         "stop_requested": is_run_stop_requested(db, run),
@@ -1826,7 +1827,9 @@ def process_partition(
         }
         # A terminal source row may be newer than this bounded event batch.
         # Retain the last published descriptor/numbers until all its committed
-        # events are applied. Source commits wait on our partition row lock,
+        # events are applied (the workflow status itself is mirrored into the
+        # dimension row by the source transaction: dashboard_outbox
+        # .publish_run_status). Source commits wait on our partition row lock,
         # so a live run's rebuild may be deferred until after commit.
         if not terminal and defer_live_refresh:
             ensure_pending_summary(db, run_id, version)

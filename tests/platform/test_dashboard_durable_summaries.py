@@ -1095,7 +1095,14 @@ def test_terminal_backlog_does_not_publish_completed_partial_totals(database):
         service.process_partition(db, "r", max_events=3)
         db.commit()
         assert service.dashboard_freshness(db, ["p"])["freshness"]["updating"]
-    assert projected(database) == previous
+    # The status is mirrored into the row by the source transaction (the run
+    # page already says COMPLETED); the numbers wait for the whole backlog.
+    partial = projected(database)
+    assert partial["status"] == "COMPLETED"
+    assert {k: v for k, v in partial.items() if k not in ("status", "status_reason")} == {
+        k: v for k, v in previous.items() if k not in ("status", "status_reason")
+    }
+    assert partial["total_items"] == previous["total_items"] == 1
     drain(database, max_events=3)
     assert projected(database)["status"] == "COMPLETED"
     assert projected(database)["total_items"] == 13
