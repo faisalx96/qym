@@ -1,0 +1,19 @@
+/* Items-first split: table left, sticky analysis column right (UX_DECISION variant C). */
+.page {
+  --run-panel-width: 380px;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.split[data-panel='open'] {
+  grid-template-columns: minmax(0, 1fr) var(--run-panel-width);
+}

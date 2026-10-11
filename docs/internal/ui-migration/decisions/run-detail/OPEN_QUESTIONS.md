@@ -17,3 +17,9 @@
 - 2026-10-11 — Not-found/denied: the page classifies the 200 `{error}` envelope (not
   found / denied / else) in the query function and throws an `ApiError` with 404/403
   so `ErrorState` works; the endpoint itself is left unchanged for the legacy page.
+- 2026-10-11 — Virtualization library: `@tanstack/react-virtual@3.14.13` (pinned; newest release ≥ 2 weeks old). It is headless, measures dynamic row heights (expanded item cards) and uses the shell's `main#shell-content` scroller via `scrollMargin`, so the page keeps one scroller. Used for the item list, heatmap, span tree and item×metric matrix.
+- 2026-10-12 — Run was interrupted by a usage limit; the design sub-agent's outputs survived, only UX_DECISION.md was missing and a fresh UX sub-agent wrote it. Winner: variant C (items-first), see decisions/run-detail/UX_DECISION.md.
+- 2026-10-12 — Deep analysis: correlation matrix + relationship scatter kept (panel tab "Deep"); item×metric matrix, quality-latency frontier, by-pass trend and stability map dropped for v1 (NICE in brief §3c; Deep tab leaves room). Sankey dropped (NICE).
+- 2026-10-12 — Reviews have a home as a panel tab ("Reviews", shown only when review events exist) plus the score-lock notice above the table; experiment panel and versioning details live in the expandable hero.
+- 2026-10-12 — Section anchors: `#overview|latency|deep|categories|errors|root-cause` open the matching panel tab, `#items` scrolls to the table; `?panel=<tab>` is the new URL form. Under 1200px the panel is a Drawer instead of an inline column (UX_DECISION fix).
+- 2026-10-12 — Legacy item-level diagnosis editors are not rebuilt (brief §9 Q2): legacy values show read-only; issue dialog is per metric.

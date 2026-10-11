@@ -131,20 +131,16 @@ export function fetchItemDetails(runId: string, itemIds: string[]): Promise<Item
   return api.post<ItemDetailsPayload>(runUrl(runId, '/items/details'), { item_ids: itemIds });
 }
 
-export function useItemSearchQuery(
-  runId: string,
-  condition: ItemSearchCondition | null,
-  pass: number | null,
-  enabled: boolean,
-) {
+export function useItemSearchQuery(runId: string, conditions: ItemSearchCondition[], passNumbers: number[], enabled: boolean) {
+  const sig = JSON.stringify([conditions.map((c) => [c.id, c.field, c.value]), passNumbers]);
   return useQuery({
-    queryKey: runKeys.itemSearch(runId, condition?.field ?? 'all', condition?.value ?? '', pass),
+    queryKey: ['run', runId, 'item-search', sig] as const,
     queryFn: () =>
       api.post<ItemSearchPayload>(runUrl(runId, '/items/search'), {
-        conditions: [condition],
-        ...(pass ? { pass_number: pass } : {}),
+        conditions,
+        ...(passNumbers.length === 1 ? { pass_number: passNumbers[0] } : passNumbers.length > 1 ? { pass_numbers: passNumbers } : {}),
       }),
-    enabled: enabled && !!condition && !!condition.value,
+    enabled: enabled && conditions.length > 0,
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });

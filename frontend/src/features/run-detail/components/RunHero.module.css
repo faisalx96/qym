@@ -196,3 +196,13 @@
   font-size: var(--font-base);
   color: var(--text-primary);
 }
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.details[hidden] {
+  display: none;
+}
