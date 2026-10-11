@@ -222,7 +222,5 @@ export function collation(sort: string | null | undefined, values: unknown[] | u
   const field = sortField(sort);
   const compare =
     field === 'model' ? compareModelKeys : (a: unknown, b: unknown) => String(a).localeCompare(String(b));
-  return (values ?? [])
-    .map((v) => String(v))
-    .sort((a, b) => compare(a, b) || (a < b ? -1 : a > b ? 1 : 0));
+  return (values ?? []).map((v) => String(v)).sort((a, b) => compare(a, b) || (a < b ? -1 : a > b ? 1 : 0));
 }

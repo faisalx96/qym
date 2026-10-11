@@ -1,5 +1,12 @@
 /** Modals of the runs list: review decision, submit, delete, transfer ownership, error details (brief 03 J4/J5). */
-import { useDeletePasses, useDeleteRuns, useProjectMembers, useRunWorkflow, useSubmitRuns, useTransferOwner } from '@/api/dashboard';
+import {
+  useDeletePasses,
+  useDeleteRuns,
+  useProjectMembers,
+  useRunWorkflow,
+  useSubmitRuns,
+  useTransferOwner,
+} from '@/api/dashboard';
 import type { RunRow } from '@/api/dashboardTypes';
 import { announceRunStatus } from '@/lib/run-status';
 import { ApiError } from '@/lib/http';
@@ -15,10 +22,34 @@ export type DialogState =
   | null;
 
 const WORKFLOW_COPY = {
-  approve: { title: 'Approve run', confirm: 'Approve', tone: 'primary' as const, done: 'approved', help: 'Approved runs are locked and count as reference results.' },
-  reject: { title: 'Reject run', confirm: 'Reject', tone: 'danger' as const, done: 'rejected', help: 'The owner is told why; the run can be unrejected later.' },
-  unapprove: { title: 'Withdraw approval', confirm: 'Unapprove', tone: 'primary' as const, done: 'unapproved', help: 'The run returns to Submitted for another decision.' },
-  unreject: { title: 'Withdraw rejection', confirm: 'Unreject', tone: 'primary' as const, done: 'unrejected', help: 'The run returns to Submitted for another decision.' },
+  approve: {
+    title: 'Approve run',
+    confirm: 'Approve',
+    tone: 'primary' as const,
+    done: 'approved',
+    help: 'Approved runs are locked and count as reference results.',
+  },
+  reject: {
+    title: 'Reject run',
+    confirm: 'Reject',
+    tone: 'danger' as const,
+    done: 'rejected',
+    help: 'The owner is told why; the run can be unrejected later.',
+  },
+  unapprove: {
+    title: 'Withdraw approval',
+    confirm: 'Unapprove',
+    tone: 'primary' as const,
+    done: 'unapproved',
+    help: 'The run returns to its execution result (Completed or Failed).',
+  },
+  unreject: {
+    title: 'Withdraw rejection',
+    confirm: 'Unreject',
+    tone: 'primary' as const,
+    done: 'unrejected',
+    help: 'The run returns to its execution result (Completed or Failed).',
+  },
 };
 
 function message(e: unknown): string {
@@ -68,11 +99,24 @@ export function RunDialogs({
         confirmLabel={copy.confirm}
         submittingLabel="Saving…"
         tone={copy.tone}
-        fields={[{ name: 'comment', label: 'Comment', type: 'textarea', rows: 3, placeholder: 'Optional note for the history', required: wf?.action === 'reject' }]}
+        fields={[
+          {
+            name: 'comment',
+            label: 'Comment',
+            type: 'textarea',
+            rows: 3,
+            placeholder: 'Optional note for the history',
+            required: wf?.action === 'reject',
+          },
+        ]}
         onSubmit={async (v) => {
           if (!wf) return;
           try {
-            const res = await workflow.mutateAsync({ runId: wf.row.run_id, action: wf.action, comment: String(v.comment ?? '') });
+            const res = await workflow.mutateAsync({
+              runId: wf.row.run_id,
+              action: wf.action,
+              comment: String(v.comment ?? ''),
+            });
             toast.show(`${name(wf.row)} ${copy.done}`, { tone: 'success' });
             announceRunStatus([wf.row.run_id], res.status);
           } catch (e) {
@@ -83,15 +127,33 @@ export function RunDialogs({
       <FormDialog
         open={Boolean(sub)}
         onOpenChange={close}
-        title={sub && sub.rows.length === 1 ? `Submit ${name(sub.rows[0]!)} for review` : `Submit ${sub?.rows.length ?? 0} runs for review`}
+        title={
+          sub && sub.rows.length === 1
+            ? `Submit ${name(sub.rows[0]!)} for review`
+            : `Submit ${sub?.rows.length ?? 0} runs for review`
+        }
         description="Reviewers are asked to approve or reject. Runs stay read-only while submitted."
         confirmLabel="Submit"
-        fields={[{ name: 'comment', label: 'Comment', type: 'textarea', rows: 3, placeholder: 'Optional note for the reviewer' }]}
+        fields={[
+          {
+            name: 'comment',
+            label: 'Comment',
+            type: 'textarea',
+            rows: 3,
+            placeholder: 'Optional note for the reviewer',
+          },
+        ]}
         onSubmit={async (v) => {
           if (!sub) return;
           try {
-            await submit.mutateAsync({ runIds: sub.rows.map((r) => r.run_id), comment: String(v.comment ?? '') });
-            toast.show(sub.rows.length === 1 ? 'Submitted for review' : `${sub.rows.length} runs submitted for review`, { tone: 'success' });
+            await submit.mutateAsync({
+              runIds: sub.rows.map((r) => r.run_id),
+              comment: String(v.comment ?? ''),
+            });
+            toast.show(
+              sub.rows.length === 1 ? 'Submitted for review' : `${sub.rows.length} runs submitted for review`,
+              { tone: 'success' },
+            );
             onSubmitted();
           } catch (e) {
             return message(e);
@@ -101,9 +163,19 @@ export function RunDialogs({
       <ConfirmDialog
         open={Boolean(rm)}
         onOpenChange={close}
-        title={rm && rm.refs.length === 1 ? `Delete ${rm.names[0]}?` : `Delete ${rm?.refs.length ?? 0} selections?`}
+        title={
+          rm && rm.refs.length === 1 ? `Delete ${rm.names[0]}?` : `Delete ${rm?.refs.length ?? 0} selections?`
+        }
         description="Whole runs move to Deleted Runs and can be restored by an admin within the retention window. Deleting a single pass is permanent."
-        warning={rm ? { lead: 'This will delete:', items: rm.names.slice(0, 8).map((n) => ({ title: n })), more: Math.max(0, rm.names.length - 8) } : undefined}
+        warning={
+          rm
+            ? {
+                lead: 'This will delete:',
+                items: rm.names.slice(0, 8).map((n) => ({ title: n })),
+                more: Math.max(0, rm.names.length - 8),
+              }
+            : undefined
+        }
         confirmLabel="Delete"
         tone="danger"
         onConfirm={async () => {
@@ -116,7 +188,8 @@ export function RunDialogs({
             failed += res.failures.length;
           }
           const byRun = new Map<string, number[]>();
-          for (const ref of passRefs) byRun.set(passRefBase(ref), [...(byRun.get(passRefBase(ref)) ?? []), passNumber(ref)!]);
+          for (const ref of passRefs)
+            byRun.set(passRefBase(ref), [...(byRun.get(passRefBase(ref)) ?? []), passNumber(ref)!]);
           for (const [runId, passes] of byRun) {
             try {
               await delPasses.mutateAsync({ runId, passes });
@@ -161,7 +234,11 @@ export function RunDialogs({
         onOpenChange={close}
         title={er ? `Errors in ${name(er.row)}` : 'Errors'}
         size="sm"
-        footer={<Button variant="neutral" onPress={onClose}>Close</Button>}
+        footer={
+          <Button variant="neutral" onPress={onClose}>
+            Close
+          </Button>
+        }
       >
         {er ? <ErrorDetails row={er.row} /> : null}
       </Dialog>
@@ -179,8 +256,18 @@ function ErrorDetails({ row }: { row: RunRow }) {
         dense
         aria-label="Error counts"
         items={[
-          { key: 'task', label: `Task errors ${scope}`, value: String(row.task_error_count ?? row.execution_error_count ?? 0), mono: true },
-          { key: 'metric', label: `Metric errors ${scope}`, value: String(row.metric_error_count ?? 0), mono: true },
+          {
+            key: 'task',
+            label: `Task errors ${scope}`,
+            value: String(row.task_error_count ?? row.execution_error_count ?? 0),
+            mono: true,
+          },
+          {
+            key: 'metric',
+            label: `Metric errors ${scope}`,
+            value: String(row.metric_error_count ?? 0),
+            mono: true,
+          },
           ...perMetric.map(([m, n]) => ({ key: `m-${m}`, label: `  ${m}`, value: String(n), mono: true })),
           { key: 'retries', label: 'Total retries', value: String(row.total_retries ?? 0), mono: true },
         ]}

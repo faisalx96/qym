@@ -12,6 +12,12 @@ export interface RunsCtxValue {
   owners: Record<string, string>;
 }
 
-export const EMPTY_CTX: RunsCtxValue = { slug: '', listContext: '', metricTypes: {}, modelIndex: {}, owners: {} };
+export const EMPTY_CTX: RunsCtxValue = {
+  slug: '',
+  listContext: '',
+  metricTypes: {},
+  modelIndex: {},
+  owners: {},
+};
 export const RunsCtx = createContext<RunsCtxValue>(EMPTY_CTX);
 export const useRunsCtx = () => useContext(RunsCtx);

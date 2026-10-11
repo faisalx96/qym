@@ -7,9 +7,30 @@
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { Button as AriaButton } from 'react-aria-components';
 import type { Facets } from '@/api/dashboardTypes';
-import { Button, Checkbox, Dialog, Icon, Popover, SearchField, SegmentedControl, Text, TextField } from '@/ui';
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  Icon,
+  Popover,
+  SearchField,
+  SegmentedControl,
+  Text,
+  TextField,
+} from '@/ui';
 import { parseLocalDate, type QuickRange } from '@/lib/runs-order';
-import { countActiveFilters, customRangeLabel, DEFAULT_VIEW, EMPTY, modelOptionLabel, NONE, statusLabel, versioningKeyWords, type OriginFilter, type RunsView } from './urlState';
+import {
+  countActiveFilters,
+  customRangeLabel,
+  DEFAULT_VIEW,
+  EMPTY,
+  modelOptionLabel,
+  NONE,
+  statusLabel,
+  versioningKeyWords,
+  type OriginFilter,
+  type RunsView,
+} from './urlState';
 import type { ViewPatch } from './useRunsView';
 import styles from './FiltersPopover.module.css';
 
@@ -29,14 +50,25 @@ export const datasetLabel = (v: string) => {
   return version ? `${name} (${version})` : (name ?? v);
 };
 
-export function buildFacetDefs(view: RunsView, facets: Facets | undefined, owners: Record<string, string>): FacetDef[] {
+export function buildFacetDefs(
+  view: RunsView,
+  facets: Facets | undefined,
+  owners: Record<string, string>,
+): FacetDef[] {
   const f = facets;
   const opt = (values: string[] | undefined, label: (v: string) => string, selected: string[]) => {
     const all = [...(values ?? [])];
     for (const s of selected) if (s !== NONE && !all.includes(s)) all.push(s);
-    return all.filter((v) => v !== NONE).map((v) => ({ value: v, label: v === EMPTY ? 'Empty / Missing' : label(v) }));
+    return all
+      .filter((v) => v !== NONE)
+      .map((v) => ({ value: v, label: v === EMPTY ? 'Empty / Missing' : label(v) }));
   };
-  const list = (key: ListKey, label: string, values: string[] | undefined, lab: (v: string) => string): FacetDef => ({
+  const list = (
+    key: ListKey,
+    label: string,
+    values: string[] | undefined,
+    lab: (v: string) => string,
+  ): FacetDef => ({
     id: key,
     label,
     options: opt(values, lab, view[key]),
@@ -91,7 +123,12 @@ export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopove
         label="Filters"
         placement="bottom start"
         trigger={
-          <Button variant={count ? 'accent' : 'neutral'} icon={<Icon name="list" size={12} />} iconEnd={<Icon name="chevron-down" size={12} />} data-testid="filters-trigger">
+          <Button
+            variant={count ? 'accent' : 'neutral'}
+            icon={<Icon name="list" size={12} />}
+            iconEnd={<Icon name="chevron-down" size={12} />}
+            data-testid="filters-trigger"
+          >
             Filters{count ? ` · ${count}` : ''}
           </Button>
         }
@@ -105,13 +142,18 @@ export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopove
               <SegmentedControl<QuickRange>
                 label="Time range"
                 value={view.range}
-                onChange={(range) => (range === 'custom' ? setRangeOpen(true) : onChange({ range, from: '', to: '' }))}
+                onChange={(range) =>
+                  range === 'custom' ? setRangeOpen(true) : onChange({ range, from: '', to: '' })
+                }
                 options={[
                   { value: 'all', label: 'All', title: 'Shortcut 1' },
                   { value: 'today', label: 'Today', title: 'Shortcut 2' },
                   { value: 'week', label: '7d', title: 'Shortcut 3' },
                   { value: 'month', label: '30d', title: 'Shortcut 4' },
-                  { value: 'custom', label: view.range === 'custom' ? customRangeLabel(view.from, view.to) : 'Range…' },
+                  {
+                    value: 'custom',
+                    label: view.range === 'custom' ? customRangeLabel(view.from, view.to) : 'Range…',
+                  },
                 ]}
               />
             </div>
@@ -142,7 +184,11 @@ export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopove
               ))}
             </div>
             <div className={styles.foot}>
-              <Button variant="ghost" onPress={() => onChange({ ...DEFAULT_VIEW, versioning: {}, q: view.q, sort: view.sort })} isDisabled={!count}>
+              <Button
+                variant="ghost"
+                onPress={() => onChange({ ...DEFAULT_VIEW, versioning: {}, q: view.q, sort: view.sort })}
+                isDisabled={!count}
+              >
                 Clear all
               </Button>
               <Button variant="primary" onPress={close}>
@@ -163,7 +209,17 @@ export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopove
   );
 }
 
-function FacetSection({ def, open, onToggle, onChange }: { def: FacetDef; open: boolean; onToggle: () => void; onChange: (values: string[]) => void }) {
+function FacetSection({
+  def,
+  open,
+  onToggle,
+  onChange,
+}: {
+  def: FacetDef;
+  open: boolean;
+  onToggle: () => void;
+  onChange: (values: string[]) => void;
+}) {
   const panelId = useId();
   const [query, setQuery] = useState('');
   const selected = new Set(def.selected);
@@ -178,7 +234,12 @@ function FacetSection({ def, open, onToggle, onChange }: { def: FacetDef; open: 
   };
   return (
     <section className={styles.facet} data-open={open ? '' : undefined} aria-label={def.label}>
-      <AriaButton className={styles.facetHead} onPress={onToggle} aria-expanded={open} aria-controls={panelId}>
+      <AriaButton
+        className={styles.facetHead}
+        onPress={onToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+      >
         <span className={styles.facetName}>{def.label}</span>
         <span className={styles.facetSummary} data-active={def.selected.length ? '' : undefined}>
           {summary(def)}
@@ -187,12 +248,21 @@ function FacetSection({ def, open, onToggle, onChange }: { def: FacetDef; open: 
       </AriaButton>
       {open ? (
         <div id={panelId} className={styles.facetBody}>
-          {def.options.length > 8 ? <SearchField label={`Search ${def.label}`} hideLabel placeholder={`Search ${def.label.toLowerCase()}`} value={query} onChange={setQuery} width="100%" /> : null}
+          {def.options.length > 8 ? (
+            <SearchField
+              label={`Search ${def.label}`}
+              hideLabel
+              placeholder={`Search ${def.label.toLowerCase()}`}
+              value={query}
+              onChange={setQuery}
+              width="100%"
+            />
+          ) : null}
           <div className={styles.facetActions}>
             <Button variant="ghost" onPress={() => onChange(def.options.map((o) => o.value))}>
               Select all
             </Button>
-            <Button variant="ghost" onPress={() => onChange([])} isDisabled={!def.selected.length}>
+            <Button variant="ghost" onPress={() => onChange([])}>
               Clear
             </Button>
             <Button variant="ghost" onPress={() => onChange([NONE])}>
@@ -205,7 +275,11 @@ function FacetSection({ def, open, onToggle, onChange }: { def: FacetDef; open: 
                 <Checkbox isSelected={selected.has(o.value)} onChange={() => toggle(o.value)}>
                   {o.label}
                 </Checkbox>
-                <AriaButton className={styles.only} onPress={() => onChange([o.value])} aria-label={`Only ${o.label}`}>
+                <AriaButton
+                  className={styles.only}
+                  onPress={() => onChange([o.value])}
+                  aria-label={`Only ${o.label}`}
+                >
                   Only
                 </AriaButton>
               </li>
@@ -224,11 +298,44 @@ function FacetSection({ def, open, onToggle, onChange }: { def: FacetDef; open: 
   );
 }
 
-export function CustomRangeDialog({ open, onOpenChange, from, to, onApply }: { open: boolean; onOpenChange: (o: boolean) => void; from: string; to: string; onApply: (from: string, to: string) => void }) {
-  return <RangeBody key={open ? 'open' : 'closed'} open={open} onOpenChange={onOpenChange} from={from} to={to} onApply={onApply} />;
+export function CustomRangeDialog({
+  open,
+  onOpenChange,
+  from,
+  to,
+  onApply,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  from: string;
+  to: string;
+  onApply: (from: string, to: string) => void;
+}) {
+  return (
+    <RangeBody
+      key={open ? 'open' : 'closed'}
+      open={open}
+      onOpenChange={onOpenChange}
+      from={from}
+      to={to}
+      onApply={onApply}
+    />
+  );
 }
 
-function RangeBody({ open, onOpenChange, from, to, onApply }: { open: boolean; onOpenChange: (o: boolean) => void; from: string; to: string; onApply: (from: string, to: string) => void }) {
+function RangeBody({
+  open,
+  onOpenChange,
+  from,
+  to,
+  onApply,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  from: string;
+  to: string;
+  onApply: (from: string, to: string) => void;
+}) {
   const [a, setA] = useState(from);
   const [b, setB] = useState(to);
   const [error, setError] = useState('');
@@ -270,4 +377,3 @@ function RangeBody({ open, onOpenChange, from, to, onApply }: { open: boolean; o
     </Dialog>
   );
 }
-

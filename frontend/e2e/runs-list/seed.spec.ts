@@ -9,9 +9,14 @@ test('seeded runs reach /api/dashboard/runs with mixed statuses', async ({ reque
     data: { project_slug: project.slug, filters: {}, limit: 50, offset: 0, include_overview: true },
   });
   expect(res.ok()).toBeTruthy();
-  const body = (await res.json()) as { rows: { status: string; samples: number }[]; overview: { facets: { statuses: string[] } } };
+  const body = (await res.json()) as {
+    rows: { status: string; samples: number }[];
+    overview: { facets: { statuses: string[] } };
+  };
   expect(body.rows.length).toBe(13);
   expect(body.rows.some((r) => r.status === 'RUNNING')).toBeTruthy();
   expect(body.rows.some((r) => r.samples === 3)).toBeTruthy();
-  expect(body.overview.facets.statuses).toEqual(expect.arrayContaining(['COMPLETED', 'FAILED', 'SUBMITTED', 'APPROVED', 'REJECTED', 'STOPPED']));
+  expect(body.overview.facets.statuses).toEqual(
+    expect.arrayContaining(['COMPLETED', 'FAILED', 'SUBMITTED', 'APPROVED', 'REJECTED', 'STOPPED']),
+  );
 });

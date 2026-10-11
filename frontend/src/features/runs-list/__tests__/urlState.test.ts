@@ -14,7 +14,8 @@ import {
 
 describe('runs view ⇄ URL', () => {
   it('round-trips the legacy contract', () => {
-    const url = 'task=a&task=b&model=gpt-4o&status=COMPLETED&sort=model-asc&page=2&range=custom&from=2026-01-01&origin=local&q=hello';
+    const url =
+      'task=a&task=b&model=gpt-4o&status=COMPLETED&sort=model-asc&page=2&range=custom&from=2026-01-01&origin=local&q=hello';
     const view = parseView(new URLSearchParams(url));
     expect(view.tasks).toEqual(['a', 'b']);
     expect(view.models).toEqual(['gpt-4o|||plain', 'gpt-4o|||reasoning']);
@@ -35,16 +36,27 @@ describe('runs view ⇄ URL', () => {
     expect(countActiveFilters(DEFAULT_VIEW)).toBe(0);
   });
   it('encodes versioning filters as v.<key>', () => {
-    const view = parseView(new URLSearchParams('v.prompt_version=p1&v.prompt_version=p2&v.model_tag=__empty__'));
+    const view = parseView(
+      new URLSearchParams('v.prompt_version=p1&v.prompt_version=p2&v.model_tag=__empty__'),
+    );
     expect(view.versioning).toEqual({ prompt_version: ['p1', 'p2'], model_tag: ['__empty__'] });
-    expect(viewToParams(view).toString()).toBe('v.model_tag=__empty__&v.prompt_version=p1&v.prompt_version=p2');
-    expect(viewToFilters(view).versioning).toEqual({ prompt_version: ['p1', 'p2'], model_tag: ['__empty__'] });
+    expect(viewToParams(view).toString()).toBe(
+      'v.model_tag=__empty__&v.prompt_version=p1&v.prompt_version=p2',
+    );
+    expect(viewToFilters(view).versioning).toEqual({
+      prompt_version: ['p1', 'p2'],
+      model_tag: ['__empty__'],
+    });
     expect(countActiveFilters(view)).toBe(2);
     // The legacy run-page context ignores versioning (OPEN_QUESTIONS §9.1).
     expect(contextForView(view)).toBe('');
   });
   it('collapses model variants only when both are selected', () => {
-    expect(modelUrlValues(['m|||plain', 'm|||reasoning', 'n|||plain', '__none__'])).toEqual(['m', 'n|||plain', '__none__']);
+    expect(modelUrlValues(['m|||plain', 'm|||reasoning', 'n|||plain', '__none__'])).toEqual([
+      'm',
+      'n|||plain',
+      '__none__',
+    ]);
   });
   it('ignores a custom range without dates and invalid values', () => {
     const view = parseView(new URLSearchParams('range=custom&sort=nonsense&page=0&origin=verified'));

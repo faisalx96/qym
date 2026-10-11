@@ -4,7 +4,17 @@
  * two stacked panels sharing the X axis (syncId), both with accessibilityLayer
  * so the readout is keyboard-reachable (Tab to the chart, ←/→ moves it).
  */
-import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import type { Trend } from '@/api/dashboardTypes';
 import { Text } from '@/ui';
 import styles from './TrendChart.module.css';
@@ -23,7 +33,15 @@ function short(date: string): string {
   return `${MONTHS[Number(m) - 1]} ${Number(d)}`;
 }
 
-function TrendTooltip({ active, payload, metric }: { active?: boolean; payload?: { payload: Point }[]; metric: string }) {
+function TrendTooltip({
+  active,
+  payload,
+  metric,
+}: {
+  active?: boolean;
+  payload?: { payload: Point }[];
+  metric: string;
+}) {
   if (!active || !payload?.length) return null;
   const p = payload[0]!.payload;
   return (
@@ -62,18 +80,53 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
   const tickEvery = Math.max(1, Math.round(data.length / 6));
   const ticks = data.filter((_, i) => i % tickEvery === 0).map((d) => d.date);
   return (
-    <figure className={styles.figure} aria-label={`${metric} daily mean over ${trend.days} days with runs per day`} data-testid="trend-chart">
+    <figure
+      className={styles.figure}
+      aria-label={`${metric} daily mean over ${trend.days} days with runs per day`}
+      data-testid="trend-chart"
+    >
       <div className={styles.panel} data-panel="line">
         <Text variant="sm" tone="muted" as="div" className={styles.panelLabel}>
           Daily mean · {metric}
         </Text>
         <ResponsiveContainer width="100%" height={height}>
-          <ComposedChart data={data} syncId="trend" margin={{ top: 8, right: 12, left: 0, bottom: 0 }} accessibilityLayer>
+          <ComposedChart
+            data={data}
+            syncId="trend"
+            margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+            accessibilityLayer
+          >
             <CartesianGrid vertical={false} stroke="var(--border-subtle)" />
-            <XAxis dataKey="date" ticks={ticks} tickFormatter={short} axisLine={{ stroke: 'var(--border-default)' }} tickLine={false} tick={{ fill: 'var(--text-muted)' }} interval={0} />
-            <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} width={36} tickFormatter={(v: number) => `${v}%`} axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)' }} />
+            <XAxis
+              dataKey="date"
+              ticks={ticks}
+              tickFormatter={short}
+              axisLine={{ stroke: 'var(--border-default)' }}
+              tickLine={false}
+              tick={{ fill: 'var(--text-muted)' }}
+              interval={0}
+            />
+            <YAxis
+              domain={[0, 100]}
+              ticks={[0, 25, 50, 75, 100]}
+              width={36}
+              tickFormatter={(v: number) => `${v}%`}
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: 'var(--text-muted)' }}
+            />
             <Tooltip content={<TrendTooltip metric={metric} />} cursor={{ stroke: 'var(--border-strong)' }} />
-            <Line type="monotone" dataKey="mean" stroke="var(--chart-1)" strokeWidth={2} connectNulls dot={{ r: 3.5, fill: 'var(--chart-1)', stroke: 'var(--bg-surface)', strokeWidth: 2 }} activeDot={{ r: 5, stroke: 'var(--bg-surface)', strokeWidth: 2 }} isAnimationActive={false} name={metric} />
+            <Line
+              type="monotone"
+              dataKey="mean"
+              stroke="var(--chart-1)"
+              strokeWidth={2}
+              connectNulls
+              dot={{ r: 3.5, fill: 'var(--chart-1)', stroke: 'var(--bg-surface)', strokeWidth: 2 }}
+              activeDot={{ r: 5, stroke: 'var(--bg-surface)', strokeWidth: 2 }}
+              isAnimationActive={false}
+              name={metric}
+            />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -82,11 +135,23 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
           Finished runs per day
         </Text>
         <ResponsiveContainer width="100%" height={56}>
-          <BarChart data={data} syncId="trend" margin={{ top: 2, right: 12, left: 0, bottom: 0 }} barCategoryGap={2} accessibilityLayer>
+          <BarChart
+            data={data}
+            syncId="trend"
+            margin={{ top: 2, right: 12, left: 0, bottom: 0 }}
+            barCategoryGap={2}
+            accessibilityLayer
+          >
             <XAxis dataKey="date" hide />
             <YAxis width={36} hide domain={[0, 'dataMax']} />
             <Tooltip content={<TrendTooltip metric={metric} />} cursor={{ fill: 'var(--bg-hover)' }} />
-            <Bar dataKey="runs" fill="var(--border-strong)" radius={[2, 2, 0, 0]} isAnimationActive={false} name="runs" />
+            <Bar
+              dataKey="runs"
+              fill="var(--border-strong)"
+              radius={[2, 2, 0, 0]}
+              isAnimationActive={false}
+              name="runs"
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>

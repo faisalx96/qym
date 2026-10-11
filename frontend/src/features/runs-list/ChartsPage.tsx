@@ -10,7 +10,18 @@ import { Link } from 'react-router-dom';
 import { Button as AriaButton, ToggleButton } from 'react-aria-components';
 import { useModelsStats, useOverview, usePoints } from '@/api/dashboard';
 import type { Combo, GroupStats, MetricType, RunRow } from '@/api/dashboardTypes';
-import { Button, EmptyState, ErrorState, SegmentedControl, Skeleton, Tabs, Tag, Text, Tooltip } from '@/ui';
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  SegmentedControl,
+  Skeleton,
+  Tabs,
+  TabPanel,
+  Tag,
+  Text,
+  Tooltip,
+} from '@/ui';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { formatDateParts, formatLatency, formatNumericValue, formatPercentValue } from '@/lib/format';
 import { runPath } from '@/app/routes';
@@ -58,7 +69,9 @@ function useInView(margin = '200px') {
     const el = ref.current;
     if (!el || seen) return;
     if (typeof IntersectionObserver === 'undefined') return void setSeen(true); // eslint-disable-line react-hooks/set-state-in-effect
-    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setSeen(true), { rootMargin: margin });
+    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setSeen(true), {
+      rootMargin: margin,
+    });
     io.observe(el);
     return () => io.disconnect();
   }, [margin, seen]);
@@ -83,13 +96,32 @@ export function ChartsPage() {
   const overview = d.overview;
   useKpiTopbar(overview?.kpis);
   const showSkeleton = useDelayedPending(d.overviewQ.isPending);
-  const owners = useMemo(() => Object.fromEntries(Object.entries(overview?.owners ?? {}).map(([id, o]) => [id, o.display_name || o.email])), [overview?.owners]);
+  const owners = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(overview?.owners ?? {}).map(([id, o]) => [id, o.display_name || o.email]),
+      ),
+    [overview?.owners],
+  );
   const ctx = useMemo<RunsCtxValue>(
-    () => ({ slug, listContext: contextForView(view), metricTypes: overview?.metric_types ?? {}, modelIndex: overview?.chart_data?.modelIndex ?? {}, owners }),
+    () => ({
+      slug,
+      listContext: contextForView(view),
+      metricTypes: overview?.metric_types ?? {},
+      modelIndex: overview?.chart_data?.modelIndex ?? {},
+      owners,
+    }),
     [slug, view, overview, owners],
   );
-  const models = overview?.chart_data?.models ?? [];
+  // Toggled-off models stay in the legend: facets.models ignores the model filter itself.
   const modelCounts = overview?.chart_data?.model_frequency ?? {};
+  const models = [
+    ...new Set([
+      ...(overview?.chart_data?.models ?? []),
+      ...(overview?.facets?.models ?? []),
+      ...view.models.filter((m) => m !== '__none__'),
+    ]),
+  ];
   const shown = new Set(view.models.length ? view.models : models);
   const setModels = (keys: string[]) => setView({ models: keys.length === models.length ? [] : keys });
   const toggleModel = (key: string) => {
@@ -127,11 +159,16 @@ export function ChartsPage() {
               Metrics by task and dataset
             </Text>
             <Text variant="sm" tone="muted" as="p">
-              {countActiveFilters(view) && overview ? `Filtered: ${overview.total_runs} runs · ` : ''}Average metric scores across all items in matching runs. Bars are relative to the best run in the card.
+              {countActiveFilters(view) && overview ? `Filtered: ${overview.total_runs} runs · ` : ''}Average
+              metric scores across all items in matching runs. Bars are relative to the best run in the card.
             </Text>
           </div>
           {models.length ? (
-            <div className={styles.legend} role="group" aria-label="Models (click to toggle, double-click to show only one)">
+            <div
+              className={styles.legend}
+              role="group"
+              aria-label="Models (click to toggle, double-click to show only one)"
+            >
               {models.map((key) => (
                 <ToggleButton
                   key={key}
@@ -139,11 +176,11 @@ export function ChartsPage() {
                   isSelected={shown.has(key)}
                   onChange={() => toggleModel(key)}
                   onDoubleClick={() => setModels([key])}
-                  aria-label={`${plainModelName(key)}, ${modelCounts[key] ?? 0} runs`}
                 >
                   <ModelMark modelKey={key} size="md" />
-                  <span>{plainModelName(key)}</span>
+                  <span>{plainModelName(key)}</span>{' '}
                   <Mono className={styles.legendCount}>{modelCounts[key] ?? 0}</Mono>
+                  <span className={styles.srOnly}> runs</span>
                 </ToggleButton>
               ))}
               {view.models.length ? (
@@ -155,18 +192,47 @@ export function ChartsPage() {
           ) : null}
         </div>
         {d.overviewQ.isError && !overview ? (
-          <ErrorState error={d.overviewQ.error} title="Could not load charts" onRetry={() => d.overviewQ.refetch()} />
+          <ErrorState
+            error={d.overviewQ.error}
+            title="Could not load charts"
+            onRetry={() => d.overviewQ.refetch()}
+          />
         ) : !overview ? (
-          showSkeleton ? <Skeleton kind="chart" height={240} label="Loading charts" /> : <div style={{ minHeight: 240 }} aria-busy="true" />
+          showSkeleton ? (
+            <Skeleton kind="chart" height={240} label="Loading charts" />
+          ) : (
+            <div style={{ minHeight: 240 }} aria-busy="true" />
+          )
         ) : overview.chart_data.tasks.length === 0 ? (
           <EmptyState
-            title={countActiveFilters(view) ? 'No runs match current filters' : 'No data available for charts'}
-            body={countActiveFilters(view) ? 'Clear a filter or widen the time range.' : 'Run some evaluations first.'}
-            action={countActiveFilters(view) ? <Button variant="neutral" onPress={() => setView({ ...DEFAULT_VIEW, versioning: {} })}>Clear filters</Button> : undefined}
+            title={
+              countActiveFilters(view) ? 'No runs match current filters' : 'No data available for charts'
+            }
+            body={
+              countActiveFilters(view)
+                ? 'Clear a filter or widen the time range.'
+                : 'Run some evaluations first.'
+            }
+            action={
+              countActiveFilters(view) ? (
+                <Button variant="neutral" onPress={() => setView({ ...DEFAULT_VIEW, versioning: {} })}>
+                  Clear filters
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           overview.chart_data.tasks.map((t) => (
-            <TaskCard key={t.task} slug={slug} view={view} task={t.task} combos={t.datasets} metricTypes={overview.metric_types} visibleKeys={visibleKeys} revisionKey={overview.filtered_revision} />
+            <TaskCard
+              key={t.task}
+              slug={slug}
+              view={view}
+              task={t.task}
+              combos={t.datasets}
+              metricTypes={overview.metric_types}
+              visibleKeys={visibleKeys}
+              revisionKey={overview.filtered_revision}
+            />
           ))
         )}
       </div>
@@ -179,8 +245,14 @@ function useRunsDataLite(slug: string, view: RunsView, visibleKeys: Set<string> 
   const filters = useMemo(() => viewToFilters(view), [view]);
   const overviewQ = useOverview(slug, filters, { refetchInterval: 60_000 });
   const overview = overviewQ.data;
-  const trace = useMemo(() => new Set<string>(overview?.has_trace_stats ? TRACE_METRICS.map((t) => t.key) : []), [overview?.has_trace_stats]);
-  const columnSet = useMemo(() => buildColumns(overview?.all_metrics ?? [], trace, visibleKeys), [overview?.all_metrics, trace, visibleKeys]);
+  const trace = useMemo(
+    () => new Set<string>(overview?.has_trace_stats ? TRACE_METRICS.map((t) => t.key) : []),
+    [overview?.has_trace_stats],
+  );
+  const columnSet = useMemo(
+    () => buildColumns(overview?.all_metrics ?? [], trace, visibleKeys),
+    [overview?.all_metrics, trace, visibleKeys],
+  );
   return { overviewQ, overview, columnSet, filters };
 }
 
@@ -210,13 +282,18 @@ function TaskCard({
   const [sort, setSort] = useState<{ key: string; dir: SortDir }>({ key: '', dir: 'desc' });
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const filters = useMemo(() => viewToFilters(view), [view]);
-  const q = usePoints(slug, filters, 'time-desc', task, activeDataset, { enabled: seen && Boolean(activeDataset) });
+  const q = usePoints(slug, filters, 'time-desc', task, activeDataset, {
+    enabled: seen && Boolean(activeDataset),
+  });
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = q;
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, q.data?.pages.length]);
   const loaded = !q.isPending && !hasNextPage;
-  const runs: ChartRun[] = useMemo(() => (q.data?.pages ?? []).flatMap((p) => p.rows).map((r: RunRow) => toChartRun(r)), [q.data]);
+  const runs: ChartRun[] = useMemo(
+    () => (q.data?.pages ?? []).flatMap((p) => p.rows).map((r: RunRow) => toChartRun(r)),
+    [q.data],
+  );
   // Re-fetch history when the overview revision of this combo moved.
   const comboRevision = active?.revision;
   const lastRev = useRef(comboRevision);
@@ -241,8 +318,12 @@ function TaskCard({
   }, [loaded, task, activeDataset, runs.length, mode]);
 
   const comboMetrics = active?.metrics ?? [];
-  const barMetrics = comboMetrics.filter((m) => prefersBar(m, metricTypes[m]) && isMetricVisible(m, visibleKeys));
-  const plainMetrics = comboMetrics.filter((m) => !prefersBar(m, metricTypes[m]) && isMetricVisible(m, visibleKeys));
+  const barMetrics = comboMetrics.filter(
+    (m) => prefersBar(m, metricTypes[m]) && isMetricVisible(m, visibleKeys),
+  );
+  const plainMetrics = comboMetrics.filter(
+    (m) => !prefersBar(m, metricTypes[m]) && isMetricVisible(m, visibleKeys),
+  );
   const traces = visibleTraceMetrics(runs).filter((t) => (visibleKeys ? visibleKeys.has(t.key) : true));
   const showLatency = visibleKeys ? visibleKeys.has('latency') : true;
   const showMedian = visibleKeys ? visibleKeys.has('median-latency') : true;
@@ -261,12 +342,22 @@ function TaskCard({
   // Groups depend on stats for sorting; build twice (sort by stats once they are ready).
   const [statsMap, setStatsMap] = useState<Record<string, GroupStats>>({});
   const groupsRaw = isGrouped
-    ? buildGroups(runs, groupMode, metricsKey ? metricsKey.split('|') : [], traceKey ? traceKey.split('|') : [], `${task}_${activeDataset}`.replace(/[^a-zA-Z0-9_-]/g, '_'), { key: sortKey, dir: sortDir }, (g) => statsMap[g.id] ?? null)
+    ? buildGroups(
+        runs,
+        groupMode,
+        metricsKey ? metricsKey.split('|') : [],
+        traceKey ? traceKey.split('|') : [],
+        `${task}_${activeDataset}`.replace(/[^a-zA-Z0-9_-]/g, '_'),
+        { key: sortKey, dir: sortDir },
+        (g) => statsMap[g.id] ?? null,
+      )
     : [];
   const flatGroups = groupsRaw.flatMap((g) => [g, ...(g.children ?? [])]);
   const statBody = (() => {
     if (!isGrouped || !rule || !loaded) return null;
-    const groups = flatGroups.filter((g) => g.runs.length).map((g) => ({ key: g.id, runs: [...new Set(g.runs.map((r) => r.run_id))] }));
+    const groups = flatGroups
+      .filter((g) => g.runs.length)
+      .map((g) => ({ key: g.id, runs: [...new Set(g.runs.map((r) => r.run_id))] }));
     if (!groups.length || groups.length > 100 || groups.some((g) => g.runs.length > 2000)) return null;
     return { ...rule, groups };
   })();
@@ -278,20 +369,46 @@ function TaskCard({
 
   const sortedRuns = sortRuns(runs, sortKey, sortDir);
   const maxOf = (f: (r: ChartRun) => number | null | undefined) => Math.max(0, ...runs.map((r) => f(r) ?? 0));
-  const scaleMax = Object.fromEntries(metricsForAgg.map((m) => [m, metricTypes[m] === 'numeric' ? maxOf((r) => r.metric_averages[m]) : 1]));
+  const scaleMax = Object.fromEntries(
+    metricsForAgg.map((m) => [m, metricTypes[m] === 'numeric' ? maxOf((r) => r.metric_averages[m]) : 1]),
+  );
   const maxLatency = maxOf((r) => r.latency);
   const maxMedian = maxOf((r) => r.median_latency);
-  const traceMax = Object.fromEntries(traces.map((t) => [t.key, t.key === 'tool_success_rate' ? 1 : maxOf((r) => (r.trace_stats?.[t.key] as number | undefined) ?? 0)]));
+  const traceMax = Object.fromEntries(
+    traces.map((t) => [
+      t.key,
+      t.key === 'tool_success_rate' ? 1 : maxOf((r) => (r.trace_stats?.[t.key] as number | undefined) ?? 0),
+    ]),
+  );
 
-  const colCount = 1 + barMetrics.length + plainMetrics.length + (showLatency ? 1 : 0) + (showMedian ? 1 : 0) + traces.length + (isGrouped ? 3 : 0);
+  const colCount =
+    1 +
+    barMetrics.length +
+    plainMetrics.length +
+    (showLatency ? 1 : 0) +
+    (showMedian ? 1 : 0) +
+    traces.length +
+    (isGrouped ? 3 : 0);
   const allModels = new Set(combos.flatMap((c) => Object.keys(c.models))).size;
   const totalRuns = combos.reduce((n, c) => n + c.totalRuns, 0);
 
-  const sortBy = (key: string) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: chartSortDirection(key) }));
+  const sortBy = (key: string) =>
+    setSort((s) =>
+      s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: chartSortDirection(key) },
+    );
   const header = (key: string | null, label: string, opts: { viz?: boolean; end?: boolean } = {}) => {
     const isActive = key !== null && sortKey === key;
     return (
-      <th key={label} scope="col" className={styles.th} data-align={opts.end ? 'end' : undefined} data-sorted={isActive ? '' : undefined} aria-sort={key === null ? undefined : isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <th
+        key={label}
+        scope="col"
+        className={styles.th}
+        data-align={opts.end ? 'end' : undefined}
+        data-sorted={isActive ? '' : undefined}
+        aria-sort={
+          key === null ? undefined : isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+        }
+      >
         {key === null ? (
           <span>{label}</span>
         ) : (
@@ -308,7 +425,10 @@ function TaskCard({
 
   const renderRun = (r: ChartRun, inGroup: boolean, grp: GroupAxis | null) => {
     const date = formatDateParts(r.timestamp);
-    const label = inGroup && (grp === 'model' || grp === 'version-model') ? `${date.date} · ${date.time}` : modelLabel(r.model);
+    const label =
+      inGroup && (grp === 'model' || grp === 'version-model')
+        ? `${date.date} · ${date.time}`
+        : modelLabel(r.model);
     return (
       <tr key={r.run_id} className={styles.tr} data-in-group={inGroup ? '' : undefined}>
         <th scope="row" className={styles.rowHead}>
@@ -317,7 +437,9 @@ function TaskCard({
             <Link to={runPath(slug, r.run_id)} className={styles.rowLink} title={r.run_name}>
               {label}
             </Link>
-            {!(inGroup && (grp === 'model' || grp === 'version-model')) ? <Mono className={styles.rowDate}>{date.date}</Mono> : null}
+            {!(inGroup && (grp === 'model' || grp === 'version-model')) ? (
+              <Mono className={styles.rowDate}>{date.date}</Mono>
+            ) : null}
             {r.git_commit && grp !== 'version' ? (
               <Tag kind="version" title={`${r.git_branch}/${r.git_commit}`}>
                 {r.git_commit}
@@ -327,7 +449,16 @@ function TaskCard({
         </th>
         {barMetrics.map((m) => (
           <td key={m} className={styles.td}>
-            <ScoreBar value={r.metric_averages[m]} max={scaleMax[m] ?? 1} modelKey={r.model} label={metricTypes[m] === 'numeric' ? formatNumericValue(r.metric_averages[m], 2) : formatPercentValue(r.metric_averages[m])} />
+            <ScoreBar
+              value={r.metric_averages[m]}
+              max={scaleMax[m] ?? 1}
+              modelKey={r.model}
+              label={
+                metricTypes[m] === 'numeric'
+                  ? formatNumericValue(r.metric_averages[m], 2)
+                  : formatPercentValue(r.metric_averages[m])
+              }
+            />
           </td>
         ))}
         {plainMetrics.map((m) => (
@@ -335,8 +466,26 @@ function TaskCard({
             <Mono>{formatNumericValue(r.metric_averages[m], 2)}</Mono>
           </td>
         ))}
-        {showLatency ? <td className={styles.td}><ScoreBar value={r.latency || null} max={maxLatency} modelKey={r.model} label={formatLatency(r.latency)} /></td> : null}
-        {showMedian ? <td className={styles.td}><ScoreBar value={r.median_latency || null} max={maxMedian} modelKey={r.model} label={formatLatency(r.median_latency)} /></td> : null}
+        {showLatency ? (
+          <td className={styles.td}>
+            <ScoreBar
+              value={r.latency || null}
+              max={maxLatency}
+              modelKey={r.model}
+              label={formatLatency(r.latency)}
+            />
+          </td>
+        ) : null}
+        {showMedian ? (
+          <td className={styles.td}>
+            <ScoreBar
+              value={r.median_latency || null}
+              max={maxMedian}
+              modelKey={r.model}
+              label={formatLatency(r.median_latency)}
+            />
+          </td>
+        ) : null}
         {traces.map((t) => {
           const v = r.trace_stats?.[t.key] as number | undefined;
           return (
@@ -356,13 +505,23 @@ function TaskCard({
     const agg = g.agg;
     const unavailable = !rule;
     const statCell = (value: number | null | undefined, kind: 'passAtK' | 'consistency' | 'reliability') => (
-      <GroupStat key={kind} value={value} loading={Boolean(rule) && !stats && (statsQ.isPending || statsQ.isFetching)} unavailable={unavailable} single={stats?.K === 1 && kind !== 'passAtK'} k={stats?.K} />
+      <GroupStat
+        key={kind}
+        value={value}
+        loading={Boolean(rule) && !stats && (statsQ.isPending || statsQ.isFetching)}
+        unavailable={unavailable}
+        single={stats?.K === 1 && kind !== 'passAtK'}
+        k={stats?.K}
+      />
     );
     return (
       <Fragment key={g.id}>
         <tr className={styles.groupRow} data-level={level}>
           <th scope="row" className={styles.rowHead} data-group>
-            <span className={styles.rowHeadInner} style={{ paddingInlineStart: level === 2 ? 'var(--space-lg)' : undefined }}>
+            <span
+              className={styles.rowHeadInner}
+              style={{ paddingInlineStart: level === 2 ? 'var(--space-lg)' : undefined }}
+            >
               <AriaButton
                 className={styles.groupToggle}
                 aria-expanded={open}
@@ -387,7 +546,17 @@ function TaskCard({
           </th>
           {barMetrics.map((m) => (
             <td key={m} className={styles.td} data-group>
-              <ScoreBar value={agg.metricAverages[m]} max={scaleMax[m] ?? 1} modelKey={g.model ?? g.runs[0]!.model} muted={g.kind !== 'model'} label={metricTypes[m] === 'numeric' ? formatNumericValue(agg.metricAverages[m], 2) : formatPercentValue(agg.metricAverages[m])} />
+              <ScoreBar
+                value={agg.metricAverages[m]}
+                max={scaleMax[m] ?? 1}
+                modelKey={g.model ?? g.runs[0]!.model}
+                muted={g.kind !== 'model'}
+                label={
+                  metricTypes[m] === 'numeric'
+                    ? formatNumericValue(agg.metricAverages[m], 2)
+                    : formatPercentValue(agg.metricAverages[m])
+                }
+              />
             </td>
           ))}
           {plainMetrics.map((m) => (
@@ -395,8 +564,16 @@ function TaskCard({
               <Mono>{formatNumericValue(agg.metricAverages[m], 2)}</Mono>
             </td>
           ))}
-          {showLatency ? <td className={styles.td} data-group><Mono>{formatLatency(agg.avgLatency)}</Mono></td> : null}
-          {showMedian ? <td className={styles.td} data-group><Mono>{formatLatency(agg.medianLatency)}</Mono></td> : null}
+          {showLatency ? (
+            <td className={styles.td} data-group>
+              <Mono>{formatLatency(agg.avgLatency)}</Mono>
+            </td>
+          ) : null}
+          {showMedian ? (
+            <td className={styles.td} data-group>
+              <Mono>{formatLatency(agg.medianLatency)}</Mono>
+            </td>
+          ) : null}
           {traces.map((t) => (
             <td key={t.key} className={styles.td} data-group>
               <Mono>{t.format(agg.traceAverages[t.key])}</Mono>
@@ -420,7 +597,10 @@ function TaskCard({
 
   const headerRow = (
     <tr>
-      {header(isGrouped ? (groupMode === 'version' || groupMode === 'version-model' ? null : 'model') : 'model', isGrouped ? firstColumnLabel(groupMode) : 'Model')}
+      {header(
+        isGrouped ? (groupMode === 'version' || groupMode === 'version-model' ? null : 'model') : 'model',
+        isGrouped ? firstColumnLabel(groupMode) : 'Model',
+      )}
       {barMetrics.map((m) => header(m, m.replace(/_/g, ' '), { viz: true }))}
       {plainMetrics.map((m) => header(m, m.replace(/_/g, ' '), { end: true }))}
       {showLatency ? header('latency', '⚡ Avg latency', { viz: true }) : null}
@@ -431,7 +611,16 @@ function TaskCard({
   );
 
   return (
-    <section ref={(el) => { ref.current = el; cardRef.current = el; }} className={styles.card} aria-labelledby={`card-${task}`} style={!loaded && minH ? { minHeight: minH } : undefined} data-testid={`chart-card-${task}`}>
+    <section
+      ref={(el) => {
+        ref.current = el;
+        cardRef.current = el;
+      }}
+      className={styles.card}
+      aria-labelledby={`card-${task}`}
+      style={!loaded && minH ? { minHeight: minH } : undefined}
+      data-testid={`chart-card-${task}`}
+    >
       <header className={styles.cardHead}>
         <Text variant="md" as="h3" id={`card-${task}`} className={styles.cardTitle}>
           {task}
@@ -451,65 +640,114 @@ function TaskCard({
           setCollapsed(new Set());
           setSort({ key: '', dir: 'desc' });
         }}
-      />
-      <div className={styles.toolbar}>
-        <Text variant="sm" tone="muted" as="span" className={styles.toolbarLabel}>
-          Rows
-        </Text>
-        <SegmentedControl<RowMode> label={`${task} rows`} value={mode} onChange={setMode} options={[{ value: 'runs', label: 'Runs' }, { value: 'grouped', label: 'Grouped' }]} />
-        {mode === 'grouped' ? (
-          <>
+      >
+        <TabPanel id={activeDataset}>
+          <div className={styles.toolbar}>
             <Text variant="sm" tone="muted" as="span" className={styles.toolbarLabel}>
-              Group
+              Rows
             </Text>
-            <SegmentedControl<'model' | 'version'>
-              label={`${task} group by`}
-              value={axis === 'model' || axis === 'model-version' ? 'model' : 'version'}
-              onChange={(v) => setAxis(v)}
-              options={[{ value: 'model', label: 'Model' }, { value: 'version', label: 'Version', disabled: !comboHasVersionData(runs) }]}
-            />
-            <Text variant="sm" tone="muted" as="span" className={styles.toolbarLabel}>
-              Then
-            </Text>
-            <SegmentedControl<'none' | 'model' | 'version'>
-              label={`${task} then by`}
-              value={axis === 'version-model' ? 'model' : axis === 'model-version' ? 'version' : 'none'}
-              onChange={(v) => setAxis(v === 'none' ? (axis === 'version-model' || axis === 'version' ? 'version' : 'model') : axis === 'version' || axis === 'version-model' ? 'version-model' : 'model-version')}
+            <SegmentedControl<RowMode>
+              label={`${task} rows`}
+              value={mode}
+              onChange={setMode}
               options={[
-                { value: 'none', label: 'None' },
-                { value: 'model', label: 'Model', disabled: axis === 'model' || axis === 'model-version' },
-                { value: 'version', label: 'Version', disabled: axis === 'version' || axis === 'version-model' || !comboHasVersionData(runs) },
+                { value: 'runs', label: 'Runs' },
+                { value: 'grouped', label: 'Grouped' },
               ]}
             />
-            <Button variant="ghost" onPress={() => setCollapsed(allOpen ? new Set() : new Set(allGroupIds))}>
-              {allOpen ? 'Collapse all' : 'Expand all'}
-            </Button>
-          </>
-        ) : null}
-      </div>
-      <div className={styles.tableWrap}>
-        {q.isError ? (
-          <ErrorState compact error={q.error} title={`Could not load ${activeDataset} runs`} onRetry={() => q.refetch()} />
-        ) : !seen || !loaded ? (
-          <div style={{ minHeight: minH ? minH - 140 : 120, padding: 'var(--space-md)' }} aria-busy="true">
-            <Skeleton kind="lines" rows={5} label={`Loading ${activeDataset} runs`} />
+            {mode === 'grouped' ? (
+              <>
+                <Text variant="sm" tone="muted" as="span" className={styles.toolbarLabel}>
+                  Group
+                </Text>
+                <SegmentedControl<'model' | 'version'>
+                  label={`${task} group by`}
+                  value={axis === 'model' || axis === 'model-version' ? 'model' : 'version'}
+                  onChange={(v) => setAxis(v)}
+                  options={[
+                    { value: 'model', label: 'Model' },
+                    { value: 'version', label: 'Version', disabled: !comboHasVersionData(runs) },
+                  ]}
+                />
+                <Text variant="sm" tone="muted" as="span" className={styles.toolbarLabel}>
+                  Then
+                </Text>
+                <SegmentedControl<'none' | 'model' | 'version'>
+                  label={`${task} then by`}
+                  value={axis === 'version-model' ? 'model' : axis === 'model-version' ? 'version' : 'none'}
+                  onChange={(v) =>
+                    setAxis(
+                      v === 'none'
+                        ? axis === 'version-model' || axis === 'version'
+                          ? 'version'
+                          : 'model'
+                        : axis === 'version' || axis === 'version-model'
+                          ? 'version-model'
+                          : 'model-version',
+                    )
+                  }
+                  options={[
+                    { value: 'none', label: 'None' },
+                    {
+                      value: 'model',
+                      label: 'Model',
+                      disabled: axis === 'model' || axis === 'model-version',
+                    },
+                    {
+                      value: 'version',
+                      label: 'Version',
+                      disabled: axis === 'version' || axis === 'version-model' || !comboHasVersionData(runs),
+                    },
+                  ]}
+                />
+                <Button
+                  variant="ghost"
+                  onPress={() => setCollapsed(allOpen ? new Set() : new Set(allGroupIds))}
+                >
+                  {allOpen ? 'Collapse all' : 'Expand all'}
+                </Button>
+              </>
+            ) : null}
           </div>
-        ) : (
-          <table className={styles.table} aria-label={`${task} · ${activeDataset} runs`} style={{ minWidth: 320 + (colCount - 1) * 124 }}>
-            <thead>{headerRow}</thead>
-            <tbody>
-              {runs.length === 0 ? (
-                <tr>
-                  <td colSpan={colCount} className={styles.emptyCell}>
-                    No runs for {activeDataset} match the current filters.
-                  </td>
-                </tr>
-              ) : null}
-              {mode === 'runs' ? sortedRuns.map((r) => renderRun(r, false, null)) : groupsRaw.map((g) => renderGroup(g, 1))}
-            </tbody>
-          </table>
-        )}
-      </div>
+          <div className={styles.tableWrap}>
+            {q.isError ? (
+              <ErrorState
+                compact
+                error={q.error}
+                title={`Could not load ${activeDataset} runs`}
+                onRetry={() => q.refetch()}
+              />
+            ) : !seen || !loaded ? (
+              <div
+                style={{ minHeight: minH ? minH - 140 : 120, padding: 'var(--space-md)' }}
+                aria-busy="true"
+              >
+                <Skeleton kind="lines" rows={5} label={`Loading ${activeDataset} runs`} />
+              </div>
+            ) : (
+              <table
+                className={styles.table}
+                aria-label={`${task} · ${activeDataset} runs`}
+                style={{ minWidth: 320 + (colCount - 1) * 124 }}
+              >
+                <thead>{headerRow}</thead>
+                <tbody>
+                  {runs.length === 0 ? (
+                    <tr>
+                      <td colSpan={colCount} className={styles.emptyCell}>
+                        No runs for {activeDataset} match the current filters.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {mode === 'runs'
+                    ? sortedRuns.map((r) => renderRun(r, false, null))
+                    : groupsRaw.map((g) => renderGroup(g, 1))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </TabPanel>
+      </Tabs>
     </section>
   );
 }
@@ -518,8 +756,28 @@ function isMetricVisible(metric: string, visible: Set<string> | null): boolean {
   return visible === null || visible.has(metric);
 }
 
-function GroupStat({ value, loading, unavailable, single, k }: { value: number | null | undefined; loading: boolean; unavailable: boolean; single: boolean; k?: number }) {
-  const text = unavailable ? '—' : loading ? 'Computing…' : single ? 'Needs k ≥ 2' : value == null ? 'NA' : formatPercentValue(value);
+function GroupStat({
+  value,
+  loading,
+  unavailable,
+  single,
+  k,
+}: {
+  value: number | null | undefined;
+  loading: boolean;
+  unavailable: boolean;
+  single: boolean;
+  k?: number;
+}) {
+  const text = unavailable
+    ? '—'
+    : loading
+      ? 'Computing…'
+      : single
+        ? 'Needs k ≥ 2'
+        : value == null
+          ? 'NA'
+          : formatPercentValue(value);
   const tip = unavailable
     ? 'Pass rates need a metric with a declared direction.'
     : single
@@ -536,7 +794,19 @@ function GroupStat({ value, loading, unavailable, single, k }: { value: number |
   );
 }
 
-function ScoreBar({ value, max, modelKey, label, muted }: { value: number | null | undefined; max: number; modelKey: string; label: string; muted?: boolean }) {
+function ScoreBar({
+  value,
+  max,
+  modelKey,
+  label,
+  muted,
+}: {
+  value: number | null | undefined;
+  max: number;
+  modelKey: string;
+  label: string;
+  muted?: boolean;
+}) {
   const { modelIndex } = useRunsCtxLocal();
   if (value === null || value === undefined) return <span className={styles.empty}>—</span>;
   const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
@@ -550,4 +820,3 @@ function ScoreBar({ value, max, modelKey, label, muted }: { value: number | null
     </span>
   );
 }
-

@@ -36,7 +36,11 @@ export const TRACE_METRICS: TraceMetricColumn[] = [
   { key: 'avg_tokens', label: 'Avg Tokens', format: (v) => (v == null ? '—' : fmtTraceNum(v)) },
   { key: 'avg_llm_calls', label: 'Avg LLM Calls', format: (v) => (v == null ? '—' : v.toFixed(1)) },
   { key: 'avg_tool_calls', label: 'Avg Tool Calls', format: (v) => (v == null ? '—' : v.toFixed(1)) },
-  { key: 'tool_success_rate', label: 'Tool Success Rate', format: (v) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`) },
+  {
+    key: 'tool_success_rate',
+    label: 'Tool Success Rate',
+    format: (v) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`),
+  },
 ];
 export const SYSTEM_COLUMNS = [
   { key: 'latency', label: 'Avg Latency' },
@@ -138,16 +142,25 @@ export function isGroupMetricBoolean(runs: Pick<ChartRun, 'metric_averages'>[], 
 
 export function defaultPassThreshold(spec: MetricSpec | undefined, direction: MetricDirection): number {
   const declared = (spec as { pass_threshold?: unknown } | undefined)?.pass_threshold;
-  if (declared !== null && declared !== undefined && Number.isFinite(Number(declared))) return Number(declared);
+  if (declared !== null && declared !== undefined && Number.isFinite(Number(declared)))
+    return Number(declared);
   return direction === 'minimize' ? 0.2 : 0.8;
 }
 
 /** Group Pass@K metric: the newest run's declared primary if a score, else the first score metric. */
-export function groupMetricName(runs: ChartRun[], comboMetrics: string[], types: Record<string, MetricType>): string {
+export function groupMetricName(
+  runs: ChartRun[],
+  comboMetrics: string[],
+  types: Record<string, MetricType>,
+): string {
   const isScore = (m: string) => (types[m] ?? 'score') !== 'numeric';
   const newest = [...runs].sort((a, b) => Date.parse(b.timestamp || '0') - Date.parse(a.timestamp || '0'))[0];
   const declared = newest ? defaultMetricName(newest.metrics, newest.metric_specs) : null;
-  return (declared && comboMetrics.includes(declared) && isScore(declared) ? declared : comboMetrics.find(isScore)) ?? '';
+  return (
+    (declared && comboMetrics.includes(declared) && isScore(declared)
+      ? declared
+      : comboMetrics.find(isScore)) ?? ''
+  );
 }
 
 export interface GroupStatRule {
@@ -230,9 +243,15 @@ export interface ChartGroup {
   children?: ChartGroup[];
 }
 
-export function versionGroupOf(run: Pick<ChartRun, 'git_branch' | 'git_commit'>): { key: string; label: string } {
+export function versionGroupOf(run: Pick<ChartRun, 'git_branch' | 'git_commit'>): {
+  key: string;
+  label: string;
+} {
   if (run.git_commit) {
-    return { key: run.git_commit, label: run.git_branch ? `${run.git_branch}/${run.git_commit}` : run.git_commit };
+    return {
+      key: run.git_commit,
+      label: run.git_branch ? `${run.git_branch}/${run.git_commit}` : run.git_commit,
+    };
   }
   return { key: '__no_version__', label: 'No version' };
 }
@@ -340,14 +359,22 @@ export function buildGroups(
   traceKeys: string[],
   cardId: string,
   sort: { key: string; dir: SortDir },
-  statsOf: (group: ChartGroup) => { passAtK: number | null; consistency: number | null; reliability: number | null } | null | undefined,
+  statsOf: (
+    group: ChartGroup,
+  ) => { passAtK: number | null; consistency: number | null; reliability: number | null } | null | undefined,
 ): ChartGroup[] {
   if (mode === 'run') return [];
   const primary: 'version' | 'model' = mode === 'version' || mode === 'version-model' ? 'version' : 'model';
   const secondary: 'version' | 'model' | null =
     mode === 'version-model' ? 'model' : mode === 'model-version' ? 'version' : null;
   const sortGroups = (gs: ChartGroup[]) =>
-    gs.sort((a, b) => compareSortValues(groupSortValue(a, sort.key, statsOf(a)), groupSortValue(b, sort.key, statsOf(b)), sort.dir));
+    gs.sort((a, b) =>
+      compareSortValues(
+        groupSortValue(a, sort.key, statsOf(a)),
+        groupSortValue(b, sort.key, statsOf(b)),
+        sort.dir,
+      ),
+    );
   const groups = groupRunsBy(runs, primary, metrics, traceKeys, cardId);
   for (const g of groups) {
     if (secondary) {
@@ -371,13 +398,20 @@ export function comboRuns(combo: Combo): ChartRun[] {
 /** Stable model colour index: frequency order from the server (modelIndex), else by key. */
 export function modelIndexOf(modelKey: string, index: Record<string, number>, palette: number): number {
   const i = index[modelKey];
-  return (Number.isInteger(i) ? (i as number) : Object.keys(index).sort(compareModelKeys).indexOf(modelKey)) % palette;
+  return (
+    (Number.isInteger(i) ? (i as number) : Object.keys(index).sort(compareModelKeys).indexOf(modelKey)) %
+    palette
+  );
 }
 
 export function firstColumnLabel(mode: GroupMode): string {
   return (
-    { run: 'Model', version: 'Version', model: 'Model', 'version-model': 'Version / Model', 'model-version': 'Model / Version' }[
-      mode
-    ] ?? 'Model'
+    {
+      run: 'Model',
+      version: 'Version',
+      model: 'Model',
+      'version-model': 'Version / Model',
+      'model-version': 'Model / Version',
+    }[mode] ?? 'Model'
   );
 }

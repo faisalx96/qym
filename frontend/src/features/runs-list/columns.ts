@@ -39,22 +39,88 @@ export const BASE_COLUMNS: ColumnDef[] = [
 ];
 
 export const SYSTEM_COLUMNS: ColumnDef[] = [
-  { id: 'latency', label: '⚡ Avg latency', group: 'system', sortKey: 'latency', width: 110, align: 'end', visKey: 'latency' },
-  { id: 'median-latency', label: '⚡ Median latency', group: 'system', sortKey: 'median-latency', width: 120, align: 'end', visKey: 'median-latency' },
+  {
+    id: 'latency',
+    label: '⚡ Avg latency',
+    group: 'system',
+    sortKey: 'latency',
+    width: 110,
+    align: 'end',
+    visKey: 'latency',
+  },
+  {
+    id: 'median-latency',
+    label: '⚡ Median latency',
+    group: 'system',
+    sortKey: 'median-latency',
+    width: 120,
+    align: 'end',
+    visKey: 'median-latency',
+  },
 ];
-export const DURATION_COLUMN: ColumnDef = { ...base('duration', 'Duration', 96, 'duration'), group: 'system', align: 'end' };
+export const DURATION_COLUMN: ColumnDef = {
+  ...base('duration', 'Duration', 96, 'duration'),
+  group: 'system',
+  align: 'end',
+};
 
 export const TRACE_COLUMNS: ColumnDef[] = [
-  { id: 'trace-avg_tokens', label: '⚡ Avg tokens', group: 'trace', sortKey: 'trace-avg_tokens', width: 110, align: 'end', visKey: 'avg_tokens' },
-  { id: 'trace-avg_llm_calls', label: '⚡ LLM calls', group: 'trace', sortKey: 'trace-avg_llm_calls', width: 106, align: 'end', visKey: 'avg_llm_calls' },
-  { id: 'trace-avg_tool_calls', label: '⚡ Tool calls', group: 'trace', sortKey: 'trace-avg_tool_calls', width: 106, align: 'end', visKey: 'avg_tool_calls' },
-  { id: 'trace-tool_success_rate', label: '⚡ Tool success', group: 'trace', sortKey: 'trace-tool_success_rate', width: 116, align: 'end', visKey: 'tool_success_rate' },
+  {
+    id: 'trace-avg_tokens',
+    label: '⚡ Avg tokens',
+    group: 'trace',
+    sortKey: 'trace-avg_tokens',
+    width: 110,
+    align: 'end',
+    visKey: 'avg_tokens',
+  },
+  {
+    id: 'trace-avg_llm_calls',
+    label: '⚡ LLM calls',
+    group: 'trace',
+    sortKey: 'trace-avg_llm_calls',
+    width: 106,
+    align: 'end',
+    visKey: 'avg_llm_calls',
+  },
+  {
+    id: 'trace-avg_tool_calls',
+    label: '⚡ Tool calls',
+    group: 'trace',
+    sortKey: 'trace-avg_tool_calls',
+    width: 106,
+    align: 'end',
+    visKey: 'avg_tool_calls',
+  },
+  {
+    id: 'trace-tool_success_rate',
+    label: '⚡ Tool success',
+    group: 'trace',
+    sortKey: 'trace-tool_success_rate',
+    width: 116,
+    align: 'end',
+    visKey: 'tool_success_rate',
+  },
 ];
 
-export const ACTIONS_COLUMN: ColumnDef = { id: 'actions', label: 'Actions', group: 'run', width: 104, visKey: null };
+export const ACTIONS_COLUMN: ColumnDef = {
+  id: 'actions',
+  label: 'Actions',
+  group: 'run',
+  width: 104,
+  visKey: null,
+};
 
 export function metricColumn(name: string): ColumnDef {
-  return { id: `metric-${name}`, label: name.replace(/_/g, ' '), group: 'metrics', sortKey: `metric-${name}`, width: 124, align: 'end', visKey: name };
+  return {
+    id: `metric-${name}`,
+    label: name.replace(/_/g, ' '),
+    group: 'metrics',
+    sortKey: `metric-${name}`,
+    width: 124,
+    align: 'end',
+    visKey: name,
+  };
 }
 
 export interface ColumnSet {
@@ -63,7 +129,11 @@ export interface ColumnSet {
 }
 
 /** `visible === null` = nothing saved yet: every column except trace stats without data. */
-export function buildColumns(metrics: string[], traceWithData: Set<string>, visible: Set<string> | null): ColumnSet {
+export function buildColumns(
+  metrics: string[],
+  traceWithData: Set<string>,
+  visible: Set<string> | null,
+): ColumnSet {
   const all: ColumnDef[] = [
     ...BASE_COLUMNS,
     ...metrics.map(metricColumn),

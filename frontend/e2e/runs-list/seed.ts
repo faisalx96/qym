@@ -10,7 +10,10 @@ export interface SeedRunSpec {
   task: string;
   dataset: string;
   model: string;
-  metrics: Record<string, { score_type: 'boolean' | 'percentage' | 'number'; direction: 'maximize' | 'minimize' }>;
+  metrics: Record<
+    string,
+    { score_type: 'boolean' | 'percentage' | 'number'; direction: 'maximize' | 'minimize' }
+  >;
   /** item scores per metric (one value per item; null = item fails) */
   items: (Record<string, number> | null)[];
   status?: 'COMPLETED' | 'FAILED' | 'STOPPED' | 'RUNNING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
@@ -34,7 +37,9 @@ const uuid = () =>
   });
 
 export async function createApiKey(request: APIRequestContext, projectId: string): Promise<string> {
-  const res = await request.post(`/v1/projects/${projectId}/api-keys`, { data: { name: `e2e-${Date.now()}` } });
+  const res = await request.post(`/v1/projects/${projectId}/api-keys`, {
+    data: { name: `e2e-${Date.now()}` },
+  });
   expect(res.ok(), await res.text()).toBeTruthy();
   return ((await res.json()) as { token: string }).token;
 }
@@ -51,14 +56,20 @@ function event(runId: string, seq: number, type: string, payload: unknown, at: D
   });
 }
 
-export async function seedRun(request: APIRequestContext, token: string, spec: SeedRunSpec): Promise<SeededRun> {
+export async function seedRun(
+  request: APIRequestContext,
+  token: string,
+  spec: SeedRunSpec,
+): Promise<SeededRun> {
   const headers = { Authorization: `Bearer ${token}` };
   const metrics = Object.keys(spec.metrics);
   const samples = spec.samples ?? 1;
   const config: Record<string, unknown> = { samples, run_name: spec.name };
   if (spec.gitBranch) config.git_branch = spec.gitBranch;
   if (spec.gitCommit) config.git_commit = spec.gitCommit;
-  const specs = Object.fromEntries(Object.entries(spec.metrics).map(([k, v]) => [k, { ...v, schema_version: 2 }]));
+  const specs = Object.fromEntries(
+    Object.entries(spec.metrics).map(([k, v]) => [k, { ...v, schema_version: 2 }]),
+  );
   const created = await request.post('/v1/runs', {
     headers,
     data: {
@@ -187,7 +198,10 @@ export async function seedRun(request: APIRequestContext, token: string, spec: S
             pass_number: pass,
             samples,
             metrics: Object.fromEntries(
-              metrics.map((m) => [m, means[m]!.length ? means[m]!.reduce((a, b) => a + b, 0) / means[m]!.length : null]),
+              metrics.map((m) => [
+                m,
+                means[m]!.length ? means[m]!.reduce((a, b) => a + b, 0) / means[m]!.length : null,
+              ]),
             ),
           },
           t,
@@ -198,7 +212,13 @@ export async function seedRun(request: APIRequestContext, token: string, spec: S
   if (!running) {
     const final = status === 'FAILED' ? 'FAILED' : status === 'STOPPED' ? 'STOPPED' : 'COMPLETED';
     lines.push(
-      event(runId, ++seq, 'run_completed', { ended_at: new Date(t.getTime() + 2000).toISOString(), final_status: final }, t),
+      event(
+        runId,
+        ++seq,
+        'run_completed',
+        { ended_at: new Date(t.getTime() + 2000).toISOString(), final_status: final },
+        t,
+      ),
     );
   }
   const ingested = await request.post(`/v1/runs/${runId}/events`, {
@@ -207,9 +227,13 @@ export async function seedRun(request: APIRequestContext, token: string, spec: S
   });
   expect(ingested.ok(), await ingested.text()).toBeTruthy();
   if (status === 'SUBMITTED' || status === 'APPROVED' || status === 'REJECTED') {
-    expect((await request.post(`/v1/runs/${runId}/submit`, { data: { comment: 'review' } })).ok()).toBeTruthy();
+    expect(
+      (await request.post(`/v1/runs/${runId}/submit`, { data: { comment: 'review' } })).ok(),
+    ).toBeTruthy();
     if (status === 'APPROVED')
-      expect((await request.post(`/v1/runs/${runId}/approve`, { data: { comment: 'ok' } })).ok()).toBeTruthy();
+      expect(
+        (await request.post(`/v1/runs/${runId}/approve`, { data: { comment: 'ok' } })).ok(),
+      ).toBeTruthy();
     if (status === 'REJECTED')
       expect((await request.post(`/v1/runs/${runId}/reject`, { data: { comment: 'no' } })).ok()).toBeTruthy();
   }
@@ -226,7 +250,9 @@ export async function completeRun(
   const now = new Date();
   const res = await request.post(`/v1/runs/${runId}/events`, {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-ndjson' },
-    data: event(runId, 9_000, 'run_completed', { ended_at: now.toISOString(), final_status: finalStatus }, now) + '\n',
+    data:
+      event(runId, 9_000, 'run_completed', { ended_at: now.toISOString(), final_status: finalStatus }, now) +
+      '\n',
   });
   expect(res.ok(), await res.text()).toBeTruthy();
 }
@@ -252,10 +278,23 @@ export async function seedProjectWithRuns(
   const count = opts.count ?? 42;
   const project = await createProject(request, 'Runs E2E', uniqueSlug(opts.slugPrefix ?? 'runs'));
   const token = await createApiKey(request, project.id);
-  const tasks: Record<string, string[]> = { text2sql: ['spider-dev'], summarize: ['cnn-sample'], 'rag-qa': ['hotpot-small'] };
+  const tasks: Record<string, string[]> = {
+    text2sql: ['spider-dev'],
+    summarize: ['cnn-sample'],
+    'rag-qa': ['hotpot-small'],
+  };
   const models = ['openai/gpt-4o', 'anthropic/claude-sonnet-4'];
   const statuses: SeedRunSpec['status'][] = [
-    'COMPLETED', 'COMPLETED', 'COMPLETED', 'FAILED', 'COMPLETED', 'SUBMITTED', 'APPROVED', 'REJECTED', 'STOPPED', 'COMPLETED',
+    'COMPLETED',
+    'COMPLETED',
+    'COMPLETED',
+    'FAILED',
+    'COMPLETED',
+    'SUBMITTED',
+    'APPROVED',
+    'REJECTED',
+    'STOPPED',
+    'COMPLETED',
   ];
   const runs: SeededRun[] = [];
   for (let i = 0; i < count; i++) {
@@ -265,7 +304,11 @@ export async function seedProjectWithRuns(
     const items = Array.from({ length: 6 }, (_, j) =>
       statuses[i % statuses.length] === 'FAILED' && j % 2 === 0
         ? null
-        : { accuracy: j / 5 < quality ? 1 : 0, quality: Math.min(1, quality + j / 40), latency_s: 0.5 + j / 4 },
+        : {
+            accuracy: j / 5 < quality ? 1 : 0,
+            quality: Math.min(1, quality + j / 40),
+            latency_s: 0.5 + j / 4,
+          },
     );
     runs.push(
       await seedRun(request, token, {
@@ -279,7 +322,7 @@ export async function seedProjectWithRuns(
         samples: i === 5 ? 3 : 1,
         gitBranch: i % 3 === 2 ? undefined : 'main',
         gitCommit: i % 3 === 2 ? undefined : i % 2 ? 'a1b2c3d' : 'e4f5a6b',
-        startedAt: new Date(Date.now() - (i * 1.37 * 86_400_000) % (45 * 86_400_000) - i * 60_000),
+        startedAt: new Date(Date.now() - ((i * 1.37 * 86_400_000) % (45 * 86_400_000)) - i * 60_000),
         latencyMs: 400 + (i % 7) * 300,
       }),
     );

@@ -98,3 +98,8 @@
 .centered {
   padding: var(--space-xl) var(--space-md);
 }
+
+.inlineLink {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}

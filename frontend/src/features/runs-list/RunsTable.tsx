@@ -62,11 +62,21 @@ function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
   if (col.id.startsWith('trace-')) {
     const v = row.trace_stats?.[col.id.slice(6)];
     if (typeof v !== 'number') return <span>—</span>;
-    return <Mono>{col.id === 'trace-tool_success_rate' ? `${(v * 100).toFixed(1)}%` : formatNumericValue(v, 1)}</Mono>;
+    return (
+      <Mono>
+        {col.id === 'trace-tool_success_rate' ? `${(v * 100).toFixed(1)}%` : formatNumericValue(v, 1)}
+      </Mono>
+    );
   }
   switch (col.id) {
     case 'run':
-      return <RunNameCell row={row} expanded={p.expanded.has(row.run_id)} onToggleExpand={() => p.onToggleExpand(row.run_id)} />;
+      return (
+        <RunNameCell
+          row={row}
+          expanded={p.expanded.has(row.run_id)}
+          onToggleExpand={() => p.onToggleExpand(row.run_id)}
+        />
+      );
     case 'status':
       return <StatusCell row={row} />;
     case 'signals':
@@ -109,7 +119,8 @@ export function RunsTable(p: RunsTableProps) {
 
   useEffect(() => {
     const el = rowRefs.current[p.focusedIndex];
-    if (el && document.activeElement !== el && !el.contains(document.activeElement)) el.focus({ preventScroll: false });
+    if (el && document.activeElement !== el && !el.contains(document.activeElement))
+      el.focus({ preventScroll: false });
   }, [p.focusedIndex]);
 
   if (p.loading) {
@@ -129,7 +140,13 @@ export function RunsTable(p: RunsTableProps) {
       data-sticky-first=""
       data-testid="runs-table"
     >
-      <table className={styles.table} data-dimmed={p.dimmed ? '' : undefined} style={{ minWidth: totalWidth }} aria-label="Runs" aria-rowcount={p.rows.length}>
+      <table
+        className={styles.table}
+        data-dimmed={p.dimmed ? '' : undefined}
+        style={{ minWidth: totalWidth }}
+        aria-label="Runs"
+        aria-rowcount={p.rows.length}
+      >
         <colgroup>
           {p.selectMode ? <col style={{ width: 36 }} /> : null}
           {cols.map((c) => (
@@ -151,7 +168,13 @@ export function RunsTable(p: RunsTableProps) {
             {cols.map((def, i) => {
               const sortable = Boolean(def.sortKey);
               const active = sortable && p.sort.field === def.sortKey;
-              const ariaSort = active ? (p.sort.direction === 'asc' ? 'ascending' : 'descending') : sortable ? 'none' : undefined;
+              const ariaSort = active
+                ? p.sort.direction === 'asc'
+                  ? 'ascending'
+                  : 'descending'
+                : sortable
+                  ? 'none'
+                  : undefined;
               return (
                 <th
                   key={def.id}
@@ -166,7 +189,11 @@ export function RunsTable(p: RunsTableProps) {
                   {sortable ? (
                     <AriaButton className={styles.sortButton} onPress={() => p.onSort(def.sortKey!)}>
                       <span className={styles.thLabel}>{def.label}</span>
-                      <span className={styles.sortGlyph} data-active={active ? '' : undefined} aria-hidden="true">
+                      <span
+                        className={styles.sortGlyph}
+                        data-active={active ? '' : undefined}
+                        aria-hidden="true"
+                      >
                         {active ? (p.sort.direction === 'asc' ? '↑' : '↓') : '↕'}
                       </span>
                     </AriaButton>
@@ -245,7 +272,10 @@ export function RunsTable(p: RunsTableProps) {
                       selectMode={p.selectMode}
                       selected={p.selected}
                       onToggle={p.onToggleSelect}
-                      canDelete={!p.perm.readOnly && (p.perm.isAdmin || p.perm.canManage || row.owner?.id === p.perm.meId)}
+                      canDelete={
+                        !p.perm.readOnly &&
+                        (p.perm.isAdmin || p.perm.canManage || row.owner?.id === p.perm.meId)
+                      }
                     />
                   </td>
                 </tr>
@@ -256,7 +286,13 @@ export function RunsTable(p: RunsTableProps) {
       </table>
       {p.rows.length === 0 ? (
         <div className={styles.emptyHost}>
-          {p.emptyState ?? <EmptyState compact title="No runs match current filters" body="Clear a filter or widen the time range." />}
+          {p.emptyState ?? (
+            <EmptyState
+              compact
+              title="No runs match current filters"
+              body="Clear a filter or widen the time range."
+            />
+          )}
         </div>
       ) : null}
     </div>
@@ -264,6 +300,7 @@ export function RunsTable(p: RunsTableProps) {
 }
 
 function hasPassSelected(selected: Set<string>, runId: string): boolean {
-  for (const ref of selected) if (ref.startsWith(runId + PASS_REF_SEP) && passRefBase(ref) === runId) return true;
+  for (const ref of selected)
+    if (ref.startsWith(runId + PASS_REF_SEP) && passRefBase(ref) === runId) return true;
   return false;
 }

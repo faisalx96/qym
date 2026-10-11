@@ -29,7 +29,14 @@ import {
   useRunsSelection,
   writeVisibleColumns,
 } from './selection';
-import { contextForView, countActiveFilters, filterSummary, DEFAULT_VIEW, PAGE_SIZE, parseSort } from './urlState';
+import {
+  contextForView,
+  countActiveFilters,
+  filterSummary,
+  DEFAULT_VIEW,
+  PAGE_SIZE,
+  parseSort,
+} from './urlState';
 import { defaultDirection, sortString } from './urlState';
 import { datasetLabel } from './FiltersPopover';
 import styles from './RunsPage.module.css';
@@ -43,7 +50,9 @@ export function RunsPage() {
   const { view, setView, setPage } = useRunsView();
   const selection = useRunsSelection(slug);
   const [visibleKeys, setVisibleKeys] = useState<Set<string> | null>(readVisibleColumns);
-  const [selectMode, setSelectMode] = useState(() => selection.selected.size > 0 || selection.cohortA.length > 0);
+  const [selectMode, setSelectMode] = useState(
+    () => selection.selected.size > 0 || selection.cohortA.length > 0,
+  );
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -51,14 +60,23 @@ export function RunsPage() {
   const searchRef = useRef<HTMLInputElement>(null);
   const pending = useRef<'first' | 'last' | null>(null);
 
-  const pinnedIds = useMemo(() => [...new Set([...selection.selected, ...selection.cohortA].map(passRefBase))], [selection.selected, selection.cohortA]);
+  const pinnedIds = useMemo(
+    () => [...new Set([...selection.selected, ...selection.cohortA].map(passRefBase))],
+    [selection.selected, selection.cohortA],
+  );
   const d = useRunsData(slug, view, visibleKeys, pinnedIds);
   const { rows, columnSet } = d;
   useKpiTopbar(d.overview?.kpis);
 
-  const known = useMemo(() => new Map([...d.pinnedRows, ...rows].map((r) => [r.run_id, r])), [d.pinnedRows, rows]);
+  const known = useMemo(
+    () => new Map([...d.pinnedRows, ...rows].map((r) => [r.run_id, r])),
+    [d.pinnedRows, rows],
+  );
   const samplesOf = useCallback((id: string) => known.get(id)?.samples ?? 1, [known]);
-  const nameOf = useCallback((id: string) => known.get(id)?.external_run_id || known.get(id)?.run_name || id.slice(0, 8), [known]);
+  const nameOf = useCallback(
+    (id: string) => known.get(id)?.external_run_id || known.get(id)?.run_name || id.slice(0, 8),
+    [known],
+  );
 
   // Drop selected runs that no longer exist and pass picks whose passes changed.
   const reconcile = selection.reconcile;
@@ -68,6 +86,11 @@ export function RunsPage() {
     reconcile([...d.pinnedRows, ...rows], new Set([...d.pinnedRows, ...rows].map((r) => r.run_id)));
   }, [d.data, pinnedReady, d.runsQ.isFetching, d.pinnedRows, rows, reconcile]);
 
+  // Focus resets on a sort/page change (declared first so a pending keyboard landing wins).
+  useEffect(() => {
+    if (!pending.current) setFocusedIndex(-1);
+  }, [d.sort, view.page]);  
+
   // Keyboard focus moved across a page edge: land on the first/last row once the page loads.
   useEffect(() => {
     if (!rows.length || !pending.current) return;
@@ -75,13 +98,28 @@ export function RunsPage() {
     pending.current = null;
   }, [rows]);
 
-  const owners = useMemo(() => Object.fromEntries(Object.entries(d.overview?.owners ?? {}).map(([id, o]) => [id, o.display_name || o.email])), [d.overview?.owners]);
+  const owners = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(d.overview?.owners ?? {}).map(([id, o]) => [id, o.display_name || o.email]),
+      ),
+    [d.overview?.owners],
+  );
   const ctx = useMemo<RunsCtxValue>(
-    () => ({ slug, listContext: contextForView(view), metricTypes: d.overview?.metric_types ?? {}, modelIndex: d.overview?.chart_data?.modelIndex ?? {}, owners }),
+    () => ({
+      slug,
+      listContext: contextForView(view),
+      metricTypes: d.overview?.metric_types ?? {},
+      modelIndex: d.overview?.chart_data?.modelIndex ?? {},
+      owners,
+    }),
     [slug, view, d.overview, owners],
   );
 
-  const perm = useMemo(() => ({ readOnly, canManage, isAdmin, meId: me.id }), [readOnly, canManage, isAdmin, me.id]);
+  const perm = useMemo(
+    () => ({ readOnly, canManage, isAdmin, meId: me.id }),
+    [readOnly, canManage, isAdmin, me.id],
+  );
   const showSkeleton = useDelayedPending(d.runsQ.isPending && !d.runsQ.isError);
   const stale = d.runsQ.isError && Boolean(d.data);
   const totalPages = Math.max(1, Math.ceil(d.total / PAGE_SIZE));
@@ -95,7 +133,8 @@ export function RunsPage() {
   const onSort = (field: string) =>
     setView((v) => {
       const cur = parseSort(v.sort);
-      const direction = cur.field === field ? (cur.direction === 'asc' ? 'desc' : 'asc') : defaultDirection(field);
+      const direction =
+        cur.field === field ? (cur.direction === 'asc' ? 'desc' : 'asc') : defaultDirection(field);
       return { ...v, sort: sortString({ field, direction }) };
     });
 
@@ -122,24 +161,38 @@ export function RunsPage() {
     if (!selection.cohortA.length) {
       if (!refs.length) return;
       selection.lockCohortA();
-      toast.show(`Cohort A locked. Pick ${cohortUnitCount(refs, samplesOf)} executions for cohort B.`, { tone: 'info' });
+      toast.show(`Cohort A locked. Pick ${cohortUnitCount(refs, samplesOf)} executions for cohort B.`, {
+        tone: 'info',
+      });
       return;
     }
     const a = selection.cohortA;
     const ua = cohortUnitCount(a, samplesOf);
     const ub = cohortUnitCount(refs, samplesOf);
-    if (ua !== ub) return toast.show(`Cohort A holds ${ua} execution${ua === 1 ? '' : 's'}; B holds ${ub}. Balance the two sides first.`, { tone: 'error' });
-    if (refs.some((r) => a.some((l) => cohortRefsConflict(l, r)))) return toast.show('One or more runs are already in Cohort A. Pick different runs for B.', { tone: 'error' });
+    if (ua !== ub)
+      return toast.show(
+        `Cohort A holds ${ua} execution${ua === 1 ? '' : 's'}; B holds ${ub}. Balance the two sides first.`,
+        { tone: 'error' },
+      );
+    if (refs.some((r) => a.some((l) => cohortRefsConflict(l, r))))
+      return toast.show('One or more runs are already in Cohort A. Pick different runs for B.', {
+        tone: 'error',
+      });
     const qs = handoffCohorts(a, refs, samplesOf, nameOf);
     navigate(`${ROUTES.compare}?${qs}`);
   };
 
-  const selectedRows = (): typeof rows => [...new Set(refs.map(passRefBase))].map((id) => known.get(id)).filter((r): r is NonNullable<typeof r> => Boolean(r));
+  const selectedRows = (): typeof rows =>
+    [...new Set(refs.map(passRefBase))]
+      .map((id) => known.get(id))
+      .filter((r): r is NonNullable<typeof r> => Boolean(r));
   const onAction = (id: string, row: (typeof rows)[number]) => {
-    if (id === 'delete') setDialog({ kind: 'delete', refs: [row.run_id], names: [row.external_run_id || row.run_name] });
+    if (id === 'delete')
+      setDialog({ kind: 'delete', refs: [row.run_id], names: [row.external_run_id || row.run_name] });
     else if (id === 'submit') setDialog({ kind: 'submit', rows: [row] });
     else if (id === 'transfer') setDialog({ kind: 'transfer', row });
-    else if (id === 'approve' || id === 'reject' || id === 'unapprove' || id === 'unreject') setDialog({ kind: 'workflow', action: id, row });
+    else if (id === 'approve' || id === 'reject' || id === 'unapprove' || id === 'unreject')
+      setDialog({ kind: 'workflow', action: id, row });
   };
 
   const handlers: RunsKeyboardHandlers = useMemo(
@@ -168,7 +221,8 @@ export function RunsPage() {
       },
       openFocused: () => {
         const r = rows[focusedIndex];
-        if (r && document.activeElement?.tagName !== 'A' && document.activeElement?.tagName !== 'BUTTON') openRun(r);
+        if (r && document.activeElement?.tagName !== 'A' && document.activeElement?.tagName !== 'BUTTON')
+          openRun(r);
       },
       toggleFocused: () => {
         const r = rows[focusedIndex];
@@ -187,33 +241,80 @@ export function RunsPage() {
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, focusedIndex, page, totalPages, selectMode, selection.selected, selection.cohortA, compare, openRun, setPage, setView],
+    [
+      rows,
+      focusedIndex,
+      page,
+      totalPages,
+      selectMode,
+      selection.selected,
+      selection.cohortA,
+      compare,
+      openRun,
+      setPage,
+      setView,
+    ],
   );
   useRunsKeyboard(handlers, !dialog);
 
-  useEffect(() => setFocusedIndex(-1), [d.sort, view.page]); // eslint-disable-line react-hooks/set-state-in-effect
-
   const filtered = countActiveFilters(view) > 0;
-  const sentence = filterSummary(view, { total: d.projectTotal, filtered: d.total }, { owner: (id) => owners[id] ?? id, dataset: datasetLabel });
+  const sentence = filterSummary(
+    view,
+    { total: d.projectTotal, filtered: d.total },
+    { owner: (id) => owners[id] ?? id, dataset: datasetLabel },
+  );
   const canDeleteAny = isAdmin || canManage || selectedRows().every((r) => r.owner?.id === me.id);
 
   let body;
   if (d.runsQ.isError && !d.data) {
-    body = <div className={styles.centered}><ErrorState error={d.runsQ.error} title="Could not load runs" onRetry={() => d.runsQ.refetch()} /></div>;
-  } else if (d.runsQ.isPending || (!d.data && !d.runsQ.isError)) {
-    body = showSkeleton ? <Skeleton kind="table" rows={12} label="Loading runs" /> : <div style={{ minHeight: 240 }} aria-busy="true" />;
-  } else {
-    const empty = d.projectTotal === 0 && !filtered ? (
-      <EmptyState
-        title={d.data?.freshness.unpublished_runs ? 'Run history is preparing' : 'No evaluation runs found'}
-        body={d.data?.freshness.unpublished_runs ? 'Available runs will appear automatically.' : (
-          <>Push a run with the SDK, or read <Link to={`${ROUTES.docs}#get-started/first-run`}>how to log your first run</Link>.</>
-        )}
-      />
-    ) : (
-      <EmptyState compact title="No runs match current filters" body={d.data?.freshness.unpublished_runs ? 'Run history is preparing. Available runs will appear automatically.' : 'Clear a filter or widen the time range.'}
-        action={filtered ? <Button variant="neutral" onPress={() => setView({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort })}>Clear filters</Button> : undefined} />
+    body = (
+      <div className={styles.centered}>
+        <ErrorState error={d.runsQ.error} title="Could not load runs" onRetry={() => d.runsQ.refetch()} />
+      </div>
     );
+  } else if (d.runsQ.isPending || (!d.data && !d.runsQ.isError)) {
+    body = showSkeleton ? (
+      <Skeleton kind="table" rows={12} label="Loading runs" />
+    ) : (
+      <div style={{ minHeight: 240 }} aria-busy="true" />
+    );
+  } else {
+    const empty =
+      d.projectTotal === 0 && !filtered ? (
+        <EmptyState
+          title={d.data?.freshness.unpublished_runs ? 'Run history is preparing' : 'No evaluation runs found'}
+          body={
+            d.data?.freshness.unpublished_runs ? (
+              'Available runs will appear automatically.'
+            ) : (
+              <>
+                Push a run with the SDK, or read{' '}
+                <Link to={`${ROUTES.docs}#get-started/first-run`} className={styles.inlineLink}>how to log your first run</Link>.
+              </>
+            )
+          }
+        />
+      ) : (
+        <EmptyState
+          compact
+          title="No runs match current filters"
+          body={
+            d.data?.freshness.unpublished_runs
+              ? 'Run history is preparing. Available runs will appear automatically.'
+              : 'Clear a filter or widen the time range.'
+          }
+          action={
+            filtered ? (
+              <Button
+                variant="neutral"
+                onPress={() => setView({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort })}
+              >
+                Clear filters
+              </Button>
+            ) : undefined
+          }
+        />
+      );
     body = (
       <RunsTable
         slug={slug}
@@ -226,7 +327,14 @@ export function RunsPage() {
         onToggleSelect={selection.toggle}
         onSelectPage={selection.setMany}
         expanded={expanded}
-        onToggleExpand={(id) => setExpanded((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; })}
+        onToggleExpand={(id) =>
+          setExpanded((s) => {
+            const n = new Set(s);
+            if (n.has(id)) n.delete(id);
+            else n.add(id);
+            return n;
+          })
+        }
         focusedIndex={focusedIndex}
         onFocusIndex={setFocusedIndex}
         onOpen={openRun}
@@ -261,13 +369,19 @@ export function RunsPage() {
                   writeVisibleColumns(keys);
                 }}
               />
-              <Button variant={selectMode ? 'accent' : 'neutral'} onPress={() => (selectMode ? clearSelection() : setSelectMode(true))} aria-pressed={selectMode}>
+              <Button
+                variant={selectMode ? 'accent' : 'neutral'}
+                onPress={() => (selectMode ? clearSelection() : setSelectMode(true))}
+                aria-pressed={selectMode}
+              >
                 {selectMode ? 'Done selecting' : 'Select'}
               </Button>
             </>
           }
         />
-        {stale && d.updatedAt ? <StaleBanner since={d.updatedAt} filtersApplied={false} onRetry={() => d.runsQ.refetch()} /> : null}
+        {stale && d.updatedAt ? (
+          <StaleBanner since={d.updatedAt} filtersApplied={false} onRetry={() => d.runsQ.refetch()} />
+        ) : null}
         {body}
         <StatusBar
           left={
@@ -280,7 +394,17 @@ export function RunsPage() {
                 onCompare={compare}
                 onCohort={cohort}
                 onSubmit={() => setDialog({ kind: 'submit', rows: selectedRows() })}
-                onDelete={() => setDialog({ kind: 'delete', refs, names: refs.map((r) => nameOf(passRefBase(r)) + (r.includes('::pass') ? ` (pass ${r.split('::pass')[1]})` : '')) })}
+                onDelete={() =>
+                  setDialog({
+                    kind: 'delete',
+                    refs,
+                    names: refs.map(
+                      (r) =>
+                        nameOf(passRefBase(r)) +
+                        (r.includes('::pass') ? ` (pass ${r.split('::pass')[1]})` : ''),
+                    ),
+                  })
+                }
                 onClear={clearSelection}
               />
             ) : (
@@ -311,4 +435,3 @@ export function RunsPage() {
     </RunsCtx.Provider>
   );
 }
-

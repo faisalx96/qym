@@ -2,7 +2,20 @@
 import { useState } from 'react';
 import type { RunRow } from '@/api/dashboardTypes';
 import { useDeletePasses, useGroupMetrics, useRunPasses } from '@/api/dashboard';
-import { ConfirmDialog, Checkbox, ErrorState, HelpMarker, IconButton, RunStatusBadge, ScoreValue, Select, Skeleton, Slider, Text, useToast } from '@/ui';
+import {
+  ConfirmDialog,
+  Checkbox,
+  ErrorState,
+  HelpMarker,
+  IconButton,
+  RunStatusBadge,
+  ScoreValue,
+  Select,
+  Skeleton,
+  Slider,
+  Text,
+  useToast,
+} from '@/ui';
 import { formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
 import { metricDirection } from '@/lib/metrics';
 import { defaultMetricName, defaultPassThreshold, groupStatRule, toChartRun } from './chartModel';
@@ -37,15 +50,37 @@ export function PassesPanel({
   const rule = activeMetric ? groupStatRule([toChartRun(row)], activeMetric) : null;
   const [threshold, setThreshold] = useState<number | null>(null);
   const activeThreshold =
-    threshold ?? rule?.threshold ?? defaultPassThreshold(activeMetric ? row.metric_specs[activeMetric] : undefined, activeMetric ? metricDirection(row.metric_specs[activeMetric]) : null);
-  const groupQ = useGroupMetrics(row.run_id, activeMetric, activeThreshold, { enabled: Boolean(activeMetric) && row.samples > 1 });
+    threshold ??
+    rule?.threshold ??
+    defaultPassThreshold(
+      activeMetric ? row.metric_specs[activeMetric] : undefined,
+      activeMetric ? metricDirection(row.metric_specs[activeMetric]) : null,
+    );
+  const groupQ = useGroupMetrics(row.run_id, activeMetric, activeThreshold, {
+    enabled: Boolean(activeMetric) && row.samples > 1,
+  });
   const del = useDeletePasses(slug);
   const toast = useToast();
   const [deleting, setDeleting] = useState<number | null>(null);
   const [draft, setDraft] = useState<number | null>(null);
 
-  if (passesQ.isPending) return <div className={styles.panel}><Skeleton kind="lines" rows={3} label="Loading passes" /></div>;
-  if (passesQ.isError) return <div className={styles.panel}><ErrorState compact error={passesQ.error} title="Could not load passes" onRetry={() => passesQ.refetch()} /></div>;
+  if (passesQ.isPending)
+    return (
+      <div className={styles.panel}>
+        <Skeleton kind="lines" rows={3} label="Loading passes" />
+      </div>
+    );
+  if (passesQ.isError)
+    return (
+      <div className={styles.panel}>
+        <ErrorState
+          compact
+          error={passesQ.error}
+          title="Could not load passes"
+          onRetry={() => passesQ.refetch()}
+        />
+      </div>
+    );
   const passes = passesQ.data.passes;
   const metrics = passesQ.data.metrics;
   const g = groupQ.data?.group ?? null;
@@ -66,14 +101,35 @@ export function PassesPanel({
         </div>
         {groupQ.isError ? (
           <Text variant="sm" tone="muted" as="p">
-            Group metrics are not available: {groupQ.error instanceof Error ? groupQ.error.message : 'request failed'}
+            Group metrics are not available:{' '}
+            {groupQ.error instanceof Error ? groupQ.error.message : 'request failed'}
           </Text>
         ) : (
           <dl className={styles.stats} aria-busy={groupQ.isFetching}>
-            <Stat label={`Pass@${g?.k ?? 'k'}`} help="Share of items solved by at least one of the k passes at the threshold." value={g?.pass_at_k} dir={dir} />
-            <Stat label={`Pass^${g?.k ?? 'k'}`} help="Share of items solved by every pass." value={g?.pass_hat_k} dir={dir} />
-            <Stat label="Consistency" help="Agreement between passes on the same item." value={g?.consistency} dir={dir} />
-            <Stat label="Reliability" help="Pass^k over Pass@k: how much of the ceiling is reached every time." value={g?.reliability} dir={dir} />
+            <Stat
+              label={`Pass@${g?.k ?? 'k'}`}
+              help="Share of items solved by at least one of the k passes at the threshold."
+              value={g?.pass_at_k}
+              dir={dir}
+            />
+            <Stat
+              label={`Pass^${g?.k ?? 'k'}`}
+              help="Share of items solved by every pass."
+              value={g?.pass_hat_k}
+              dir={dir}
+            />
+            <Stat
+              label="Consistency"
+              help="Agreement between passes on the same item."
+              value={g?.consistency}
+              dir={dir}
+            />
+            <Stat
+              label="Reliability"
+              help="Pass^k over Pass@k: how much of the ceiling is reached every time."
+              value={g?.reliability}
+              dir={dir}
+            />
           </dl>
         )}
         <div className={styles.controls}>
@@ -137,7 +193,11 @@ export function PassesPanel({
               <tr key={p.pass_number} data-selected={selected.has(ref) ? '' : undefined}>
                 {selectMode ? (
                   <td className={styles.selectCol}>
-                    <Checkbox aria-label={`Select pass ${p.pass_number} of ${name}`} isSelected={selected.has(ref)} onChange={() => onToggle(ref)} />
+                    <Checkbox
+                      aria-label={`Select pass ${p.pass_number} of ${name}`}
+                      isSelected={selected.has(ref)}
+                      onChange={() => onToggle(ref)}
+                    />
                   </td>
                 ) : null}
                 <td>
@@ -151,7 +211,12 @@ export function PassesPanel({
                     {metricTypes[m] === 'numeric' ? (
                       <Mono>{formatNumericValue(p.metric_means[m], 2)}</Mono>
                     ) : (
-                      <ScoreValue value={p.metric_means[m]} type={metricTypes[m]} direction={metricDirection(row.metric_specs[m])} digits={1} />
+                      <ScoreValue
+                        value={p.metric_means[m]}
+                        type={metricTypes[m]}
+                        direction={metricDirection(row.metric_specs[m])}
+                        digits={1}
+                      />
                     )}
                   </td>
                 ))}
@@ -167,7 +232,14 @@ export function PassesPanel({
                   <Mono>{formatDurationMs(p.duration_ms)}</Mono>
                 </td>
                 <td>
-                  {canDeletePass ? <IconButton label={`Delete pass ${p.pass_number} of ${name}`} icon="trash" tone="danger" onPress={() => setDeleting(p.pass_number)} /> : null}
+                  {canDeletePass ? (
+                    <IconButton
+                      label={`Delete pass ${p.pass_number} of ${name}`}
+                      icon="trash"
+                      tone="danger"
+                      onPress={() => setDeleting(p.pass_number)}
+                    />
+                  ) : null}
                 </td>
               </tr>
             );
@@ -191,7 +263,17 @@ export function PassesPanel({
   );
 }
 
-function Stat({ label, help, value, dir }: { label: string; help: string; value: number | null | undefined; dir: 'maximize' | 'minimize' | null }) {
+function Stat({
+  label,
+  help,
+  value,
+  dir,
+}: {
+  label: string;
+  help: string;
+  value: number | null | undefined;
+  dir: 'maximize' | 'minimize' | null;
+}) {
   return (
     <div>
       <dt>

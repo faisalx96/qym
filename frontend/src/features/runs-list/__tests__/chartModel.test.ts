@@ -59,17 +59,40 @@ describe('chart model', () => {
     expect(modelLabel('openai/gpt-4o|||plain')).toBe('gpt-4o');
   });
   it('builds nested groups sorted by the card sort', () => {
-    const groups = buildGroups(runs, 'version-model', ['accuracy'], [], 'card', { key: 'accuracy', dir: 'desc' }, () => null);
+    const groups = buildGroups(
+      runs,
+      'version-model',
+      ['accuracy'],
+      [],
+      'card',
+      { key: 'accuracy', dir: 'desc' },
+      () => null,
+    );
     expect(groups.map((g) => g.label)).toEqual(['main/abc', 'main/def', 'No version']);
     expect(groups[0]!.children!.map((c) => c.label)).toEqual(['gpt-4o', 'claude']);
-    const byModel = buildGroups(runs, 'model', ['accuracy'], [], 'card', { key: 'model', dir: 'asc' }, () => null);
+    const byModel = buildGroups(
+      runs,
+      'model',
+      ['accuracy'],
+      [],
+      'card',
+      { key: 'model', dir: 'asc' },
+      () => null,
+    );
     expect(byModel.map((g) => g.label)).toEqual(['claude', 'claude (reasoning)', 'gpt-4o']);
     expect(byModel[2]!.runs.map((r) => r.run_id)).toEqual(['d', 'a']);
   });
   it('derives the group statistics rule', () => {
-    expect(groupMetricName(runs, ['cost', 'accuracy'], { cost: 'numeric', accuracy: 'score' })).toBe('accuracy');
+    expect(groupMetricName(runs, ['cost', 'accuracy'], { cost: 'numeric', accuracy: 'score' })).toBe(
+      'accuracy',
+    );
     expect(isGroupMetricBoolean(runs, 'accuracy')).toBe(false);
-    expect(groupStatRule(runs, 'accuracy')).toEqual({ metric: 'accuracy', threshold: 0.8, is_boolean: false, direction: 'maximize' });
+    expect(groupStatRule(runs, 'accuracy')).toEqual({
+      metric: 'accuracy',
+      threshold: 0.8,
+      is_boolean: false,
+      direction: 'maximize',
+    });
     expect(groupStatRule(runs, 'cost')).toBeNull();
     const bool = [run('x', 'm', 1, '2026-01-01'), run('y', 'm', 0, '2026-01-02')];
     expect(groupStatRule(bool, 'accuracy')?.threshold).toBe(0.9999);

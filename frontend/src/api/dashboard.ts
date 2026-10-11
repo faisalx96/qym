@@ -95,7 +95,12 @@ export function fetchOverview(
 export function useOverview(
   slug: string,
   filters: DashboardFilters,
-  opts: { sort?: string; collation?: string[] | null; enabled?: boolean; refetchInterval?: number | false } = {},
+  opts: {
+    sort?: string;
+    collation?: string[] | null;
+    enabled?: boolean;
+    refetchInterval?: number | false;
+  } = {},
 ) {
   return useQuery({
     queryKey: dashboardKeys.overview(slug, filters, opts.sort, opts.collation),
@@ -108,7 +113,11 @@ export function useOverview(
   });
 }
 
-export function useKpis(slug: string, filters: DashboardFilters, opts: { refetchInterval?: number | false } = {}) {
+export function useKpis(
+  slug: string,
+  filters: DashboardFilters,
+  opts: { refetchInterval?: number | false } = {},
+) {
   return useQuery({
     queryKey: dashboardKeys.kpis(slug, filters),
     queryFn: ({ signal }) =>
@@ -186,7 +195,9 @@ export interface ModelsStatsBody {
 
 export function useModelsStats(body: ModelsStatsBody | null) {
   return useQuery({
-    queryKey: dashboardKeys.modelsStats(body ?? { metric: '', threshold: 0, is_boolean: false, direction: null, groups: [] }),
+    queryKey: dashboardKeys.modelsStats(
+      body ?? { metric: '', threshold: 0, is_boolean: false, direction: null, groups: [] },
+    ),
     queryFn: ({ signal }) => api.post<ModelsStatsResponse>('/api/dashboard/models/stats', body, { signal }),
     enabled: Boolean(body && body.groups.length),
     staleTime: 60_000,
@@ -207,11 +218,15 @@ export function usePendingCorrections(slug: string, limit = 12) {
 
 /** `{error}` with HTTP 200 on the legacy run routes → thrown Error. */
 function unwrapLegacy<T extends { error?: string }>(data: T): T {
-  if (data && typeof data === 'object' && typeof data.error === 'string' && data.error) throw new Error(data.error);
+  if (data && typeof data === 'object' && typeof data.error === 'string' && data.error)
+    throw new Error(data.error);
   return data;
 }
 
-export function useRunPasses(runId: string, opts: { enabled?: boolean; refetchInterval?: number | false } = {}) {
+export function useRunPasses(
+  runId: string,
+  opts: { enabled?: boolean; refetchInterval?: number | false } = {},
+) {
   return useQuery({
     queryKey: runKeys.passes(runId),
     queryFn: async ({ signal }) =>
@@ -292,7 +307,10 @@ export function useSubmitRuns(slug: string) {
         ? api.post<{ ok: boolean; status: RunStatus }>(`/v1/runs/${encodeRunId(runIds[0]!)}/submit`, {
             comment: comment ?? '',
           })
-        : api.post<{ ok: boolean; status?: RunStatus }>('/v1/runs/submit', { run_ids: runIds, comment: comment ?? '' }),
+        : api.post<{ ok: boolean; status?: RunStatus }>('/v1/runs/submit', {
+            run_ids: runIds,
+            comment: comment ?? '',
+          }),
     onSuccess: (_r, { runIds }) => {
       for (const id of runIds) patchRunStatus(qc, slug, id, { status: 'SUBMITTED' });
       invalidateDashboard(qc, slug);
@@ -310,7 +328,11 @@ export function useTransferOwner(slug: string) {
       ),
     onSuccess: (result, { runId, userId }) => {
       patchRunStatus(qc, slug, runId, {
-        owner: { id: result.owner.id ?? userId, display_name: result.owner.display_name, email: result.owner.email },
+        owner: {
+          id: result.owner.id ?? userId,
+          display_name: result.owner.display_name,
+          email: result.owner.email,
+        },
       });
       invalidateDashboard(qc, slug);
     },
@@ -325,7 +347,9 @@ export function useDeleteRuns(slug: string) {
       let purgeAfterDays: number | undefined;
       for (const runId of runIds) {
         try {
-          const r = await api.post<{ ok: boolean; purge_after_days?: number }>('/api/runs/delete', { file_path: runId });
+          const r = await api.post<{ ok: boolean; purge_after_days?: number }>('/api/runs/delete', {
+            file_path: runId,
+          });
           purgeAfterDays = r.purge_after_days ?? purgeAfterDays;
         } catch (error) {
           failures.push({ runId, error });

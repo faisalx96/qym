@@ -53,7 +53,8 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   if (el.isContentEditable) return true;
   const tag = el.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (el.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-popover]')) return true;
+  if (el.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-popover]'))
+    return true;
   return false;
 }
 

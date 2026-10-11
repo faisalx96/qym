@@ -32,14 +32,30 @@
   transform: rotate(45deg) scale(0.85);
 }
 
-.modelMark[data-series='1'] { background: var(--chart-1); }
-.modelMark[data-series='2'] { background: var(--chart-2); }
-.modelMark[data-series='3'] { background: var(--chart-3); }
-.modelMark[data-series='4'] { background: var(--chart-4); }
-.modelMark[data-series='5'] { background: var(--chart-5); }
-.modelMark[data-series='6'] { background: var(--chart-6); }
-.modelMark[data-series='7'] { background: var(--chart-7); }
-.modelMark[data-series='8'] { background: var(--chart-8); }
+.modelMark[data-series='1'] {
+  background: var(--chart-1);
+}
+.modelMark[data-series='2'] {
+  background: var(--chart-2);
+}
+.modelMark[data-series='3'] {
+  background: var(--chart-3);
+}
+.modelMark[data-series='4'] {
+  background: var(--chart-4);
+}
+.modelMark[data-series='5'] {
+  background: var(--chart-5);
+}
+.modelMark[data-series='6'] {
+  background: var(--chart-6);
+}
+.modelMark[data-series='7'] {
+  background: var(--chart-7);
+}
+.modelMark[data-series='8'] {
+  background: var(--chart-8);
+}
 
 .model {
   display: inline-flex;
@@ -147,10 +163,18 @@
   outline-offset: 1px;
 }
 
-.signal[data-tone='error'] { color: var(--error); }
-.signal[data-tone='metric'] { color: var(--metric-error); }
-.signal[data-tone='info'] { color: var(--info); }
-.signal[data-tone='warning'] { color: var(--warning); }
+.signal[data-tone='error'] {
+  color: var(--error);
+}
+.signal[data-tone='metric'] {
+  color: var(--metric-error);
+}
+.signal[data-tone='info'] {
+  color: var(--info);
+}
+.signal[data-tone='warning'] {
+  color: var(--warning);
+}
 
 .metric {
   display: inline-flex;

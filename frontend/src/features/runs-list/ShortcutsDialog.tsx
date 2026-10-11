@@ -3,10 +3,23 @@ import { Dialog, Kbd, Switch, Text } from '@/ui';
 import { SHORTCUT_HELP, useSingleKeyShortcuts } from './useRunsKeyboard';
 import styles from './ShortcutsDialog.module.css';
 
-export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+export function ShortcutsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
   const [single, setSingle] = useSingleKeyShortcuts();
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Keyboard shortcuts" size="sm" description="Shortcuts never fire inside inputs, dialogs or open menus." data-testid="shortcuts-dialog">
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Keyboard shortcuts"
+      size="sm"
+      description="Shortcuts never fire inside inputs, dialogs or open menus."
+      data-testid="shortcuts-dialog"
+    >
       <table className={styles.table}>
         <tbody>
           {SHORTCUT_HELP.map((s) => (

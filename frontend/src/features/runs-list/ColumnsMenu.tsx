@@ -31,7 +31,14 @@ export function ColumnsMenu({
     onChange(next);
   };
   return (
-    <Popover label="Columns" trigger={<Button variant="neutral" iconEnd={<Icon name="chevron-down" size={12} />}>Columns</Button>}>
+    <Popover
+      label="Columns"
+      trigger={
+        <Button variant="neutral" iconEnd={<Icon name="chevron-down" size={12} />}>
+          Columns
+        </Button>
+      }
+    >
       <div className={styles.menu}>
         {GROUPS.filter((g) => !groups || groups.includes(g.id)).map((g) => {
           const cols = optional.filter((c) => c.group === g.id && c.id !== 'run');
@@ -42,7 +49,12 @@ export function ColumnsMenu({
                 {g.label}
               </Text>
               {cols.map((c) => (
-                <Checkbox key={c.id} isSelected={shown.has(c.visKey!)} onChange={() => toggle(c.visKey!)} className={styles.option}>
+                <Checkbox
+                  key={c.id}
+                  isSelected={shown.has(c.visKey!)}
+                  onChange={() => toggle(c.visKey!)}
+                  className={styles.option}
+                >
                   {c.label}
                 </Checkbox>
               ))}

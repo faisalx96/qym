@@ -117,7 +117,11 @@ export function StatusCell({ row }: { row: RunRow }) {
       <RunStatusBadge status={status} label={STATUS_LABEL[status] ?? status} />
       {live ? (
         <span className={styles.progress} aria-label={`Progress ${pct} percent`}>
-          {pass ? <span className={styles.mono}>pass {pass}/{row.samples}</span> : null}
+          {pass ? (
+            <span className={styles.mono}>
+              pass {pass}/{row.samples}
+            </span>
+          ) : null}
           {row.samples <= 1 ? (
             <span className={styles.progressTrack} aria-hidden="true">
               <span className={styles.progressFill} style={{ width: `${pct}%` }} />
@@ -145,18 +149,47 @@ export interface SignalItem {
 export function signalItems(row: RunRow): SignalItem[] {
   const live = isActiveRun(row);
   const known = row.task_error_count != null && row.metric_error_count != null;
-  const task = known ? (row.task_error_count ?? 0) : Number(row.execution_error_count ?? row.error_count ?? 0);
+  const task = known
+    ? (row.task_error_count ?? 0)
+    : Number(row.execution_error_count ?? row.error_count ?? 0);
   const metric = row.metric_error_count ?? 0;
   const retries = row.total_retries ?? 0;
   const scope = row.samples > 1 ? ' across all passes' : ' across all items';
   const items: SignalItem[] = [];
-  if (task) items.push({ key: 'task', glyph: '⚠', tone: 'error', count: task, text: `${task} task error${task > 1 ? 's' : ''}${scope}${known ? '' : ' (breakdown is updating)'}` });
-  if (metric) items.push({ key: 'metric', glyph: '⚠', tone: 'metric', count: metric, text: `${metric} metric error${metric > 1 ? 's' : ''}${scope}` });
-  if (retries && !live) items.push({ key: 'retry', glyph: '↻', tone: 'info', count: retries, text: `${retries} total retr${retries > 1 ? 'ies' : 'y'}${scope}` });
+  if (task)
+    items.push({
+      key: 'task',
+      glyph: '⚠',
+      tone: 'error',
+      count: task,
+      text: `${task} task error${task > 1 ? 's' : ''}${scope}${known ? '' : ' (breakdown is updating)'}`,
+    });
+  if (metric)
+    items.push({
+      key: 'metric',
+      glyph: '⚠',
+      tone: 'metric',
+      count: metric,
+      text: `${metric} metric error${metric > 1 ? 's' : ''}${scope}`,
+    });
+  if (retries && !live)
+    items.push({
+      key: 'retry',
+      glyph: '↻',
+      tone: 'info',
+      count: retries,
+      text: `${retries} total retr${retries > 1 ? 'ies' : 'y'}${scope}`,
+    });
   const inc = row.ingest_incomplete as unknown;
   if (inc && typeof inc === 'object') {
     const reason = (inc as { reason?: string }).reason;
-    items.push({ key: 'ingest', glyph: '◌', tone: 'warning', count: 0, text: `Incomplete data. ${reason || 'Not all of this run reached the platform.'}` });
+    items.push({
+      key: 'ingest',
+      glyph: '◌',
+      tone: 'warning',
+      count: 0,
+      text: `Incomplete data. ${reason || 'Not all of this run reached the platform.'}`,
+    });
   }
   return items;
 }
@@ -169,7 +202,12 @@ export function Signals({ row, onDetails }: { row: RunRow; onDetails?: (row: Run
     <span className={styles.signals}>
       {items.map((it) => (
         <Tooltip key={it.key} content={it.text}>
-          <AriaButton className={styles.signal} data-tone={it.tone} aria-label={it.text} onPress={() => onDetails?.(row)}>
+          <AriaButton
+            className={styles.signal}
+            data-tone={it.tone}
+            aria-label={it.text}
+            onPress={() => onDetails?.(row)}
+          >
             {it.count ? <span className={styles.mono}>{it.count}</span> : null}
             <span aria-hidden="true">{it.glyph}</span>
           </AriaButton>
@@ -190,15 +228,31 @@ export function MetricCell({ row, metric }: { row: RunRow; metric: string }) {
   const error = metricErr ? 'metric' : taskErr && dir === 'minimize' ? 'task' : null;
   if (type === 'numeric') {
     return (
-      <span className={[styles.numeric, styles.mono].join(' ')} title={`${metric}: raw value${dir === 'minimize' ? ', lower is better' : ''}`}>
+      <span
+        className={[styles.numeric, styles.mono].join(' ')}
+        title={`${metric}: raw value${dir === 'minimize' ? ', lower is better' : ''}`}
+      >
         {formatNumericValue(v, 2)}
       </span>
     );
   }
   const scored = row.metric_scored_averages?.[metric];
   return (
-    <span className={styles.metric} title={scored !== undefined && scored !== v ? `Mean of scored items: ${(scored * 100).toFixed(1)}%` : undefined}>
-      <ScoreValue value={v} type={type} direction={dir} digits={smartDigits(v, row.metric_neighbor_values?.[metric])} error={error} />
+    <span
+      className={styles.metric}
+      title={
+        scored !== undefined && scored !== v
+          ? `Mean of scored items: ${(scored * 100).toFixed(1)}%`
+          : undefined
+      }
+    >
+      <ScoreValue
+        value={v}
+        type={type}
+        direction={dir}
+        digits={smartDigits(v, row.metric_neighbor_values?.[metric])}
+        error={error}
+      />
       {taskErr && !error ? (
         <span className={styles.metricGlyph} data-tone="error" title={`${taskErr} task errors counted as 0`}>
           ⚠
@@ -224,7 +278,9 @@ export function RunNameCell({
     <span className={styles.runName}>
       {repeat ? (
         <IconButton
-          label={expanded ? `Collapse ${row.samples} passes of ${name}` : `Expand ${row.samples} passes of ${name}`}
+          label={
+            expanded ? `Collapse ${row.samples} passes of ${name}` : `Expand ${row.samples} passes of ${name}`
+          }
           icon={expanded ? 'chevron-down' : 'chevron-right'}
           onPress={onToggleExpand}
           aria-expanded={expanded}
@@ -273,7 +329,11 @@ export function ExperimentCell({ row }: { row: RunRow }) {
   const { slug } = useRunsCtx();
   if (!row.experiment) return <span className={styles.empty}>—</span>;
   return (
-    <Link to={projectPath(slug, `experiments/${row.experiment.id}`)} className={styles.runLink} title={row.experiment.name}>
+    <Link
+      to={projectPath(slug, `experiments/${row.experiment.id}`)}
+      className={styles.runLink}
+      title={row.experiment.name}
+    >
       {row.experiment.name}
     </Link>
   );
@@ -299,7 +359,11 @@ export function RowActions({
   const isOwner = row.owner?.id === perm.meId;
   const items = [];
   if (perm.canManage) {
-    if (row.status === 'SUBMITTED') items.push({ id: 'approve', label: 'Approve' }, { id: 'reject', label: 'Reject', tone: 'danger' as const });
+    if (row.status === 'SUBMITTED')
+      items.push(
+        { id: 'approve', label: 'Approve' },
+        { id: 'reject', label: 'Reject', tone: 'danger' as const },
+      );
     if (row.status === 'APPROVED') items.push({ id: 'unapprove', label: 'Unapprove' });
     if (row.status === 'REJECTED') items.push({ id: 'unreject', label: 'Unreject' });
     items.push({ id: 'transfer', label: 'Transfer ownership…', separatorBefore: items.length > 0 });
@@ -309,8 +373,22 @@ export function RowActions({
   const name = row.external_run_id || row.run_name;
   return (
     <span className={styles.actions}>
-      {canSubmit ? <IconButton label={`Submit ${name} for review`} icon="check" tone="approve" onPress={() => onAction('submit', row)} /> : null}
-      {canDelete && !isActiveRun(row) ? <IconButton label={`Delete ${name}`} icon="trash" tone="danger" onPress={() => onAction('delete', row)} /> : null}
+      {canSubmit ? (
+        <IconButton
+          label={`Submit ${name} for review`}
+          icon="check"
+          tone="approve"
+          onPress={() => onAction('submit', row)}
+        />
+      ) : null}
+      {canDelete && !isActiveRun(row) ? (
+        <IconButton
+          label={`Delete ${name}`}
+          icon="trash"
+          tone="danger"
+          onPress={() => onAction('delete', row)}
+        />
+      ) : null}
       {items.length ? (
         <DropdownMenu
           label={`More actions for ${name}`}

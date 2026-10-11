@@ -84,7 +84,11 @@ export function formatMetricValueSmart(
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "Oct 11" + "19:16" split for the Date cell. */
-export function formatDateParts(iso: string | null | undefined): { date: string; time: string; full: string } {
+export function formatDateParts(iso: string | null | undefined): {
+  date: string;
+  time: string;
+  full: string;
+} {
   if (!iso) return { date: '—', time: '', full: '' };
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return { date: '—', time: '', full: '' };

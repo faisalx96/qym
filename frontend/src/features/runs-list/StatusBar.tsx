@@ -43,7 +43,13 @@ export function StatusBar({
         <Pagination total={total} page={page} pageSize={PAGE_SIZE} noun="runs" onPageChange={onPage} />
       </div>
       <div className={styles.right}>
-        <Text variant="sm" tone="muted" as="span" className={styles.updated} role={note || failed ? 'status' : undefined}>
+        <Text
+          variant="sm"
+          tone="muted"
+          as="span"
+          className={styles.updated}
+          role={note || failed ? 'status' : undefined}
+        >
           {note ?? (
             <>
               Last updated <span className={styles.mono}>{updatedAt ? formatClock(updatedAt) : '—'}</span>

@@ -60,7 +60,10 @@ export const DEFAULT_VIEW: RunsView = {
   page: 1,
 };
 
-const LIST_KEYS: readonly (readonly [string, keyof Pick<RunsView, 'tasks' | 'models' | 'datasets' | 'statuses' | 'versions' | 'owners'>])[] = [
+const LIST_KEYS: readonly (readonly [
+  string,
+  keyof Pick<RunsView, 'tasks' | 'models' | 'datasets' | 'statuses' | 'versions' | 'owners'>,
+])[] = [
   ['task', 'tasks'],
   ['model', 'models'],
   ['dataset', 'datasets'],

@@ -57,10 +57,21 @@ describe('selection refs', () => {
 
 describe('polling cadence', () => {
   const idle = { updatingPolls: 0, stoppingSince: 0, announcedUntil: 0 };
-  const fresh = { updating: false, pending_partitions: 0, backfilling: false, unpublished_runs: 0, failed_partitions: 0, oldest_pending_at: null };
+  const fresh = {
+    updating: false,
+    pending_partitions: 0,
+    backfilling: false,
+    unpublished_runs: 0,
+    failed_partitions: 0,
+    oldest_pending_at: null,
+  };
   it('idles at 60 s and goes live with an active row', () => {
-    expect(computeInterval({ rows: [{ status: 'COMPLETED', stop_requested: false }], freshness: fresh }, idle)).toBe(IDLE_MS);
-    expect(computeInterval({ rows: [{ status: 'RUNNING', stop_requested: false }], freshness: fresh }, idle)).toBe(LIVE_MS);
+    expect(
+      computeInterval({ rows: [{ status: 'COMPLETED', stop_requested: false }], freshness: fresh }, idle),
+    ).toBe(IDLE_MS);
+    expect(
+      computeInterval({ rows: [{ status: 'RUNNING', stop_requested: false }], freshness: fresh }, idle),
+    ).toBe(LIVE_MS);
     expect(computeInterval({ rows: [], freshness: fresh, hasActiveRuns: true }, idle)).toBe(LIVE_MS);
   });
   it('backs off 2→4→8→15 while updating', () => {
@@ -75,6 +86,8 @@ describe('polling cadence', () => {
     const stopping = { rows: [{ status: 'RUNNING' as const, stop_requested: true }], freshness: fresh };
     expect(computeInterval(stopping, { ...idle, stoppingSince: now - 1000 }, now)).toBe(STOPPING_MS);
     expect(computeInterval(stopping, { ...idle, stoppingSince: now - 61_000 }, now)).toBe(LIVE_MS);
-    expect(computeInterval({ rows: [], freshness: fresh }, { ...idle, announcedUntil: now + 5000 }, now)).toBe(STOPPING_MS);
+    expect(
+      computeInterval({ rows: [], freshness: fresh }, { ...idle, announcedUntil: now + 5000 }, now),
+    ).toBe(STOPPING_MS);
   });
 });

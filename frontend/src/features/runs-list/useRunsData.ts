@@ -7,7 +7,12 @@ import { buildColumns, sortColumnVisible } from './columns';
 import { useRefetchOnVisible, useRunsCadence } from './polling';
 import { DEFAULT_VIEW, filterKey, PAGE_SIZE, viewToFilters, type RunsView } from './urlState';
 
-export function useRunsData(slug: string, view: RunsView, visibleKeys: Set<string> | null, pinnedIds: string[]) {
+export function useRunsData(
+  slug: string,
+  view: RunsView,
+  visibleKeys: Set<string> | null,
+  pinnedIds: string[],
+) {
   const key = filterKey(view);
   const filters = useMemo(() => viewToFilters({ ...DEFAULT_VIEW, ...JSON.parse(key) } as RunsView), [key]);
 
@@ -15,12 +20,25 @@ export function useRunsData(slug: string, view: RunsView, visibleKeys: Set<strin
   const overview = overviewQ.data;
 
   // Metrics/trace columns come from the overview; a hidden sort column falls back to time-desc.
-  const traceWithData = useMemo(() => new Set<string>(overview?.has_trace_stats ? ['avg_tokens', 'avg_llm_calls', 'avg_tool_calls', 'tool_success_rate'] : []), [overview?.has_trace_stats]);
-  const columnSet = useMemo(() => buildColumns(overview?.all_metrics ?? [], traceWithData, visibleKeys), [overview?.all_metrics, traceWithData, visibleKeys]);
+  const traceWithData = useMemo(
+    () =>
+      new Set<string>(
+        overview?.has_trace_stats
+          ? ['avg_tokens', 'avg_llm_calls', 'avg_tool_calls', 'tool_success_rate']
+          : [],
+      ),
+    [overview?.has_trace_stats],
+  );
+  const columnSet = useMemo(
+    () => buildColumns(overview?.all_metrics ?? [], traceWithData, visibleKeys),
+    [overview?.all_metrics, traceWithData, visibleKeys],
+  );
   const sort = sortColumnVisible(view.sort, columnSet.visible) ? view.sort : DEFAULT_SORT;
 
   const column = collatedColumn(sort);
-  const order = column ? collation(sort, overview?.sort_values?.[column as keyof NonNullable<typeof overview>['sort_values']]) : null;
+  const order = column
+    ? collation(sort, overview?.sort_values?.[column as keyof NonNullable<typeof overview>['sort_values']])
+    : null;
   const ready = !column || Boolean(overview);
 
   const body: RunsBody = {
@@ -38,7 +56,10 @@ export function useRunsData(slug: string, view: RunsView, visibleKeys: Set<strin
   const data = runsQ.data;
   const refetch = runsQ.refetch;
   const onAnnounce = useCallback(() => void refetch(), [refetch]);
-  const interval = useRunsCadence({ rows: data?.rows ?? [], freshness: data?.freshness, hasActiveRuns: overview?.has_active_runs }, onAnnounce);
+  const interval = useRunsCadence(
+    { rows: data?.rows ?? [], freshness: data?.freshness, hasActiveRuns: overview?.has_active_runs },
+    onAnnounce,
+  );
   useEffect(() => {
     cadence.current = interval;
   }, [interval]);
@@ -50,14 +71,22 @@ export function useRunsData(slug: string, view: RunsView, visibleKeys: Set<strin
   const requestedRev = useRef<unknown>(undefined);
   const refetchOverview = overviewQ.refetch;
   useEffect(() => {
-    if (rev === undefined || overviewRev === undefined || rev === overviewRev || requestedRev.current === rev) return;
+    if (rev === undefined || overviewRev === undefined || rev === overviewRev || requestedRev.current === rev)
+      return;
     requestedRev.current = rev;
     void refetchOverview();
   }, [rev, overviewRev, refetchOverview]);
 
   // Off-page selected runs (Compare / Delete need their rows): one `ids` round trip, ≤100.
   const pageIds = useMemo(() => new Set((data?.rows ?? []).map((r) => r.run_id)), [data?.rows]);
-  const offPage = useMemo(() => pinnedIds.filter((id) => !pageIds.has(id)).slice(0, 100).sort(), [pinnedIds, pageIds]);
+  const offPage = useMemo(
+    () =>
+      pinnedIds
+        .filter((id) => !pageIds.has(id))
+        .slice(0, 100)
+        .sort(),
+    [pinnedIds, pageIds],
+  );
   const pinnedQ = useRunsPage(
     { project_slug: slug, filters: {}, sort: DEFAULT_SORT, limit: 1, offset: 0, ids: offPage },
     { enabled: offPage.length > 0 && Boolean(data), keepPrevious: false },

@@ -290,14 +290,30 @@
   background: var(--border-strong);
 }
 
-.barFill[data-series='1'] { background: var(--chart-1); }
-.barFill[data-series='2'] { background: var(--chart-2); }
-.barFill[data-series='3'] { background: var(--chart-3); }
-.barFill[data-series='4'] { background: var(--chart-4); }
-.barFill[data-series='5'] { background: var(--chart-5); }
-.barFill[data-series='6'] { background: var(--chart-6); }
-.barFill[data-series='7'] { background: var(--chart-7); }
-.barFill[data-series='8'] { background: var(--chart-8); }
+.barFill[data-series='1'] {
+  background: var(--chart-1);
+}
+.barFill[data-series='2'] {
+  background: var(--chart-2);
+}
+.barFill[data-series='3'] {
+  background: var(--chart-3);
+}
+.barFill[data-series='4'] {
+  background: var(--chart-4);
+}
+.barFill[data-series='5'] {
+  background: var(--chart-5);
+}
+.barFill[data-series='6'] {
+  background: var(--chart-6);
+}
+.barFill[data-series='7'] {
+  background: var(--chart-7);
+}
+.barFill[data-series='8'] {
+  background: var(--chart-8);
+}
 
 .barLabel {
   flex: none;

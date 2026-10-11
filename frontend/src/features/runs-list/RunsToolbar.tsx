@@ -30,7 +30,11 @@ export function RunsToolbar({
   const search = useDebouncedSearch(view.q, (q) => onChange({ q }));
   const clear = () => onChange({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort });
   return (
-    <div className={styles.commandBar} role="toolbar" aria-label={`${mode === 'runs' ? 'Runs' : 'Charts'} toolbar`}>
+    <div
+      className={styles.commandBar}
+      role="toolbar"
+      aria-label={`${mode === 'runs' ? 'Runs' : 'Charts'} toolbar`}
+    >
       {mode === 'runs' ? (
         <SearchField
           ref={searchRef}
