@@ -21,7 +21,7 @@ describe('catalog draft', () => {
   it('lists every category and marks example-only labels read-only', () => {
     const draft = catalogFromConfig(config);
     expect(draft.categories.map((c) => c.name)).toEqual(['Retrieval', 'Format']);
-    expect(draft.categories[0].subs.map((s) => [s.name, s.exampleOnly])).toEqual([
+    expect(draft.categories[0]!.subs.map((s) => [s.name, s.exampleOnly])).toEqual([
       ['Missing context', false],
       ['Stale index', true],
     ]);
@@ -31,11 +31,11 @@ describe('catalog draft', () => {
   it('requires both taxonomy fields and never saves example-only labels', () => {
     const draft = catalogFromConfig(config);
     expect(validateCatalog(draft)).toEqual({ categories: ['Format'], subcategories: [] });
-    draft.categories[1].description = 'x';
-    draft.categories[1].whenToUse = 'y';
-    draft.categories[0].subs[0].whenToUse = '';
+    draft.categories[1]!.description = 'x';
+    draft.categories[1]!.whenToUse = 'y';
+    draft.categories[0]!.subs[0]!.whenToUse = '';
     expect(validateCatalog(draft).subcategories).toEqual(['Retrieval / Missing context']);
-    draft.categories[0].subs[0].whenToUse = 'sw';
+    draft.categories[0]!.subs[0]!.whenToUse = 'sw';
     expect(validateCatalog(draft)).toEqual({ categories: [], subcategories: [] });
     const payload = catalogPayload(draft);
     expect(payload.category_details_map).toEqual({ Retrieval: ['Missing context'] });

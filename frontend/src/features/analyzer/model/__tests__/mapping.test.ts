@@ -32,14 +32,14 @@ describe('json paths', () => {
   it('builds a tree with [*] array nodes and tri-state selection', () => {
     const tree = pathsToTree(['ctx.docs[].id', 'ctx.docs[].text', 'q']);
     expect(tree.map((n) => n.label)).toEqual(['ctx', 'q']);
-    const docs = tree[0].children[0];
+    const docs = tree[0]!.children[0]!;
     expect(docs.label).toBe('docs');
-    expect(docs.children[0].label).toBe('[*]');
+    expect(docs.children[0]!.label).toBe('[*]');
     let sel = new Set<string>();
-    sel = toggleNode(docs.children[0].children[0], sel);
-    expect(nodeState(tree[0], sel)).toBe('some');
+    sel = toggleNode(docs.children[0]!.children[0]!, sel);
+    expect(nodeState(tree[0]!, sel)).toBe('some');
     sel = toggleNode(docs, sel);
-    expect(nodeState(tree[0], sel)).toBe('all');
+    expect(nodeState(tree[0]!, sel)).toBe('all');
     expect(coverPaths(tree, sel)).toEqual(['ctx']);
   });
 

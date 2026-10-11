@@ -116,8 +116,8 @@ export function catalogPayload(draft: CatalogDraft): CatalogUpdate {
       const description = sub.description.trim();
       const when = sub.whenToUse.trim();
       if (description || when) {
-        subTaxonomy[cat.name] ??= {};
-        subTaxonomy[cat.name][sub.name.trim()] = {
+        const bucket = (subTaxonomy[cat.name] ??= {});
+        bucket[sub.name.trim()] = {
           ...(description ? { description } : {}),
           ...(when ? { when_to_use: when } : {}),
         };

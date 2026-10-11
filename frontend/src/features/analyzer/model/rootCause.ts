@@ -65,11 +65,12 @@ export function rootCauseIssues(value: unknown): RootCauseIssue[] {
       confidence: confidenceOf(raw.confidence),
     });
   }
-  if (issues.length) {
+  const first = issues[0];
+  if (first) {
     const topReason = str(value.root_cause_reason);
-    if (!issues[0].category_reason && topReason) issues[0].category_reason = topReason;
+    if (!first.category_reason && topReason) first.category_reason = topReason;
     const top = confidenceOf(value.confidence ?? value.root_cause_confidence);
-    if (issues[0].confidence == null && top != null) issues[0].confidence = top;
+    if (first.confidence == null && top != null) first.confidence = top;
   }
   return issues;
 }

@@ -96,8 +96,8 @@ describe('matchTargets', () => {
       metricSpecs: specs,
       passNumber: 2,
     });
-    expect(built[0].output).toBe('p2');
-    expect(matchTargets(built, opts)[0].metrics).toEqual(['acc']);
+    expect(built[0]!.output).toBe('p2');
+    expect(matchTargets(built, opts)[0]!.metrics).toEqual(['acc']);
     const pass1 = buildAnalyzerRows({
       rows: rows([{ pass_scores: { acc: [1, 0.1], lat: [1, 1] } }]),
       metricNames: ['acc', 'lat'],
