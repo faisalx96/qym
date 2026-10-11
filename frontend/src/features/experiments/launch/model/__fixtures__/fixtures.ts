@@ -130,7 +130,12 @@ export function twoEnvCtx(opts: Omit<CtxOptions, 'envs'> = {}): FormContext {
       makeEnv(PRODUCTION, 'production'),
       makeEnv(STAGING, 'staging', {
         drop: ['/VIZ_MAX_GROUPS'],
-        add: [{ entry: entry({ pointer: '/STAGING_ONLY_FLAG', type: 'boolean', widget: 'toggle', group: 'misc' }), group: 'misc' }],
+        add: [
+          {
+            entry: entry({ pointer: '/STAGING_ONLY_FLAG', type: 'boolean', widget: 'toggle', group: 'misc' }),
+            group: 'misc',
+          },
+        ],
       }),
     ],
   });
@@ -147,14 +152,31 @@ export const syntheticEntries: DescriptorEntry[] = [
     additional_pointer: '/EXTRA/{key}',
     group: 'misc',
   }),
-  entry({ pointer: '/EXTRA/known', type: 'integer', widget: 'number', parent: '/EXTRA', bounds: { minimum: 0 } }),
-  entry({ pointer: '/EXTRA/{key}', type: 'json', widget: 'json', parent: '/EXTRA', params: ['key'], accepts: null }),
+  entry({
+    pointer: '/EXTRA/known',
+    type: 'integer',
+    widget: 'number',
+    parent: '/EXTRA',
+    bounds: { minimum: 0 },
+  }),
+  entry({
+    pointer: '/EXTRA/{key}',
+    type: 'json',
+    widget: 'json',
+    parent: '/EXTRA',
+    params: ['key'],
+    accepts: null,
+  }),
   entry({ pointer: '/STOP_WORDS', type: 'array', widget: 'json', item_type: 'string' }),
   entry({ pointer: '/FLEX', type: 'json', widget: 'json', accepts: ['integer', 'string'] }),
   entry({ pointer: '/LABEL', type: 'string', widget: 'text', pattern: '^[a-z]+$', bounds: { maxLength: 8 } }),
 ];
 
 export function withSynthetic(): FormContext {
-  const add = syntheticEntries.map((e) => ({ entry: e, group: 'misc', root: e.parent === null || e.parent === undefined }));
+  const add = syntheticEntries.map((e) => ({
+    entry: e,
+    group: 'misc',
+    root: e.parent === null || e.parent === undefined,
+  }));
   return makeCtx({ envs: [makeEnv(PRODUCTION, 'production', { add })] });
 }

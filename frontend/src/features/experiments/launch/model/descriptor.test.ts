@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { entry, makeCtx, makeEnv, PRODUCTION, STAGING, twoEnvCtx, withSynthetic } from './__fixtures__/fixtures';
+import {
+  entry,
+  makeCtx,
+  makeEnv,
+  PRODUCTION,
+  STAGING,
+  twoEnvCtx,
+  withSynthetic,
+} from './__fixtures__/fixtures';
 import {
   acceptsText,
   buildUnionSlots,
@@ -55,7 +63,9 @@ describe('union across environments', () => {
   });
 
   it('does not union an environment that has no form', () => {
-    const c = makeCtx({ envs: [makeEnv(PRODUCTION, 'production'), makeEnv(STAGING, 'staging', { formError: 'down' })] });
+    const c = makeCtx({
+      envs: [makeEnv(PRODUCTION, 'production'), makeEnv(STAGING, 'staging', { formError: 'down' })],
+    });
     expect(c.union.envs).toEqual([PRODUCTION]);
     expect(c.envs[1]?.formError).toBe('down');
   });
@@ -100,7 +110,10 @@ describe('model slots', () => {
     expect(prod.available).toBe(false);
     expect(prod.reasons[0]).toContain('Wrong base URL (staging)');
     expect(list.find((x) => x.id === 'conn-mini')?.available).toBe(true);
-    const globals = globalConnections(c, c.slots.filter((s) => s.kind === 'endpoint'));
+    const globals = globalConnections(
+      c,
+      c.slots.filter((s) => s.kind === 'endpoint'),
+    );
     expect(globals.find((x) => x.id === 'conn-mini')?.available).toBe(true);
   });
 
@@ -220,7 +233,9 @@ describe('leafSchema (zod from type / bounds / enum / pattern / accepts)', () =>
   });
 
   it('refuses a value for a secret field', () => {
-    expect(validateLeafValue(e('/LLM_OVERRIDES/endpoints/{endpoint}/api_key'), 'sk-1')).toContain('Keys are never entered here');
+    expect(validateLeafValue(e('/LLM_OVERRIDES/endpoints/{endpoint}/api_key'), 'sk-1')).toContain(
+      'Keys are never entered here',
+    );
   });
 
   it('checks pattern, length, lists and json accepts', () => {
@@ -243,7 +258,9 @@ describe('leafSchema (zod from type / bounds / enum / pattern / accepts)', () =>
     expect(schema.safeParse(undefined).success).toBe(true);
     expect(validateLeafValue(e('/MILVUS_SEARCH_THRESHOLD'), { sweep: [0.1, 0.2] })).toBeNull();
     expect(validateLeafValue(e('/MILVUS_SEARCH_THRESHOLD'), { sweep: [0.1, 0.1] })).toBe('Duplicate value');
-    expect(validateLeafValue(e('/MILVUS_SEARCH_THRESHOLD'), { sweep: [] })).toBe('A sweep needs a non-empty list of values');
+    expect(validateLeafValue(e('/MILVUS_SEARCH_THRESHOLD'), { sweep: [] })).toBe(
+      'A sweep needs a non-empty list of values',
+    );
   });
 
   it('validates raw control text for RHF', () => {
@@ -260,7 +277,9 @@ describe('hints', () => {
   it('lists bounds and json accepts', () => {
     expect(hintText(e('/MILVUS_SEARCH_THRESHOLD'))).toBe('Range ≥ 0, ≤ 1.');
     const c = withSynthetic();
-    expect(hintText(c.union.fields['/FLEX']!)).toBe('JSON value: integer or string. Plain text is sent as a string.');
+    expect(hintText(c.union.fields['/FLEX']!)).toBe(
+      'JSON value: integer or string. Plain text is sent as a string.',
+    );
     expect(hintText(c.union.fields['/STOP_WORDS']!)).toContain('A JSON list of string values.');
   });
 });
@@ -268,7 +287,13 @@ describe('hints', () => {
 describe('unmatchedPointers', () => {
   it('lists pointers no field describes, sorted', () => {
     expect(
-      unmatchedPointers(ctx.union, ['/BRIEF_ENABLED', '/ZED', '/LLM_OVERRIDES/endpoints/x/model', '/ALPHA/a', '/LLM_OVERRIDES']),
+      unmatchedPointers(ctx.union, [
+        '/BRIEF_ENABLED',
+        '/ZED',
+        '/LLM_OVERRIDES/endpoints/x/model',
+        '/ALPHA/a',
+        '/LLM_OVERRIDES',
+      ]),
     ).toEqual(['/ALPHA/a', '/LLM_OVERRIDES', '/ZED']);
   });
 });

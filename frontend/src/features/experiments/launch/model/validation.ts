@@ -6,13 +6,25 @@
 import { datasetValue, DESCRIPTION_MAX, PRIORITY_ORDER } from './document';
 import { envsMissing, envName, leafSchema, notInEnvMessage } from './descriptor';
 import { evaluatorLocalErrors, configEntry } from './evaluator';
-import { groupOfPointer, UNMATCHED_GROUP } from './settingsTree';
+import { groupOfPointer } from './settingsTree';
 import { matchTemplate, pointerToFieldName, splitPointer, unescapeSegment } from './pointers';
 import { parseVersioning, buildSpec } from './spec';
 import { jobEstimate, sweepLocalErrors } from './sweeps';
-import type { DryRunResponse, FormContext, LaunchDocument, Priority, ServerError, StepId, ValidationItem } from './types';
+import type {
+  DryRunResponse,
+  FormContext,
+  LaunchDocument,
+  Priority,
+  ServerError,
+  StepId,
+  ValidationItem,
+} from './types';
 
-export const ROLE_LABELS: Record<string, string> = { model: 'Model', base_url: 'Base URL', api_key: 'API key' };
+export const ROLE_LABELS: Record<string, string> = {
+  model: 'Model',
+  base_url: 'Base URL',
+  api_key: 'API key',
+};
 
 // Pseudo pointers of fields that are not part of the §8.1 document.
 export const PSEUDO = {
@@ -40,7 +52,12 @@ function overridesLabel(ctx: FormContext, relative: string): string {
   const segs = splitPointer(relative);
   const parts: string[] = [];
   for (let i = 1; i <= segs.length; i += 1) {
-    const prefix = '/' + segs.slice(0, i).map((s) => s.replace(/~/g, '~0').replace(/\//g, '~1')).join('/');
+    const prefix =
+      '/' +
+      segs
+        .slice(0, i)
+        .map((s) => s.replace(/~/g, '~0').replace(/\//g, '~1'))
+        .join('/');
     const template = matchTemplate(fields, prefix);
     const entry = template ? fields[template] : undefined;
     const last = entry?.path[entry.path.length - 1] ?? '';
@@ -64,7 +81,8 @@ export function locate(pointer: string, ctx: FormContext): Located {
   if (pointer === '/evaluator/dataset') return { label: 'Dataset', stepId: 'where' };
   if (pointer === '/evaluator/dataset_version') return { label: 'Dataset version', stepId: 'where' };
   if (pointer === '/evaluator') return { label: 'Evaluation inputs', stepId: 'where' };
-  if (pointer === '/links' || pointer.startsWith('/links/')) return { label: 'Sweeps › linked values', stepId: 'env' };
+  if (pointer === '/links' || pointer.startsWith('/links/'))
+    return { label: 'Sweeps › linked values', stepId: 'env' };
   if (pointer.startsWith('/slot_bindings')) {
     const segs = splitPointer(pointer);
     const key = segs[1];
@@ -73,7 +91,8 @@ export function locate(pointer: string, ctx: FormContext): Located {
     const rest = segs.slice(2);
     let label = base;
     if (rest[0] === 'sweep' && rest[1] != null) label = `${base} › model ${Number(rest[1]) + 1}`;
-    else if (rest[0] === 'temporary' && rest[1]) label = `${base} › ${ROLE_LABELS[rest[1]] ?? titleCase(rest[1].replace(/_/g, ' '))}`;
+    else if (rest[0] === 'temporary' && rest[1])
+      label = `${base} › ${ROLE_LABELS[rest[1]] ?? titleCase(rest[1].replace(/_/g, ' '))}`;
     else if (rest[0] === 'connection_id') label = `${base} › Project model`;
     return { label, stepId: 'models' };
   }
@@ -129,20 +148,36 @@ export interface LocalErrorOptions {
 }
 
 /** Cheap checks, in the order the form shows them. Launch is blocked while any remain. */
-export function localErrors(doc: LaunchDocument, ctx: FormContext, options: LocalErrorOptions = {}): ValidationItem[] {
+export function localErrors(
+  doc: LaunchDocument,
+  ctx: FormContext,
+  options: LocalErrorOptions = {},
+): ValidationItem[] {
   const out: ValidationItem[] = [];
   const push = (pointer: string, message: string, extra: Partial<ValidationItem> = {}) =>
     out.push(item(pointer, message, ctx, { source: 'local', ...extra }));
   if (!doc.environmentIds.length) push(PSEUDO.environments, 'Pick at least one environment.');
   for (const env of ctx.envs) if (env.formError) push(PSEUDO.environments, `${env.formError} (${env.name})`);
-  if ((doc.base.kind === 'default' || doc.base.kind === 'saved') && !(doc.base.loaded && doc.base.versionId)) {
-    push(PSEUDO.base, doc.base.loading ? 'The starting point is still loading.' : doc.base.error || 'The starting point did not load; pick another one.');
+  if (
+    (doc.base.kind === 'default' || doc.base.kind === 'saved') &&
+    !(doc.base.loaded && doc.base.versionId)
+  ) {
+    push(
+      PSEUDO.base,
+      doc.base.loading
+        ? 'The starting point is still loading.'
+        : doc.base.error || 'The starting point did not load; pick another one.',
+    );
   }
   if (!datasetValue(doc)) push('/evaluator/dataset', 'Choose a dataset.');
-  for (const p of Object.keys(doc.invalid)) push('/env_overrides' + p, (doc.invalid[p] as { message: string }).message);
+  for (const p of Object.keys(doc.invalid))
+    push('/env_overrides' + p, (doc.invalid[p] as { message: string }).message);
   for (const p of Object.keys(doc.values)) {
     for (const id of envsMissing(ctx.envs, p)) {
-      push('/env_overrides' + p, notInEnvMessage(p, envName(ctx, id)), { rule: 'not_in_environment', environmentId: id });
+      push('/env_overrides' + p, notInEnvMessage(p, envName(ctx, id)), {
+        rule: 'not_in_environment',
+        environmentId: id,
+      });
     }
   }
   // Type and bounds from the descriptor (swept values item by item).
@@ -150,7 +185,12 @@ export function localErrors(doc: LaunchDocument, ctx: FormContext, options: Loca
     if (p in doc.invalid) continue;
     const template = matchTemplate(ctx.union.fields, p);
     const entry = template ? ctx.union.fields[template] : undefined;
-    if (!entry || entry.kind !== 'field' || ctx.slots.some((s) => doc.bindings[s.slot_key] && s.pointers.includes(p))) continue;
+    if (
+      !entry ||
+      entry.kind !== 'field' ||
+      ctx.slots.some((s) => doc.bindings[s.slot_key] && s.pointers.includes(p))
+    )
+      continue;
     const result = leafSchema(entry).safeParse(doc.values[p]);
     if (!result.success) {
       const first = result.error.issues[0];
@@ -159,14 +199,18 @@ export function localErrors(doc: LaunchDocument, ctx: FormContext, options: Loca
     }
   }
   if (!doc.name.trim()) push(PSEUDO.name, 'Name the experiment.');
-  if (doc.description.length > DESCRIPTION_MAX) push(PSEUDO.description, `Descriptions are at most ${DESCRIPTION_MAX} characters.`);
+  if (doc.description.length > DESCRIPTION_MAX)
+    push(PSEUDO.description, `Descriptions are at most ${DESCRIPTION_MAX} characters.`);
   for (const message of parseVersioning(doc.versioningText).errors) push(PSEUDO.versioning, message);
   for (const e of evaluatorLocalErrors(doc, ctx.evaluatorPanel)) push(e.pointer, e.message);
   const spec = buildSpec(doc, ctx.evaluatorPanel);
   for (const e of sweepLocalErrors(spec, (p) => locate(p, ctx).label)) push(e.pointer, e.message);
   const raw = options.rawJsonErrors ?? [];
   if (raw.length) {
-    push(PSEUDO.rawJson, `Raw JSON not applied: ${raw[0]?.message}${raw.length > 1 ? ` (+${raw.length - 1} more)` : ''}`);
+    push(
+      PSEUDO.rawJson,
+      `Raw JSON not applied: ${raw[0]?.message}${raw.length > 1 ? ` (+${raw.length - 1} more)` : ''}`,
+    );
   }
   return out;
 }
@@ -192,7 +236,10 @@ export function mapServerErrors(
 ): ValidationItem[] {
   return errors.map((e) => {
     // A binding error points at the slot, whatever raw field it came from.
-    const pointer = e.slot_key && !e.pointer.startsWith('/slot_bindings') ? '/slot_bindings/' + e.slot_key.replace(/~/g, '~0').replace(/\//g, '~1') : (e.pointer ?? '');
+    const pointer =
+      e.slot_key && !e.pointer.startsWith('/slot_bindings')
+        ? '/slot_bindings/' + e.slot_key.replace(/~/g, '~0').replace(/\//g, '~1')
+        : (e.pointer ?? '');
     const where: string[] = [];
     if (e.environment_id && ctx.envs.length > 1) where.push(envName(ctx, e.environment_id));
     const combo = comboName(e, preview);
@@ -208,7 +255,10 @@ export function mapServerErrors(
 }
 
 /** Server errors worth listing: not already a local error, not the cap (the callout says it), deduped. */
-export function visibleServerErrors(source: readonly ServerError[], local: readonly ValidationItem[]): ServerError[] {
+export function visibleServerErrors(
+  source: readonly ServerError[],
+  local: readonly ValidationItem[],
+): ServerError[] {
   const localPointers = new Set(local.map((l) => l.pointer));
   const seen = new Set<string>();
   return source.filter((e) => {
@@ -308,7 +358,9 @@ export function priorityOptions(
 ): Array<{ value: Priority | ''; label: string; disabled: boolean }> {
   const cap = maxPriority(ctx);
   const defaults = ctx.envs.map((e) => e.defaultPriority).filter((p): p is Priority => Boolean(p));
-  const defaultLabel = defaults.length ? ` (${defaults.reduce((a, b) => (PRIORITY_ORDER[a] <= PRIORITY_ORDER[b] ? a : b))})` : '';
+  const defaultLabel = defaults.length
+    ? ` (${defaults.reduce((a, b) => (PRIORITY_ORDER[a] <= PRIORITY_ORDER[b] ? a : b))})`
+    : '';
   const options: Array<{ value: Priority | ''; label: string; disabled: boolean }> = [
     { value: '', label: `Environment default${defaultLabel}`, disabled: false },
   ];
@@ -325,7 +377,10 @@ export function priorityOptions(
 }
 
 /** Clears a priority the selected environments / the user's role no longer allow. */
-export function normalizePriority(doc: LaunchDocument, ctx: Pick<FormContext, 'envs' | 'isManager'>): LaunchDocument {
+export function normalizePriority(
+  doc: LaunchDocument,
+  ctx: Pick<FormContext, 'envs' | 'isManager'>,
+): LaunchDocument {
   if (!doc.priority) return doc;
   const over = PRIORITY_ORDER[doc.priority] > PRIORITY_ORDER[maxPriority(ctx)];
   if (over || (doc.priority === 'HIGH' && !ctx.isManager)) return { ...doc, priority: '' };
@@ -365,8 +420,11 @@ export function errorMessage(detail: unknown, fallback = 'Request failed'): stri
     const m = (detail as { message?: unknown }).message;
     if (typeof m === 'string' && m) return m;
   }
-  if (Array.isArray(detail)) return detail.map((e) => (e && typeof e === 'object' && 'msg' in e ? String((e as { msg: unknown }).msg) : String(e))).join('; ');
+  if (Array.isArray(detail))
+    return detail
+      .map((e) =>
+        e && typeof e === 'object' && 'msg' in e ? String((e as { msg: unknown }).msg) : String(e),
+      )
+      .join('; ');
   return fallback;
 }
-
-export { UNMATCHED_GROUP };

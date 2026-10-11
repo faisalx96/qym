@@ -1,42 +1,42 @@
 {
- "environment_id": "env-production",
- "slots": [
-  {
-   "slot_key": "endpoint:primary",
-   "kind": "endpoint",
-   "label": "Primary model",
-   "field_map": {
-    "model": "/LLM_OVERRIDES/endpoints/primary/model",
-    "base_url": "/LLM_OVERRIDES/endpoints/primary/base_url",
-    "api_key": "/LLM_OVERRIDES/endpoints/primary/api_key"
-   },
-   "transport_fields": {
-    "timeout": "/LLM_OVERRIDES/endpoints/primary/timeout",
-    "max_attempts": "/LLM_OVERRIDES/endpoints/primary/max_attempts",
-    "max_connections": "/LLM_OVERRIDES/endpoints/primary/max_connections",
-    "max_keepalive": "/LLM_OVERRIDES/endpoints/primary/max_keepalive",
-    "connect_timeout": "/LLM_OVERRIDES/endpoints/primary/connect_timeout"
-   },
-   "extra_field_maps": [],
-   "required": true,
-   "status": "confirmed"
-  },
-  {
-   "slot_key": "flat:VIZ_LLM",
-   "kind": "flat",
-   "label": "VIZ LLM model",
-   "field_map": {
-    "model": "/VIZ_LLM_MODEL",
-    "base_url": null,
-    "api_key": null
-   },
-   "transport_fields": {
-    "timeout": "/VIZ_LLM_TIMEOUT"
-   },
-   "extra_field_maps": [],
-   "required": false,
-   "status": "confirmed"
-  }
- ],
- "needs_confirmation": false
+  "environment_id": "env-production",
+  "slots": [
+    {
+      "slot_key": "endpoint:primary",
+      "kind": "endpoint",
+      "label": "Primary model",
+      "field_map": {
+        "model": "/LLM_OVERRIDES/endpoints/primary/model",
+        "base_url": "/LLM_OVERRIDES/endpoints/primary/base_url",
+        "api_key": "/LLM_OVERRIDES/endpoints/primary/api_key"
+      },
+      "transport_fields": {
+        "timeout": "/LLM_OVERRIDES/endpoints/primary/timeout",
+        "max_attempts": "/LLM_OVERRIDES/endpoints/primary/max_attempts",
+        "max_connections": "/LLM_OVERRIDES/endpoints/primary/max_connections",
+        "max_keepalive": "/LLM_OVERRIDES/endpoints/primary/max_keepalive",
+        "connect_timeout": "/LLM_OVERRIDES/endpoints/primary/connect_timeout"
+      },
+      "extra_field_maps": [],
+      "required": true,
+      "status": "confirmed"
+    },
+    {
+      "slot_key": "flat:VIZ_LLM",
+      "kind": "flat",
+      "label": "VIZ LLM model",
+      "field_map": {
+        "model": "/VIZ_LLM_MODEL",
+        "base_url": null,
+        "api_key": null
+      },
+      "transport_fields": {
+        "timeout": "/VIZ_LLM_TIMEOUT"
+      },
+      "extra_field_maps": [],
+      "required": false,
+      "status": "confirmed"
+    }
+  ],
+  "needs_confirmation": false
 }

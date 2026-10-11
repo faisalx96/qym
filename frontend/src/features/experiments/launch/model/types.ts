@@ -501,6 +501,8 @@ export interface LaunchRequest {
 export interface ServerError {
   pointer: string;
   rule?: string;
+  /** e.g. `temporary_key_required`. */
+  code?: string;
   message: string;
   environment_id?: string | null;
   environment_name?: string | null;

@@ -5,10 +5,28 @@
  * to open. Components only render this tree.
  */
 import { boundPointers, endpointName } from './bindings';
-import { editEntry, hintText, leafKind, missingFrom, placeholderFor, unmatchedEntry, unmatchedPointers, envsMissing, notInEnvMessage } from './descriptor';
+import {
+  editEntry,
+  hintText,
+  leafKind,
+  missingFrom,
+  placeholderFor,
+  unmatchedEntry,
+  unmatchedPointers,
+  envsMissing,
+  notInEnvMessage,
+} from './descriptor';
 import type { LeafKind } from './descriptor';
 import { changedPointers, isChanged } from './layering';
-import { appendSegment, childPointer, has, isSweepValue, pointerToFieldName, sameValue, splitPointer } from './pointers';
+import {
+  appendSegment,
+  childPointer,
+  has,
+  isSweepValue,
+  pointerToFieldName,
+  sameValue,
+  splitPointer,
+} from './pointers';
 import type { DescriptorEntry, FormContext, InvalidText, JsonValue, LaunchDocument } from './types';
 
 export interface SettingsFilter {
@@ -184,7 +202,11 @@ function collectionKeys(s: BuildState, entry: DescriptorEntry, concrete: string)
 export function endpointRefOptions(doc: LaunchDocument, ctx: FormContext, entry: DescriptorEntry): string[] {
   const collection = entry.ref_collection ? ctx.union.fields[entry.ref_collection] : undefined;
   if (!collection) return [];
-  return collectionKeys({ doc, ctx, bound: {}, query: '', changedOnly: false }, collection, entry.ref_collection as string);
+  return collectionKeys(
+    { doc, ctx, bound: {}, query: '', changedOnly: false },
+    collection,
+    entry.ref_collection as string,
+  );
 }
 
 function leaf(
@@ -203,7 +225,9 @@ function leaf(
   const label = (context ? context + ' · ' : '') + title;
   const changed = isChanged(s.doc, pointer);
   const missingEnvs = override ? [] : missingFrom(s.ctx.union, template);
-  const notInEnv = has(s.doc.values, pointer) ? envsMissing(s.ctx.envs, pointer).map((id) => notInEnvMessage(pointer, envLabel(s.ctx, id))) : [];
+  const notInEnv = has(s.doc.values, pointer)
+    ? envsMissing(s.ctx.envs, pointer).map((id) => notInEnvMessage(pointer, envLabel(s.ctx, id)))
+    : [];
   const boundBy = s.bound[pointer] ?? null;
   const searchText = [label, entry.name, pointer, entry.description ?? ''].join(' ').toLowerCase();
   const matches = (!s.query || searchText.includes(s.query)) && (!s.changedOnly || changed);
@@ -247,7 +271,14 @@ function allItemsField(
   const same =
     free.every((p) => sameValue(s.doc.values[p], s.doc.values[free[0] as string])) &&
     !free.some((p) => has(s.doc.invalid, p) || isSweepValue(s.doc.values[p]));
-  return { template, entry, label, pointers: free, same, value: same ? s.doc.values[free[0] as string] : undefined };
+  return {
+    template,
+    entry,
+    label,
+    pointers: free,
+    same,
+    value: same ? s.doc.values[free[0] as string] : undefined,
+  };
 }
 
 function roleColumns(s: BuildState, table: DescriptorEntry): Array<{ template: string; label: string }> {
@@ -283,10 +314,15 @@ function roleTable(s: BuildState, template: string): RoleTableNode {
       ),
     );
     const changed = cells.some((c) => c.changed);
-    const text = [row.key, row.label ?? '', row.description ?? '', ...cols.map((c) => c.label)].join(' ').toLowerCase();
+    const text = [row.key, row.label ?? '', row.description ?? '', ...cols.map((c) => c.label)]
+      .join(' ')
+      .toLowerCase();
     const prefix = row.pointer + '/';
-    const overridden = Object.keys(s.doc.values).some((p) => p.startsWith(prefix)) || Object.keys(s.doc.invalid).some((p) => p.startsWith(prefix));
+    const overridden =
+      Object.keys(s.doc.values).some((p) => p.startsWith(prefix)) ||
+      Object.keys(s.doc.invalid).some((p) => p.startsWith(prefix));
     const docPointer = '/env_overrides' + row.pointer;
+    const rowVisible = (!query || text.includes(query)) && (!s.changedOnly || changed);
     return {
       pointer: row.pointer,
       docPointer,
@@ -295,10 +331,10 @@ function roleTable(s: BuildState, template: string): RoleTableNode {
       label: row.label || row.key,
       description: row.description ?? null,
       absentEnvs: s.ctx.envs.length > 1 ? envsMissing(s.ctx.envs, row.pointer) : [],
-      cells: cells.map((c) => ({ ...c, visible: true })),
+      cells: cells.map((c) => ({ ...c, visible: rowVisible })),
       changed,
       overridden,
-      visible: (!query || text.includes(query)) && (!s.changedOnly || changed),
+      visible: rowVisible,
     };
   });
   const allRow = cols.map((col) =>
@@ -362,7 +398,14 @@ function extraKeys(s: BuildState, entry: DescriptorEntry, pointer: string): Extr
   const items = keys.map((key) => {
     const concrete = appendSegment(pointer, key);
     if (item.kind === 'field') {
-      const n = leaf(s, template, concrete, entry.label || entry.name, { ...item, name: key, label: key }, true);
+      const n = leaf(
+        s,
+        template,
+        concrete,
+        entry.label || entry.name,
+        { ...item, name: key, label: key },
+        true,
+      );
       return { key, pointer: concrete, node: n };
     }
     const docPointer = '/env_overrides' + concrete;
@@ -411,7 +454,9 @@ function collection(s: BuildState, template: string, pointer: string): Collectio
     for (const childTemplate of item.children ?? []) {
       const child = s.ctx.union.fields[childTemplate];
       if (!child) continue;
-      const pointers = keys.map((key) => childPointer(entry.item_pointer as string, appendSegment(pointer, key), childTemplate));
+      const pointers = keys.map((key) =>
+        childPointer(entry.item_pointer as string, appendSegment(pointer, key), childTemplate),
+      );
       const f = allItemsField(s, childTemplate, `All ${noun} · ${child.label || child.name}`, pointers);
       if (f) allItems.push(f);
     }
@@ -472,7 +517,11 @@ function countLeaves(nodes: readonly SettingsNode[], onlyVisible: boolean): numb
 }
 
 /** The whole "Environment overrides" card for the current document and filter. */
-export function buildSettingsView(doc: LaunchDocument, ctx: FormContext, filter: Partial<SettingsFilter> = {}): SettingsView {
+export function buildSettingsView(
+  doc: LaunchDocument,
+  ctx: FormContext,
+  filter: Partial<SettingsFilter> = {},
+): SettingsView {
   const query = (filter.search ?? '').trim().toLowerCase();
   const changedOnly = Boolean(filter.changedOnly);
   const filtering = Boolean(query) || changedOnly;
@@ -540,7 +589,12 @@ export function allLeaves(view: SettingsView): LeafNode[] {
 export function groupOfPointer(ctx: Pick<FormContext, 'union'>, pointer: string): string | null {
   const segments = splitPointer(pointer);
   for (let n = segments.length; n > 0; n -= 1) {
-    const prefix = '/' + segments.slice(0, n).map((x) => x.replace(/~/g, '~0').replace(/\//g, '~1')).join('/');
+    const prefix =
+      '/' +
+      segments
+        .slice(0, n)
+        .map((x) => x.replace(/~/g, '~0').replace(/\//g, '~1'))
+        .join('/');
     const template = Object.keys(ctx.union.fields).find((t) => sameShape(t, prefix));
     const entry = template ? ctx.union.fields[template] : undefined;
     if (entry?.group) return entry.group;
@@ -551,5 +605,8 @@ export function groupOfPointer(ctx: Pick<FormContext, 'union'>, pointer: string)
 function sameShape(template: string, concrete: string): boolean {
   const a = splitPointer(template);
   const b = splitPointer(concrete);
-  return a.length === b.length && a.every((seg, i) => seg === b[i] || (seg.length > 2 && seg.startsWith('{') && seg.endsWith('}')));
+  return (
+    a.length === b.length &&
+    a.every((seg, i) => seg === b[i] || (seg.length > 2 && seg.startsWith('{') && seg.endsWith('}')))
+  );
 }

@@ -64,7 +64,11 @@ export function isChanged(doc: LaunchDocument, pointer: string): boolean {
 
 export function changedPointers(doc: LaunchDocument): string[] {
   const seen = new Set<string>();
-  for (const p of [...Object.keys(doc.values), ...Object.keys(doc.baseline.values), ...Object.keys(doc.invalid)]) {
+  for (const p of [
+    ...Object.keys(doc.values),
+    ...Object.keys(doc.baseline.values),
+    ...Object.keys(doc.invalid),
+  ]) {
     if (!seen.has(p) && isChanged(doc, p)) seen.add(p);
   }
   return Array.from(seen);
@@ -111,7 +115,11 @@ export function diffText(doc: LaunchDocument, editor = false): string {
 }
 
 /** Badge counts on the wizard steps: env_overrides on "env", evaluation inputs on "eval". */
-export function stepChangeCount(doc: LaunchDocument, ctx: Pick<FormContext, 'evaluatorPanel'>, step: StepId): number {
+export function stepChangeCount(
+  doc: LaunchDocument,
+  ctx: Pick<FormContext, 'evaluatorPanel'>,
+  step: StepId,
+): number {
   if (step === 'env') return changedPointers(doc).length;
   if (step === 'eval') return evaluatorChangedCount(doc, ctx.evaluatorPanel);
   return 0;
@@ -133,13 +141,22 @@ export function setValue(doc: LaunchDocument, pointer: string, value: JsonValue 
  * Control text -> edit. Empty = unset (inherit); text that does not parse is kept in
  * `invalid` (and reported). `asJson` when the control is the JSON fallback (B20).
  */
-export function setLeafInput(doc: LaunchDocument, entry: DescriptorEntry, pointer: string, raw: string, asJson = false): LaunchDocument {
+export function setLeafInput(
+  doc: LaunchDocument,
+  entry: DescriptorEntry,
+  pointer: string,
+  raw: string,
+  asJson = false,
+): LaunchDocument {
   const edit = asJson ? jsonFallback(entry) : entry;
   const parsed = parseInput(edit, raw);
   if ('error' in parsed) {
     const values = { ...doc.values };
     delete values[pointer];
-    const invalid: Record<string, InvalidText> = { ...doc.invalid, [pointer]: { message: parsed.error, raw, json: Boolean(edit.fallback) } };
+    const invalid: Record<string, InvalidText> = {
+      ...doc.invalid,
+      [pointer]: { message: parsed.error, raw, json: Boolean(edit.fallback) },
+    };
     return { ...doc, values, invalid };
   }
   return setValue(doc, pointer, 'unset' in parsed ? undefined : parsed.value);
@@ -180,7 +197,12 @@ export function addKey(doc: LaunchDocument, listKey: string, key: string): Launc
 }
 
 /** Remove an added key (and the values under it). */
-export function removeKey(doc: LaunchDocument, listKey: string, itemPointer: string, key: string): LaunchDocument {
+export function removeKey(
+  doc: LaunchDocument,
+  listKey: string,
+  itemPointer: string,
+  key: string,
+): LaunchDocument {
   const list = (doc.addedKeys[listKey] ?? []).filter((k) => k !== key);
   return dropValuesUnder({ ...doc, addedKeys: { ...doc.addedKeys, [listKey]: list } }, itemPointer);
 }
@@ -191,19 +213,29 @@ export function resetField(doc: LaunchDocument, pointer: string): LaunchDocument
   const values = { ...doc.values };
   const invalid = { ...doc.invalid };
   delete invalid[pointer];
-  if (has(doc.baseline.values, pointer)) values[pointer] = deepCopy(doc.baseline.values[pointer] as JsonValue);
+  if (has(doc.baseline.values, pointer))
+    values[pointer] = deepCopy(doc.baseline.values[pointer] as JsonValue);
   else delete values[pointer];
   return { ...doc, values, invalid };
 }
 
-export function resetSlot(doc: LaunchDocument, ctx: Pick<FormContext, 'slots'>, slotKey: string, secrets?: SecretStore): LaunchDocument {
+export function resetSlot(
+  doc: LaunchDocument,
+  ctx: Pick<FormContext, 'slots'>,
+  slotKey: string,
+  secrets?: SecretStore,
+): LaunchDocument {
   const base = doc.baseline.bindings[slotKey];
   return setBinding(doc, ctx, slotKey, base ? deepCopy(base) : null, secrets);
 }
 
 /** "Reset all" on the settings toolbar: every setting back to the base. */
 export function resetSettings(doc: LaunchDocument, ctx: Pick<FormContext, 'slots'>): LaunchDocument {
-  return { ...doc, values: stripBoundFields(deepCopy(doc.baseline.values), doc.bindings, ctx.slots), invalid: {} };
+  return {
+    ...doc,
+    values: stripBoundFields(deepCopy(doc.baseline.values), doc.bindings, ctx.slots),
+    invalid: {},
+  };
 }
 
 /** "Reset roles": drops every value under the given role-table rows. */
@@ -277,7 +309,8 @@ export function baselineFrom(config: LaunchConfig | null | undefined, ctx: FormC
   const evDataset = evaluator['dataset'];
   if (typeof evDataset === 'string' && evDataset) {
     if (ctx.datasetNames.includes(evDataset)) {
-      const alias = typeof evConfig['dataset_alias'] === 'string' ? (evConfig['dataset_alias'] as string) : '';
+      const alias =
+        typeof evConfig['dataset_alias'] === 'string' ? (evConfig['dataset_alias'] as string) : '';
       const version = evaluator['dataset_version'];
       dataset = {
         mode: 'project',
@@ -292,7 +325,8 @@ export function baselineFrom(config: LaunchConfig | null | undefined, ctx: FormC
     }
   }
   delete evaluator['dataset'];
-  if (isPlainObject(evaluator['config']) && !Object.keys(evaluator['config']).length) delete evaluator['config'];
+  if (isPlainObject(evaluator['config']) && !Object.keys(evaluator['config']).length)
+    delete evaluator['config'];
   return { values: stripped, bindings, dataset, evaluatorExtra: evaluator, notes };
 }
 
@@ -302,11 +336,19 @@ export interface LoadedBase {
 }
 
 /** Lays a loaded base under the document: baseline, values, bindings, extras, dataset, info. */
-export function applyBaseline(doc: LaunchDocument, loaded: LoadedBase, links?: string[][] | undefined | 'keep'): LaunchDocument {
+export function applyBaseline(
+  doc: LaunchDocument,
+  loaded: LoadedBase,
+  links?: string[][] | undefined | 'keep',
+): LaunchDocument {
   const { base, info } = loaded;
   const next: LaunchDocument = {
     ...doc,
-    baseline: { values: deepCopy(base.values), bindings: deepCopy(base.bindings), dataset: base.dataset ? { ...base.dataset } : null },
+    baseline: {
+      values: deepCopy(base.values),
+      bindings: deepCopy(base.bindings),
+      dataset: base.dataset ? { ...base.dataset } : null,
+    },
     values: deepCopy(base.values),
     invalid: {},
     bindings: deepCopy(base.bindings),
@@ -335,8 +377,10 @@ export function captureEdits(doc: LaunchDocument): CapturedEdits {
     else values[p] = { value: deepCopy(doc.values[p] as JsonValue) };
   }
   const bindings: CapturedEdits['bindings'] = {};
-  for (const k of changedSlots(doc)) bindings[k] = doc.bindings[k] ? deepCopy(doc.bindings[k] as SlotBinding) : null;
-  const dataset = datasetValue(doc) && (datasetChanged(doc) || !doc.baseline.dataset) ? { ...doc.dataset } : null;
+  for (const k of changedSlots(doc))
+    bindings[k] = doc.bindings[k] ? deepCopy(doc.bindings[k] as SlotBinding) : null;
+  const dataset =
+    datasetValue(doc) && (datasetChanged(doc) || !doc.baseline.dataset) ? { ...doc.dataset } : null;
   return { values, bindings, dataset };
 }
 
@@ -349,7 +393,11 @@ export interface ReplayResult {
 }
 
 /** Re-apply edits whose setting or slot exists on the new base (§8.2). */
-export function replayEdits(doc: LaunchDocument, edits: CapturedEdits, ctx: Pick<FormContext, 'union' | 'slots'>): ReplayResult {
+export function replayEdits(
+  doc: LaunchDocument,
+  edits: CapturedEdits,
+  ctx: Pick<FormContext, 'union' | 'slots'>,
+): ReplayResult {
   const fields = ctx.union.fields;
   const slotKeys = ctx.slots.map((s) => s.slot_key);
   let kept = 0;
@@ -379,19 +427,29 @@ export function replayEdits(doc: LaunchDocument, edits: CapturedEdits, ctx: Pick
     else delete bindings[k];
     kept += 1;
   }
-  let next: LaunchDocument = { ...doc, values: stripBoundFields(values, bindings, ctx.slots), invalid, bindings };
+  let next: LaunchDocument = {
+    ...doc,
+    values: stripBoundFields(values, bindings, ctx.slots),
+    invalid,
+    bindings,
+  };
   if (edits.dataset) next = { ...next, dataset: { ...edits.dataset } };
   return { doc: next, kept, dropped: droppedItems.length, droppedItems };
 }
 
-export interface ApplyBaseResult extends ReplayResult {}
+export type ApplyBaseResult = ReplayResult;
 
 /**
  * Switch the starting point: the loaded base replaces the baseline and the user's
  * edits that still fit are replayed on top. `dropped` lists what did not fit (toast:
  * "N changes did not fit the new starting point and were dropped").
  */
-export function applyBase(doc: LaunchDocument, ctx: FormContext, loaded: LoadedBase, secrets?: SecretStore): ApplyBaseResult {
+export function applyBase(
+  doc: LaunchDocument,
+  ctx: FormContext,
+  loaded: LoadedBase,
+  secrets?: SecretStore,
+): ApplyBaseResult {
   const edits = captureEdits(doc);
   const links = loaded.info.kind === 'clone' && doc.clone ? deepCopy(doc.clone.linkedGroups) : doc.links;
   const laid = applyBaseline(doc, loaded, links);
@@ -409,7 +467,14 @@ export function droppedChangesMessage(dropped: number): string {
 export function describeBaseChange(
   doc: LaunchDocument,
   baseLabelText: string,
-): { needed: boolean; count: number; title: string; description: string[]; confirmLabel: string; cancelLabel: string } {
+): {
+  needed: boolean;
+  count: number;
+  title: string;
+  description: string[];
+  confirmLabel: string;
+  cancelLabel: string;
+} {
   const count = diffCount(doc).total;
   return {
     needed: count > 0,
@@ -447,7 +512,10 @@ export function loadedBaseFromPreset(
 ): LoadedBase {
   const info = { ...emptyBaseInfo(kind), envId };
   if (!res.remap) {
-    return { base: baselineFrom({}, ctx), info: { ...info, loaded: false, error: 'Failed to load the preset' } };
+    return {
+      base: baselineFrom({}, ctx),
+      info: { ...info, loaded: false, error: 'Failed to load the preset' },
+    };
   }
   const version = res.version;
   const { dropped, errors } = dropMessages(res.remap);
@@ -499,11 +567,19 @@ export function loadedBaseFromBestRun(envId: string, res: BestRunBaseResponse, c
 
 /** A best run not chosen yet (the scope prompt comes first, B15): blank, pending. */
 export function pendingBestRunBase(envId: string, ctx: FormContext): LoadedBase {
-  return { base: baselineFrom({}, ctx), info: { ...emptyBaseInfo('best_run'), envId, loaded: false, pending: true } };
+  return {
+    base: baselineFrom({}, ctx),
+    info: { ...emptyBaseInfo('best_run'), envId, loaded: false, pending: true },
+  };
 }
 
 /** The error state of a base that failed to load (the form starts blank). */
-export function failedBase(kind: BaseKind, envId: string | null, error: string, ctx: FormContext): LoadedBase {
+export function failedBase(
+  kind: BaseKind,
+  envId: string | null,
+  error: string,
+  ctx: FormContext,
+): LoadedBase {
   return { base: baselineFrom({}, ctx), info: { ...emptyBaseInfo(kind), envId, loaded: false, error } };
 }
 
@@ -515,7 +591,8 @@ export function reuseTemporaryPrompt(
   secrets?: SecretStore,
 ): { doc: LaunchDocument; error?: string } {
   const slot = ctx.slots.find((s) => s.slot_key === prompt.slot_key);
-  if (!slot || !prompt.model) return { doc, error: `Model slot ${prompt.slot_key} is not confirmed on the selected environments` };
+  if (!slot || !prompt.model)
+    return { doc, error: `Model slot ${prompt.slot_key} is not confirmed on the selected environments` };
   const binding: SlotBinding = {
     kind: 'temporary',
     label: prompt.label || undefined,
@@ -532,7 +609,10 @@ export function reuseTemporaryPrompt(
 
 export interface ClonePrefill {
   /** Merge into the document with Object.assign / spread. */
-  patch: Pick<LaunchDocument, 'name' | 'description' | 'environmentIds' | 'priority' | 'versioningText' | 'clone' | 'base'>;
+  patch: Pick<
+    LaunchDocument,
+    'name' | 'description' | 'environmentIds' | 'priority' | 'versioningText' | 'clone' | 'base'
+  >;
   notes: string[];
   /** Slot keys of temporary models that lose their key (re-enter under Models). */
   needsKeyReentry: string[];
@@ -565,7 +645,8 @@ export function prefillFromClone(
   let envIds = Array.isArray(res.environment_ids) ? res.environment_ids.slice() : [];
   const notes: string[] = [];
   const wantsJob = args.jobId ?? null;
-  let job: string | null = wantsJob && (res.base_source as { job_id?: string })?.job_id === wantsJob ? wantsJob : null;
+  let job: string | null =
+    wantsJob && (res.base_source as { job_id?: string })?.job_id === wantsJob ? wantsJob : null;
   if (wantsJob && !job) {
     const row = args.jobRow;
     if (row && row.id === wantsJob && isPlainObject(row.qym_config)) {
@@ -588,9 +669,12 @@ export function prefillFromClone(
     return (isSweepValue(b) ? b.sweep : [b]).some((x) => isPlainObject(x) && isPlainObject(x['temporary']));
   });
   if (needsKeyReentry.length) {
-    notes.push(`Temporary models are copied without their API keys: re-enter each key under Models (${needsKeyReentry.join(', ')}).`);
+    notes.push(
+      `Temporary models are copied without their API keys: re-enter each key under Models (${needsKeyReentry.join(', ')}).`,
+    );
   }
-  if (containsSweep(spec)) notes.push('Swept values are kept as they were, so the same combinations are launched.');
+  if (containsSweep(spec))
+    notes.push('Swept values are kept as they were, so the same combinations are launched.');
   const sourceName = String(res.name || '').replace(/ \((copy|rerun)\)$/, '');
   const clone: CloneInfo = {
     experimentId: args.experimentId,
@@ -659,11 +743,15 @@ export function baseAvailability(
   if (!env) return { ok: false, reason: 'Pick an environment first' };
   if (kind === 'best_run') return { ok: true };
   if (kind === 'default') {
-    return hasOfficial(env) ? { ok: true } : { ok: false, reason: `No default preset is published for ${env.name}` };
+    return hasOfficial(env)
+      ? { ok: true }
+      : { ok: false, reason: `No default preset is published for ${env.name}` };
   }
   if (kind === 'saved') {
     if (opts.savedPresets == null) return { ok: false, reason: 'Loading saved presets…' };
-    return opts.savedPresets > 0 ? { ok: true } : { ok: false, reason: `No saved presets for ${env.name} yet` };
+    return opts.savedPresets > 0
+      ? { ok: true }
+      : { ok: false, reason: `No saved presets for ${env.name} yet` };
   }
   return { ok: false };
 }
@@ -678,12 +766,19 @@ export const BASE_LABELS: Record<BaseKind, string> = {
 };
 
 /** "Default preset v3 · production", "Saved preset “x” v2", "Clone of …", best-run header. */
-export function baseLabel(doc: Pick<LaunchDocument, 'base' | 'clone' | 'environmentIds'>, envName?: (id: string) => string): string {
+export function baseLabel(
+  doc: Pick<LaunchDocument, 'base' | 'clone' | 'environmentIds'>,
+  envName?: (id: string) => string,
+): string {
   const info = doc.base;
   const version = info.version != null ? ` v${info.version}` : '';
   switch (info.kind) {
     case 'default':
-      return 'Default preset' + version + (doc.environmentIds.length > 1 && info.envId && envName ? ` · ${envName(info.envId)}` : '');
+      return (
+        'Default preset' +
+        version +
+        (doc.environmentIds.length > 1 && info.envId && envName ? ` · ${envName(info.envId)}` : '')
+      );
     case 'saved':
       return 'Saved preset' + (info.presetName ? ` “${info.presetName}”` : '') + version;
     case 'clone': {
@@ -702,11 +797,21 @@ export function baseLabel(doc: Pick<LaunchDocument, 'base' | 'clone' | 'environm
 // ── Pruning after the environments change ────────────────────────────────
 
 /** Drop bindings of slots no selected environment confirms (and their baseline copies). */
-export function pruneBindings(doc: LaunchDocument, ctx: Pick<FormContext, 'slots'>, secrets?: SecretStore): LaunchDocument {
+export function pruneBindings(
+  doc: LaunchDocument,
+  ctx: Pick<FormContext, 'slots'>,
+  secrets?: SecretStore,
+): LaunchDocument {
   const keys = ctx.slots.map((s) => s.slot_key);
   const bindings = Object.fromEntries(Object.entries(doc.bindings).filter(([k]) => keys.includes(k)));
-  const baselineBindings = Object.fromEntries(Object.entries(doc.baseline.bindings).filter(([k]) => keys.includes(k)));
-  const next: LaunchDocument = { ...doc, bindings, baseline: { ...doc.baseline, bindings: baselineBindings } };
+  const baselineBindings = Object.fromEntries(
+    Object.entries(doc.baseline.bindings).filter(([k]) => keys.includes(k)),
+  );
+  const next: LaunchDocument = {
+    ...doc,
+    bindings,
+    baseline: { ...doc.baseline, bindings: baselineBindings },
+  };
   if (secrets) pruneSecrets(next, secrets);
   return next;
 }

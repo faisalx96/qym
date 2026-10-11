@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 import { checkValues } from './sweeps';
-import { has, isPlainObject, isSweepValue, matchPointer, sameValue, splitPointer } from './pointers';
+import { isPlainObject, isSweepValue, matchPointer, sameValue, splitPointer } from './pointers';
 import type {
   DescriptorEntry,
   DescriptorGroup,
@@ -575,13 +575,25 @@ export function leafSchema(entry: DescriptorEntry): z.ZodType<unknown> {
   return z.unknown().superRefine((value, ctx) => {
     if (value === undefined) return;
     if (isSweepValue(value)) {
-      for (const problem of checkValues(entry, value)) {
+      const problems = checkValues(entry, value);
+      for (const problem of problems) {
         ctx.addIssue({
           code: 'custom',
           message: problem.message,
           path: problem.index == null ? ['sweep'] : ['sweep', problem.index],
         });
       }
+      if (problems.length) return;
+      // Types are fine: each value must also respect the bounds.
+      value.sweep.forEach((item, i) => {
+        if (item === null) return;
+        const result = base.safeParse(item);
+        if (!result.success) {
+          for (const issue of result.error.issues) {
+            ctx.addIssue({ code: 'custom', message: issue.message, path: ['sweep', i] });
+          }
+        }
+      });
       return;
     }
     const result = base.safeParse(value);
@@ -658,5 +670,3 @@ export function unmatchedPointers(model: UnionModel, pointers: Iterable<string>)
   }
   return out.sort();
 }
-
-export { has };

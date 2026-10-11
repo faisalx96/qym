@@ -47,14 +47,28 @@ function ctxWithFast(extra = ['fast']): FormContext {
 }
 
 const conn = (id: string): SlotBinding => ({ kind: 'connection', id });
-const temp = (ref: string | null = 'tmp-1'): SlotBinding => ({ kind: 'temporary', model: 'gpt-x', label: 'X', baseUrl: 'https://x', secretRef: ref, save: false, needsKey: !ref });
+const temp = (ref: string | null = 'tmp-1'): SlotBinding => ({
+  kind: 'temporary',
+  model: 'gpt-x',
+  label: 'X',
+  baseUrl: 'https://x',
+  secretRef: ref,
+  save: false,
+  needsKey: !ref,
+});
 
 describe('spec conversion', () => {
   it('writes connections, temporary models (ref only) and sweeps', () => {
     expect(bindingToSpec(conn('c1'))).toEqual({ connection_id: 'c1' });
-    expect(bindingToSpec(temp())).toEqual({ temporary: { model: 'gpt-x', label: 'X', base_url: 'https://x', api_key: { $secret: 'tmp-1' } } });
-    expect(bindingToSpec(temp(null))).toEqual({ temporary: { model: 'gpt-x', label: 'X', base_url: 'https://x' } });
-    expect(bindingToSpec({ kind: 'sweep', items: [{ connection_id: 'a' }, { inherit: true }] })).toEqual({ sweep: [{ connection_id: 'a' }, { inherit: true }] });
+    expect(bindingToSpec(temp())).toEqual({
+      temporary: { model: 'gpt-x', label: 'X', base_url: 'https://x', api_key: { $secret: 'tmp-1' } },
+    });
+    expect(bindingToSpec(temp(null))).toEqual({
+      temporary: { model: 'gpt-x', label: 'X', base_url: 'https://x' },
+    });
+    expect(bindingToSpec({ kind: 'sweep', items: [{ connection_id: 'a' }, { inherit: true }] })).toEqual({
+      sweep: [{ connection_id: 'a' }, { inherit: true }],
+    });
   });
 
   it('compares bindings without the key ref', () => {
@@ -65,7 +79,12 @@ describe('spec conversion', () => {
 
   it('collects refs under bindings and sweeps', () => {
     expect(bindingSecretRefs(temp('r1'))).toEqual(['r1']);
-    expect(bindingSecretRefs({ kind: 'sweep', items: [{ temporary: { model: 'm', api_key: { $secret: 'r2' } } }, { connection_id: 'c' }] })).toEqual(['r2']);
+    expect(
+      bindingSecretRefs({
+        kind: 'sweep',
+        items: [{ temporary: { model: 'm', api_key: { $secret: 'r2' } } }, { connection_id: 'c' }],
+      }),
+    ).toEqual(['r2']);
     expect(bindingSecretRefs(conn('c'))).toEqual([]);
   });
 });
@@ -75,7 +94,10 @@ describe('binding a slot', () => {
 
   it('drops raw values under the slot (binding_conflict) and locks the pointers', () => {
     const doc = createDocument({
-      values: { '/LLM_OVERRIDES/endpoints/primary/model': 'old', '/LLM_OVERRIDES/endpoints/primary/timeout': 30 },
+      values: {
+        '/LLM_OVERRIDES/endpoints/primary/model': 'old',
+        '/LLM_OVERRIDES/endpoints/primary/timeout': 30,
+      },
       invalid: { '/LLM_OVERRIDES/endpoints/primary/base_url': { message: 'x', raw: 'x' } },
     });
     const next = setBinding(doc, ctx, 'endpoint:primary', conn('conn-prod'));
@@ -106,15 +128,28 @@ describe('binding a slot', () => {
   });
 
   it('summarises a binding for the review panel', () => {
-    const doc = createDocument({ bindings: { 'endpoint:primary': conn('conn-mini'), 'flat:VIZ_LLM': temp() } });
+    const doc = createDocument({
+      bindings: { 'endpoint:primary': conn('conn-mini'), 'flat:VIZ_LLM': temp() },
+    });
     expect(bindingSummary(doc, ctx, 'endpoint:primary')).toBe('gpt-4o mini');
     expect(bindingSummary(doc, ctx, 'flat:VIZ_LLM')).toBe('Temporary: X');
     expect(bindingSummary(doc, ctx, 'nothing')).toBe('Inherit');
-    expect(bindingSummary({ ...doc, bindings: { a: { kind: 'sweep', items: [{ connection_id: 'x' }] } } }, ctx, 'a')).toBe('Sweep of 1 model');
+    expect(
+      bindingSummary(
+        { ...doc, bindings: { a: { kind: 'sweep', items: [{ connection_id: 'x' }] } } },
+        ctx,
+        'a',
+      ),
+    ).toBe('Sweep of 1 model');
   });
 
   it('builds a temporary binding from the form result', () => {
-    expect(temporaryBinding({ model: 'm', secretRef: 'r' })).toMatchObject({ kind: 'temporary', secretRef: 'r', needsKey: false, save: false });
+    expect(temporaryBinding({ model: 'm', secretRef: 'r' })).toMatchObject({
+      kind: 'temporary',
+      secretRef: 'r',
+      needsKey: false,
+      save: false,
+    });
   });
 });
 
@@ -152,7 +187,10 @@ describe('global model (B22)', () => {
   });
 
   it('derives the global model back when every endpoint shares one binding', () => {
-    const doc = createDocument({ extraEndpoints: ['fast'], bindings: { 'endpoint:primary': conn('c'), 'endpoint:fast': conn('c') } });
+    const doc = createDocument({
+      extraEndpoints: ['fast'],
+      bindings: { 'endpoint:primary': conn('c'), 'endpoint:fast': conn('c') },
+    });
     expect(deriveGlobalModel(doc, ctx).globalModel).toEqual(conn('c'));
     const mixed = { ...doc, bindings: { 'endpoint:primary': conn('c'), 'endpoint:fast': conn('d') } };
     expect(deriveGlobalModel(mixed, ctx).globalModel).toBeNull();
@@ -214,7 +252,18 @@ describe('global model (B22)', () => {
 describe('extra endpoints', () => {
   it('names the endpoint slots of a config no environment has confirmed', () => {
     const c = makeCtx();
-    expect(unconfirmedEndpoints({ slot_bindings: { 'endpoint:fast': { connection_id: 'x' }, 'endpoint:primary': null, 'flat:VIZ_LLM': null } }, c)).toEqual(['fast']);
+    expect(
+      unconfirmedEndpoints(
+        {
+          slot_bindings: {
+            'endpoint:fast': { connection_id: 'x' },
+            'endpoint:primary': null,
+            'flat:VIZ_LLM': null,
+          },
+        },
+        c,
+      ),
+    ).toEqual(['fast']);
     expect(unconfirmedEndpoints(null, c)).toEqual([]);
   });
 

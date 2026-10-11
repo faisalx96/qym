@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { evaluatorPanel, formResponse, makeCtx, PRODUCTION, slotsResponse, twoEnvCtx } from './__fixtures__/fixtures';
+import {
+  evaluatorPanel,
+  formResponse,
+  makeCtx,
+  PRODUCTION,
+  slotsResponse,
+  twoEnvCtx,
+} from './__fixtures__/fixtures';
 
 describe('fixtures', () => {
   it('carry the real exp-seed payloads', () => {
-    expect(Object.keys(formResponse.descriptor.fields)).toContain('/LLM_OVERRIDES/endpoints/{endpoint}/model');
+    expect(Object.keys(formResponse.descriptor.fields)).toContain(
+      '/LLM_OVERRIDES/endpoints/{endpoint}/model',
+    );
     expect(slotsResponse.slots.map((s) => s.slot_key)).toEqual(['endpoint:primary', 'flat:VIZ_LLM']);
     expect(evaluatorPanel.fields).toContain('samples');
   });

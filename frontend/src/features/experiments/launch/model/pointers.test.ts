@@ -32,22 +32,34 @@ describe('pointer escaping', () => {
 
   it('computes a concrete child pointer from templates', () => {
     expect(
-      childPointer('/LLM_OVERRIDES/endpoints/{endpoint}', '/LLM_OVERRIDES/endpoints/fast', '/LLM_OVERRIDES/endpoints/{endpoint}/model'),
+      childPointer(
+        '/LLM_OVERRIDES/endpoints/{endpoint}',
+        '/LLM_OVERRIDES/endpoints/fast',
+        '/LLM_OVERRIDES/endpoints/{endpoint}/model',
+      ),
     ).toBe('/LLM_OVERRIDES/endpoints/fast/model');
   });
 });
 
 describe('matchPointer / matchTemplate', () => {
   it('maps a concrete pointer onto its template, literal before role row before key', () => {
-    expect(matchPointer(descriptor, '/LLM_OVERRIDES/endpoints/fast/model')).toBe('/LLM_OVERRIDES/endpoints/{endpoint}/model');
-    expect(matchPointer(descriptor, '/LLM_OVERRIDES/main/temperature')).toBe('/LLM_OVERRIDES/{role}/temperature');
-    expect(matchPointer(descriptor, '/LLM_OVERRIDES/main/response_format/type')).toBe('/LLM_OVERRIDES/{role}/response_format/type');
+    expect(matchPointer(descriptor, '/LLM_OVERRIDES/endpoints/fast/model')).toBe(
+      '/LLM_OVERRIDES/endpoints/{endpoint}/model',
+    );
+    expect(matchPointer(descriptor, '/LLM_OVERRIDES/main/temperature')).toBe(
+      '/LLM_OVERRIDES/{role}/temperature',
+    );
+    expect(matchPointer(descriptor, '/LLM_OVERRIDES/main/response_format/type')).toBe(
+      '/LLM_OVERRIDES/{role}/response_format/type',
+    );
     expect(matchPointer(descriptor, '/NOPE')).toBeNull();
     expect(matchPointer(descriptor, '/LLM_OVERRIDES/main/not_a_column')).toBeNull();
   });
 
   it('matches by shape with the fewest wildcards', () => {
-    expect(matchTemplate(fields, '/LLM_OVERRIDES/endpoints/primary/model')).toBe('/LLM_OVERRIDES/endpoints/{endpoint}/model');
+    expect(matchTemplate(fields, '/LLM_OVERRIDES/endpoints/primary/model')).toBe(
+      '/LLM_OVERRIDES/endpoints/{endpoint}/model',
+    );
     expect(matchTemplate(fields, '/BRIEF_ENABLED')).toBe('/BRIEF_ENABLED');
     expect(matchTemplate(fields, '/UNKNOWN/x')).toBeNull();
   });

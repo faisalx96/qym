@@ -5,13 +5,15 @@ import type { BaseInfo } from './types';
 export const BEST_RUN_LIMIT = 5;
 
 export const BEST_RUN_REASONS: Record<string, string> = {
-  custom_dataset: 'Runs on a custom dataset string are never ranked. Pick a project dataset to see best runs.',
+  custom_dataset:
+    'Runs on a custom dataset string are never ranked. Pick a project dataset to see best runs.',
   unknown_dataset_version: 'That dataset version or alias does not exist.',
   no_metric: 'No metric to rank by yet.',
   no_runs_on_version: 'No official run on this dataset version yet.',
   no_runs_in_scope: 'No official run matches this scope.',
   no_runs_for_metric: 'No official run in this scope has this metric.',
-  all_excluded: 'Every run in this scope errored on more than 20% of its items. Include errored runs to see them.',
+  all_excluded:
+    'Every run in this scope errored on more than 20% of its items. Include errored runs to see them.',
 };
 
 export const VERSION_LABELS: Record<string, string> = { agent_version: 'agent', kb_version: 'kb' };
@@ -61,7 +63,9 @@ export function versionText(versioning: unknown): string {
 }
 
 /** "run abc12345 · accuracy 0.84 · agent v1.12 / kb 381" */
-export function bestRunHeader(info: Pick<BaseInfo, 'runId' | 'metric' | 'score'> & { versioning?: unknown }): string {
+export function bestRunHeader(
+  info: Pick<BaseInfo, 'runId' | 'metric' | 'score'> & { versioning?: unknown },
+): string {
   if (!info.runId) return '';
   const parts = [`run ${info.runId.slice(0, 8)}`];
   if (info.metric) parts.push(`${info.metric} ${formatScore(info.score)}`);

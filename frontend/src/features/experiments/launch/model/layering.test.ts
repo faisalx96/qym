@@ -43,13 +43,24 @@ import {
   removeKey,
   type LoadedBase,
 } from './layering';
-import type { BestRunBaseResponse, CloneResponse, LaunchConfig, LaunchDocument, PresetVersionResponse } from './types';
+import type {
+  BestRunBaseResponse,
+  CloneResponse,
+  LaunchConfig,
+  LaunchDocument,
+  PresetVersionResponse,
+} from './types';
 
 const ctx = makeCtx();
 const f = ctx.union.fields;
 
 const presetConfig: LaunchConfig = {
-  evaluator: { dataset: 'support-qa', dataset_version: '3', report_k: 5, config: { samples: 2, run_metadata: { team: 'a', qym_launch: 'x' } } },
+  evaluator: {
+    dataset: 'support-qa',
+    dataset_version: '3',
+    report_k: 5,
+    config: { samples: 2, run_metadata: { team: 'a', qym_launch: 'x' } },
+  },
   slot_bindings: {
     'endpoint:primary': { connection_id: 'conn-prod' },
     'flat:VIZ_LLM': { temporary: { model: 'viz-m', api_key: { $secret: 'old' } } },
@@ -58,13 +69,19 @@ const presetConfig: LaunchConfig = {
   env_overrides: {
     MILVUS_SEARCH_THRESHOLD: 0.4,
     SQL_RESULT_LIMIT: 50,
-    LLM_OVERRIDES: { endpoints: { primary: { model: 'filled-by-slot', timeout: 30 } }, main: { temperature: 0.1 } },
+    LLM_OVERRIDES: {
+      endpoints: { primary: { model: 'filled-by-slot', timeout: 30 } },
+      main: { temperature: 0.1 },
+    },
     GONE_SETTING: 1,
   },
 };
 
 function laid(config: LaunchConfig = presetConfig, c = ctx): { doc: LaunchDocument; loaded: LoadedBase } {
-  const loaded: LoadedBase = { base: baselineFrom(config, c), info: { ...scratchBase(c).info, kind: 'default', versionId: 'v1', version: 3, loaded: true } };
+  const loaded: LoadedBase = {
+    base: baselineFrom(config, c),
+    info: { ...scratchBase(c).info, kind: 'default', versionId: 'v1', version: 3, loaded: true },
+  };
   const doc = applyBase(createDocument({ environmentIds: [PRODUCTION] }), c, loaded).doc;
   return { doc, loaded };
 }
@@ -85,7 +102,12 @@ describe('baselineFrom', () => {
   });
 
   it('keeps temporary models without their key and asks for it again', () => {
-    expect(base.bindings['flat:VIZ_LLM']).toMatchObject({ kind: 'temporary', model: 'viz-m', secretRef: null, needsKey: true });
+    expect(base.bindings['flat:VIZ_LLM']).toMatchObject({
+      kind: 'temporary',
+      model: 'viz-m',
+      secretRef: null,
+      needsKey: true,
+    });
   });
 
   it('notes a slot no environment confirms', () => {
@@ -100,11 +122,17 @@ describe('baselineFrom', () => {
 
   it('maps a project dataset version onto the picker and the rest into the extras', () => {
     expect(base.dataset).toEqual({ mode: 'project', name: 'support-qa', ref: 'v:3', custom: '' });
-    expect(base.evaluatorExtra).toEqual({ report_k: 5, config: { samples: 2, run_metadata: { team: 'a', qym_launch: 'x' } } });
+    expect(base.evaluatorExtra).toEqual({
+      report_k: 5,
+      config: { samples: 2, run_metadata: { team: 'a', qym_launch: 'x' } },
+    });
   });
 
   it('maps an alias, and a custom dataset string', () => {
-    const alias = baselineFrom({ evaluator: { dataset: 'legal-set', config: { dataset_alias: 'production' } } }, ctx);
+    const alias = baselineFrom(
+      { evaluator: { dataset: 'legal-set', config: { dataset_alias: 'production' } } },
+      ctx,
+    );
     expect(alias.dataset).toEqual({ mode: 'project', name: 'legal-set', ref: 'a:production', custom: '' });
     expect(alias.evaluatorExtra).toEqual({});
     const custom = baselineFrom({ evaluator: { dataset: 'my/own set' } }, ctx);
@@ -145,7 +173,9 @@ describe('baseline vs edits', () => {
   });
 
   it('unsetting a base value is a change; unparsable text is a change', () => {
-    expect(isChanged(setValue(doc, '/MILVUS_SEARCH_THRESHOLD', undefined), '/MILVUS_SEARCH_THRESHOLD')).toBe(true);
+    expect(isChanged(setValue(doc, '/MILVUS_SEARCH_THRESHOLD', undefined), '/MILVUS_SEARCH_THRESHOLD')).toBe(
+      true,
+    );
     const bad = setLeafInput(doc, f['/SQL_RESULT_LIMIT']!, '/SQL_RESULT_LIMIT', 'abc');
     expect(bad.invalid['/SQL_RESULT_LIMIT']).toMatchObject({ message: 'Enter a number', raw: 'abc' });
     expect(bad.values['/SQL_RESULT_LIMIT']).toBeUndefined();
@@ -166,8 +196,14 @@ describe('baseline vs edits', () => {
     const targets = ['/LLM_OVERRIDES/main/temperature', '/LLM_OVERRIDES/router/temperature'];
     const r = setAllInput(doc, f['/LLM_OVERRIDES/{role}/temperature']!, targets, '0.3');
     expect(r.doc.values['/LLM_OVERRIDES/router/temperature']).toBe(0.3);
-    expect(setAllInput(doc, f['/LLM_OVERRIDES/{role}/temperature']!, targets, 'x').error).toBe('Enter a number');
-    expect(setAllInput(r.doc, f['/LLM_OVERRIDES/{role}/temperature']!, targets, '').doc.values['/LLM_OVERRIDES/main/temperature']).toBeUndefined();
+    expect(setAllInput(doc, f['/LLM_OVERRIDES/{role}/temperature']!, targets, 'x').error).toBe(
+      'Enter a number',
+    );
+    expect(
+      setAllInput(r.doc, f['/LLM_OVERRIDES/{role}/temperature']!, targets, '').doc.values[
+        '/LLM_OVERRIDES/main/temperature'
+      ],
+    ).toBeUndefined();
   });
 
   it('adds and removes collection keys with their values', () => {
@@ -183,7 +219,12 @@ describe('baseline vs edits', () => {
 
 describe('reset', () => {
   const { doc } = laid();
-  const edited = setBinding(setValue(setValue(doc, '/MILVUS_SEARCH_THRESHOLD', 0.9), '/BRIEF_ENABLED', true), ctx, 'endpoint:primary', { kind: 'connection', id: 'conn-mini' });
+  const edited = setBinding(
+    setValue(setValue(doc, '/MILVUS_SEARCH_THRESHOLD', 0.9), '/BRIEF_ENABLED', true),
+    ctx,
+    'endpoint:primary',
+    { kind: 'connection', id: 'conn-mini' },
+  );
 
   it('resets one field to the base value or removes it when the base had none', () => {
     expect(resetField(edited, '/MILVUS_SEARCH_THRESHOLD').values['/MILVUS_SEARCH_THRESHOLD']).toBe(0.4);
@@ -191,7 +232,10 @@ describe('reset', () => {
   });
 
   it('resets one slot to the base model (or inherit)', () => {
-    expect(resetSlot(edited, ctx, 'endpoint:primary').bindings['endpoint:primary']).toEqual({ kind: 'connection', id: 'conn-prod' });
+    expect(resetSlot(edited, ctx, 'endpoint:primary').bindings['endpoint:primary']).toEqual({
+      kind: 'connection',
+      id: 'conn-prod',
+    });
     const noBase = setBinding(edited, ctx, 'endpoint:other' as never, { kind: 'connection', id: 'x' });
     expect(resetSlot(noBase, ctx, 'endpoint:other').bindings['endpoint:other']).toBeUndefined();
   });
@@ -206,7 +250,17 @@ describe('reset', () => {
   it('keeps a re-entered key when the model itself is unchanged', () => {
     const secrets = new SecretStore();
     secrets.put('K', 'tmp-new');
-    const withKey = { ...doc, bindings: { ...doc.bindings, 'flat:VIZ_LLM': { ...(doc.bindings['flat:VIZ_LLM'] as object), secretRef: 'tmp-new', needsKey: false } } } as unknown as LaunchDocument;
+    const withKey = {
+      ...doc,
+      bindings: {
+        ...doc.bindings,
+        'flat:VIZ_LLM': {
+          ...(doc.bindings['flat:VIZ_LLM'] as object),
+          secretRef: 'tmp-new',
+          needsKey: false,
+        },
+      },
+    } as unknown as LaunchDocument;
     const all = resetAll(withKey, ctx, secrets);
     expect((all.bindings['flat:VIZ_LLM'] as { secretRef: string }).secretRef).toBe('tmp-new');
     expect(secrets.has('tmp-new')).toBe(true);
@@ -214,7 +268,9 @@ describe('reset', () => {
 
   it('drops the values under role rows', () => {
     const d = setValue(doc, '/LLM_OVERRIDES/router/temperature', 0.5);
-    expect(resetRoles(d, ['/LLM_OVERRIDES/router']).values['/LLM_OVERRIDES/router/temperature']).toBeUndefined();
+    expect(
+      resetRoles(d, ['/LLM_OVERRIDES/router']).values['/LLM_OVERRIDES/router/temperature'],
+    ).toBeUndefined();
   });
 });
 
@@ -235,7 +291,10 @@ describe('changing the starting point replays the edits that still fit', () => {
   });
 
   it('keeps edits whose setting exists on the new base and reports the dropped ones', () => {
-    const next: LoadedBase = { base: baselineFrom({ env_overrides: { SQL_RESULT_LIMIT: 7 } }, ctx), info: scratchBase(ctx).info };
+    const next: LoadedBase = {
+      base: baselineFrom({ env_overrides: { SQL_RESULT_LIMIT: 7 } }, ctx),
+      info: scratchBase(ctx).info,
+    };
     const result = applyBase(edited, ctx, next);
     expect(result.kept).toBe(2); // threshold + primary binding
     expect(result.dropped).toBe(1);
@@ -252,7 +311,21 @@ describe('changing the starting point replays the edits that still fit', () => {
 
   it('drops a binding edit for a slot the new environments do not confirm', () => {
     const next: LoadedBase = { base: baselineFrom({}, ctx), info: scratchBase(ctx).info };
-    const noViz = makeCtx({ envs: [makeEnv(PRODUCTION, 'production', { slots: [{ slot_key: 'endpoint:primary', kind: 'endpoint', label: 'Primary model', field_map: { model: '/LLM_OVERRIDES/endpoints/primary/model' }, required: true }] })] });
+    const noViz = makeCtx({
+      envs: [
+        makeEnv(PRODUCTION, 'production', {
+          slots: [
+            {
+              slot_key: 'endpoint:primary',
+              kind: 'endpoint',
+              label: 'Primary model',
+              field_map: { model: '/LLM_OVERRIDES/endpoints/primary/model' },
+              required: true,
+            },
+          ],
+        }),
+      ],
+    });
     const withViz = setBinding(edited, ctx, 'flat:VIZ_LLM', { kind: 'connection', id: 'conn-prod' });
     const result = applyBase(withViz, noViz, next);
     expect(result.droppedItems).toContain('/slot_bindings/flat:VIZ_LLM');
@@ -270,7 +343,13 @@ describe('changing the starting point replays the edits that still fit', () => {
   it('wording of the confirm', () => {
     expect(describeBaseChange(doc, 'Default preset v3').needed).toBe(false);
     const c = describeBaseChange(edited, 'Default preset v3');
-    expect(c).toMatchObject({ needed: true, count: 3, title: 'Change the starting point?', confirmLabel: 'Change starting point', cancelLabel: 'Keep current' });
+    expect(c).toMatchObject({
+      needed: true,
+      count: 3,
+      title: 'Change the starting point?',
+      confirmLabel: 'Change starting point',
+      cancelLabel: 'Keep current',
+    });
     expect(c.description[0]).toBe('You have 3 changes on top of Default preset v3.');
   });
 
@@ -284,22 +363,55 @@ describe('changing the starting point replays the edits that still fit', () => {
 describe('bases from server responses', () => {
   it('a preset version re-mapped onto the current schema', () => {
     const res: PresetVersionResponse = {
-      version: { id: 'ver-1', version: 3, config: {}, notes: 'tuned', warnings: [{ rule: 'schema_hash', message: 'old' }, { rule: 'model', message: 'model gone' }] },
-      remap: { config: presetConfig, dropped: [{ pointer: '/X', message: 'removed' }], errors: ['bad'], summary: '1 dropped' },
+      version: {
+        id: 'ver-1',
+        version: 3,
+        config: {},
+        notes: 'tuned',
+        warnings: [
+          { rule: 'schema_hash', message: 'old' },
+          { rule: 'model', message: 'model gone' },
+        ],
+      },
+      remap: {
+        config: presetConfig,
+        dropped: [{ pointer: '/X', message: 'removed' }],
+        errors: ['bad'],
+        summary: '1 dropped',
+      },
     };
     const loaded = loadedBaseFromPreset('saved', PRODUCTION, { id: 'p1', name: 'Tuned' }, res, ctx);
     expect(loaded.info).toMatchObject({
-      kind: 'saved', loaded: true, versionId: 'ver-1', version: 3, presetId: 'p1', presetName: 'Tuned', releaseNotes: 'tuned',
-      summary: '1 dropped', warnings: ['model gone'], errors: ['bad'], envId: PRODUCTION,
+      kind: 'saved',
+      loaded: true,
+      versionId: 'ver-1',
+      version: 3,
+      presetId: 'p1',
+      presetName: 'Tuned',
+      releaseNotes: 'tuned',
+      summary: '1 dropped',
+      warnings: ['model gone'],
+      errors: ['bad'],
+      envId: PRODUCTION,
     });
     expect(loaded.info.dropped).toHaveLength(1);
     expect(loaded.base.values['/SQL_RESULT_LIMIT']).toBe(50);
-    expect(baseLabel({ base: loaded.info, clone: null, environmentIds: [PRODUCTION] })).toBe('Saved preset “Tuned” v3');
-    expect(loadedBaseFromPreset('default', PRODUCTION, { id: 'p', name: 'x' }, res, ctx).info.presetName).toBeNull();
+    expect(baseLabel({ base: loaded.info, clone: null, environmentIds: [PRODUCTION] })).toBe(
+      'Saved preset “Tuned” v3',
+    );
+    expect(
+      loadedBaseFromPreset('default', PRODUCTION, { id: 'p', name: 'x' }, res, ctx).info.presetName,
+    ).toBeNull();
   });
 
   it('a preset response without a remap is a failed base', () => {
-    const loaded = loadedBaseFromPreset('default', PRODUCTION, { id: 'p', name: 'x' }, { version: { id: 'v', version: 1, config: {} } }, ctx);
+    const loaded = loadedBaseFromPreset(
+      'default',
+      PRODUCTION,
+      { id: 'p', name: 'x' },
+      { version: { id: 'v', version: 1, config: {} } },
+      ctx,
+    );
     expect(loaded.info.loaded).toBe(false);
     expect(loaded.info.error).toBe('Failed to load the preset');
   });
@@ -317,19 +429,41 @@ describe('bases from server responses', () => {
       warnings: [{ message: 'careful' }],
     };
     const loaded = loadedBaseFromBestRun(PRODUCTION, res, ctx);
-    expect(loaded.info).toMatchObject({ kind: 'best_run', runId: 'abcdef1234567890', metric: 'accuracy', warnings: ['careful'] });
+    expect(loaded.info).toMatchObject({
+      kind: 'best_run',
+      runId: 'abcdef1234567890',
+      metric: 'accuracy',
+      warnings: ['careful'],
+    });
     expect(loaded.info.label).toBe('run abcdef12 · accuracy 0.84 · agent v1.12 / kb 381');
-    expect(baseLabel({ base: loaded.info, clone: null, environmentIds: [PRODUCTION] })).toBe(loaded.info.label);
+    expect(baseLabel({ base: loaded.info, clone: null, environmentIds: [PRODUCTION] })).toBe(
+      loaded.info.label,
+    );
     expect(loaded.info.drift?.status).toBe('changed');
     expect(pendingBestRunBase(PRODUCTION, ctx).info).toMatchObject({ pending: true, loaded: false });
-    expect(failedBase('default', PRODUCTION, 'boom', ctx).info).toMatchObject({ loaded: false, error: 'boom' });
+    expect(failedBase('default', PRODUCTION, 'boom', ctx).info).toMatchObject({
+      loaded: false,
+      error: 'boom',
+    });
   });
 
   it('re-binds a temporary model the run used and asks for its key', () => {
     const { doc } = laid();
-    const r = reuseTemporaryPrompt(doc, ctx, { slot_key: 'endpoint:primary', model: 'gpt-x', label: 'X', base_url: 'https://x' });
-    expect(r.doc.bindings['endpoint:primary']).toMatchObject({ kind: 'temporary', model: 'gpt-x', needsKey: true, secretRef: null });
-    expect(reuseTemporaryPrompt(doc, ctx, { slot_key: 'nope', model: 'x' }).error).toContain('is not confirmed');
+    const r = reuseTemporaryPrompt(doc, ctx, {
+      slot_key: 'endpoint:primary',
+      model: 'gpt-x',
+      label: 'X',
+      base_url: 'https://x',
+    });
+    expect(r.doc.bindings['endpoint:primary']).toMatchObject({
+      kind: 'temporary',
+      model: 'gpt-x',
+      needsKey: true,
+      secretRef: null,
+    });
+    expect(reuseTemporaryPrompt(doc, ctx, { slot_key: 'nope', model: 'x' }).error).toContain(
+      'is not confirmed',
+    );
   });
 });
 
@@ -380,7 +514,11 @@ describe('clone prefill', () => {
     const c = makeCtx();
     expect(cloneExtraEndpoints(clone, c)).toEqual(['fast']);
     const loaded = loadedBaseFromClone(clone, c);
-    expect(loaded.base.bindings['endpoint:primary']).toMatchObject({ kind: 'temporary', secretRef: null, needsKey: true });
+    expect(loaded.base.bindings['endpoint:primary']).toMatchObject({
+      kind: 'temporary',
+      secretRef: null,
+      needsKey: true,
+    });
     expect(loaded.base.bindings['flat:VIZ_LLM']).toMatchObject({ kind: 'sweep' });
     expect(loaded.base.values['/MILVUS_SEARCH_THRESHOLD']).toEqual({ sweep: [0.1, 0.2] });
     const doc = applyBase(createDocument({ ...p.patch }), c, loaded).doc;
@@ -392,12 +530,26 @@ describe('clone prefill', () => {
   it('a one-job clone falls back to the job snapshot when the server ignored job_id', () => {
     const p = prefillFromClone(
       { ...res, base_source: { kind: 'clone', experiment_id: 'x1' } },
-      { experimentId: 'x1', jobId: 'j9', jobRow: { id: 'j9', environment_id: PRODUCTION, qym_config: { evaluator: { dataset: 'legal-set' }, slot_bindings: {}, env_overrides: { BRIEF_ENABLED: true } } } },
+      {
+        experimentId: 'x1',
+        jobId: 'j9',
+        jobRow: {
+          id: 'j9',
+          environment_id: PRODUCTION,
+          qym_config: {
+            evaluator: { dataset: 'legal-set' },
+            slot_bindings: {},
+            env_overrides: { BRIEF_ENABLED: true },
+          },
+        },
+      },
     );
     expect(p.patch.clone).toMatchObject({ jobId: 'j9', linkedGroups: undefined });
     expect(p.patch.clone?.spec.env_overrides).toEqual({ BRIEF_ENABLED: true });
     expect(p.patch.environmentIds).toEqual([PRODUCTION]);
-    expect(baseLabel({ base: p.patch.base, clone: p.patch.clone, environmentIds: [] })).toBe('Clone of Threshold sweep (one job)');
+    expect(baseLabel({ base: p.patch.base, clone: p.patch.clone, environmentIds: [] })).toBe(
+      'Clone of Threshold sweep (one job)',
+    );
   });
 
   it('says so when the asked-for job is nowhere', () => {
@@ -407,7 +559,10 @@ describe('clone prefill', () => {
   });
 
   it('accepts a job-scoped response', () => {
-    const p = prefillFromClone({ ...res, base_source: { kind: 'clone', experiment_id: 'x1', job_id: 'j1' } }, { experimentId: 'x1', jobId: 'j1' });
+    const p = prefillFromClone(
+      { ...res, base_source: { kind: 'clone', experiment_id: 'x1', job_id: 'j1' } },
+      { experimentId: 'x1', jobId: 'j1' },
+    );
     expect(p.patch.clone?.jobId).toBe('j1');
     expect(p.patch.clone?.linkedGroups).toBeUndefined();
   });
@@ -425,9 +580,13 @@ describe('pruning after the environments change', () => {
     const doc = createDocument({ values: { '/BRIEF_ENABLED': true, '/GHOST': 1 } });
     expect(pruneOrphanValues(doc, ctx).values).toEqual({ '/BRIEF_ENABLED': true });
     const two = twoEnvCtx();
-    expect(pruneOrphanValues(createDocument({ values: { '/VIZ_MAX_GROUPS': 3 } }), two).values).toEqual({ '/VIZ_MAX_GROUPS': 3 });
+    expect(pruneOrphanValues(createDocument({ values: { '/VIZ_MAX_GROUPS': 3 } }), two).values).toEqual({
+      '/VIZ_MAX_GROUPS': 3,
+    });
     const loading = makeCtx({ envs: [makeEnv(PRODUCTION, 'p', { formError: 'x' })] });
-    expect(pruneOrphanValues(createDocument({ values: { '/GHOST': 1 } }), loading).values).toEqual({ '/GHOST': 1 });
+    expect(pruneOrphanValues(createDocument({ values: { '/GHOST': 1 } }), loading).values).toEqual({
+      '/GHOST': 1,
+    });
   });
 });
 
@@ -443,9 +602,18 @@ describe('base choice', () => {
 
   it('says why a base is not available', () => {
     expect(baseAvailability('default', withPreset)).toEqual({ ok: true });
-    expect(baseAvailability('default', without)).toEqual({ ok: false, reason: 'No default preset is published for B' });
-    expect(baseAvailability('saved', without, { savedPresets: 0 })).toEqual({ ok: false, reason: 'No saved presets for B yet' });
-    expect(baseAvailability('saved', without, { savedPresets: null })).toEqual({ ok: false, reason: 'Loading saved presets…' });
+    expect(baseAvailability('default', without)).toEqual({
+      ok: false,
+      reason: 'No default preset is published for B',
+    });
+    expect(baseAvailability('saved', without, { savedPresets: 0 })).toEqual({
+      ok: false,
+      reason: 'No saved presets for B yet',
+    });
+    expect(baseAvailability('saved', without, { savedPresets: null })).toEqual({
+      ok: false,
+      reason: 'Loading saved presets…',
+    });
     expect(baseAvailability('saved', without, { savedPresets: 2 })).toEqual({ ok: true });
     expect(baseAvailability('scratch', null)).toEqual({ ok: true });
     expect(baseAvailability('best_run', null)).toEqual({ ok: false, reason: 'Pick an environment first' });
@@ -455,7 +623,9 @@ describe('base choice', () => {
   it('labels the default preset with its environment when several are selected', () => {
     const { loaded } = laid();
     const info = { ...loaded.info, envId: PRODUCTION };
-    expect(baseLabel({ base: info, clone: null, environmentIds: [PRODUCTION, 'x'] }, () => 'production')).toBe('Default preset v3 · production');
+    expect(
+      baseLabel({ base: info, clone: null, environmentIds: [PRODUCTION, 'x'] }, () => 'production'),
+    ).toBe('Default preset v3 · production');
     expect(baseLabel({ base: info, clone: null, environmentIds: [PRODUCTION] })).toBe('Default preset v3');
   });
 });
@@ -463,7 +633,13 @@ describe('base choice', () => {
 describe('binding changed selector', () => {
   it('ignores a re-entered key', () => {
     const { doc } = laid();
-    const withKey = { ...doc, bindings: { ...doc.bindings, 'flat:VIZ_LLM': { ...(doc.bindings['flat:VIZ_LLM'] as object), secretRef: 'r' } } } as unknown as LaunchDocument;
+    const withKey = {
+      ...doc,
+      bindings: {
+        ...doc.bindings,
+        'flat:VIZ_LLM': { ...(doc.bindings['flat:VIZ_LLM'] as object), secretRef: 'r' },
+      },
+    } as unknown as LaunchDocument;
     expect(bindingChanged(withKey, 'flat:VIZ_LLM')).toBe(false);
   });
 });

@@ -17,7 +17,16 @@ import {
   reservedPrefix,
   syncMetaSeed,
 } from './evaluator';
-import { deepCopy, escapeSegment, has, isPlainObject, isSweepValue, matchTemplate, sameValue, splitPointer } from './pointers';
+import {
+  deepCopy,
+  escapeSegment,
+  has,
+  isPlainObject,
+  isSweepValue,
+  matchTemplate,
+  sameValue,
+  splitPointer,
+} from './pointers';
 import type { SecretStore } from './secrets';
 import { buildSpec } from './spec';
 import { checkLinks, checkValues, sweepItemKey } from './sweeps';
@@ -81,9 +90,16 @@ function placeholderPointers(value: unknown, pointer: string, out: string[] = []
   return out;
 }
 
-function sweepErrors(entry: DescriptorEntry, value: unknown, pointer: string, errors: RawJsonError[]): boolean {
+function sweepErrors(
+  entry: DescriptorEntry,
+  value: unknown,
+  pointer: string,
+  errors: RawJsonError[],
+): boolean {
   const problems = checkValues(entry, value);
-  problems.forEach((p) => errors.push({ pointer: p.index == null ? pointer : pointer + '/sweep/' + p.index, message: p.message }));
+  problems.forEach((p) =>
+    errors.push({ pointer: p.index == null ? pointer : pointer + '/sweep/' + p.index, message: p.message }),
+  );
   return !problems.length;
 }
 
@@ -93,12 +109,19 @@ function roleRowProblem(ctx: Pick<FormContext, 'union'>, template: string, point
     if (table.kind !== 'role_table' || !template.startsWith(table.pointer + '/')) continue;
     const depth = splitPointer(table.pointer).length;
     const key = splitPointer(pointer)[depth - 1];
-    if (!(table.rows ?? []).some((r) => r.key === key)) problem = 'Unknown role for the selected environments';
+    if (!(table.rows ?? []).some((r) => r.key === key))
+      problem = 'Unknown role for the selected environments';
   }
   return problem;
 }
 
-function flattenDoc(value: unknown, pointer: string, ctx: Pick<FormContext, 'union'>, out: Values, errors: RawJsonError[]): void {
+function flattenDoc(
+  value: unknown,
+  pointer: string,
+  ctx: Pick<FormContext, 'union'>,
+  out: Values,
+  errors: RawJsonError[],
+): void {
   const docPointer = '/env_overrides' + pointer;
   if (value === null) return; // unset: inherit
   const template = pointer ? matchTemplate(ctx.union.fields, pointer) : null;
@@ -118,14 +141,18 @@ function flattenDoc(value: unknown, pointer: string, ctx: Pick<FormContext, 'uni
       return;
     }
     if (entry.secret || entry.widget === 'secret') {
-      errors.push({ pointer: docPointer, message: 'Keys are never entered here: bind a model slot (project or temporary model) instead' });
+      errors.push({
+        pointer: docPointer,
+        message: 'Keys are never entered here: bind a model slot (project or temporary model) instead',
+      });
       return;
     }
     if (sweepErrors(entry, value, docPointer, errors)) out[pointer] = deepCopy(value as unknown as JsonValue);
     return;
   }
   if (isPlainObject(value) && (!entry || entry.kind !== 'field')) {
-    for (const key of Object.keys(value)) flattenDoc(value[key], pointer + '/' + escapeSegment(key), ctx, out, errors);
+    for (const key of Object.keys(value))
+      flattenDoc(value[key], pointer + '/' + escapeSegment(key), ctx, out, errors);
     return;
   }
   if (!entry || entry.kind !== 'field') {
@@ -138,7 +165,10 @@ function flattenDoc(value: unknown, pointer: string, ctx: Pick<FormContext, 'uni
     return;
   }
   if (entry.secret || entry.widget === 'secret') {
-    errors.push({ pointer: docPointer, message: 'Keys are never entered here: bind a model slot (project or temporary model) instead' });
+    errors.push({
+      pointer: docPointer,
+      message: 'Keys are never entered here: bind a model slot (project or temporary model) instead',
+    });
     return;
   }
   const result = leafSchema(entry).safeParse(value);
@@ -179,14 +209,20 @@ function readBinding(
   if (has(b, 'temporary') && Object.keys(b).length === 1 && isPlainObject(t)) {
     const extra = Object.keys(t).filter((k) => !TEMPORARY_KEYS.includes(k));
     if (extra.length) {
-      errors.push({ pointer: pointer + '/temporary', message: 'Unknown temporary model keys: ' + extra.join(', ') });
+      errors.push({
+        pointer: pointer + '/temporary',
+        message: 'Unknown temporary model keys: ' + extra.join(', '),
+      });
       return null;
     }
     if (typeof t['model'] !== 'string' || !t['model']) {
       errors.push({ pointer: pointer + '/temporary/model', message: 'A temporary model needs a model name' });
       return null;
     }
-    if ((t['label'] != null && typeof t['label'] !== 'string') || (t['base_url'] != null && typeof t['base_url'] !== 'string')) {
+    if (
+      (t['label'] != null && typeof t['label'] !== 'string') ||
+      (t['base_url'] != null && typeof t['base_url'] !== 'string')
+    ) {
       errors.push({ pointer: pointer + '/temporary', message: 'label and base_url must be strings' });
       return null;
     }
@@ -195,12 +231,18 @@ function readBinding(
     if (key != null) {
       const valid = isPlainObject(key) && Object.keys(key).length === 1 && typeof key['$secret'] === 'string';
       if (!valid) {
-        errors.push({ pointer: pointer + '/temporary/api_key', message: 'Keys are never typed into JSON: use "+ Temporary model" on the model card' });
+        errors.push({
+          pointer: pointer + '/temporary/api_key',
+          message: 'Keys are never typed into JSON: use "+ Temporary model" on the model card',
+        });
         return null;
       }
       ref = (key as { $secret: string })['$secret'];
       if (!secrets.has(ref)) {
-        errors.push({ pointer: pointer + '/temporary/api_key', message: 'Unknown key reference: add the temporary model again to enter its key' });
+        errors.push({
+          pointer: pointer + '/temporary/api_key',
+          message: 'Unknown key reference: add the temporary model again to enter its key',
+        });
         return null;
       }
     }
@@ -259,7 +301,12 @@ function readBindings(
         } else {
           const read = readBinding(item, at, slotKey, doc, secrets, errors);
           if (read) {
-            value = read.kind === 'connection' ? { connection_id: read.id } : read.kind === 'temporary' ? { temporary: temporaryItem(read) } : null;
+            value =
+              read.kind === 'connection'
+                ? { connection_id: read.id }
+                : read.kind === 'temporary'
+                  ? { temporary: temporaryItem(read) }
+                  : null;
           }
         }
         if (!value) {
@@ -285,7 +332,9 @@ function readBindings(
 }
 
 function temporaryItem(b: Extract<SlotBinding, { kind: 'temporary' }>) {
-  const t: { label?: string; model: string; base_url?: string; api_key?: { $secret: string } } = { model: b.model };
+  const t: { label?: string; model: string; base_url?: string; api_key?: { $secret: string } } = {
+    model: b.model,
+  };
   if (b.label) t.label = b.label;
   if (b.baseUrl) t.base_url = b.baseUrl;
   if (b.secretRef) t.api_key = { $secret: b.secretRef };
@@ -300,21 +349,28 @@ function readEvaluator(raw: unknown, panel: EvaluatorPanel | null, errors: RawJs
   }
   const ev = raw;
   for (const key of Object.keys(ev)) {
-    if (!EVALUATOR_KEYS.includes(key)) errors.push({ pointer: '/evaluator/' + escapeSegment(key), message: 'Unknown key' });
+    if (!EVALUATOR_KEYS.includes(key))
+      errors.push({ pointer: '/evaluator/' + escapeSegment(key), message: 'Unknown key' });
   }
   for (const key of platformOwnedEvaluator(panel)) {
-    if (ev[key] != null) errors.push({ pointer: '/evaluator/' + key, message: `${key} is set by the platform (from the primary model slot); remove it` });
+    if (ev[key] != null)
+      errors.push({
+        pointer: '/evaluator/' + key,
+        message: `${key} is set by the platform (from the primary model slot); remove it`,
+      });
   }
   for (const key of ['dataset', 'dataset_version'] as const) {
     const v = ev[key];
     if (v == null) continue;
     if (isSweepValue(v)) errors.push({ pointer: '/evaluator/' + key, message: DATASET_SWEEP_MESSAGE });
-    else if (typeof v !== 'string') errors.push({ pointer: '/evaluator/' + key, message: 'Must be a string' });
+    else if (typeof v !== 'string')
+      errors.push({ pointer: '/evaluator/' + key, message: 'Must be a string' });
     else out[key] = v;
   }
   if (ev['report_k'] != null) {
     const k = ev['report_k'];
-    if (typeof k !== 'number' || !Number.isInteger(k) || k < 1) errors.push({ pointer: '/evaluator/report_k', message: 'Must be a whole number ≥ 1' });
+    if (typeof k !== 'number' || !Number.isInteger(k) || k < 1)
+      errors.push({ pointer: '/evaluator/report_k', message: 'Must be a whole number ≥ 1' });
     else out.report_k = k;
   }
   const config = ev['config'] == null ? {} : ev['config'];
@@ -323,7 +379,10 @@ function readEvaluator(raw: unknown, panel: EvaluatorPanel | null, errors: RawJs
     return out;
   }
   if (!panel && Object.keys(config).length) {
-    errors.push({ pointer: '/evaluator/config', message: 'The evaluation inputs are still loading; try again' });
+    errors.push({
+      pointer: '/evaluator/config',
+      message: 'The evaluation inputs are still loading; try again',
+    });
     return out;
   }
   const owned = platformOwnedConfig(panel);
@@ -338,7 +397,11 @@ function readEvaluator(raw: unknown, panel: EvaluatorPanel | null, errors: RawJs
         continue;
       }
       for (const key of Object.keys(value)) {
-        if (isReservedKey(key, prefix)) errors.push({ pointer: pointer + '/' + escapeSegment(key), message: `Keys starting with ${prefix} are reserved for the platform` });
+        if (isReservedKey(key, prefix))
+          errors.push({
+            pointer: pointer + '/' + escapeSegment(key),
+            message: `Keys starting with ${prefix} are reserved for the platform`,
+          });
         else out.meta.push({ key, raw: metadataText(value[key]) });
       }
       continue;
@@ -350,7 +413,12 @@ function readEvaluator(raw: unknown, panel: EvaluatorPanel | null, errors: RawJs
     const entry = configEntry(panel, name);
     if (!entry) {
       const fromEnv = panel?.source && panel.source !== 'static';
-      errors.push({ pointer, message: fromEnv ? "Not in the selected environments' evaluator schema" : 'Unknown key (EvaluatorRequestConfig rejects extra keys)' });
+      errors.push({
+        pointer,
+        message: fromEnv
+          ? "Not in the selected environments' evaluator schema"
+          : 'Unknown key (EvaluatorRequestConfig rejects extra keys)',
+      });
       continue;
     }
     if (value == null) continue;
@@ -359,7 +427,8 @@ function readEvaluator(raw: unknown, panel: EvaluatorPanel | null, errors: RawJs
         errors.push({ pointer, message: DATASET_SWEEP_MESSAGE });
         continue;
       }
-      if (sweepErrors(entry, value, pointer, errors)) out.config[name] = deepCopy(value as unknown as JsonValue);
+      if (sweepErrors(entry, value, pointer, errors))
+        out.config[name] = deepCopy(value as unknown as JsonValue);
       continue;
     }
     const result = leafSchema(entry).safeParse(value);
@@ -373,18 +442,25 @@ function readEvaluator(raw: unknown, panel: EvaluatorPanel | null, errors: RawJs
 }
 
 /** Parse and validate the editor text. On success `errors` is empty and the parts to apply are set. */
-export function readRawDocument(text: string, doc: LaunchDocument, ctx: FormContext, secrets: SecretStore): RawJsonRead {
+export function readRawDocument(
+  text: string,
+  doc: LaunchDocument,
+  ctx: FormContext,
+  secrets: SecretStore,
+): RawJsonRead {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (err) {
     return { errors: [{ pointer: '', message: 'Invalid JSON: ' + jsonErr(err) }] };
   }
-  if (!isPlainObject(parsed)) return { errors: [{ pointer: '', message: 'The document must be a JSON object' }] };
+  if (!isPlainObject(parsed))
+    return { errors: [{ pointer: '', message: 'The document must be a JSON object' }] };
   const body = parsed;
   const errors: RawJsonError[] = [];
   for (const key of Object.keys(body)) {
-    if (!DOCUMENT_KEYS.includes(key)) errors.push({ pointer: '/' + escapeSegment(key), message: 'Unknown key' });
+    if (!DOCUMENT_KEYS.includes(key))
+      errors.push({ pointer: '/' + escapeSegment(key), message: 'Unknown key' });
   }
   for (const pointer of placeholderPointers(body, '')) {
     errors.push({ pointer, message: PLACEHOLDER_PREFIX + ' is reserved for platform slot placeholders' });
@@ -396,7 +472,10 @@ export function readRawDocument(text: string, doc: LaunchDocument, ctx: FormCont
   const env = body['env_overrides'] == null ? {} : body['env_overrides'];
   if (!isPlainObject(env)) errors.push({ pointer: '/env_overrides', message: 'Must be an object' });
   else if (Object.keys(env).length && !ctx.union.envs.length) {
-    errors.push({ pointer: '/env_overrides', message: 'Pick an environment (and wait for its settings) first' });
+    errors.push({
+      pointer: '/env_overrides',
+      message: 'Pick an environment (and wait for its settings) first',
+    });
   } else {
     for (const key of Object.keys(env)) flattenDoc(env[key], '/' + escapeSegment(key), ctx, values, errors);
   }
@@ -404,14 +483,19 @@ export function readRawDocument(text: string, doc: LaunchDocument, ctx: FormCont
   for (const slot of ctx.slots) {
     if (!bindings[slot.slot_key]) continue;
     for (const p of slot.pointers) {
-      if (has(values, p)) errors.push({ pointer: '/env_overrides' + p, message: `Filled by the ${slot.label} binding; remove this value or unbind the slot` });
+      if (has(values, p))
+        errors.push({
+          pointer: '/env_overrides' + p,
+          message: `Filled by the ${slot.label} binding; remove this value or unbind the slot`,
+        });
     }
   }
   let links: string[][] | null = null;
   if (body['links'] != null) {
     const problems = checkLinks({ ...(body as object), links: body['links'] } as never);
     problems.forEach((e) => errors.push(e));
-    if (!problems.length && Array.isArray(body['links']) && body['links'].length) links = deepCopy(body['links']) as string[][];
+    if (!problems.length && Array.isArray(body['links']) && body['links'].length)
+      links = deepCopy(body['links']) as string[][];
   }
   return { errors, evaluator, bindings, values, links };
 }
@@ -436,7 +520,8 @@ function datasetFrom(
     return { dataset: { mode: 'project', name, ref, custom: '' }, leftoverVersion: version };
   }
   if (name) return { dataset: { mode: 'custom', name: '', ref: '', custom: name }, leftoverVersion: version };
-  if (doc.dataset.mode === 'custom') return { dataset: { ...doc.dataset, custom: '' }, leftoverVersion: version };
+  if (doc.dataset.mode === 'custom')
+    return { dataset: { ...doc.dataset, custom: '' }, leftoverVersion: version };
   return { dataset: { ...doc.dataset, name: '', ref: '' }, leftoverVersion: version };
 }
 
@@ -445,7 +530,12 @@ function datasetFrom(
  * an edit; a base input the document leaves out is cleared (null), so Raw JSON can
  * remove it too. The document is the whole truth: base extras it leaves out are dropped.
  */
-export function applyRawDocument(doc: LaunchDocument, ctx: FormContext, read: RawJsonRead, secrets?: SecretStore): LaunchDocument {
+export function applyRawDocument(
+  doc: LaunchDocument,
+  ctx: FormContext,
+  read: RawJsonRead,
+  secrets?: SecretStore,
+): LaunchDocument {
   const ev = read.evaluator as ReadEvaluator;
   const config = deepCopy(ev.config);
   const { dataset, leftoverVersion } = datasetFrom(ev, config, doc, ctx);
@@ -454,7 +544,8 @@ export function applyRawDocument(doc: LaunchDocument, ctx: FormContext, read: Ra
     if (!sameValue(config[name], baseValue(doc, name))) edits[name] = config[name] as JsonValue;
   }
   for (const name of Object.keys(baseConfig(doc))) {
-    if (name !== 'run_metadata' && !has(config, name) && baseValue(doc, name) !== undefined) edits[name] = null;
+    if (name !== 'run_metadata' && !has(config, name) && baseValue(doc, name) !== undefined)
+      edits[name] = null;
   }
   let nextId = doc.evaluator.nextMetaId;
   const meta = ev.meta.map((row) => ({ id: nextId++, key: row.key, raw: row.raw }));
@@ -477,7 +568,11 @@ export function applyRawDocument(doc: LaunchDocument, ctx: FormContext, read: Ra
       invalid: {},
       meta,
       metaTouched: true,
-      metaSeed: JSON.stringify(baseConfig(doc)['run_metadata'] && isPlainObject(baseConfig(doc)['run_metadata']) ? baseConfig(doc)['run_metadata'] : {}),
+      metaSeed: JSON.stringify(
+        baseConfig(doc)['run_metadata'] && isPlainObject(baseConfig(doc)['run_metadata'])
+          ? baseConfig(doc)['run_metadata']
+          : {},
+      ),
       nextMetaId: nextId,
       extra,
     },
@@ -517,7 +612,12 @@ export function rawJsonStatus(state: RawJsonState): RawJsonStatus {
 }
 
 /** Form edits flow into the editor while it has no unapplied text (or when forced). */
-export function syncRawFromForm(state: RawJsonState, doc: LaunchDocument, panel?: EvaluatorPanel | null, force = false): RawJsonState {
+export function syncRawFromForm(
+  state: RawJsonState,
+  doc: LaunchDocument,
+  panel?: EvaluatorPanel | null,
+  force = false,
+): RawJsonState {
   if (!force && (state.dirty || state.errors.length)) return state;
   const text = documentText(doc, panel);
   if (!force && text === state.text && text === state.synced) return state;

@@ -49,13 +49,19 @@ describe('sweepable fields and value checks', () => {
 
   it('reports empty lists, bad values and duplicates by index', () => {
     expect(checkValues(threshold, { sweep: [0.1, 0.2] })).toEqual([]);
-    expect(checkValues(threshold, { sweep: [] })).toEqual([{ index: null, message: 'A sweep needs a non-empty list of values' }]);
+    expect(checkValues(threshold, { sweep: [] })).toEqual([
+      { index: null, message: 'A sweep needs a non-empty list of values' },
+    ]);
     expect(checkValues(threshold, { sweep: [0.1, 'x', 0.1] })).toEqual([
       { index: 1, message: 'Must be a number' },
       { index: 2, message: 'Duplicate value' },
     ]);
-    expect(checkValues(limit, { sweep: [1, 1.5] })).toEqual([{ index: 1, message: 'Must be a whole number' }]);
-    expect(checkValues(mode, { sweep: ['rag', 'zzz'] })).toEqual([{ index: 1, message: 'Must be one of the listed values' }]);
+    expect(checkValues(limit, { sweep: [1, 1.5] })).toEqual([
+      { index: 1, message: 'Must be a whole number' },
+    ]);
+    expect(checkValues(mode, { sweep: ['rag', 'zzz'] })).toEqual([
+      { index: 1, message: 'Must be one of the listed values' },
+    ]);
     expect(checkValues(f['/LLM_OVERRIDES/endpoints/{endpoint}/api_key']!, { sweep: ['k'] })).toEqual([
       { index: null, message: 'This setting cannot be swept' },
     ]);
@@ -75,7 +81,9 @@ describe('numeric ranges (at most 100 values)', () => {
     expect(expandRange(threshold, '0', '1', '0')).toEqual({ error: 'The step must be above 0' });
     expect(expandRange(limit, '1', '5', '0.5')).toEqual({ error: 'Use whole numbers' });
     expect(expandRange(limit, '1', '100', '1')).toMatchObject({ values: expect.any(Array) });
-    expect(expandRange(limit, '1', '101', '1')).toEqual({ error: 'That range has 101 values; the most is 100' });
+    expect(expandRange(limit, '1', '101', '1')).toEqual({
+      error: 'That range has 101 values; the most is 100',
+    });
   });
 });
 
@@ -111,14 +119,19 @@ describe('chip editing', () => {
     expect(modes.map((o) => o.value)).toEqual(['rag', 'llm_direct', 'pure_llm']);
     expect(toggleChoice(modes, ['pure_llm'], 'rag')).toEqual(['rag', 'pure_llm']);
     expect(toggleChoice(modes, ['rag', 'pure_llm'], 'rag')).toEqual(['pure_llm']);
-    expect(choiceOptions(f['/LLM_OVERRIDES/{role}/endpoint']!, ['primary', 'fast'])?.map((o) => o.value)).toEqual(['primary', 'fast']);
+    expect(
+      choiceOptions(f['/LLM_OVERRIDES/{role}/endpoint']!, ['primary', 'fast'])?.map((o) => o.value),
+    ).toEqual(['primary', 'fast']);
     expect(choiceOptions(threshold)).toBeNull();
   });
 });
 
 describe('axes, links and the run estimate', () => {
   const spec = {
-    env_overrides: { MILVUS_SEARCH_THRESHOLD: { sweep: [0.1, 0.2, 0.3] }, SQL_RESULT_LIMIT: { sweep: [10, 20] } },
+    env_overrides: {
+      MILVUS_SEARCH_THRESHOLD: { sweep: [0.1, 0.2, 0.3] },
+      SQL_RESULT_LIMIT: { sweep: [10, 20] },
+    },
     evaluator: { config: { samples: { sweep: [1, 2, 3] } } },
     slot_bindings: { 'endpoint:primary': { sweep: [{ connection_id: 'a' }, { connection_id: 'b' }] } },
   };
@@ -136,7 +149,10 @@ describe('axes, links and the run estimate', () => {
     const grid = axesOf(spec);
     expect(grid.axes.map((a) => a.length)).toEqual([2, 3, 3, 2]);
     expect(comboCount(grid.axes)).toBe(36);
-    const linkedSpec = { ...spec, links: [['/evaluator/config/samples', '/env_overrides/MILVUS_SEARCH_THRESHOLD']] };
+    const linkedSpec = {
+      ...spec,
+      links: [['/evaluator/config/samples', '/env_overrides/MILVUS_SEARCH_THRESHOLD']],
+    };
     const linked = axesOf(linkedSpec);
     expect(linked.axes.map((a) => a.length)).toEqual([2, 3, 2]);
     expect(linked.axes[1]).toMatchObject({ linked: true, group: 0 });
@@ -155,35 +171,71 @@ describe('axes, links and the run estimate', () => {
 
   it('links axes of equal length and refuses unequal ones', () => {
     const found = findSweeps(spec);
-    const ok = linkAxes(undefined, ['/evaluator/config/samples', '/env_overrides/MILVUS_SEARCH_THRESHOLD'], found);
+    const ok = linkAxes(
+      undefined,
+      ['/evaluator/config/samples', '/env_overrides/MILVUS_SEARCH_THRESHOLD'],
+      found,
+    );
     expect(ok).toEqual({ links: [['/evaluator/config/samples', '/env_overrides/MILVUS_SEARCH_THRESHOLD']] });
-    const bad = linkAxes(undefined, ['/evaluator/config/samples', '/env_overrides/SQL_RESULT_LIMIT'], found, (p) => p.split('/').pop()!);
-    expect(bad).toEqual({ error: 'Linked values need the same number of values (samples has 3, SQL_RESULT_LIMIT has 2).' });
+    const bad = linkAxes(
+      undefined,
+      ['/evaluator/config/samples', '/env_overrides/SQL_RESULT_LIMIT'],
+      found,
+      (p) => p.split('/').pop()!,
+    );
+    expect(bad).toEqual({
+      error: 'Linked values need the same number of values (samples has 3, SQL_RESULT_LIMIT has 2).',
+    });
     expect('error' in linkAxes(undefined, ['/evaluator/config/samples'], found)).toBe(true);
   });
 
   it('unlinks a group and drops links to values no longer swept', () => {
-    const links = [['/a', '/b'], ['/c', '/d']];
+    const links = [
+      ['/a', '/b'],
+      ['/c', '/d'],
+    ];
     const swept = new Set(['/a', '/b', '/c', '/d']);
     expect(unlinkGroup(links, swept, 0)).toEqual([['/c', '/d']]);
     expect(unlinkGroup([['/a', '/b']], swept, 0)).toBeUndefined();
-    expect(cleanLinks([['/a', '/b', '/gone'], ['/a', '/c']], new Set(['/a', '/b', '/c']))).toEqual([['/a', '/b']]);
-    expect(pruneLinks([['/env_overrides/X', '/env_overrides/Y']], { env_overrides: { X: { sweep: [1] }, Y: 3 } })).toBeUndefined();
+    expect(
+      cleanLinks(
+        [
+          ['/a', '/b', '/gone'],
+          ['/a', '/c'],
+        ],
+        new Set(['/a', '/b', '/c']),
+      ),
+    ).toEqual([['/a', '/b']]);
+    expect(
+      pruneLinks([['/env_overrides/X', '/env_overrides/Y']], { env_overrides: { X: { sweep: [1] }, Y: 3 } }),
+    ).toBeUndefined();
   });
 
   it('checks links written in a document like the service', () => {
-    const doc = { ...spec, links: [['/evaluator/config/samples', '/env_overrides/SQL_RESULT_LIMIT'], ['/nope', '/env_overrides/MILVUS_SEARCH_THRESHOLD'], ['/env_overrides/MILVUS_SEARCH_THRESHOLD']] };
+    const doc = {
+      ...spec,
+      links: [
+        ['/evaluator/config/samples', '/env_overrides/SQL_RESULT_LIMIT'],
+        ['/nope', '/env_overrides/MILVUS_SEARCH_THRESHOLD'],
+        ['/env_overrides/MILVUS_SEARCH_THRESHOLD'],
+      ],
+    };
     const messages = checkLinks(doc).map((e) => e.message);
     expect(messages).toContain('Linked values need the same number of values (got 3, 2)');
     expect(messages).toContain('/nope is not a swept value');
     expect(messages).toContain('A linked group needs two or more values');
-    expect(checkLinks({ links: 'x' as never })).toEqual([{ pointer: '/links', message: 'links must be a list of lists of pointers' }]);
+    expect(checkLinks({ links: 'x' as never })).toEqual([
+      { pointer: '/links', message: 'links must be a list of lists of pointers' },
+    ]);
     expect(checkLinks({})).toEqual([]);
   });
 
   it('reports empty sweeps and uneven linked groups as local errors', () => {
     const errs = sweepLocalErrors(
-      { env_overrides: { A: { sweep: [] }, B: { sweep: [1, 2] }, C: { sweep: [1] } }, links: [['/env_overrides/B', '/env_overrides/C']] },
+      {
+        env_overrides: { A: { sweep: [] }, B: { sweep: [1, 2] }, C: { sweep: [1] } },
+        links: [['/env_overrides/B', '/env_overrides/C']],
+      },
       (p) => p.split('/').pop()!,
     );
     expect(errs).toEqual([
@@ -196,11 +248,23 @@ describe('axes, links and the run estimate', () => {
 describe('model sweeps', () => {
   it('starts from the slot binding and keys temporary models without their key', () => {
     expect(startModelSweep(null)).toEqual({ kind: 'sweep', items: [] });
-    expect(startModelSweep({ kind: 'connection', id: 'c1' })).toEqual({ kind: 'sweep', items: [{ connection_id: 'c1' }] });
-    const temp = { kind: 'temporary' as const, model: 'm', label: 'L', secretRef: 'tmp-1', save: false, needsKey: false };
+    expect(startModelSweep({ kind: 'connection', id: 'c1' })).toEqual({
+      kind: 'sweep',
+      items: [{ connection_id: 'c1' }],
+    });
+    const temp = {
+      kind: 'temporary' as const,
+      model: 'm',
+      label: 'L',
+      secretRef: 'tmp-1',
+      save: false,
+      needsKey: false,
+    };
     const item = modelItemFromBinding(temp)!;
     expect(item).toEqual({ temporary: { model: 'm', label: 'L', api_key: { $secret: 'tmp-1' } } });
-    expect(sweepItemKey(item)).toBe(sweepItemKey({ temporary: { model: 'm', label: 'L', api_key: { $secret: 'other' } } }));
+    expect(sweepItemKey(item)).toBe(
+      sweepItemKey({ temporary: { model: 'm', label: 'L', api_key: { $secret: 'other' } } }),
+    );
     expect(sweepItemKey({ inherit: true })).toBe('inherit');
   });
 
@@ -218,8 +282,16 @@ describe('model sweeps', () => {
     expect(bindingFromSweepItem({ connection_id: 'a' })).toEqual({ kind: 'connection', id: 'a' });
     expect(bindingFromSweepItem({ inherit: true })).toBeNull();
     expect(bindingFromSweepItem(undefined)).toBeNull();
-    expect(bindingFromSweepItem({ temporary: { model: 'm' } })).toMatchObject({ kind: 'temporary', model: 'm', secretRef: null, needsKey: true });
-    expect(bindingFromSweepItem({ temporary: { model: 'm', api_key: { $secret: 'r' } } })).toMatchObject({ secretRef: 'r', needsKey: false });
+    expect(bindingFromSweepItem({ temporary: { model: 'm' } })).toMatchObject({
+      kind: 'temporary',
+      model: 'm',
+      secretRef: null,
+      needsKey: true,
+    });
+    expect(bindingFromSweepItem({ temporary: { model: 'm', api_key: { $secret: 'r' } } })).toMatchObject({
+      secretRef: 'r',
+      needsKey: false,
+    });
   });
 });
 
