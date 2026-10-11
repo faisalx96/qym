@@ -1,0 +1,86 @@
+/* Raw JSON section and the editor shell (the CodeMirror theme itself lives in codemirrorTheme.ts). */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.editor {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.editor[data-invalid] {
+  border-color: var(--error);
+}
+
+.editor:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.fallback {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 20rem;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  line-height: 1.5;
+  resize: vertical;
+  unicode-bidi: plaintext;
+  outline: none;
+}
+
+.status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.errors {
+  margin: 0;
+  padding-inline-start: var(--space-lg);
+  color: var(--text-primary);
+  font-size: var(--font-base);
+}
+
+.errors li {
+  overflow-wrap: anywhere;
+}
+
+.pointer {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.readonly {
+  max-height: 24rem;
+  overflow: auto;
+}
