@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 
@@ -10,8 +10,26 @@ const PLATFORM_PORT = process.env.QYM_PLATFORM_PORT ?? '8800';
 const VITE_PORT = Number(process.env.QYM_VITE_PORT ?? '5800');
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 
+/**
+ * In production the platform serves `public/` files from /app/assets/*
+ * (vite copies public/assets → _static/app/assets). The dev server keeps
+ * `public/` at the root, so map /app/assets/<file> back to /assets/<file>
+ * when no built chunk matches.
+ */
+function devPublicUnderApp(): Plugin {
+  return {
+    name: 'qym-dev-public-under-app',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url?.startsWith('/app/assets/')) req.url = req.url.slice('/app'.length);
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), devPublicUnderApp()],
   base: './',
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   css: { modules: { localsConvention: 'camelCaseOnly' } },

@@ -1,0 +1,210 @@
+/* Project settings: cards, add bars, tables (project_settings.html recipes). */
+.card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.cardBody {
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg) var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.addBar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md);
+}
+
+.inlineActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.dangerCard {
+  border-color: color-mix(in srgb, var(--error) 40%, var(--border-subtle));
+}
+
+.dangerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding: var(--space-md) 0;
+}
+
+.dangerRow + .dangerRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.promptLayout {
+  display: grid;
+  grid-template-columns: var(--settings-prompt-rail-width) minmax(0, 1fr);
+  gap: var(--space-lg);
+}
+
+.promptRail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.promptTab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: var(--tab-height);
+  padding: 0 var(--space-md);
+  border: 0;
+  border-inline-start: 2px solid transparent;
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.promptTab[aria-selected='true'] {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  background: var(--bg-elevated);
+}
+
+.promptEditor {
+  min-height: var(--settings-prompt-editor-min-height);
+  font-family: var(--font-mono);
+}
+
+.promptMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.unsaved {
+  color: var(--warning);
+}
+
+.diff {
+  max-height: 360px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+}
+
+.diff ins {
+  text-decoration: none;
+  background: rgba(16, 185, 129, 0.18);
+  color: var(--success);
+}
+
+.diff del {
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--error);
+}
+
+.combo {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+}
+
+.comboInput {
+  width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  outline: none;
+}
+
+.comboInput:focus-visible {
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.comboList {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  width: 100%;
+  max-height: var(--dropdown-max-height);
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-xs);
+  list-style: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dropdown-radius);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-dropdown);
+}
+
+.comboOption {
+  display: flex;
+  flex-direction: column;
+  min-height: var(--dropdown-option-height);
+  justify-content: center;
+  padding: 0 var(--space-sm);
+  border-radius: var(--control-radius);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.comboOption[aria-selected='true'],
+.comboOption:hover {
+  background: var(--bg-hover);
+}
+
+.comboOption small {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-family: var(--font-mono);
+}
+
+@media (max-width: 800px) {
+  .promptLayout {
+    grid-template-columns: 1fr;
+  }
+}

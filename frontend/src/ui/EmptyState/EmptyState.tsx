@@ -23,7 +23,7 @@ export function EmptyState({ icon, title, body, action, compact }: EmptyStatePro
         {title}
       </Text>
       {body ? (
-        <Text variant="md" tone="muted" weight={400} as="p" className={styles.body}>
+        <Text variant="md" tone="muted" weight={400} as="div" className={styles.body}>
           {body}
         </Text>
       ) : null}

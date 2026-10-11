@@ -1,0 +1,26 @@
+/* Profile page: account card, projects table, bootstrap form. */
+.card {
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.projectCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.actions {
+  display: inline-flex;
+  gap: var(--space-md);
+}
+
+.bootstrapForm {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}

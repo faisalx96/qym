@@ -1,12 +1,12 @@
-import type { ElementType, HTMLAttributes, ReactNode } from 'react';
+import type { AllHTMLAttributes, ElementType, ReactNode } from 'react';
 import styles from './Text.module.css';
 
 /** Type-scale roles (DESIGN_LANGUAGE §1). `xs` is badge chrome only and not offered here. */
 export type TextRole = 'title' | 'stat' | 'xl' | 'lg' | 'md' | 'base' | 'sm';
 export type TextTone = 'primary' | 'secondary' | 'muted' | 'accent' | 'danger' | 'success' | 'warning';
 
-export interface TextProps extends HTMLAttributes<HTMLElement> {
-  role?: never; // use `variant` — `role` stays the ARIA attribute
+export interface TextProps extends Omit<AllHTMLAttributes<HTMLElement>, 'as'> {
+  /** Type-scale role (DESIGN_LANGUAGE §1). `role` stays the ARIA attribute. */
   variant?: TextRole;
   tone?: TextTone;
   mono?: boolean;
