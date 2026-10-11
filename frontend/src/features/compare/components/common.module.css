@@ -1,0 +1,83 @@
+/* Delta recipes: Tag (flat square) with sign + glyph + word; chips are the shared Chip primitive. */
+.dot {
+  display: inline-block;
+  flex: none;
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: var(--radius-pill);
+}
+
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  white-space: nowrap;
+}
+
+.band {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.counts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.forest {
+  position: relative;
+  display: inline-block;
+  width: 5rem;
+  height: var(--space-md);
+  flex: none;
+}
+
+.forestZero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--border-default);
+}
+
+.forestBand {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  background: var(--text-muted);
+  transform: translateY(-50%);
+}
+
+.forestPoint {
+  position: absolute;
+  top: 50%;
+  width: var(--space-sm);
+  height: var(--space-sm);
+  background: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  transform: translate(-50%, -50%);
+}
+
+.forest[data-verdict='improved'] .forestPoint {
+  background: var(--success);
+}
+
+.forest[data-verdict='regressed'] .forestPoint {
+  background: var(--error);
+}

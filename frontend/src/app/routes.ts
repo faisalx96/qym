@@ -29,6 +29,7 @@ export const ROUTES = {
     datasets: 'datasets',
     datasetsSplat: 'datasets/*',
     analysis: 'analysis',
+    compare: 'compare',
     reviews: 'reviews',
     settings: 'settings',
     runs_detail: 'runs/*',

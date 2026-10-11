@@ -35,3 +35,33 @@ export function useCompareQuery(baseIds: string[]) {
     retry: false,
   });
 }
+
+export interface StepGroupLite {
+  phase: string;
+  step_type?: string;
+  kind?: string;
+  name?: string;
+  n: number;
+  mean_ms?: number | null;
+  median_ms?: number | null;
+  p95_ms?: number | null;
+  error_count?: number;
+}
+
+export interface CompareStepLatency {
+  groups_by_ref?: Record<string, StepGroupLite[]>;
+}
+
+/** `GET /api/runs/step-latency` for the compared columns: one lane per ref (a whole run pools its passes). */
+export function useCompareStepLatency(refs: string[], enabled: boolean) {
+  return useQuery({
+    queryKey: ['compare', 'steps', ...refs] as const,
+    queryFn: () =>
+      api.get<CompareStepLatency>(
+        `/api/runs/step-latency?run_ids=${encodeURIComponent(refs.join(','))}&rollup=name&group_by=ref`,
+      ),
+    enabled: enabled && refs.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
+}

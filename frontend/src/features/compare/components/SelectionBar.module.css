@@ -1,0 +1,50 @@
+.bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.letter {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.baseMark {
+  color: var(--accent-primary);
+}
+
+.cohort {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  width: 100%;
+}
+
+.side {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}

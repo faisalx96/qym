@@ -12,6 +12,7 @@ import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
 import { RouteError } from '@/features/shell/RouteError';
 import { ComingSoon } from '@/features/dev/ComingSoon';
+import { ComparePage } from '@/features/compare/ComparePage';
 
 const C = ROUTES.projectChildren;
 
@@ -29,6 +30,7 @@ const projectChildren: RouteObject[] = [
   { path: C.datasetsSplat, element: <ComingSoon brief="07-datasets-reviews-trash" title="Dataset" /> },
   { path: C.analysis, element: <ComingSoon brief="08-playground" title="Auto-analysis" /> },
   { path: C.reviews, element: <ComingSoon brief="07-datasets-reviews-trash" title="Reviews" /> },
+  { path: C.compare, element: <ComparePage /> },
   { path: C.settings, element: <ProjectSettingsPage /> },
   { path: C.runs_detail, element: <ComingSoon brief="04-run-detail" title="Run" /> },
 ];
@@ -64,7 +66,7 @@ export const routes: RouteObject[] = [
             path: ROUTES.trash,
             element: <ComingSoon brief="07-datasets-reviews-trash" title="Deleted runs" />,
           },
-          { path: ROUTES.compare, element: <ComingSoon brief="05-compare-analyzer" title="Compare" /> },
+          { path: ROUTES.compare, element: <ComparePage /> },
           { path: ROUTES.reviews, element: <ComingSoon brief="07-datasets-reviews-trash" title="Reviews" /> },
           { path: ROUTES.docs, element: <ComingSoon brief="09-admin-docs" title="Docs" /> },
           { path: ROUTES.docsNew, element: <ComingSoon brief="09-admin-docs" title="Docs" /> },
