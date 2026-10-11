@@ -69,7 +69,9 @@ export function ItemList() {
     if (scrolled.current === target) return;
     scrolled.current = target;
     ui.toggleExpanded(target, true);
-    requestAnimationFrame(() => document.getElementById(`item-${CSS.escape(target)}`)?.scrollIntoView({ block: 'start' }));
+    const land = () => document.getElementById(`item-${target}`)?.scrollIntoView({ block: 'start' });
+    requestAnimationFrame(land);
+    window.setTimeout(land, 400);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, items, clamped]);
 
@@ -100,10 +102,12 @@ export function ItemList() {
                 type="button"
                 className={styles.row}
                 aria-expanded={open}
-                aria-label={`Item ${index}: ${first?.input_preview ?? item.itemId}`}
                 onClick={() => ui.toggleExpanded(item.itemId)}
               >
-                <span className={styles.index}>{index}</span>
+                <span className={styles.srOnly}>Item {index}: </span>
+                <span className={styles.index} aria-hidden>
+                  {index}
+                </span>
                 <span className={styles.preview}>{first?.input_preview || item.itemId}</span>
                 <Pills itemId={item.itemId} scores={item.scores} rows={item.rows} />
               </button>

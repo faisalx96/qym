@@ -168,7 +168,8 @@ export function conditionHasValue(c: FilterCondition): boolean {
 
 export function encodeFiltersParam(f: CompareFilters): string | null {
   const out: Record<string, unknown> = {};
-  if (filterRuleCountRaw(f.rules, conditionHasValue) > 0) out.rules = f.rules;
+  // Draft (incomplete) rules are kept so the builder can be edited; they are ignored when filtering.
+  if (f.rules.children.length > 0) out.rules = f.rules;
   if (f.approval !== null) out.approval = f.approval;
   if (f.complexity !== null) out.complexity = f.complexity;
   if (f.domain !== null) {

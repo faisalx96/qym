@@ -80,7 +80,7 @@ function StatCard({ label, from, to, delta, noise, help }: { label: React.ReactN
 
 function PassTrack({ passes }: { passes: boolean[] }) {
   return (
-    <span className={styles.track} aria-label={`${passes.filter(Boolean).length} of ${passes.length} pass`}>
+    <span className={styles.track} role="img" aria-label={`${passes.filter(Boolean).length} of ${passes.length} pass`}>
       {passes.map((p, i) => (
         <span key={i} className={styles.dot} data-pass={p || undefined} aria-hidden>
           {p ? '✓' : '✗'}

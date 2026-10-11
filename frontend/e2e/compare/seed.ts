@@ -343,3 +343,111 @@ export async function seedCompareScenario(client: SeedClient, slug: string): Pro
   });
   return { slug, projectId: project.id, runs: { base, a, b, c, repeat3, other } };
 }
+
+/* ── additive extensions used by the compare specs ── */
+
+/** Spans for one trace (AGENT root + LLM child), copied in spirit from ui/run-detail seed pushTrace. */
+export function pushCompareTrace(stream: EventStream, traceId: string): void {
+  const base = 1_700_000_000_000_000_000;
+  const ms = 1_000_000;
+  const span = (id: string, parent: string | null, name: string, kind: string, startMs: number, durMs: number, attrs: Record<string, unknown>) =>
+    stream.push('span_completed', {
+      trace_id: traceId,
+      span_id: `${traceId}-${id}`,
+      parent_span_id: parent ? `${traceId}-${parent}` : null,
+      name,
+      kind: 'INTERNAL',
+      start_time_ns: base + startMs * ms,
+      end_time_ns: base + (startMs + durMs) * ms,
+      duration_ms: durMs,
+      status: 'OK',
+      attributes: attrs,
+      events: [],
+      links: [],
+    });
+  span('root', null, 'answer_question', 'AGENT', 0, 400, { 'openinference.span.kind': 'AGENT', 'input.value': 'q', 'output.value': 'a' });
+  span('llm', 'root', 'ChatOpenAI', 'LLM', 10, 300, {
+    'openinference.span.kind': 'LLM',
+    'llm.model_name': 'gpt-5-mini',
+    'llm.input_messages.0.message.role': 'user',
+    'llm.input_messages.0.message.content': 'What does the policy require?',
+    'llm.output_messages.0.message.role': 'assistant',
+    'llm.output_messages.0.message.content': 'Written approval.',
+  });
+}
+
+/** A run on another dataset name / the same items (for the different-data notice). */
+export async function seedCompareRunOnDataset(client: SeedClient, token: string, dataset: string, name: string, items = 10): Promise<string> {
+  const SPEC = SPECS;
+  const runId = await createRun(client, token, {
+    task: 'qa_task',
+    dataset,
+    model: 'openai/gpt-5-mini',
+    metrics: Object.keys(SPEC),
+    metric_specs: SPEC,
+    run_metadata: { run_name: name },
+    run_config: { samples: 1, run_name: name },
+  });
+  const stream = new EventStream(client, token, runId, 777);
+  stream.push('run_started', {
+    task: 'qa_task',
+    dataset,
+    model: 'openai/gpt-5-mini',
+    metrics: Object.keys(SPEC),
+    metric_specs: SPEC,
+    total_items: items,
+    started_at: new Date(Date.UTC(2026, 9, 1, 12, 0, 0)).toISOString(),
+    run_metadata: { run_name: name },
+    run_config: { samples: 1, run_name: name },
+  });
+  for (let i = 0; i < items; i++) {
+    const id = `cmp-${String(i + 1).padStart(3, '0')}`;
+    stream.push('item_started', { item_id: id, index: i, input: `Question ${i + 1}`, expected: 'x', item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] } });
+    stream.push('metric_scored', { item_id: id, metric_name: 'correct', score_numeric: i % 2, score_raw: i % 2 === 1, meta: {} });
+    stream.push('metric_scored', { item_id: id, metric_name: 'quality', score_numeric: 0.4 + (i % 5) / 10, meta: {} });
+    stream.push('item_completed', { item_id: id, index: i, is_final_pass: true, output: `Answer ${i}`, latency_ms: 500, item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] } });
+  }
+  stream.push('run_completed', { ended_at: new Date(Date.UTC(2026, 9, 1, 12, 30, 0)).toISOString(), final_status: 'COMPLETED' });
+  await stream.flush();
+  return runId;
+}
+
+/** One traced item (cmp-010) on a run: item_attempt_started + spans + trace_id on completion. */
+export async function seedTracedRun(client: SeedClient, token: string, name: string): Promise<string> {
+  const runId = await createRun(client, token, {
+    task: 'qa_task',
+    dataset: COMPARE_DATASET,
+    model: 'openai/gpt-5-mini',
+    metrics: Object.keys(SPECS),
+    metric_specs: SPECS,
+    run_metadata: { run_name: name },
+    run_config: { samples: 1, run_name: name },
+  });
+  const stream = new EventStream(client, token, runId, 888);
+  stream.push('run_started', {
+    task: 'qa_task',
+    dataset: COMPARE_DATASET,
+    model: 'openai/gpt-5-mini',
+    metrics: Object.keys(SPECS),
+    metric_specs: SPECS,
+    total_items: 12,
+    started_at: new Date(Date.UTC(2026, 9, 1, 12, 0, 0)).toISOString(),
+    run_metadata: { run_name: name },
+    run_config: { samples: 1, run_name: name },
+  });
+  for (let i = 0; i < 12; i++) {
+    const id = `cmp-${String(i + 1).padStart(3, '0')}`;
+    const traceId = i === 9 ? `trace-${id}` : undefined;
+    stream.push('item_started', { item_id: id, index: i, input: `Question ${i + 1}`, expected: 'x', item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] } });
+    if (traceId) {
+      stream.push('item_attempt_started', { item_id: id, index: i, attempt_number: 1, trace_id: traceId, task_started_at_ms: 1_700_000_000_000 });
+      pushCompareTrace(stream, traceId);
+    }
+    stream.push('metric_scored', { item_id: id, metric_name: 'correct', score_numeric: i % 2, score_raw: i % 2 === 1, meta: {} });
+    stream.push('metric_scored', { item_id: id, metric_name: 'quality', score_numeric: 0.4 + (i % 5) / 10, meta: {} });
+    stream.push('item_completed', { item_id: id, index: i, is_final_pass: true, output: `Answer ${i}`, latency_ms: 500, trace_id: traceId, task_started_at_ms: 1_700_000_000_000, item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] } });
+  }
+  stream.push('run_completed', { ended_at: new Date(Date.UTC(2026, 9, 1, 12, 30, 0)).toISOString(), final_status: 'COMPLETED' });
+  await stream.flush();
+  return runId;
+}
