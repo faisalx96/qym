@@ -29,7 +29,7 @@ import { fullWidth } from '@/features/shell/layout';
 import { Button, Checkbox, ConfirmDialog, EmptyState, ErrorState, IconButton, PageHeader, SearchField, Select, Skeleton, TabPanel, Tabs, Text, useToast } from '@/ui';
 import { ConflictDialog, CommentDialog, ShortcutsDialog } from './dialogs';
 import { DetailPane } from './DetailPane';
-import { FilterChips, FiltersPopover } from './FiltersPopover';
+import { FilterChips, FiltersPanel, FiltersToggle } from './FiltersPopover';
 import { applyFilterParams, bulkSelection, BULK_FITS, clearedFilters, describeView, filtersFromParams, fitsStatusTab, hasActiveFilters } from './lib/filters';
 import { useQueueKeys } from './lib/useQueueKeys';
 import { ReviewRow } from './ReviewRow';
@@ -109,6 +109,7 @@ export function ReviewsPage() {
   const inflight = useRef(new Set<number>());
   const [dialog, setDialog] = useState<null | { kind: 'reject'; row: CorrectionRow } | { kind: 'bulk'; action: 'approve' | 'reject' } | { kind: 'delete'; row: CorrectionRow } | { kind: 'bulk-delete' }>(null);
   const [help, setHelp] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const decideMut = useDecide();
@@ -365,7 +366,7 @@ export function ReviewsPage() {
             <Checkbox isSelected={allSelected} isIndeterminate={!allSelected && selected.size > 0} onChange={(v) => setSelected(v ? new Set(rows.map((r) => r.id)) : new Set())} aria-label="Select all visible corrections" hideLabel />
             <SearchField ref={searchRef} label="Search corrections" placeholder="Search task, item, root cause…" value={search} onChange={setSearch} width={260} />
             <Select label="Sort" hideLabel items={SORTS} value={filters.sort} onChange={(k) => k && setFilters({ sort: String(k) as ReviewSort })} searchable={false} width={170} />
-            <FiltersPopover filters={filters} facets={first} onChange={setFilters} />
+            <FiltersToggle filters={filters} open={filtersOpen} onToggle={() => setFiltersOpen((v) => !v)} />
             <FilterChips filters={filters} onChange={setFilters} />
             {filtered || filters.status !== 'pending' ? (
               <Button variant="ghost" size="sm" onPress={() => { setSearch(''); setFilters(clearedFilters(filters)); }} data-testid="clear-filters">
@@ -378,6 +379,7 @@ export function ReviewsPage() {
             </Text>
             <IconButton label="Keyboard shortcuts" icon="info" onPress={() => setHelp(true)} />
           </div>
+          {filtersOpen ? <FiltersPanel filters={filters} facets={first} onChange={setFilters} /> : null}
           <div className={styles.bulk} role="region" aria-label="Bulk actions" data-active={selected.size ? '' : undefined}>
             {selected.size ? (
               <>

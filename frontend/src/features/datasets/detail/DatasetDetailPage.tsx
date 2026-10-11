@@ -5,7 +5,7 @@
  * normalised to always carry `?v=`.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { downloadUrl, useDataset, useDatasetVersions, useSetProduction, type Dataset, type DatasetVersion } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
@@ -213,9 +213,9 @@ function DetailBody({ slug, dataset, versions, active, tab, readOnly }: { slug: 
             ? [
                 <span key="fork">
                   forked from{' '}
-                  <a href={hrefFor(versions.find((v) => v.id === active.parent_version_id) ?? active)} className={styles.inlineLink}>
+                  <Link to={hrefFor(versions.find((v) => v.id === active.parent_version_id) ?? active)} className={styles.inlineLink}>
                     {versions.find((v) => v.id === active.parent_version_id)?.version ?? '?'}
-                  </a>
+                  </Link>
                 </span>,
               ]
             : []),

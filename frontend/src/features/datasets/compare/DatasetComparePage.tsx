@@ -9,7 +9,7 @@ import { fetchFullCompare, useCompare, useDataset, useDatasetVersions, type Comp
 import { useDelayedPending } from '@/lib/pending';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { Button, EmptyState, ErrorState, Icon, IconButton, LinkButton, PageHeader, Select, Skeleton, StatStrip, Tabs, Tag, Text, useToast } from '@/ui';
+import { Button, EmptyState, ErrorState, Icon, IconButton, LinkButton, PageHeader, Select, Skeleton, StatStrip, TabPanel, Tabs, Tag, Text, useToast } from '@/ui';
 import { FieldDiff } from '../components/FieldDiff';
 import { UserPill } from '../components/UserPill';
 import { formatDate, itemIdentity } from '../lib/itemValue';
@@ -164,7 +164,8 @@ function CompareBody({ slug, datasetRef, base, head, kind, onKind }: { slug: str
           { label: 'Unchanged', value: summary.unchanged },
         ]}
       />
-      <Tabs label="Comparison kinds" items={KINDS.map((k) => ({ id: k.id, label: k.label, count: summary[k.id] }))} selected={kind} onSelect={(id) => onKind(id as CompareKind)} />
+      <Tabs label="Comparison kinds" items={KINDS.map((k) => ({ id: k.id, label: k.label, count: summary[k.id] }))} selected={kind} onSelect={(id) => onKind(id as CompareKind)}>
+        <TabPanel id={kind}>
       {kind === 'changed' && rows.length ? (
         <Text variant="sm" tone="muted">
           Listed in the order the changes happened, oldest first.
@@ -189,6 +190,8 @@ function CompareBody({ slug, datasetRef, base, head, kind, onKind }: { slug: str
           </Button>
         ) : null}
       </div>
+        </TabPanel>
+      </Tabs>
     </div>
   );
 }

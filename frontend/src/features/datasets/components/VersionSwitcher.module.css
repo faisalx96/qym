@@ -74,7 +74,8 @@
 }
 
 .row[data-selected] {
-  background: var(--bg-active);
+  background: var(--bg-hover);
+  box-shadow: inset 3px 0 0 var(--accent-primary);
 }
 
 .rowMain {

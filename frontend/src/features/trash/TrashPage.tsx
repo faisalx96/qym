@@ -71,9 +71,9 @@ export function TrashPage() {
 
   // An emptied last page steps back.
   useEffect(() => {
-    if (list.data && list.data.runs.length === 0 && page > 1) setQuery({ page: String(page - 1) });
+    if (list.data && !list.isPlaceholderData && list.data.runs.length === 0 && page > 1) setQuery({ page: String(page - 1) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list.data, page]);
+  }, [list.data, list.isPlaceholderData, page]);
 
   async function doRestore(ids: string[]) {
     try {

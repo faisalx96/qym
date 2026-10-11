@@ -1,7 +1,7 @@
 /** One "Filters" popover: facet multiselects, source, confidence band; active filters show as removable chips. */
 import { useMemo } from 'react';
 import type { Key } from 'react-aria-components';
-import { Button, Chip, MultiSelect, Popover, SegmentedControl, Slider } from '@/ui';
+import { Button, Chip, MultiSelect, SegmentedControl, Slider } from '@/ui';
 import type { CorrectionsPage, ReviewFilters, ReviewSource } from '@/api/reviews';
 import styles from './FiltersPopover.module.css';
 
@@ -18,52 +18,51 @@ export function activeFilterCount(f: ReviewFilters): number {
   return [f.source, f.confMin > 0 || f.confMax < 100, f.task, f.dataset, f.model, f.run].filter(Boolean).length;
 }
 
-export function FiltersPopover({ filters, facets, onChange }: { filters: ReviewFilters; facets: CorrectionsPage | undefined; onChange: (patch: Partial<ReviewFilters>) => void }) {
+export function FiltersToggle({ filters, open, onToggle }: { filters: ReviewFilters; open: boolean; onToggle: () => void }) {
   const n = activeFilterCount(filters);
   return (
-    <Popover
-      label="Filters"
-      placement="bottom start"
-      trigger={
-        <Button variant="neutral" size="sm" data-testid="filters-trigger" iconEnd={<span aria-hidden="true">▾</span>}>
-          Filters{n ? ` (${n})` : ''}
-        </Button>
-      }
-    >
-      <div className={styles.panel}>
-        {FACETS.map((f) => {
-          const values = facets?.[f.list] ?? [];
-          const counts = facets?.facet_counts?.[f.counts] ?? {};
-          const items = values.map((v) => ({ key: v, label: v, count: counts[v] }));
-          const current = filters[f.key];
-          return (
-            <MultiSelect
-              key={f.key}
-              label={f.label}
-              items={items}
-              value={new Set<Key>(current === null ? values : current)}
-              placeholder="All"
-              onChange={(keys) => onChange({ [f.key]: keys.size === values.length ? null : [...keys].map(String) } as Partial<ReviewFilters>)}
-            />
-          );
-        })}
-        <SegmentedControl<'all' | ReviewSource>
-          label="Source"
-          value={filters.source ?? 'all'}
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'ai_only', label: 'AI only' },
-            { value: 'human_only', label: 'Human only' },
-            { value: 'corrected', label: 'AI+Human corrected' },
-          ]}
-          onChange={(v) => onChange({ source: v === 'all' ? null : v })}
-        />
-        <div className={styles.band}>
-          <Slider label="Confidence min" unit="%" minValue={0} maxValue={100} step={5} value={filters.confMin} onChange={(v) => onChange({ confMin: Math.min(v, filters.confMax) })} />
-          <Slider label="Confidence max" unit="%" minValue={0} maxValue={100} step={5} value={filters.confMax} onChange={(v) => onChange({ confMax: Math.max(v, filters.confMin) })} />
-        </div>
+    <Button variant="neutral" size="sm" onPress={onToggle} aria-expanded={open} aria-controls="reviews-filters-panel" data-testid="filters-trigger" iconEnd={<span aria-hidden="true">{open ? '▴' : '▾'}</span>}>
+      Filters{n ? ` (${n})` : ''}
+    </Button>
+  );
+}
+
+/** Inline panel (a nested popover inside a popover would close its parent). */
+export function FiltersPanel({ filters, facets, onChange }: { filters: ReviewFilters; facets: CorrectionsPage | undefined; onChange: (patch: Partial<ReviewFilters>) => void }) {
+  return (
+    <div className={styles.panel} id="reviews-filters-panel" role="group" aria-label="Filters">
+      {FACETS.map((f) => {
+        const values = facets?.[f.list] ?? [];
+        const counts = facets?.facet_counts?.[f.counts] ?? {};
+        const items = values.map((v) => ({ key: v, label: v, count: counts[v] }));
+        const current = filters[f.key];
+        return (
+          <MultiSelect
+            key={f.key}
+            label={f.label}
+            items={items}
+            value={new Set<Key>(current === null ? values : current)}
+            placeholder="All"
+            onChange={(keys) => onChange({ [f.key]: keys.size === values.length ? null : [...keys].map(String) } as Partial<ReviewFilters>)}
+          />
+        );
+      })}
+      <SegmentedControl<'all' | ReviewSource>
+        label="Source"
+        value={filters.source ?? 'all'}
+        options={[
+          { value: 'all', label: 'All' },
+          { value: 'ai_only', label: 'AI only' },
+          { value: 'human_only', label: 'Human only' },
+          { value: 'corrected', label: 'AI+Human corrected' },
+        ]}
+        onChange={(v) => onChange({ source: v === 'all' ? null : v })}
+      />
+      <div className={styles.band}>
+        <Slider label="Confidence min" unit="%" minValue={0} maxValue={100} step={5} value={filters.confMin} onChange={(v) => onChange({ confMin: Math.min(v, filters.confMax) })} />
+        <Slider label="Confidence max" unit="%" minValue={0} maxValue={100} step={5} value={filters.confMax} onChange={(v) => onChange({ confMax: Math.max(v, filters.confMin) })} />
       </div>
-    </Popover>
+    </div>
   );
 }
 

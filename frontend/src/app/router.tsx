@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, Outlet, type RouteObject } from 'react-router-dom';
 import { appBase, isDev } from '@/lib/runtime';
 import { ROUTES } from './routes';
@@ -12,9 +13,25 @@ import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
 import { RouteError } from '@/features/shell/RouteError';
 import { ComingSoon } from '@/features/dev/ComingSoon';
-import { ReviewsPage } from '@/features/reviews/ReviewsPage';
-import { TrashPage } from '@/features/trash/TrashPage';
-import { DatasetsRoutes } from '@/features/datasets/DatasetsRoutes';
+
+const ReviewsPageLazy = lazy(() => import('@/features/reviews/ReviewsPage').then((m) => ({ default: m.ReviewsPage })));
+const TrashPageLazy = lazy(() => import('@/features/trash/TrashPage').then((m) => ({ default: m.TrashPage })));
+const DatasetsRoutesLazy = lazy(() => import('@/features/datasets/DatasetsRoutes').then((m) => ({ default: m.DatasetsRoutes })));
+const ReviewsPage = () => (
+  <Suspense fallback={null}>
+    <ReviewsPageLazy />
+  </Suspense>
+);
+const TrashPage = () => (
+  <Suspense fallback={null}>
+    <TrashPageLazy />
+  </Suspense>
+);
+const DatasetsRoutes = () => (
+  <Suspense fallback={null}>
+    <DatasetsRoutesLazy />
+  </Suspense>
+);
 
 const C = ROUTES.projectChildren;
 

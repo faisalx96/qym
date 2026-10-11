@@ -513,11 +513,13 @@ export function downloadUrl(slug: string, ref: string, version: string) {
 
 // ---------------------------------------------------------------- mutations
 
-export function invalidateDataset(qc: QueryClient, slug: string, ref: string) {
-  void qc.invalidateQueries({ queryKey: ['dataset', slug, ref] });
-  void qc.invalidateQueries({ queryKey: ['dataset-versions', slug, ref] });
-  void qc.invalidateQueries({ queryKey: ['dataset-lineage', slug, ref] });
-  void qc.invalidateQueries({ queryKey: ['datasets', slug] });
+export function invalidateDataset(qc: QueryClient, slug: string, ref: string): Promise<unknown> {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ['dataset', slug, ref] }),
+    qc.invalidateQueries({ queryKey: ['dataset-versions', slug, ref] }),
+    qc.invalidateQueries({ queryKey: ['dataset-lineage', slug, ref] }),
+    qc.invalidateQueries({ queryKey: ['datasets', slug] }),
+  ]);
 }
 
 export function invalidateItems(qc: QueryClient, slug: string, ref: string) {
@@ -582,7 +584,9 @@ export function useCreateVersion(slug: string, ref: string) {
   return useMutation({
     mutationFn: (body: { name?: string; description?: string; from_version?: string; from_alias?: string }) =>
       api.post<{ version: DatasetVersion }>(withSlug(`/v1/datasets/${enc(ref)}/versions`, slug), body),
-    onSuccess: () => invalidateDataset(qc, slug, ref),
+    onSuccess: async () => {
+      await invalidateDataset(qc, slug, ref);
+    },
   });
 }
 

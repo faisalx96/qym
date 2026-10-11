@@ -3,6 +3,7 @@
  * are real links (`?v=`), ↑/↓/Home/End/Enter/Escape via React Aria ListBox.
  */
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button as AriaButton, ListBox, ListBoxItem } from 'react-aria-components';
 import type { DatasetVersion } from '@/api/datasets';
 import { Badge, Icon, Popover, SearchField, Tag } from '@/ui';
@@ -17,6 +18,7 @@ export interface VersionSwitcherProps {
 }
 
 export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherProps) {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const filtered = useMemo(() => {
@@ -57,10 +59,15 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
             selectedKeys={[active.id]}
             items={filtered}
             autoFocus={versions.length <= 6}
-            onAction={() => close()}
+            onSelectionChange={(keys) => {
+              const key = keys === 'all' ? null : [...keys][0];
+              const v = versions.find((x) => x.id === key);
+              close();
+              if (v && v.id !== active.id) navigate(hrefFor(v));
+            }}
           >
             {(v) => (
-              <ListBoxItem id={v.id} href={hrefFor(v)} textValue={`${v.version} ${v.name}`} className={styles.row}>
+              <ListBoxItem id={v.id} textValue={`${v.version} ${v.name}`} className={styles.row}>
                 <span className={styles.rowMain}>
                   <span className={styles.rowVersion}>{v.version}</span>
                   <span className={styles.rowName}>{v.name || <em>unnamed</em>}</span>

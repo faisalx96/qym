@@ -42,7 +42,7 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
             {pluralize(v.item_count, 'item')} · {pluralize(v.run_count, 'run')}
           </span>
           {v.change_counts ? (
-            <span className={styles.changes} aria-label="Changes vs parent">
+            <span className={styles.changes} role="group" aria-label="Changes vs parent">
               {v.change_counts.added ? <Tag tone="success">+{v.change_counts.added}</Tag> : null}
               {v.change_counts.deleted ? <Tag tone="danger">−{v.change_counts.deleted}</Tag> : null}
               {v.change_counts.modified ? <Tag tone="warning">~{v.change_counts.modified}</Tag> : null}

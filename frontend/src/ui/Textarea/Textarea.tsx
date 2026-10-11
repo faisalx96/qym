@@ -29,7 +29,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   ref,
 ) {
   return (
-    <AriaTextField className={[fieldStyles.field, className].filter(Boolean).join(' ')} {...rest}>
+    <AriaTextField className={[fieldStyles.field, className].filter(Boolean).join(' ')} isInvalid={rest.isInvalid ?? (errorMessage ? true : undefined)} {...rest}>
       <Label className={fieldStyles.label} data-hidden={hideLabel ? '' : undefined}>
         {label}
       </Label>

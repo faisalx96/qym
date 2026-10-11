@@ -459,7 +459,7 @@ function WizardInner({
                 <Text variant="base" tone="muted">
                   {mode === 'new'
                     ? `Creates a new dataset "${name.trim()}" (slug ${slugPreview || 'generated'}) with this file as version v1.`
-                    : `Creates version ${nextVersionAfter(latestVersion) ?? 'vN'} of "${effectiveTarget?.name}" from this file.`}
+                    : `Creates version ${nextVersionAfter(latestVersion ?? effectiveTarget?.latest_version?.version) ?? 'vN'} of "${effectiveTarget?.name}" from this file.`}
                 </Text>
                 <Checkbox isSelected={publish} onChange={setPublish}>
                   Publish immediately
