@@ -60,7 +60,14 @@ describe('RunExperimentPanel states', () => {
   });
 
   it('hides promote for people who cannot manage the environment', () => {
-    wrap(<RunExperimentPanel panel={{ ...base, can_promote: false }} slug="p" runId="r1" runStatus="COMPLETED" />);
+    wrap(
+      <RunExperimentPanel
+        panel={{ ...base, can_promote: false }}
+        slug="p"
+        runId="r1"
+        runStatus="COMPLETED"
+      />,
+    );
     expect(screen.queryByText('Promote to default preset')).toBeNull();
   });
 

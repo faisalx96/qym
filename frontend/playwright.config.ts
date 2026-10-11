@@ -16,7 +16,8 @@ const AUTH_MODE = process.env.QYM_E2E_AUTH_MODE ?? 'none';
 // Defaults the specs and the platform both read (override from the shell when needed).
 process.env.QYM_ADMIN_BOOTSTRAP_TOKEN ??= 'e2e-bootstrap';
 process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY ??= 'nhrVWj9_tg4JBetyZrLyHLQTy9-5DTMysJYeRSS5flY=';
-const dbFile = path.join(here, '.qym-e2e.db');
+// QYM_E2E_DB lets two runs in one checkout (different ports) keep separate SQLite files.
+const dbFile = process.env.QYM_E2E_DB ?? path.join(here, '.qym-e2e.db');
 const venvPython = path.join(repo, '.venv', 'bin', 'python');
 // Stand-in Evaluation Services for the experiments area (frontend/scripts/fake_eval_service.py).
 export const EVAL_PORT_A = Number(PLATFORM_PORT) + 100;
@@ -62,6 +63,8 @@ export default defineConfig({
         `QYM_LLM_CONFIG_ENCRYPTION_KEY=${process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY}`,
         `QYM_BASE_URL=${BASE_URL}`,
         `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true`,
+        // specs launch far more than the default 30 experiments per hour
+        `QYM_EVAL_EXPERIMENT_CREATE_RATE_LIMIT=0`,
         `QYM_ROLE=all`,
         `${venvPython} -m uvicorn qym_platform.main:app --port ${PLATFORM_PORT} --log-level warning`,
       ].join(' '),
