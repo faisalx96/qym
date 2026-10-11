@@ -291,7 +291,7 @@ textarea.control {
   padding: var(--space-xs) var(--space-sm);
   border-top: 1px solid var(--border-subtle);
   vertical-align: top;
-  min-width: 96px;
+  min-width: 140px;
 }
 
 .table td.roleName {
@@ -567,8 +567,4 @@ button.chip:focus-visible,
 .cellRow .control {
   flex: 1 1 96px;
   min-width: 96px;
-}
-
-.table td {
-  min-width: 140px;
 }
