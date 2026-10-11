@@ -12,6 +12,10 @@ import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
 import { RouteError } from '@/features/shell/RouteError';
 import { ComingSoon } from '@/features/dev/ComingSoon';
+import { ExperimentsIndexRoute, ExperimentsSplatRoute } from '@/features/experiments/ExperimentsRoutes';
+import { QueuePage } from '@/features/experiments/queue/QueuePage';
+import { EnvironmentsRoute } from '@/features/environments/EnvironmentsRoutes';
+import { ModelsPage } from '@/features/models/ModelsPage';
 
 const C = ROUTES.projectChildren;
 
@@ -20,11 +24,11 @@ const projectChildren: RouteObject[] = [
   { index: true, element: <ComingSoon brief="03-overview-runs-list-charts" title="Runs" /> },
   { path: C.overview, element: <ComingSoon brief="03-overview-runs-list-charts" title="Overview" /> },
   { path: C.charts, element: <ComingSoon brief="03-overview-runs-list-charts" title="Charts" /> },
-  { path: C.models, element: <ComingSoon brief="06-experiments-eval-queue" title="Models" /> },
-  { path: C.experimentsQueue, element: <ComingSoon brief="06-experiments-eval-queue" title="Eval queue" /> },
-  { path: C.experiments, element: <ComingSoon brief="06-experiments-eval-queue" title="Experiments" /> },
-  { path: C.experimentsSplat, element: <ComingSoon brief="06-experiments-eval-queue" title="Experiment" /> },
-  { path: C.environments, element: <ComingSoon brief="06-experiments-eval-queue" title="Environments" /> },
+  { path: C.models, element: <ModelsPage /> },
+  { path: C.experimentsQueue, element: <QueuePage /> },
+  { path: C.experiments, element: <ExperimentsIndexRoute /> },
+  { path: C.experimentsSplat, element: <ExperimentsSplatRoute /> },
+  { path: C.environments, element: <EnvironmentsRoute /> },
   { path: C.datasets, element: <ComingSoon brief="07-datasets-reviews-trash" title="Datasets" /> },
   { path: C.datasetsSplat, element: <ComingSoon brief="07-datasets-reviews-trash" title="Dataset" /> },
   { path: C.analysis, element: <ComingSoon brief="08-playground" title="Auto-analysis" /> },
