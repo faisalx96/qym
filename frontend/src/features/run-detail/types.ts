@@ -303,7 +303,7 @@ export interface GroupMetricsPayload {
     reliability?: number;
   };
   band?: Record<string, GroupMetricsBand>;
-  distribution?: Array<{ bucket?: number; label?: string; count?: number; [key: string]: unknown }>;
+  distribution?: number[];
   uncertainty?: Record<string, unknown>;
   error?: string;
 }

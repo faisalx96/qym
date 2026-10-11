@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { activeChips } from '../activeChips';
 import { buildCsv, csvEscape, discoverColumns } from '../csv';
-import { buildFieldDefs, effectiveThresholds, emptyView } from '../filterRules';
+import { buildFieldDefs, effectiveThresholds, emptyView, type RunView } from '../filterRules';
 import { metricCell, rowStatus } from '../rowDisplay';
 import { buildRunModel } from '../runModel';
 import { bodyText, itemLink } from '../itemText';
@@ -67,9 +67,9 @@ describe('row display', () => {
 describe('active chips', () => {
   it('lists page filters and removes each one', () => {
     const defs = buildFieldDefs(ctx);
-    const v = {
+    const v: RunView = {
       ...view,
-      show: 'failed' as const,
+      show: 'failed',
       filters: {
         ...view.filters,
         latency: { min: 2000, max: Infinity },
@@ -80,7 +80,7 @@ describe('active chips', () => {
     const chips = activeChips(v, defs, 'q');
     expect(chips.map((c) => c.key)).toEqual(['show', 'error:task', 'latency', 'cat:domain']);
     expect(chips[0]!.label).toBe('Failing · q');
-    const cleared = chips.reduce((acc, c) => c.clear(acc), v);
+    const cleared = chips.reduce<RunView>((acc, c) => c.clear(acc), v);
     expect(cleared.show).toBe('all');
     expect(cleared.filters.latency).toBeNull();
     expect(cleared.filters.errors).toEqual({});

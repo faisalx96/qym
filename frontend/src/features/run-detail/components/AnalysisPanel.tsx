@@ -94,6 +94,7 @@ function PanelContents({
         table.
       </Text>
       <Tabs
+        className={styles.tabs}
         label="Analysis views"
         selected={current}
         onSelect={(id) => onTab(id as PanelTab)}

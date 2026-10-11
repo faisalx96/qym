@@ -23,3 +23,6 @@
 - 2026-10-12 — Reviews have a home as a panel tab ("Reviews", shown only when review events exist) plus the score-lock notice above the table; experiment panel and versioning details live in the expandable hero.
 - 2026-10-12 — Section anchors: `#overview|latency|deep|categories|errors|root-cause` open the matching panel tab, `#items` scrolls to the table; `?panel=<tab>` is the new URL form. Under 1200px the panel is a Drawer instead of an inline column (UX_DECISION fix).
 - 2026-10-12 — Legacy item-level diagnosis editors are not rebuilt (brief §9 Q2): legacy values show read-only; issue dialog is per metric.
+- 2026-10-12 — Root cause: issues are reviewed per pass on repeat runs (the server requires `pass_number`), so the all-passes view shows links to `?pass=N&item=ID` instead of cards. Category catalog editing from inside the issue dialog is not kept (brief §9 Q12): the dialog offers the project catalog plus a free-text "New category…"; solution is free text (no preset list).
+- 2026-10-12 — Page size: virtualized table keeps a real pager with page sizes 20 (default, so legacy `?page=N` links land where they did) / 50 / 100 / 500, remembered in localStorage `qym:run-page-size` (brief §9 Q3).
+- 2026-10-12 — Categories "Compare" view and the Sankey are dropped (NICE); the Categories tab keeps chips + cards with click-to-filter.

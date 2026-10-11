@@ -32,3 +32,9 @@
   gap: var(--space-md);
   padding-top: var(--space-md);
 }
+
+/* Every tab stays visible: the strip wraps instead of scrolling. */
+.tabs :global([role='tablist']) {
+  flex-wrap: wrap;
+  overflow: visible;
+}

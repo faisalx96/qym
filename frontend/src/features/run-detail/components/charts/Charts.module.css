@@ -1,0 +1,280 @@
+/* Marks for the analysis panel (tokens only, 2px surface gaps, rounded data ends). */
+.gauge {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  transform: rotate(-90deg);
+}
+
+.gaugeTrack {
+  fill: none;
+  stroke: var(--bg-elevated);
+  stroke-width: 5;
+}
+
+.gaugeFill {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.split {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.splitTrack {
+  display: flex;
+  gap: 2px;
+  height: 24px;
+}
+
+.seg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-basis: 0;
+  min-width: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+}
+
+button.seg {
+  cursor: pointer;
+}
+
+button.seg:hover {
+  filter: brightness(1.12);
+}
+
+button.seg:focus-visible,
+.col:focus-visible,
+.passCol:focus-visible,
+.matrixCell:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.segText {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 700;
+  color: var(--bg-void);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.dot,
+.swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: var(--space-xs);
+  border-radius: 2px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+}
+
+.hist {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 110px;
+}
+
+.col,
+.passCol {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+button.col,
+.passCol {
+  cursor: pointer;
+}
+
+.col[data-empty] {
+  opacity: 0.6;
+}
+
+.count {
+  height: 14px;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.barArea {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  width: 100%;
+  min-height: 0;
+}
+
+.bar {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  overflow: hidden;
+}
+
+button.col:hover .bar,
+.passCol:hover:not(:disabled) .bar {
+  filter: brightness(1.15);
+}
+
+.barErr {
+  width: 100%;
+  background: repeating-linear-gradient(45deg, var(--bg-void) 0 2px, transparent 2px 4px);
+}
+
+.axis {
+  height: 14px;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.bandValue {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.bandValue[data-band='1'] {
+  color: var(--score-1);
+}
+.bandValue[data-band='2'] {
+  color: var(--score-2);
+}
+.bandValue[data-band='3'] {
+  color: var(--score-3);
+}
+.bandValue[data-band='4'] {
+  color: var(--score-4);
+}
+.bandValue[data-band='5'] {
+  color: var(--score-5);
+}
+
+.rate {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.rateFill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.scatter,
+.curve svg {
+  width: 100%;
+  height: auto;
+}
+
+.grid {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.tick {
+  font-size: var(--font-sm);
+  fill: var(--text-muted);
+}
+
+.axisTitle {
+  font-size: var(--font-sm);
+  fill: var(--text-secondary);
+}
+
+.dot2 {
+  fill: var(--chart-2);
+  fill-opacity: 0.7;
+  stroke: var(--bg-surface);
+  stroke-width: 1;
+  cursor: pointer;
+}
+
+.dot2:hover {
+  fill-opacity: 1;
+}
+
+.curve {
+  margin: 0;
+}
+
+.line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.band {
+  fill-opacity: 0.14;
+}
+
+.marker {
+  fill: var(--bg-surface);
+  stroke-width: 2;
+}
+
+.passBars {
+  display: flex;
+  gap: 2px;
+  height: 110px;
+}
+
+.passCol[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--accent-primary);
+  border-radius: 4px;
+}
+
+.passCol:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.matrixCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+}
