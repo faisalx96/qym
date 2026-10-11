@@ -148,9 +148,8 @@
 }
 
 .seg {
-  min-width: var(--control-height);
-  height: var(--control-height);
-  padding: 0 var(--space-xs);
+  min-width: 2rem;
+  padding: var(--space-xs) var(--space-sm);
   border: 0;
   border-radius: var(--control-radius);
   color: var(--bg-base);

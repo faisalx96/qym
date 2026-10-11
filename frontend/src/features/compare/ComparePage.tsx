@@ -100,6 +100,7 @@ function CompareLoaded({ c, model, slug }: { c: CompareController; model: Compar
   const itemIds = useMemo(() => (result ? result.items.map((i) => i.itemId) : []), [result]);
   const stats = useMemo(() => (c.ctx ? computeComparisonStats(model, c.ctx, itemIds) : null), [model, c.ctx, itemIds]);
   const [panel, setPanel] = useState(true);
+  const location = useLocation();
   if (!info || !metric || !c.ctx || !result || !stats) return <ErrorState error={new Error('These runs have no metrics to compare.')} title="Nothing to compare" compact />;
   const value: CompareValue = {
     c,
@@ -118,7 +119,6 @@ function CompareLoaded({ c, model, slug }: { c: CompareController; model: Compar
   };
   const sweep = c.view.tab === 'sweep' && !!c.cohorts;
   const first = model.runs[0]?.run;
-  const location = useLocation();
   return (
     <CompareCtx.Provider value={value}>
       <MissingToast missing={c.missing} />
