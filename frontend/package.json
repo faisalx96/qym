@@ -6,7 +6,9 @@
   "engines": { "node": ">=24" },
   "scripts": {
     "dev": "vite --port 5800 --strictPort",
+    "dev:sdk": "vite --config vite.sdk.config.ts",
     "build": "tsc -b && vite build",
+    "build:sdk": "tsc -b && vite build --config vite.sdk.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint src e2e --max-warnings 0",
