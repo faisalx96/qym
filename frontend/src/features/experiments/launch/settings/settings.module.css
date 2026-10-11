@@ -94,7 +94,7 @@
   align-items: center;
   gap: var(--space-xs);
   flex-wrap: wrap;
-  min-height: var(--control-height);
+  min-block-size: var(--control-height);
 }
 
 .label {
@@ -118,7 +118,7 @@
 .control {
   width: 100%;
   min-width: 0;
-  height: var(--control-height);
+  block-size: var(--control-height);
   padding: 0 var(--space-sm);
   border: 1px solid var(--border-default);
   border-radius: var(--control-radius);
@@ -233,7 +233,7 @@ textarea.control {
   align-items: center;
   gap: var(--space-xs);
   flex-wrap: wrap;
-  min-height: var(--control-height);
+  min-block-size: var(--control-height);
 }
 
 .blockTitle {
@@ -305,7 +305,7 @@ textarea.control {
   align-items: center;
   gap: var(--space-xs);
   flex-wrap: wrap;
-  min-height: var(--control-height);
+  min-block-size: var(--control-height);
 }
 
 .allRow td {
