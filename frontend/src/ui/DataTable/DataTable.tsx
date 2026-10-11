@@ -12,6 +12,7 @@ import {
   type Key,
 } from 'react-aria-components';
 import { KEYS, readJson, writeJson } from '@/lib/storage';
+import { Checkbox } from '../Checkbox';
 import styles from './DataTable.module.css';
 
 export interface Column<Row> {
@@ -140,6 +141,11 @@ export function DataTable<Row>({
         {...rest}
       >
         <TableHeader className={styles.thead}>
+          {selection && (selection.mode ?? 'multiple') === 'multiple' ? (
+            <Column id="__select" width={40} minWidth={40} maxWidth={40} className={styles.th} aria-label="Select">
+              <Checkbox slot="selection" aria-label="Select all rows" hideLabel />
+            </Column>
+          ) : null}
           {visible.map((col, i) => (
             <Column
               key={col.id}
@@ -189,6 +195,11 @@ export function DataTable<Row>({
         >
           {(item) => (
             <Row id={item.id} className={styles.tr} href={rowHref?.(item.row)}>
+              {selection && (selection.mode ?? 'multiple') === 'multiple' ? (
+                <Cell className={styles.td}>
+                  <Checkbox slot="selection" aria-label="Select row" hideLabel />
+                </Cell>
+              ) : null}
               {visible.map((col) => (
                 <Cell
                   key={col.id}
