@@ -455,7 +455,7 @@ def test_static_assets_stay_cacheable_under_a_root_path(monkeypatch):
     settings = PlatformSettings(environment="test", auth_mode="none", root_path="/qym")
     monkeypatch.setattr(main, "PlatformSettings", lambda: settings)
     client = TestClient(main.build_app())  # no lifespan: no background workers
-    for path in ("/qym/static/auth.js", "/qym/ui/index.html"):
+    for path in ("/qym/static/auth.js",):
         asset = client.get(path)
         assert asset.status_code == 200
         assert "no-store" not in asset.headers.get("cache-control", "")

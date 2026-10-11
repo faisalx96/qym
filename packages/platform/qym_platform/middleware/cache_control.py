@@ -18,7 +18,7 @@ from typing import Tuple
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-STATIC_PREFIXES: Tuple[str, ...] = ("/static/", "/ui/", "/app/assets/")
+STATIC_PREFIXES: Tuple[str, ...] = ("/static/", "/app/assets/")
 
 
 class NoStoreMiddleware:

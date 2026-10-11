@@ -5,8 +5,8 @@ editing, or generating anything under `packages/platform/qym_platform/_static/`,
 follow this document. It is enforced by `tests/platform/test_design_language.py` —
 violations fail CI, so read this before writing CSS, not after.
 
-Scope: the platform dashboard (`_static/dashboard/`). Two sanctioned exceptions
-are listed at the end (docs prose scale, the separate `/ui` app).
+Scope: the platform dashboard (`_static/dashboard/`). One sanctioned exception
+is listed at the end (docs prose scale). The SDK-local viewer is built from `frontend/` with the same tokens.
 
 ---
 
@@ -78,8 +78,7 @@ updating the test's allowlist deliberately.
 - The mono stack is system faces only: `ui-monospace, SFMono-Regular, 'SF Mono',
   Menlo, …, Consolas, 'Liberation Mono', monospace`. **Menlo must stay**: it is
   the only mono face Chrome on macOS can see by name; without it the generic
-  `monospace` resolves to Courier. Any hardcoded mono stack (e.g. the SDK-local
-  `_static/ui`) names Menlo too; CI checks both.
+  `monospace` resolves to Courier. Any hardcoded mono stack names Menlo too; CI checks both.
 - **Text direction.** Every block that shows user or model text takes
   `QymSafe.textDirAttrs(text)` (or `QymSafe.applyTextDir(el, text)` for DOM
   nodes): mostly-Arabic text gets `dir="rtl" lang="ar"`, anything else
@@ -414,9 +413,6 @@ values inside must be tokens. Prefix page-local classes (`.dsx-`, `.pg-`, `.tv-`
   larger independent heading/body scale (28/20/16/13.5→13px) and a brighter
   `--docs-body`. They still use the shared color ramp for labels and the
   tokenized `--code-*` syntax palette.
-- **`_static/ui/` (SDK-local run UI)**: a separate mini-app with its own theme
-  (`app.css`), including a light mode. Do not import dashboard tokens there or
-  vice versa.
 - **`tmp/mockups/` (gitignored)**: design scratch files and mocks live here,
   outside the shipped package, so they are exempt from all rules and from CI.
   Do not add scratch mocks under `_static/` — they get served and shipped.

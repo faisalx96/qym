@@ -49,4 +49,4 @@ where = ["."]
 include = ["qym_platform", "qym_platform.*"]
 
 [tool.setuptools.package-data]
-qym_platform = ["_static/dashboard/*", "_static/dashboard/docs/**/*", "_static/ui/*", "_static/app/**/*", "migrations/*", "migrations/versions/*"]
+qym_platform = ["_static/dashboard/*", "_static/dashboard/docs/**/*", "_static/app/**/*", "migrations/*", "migrations/versions/*"]
