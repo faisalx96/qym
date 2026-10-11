@@ -1,0 +1,137 @@
+/* Recipe: DESIGN_LANGUAGE §3 sidebar-nav + editor card. */
+.saveCluster {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.addForm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.catTabs {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.catLabel {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.editorHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding-top: var(--space-sm);
+}
+
+.subTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.subList,
+.exampleList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.subHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.example {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+}
+
+.example summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+}
+
+.exampleBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0 var(--space-md) var(--space-md);
+}
+
+.exampleBody dt {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.exampleBody dd {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  text-align: start;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+@media (max-width: 760px) {
+  .catTabs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
