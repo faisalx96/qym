@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite --port 5800 --strictPort",
     "build": "tsc -b && vite build",
@@ -25,7 +27,8 @@
     "react": "18.3.1",
     "react-aria-components": "1.22.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "7.18.4"
+    "react-router-dom": "7.18.4",
+    "recharts": "3.10.1"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

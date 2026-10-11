@@ -52,7 +52,6 @@ export default defineConfig({
         `QYM_ADMIN_BOOTSTRAP_TOKEN=${process.env.QYM_ADMIN_BOOTSTRAP_TOKEN}`,
         `QYM_LLM_CONFIG_ENCRYPTION_KEY=${process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY}`,
         `QYM_BASE_URL=${BASE_URL}`,
-        `QYM_ROLE=api`,
         `${venvPython} -m uvicorn qym_platform.main:app --port ${PLATFORM_PORT} --log-level warning`,
       ].join(' '),
       url: `http://127.0.0.1:${PLATFORM_PORT}/healthz`,
