@@ -358,6 +358,14 @@ class TaskAttemptResult:
         return float(self.latency_s * 1000.0)
 
 
+# Pass number of the item the current asyncio Task is working on. Task
+# workers and metric workers set it per item, so an item scored while a later
+# pass is already running is still reported under its own pass.
+_PASS_NUMBER: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "qym_pass_number", default=0
+)
+
+
 @dataclass
 class PendingItemScore:
     """A task output waiting in the metric queue to be scored.
@@ -673,9 +681,10 @@ class Evaluator:
         self.metric_max_retries = self.config.metric_max_retries
         self.max_retries = self.config.max_retries
         self.samples = self.config.samples
-        # Passes execute strictly sequentially, so a single instance-level
-        # cursor is safe: every emit during pass j reads j here.
-        self._current_pass: int = 1
+        # Pass the run is currently dispatching tasks for. Per-item work reads
+        # its own pass from a context variable instead (see _current_pass):
+        # an item of pass j may still be scored while pass j+1 runs.
+        self._pass_fallback: int = 1
         self._samples_warned: bool = False
 
         # Model handling - strip provider prefix once, keep full name for user's task
@@ -1717,12 +1726,23 @@ class Evaluator:
                     metric_meta=metric_meta,
                 )
 
+            # Items of each pass still to be finished (recorded). A pass is
+            # complete once this reaches zero, which can happen while later
+            # passes are already running their tasks.
+            pass_outstanding: Dict[int, int] = {}
+
             async def _finish_item(
                 idx: int, item_id: str, item: Any, pass_number: int, eval_result: Any
             ) -> None:
                 row = _record_outcome(idx, item_id, item, pass_number, eval_result)
                 if checkpoint_writer:
                     await write_queue.put(row)
+                remaining = pass_outstanding.get(pass_number)
+                if remaining is not None:
+                    remaining -= 1
+                    pass_outstanding[pass_number] = remaining
+                    if remaining == 0:
+                        await _emit_pass_completed(pass_number)
 
             # Task workers: run the task, hand a successful output to the
             # metric queue and immediately take the next item. Metrics never
@@ -1735,6 +1755,7 @@ class Evaluator:
                         work_queue.task_done()
                         break
                     idx, item_id, item, pass_number = entry
+                    _PASS_NUMBER.set(pass_number)
                     if self._should_stop_requested():
                         interrupted = True
                         work_queue.task_done()
@@ -1753,6 +1774,8 @@ class Evaluator:
             # Metric workers: score queued task outputs, at most
             # ``metric_concurrency`` items at a time. An item is completed
             # (platform event, progress, result, checkpoint) only once scored.
+            # The workers live for the whole run, across passes: scoring never
+            # gates task execution, not even between repeat passes.
             # A graceful stop (should_stop) still drains this queue: those
             # tasks already ran, so their outputs are scored and kept.
             async def _metric_worker():
@@ -1763,6 +1786,7 @@ class Evaluator:
                         break
                     entry, pending = job
                     idx, item_id, item, pass_number = entry
+                    _PASS_NUMBER.set(pass_number)
                     try:
                         eval_result = await self._score_item(pending)
                     except Exception as e:
@@ -1781,24 +1805,35 @@ class Evaluator:
                     except asyncio.QueueEmpty:
                         break
                     if job is not None:
-                        _entry, pending = job
-                        await self._emit_item_cancelled(
-                            pending.index,
-                            pending.item,
-                            pending.attempt.spans,
-                            pending.tracker,
-                        )
+                        entry, pending = job
+                        token = _PASS_NUMBER.set(entry[3])
+                        try:
+                            await self._emit_item_cancelled(
+                                pending.index,
+                                pending.item,
+                                pending.attempt.spans,
+                                pending.tracker,
+                            )
+                        finally:
+                            _PASS_NUMBER.reset(token)
                     metric_queue.task_done()
 
             writer_task = (
                 asyncio.create_task(_write_loop()) if checkpoint_writer else None
             )
             # Repeat runs execute as k sequential passes over the dataset.
-            # Each pass gets its own worker set; gathering them is the pass
-            # barrier (pass j's slice metrics are final before pass j+1
-            # starts). worker_tasks always holds the CURRENT pass's workers so
-            # the interrupt handler below drains the right tasks.
+            # Each pass gets its own task worker set; gathering them is the
+            # pass barrier for TASKS only (pass j's tasks all ran before pass
+            # j+1 starts). Scoring is not part of the barrier: one set of
+            # metric workers serves the whole run, and pass_completed fires
+            # from _finish_item once the pass's last item is scored.
+            # worker_tasks always holds the CURRENT pass's workers so the
+            # interrupt handler below drains the right tasks.
             worker_tasks: List[asyncio.Task] = []
+            metric_worker_tasks.extend(
+                asyncio.create_task(_metric_worker())
+                for _ in range(self.metric_concurrency)
+            )
 
             async def _emit_pass_completed(pass_number: int) -> None:
                 if self.samples <= 1:
@@ -1852,27 +1887,21 @@ class Evaluator:
                     for idx, item_id, item in pending_entries
                     if (item_id, pass_number) not in completed_pairs
                 ]
+                pass_outstanding[pass_number] = len(entries)
+                if not entries:
+                    await _emit_pass_completed(pass_number)
                 for entry in entries:
                     await work_queue.put(entry)
                 for _ in range(self.max_concurrency):
                     await work_queue.put(None)
-                pass_metric_workers = [
-                    asyncio.create_task(_metric_worker())
-                    for _ in range(self.metric_concurrency)
-                ]
-                metric_worker_tasks.clear()
-                metric_worker_tasks.extend(pass_metric_workers)
                 pass_workers = [
                     asyncio.create_task(_worker()) for _ in range(self.max_concurrency)
                 ]
                 worker_tasks.clear()
                 worker_tasks.extend(pass_workers)
                 await asyncio.gather(*pass_workers)
-                # Every task of the pass has run; the pass (and the run) ends
-                # only once the metric queue has drained.
-                for _ in pass_metric_workers:
-                    metric_queue.put_nowait(None)
-                await asyncio.gather(*pass_metric_workers)
+                # Every task of the pass has run. Its outputs may still be
+                # queued for scoring; the next pass starts regardless.
 
             async def _stop_workers(
                 tasks: List[asyncio.Task], queue: asyncio.Queue, timeout: float
@@ -1898,7 +1927,11 @@ class Evaluator:
                     if interrupted or self._should_stop_requested():
                         interrupted = True
                         break
-                    await _emit_pass_completed(_pass_number)
+                # Every task of every pass has run; the run ends only once the
+                # metric queue has drained.
+                for _ in metric_worker_tasks:
+                    metric_queue.put_nowait(None)
+                await asyncio.gather(*metric_worker_tasks)
             except (KeyboardInterrupt, asyncio.CancelledError) as exc:
                 interrupted = True
                 cancel_exc = exc
@@ -3284,6 +3317,20 @@ class Evaluator:
         if isinstance(outcome, PendingItemScore):
             return await self._score_item(outcome)
         return outcome
+
+    @property
+    def _current_pass(self) -> int:
+        """Pass number of the item this Task is processing.
+
+        Per-item work (task and metric workers) sets it in its own context;
+        outside those the pass the run is currently dispatching is used.
+        """
+        return _PASS_NUMBER.get() or self._pass_fallback
+
+    @_current_pass.setter
+    def _current_pass(self, value: int) -> None:
+        self._pass_fallback = int(value)
+        _PASS_NUMBER.set(int(value))
 
     async def _run_item_task(
         self, index: int, item: Any, tracker: "ProgressObserver"

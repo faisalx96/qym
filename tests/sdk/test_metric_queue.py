@@ -358,7 +358,7 @@ def test_task_failures_skip_the_metric_queue():
     assert sorted(result.results) == ["item-0", "item-2"]
 
 
-def test_repeat_passes_wait_for_their_metrics():
+def test_repeat_passes_report_their_own_metrics():
     recorder = _Recorder()
 
     async def task(question: str) -> str:
@@ -381,7 +381,8 @@ def test_repeat_passes_wait_for_their_metrics():
     assert len(result.results) == 4
     for entries in result.passes.values():
         assert sorted(entries) == [1, 2]
-    # pass_completed for pass 1 fires once pass 1's metrics are all in.
+    # pass_completed for pass 1 fires once pass 1's metrics are all in (the
+    # pass is complete when its scoring is, not when its tasks are).
     assert recorder.passes and recorder.passes[0]["pass_number"] == 1
     assert recorder.passes[0]["metrics"]
 
@@ -517,3 +518,56 @@ def test_eval_span_context_moves_from_task_worker_to_metric_worker():
         finished["eval-0"].context.span_id,
         finished["eval-1"].context.span_id,
     }
+
+
+def test_stuck_metric_never_stalls_tasks_across_passes():
+    """A metric stuck on pass 1 must not hold up pass 2's (or any) tasks.
+
+    Task execution and scoring are fully independent queues: the pass
+    barrier gates tasks only, scoring drains on its own.
+    """
+    recorder = _Recorder()
+    release = asyncio.Event()
+    task_calls: List[tuple] = []
+    seen = {"passes": set()}
+
+    async def task(question: str) -> str:
+        task_calls.append(question)
+        return question
+
+    async def sticky(output: str, expected: str) -> float:
+        # First scored item of the run blocks until every task has run.
+        if not seen["passes"]:
+            seen["passes"].add("blocked")
+            await release.wait()
+        return 1.0
+
+    evaluator = Evaluator(
+        task=task,
+        dataset=_Dataset(3),
+        metrics=[sticky],
+        observer=recorder,
+        samples=3,
+        config=_config(max_concurrency=2, metric_concurrency=1),
+    )
+
+    async def _go():
+        run = asyncio.create_task(evaluator.arun(show_tui=False, auto_save=False))
+        # All 9 task executions (3 items x 3 passes) finish while the first
+        # metric is still stuck.
+        deadline = time.monotonic() + 5.0
+        while len(task_calls) < 9 and time.monotonic() < deadline:
+            await asyncio.sleep(0.01)
+        assert len(task_calls) == 9, task_calls
+        assert not recorder.completed  # nothing scored yet
+        release.set()
+        return await asyncio.wait_for(run, 10.0)
+
+    result = asyncio.run(_go())
+    assert len(result.results) == 3
+    for entries in result.passes.values():
+        assert sorted(entries) == [1, 2, 3]
+        for pass_number, entry in entries.items():
+            assert entry.get("pass_number", pass_number) == pass_number
+    assert [p["pass_number"] for p in recorder.passes] == [1, 2, 3]
+    assert all(p["metrics"] for p in recorder.passes)
