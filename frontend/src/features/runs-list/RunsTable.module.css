@@ -1,0 +1,225 @@
+/* .qdt-table recipe on a hand-rolled table: sticky uppercase --font-sm muted header, --font-base secondary cells. */
+.container {
+  position: relative;
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.table[data-dimmed] .tbody {
+  opacity: 0.55;
+}
+
+.thead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg-elevated);
+}
+
+.thead th {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 650;
+  text-align: start;
+  padding: 0 var(--space-sm);
+  height: 30px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.th[data-align='end'] {
+  text-align: end;
+}
+
+.th[data-sorted] {
+  color: var(--accent-primary);
+}
+
+.th[data-select] {
+  padding-inline: var(--space-sm);
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.th[data-align='end'] .sortButton {
+  flex-direction: row-reverse;
+}
+
+.sortButton[data-hovered] {
+  color: var(--text-primary);
+}
+
+.sortButton[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.thLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sortGlyph {
+  color: var(--text-dim); /* decorative sort hint */
+  font-size: var(--font-sm);
+}
+
+.sortGlyph[data-active] {
+  color: var(--accent-primary);
+}
+
+.tbody td {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  padding: 0 var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.container[data-density='compact'] .tbody .tr td {
+  height: 32px;
+}
+
+.container[data-density='regular'] .tbody .tr td {
+  height: 40px;
+}
+
+.td[data-align='end'] {
+  text-align: end;
+}
+
+.td[data-select] {
+  text-align: center;
+}
+
+.tr {
+  outline: none;
+  transition: background var(--transition-fast);
+}
+
+.tr:hover td {
+  background: var(--bg-hover);
+}
+
+.tr[data-focused] td {
+  background: var(--bg-hover);
+}
+
+.tr:focus-visible td {
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+.tr:focus-visible td[data-first] {
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    inset 0 0 0 1px var(--accent-primary);
+}
+
+.tr[data-selected] td {
+  background: rgba(0, 212, 170, 0.08);
+}
+
+.tr[data-live] td[data-first] {
+  box-shadow: inset 2px 0 0 var(--info);
+}
+
+/* Sticky first column (CSS only, decision §9.4). */
+.container[data-sticky-first] .thead th[data-first],
+.container[data-sticky-first] .tbody td[data-first] {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 2;
+  background: var(--bg-base);
+  box-shadow: 1px 0 0 var(--border-subtle);
+}
+
+.container[data-sticky-first] .thead th[data-first] {
+  z-index: 4;
+  background: var(--bg-elevated);
+}
+
+.container[data-sticky-first] .tr:hover td[data-first],
+.container[data-sticky-first] .tr[data-focused] td[data-first] {
+  background: var(--bg-hover);
+}
+
+.container[data-sticky-first] .tr[data-selected] td[data-first] {
+  background: var(--bg-elevated);
+}
+
+.task {
+  color: var(--text-secondary);
+}
+
+.emptyHost {
+  position: sticky;
+  inset-inline-start: 0;
+  width: 100%;
+  padding: var(--space-lg);
+}
+
+.panelRow td {
+  background: var(--bg-surface);
+}
+
+.panelCell {
+  padding: 0 !important;
+  white-space: normal !important;
+}
+
+/* Sticky Actions column: row actions stay reachable without 1300px of horizontal scroll. */
+.container .thead th[data-last],
+.container .tbody td[data-last] {
+  position: sticky;
+  inset-inline-end: 0;
+  z-index: 2;
+  background: var(--bg-base);
+  box-shadow: -1px 0 0 var(--border-subtle);
+}
+
+.container .thead th[data-last] {
+  z-index: 4;
+  background: var(--bg-elevated);
+}
+
+.container .tr:hover td[data-last],
+.container .tr[data-focused] td[data-last] {
+  background: var(--bg-hover);
+}
+
+.container .tr[data-selected] td[data-last] {
+  background: var(--bg-elevated);
+}

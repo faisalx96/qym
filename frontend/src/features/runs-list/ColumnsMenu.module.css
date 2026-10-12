@@ -1,0 +1,25 @@
+/* Columns popover body: 4 groups of checkboxes. */
+.menu {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: var(--space-md);
+  padding: var(--space-sm);
+  max-height: var(--dropdown-max-height);
+  overflow: auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.groupLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-xs);
+}
+
+.option {
+  padding: 2px 0;
+}

@@ -1,0 +1,151 @@
+/* Filters popover: segmented rows + one disclosure per facet (DESIGN_LANGUAGE multiselect order: search, actions, options). */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: 460px;
+  max-width: calc(100vw - 2 * var(--space-lg));
+  max-height: min(640px, calc(100vh - 120px));
+  overflow-y: auto;
+  padding: var(--space-sm);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.rowLabel {
+  width: 56px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 650;
+}
+
+.facets {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.facet + .facet {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.facetHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 30px;
+  padding: 0 var(--space-sm);
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-base);
+  text-align: start;
+  cursor: pointer;
+}
+
+.facetHead[data-hovered] {
+  background: var(--bg-hover);
+}
+
+.facetHead[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.facetName {
+  flex: none;
+  width: 92px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.facetSummary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.facetSummary[data-active] {
+  color: var(--accent-primary);
+}
+
+.facetBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm) var(--space-sm);
+  background: var(--bg-base);
+}
+
+.facetActions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  max-height: 200px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: var(--dropdown-option-height);
+  padding: 0 var(--space-xs);
+  border-radius: var(--control-radius);
+}
+
+.option:hover,
+.option:focus-within {
+  background: var(--bg-hover);
+}
+
+.only {
+  padding: 0 var(--space-xs);
+  height: 20px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--accent-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.only[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+}
+
+.noOptions {
+  padding: var(--space-sm) var(--space-xs);
+}
+
+.foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.rangeFields {
+  display: flex;
+  gap: var(--space-md);
+}

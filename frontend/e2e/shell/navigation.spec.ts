@@ -15,7 +15,13 @@ test.describe('shell chrome', () => {
     await gotoApp(page, `/projects/${p.slug}`);
     await expect(page.locator('[data-app-shell]')).toBeVisible();
     // Route change already focused the content; start from the body like a fresh user.
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    // (blur() alone keeps the sequential-focus start point inside main, so pages with focusable content
+    // would Tab to their first control: reset the start point to the document start.)
+    await page.evaluate(() => {
+      document.body.setAttribute('tabindex', '-1');
+      document.body.focus();
+      document.body.removeAttribute('tabindex');
+    });
     await page.keyboard.press('Tab');
     const active = page.locator(':focus');
     await expect(active).toHaveText('Skip to content');
@@ -333,7 +339,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     const p = await createProject(request, 'Deep Links', uniqueSlug('deep'));
     const runId = 'eval/2026-01-01/abc';
     const encodedRun = runId.split('/').map(encodeURIComponent).join('/');
-    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' }[] = [
+    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' | 'runs' | 'overview' | 'charts' }[] = [
       { path: '/', expect: 'projects' },
       { path: '/profile', expect: 'profile' },
       { path: '/admin', expect: 'coming-soon' },
@@ -343,9 +349,9 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       { path: '/reviews', expect: 'reviews' },
       { path: '/docs-guide', expect: 'coming-soon' },
       { path: '/docs/sdk', expect: 'coming-soon' },
-      { path: `/projects/${p.slug}`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/overview`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/charts`, expect: 'coming-soon' },
+      { path: `/projects/${p.slug}`, expect: 'runs' },
+      { path: `/projects/${p.slug}/overview`, expect: 'overview' },
+      { path: `/projects/${p.slug}/charts`, expect: 'charts' },
       { path: `/projects/${p.slug}/models`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/experiments`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/experiments/queue`, expect: 'coming-soon' },
@@ -368,6 +374,8 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       await expect(page.locator('[data-project-not-found]'), u.path).toHaveCount(0);
       if (u.expect === 'coming-soon') {
         await expect(page.getByRole('heading', { name: /coming soon/ }), u.path).toBeVisible();
+      } else if (u.expect === 'runs' || u.expect === 'overview' || u.expect === 'charts') {
+        await expect(page.getByTestId(`${u.expect}-page`), u.path).toBeVisible();
       } else if (u.expect === 'settings') {
         await expect(page.locator('[data-settings-page]'), u.path).toBeVisible();
       } else if (u.expect === 'trash') {

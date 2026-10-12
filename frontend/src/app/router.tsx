@@ -18,6 +18,8 @@ import { AdminPage } from '@/features/admin/AdminPage';
 import { DocsPage } from '@/features/docs/DocsPage';
 import { DocsRedirect } from '@/features/docs/DocsRedirect';
 
+import { RunsPage, OverviewPage, ChartsPage } from '@/features/runs-list';
+
 const ReviewsPageLazy = lazy(() => import('@/features/reviews/ReviewsPage').then((m) => ({ default: m.ReviewsPage })));
 const TrashPageLazy = lazy(() => import('@/features/trash/TrashPage').then((m) => ({ default: m.TrashPage })));
 const DatasetsRoutesLazy = lazy(() => import('@/features/datasets/DatasetsRoutes').then((m) => ({ default: m.DatasetsRoutes })));
@@ -41,9 +43,9 @@ const C = ROUTES.projectChildren;
 
 /** Placeholder routes for every current URL (brief 01 §8). Area agents replace the elements. */
 const projectChildren: RouteObject[] = [
-  { index: true, element: <ComingSoon brief="03-overview-runs-list-charts" title="Runs" /> },
-  { path: C.overview, element: <ComingSoon brief="03-overview-runs-list-charts" title="Overview" /> },
-  { path: C.charts, element: <ComingSoon brief="03-overview-runs-list-charts" title="Charts" /> },
+  { index: true, element: <RunsPage /> },
+  { path: C.overview, element: <OverviewPage /> },
+  { path: C.charts, element: <ChartsPage /> },
   { path: C.models, element: <ComingSoon brief="06-experiments-eval-queue" title="Models" /> },
   { path: C.experimentsQueue, element: <ComingSoon brief="06-experiments-eval-queue" title="Eval queue" /> },
   { path: C.experiments, element: <ComingSoon brief="06-experiments-eval-queue" title="Experiments" /> },
