@@ -55,24 +55,45 @@ export function useContentScrollRestoration(ref: React.RefObject<HTMLElement | n
   const location = useLocation();
   const navigationType = useNavigationType();
   const offsets = useRef(new Map<string, number>());
-  const lastKey = useRef(location.key);
+  const currentKey = useRef(location.key);
+  const restoring = useRef(false);
+
+  // Record the offset as the user scrolls: by the time a route change commits the
+  // new page is already in the scroller, so reading scrollTop then is too late.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onScroll = () => {
+      if (!restoring.current) offsets.current.set(currentKey.current, el.scrollTop);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [ref]);
+
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    offsets.current.set(lastKey.current, el.scrollTop);
-    lastKey.current = location.key;
-    if (navigationType === 'POP') {
-      const saved = offsets.current.get(location.key) ?? 0;
-      // Content may still be loading; retry for up to ~6 s until the offset holds.
-      let tries = 0;
-      const tick = () => {
-        el.scrollTop = saved;
-        if (Math.abs(el.scrollTop - saved) > 2 && tries++ < 40) setTimeout(tick, 150);
-      };
-      tick();
-    } else {
+    currentKey.current = location.key;
+    if (navigationType !== 'POP') {
+      restoring.current = false;
       el.scrollTop = 0;
+      return;
     }
+    const saved = offsets.current.get(location.key) ?? 0;
+    // Content may still be loading; retry for up to ~6 s until the offset holds.
+    restoring.current = true;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      el.scrollTop = saved;
+      if (Math.abs(el.scrollTop - saved) > 2 && tries++ < 40) timer = setTimeout(tick, 150);
+      else restoring.current = false;
+    };
+    tick();
+    return () => {
+      clearTimeout(timer);
+      restoring.current = false;
+    };
   }, [location.key, navigationType, ref]);
 }
 

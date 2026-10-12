@@ -105,7 +105,10 @@ test.describe('shell chrome', () => {
     await expect(trigger).toBeFocused();
   });
 
-  test('user menu: Profile navigates in-app; Escape returns focus to the trigger', async ({ page, request }) => {
+  test('user menu: Profile navigates in-app; Escape returns focus to the trigger', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'User Menu', uniqueSlug('umenu'));
     await gotoApp(page, `/projects/${p.slug}`);
     const trigger = page.locator('[data-user-menu]');
@@ -142,6 +145,26 @@ test.describe('shell chrome', () => {
     await expect(page).toHaveURL(new RegExp(`/app/projects/${p.slug}$`));
     await expect(page.locator('[data-nav="runs"]')).toHaveAttribute('aria-current', 'page');
     expect(loads.count()).toBe(0);
+  });
+
+  test('Back restores the content scroll offset of the previous page', async ({ page, request }) => {
+    const p = await createProject(request, 'Scroll', uniqueSlug('scroll'));
+    await page.setViewportSize({ width: 1280, height: 420 });
+    await gotoApp(page, `/projects/${p.slug}/settings`);
+    const content = page.locator('#shell-content');
+    await expect(page.locator('[data-settings-page]')).toBeVisible();
+    await content.evaluate((el) => {
+      el.scrollTop = 120;
+    });
+    await expect.poll(() => content.evaluate((el) => el.scrollTop)).toBeGreaterThan(60);
+    const before = await content.evaluate((el) => el.scrollTop);
+    await page.locator('[data-nav="datasets"]').click();
+    await expect(page).toHaveURL(/\/datasets$/);
+    await expect.poll(() => content.evaluate((el) => el.scrollTop)).toBe(0);
+    await page.goBack();
+    await expect(page.locator('[data-settings-page]')).toBeVisible();
+    // Chrome's scroll anchoring may nudge the offset a little while the page re-renders.
+    await expect.poll(() => content.evaluate((el) => el.scrollTop)).toBeGreaterThanOrEqual(before);
   });
 });
 
@@ -221,7 +244,13 @@ test.describe('narrow viewport (≤760px, UX_DECISION adjustment 5)', () => {
     // the mousedown default action focuses the clicked region after the close handler ran;
     // focus must at least not be lost (body) or stuck inside the hidden overlay
     await expect
-      .poll(() => page.evaluate(() => document.activeElement?.closest('#qym-sidebar') === null && document.activeElement !== document.body))
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document.activeElement?.closest('#qym-sidebar') === null &&
+            document.activeElement !== document.body,
+        ),
+      )
       .toBe(true);
 
     // choosing a nav item
@@ -243,9 +272,13 @@ test.describe('archived project (§8.7 scenario 7)', () => {
     await gotoApp(page, `/projects/${p.slug}`);
     await expect(page.locator('[data-archived-banner]')).toBeVisible();
     await expect(page.locator('[data-archived-banner]')).toContainText('is archived and read-only');
-    await expect(page.locator('[data-archived-banner]').getByRole('link', { name: 'Unarchive it' })).toBeVisible();
+    await expect(
+      page.locator('[data-archived-banner]').getByRole('link', { name: 'Unarchive it' }),
+    ).toBeVisible();
     await expect(page.locator('[data-topbar]').getByText('Read-only')).toBeVisible();
-    await expect(page.locator('[data-project-switcher]').getByText('archived', { exact: true })).toBeVisible();
+    await expect(
+      page.locator('[data-project-switcher]').getByText('archived', { exact: true }),
+    ).toBeVisible();
     await expect(page.locator('[data-nav="analysis"]')).toHaveCount(0);
     await expect(page.locator('[data-nav="reviews"]')).toHaveCount(0);
     await expect(page.locator('[data-nav="settings"]')).toBeVisible();
@@ -260,7 +293,9 @@ test.describe('archived project (§8.7 scenario 7)', () => {
 
     // the archived project is reachable from the switcher (with its tag) while on it
     await page.locator('[data-project-switcher]').click();
-    await expect(page.locator(`[data-switch-to="${p.slug}"]`).getByText('archived', { exact: true })).toBeVisible();
+    await expect(
+      page.locator(`[data-switch-to="${p.slug}"]`).getByText('archived', { exact: true }),
+    ).toBeVisible();
   });
 
   test('project switch away from an archived project does not remember it as the last slug', async ({
@@ -345,7 +380,10 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     await gotoApp(page, `/projects/${p.slug}/runs/${encodedRun}`);
     const nav = page.getByRole('navigation', { name: 'Breadcrumb' });
     await expect(nav.locator('[aria-current="page"]')).toHaveText(runId);
-    await expect(nav.getByRole('link', { name: 'Runs' })).toHaveAttribute('href', new RegExp(`/app/projects/${p.slug}$`));
+    await expect(nav.getByRole('link', { name: 'Runs' })).toHaveAttribute(
+      'href',
+      new RegExp(`/app/projects/${p.slug}$`),
+    );
   });
 
   test('legacy /app/run/<id> resolves: redirects to the project run page (guessed) or shows the error state', async ({
@@ -361,7 +399,8 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     await expect
       .poll(async () => {
         if (/\/app\/projects\/[^/]+\/runs\/no-such-run\?view=compact$/.test(page.url())) return 'redirected';
-        if (await page.getByRole('alert').filter({ hasText: 'Couldn’t open this run' }).isVisible()) return 'error';
+        if (await page.getByRole('alert').filter({ hasText: 'Couldn’t open this run' }).isVisible())
+          return 'error';
         return 'pending';
       })
       .not.toBe('pending');
@@ -415,7 +454,9 @@ test.describe('cross-tab run status (§8.7 scenario 11)', () => {
         timeout: 3000,
       })
       .toBeGreaterThan(0);
-    const received = await first.evaluate(() => (window as unknown as { __received: unknown[] }).__received[0]);
+    const received = await first.evaluate(
+      () => (window as unknown as { __received: unknown[] }).__received[0],
+    );
     expect(received).toEqual({ runIds: ['run-1', 'run-2'], status: 'STOPPED' });
   });
 });
