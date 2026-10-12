@@ -171,7 +171,7 @@ Of the CUTOVER.md gaps only "Analyzer under a wrong project slug is not redirect
 
 | # | Old behaviour (source) | New code | Spec | Status | Notes / evidence |
 |---|---|---|---|---|---|
-| J1 | Connection select "name · model"; connections without a key are disabled and labelled "key missing" | blocks/RunBar.tsx:15-24 | - | **FIXED** (1f7c7cad) | Select passes `disabledKeys` to the react-aria Select; `llmReady` is false for a key-less connection. |
+| J1 | Connection select "name · model"; connections without a key are disabled and labelled "key missing" | blocks/RunBar.tsx:15-24 | - | **FIXED** (ee52c2f9) | Select passes `disabledKeys` to the react-aria Select; `llmReady` is false for a key-less connection. |
 | J2 | Default connection = `default_connection_id` | workspace/useRunWorkspace.ts:67 | run.spec | **OK** | Verified default selected, switching sent `connection_id`. |
 | J3 | No connection: banner + Test/Analyze disabled, Preview still works | RunAnalyze.tsx:111-117 | guidance.spec (no LLM) | **CHANGED** | Banner text kept in spirit; select is shown disabled (placeholder "No connection", from code) instead of hidden; banner and disabled buttons verified. |
 | J4 | Read-only banner ("Only project managers and the run's owner can…") | RunAnalyze.tsx:118-124 | guidance.spec (read-only) | **BUGGY** | New copy says running needs "project member access"; the real rule (`can_operate_analyzer`) is manager or run owner, so ordinary members are told the wrong thing. Buttons are correctly disabled. |
