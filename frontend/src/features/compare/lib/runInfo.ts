@@ -1,4 +1,5 @@
 /** What the run summary cards show: counts, owner, version, and which config / version keys differ between the runs. */
+import { isErrorRow } from '@/lib/metrics';
 import type { Run, RunPayload } from '@/features/run-detail/types';
 
 export interface RunCounts {
@@ -7,13 +8,14 @@ export interface RunCounts {
   errors: number;
 }
 
-/** Items / completed from the snapshot stats; errors = task + scorer errors the run reports (as the Errors tab counts them). */
+/** Items / completed from the snapshot stats; errors = items with a task or scorer error (as the Metrics tab counts them). */
 export function runCounts(p: RunPayload): RunCounts {
   const stats = p.snapshot.stats;
   const rows = p.snapshot.rows ?? [];
   const items = stats?.total ?? rows.length;
   const completed = stats?.completed ?? rows.filter((r) => r.status === 'completed').length;
-  const errors = (p.run.error_count ?? 0) + (p.run.execution_error_count ?? 0);
+  // Items with a task or scorer error: the count the Errors column and Metrics tab show.
+  const errors = rows.filter((r) => isErrorRow(r)).length;
   return { items, completed, errors };
 }
 

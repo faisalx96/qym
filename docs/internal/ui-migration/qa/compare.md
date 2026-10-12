@@ -234,3 +234,7 @@ Fix list items 1-18 are all addressed; two are deliberately narrower than the ol
 | 18 | C055 | No Sankey diagram; the Root cause tab now shows each category's solutions (counted) under the category. | A Sankey needs a chart dependency or a hand-rolled SVG layout plus a11y text alternative: about 1.5 days. The solutions list carries the same data. |
 
 Unlisted CHANGED rows (C028, C041, C052, C081) still need a product decision.
+
+## Re-review follow-up
+
+C020/C108: run cards and the export count items with a task or scorer error (same as the Metrics tab). C096: the CSV dialog skips `metric_analyses` and the other internal keys. C078: the server has no column for a human `category_reason`, so the dialog no longer offers "Why this category" (an AI issue's reason is still shown and kept on edit).

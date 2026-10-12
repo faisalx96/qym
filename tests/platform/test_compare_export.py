@@ -87,7 +87,10 @@ def test_minimize_metric_flips_the_verdict():
 
 
 def test_export_summary_cells_are_readable():
-    a = _payload("run-a", [0.5] * 40, errors=2, total=40)
+    a = _payload("run-a", [0.5] * 40, errors=8, total=40)
+    a["snapshot"]["rows"][0]["status"] = "error"
+    a["snapshot"]["rows"][1]["status"] = "error"
+    a["snapshot"]["rows"][2]["metric_meta"] = {"quality": {"status": "error"}}
     b = _payload("run-b", [0.7] * 40, status="RUNNING", errors=0, total=40)
     page = html_export.build_compare_export_html([a, b])
     text = re.sub(r"<[^>]+>", " ", page.split('id="comparison"', 1)[1].split("<iframe", 1)[0])
@@ -95,6 +98,8 @@ def test_export_summary_cells_are_readable():
     assert "RunWorkflowStatus" not in text
     assert "COMPLETED" in text and "RUNNING" in text
     # Items = the snapshot total (not "-"), Errors = task + scorer errors like the page.
+    # run-a: 2 items with a task error + 1 scorer error = 3 (error_count 2 + execution_error_count 1 would be 3
+    # only by coincidence; the counters below are deliberately inflated to 9).
     assert re.search(r"run-a\s+COMPLETED\s+Ada\s+ds v3\s+m\s+40\s+3\b", text)
     assert "Exp one" in text and "1m 5s" in text
     # One tab for the comparison plus one per run; the panels are all present.

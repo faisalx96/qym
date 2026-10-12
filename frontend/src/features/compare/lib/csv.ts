@@ -4,6 +4,7 @@
  * parsed JSON keys of input / expected / output, item metadata, and per-run
  * output, status, root cause, issues, scores, metric meta, latency, trace URL.
  */
+import { SKIPPED_METADATA } from './skipMetadata';
 import { isInternalMetaKey } from '@/lib/metrics';
 import type { Row } from '@/features/run-detail/types';
 import { getRowRootCauseAnalyses, rootCauseCategories, rootCauseIssues } from '@/features/run-detail/lib/rowMeta';
@@ -71,7 +72,7 @@ export function discoverExportColumns(model: CompareModel, items: ExportItem[]):
   const metricMetaKeys = new Map<string, Set<string>>(model.metrics.map((m) => [m, new Set<string>()]));
   for (const { rows } of items) {
     const first = rows.find((r) => r);
-    for (const k of Object.keys(first?.item_metadata ?? {})) if (k !== 'task_started_at_ms') metaKeys.add(k);
+    for (const k of Object.keys(first?.item_metadata ?? {})) if (!SKIPPED_METADATA.has(k)) metaKeys.add(k);
     for (const row of rows) {
       if (!row) continue;
       Object.keys(tryParseObject(body(row, 'input')) ?? {}).forEach((k) => inputKeys.add(k));

@@ -189,7 +189,6 @@ export function IssueDialog({ open, onOpenChange, row, metric: initialMetric, me
         ) : null}
         <TextField label="Subcategory" value={subcategory} onChange={setSubcategory} />
         <Textarea label="Finding" value={finding} onChange={setFinding} rows={3} />
-        <Textarea label="Why this category" value={reason} onChange={setReason} rows={2} />
         <TextField label="Solution" value={solution} onChange={setSolution} />
         <Textarea label="Solution notes" value={solutionNote} onChange={setSolutionNote} rows={2} />
         {message ? (

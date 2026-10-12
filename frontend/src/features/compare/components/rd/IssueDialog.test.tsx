@@ -95,7 +95,8 @@ describe('issue dialog', () => {
     expect(screen.getByRole('heading', { name: 'Edit issue · accuracy' })).toBeInTheDocument();
     expect(screen.getByLabelText('Subcategory')).toHaveValue('Subtype');
     expect(screen.getByLabelText('Finding')).toHaveValue('Second');
-    expect(screen.getByLabelText('Why this category')).toHaveValue('Saved why');
+    // The server keeps no human 'why', so the dialog offers no such field (an AI issue's reason is kept as is).
+    expect(screen.queryByLabelText('Why this category')).toBeNull();
     expect(screen.getByLabelText('Solution')).toHaveValue('Second fix');
     expect(screen.getByLabelText('Solution notes')).toHaveValue('Second note');
     expect(screen.queryByDisplayValue('First')).toBeNull();

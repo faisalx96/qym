@@ -21,7 +21,14 @@ describe('differingContext', () => {
 
 describe('runCounts', () => {
   it('reads totals from the snapshot and errors from the run', () => {
-    const p = { run: run({ error_count: 2, execution_error_count: 1 }), snapshot: { rows: [], stats: { total: 40, completed: 37, failed: 3 } } } as unknown as RunPayload;
+    const rows = [
+      { item_id: 'a', status: 'error', metric_values: [0] },
+      { item_id: 'b', status: 'error', metric_values: [0] },
+      { item_id: 'c', status: 'completed', metric_values: [0], metric_meta: { q: { status: 'error' } } },
+      { item_id: 'd', status: 'completed', metric_values: [1] },
+    ];
+    // run.error_count + execution_error_count would say 5 here; the page counts items: 2 task + 1 scorer.
+    const p = { run: run({ error_count: 2, execution_error_count: 3 }), snapshot: { rows, stats: { total: 40, completed: 37, failed: 3 } } } as unknown as RunPayload;
     expect(runCounts(p)).toEqual({ items: 40, completed: 37, errors: 3 });
   });
 });

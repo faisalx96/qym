@@ -26,3 +26,10 @@ describe('root-cause summary carries solutions (C055)', () => {
     expect(cat!.solutions).toEqual([['add reranker', 2]]);
   });
 });
+
+describe('csv item metadata (C096)', () => {
+  it('skips metric_analyses', async () => {
+    const { SKIPPED_METADATA } = await import('../skipMetadata');
+    expect(SKIPPED_METADATA.has('metric_analyses')).toBe(true);
+  });
+});

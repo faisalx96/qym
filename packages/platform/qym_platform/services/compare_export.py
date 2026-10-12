@@ -439,7 +439,8 @@ def render_comparison_html(cmp: Dict[str, Any], max_items: int = 2000) -> str:
         owner_name = owner.get("display_name") or owner.get("email") or ""
         dataset = " ".join(str(x) for x in (run.get("dataset_name"), f"v{run['dataset_version']}" if run.get("dataset_version") else "") if x)
         experiment = (run.get("experiment") or {}).get("name") or ""
-        errors = (run.get("error_count") or 0) + (run.get("execution_error_count") or 0)
+        # Items with a task or scorer error: the page's Errors count, not the run's raw counters.
+        errors = cmp["errors"][i]
         cells = [
             r["letter"],
             r["label"],
@@ -448,7 +449,7 @@ def render_comparison_html(cmp: Dict[str, Any], max_items: int = 2000) -> str:
             dataset or "-",
             run.get("model_name") or "-",
             r["total"],
-            errors if run.get("error_count") is not None or run.get("execution_error_count") is not None else cmp["errors"][i],
+            errors,
             _fmt_latency(run.get("duration_ms")),
             experiment or "-",
         ]
