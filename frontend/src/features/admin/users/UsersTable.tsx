@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Focusable } from 'react-aria-components';
 import { useUpdateUser, type AdminUser } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import { Badge, Button, ConfirmDialog, DataTable, Tag, Tooltip, useToast, type Column } from '@/ui';
@@ -103,9 +104,19 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
               </Button>
               {self ? (
                 <Tooltip content="You cannot disable your own account">
-                  <Button variant="ghost" isDisabled aria-label="You cannot disable your own account" data-user-self-disable>
-                    Disable
-                  </Button>
+                  {/* A plain focusable stand-in for the disabled button: a disabled button cannot take focus or hover */}
+                  <Focusable>
+                    <span
+                      role="button"
+                      aria-disabled="true"
+                      aria-label="You cannot disable your own account"
+                      className={styles.disabledTrigger}
+                      data-user-self-disable
+                      data-user-self-disable-wrap
+                    >
+                      Disable
+                    </span>
+                  </Focusable>
                 </Tooltip>
               ) : u.is_active ? (
                 <Button variant="ghost" onPress={() => setDisabling(u)} isDisabled={busy} loading={busy} aria-label={`Disable ${label(u)}`} data-user-disable={u.id}>

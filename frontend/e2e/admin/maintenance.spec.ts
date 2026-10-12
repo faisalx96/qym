@@ -113,3 +113,14 @@ test('invalid params JSON shows its inline error message', async ({ page }) => {
   await form.getByLabel('Params (JSON)').fill('{oops');
   await expect(form.getByText('Params must be valid JSON.')).toBeVisible();
 });
+
+test('workers service liveness shows in the header (mocked separate workers)', async ({ page }) => {
+  await page.route(/\/api\/admin\/maintenance(\?|$)/, async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    body.workers = { ...body.workers, loops: 'separate', workers_service: { alive: false, processes: [{ alive: false }, { alive: false }] } };
+    await route.fulfill({ response: res, json: body });
+  });
+  await gotoApp(page, '/admin/maintenance');
+  await expect(page.locator('[data-workers-service]')).toContainText('NOT RESPONDING (0/2 processes)');
+});

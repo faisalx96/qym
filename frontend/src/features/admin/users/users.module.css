@@ -60,6 +60,23 @@
   color: var(--text-muted);
 }
 
+.disabledTrigger {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--control-radius);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.disabledTrigger:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 .rowActions {
   display: inline-flex;
   justify-content: flex-end;

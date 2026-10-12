@@ -75,7 +75,7 @@ export function RunTable({ runs, stoppingIds, onForceStop, emptyState, storageKe
         width: 90,
         mono: true,
         align: 'end',
-        cell: (r) => progressLabel(r),
+        cell: (r) => progressLabel(r, variant),
       },
       {
         id: 'updated',

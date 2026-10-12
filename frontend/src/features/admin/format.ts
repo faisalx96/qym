@@ -52,9 +52,9 @@ export function projectLabel(run: AdminRunSummary): string {
   return p?.name || p?.slug || p?.id || '—';
 }
 
-export function progressLabel(run: AdminRunSummary): string {
+export function progressLabel(run: AdminRunSummary, variant: 'live' | 'recent' = 'recent'): string {
   const done = run.progress_completed ?? 0;
-  const total = run.total_items ?? run.progress_total;
+  const total = variant === 'live' ? (run.progress_total ?? run.total_items) : (run.total_items ?? run.progress_total);
   if (total) return `${done}/${total}`;
   return done ? String(done) : '—';
 }

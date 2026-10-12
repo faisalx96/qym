@@ -27,6 +27,11 @@ export function ArchiveProjectDialog(props: ArchiveDialogProps) {
   return props.open ? <ArchiveProjectDialogInner {...props} /> : null;
 }
 
+function formatStarted(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : `started ${d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`;
+}
+
 function ArchiveProjectDialogInner({ project, open, onOpenChange, onArchived }: ArchiveDialogProps) {
   const [preview, setPreview] = useState<ArchivePreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -44,7 +49,7 @@ function ArchiveProjectDialogInner({ project, open, onOpenChange, onArchived }: 
         text: 'They will be stopped.',
         items: preview.running_runs
           .slice(0, 5)
-          .map((r) => ({ title: r.run_name || r.run_id, meta: r.started_at })),
+          .map((r) => ({ title: r.run_name || r.run_id, meta: formatStarted(r.started_at) })),
         more: Math.max(0, preview.running_count - 5),
       }
     : previewError
@@ -64,7 +69,7 @@ function ArchiveProjectDialogInner({ project, open, onOpenChange, onArchived }: 
         'API keys stop working.',
       ]}
       warning={warning}
-      confirmLabel="Archive project"
+      confirmLabel={warning ? "Archive anyway" : "Archive project"}
       onConfirm={async () => {
         try {
           await archive.mutateAsync(project);
@@ -102,7 +107,7 @@ function UnarchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDia
       open={open}
       onOpenChange={onOpenChange}
       title={`Unarchive “${project.name}”?`}
-      tone="accent"
+      tone={keys || previewError ? "danger" : "accent"}
       description="Members can change the project again."
       warning={
         keys
@@ -124,7 +129,7 @@ function UnarchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDia
               }
             : undefined
       }
-      confirmLabel="Unarchive"
+      confirmLabel={keys || previewError ? "Unarchive anyway" : "Unarchive"}
       altLabel={reviewKeys ? 'Revoke keys first' : undefined}
       onAlternative={
         reviewKeys ? () => navigate(`${projectPath(project.slug, 'settings')}?tab=apikeys`) : undefined

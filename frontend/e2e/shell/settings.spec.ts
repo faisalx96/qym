@@ -301,7 +301,7 @@ test.describe('danger zone and archived state', () => {
     const confirm = page.getByRole('alertdialog', { name: `Archive “${p.name}”?` });
     await expect(confirm).toBeVisible();
     await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
-    await confirm.getByRole('button', { name: 'Archive project' }).click();
+    await confirm.getByRole('button', { name: /^Archive (project|anyway)$/ }).click();
     await expect(page).toHaveURL(/\/?$/);
     await expect(page.getByRole('status').filter({ hasText: `${p.name} archived` })).toBeVisible();
     // archived projects leave me.projects → no card on the landing
@@ -321,10 +321,10 @@ test.describe('danger zone and archived state', () => {
     // the banner's "Unarchive it" link opens the danger tab
     await page.locator('[data-archived-banner]').getByRole('link', { name: 'Unarchive it' }).click();
     await expect(page).toHaveURL(/\?tab=danger$/);
-    await zone.getByRole('button', { name: 'Unarchive' }).click();
+    await zone.getByRole('button', { name: /^Unarchive( anyway)?$/ }).click();
     const unarchive = page.getByRole('dialog', { name: `Unarchive “${p.name}”?` });
     await expect(unarchive).toBeVisible();
-    await unarchive.getByRole('button', { name: 'Unarchive' }).click();
+    await unarchive.getByRole('button', { name: /^Unarchive( anyway)?$/ }).click();
     await expect(page.getByRole('status').filter({ hasText: `${p.name} is active again` })).toBeVisible();
     await expect(page.locator('[data-archived-banner]')).toHaveCount(0);
     await expect(page.locator('[data-topbar]').getByText('Read-only')).toHaveCount(0);
@@ -342,8 +342,8 @@ test.describe('danger zone and archived state', () => {
     expect(key.ok()).toBeTruthy();
     await archiveProject(request, p.id);
     await gotoApp(page, `/projects/${p.slug}/settings?tab=danger`);
-    await page.locator('[data-danger-zone]').getByRole('button', { name: 'Unarchive' }).click();
-    const dialog = page.getByRole('dialog', { name: `Unarchive “${p.name}”?` });
+    await page.locator('[data-danger-zone]').getByRole('button', { name: /^Unarchive( anyway)?$/ }).click();
+    const dialog = page.getByRole('alertdialog', { name: `Unarchive “${p.name}”?` });
     await expect(dialog.getByText('1 API key will work again')).toBeVisible();
     await expect(dialog.getByText('Still active')).toBeVisible();
     await dialog.getByRole('button', { name: 'Revoke keys first' }).click();

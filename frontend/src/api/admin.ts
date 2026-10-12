@@ -98,6 +98,7 @@ export interface MaintenanceOverview {
     summary_worker_alive: boolean | null;
     maintenance_worker_alive: boolean | null;
     maintenance_current_job?: string | null;
+    workers_service?: { alive: boolean; processes: { alive: boolean }[] } | null;
   };
   pool?: string | null;
   db_stats:
