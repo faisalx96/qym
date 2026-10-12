@@ -32,6 +32,16 @@ export function csvEscape(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
+
+/**
+ * Spreadsheet apps run a cell that starts with = + - @ (or a tab / CR) as a formula, and model
+ * outputs are untrusted text; prefix those with an apostrophe. Plain numbers stay numbers.
+ */
+export function neutralizeFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) && !NUMBER.test(value) ? `'${value}` : value;
+}
+
 /** An object, or a JSON / Python-dict string holding one. */
 export function tryParseObject(value: unknown): Record<string, unknown> | null {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
@@ -145,6 +155,6 @@ export function buildCompareCsv(model: CompareModel, items: ExportItem[], column
     return csvEscape(m ? `${model.runs[parseInt(m[1] ?? '', 10)]?.label ?? ''} / ${c.label}` : c.label);
   });
   const lines = [header.join(',')];
-  for (const item of items) lines.push(columns.map((c) => csvEscape(exportCell(model, item, c.key))).join(','));
+  for (const item of items) lines.push(columns.map((c) => csvEscape(neutralizeFormula(exportCell(model, item, c.key)))).join(','));
   return '﻿' + lines.join('\n');
 }

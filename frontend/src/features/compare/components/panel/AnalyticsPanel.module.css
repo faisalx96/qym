@@ -15,7 +15,9 @@
 
 @media (max-width: 1100px) {
   .panel {
-    position: static;
+    /* relative, not static: it must stay the containing block so visually hidden (absolute) text cannot widen the page. */
+    position: relative;
+    top: auto;
     max-height: none;
   }
 }

@@ -126,3 +126,23 @@ test('axe: no serious or critical violations in the Sweep view', async ({ page }
   await expect(page.getByTestId('sweep-view')).toBeVisible();
   expect(await axeScan(page)).toEqual([]);
 });
+
+test('phone width: no horizontal page scroll, with and without an expanded item', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await open4(page);
+  const width = () => page.evaluate(() => document.documentElement.scrollWidth);
+  expect(await width()).toBeLessThanOrEqual(390);
+  await page.getByRole('button', { name: /^Item 1:/ }).click();
+  await expect(page.getByTestId('output-card')).toHaveCount(4);
+  expect(await width()).toBeLessThanOrEqual(390);
+});
+
+test.describe('light theme', () => {
+  test.use({ colorScheme: 'light' });
+  test('axe: no serious or critical violations with an expanded item', async ({ page }) => {
+    await open4(page);
+    await page.getByRole('button', { name: /^Item 1:/ }).click();
+    await expect(page.getByTestId('output-card')).toHaveCount(4);
+    expect(await axeScan(page)).toEqual([]);
+  });
+});

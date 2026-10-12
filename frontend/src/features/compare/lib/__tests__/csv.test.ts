@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCompareCsv, csvEscape, discoverExportColumns, tryParseObject } from '../csv';
+import { buildCompareCsv, csvEscape, neutralizeFormula, discoverExportColumns, tryParseObject } from '../csv';
 import { buildCompareModel } from '../model';
 import { makePayload } from './fixtures';
 
@@ -15,6 +15,15 @@ describe('compare csv', () => {
     expect(csvEscape('a,"b"')).toBe('"a,""b"""');
     expect(tryParseObject("{'a': True, 'b': None}")).toEqual({ a: true, b: null });
     expect(tryParseObject('[1]')).toBeNull();
+  });
+
+  it('neutralizes spreadsheet formulas but not numbers', () => {
+    expect(neutralizeFormula('=HYPERLINK("x")')).toBe('\'=HYPERLINK("x")');
+    expect(neutralizeFormula('@SUM(A1)')).toBe("'@SUM(A1)");
+    expect(neutralizeFormula('-cmd|calc')).toBe("'-cmd|calc");
+    expect(neutralizeFormula('-0.25')).toBe('-0.25');
+    expect(neutralizeFormula('1e-3')).toBe('1e-3');
+    expect(neutralizeFormula('hello')).toBe('hello');
   });
 
   it('discovers groups and builds a BOM CSV with only the chosen columns', () => {

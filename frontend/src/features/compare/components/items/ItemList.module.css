@@ -146,3 +146,19 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Phone: the pills drop under the preview (and wrap) instead of widening the page; the column header no longer aligns, so it goes. */
+@media (max-width: 640px) {
+  .head {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: 2rem minmax(0, 1fr);
+  }
+
+  .row .pills {
+    grid-column: 2;
+    flex-wrap: wrap;
+  }
+}
