@@ -1,19 +1,25 @@
 # qym Design Language
 
 **The single source of truth for all UI work in this repo.** If you are styling,
-editing, or generating anything under `packages/platform/qym_platform/_static/`,
-follow this document. It is enforced by `tests/platform/test_design_language.py` —
+editing, or generating anything under `frontend/` (the React app that is the
+platform UI, and the SDK-local viewer built from the same sources), follow this
+document. It is enforced by `frontend/src/__tests__/design-language.test.ts`
+(run by `tests/platform/test_design_language.py`), ESLint and Stylelint —
 violations fail CI, so read this before writing CSS, not after.
 
-Scope: the platform dashboard (`_static/dashboard/`). One sanctioned exception
-is listed at the end (docs prose scale). The SDK-local viewer is built from `frontend/` with the same tokens.
+Scope: everything in `frontend/src/`. The frozen offline export templates in
+`packages/platform/qym_platform/export_templates/` are a sanctioned exception
+(see section 5).
 
 ---
 
 ## 1. Vocabulary: design tokens
 
 All colors, sizes, spacing, and fonts come from the `:root` block in
-[`dashboard.css`](../packages/platform/qym_platform/_static/dashboard/dashboard.css).
+[`tokens.css`](../frontend/src/styles/tokens.css) (shell chrome sizes live in
+[`shell.css`](../frontend/src/styles/shell.css), global resets in `base.css`).
+The shared scale is defined there only; no other stylesheet may redefine
+`--font-*`, `--text-*`, `--bg-*` or `--control-height`.
 **Never hardcode a value that has a token.** If you need a value that doesn't
 exist, add a token first, then use it.
 
@@ -60,11 +66,12 @@ and use the run section header recipe below (`--font-xl` title).
 Off-scale values (9px, 10.5px, 11.5px, 12.5px, 13.5px, 14px, 16px, 17px, 20px…)
 must snap to the nearest role token.
 
-**Glyph exemption:** decorative glyphs — `×` close buttons, `▶`/`▼` disclosure
-arrows, `●` markers, `↕` sort hints, emoji, and oversized empty-state icons
-(32–48px) — may keep hardcoded pixel sizes. They are icons drawn with text, not
-text. The CI test freezes the current inventory of these; adding a new one means
-updating the test's allowlist deliberately.
+**Glyph exemption:** decorative glyphs — `×` close buttons, disclosure arrows,
+markers, sort hints, emoji, and oversized empty-state icons — use the
+`--glyph-*` tokens (`--glyph-md` 20px, `--glyph-lg` 48px), not raw pixels. They
+are icons drawn with text, not text. The frozen px inventory in
+`design-language.test.ts` (`FROZEN_HARDCODED_SIZES`) starts empty; adding an
+entry is a deliberate exemption, named in the commit message.
 
 ### Font families
 
@@ -79,14 +86,16 @@ updating the test's allowlist deliberately.
   Menlo, …, Consolas, 'Liberation Mono', monospace`. **Menlo must stay**: it is
   the only mono face Chrome on macOS can see by name; without it the generic
   `monospace` resolves to Courier. Any hardcoded mono stack names Menlo too; CI checks both.
-- **Text direction.** Every block that shows user or model text takes
-  `QymSafe.textDirAttrs(text)` (or `QymSafe.applyTextDir(el, text)` for DOM
-  nodes): mostly-Arabic text gets `dir="rtl" lang="ar"`, anything else
+- **Text direction.** Every block that shows user or model text goes through
+  `TextBlock` (`src/ui/TextBlock`) or takes `textDirAttrs(text)` from
+  `@/lib/text`: mostly-Arabic text gets `dir="rtl" lang="ar"`, anything else
   `dir="auto"`. Put it on the block element, never an inline span inside a
   left-to-right block; use `text-align: start`, never `left`. Code and JSON
   editors whose lines mix scripts use `unicode-bidi: plaintext` on every layer
   (CodeMirror: `EditorView.perLineTextDirection`). Arabic blocks get the 1.7
-  leading from `dashboard.css`, which page line-heights cannot override.
+  leading from `tokens.css`, which component line-heights cannot override.
+  `TextBlock` is also the only place `dangerouslySetInnerHTML` is allowed
+  (ESLint).
 
 ### Shell chrome scale
 
@@ -108,344 +117,211 @@ removed on purpose; one token name means one value everywhere.
 
 ## 2. Hard rules (CI-enforced)
 
-1. **Tokens only** for font sizes and text grays. No new hardcoded `font-size: Npx`
-   (CSS) or `fontSize: 'Npx'` (JS) outside the frozen glyph allowlist.
+Enforced by `npm run test:design` (vitest), ESLint (TSX rules) and Stylelint.
+
+1. **Tokens only** for font sizes and text grays. No hardcoded `font-size: Npx`
+   (CSS Modules; Stylelint also rejects it) or `fontSize` in a TSX `style`
+   prop (ESLint), outside the frozen glyph allowlist.
 2. **`--text-dim` never on readable content.**
 3. **No readable text below 11px.**
 4. **Mono for data, sans for words.**
 5. **No new font families**; DM Sans / Georgia / webfont imports are banned.
 6. **The old grays `#7a7a90` and `#50505e` must not reappear** (they were the
    pre-2026-07 sub-AA ramp).
-7. JS-generated markup follows the same rules — `var(--font-sm)` etc. work fine
-   inside inline `style` strings; use them.
-8. Hex colors may be hardcoded in JS **only** when concatenated with alpha
-   suffixes (e.g. `color + '40'`) where `var()` is impossible — note it with a
-   comment.
-9. **Surfaces are always themed.** The dashboard is dark only and `:root`
-   declares `color-scheme: dark`, so anything the browser draws itself (form
-   controls, `<dialog>`, scrollbars, native popups) comes up dark even before a
-   component's stylesheet has loaded. No stylesheet paints a surface in raw
-   `#fff`/`white`; use `var(--bg-*)`. A translucent decorative mark is the
-   only exception, named in the test's allow-list.
-10. **A page's stylesheets travel with it.** Put page CSS in a
-    `<link rel="stylesheet">` in the page's `<head>` with a `?v=` cache key;
-    shell.js carries those links across in-app navigation (as it does
-    `<style>`), waiting for them before the page swaps in. A script that adds
-    a stylesheet at runtime must name the same cache key the pages use.
+7. **No hardcoded colours.** Hex and `white` are rejected for `color` and
+   `background` in CSS (Stylelint) and in TSX `style` props (ESLint). Use
+   `var(--…)`.
+8. **Surfaces are always themed.** The app is dark only and `:root` declares
+   `color-scheme: dark` (also set in `index.html`), so anything the browser
+   draws itself (form controls, `<dialog>`, scrollbars, native popups) comes up
+   dark even before a stylesheet has loaded. No stylesheet paints a surface in
+   raw `#fff`/`white`; use `var(--bg-*)`.
+9. **The shared scale is defined once.** Only `tokens.css` declares
+   `--font-*`, `--text-*`, `--bg-*` and `--control-height`.
+10. **Features compose primitives.** Feature CSS does not restyle a primitive
+    (no `--control-height` heights, no `--font-xs` outside Badge/Tag, no
+    pill-shaped clickable chips of its own); `--docs-font-*` / `--docs-body`
+    are only referenced from `features/docs/`.
+11. **`dangerouslySetInnerHTML` only inside `src/ui/TextBlock`.**
 
 ---
 
-## 3. Component recipes (copy these, don't invent)
+## 3. Component recipes: the React primitives
 
-The shared control and display primitives live in
-[`ui_components.css`](../packages/platform/qym_platform/_static/dashboard/ui_components.css),
-with shared keyboard/touch behavior in
-[`ui_components.js`](../packages/platform/qym_platform/_static/dashboard/ui_components.js).
-Load the stylesheet after page-local styles and load the script with `defer`.
-New markup uses the canonical `qym-*` classes; the legacy selectors listed
-beside them are migration aliases only.
+Every shared control and display element is a primitive in
+[`frontend/src/ui/<Name>/`](../frontend/src/ui/): `<Name>.tsx`, a CSS Module
+`<Name>.module.css` whose **first line names the recipe it implements**, and an
+`index.ts` (import from `@/ui`). Do not build page-local copies; if a primitive
+is missing a variant, extend the primitive. State is expressed in `data-*`
+attributes (`data-selected`, `data-hovered`, `data-focus-visible`, …). The UI
+gallery at `/__ui` (Vite dev server) shows every primitive in every state.
+The recipe contracts (heights, radii, fonts, z-index tokens) are pinned per
+primitive in `design-language.test.ts`.
 
-### Control
-`.qym-control` is the single aligned-density input recipe: 24px high, 5px
-radius, `--font-sm`, and `--font-sans`. The 24px height keeps control text
-visually level with adjacent 11px toolbar labels. Add `.qym-input`,
-`.qym-select`, or `.qym-search` to describe behavior, not density. There are no
-compact or roomy variants. Compact inline action buttons beside these controls
-use `.qym-inline-action` and the same height. Add
-`.qym-inline-action--neutral` for secondary toolbar actions,
-`.qym-inline-action--accent` for the primary action in that row, or
-`.qym-inline-action--danger` for an explicit destructive action; all use the
-shared borderless rounded-rectangle surface. Danger actions use the semantic
-error color and must state what will be deleted. External integration actions
-may use a documented brand modifier such as `.qym-inline-action--langfuse`;
-brand color belongs to the integration action, never to generic controls. Textareas,
-range inputs, the 42px authentication fields, and composite controls such as
-the playground connection picker remain separate recipes and must not inherit
-`--control-height`.
-Within a mixed header action cluster, align direct actions and an adjacent
-status badge to the same 24px control height. The badge keeps its pill
-silhouette and semantic tint; actions keep their own semantic surfaces.
+The recipes, by intent:
 
-### Multiselect dropdown
-Use `.qym-dropdown` with content in this fixed order:
-
-1. `.qym-dropdown__search`
-2. `.qym-dropdown__actions` containing Select All and None/Clear
-3. 32px `.qym-dropdown__option` rows
-
-Each option may expose `.qym-dropdown__only`, an explicit “Only” action that
-clears the prior selection and keeps that option. Do not hide this capability
-behind double-click.
-
-### Tabs and switchers
-Section navigation uses `.qym-tabs` + `.qym-tabs__tab`: underline-only active
-state, `role="tablist"`/`role="tab"`, and synchronized `aria-selected`. Shared
-behavior provides roving focus and Left/Right/Home/End navigation.
-Dense dataset collection tabs inside chart cards are the exception: they keep
-an elevated strip, a filled active surface with green text/underline, and a
-filled count tile on every tab. Horizontally overflowing tab strips reveal
-their scrollbar thumb only on hover.
-The run detail page's **sticky section nav** (`.run-section-nav`) is the one
-jump-link variant: one row under the run header with the run name and status
-(shown once the bar sticks), one link per section (`data-run-section-link`,
-`--font-md` / 600, muted; the section in view gets `aria-current` and the
-shared sliding underline in Qym green), the page-wide Filters + Clear, and a
-back-to-top icon action. Links carry `.qym-tag--count` counts (errors use the
-danger tone). No percentages, progress bars or proportional link widths. The
-bar sticks with a frosted `--bg-void` background and gains a shadow only while
-stuck. Dropdowns opened from the bar (the filter builder) hang under it and
-close on Escape or an outside click.
-
-**Run section header.** Every top-level run-page section opens with
-`.run-section-head` (`data-run-section="<key>"`): a `--font-xl` / 650 primary
-title, one muted `--font-base` description line (ellipsis), the section's
-controls in `.run-section-head__aside` on the right, a `--border-subtle`
-hairline above and about 48px (`--space-xl` × 1.5) from the previous section.
-Sections do not add their own top or bottom margins; the header owns the
-spacing.
-
-In-place view, metric, repeat, and time switching uses `.qym-segmented` +
-`.qym-segmented__option`. The complete segmented control is 24px high so it
-aligns with adjacent selectors; options fill its inset content box, and only
-the selected option has a Qym-green background. Shared behavior moves one
-sliding selection indicator between options, preserves the prior position across
-keyed re-renders, re-measures controls after async content or visibility
-changes, and disables that motion when the user prefers reduced motion; pages
-must not add page-local selection animation.
-
-### Badges, tags, and chips
-Status and outcome labels use `.qym-badge`: 20px minimum height, fully rounded,
-tinted outline, sans 10px/650. Semantic tones are success
-(completed/approved/improved), info (running), danger
-(failed/rejected/regressed), warning (draft/stopped), and neutral
-(submitted/within-noise). Statuses keep their outline and pill silhouette.
-
-Roles, provenance, versions, passive metadata, and compact counts use
-`.qym-tag`: 20px minimum height, borderless, `--control-radius`, and a
-tinted/elevated fill. Add `.qym-tag--role`, `.qym-tag--accent`, or
-`.qym-tag--count` for those specific meanings; use `.qym-tag--data` or
-`.qym-tag--version` when the content itself is data. Semantic filled tones use
-`.qym-tag--success`, `--info`, `--warning`, or `--danger`. Roles, counts, data,
-and versions are mono; other human-readable tags are sans. A tag may grow
-vertically when its content wraps.
-
-Interactive filters use `.qym-chip`: 26px tall, rounded outline, sans 11px/600.
-Counts remain mono. Buttons remain real buttons; passive metadata must not use
-the chip recipe.
-
-### Compact icon actions
-Use `.qym-icon-action` for a single icon-only action such as copy, expand, open,
-more, edit, or close. It is a 24px borderless square with
-`--control-radius` and a transparent resting surface. Hover and keyboard focus
-change only the glyph to Qym green platform-wide: do not add a tile, surface
-tint, ring, or glow on pointer hover. Keyboard focus retains the standard thin
-focus outline for accessibility. Copied confirmation keeps the green glyph
-briefly. Semantic actions keep their meaning: approve/submit use green while
-reject/delete use red. Help markers and passive icons are not icon actions and
-must not inherit this recipe. Every copy action uses the same 24×24-viewBox
-overlapping-rectangles SVG with `stroke="currentColor"`; page-local copy glyphs
-or hardcoded stroke colors are not allowed.
-
-### Connected statistics
-Primary summary bands use `.qym-stat-strip` with `.qym-stat-strip__item`,
-`__label`, and `__value`. The strip owns the outer border; equal cells have
-dividers and no individual card borders. Labels are 13px/650 with extra vertical
-space before 18px/700 mono values. Tiny card-footer metadata is not a stat strip.
-The Runs-table repeat-run **Group metrics** header is also not a stat strip: it
-is a compact inline summary within a table group row and intentionally keeps the
-`.samples-summary-*` recipe without `qym-stat-strip` classes.
-When a connected summary accompanies a section heading, use the compact header
-variant: one 34px row, with each icon, label, and value inline. It should match
-the heading block's visual height rather than compete with the section content.
-When a statistic cell has a leading icon beside a label/value stack, align the
-icon container to the top of the stack so it sits level with the label. Never
-center the icon against the combined label-and-value height.
-Compact model-card metric matrices also remain individual tiles; they are not
-page-level summary bands and must not be converted into connected strips.
-
-### Explanations
-Use the focusable `.qym-help-marker` with a nested `.qym-help-tooltip`
-(`role="tooltip"`). The same 12px marker is used for estimator definitions,
-uncertainty, and confidence explanations. Hover/focus opens it; click/touch pins
-one marker; outside-click and Escape close it. Shared behavior assigns tooltip
-IDs and `aria-describedby`, including for dynamically rendered markers and
-standalone exports.
-
-### Data table
-Use the shared `QymDataTable` component (`qym_table.js` + `.qdt-table` in
-`dashboard.css`) for new tables. Its styles are the reference implementation:
-
-```css
-thead th {  /* sticky header */
-  font-size: var(--font-sm);        /* 11px */
-  color: var(--text-muted);
-  background: var(--bg-elevated);
-  text-transform: uppercase; letter-spacing: 0.05em; font-weight: 650;
-}
-tbody td {
-  font-size: var(--font-base);      /* 12px */
-  color: var(--text-secondary);
-  font-family: var(--font-sans);    /* mono only on ID/number/JSON columns */
-}
-```
-Numeric/ID columns add `font-family: var(--font-mono)` and
-`font-variant-numeric: tabular-nums` per column, not per table.
-Right-align scalar numeric columns. A column whose primary content is a chart,
-bar, or score track aligns its header to the visualization's left edge.
-Score-bearing table values use `.qym-score-value` plus the `score-1`…`score-5`
-class returned by `QymMetrics.getMetricColorClass(value, type, direction)`,
-with the direction from `QymMetrics.metricDirection(spec)`. Lower-is-better
-metrics read the ramp inverted; a metric that declares no direction stays
-neutral (no good/bad color, Pass/Fail, "best" or winner). A lower-is-better
-metric leaves task and scorer errors out of its mean (`QymMetrics.getRowScore`
-with the direction): an errored value shows as "Error" or the ⚠
-`--metric-error` glyph, never as a colored score, a "best" or a histogram
-bucket, and the error count sits beside the mean. Raw numeric metrics
-stay neutral, and confidence intervals remain muted rather than inheriting the
-estimate's score color.
-Wide tables that use `.qym-scroll-mirror` expose only the persistent mirrored
-horizontal scrollbar. Shared behavior adds `.qym-scroll-mirror-target` to hide
-the target's native scrollbar while preserving wheel, touch, keyboard, and
-programmatic scrolling; never render both controls.
-
-### Pagination
-Use `QymUIComponents.renderPagination()` with a `.qym-pagination` host for every
-paginated data view. The Runs view uses the approved option A placement: the
-pager is pinned inside the existing status bar, with its range summary and
-controls kept together. The shared control uses individual borderless
-rounded-square icon buttons for First, Previous, Next, and Last around a direct
-page entry and total. The current-page entry keeps the filled rounded input
-treatment but is tightly controlled: 28×24px for short values and digit-aware
-growth only when the page count requires it. It must not expand into a large
-selected button. Do not wrap the controls in a connected pill or repeat the
-action names as visible button text. Matching disabled, hover, and focus states
-apply platform-wide. Pass `pageSizeOptions` only where changing the page size is
-supported. Do not build page-local pagination markup or CSS.
-Changing pages in an item-by-item detail view returns its nested scroll host to
-the start of the complete Items section (title and toolbar included, just below
-the run page's sticky section nav), not merely the first card. If content above that section rerenders asynchronously,
-perform the scroll after the layout has settled.
-
-Wide tables that cannot expose their native horizontal scrollbar without
-vertical scrolling use `.qym-scroll-mirror` with
-`data-qym-scroll-mirror-for="<scroll-host-id>"`. The shared behavior renders an
-always-visible thumb over the table's bottom edge, keeps it synchronized with
-the table, and hides it when the table fits. The interaction wrapper remains
-transparent: do not create a separate rail, border, or background band above
-pagination. The thumb reuses the quiet, translucent neutral palette of the
-platform's vertical scrollbars; interaction may increase neutral contrast but
-must not introduce an accent-colored flash.
-
-### Page hero
-```
-h1.page-title      → var(--font-title) / 650 / --text-primary
-p.description      → var(--font-base) / 400 / --text-muted (one line, ellipsis)
-div.meta-line      → var(--font-base) / 400 / --text-muted, '·' separators
-```
-
-### Stat card
-```
-.label → var(--font-sm) / 600 / --text-muted / uppercase / ls 0.05em
-.value → var(--font-stat) / 700 / --font-mono / tabular-nums
-        (--text-primary, or a --score-N color when it encodes a score)
-```
-Mid-tier stats embedded in drawers/tiles use `--font-xl` instead of `--font-stat`.
-
-### Uppercase label / eyebrow
-`var(--font-sm)` (or `--font-xs` only when physically inside a pill),
-weight 600–700, `--text-muted`, `text-transform: uppercase`,
-`letter-spacing: 0.05em`–`0.12em`.
-
-### Status badge / pill
-`var(--font-xs)` / 650, `border-radius: 999px`, 1px border, semantic color for
-both text and border, transparent or `*-dim` background.
-
-### Role / metadata tag
-`var(--font-xs)` / 650, `border-radius: var(--control-radius)`, no border, and a
-tinted or elevated background. Use mono only for roles, counts, IDs, and version
-strings.
-
-### Modal
-Title `var(--font-xl)` (page-level modals) or reuse `.shell-modal` (body-mounted,
-root-token sizes). Body text `var(--font-sm)`–`var(--font-base)` secondary.
-
-Every modal surface (shell dialogs, page modals, drawers, the trace viewer)
-goes through `QymUIComponents.openDialog(panel, { initialFocus, onEscape })`
-and `releaseDialog(panel)`: `role="dialog"`, `aria-modal`, a label from its
-title, focus moved in on open, Tab kept inside, Escape closing when the caller
-passes `onEscape`, and focus returned to the trigger on close. Destructive
-confirms start on Cancel, and Enter acts on the focused button (only a text
-field submits on Enter). A closed drawer that stays in the DOM is `inert`
-and `aria-hidden`, and carries `aria-modal` only while open. Never close a
-modal by toggling `display` inline.
-
-### Failed requests
-A failed load is never an empty or "not found" state. Use
-`QymUIComponents.renderErrorState(host, { title, error, onRetry })` in place
-of the region that failed: it names the cause (session ended → Sign in, no
-access, not found only for a real 404, server error, network) and offers
-Retry; it never shows a create action. A refresh that fails after data was
-shown keeps the rows dimmed (`.qym-is-stale`) under a `.qym-stale-banner`
-that says how old they are and whether the latest filter change is applied.
-
-### Empty state
-Icon: hardcoded 32–48px glyph, `--text-dim`, low opacity. Title:
-`var(--font-xl)` / 650 / primary. Body: `var(--font-md)` / muted, line-height ≥1.5.
+- **Control** (`TextField`, `Select`, `MultiSelect`, `SearchField`, `NumberField`,
+  `Textarea`, `Button`, `LinkButton`, `SegmentedControl`): one aligned density,
+  `--control-height` (24px) and `--control-radius`, `--font-sm`, sans. There are
+  no compact or roomy variants. Buttons come in neutral, accent (primary) and
+  danger tones; a danger action states what will be deleted. Brand colour
+  belongs to an integration action only (e.g. Langfuse), never to generic
+  controls. The 42px authentication fields (`TextField`),
+  textareas, sliders and composite controls are separate recipes and do not
+  inherit `--control-height`. In a mixed header action cluster, actions and an
+  adjacent status badge share the 24px control height.
+- **Multiselect** (`MultiSelect`): content in fixed order: search, actions
+  (Select all and None/Clear), then `--dropdown-option-height` option rows.
+  Each option may expose an explicit "Only" action; never hide it behind
+  double-click.
+- **Tabs and switchers** (`Tabs`, `SegmentedControl`): section navigation is
+  underline-only tabs (`role="tablist"`/`tab`, `aria-selected`, roving focus and
+  Left/Right/Home/End from React Aria). In-place view/metric/repeat/time
+  switching uses `SegmentedControl`: 24px high, only the selected option has the
+  Qym-green fill, one sliding indicator, no motion under
+  `prefers-reduced-motion`. Pages never add their own selection animation. The
+  run detail page's sticky section nav (jump links, `aria-current` on the section
+  in view, sliding green underline, page-wide Filters + Clear, back-to-top) is
+  the one jump-link variant; no percentages or progress bars in it.
+- **Run section header**: every top-level run-page section opens with a
+  `--font-xl` / 650 primary title, one muted `--font-base` description line,
+  the section controls on the right, a `--border-subtle` hairline above and
+  about 48px from the previous section. The header owns the spacing; sections add
+  no top or bottom margin of their own.
+- **Badge** (`Badge`, `RunStatusBadge`): status and outcome labels, 20px minimum
+  (`--badge-height`), fully rounded, tinted 1px outline, sans `--font-xs` / 650.
+  Tones: success (completed/approved/improved), info (running), danger
+  (failed/rejected/regressed), warning (draft/stopped), neutral
+  (submitted/within-noise).
+- **Tag** (`Tag`): roles, provenance, versions, passive metadata and compact
+  counts; 20px minimum, borderless, `--control-radius`, tinted or elevated
+  fill. Roles, counts, data and versions are mono; other tags are sans. A tag
+  may grow vertically when its content wraps.
+- **Chip** (`Chip`): interactive filters only; `--chip-height`, rounded outline,
+  sans `--font-sm` / 600, counts mono. Passive metadata never uses the chip
+  recipe.
+- **Icon action** (`IconButton`, `CopyButton`): a single icon-only action, a
+  24px borderless square with `--control-radius` and a transparent resting
+  surface. Hover and keyboard focus change only the glyph colour (Qym green);
+  no tile, tint, ring or glow on pointer hover. Keyboard focus keeps the thin
+  focus outline. Semantic actions keep their meaning (approve/submit green,
+  reject/delete red). Help markers and passive icons are not icon actions.
+  Every copy action is `CopyButton` with the shared overlapping-rectangles
+  glyph from `Icon`.
+- **Connected statistics** (`StatStrip`): primary summary bands; the strip owns
+  the outer border, cells have dividers and no card borders, labels sit above
+  mono values, and a leading icon aligns to the top of the label/value stack.
+  Tiny card-footer metadata, the Runs-table repeat-run group metrics row, and
+  compact model-card metric matrices are not stat strips. With a section
+  heading, use the compact one-row variant.
+- **Explanations** (`HelpMarker`, `Tooltip`): the focusable 12px
+  `--info-marker-size` marker with a tooltip (`role="tooltip"`). Hover/focus
+  opens it, click/touch pins it, outside click and Escape close it.
+- **Data table** (`DataTable`, `.qdt-table`): sticky header in `--font-sm`,
+  `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650;
+  body cells `--font-base`, `--text-secondary`, sans. Numeric/ID columns add
+  mono and `tabular-nums` per column, not per table; scalar numeric columns are
+  right-aligned; a column whose primary content is a chart, bar or score track
+  aligns its header to the visualisation's left edge. Wide tables expose only
+  the persistent mirrored horizontal scrollbar (never both native and mirror).
+- **Scores** (`ScoreValue`): score-bearing values use the five-band
+  `--score-1..5` ramp, direction-aware via `src/lib/metrics.ts`. Lower-is-better
+  metrics read the ramp inverted; a metric that declares no direction stays
+  neutral (no good/bad colour, Pass/Fail, "best" or winner). A lower-is-better
+  metric leaves task and scorer errors out of its mean; an errored value shows
+  "Error" or the warning glyph in `--metric-error`, never a coloured score, a
+  "best" or a histogram bucket, and the error count sits beside the mean. Raw
+  numeric metrics stay neutral and confidence intervals stay muted.
+- **Pagination** (`Pagination`): every paginated view uses it. Borderless
+  rounded-square icon buttons for First, Previous, Next, Last around a direct
+  page entry (28x24px, growing only with the digit count) and total, mono; no
+  connected pill and no visible action names. The Runs view pins it inside the
+  status bar with the range summary. Pass page-size options only where changing
+  the size is supported. After a page change in an item-by-item detail view the
+  scroll host returns to the start of the whole Items section (below the sticky
+  section nav), after layout has settled.
+- **Page hero** (`PageHeader`): `Text` roles: title `--font-title` / 650 /
+  primary; description `--font-base` / muted, one line with ellipsis; meta line
+  `--font-base` / muted with `·` separators.
+- **Stat card / stat value** (`Text`, `StatStrip`): label `--font-sm` / 600 /
+  muted / uppercase; value `--font-stat` / 700 / mono / `tabular-nums`
+  (primary, or a `--score-N` colour when it encodes a score). Mid-tier stats in
+  drawers and tiles use `--font-xl`.
+- **Eyebrow** (`Eyebrow`): `--font-sm` (`--font-xs` only inside a pill), 600-700,
+  muted, uppercase, `letter-spacing` 0.05em-0.12em.
+- **Dialog and Drawer** (`Dialog`, `ConfirmDialog`, `FormDialog`, `Drawer`,
+  `Popover`, `Toast`): title `--font-xl`, body `--font-sm`-`--font-base`
+  secondary; z-index from the `--z-*` tokens only. Every modal surface has
+  `role="dialog"`, `aria-modal`, a label from its title, focus moved in on open,
+  Tab kept inside, Escape closing, and focus returned to the trigger (React
+  Aria provides this; do not hand-roll). Destructive confirms start on Cancel.
+  A closed drawer that stays mounted is `inert`. Never close a modal by toggling
+  `display`.
+- **Failed requests** (`ErrorState`, `StaleBanner`): a failed load is never an
+  empty or "not found" state. `ErrorState` names the cause (session ended, no
+  access, not found only for a real 404, server error, network) and offers Retry;
+  it never shows a create action. A refresh that fails after data was shown
+  keeps the rows dimmed under a `StaleBanner` that says how old they are and
+  whether the latest filter change is applied.
+- **Loading and empty** (`Skeleton`, `EmptyState`): a skeleton appears only
+  after the pending delay (`useDelayedPending`, 300 ms) and respects
+  `prefers-reduced-motion`. `EmptyState` is for a successful empty result only:
+  glyph icon in `--text-dim`, low opacity, title `--font-xl` / 650 / primary,
+  body `--font-md` / muted, line-height 1.5 or more.
+- **Text blocks** (`TextBlock`, `JsonViewer`, `KeyValueGrid`): see Text
+  direction above; code and JSON are mono.
 
 ---
 
 ## 4. Page anatomy
 
-Every dashboard page presents, in order: **page title → description → meta line →
-tabs (if any) → content**. Constrained pages (settings, admin, profile, projects,
-overview) render inside the 1120px shell container; data-dense pages (runs,
-charts, datasets, compare) go full-width with their own layout.
+Every page presents, in order: **page title -> description -> meta line ->
+tabs (if any) -> content**, via `PageHeader`. Constrained pages (settings,
+admin, profile, projects, overview) use the `constrained` container (1120px)
+from `@/features/shell/layout`; data-dense pages (runs, charts, datasets,
+compare) use `fullWidth` with their own layout.
 
-Pages carry their styles in an inline `<style>` block — that's accepted — but the
-values inside must be tokens. Prefix page-local classes (`.dsx-`, `.pg-`, `.tv-`,
-`.sweep-`) to avoid cascade collisions with `dashboard.css`.
+Styles live in the page or component's CSS Module next to its `.tsx`, built from
+tokens and primitives. Class names are local (CSS Modules), so no prefixing is
+needed. Set the document title with `useDocumentTitle`.
 
 ---
 
 ## 5. Sanctioned exceptions
 
-- **Docs pages** (`docs.css`, `docs/**/*.html`; in the React app
-  `frontend/src/features/docs/`): prose reading pages keep a larger
-  independent heading/body scale (28/20/16/13.5→13px) and a brighter
+- **Docs pages** (`frontend/src/features/docs/`): prose reading pages keep a
+  larger independent heading/body scale (28/20/16/15/13px) and a brighter
   `--docs-body`. They still use the shared color ramp for labels and the
-  tokenized `--code-*` syntax palette. In `frontend/` the scale is carried by
-  the `--docs-font-*` tokens in `src/styles/tokens.css` (never px literals)
-  and only `features/docs` may reference them.
-- **`_static/ui/` (SDK-local run UI)**: a separate mini-app with its own theme
-  (`app.css`), including a light mode. Do not import dashboard tokens there or
-  vice versa.
+  tokenized `--code-*` syntax palette. The scale is carried by the
+  `--docs-font-*` tokens in `src/styles/tokens.css` (never px literals) and only
+  `features/docs` may reference them.
+- **Offline export templates**
+  (`packages/platform/qym_platform/export_templates/run/`): the frozen,
+  self-contained run page behind `GET /api/runs/{id}/export-html` and
+  `/api/compare/export-html`. It must work from a single `.html` file with no
+  server, so it keeps its own inlined stylesheet and is not subject to the token
+  and lint rules. It is not restyled with the app; do not import app code into it.
+- **SDK-local viewer** (`frontend/src/sdk-viewer/`, built to
+  `packages/sdk/qym/_static/ui/`): shares the primitives and tokens; the same
+  rules apply.
 - **`tmp/mockups/` (gitignored)**: design scratch files and mocks live here,
-  outside the shipped package, so they are exempt from all rules and from CI.
-  Do not add scratch mocks under `_static/` — they get served and shipped.
+  outside the shipped packages, and are exempt from all rules. Do not add
+  scratch mocks under `packages/*/_static/`: they get served and shipped. In-app
+  design variants use dev-only mock routes (`/__mock/<area>/<variant>`, see
+  `frontend/README.md`).
 
 ---
 
 ## 6. Self-check before you finish (any LLM session: run these)
 
-From `packages/platform/qym_platform/_static/dashboard/`:
-
 ```bash
-# New hardcoded sizes? (compare against the frozen inventory in the test)
-grep -rn "font-size: *[0-9]" --include="*.html" --include="*.css" . | grep -v mock
-
-# dim on content? (every hit must be placeholder/disabled/decorative)
-grep -rn "color: var(--text-dim)" --include="*.html" --include="*.css" . | grep -v mock
-
-# Banned fonts / stale grays?
-grep -rn "DM Sans\|Georgia\|#7a7a90\|#50505e" . | grep -v mock
+cd frontend
+npm run test:design      # this document, as a test
+npm run check            # typecheck + eslint + stylelint + vitest + design test
+cd .. && pytest tests/platform/test_design_language.py -q   # thin runner of the design test
 ```
 
-Then run the enforcement test:
-
-```bash
-pytest tests/platform/test_design_language.py -q
-```
-
-If your change legitimately adds a decorative glyph size, update the frozen
-inventory in that test **in the same commit**, with the selector named in the
-diff so the reviewer can see what was exempted.
+Open `/__ui` on the Vite dev server (`npm run dev`) to see the primitives in
+every state. If your change legitimately adds a decorative glyph size, add it
+to `FROZEN_HARDCODED_SIZES` in `design-language.test.ts` **in the same commit**,
+with the selector named in the diff so the reviewer can see what was exempted.

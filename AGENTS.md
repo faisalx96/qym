@@ -14,13 +14,15 @@ This is a monorepo with two independently-buildable packages under `packages/`:
   - `utils/`: errors and HTML/HTTP frontend helpers
   - `server/`: local UIServer + DashboardServer
   - `cli/`: agent-native CLI package (Typer-based, noun-verb subcommands)
-  - `_static/`: UI and dashboard assets
+  - `_static/ui/`: the offline local run viewer (build output of `frontend/`, gitignored)
 - `packages/platform/qym_platform/`: Platform Python package (`pip install qym-platform`)
   - `api/`: FastAPI route modules (ingest, runs, org, web)
   - `db/`: SQLAlchemy models and session
   - `migrations/`: Alembic migrations
   - `tools/`: import scripts
-  - `_static/`: platform-specific UI assets
+  - `export_templates/run/`: frozen self-contained HTML templates for `/api/runs/{id}/export-html` and `/api/compare/export-html` (not the app UI)
+  - `_static/app/`: the built React UI (output of `frontend/`, gitignored; served by `api/spa.py`)
+- `frontend/`: the React + TypeScript + Vite app, which is THE platform UI (and the SDK-local viewer in `src/sdk-viewer/`); see `frontend/README.md`
 - `docker/`: Dockerfile, docker-compose, entrypoint
 - `tests/`: test suites
   - `sdk/`: SDK unit tests
@@ -35,7 +37,9 @@ This is a monorepo with two independently-buildable packages under `packages/`:
 - Format: `black . && isort .`
 - Type check: `mypy packages/sdk/qym`
 - Tests: `pytest -q -n auto` (parallel via `pytest-xdist`; on a low-memory machine `-n 4` can be faster); set `QYM_TEST_POSTGRES_URL` to run the PostgreSQL cases, which otherwise skip
-- Build SDK wheel: `pip wheel packages/sdk/ --no-deps -w dist/`
+- Frontend (Node 24): `cd frontend && npm ci && npm run check && npm run build && npm run build:sdk` (`build` writes `packages/platform/qym_platform/_static/app/`, `build:sdk` writes `packages/sdk/qym/_static/ui/`; both gitignored). Dev: `npm run dev` (Vite on 5800, proxies the API to the platform on 8800; `frontend/README.md`). Browser tests: `npm run e2e` (platform UI), `npm run e2e:sdk` (SDK viewer); they boot their own servers
+- Build SDK wheel: `pip wheel packages/sdk/ --no-deps -w dist/` (run `npm run build:sdk` first so the viewer is in the wheel)
+- Build platform wheel: `pip wheel packages/platform/ --no-deps -w dist/` (requires the built `_static/app/`, so run `npm run build` first; the Docker image builds it in a Node stage)
 - Build platform Docker: `docker compose -f docker/docker-compose.yml build`
 
 Example local run:
@@ -59,11 +63,20 @@ qym --task-file examples/example.py \
 - Keep public APIs minimal; avoid editing generated folders.
 
 ## UI & Design Work (mandatory)
-Any change to `packages/platform/qym_platform/_static/` must follow
-**`docs/DESIGN_LANGUAGE.md`** — the single source of truth for design tokens,
-the type scale and its roles, text-color usage, mono-vs-sans policy, and
-component recipes. Read it before styling anything. Rules are enforced by
-`tests/platform/test_design_language.py`; run it after any UI change.
+The UI lives in `frontend/` (React + TypeScript + Vite, CSS Modules). Any change
+there must follow **`docs/DESIGN_LANGUAGE.md`** — the single source of truth for
+design tokens (`frontend/src/styles/tokens.css`), the type scale and its roles,
+text-color usage, mono-vs-sans policy, and the primitives in `frontend/src/ui/`.
+Read it before styling anything. Rules are enforced by
+`frontend/src/__tests__/design-language.test.ts` (plus ESLint and Stylelint).
+After any UI change run `cd frontend && npm run check` and
+`pytest tests/platform/test_design_language.py` (a thin runner of the same test).
+Never hand-edit `_static/app/` or `_static/ui/`; they are build output.
+
+UI dev loop: seed a SQLite DB with `python frontend/scripts/dev_db.py`, run the
+platform with uvicorn (`QYM_AUTH_MODE=none`), then `cd frontend && npm run dev` and
+open `http://127.0.0.1:5800/` (`/__ui` is the primitive gallery). Details in
+`frontend/README.md`.
 
 ## Testing Guidelines
 - Framework: `pytest` with `pytest-asyncio` for async paths.
