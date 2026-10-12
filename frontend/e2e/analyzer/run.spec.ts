@@ -14,7 +14,10 @@ async function openRun(page: Page, slug: string, runId: string, query = ''): Pro
 }
 
 test.describe('Test Selected (6)', () => {
-  test('stub result card shows issues, confidence and Fields sent; nothing is saved', async ({ page, request }) => {
+  test('stub result card shows issues, confidence and Fields sent; nothing is saved', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     const t = trackErrors(page);
     await openRun(page, seed.slug, seed.runId);
@@ -25,8 +28,11 @@ test.describe('Test Selected (6)', () => {
     await expect(card).toContainText('Retrieval');
     await expect(card).toContainText('The answer does not use the supplied context.');
     await expect(card).toContainText('Fields sent:');
-    for (const f of ['Input', 'Expected', 'Output']) await expect(card.getByText(f, { exact: true })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Test results' }).or(page.getByLabel('Test results')).first()).toBeFocused();
+    for (const f of ['Input', 'Expected', 'Output'])
+      await expect(card.getByText(f, { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('region', { name: 'Test results' }).or(page.getByLabel('Test results')).first(),
+    ).toBeFocused();
     // a test saves nothing: the Configure step still shows all 4 targets and no "analyzed" tag
     await step(page, 'Configure').click();
     await expect(step(page, 'Configure')).toContainText('4 targets');
@@ -46,7 +52,11 @@ test.describe('Test Selected (6)', () => {
     await step(page, 'Run').click();
     const body = page.waitForRequest((r) => r.url().includes('/analyze-test'));
     await page.getByRole('button', { name: 'Test Selected (3)' }).click();
-    expect(((await body).postDataJSON() as { item_ids: string[] }).item_ids).toEqual(['item-1', 'item-2', 'item-3']);
+    expect(((await body).postDataJSON() as { item_ids: string[] }).item_ids).toEqual([
+      'item-1',
+      'item-2',
+      'item-3',
+    ]);
     await expect(page.getByRole('article', { name: /Test result for item/ })).toHaveCount(3);
   });
 
@@ -69,13 +79,18 @@ test.describe('Analyze job (7)', () => {
     const seed = await seedAnalyzer(request);
     const t = trackErrors(page);
     await openRun(page, seed.slug, seed.runId);
-    const created = page.waitForResponse((r) => r.url().endsWith('/analysis-jobs') && r.request().method() === 'POST');
+    const created = page.waitForResponse(
+      (r) => r.url().endsWith('/analysis-jobs') && r.request().method() === 'POST',
+    );
     await page.getByRole('button', { name: 'Analyze 4 items' }).click();
     expect((await created).status()).toBe(202);
     await expect(jobRegion(page)).toBeVisible();
     await expect(jobRegion(page)).toContainText('6 of 6 metric analyses succeeded', { timeout: 30_000 });
     await expect(jobRegion(page).getByText('Completed')).toBeVisible();
-    await expect(jobRegion(page).getByRole('link', { name: 'View run' })).toHaveAttribute('href', new RegExp(`/projects/${seed.slug}/runs/${seed.runId}$`));
+    await expect(jobRegion(page).getByRole('link', { name: 'View run' })).toHaveAttribute(
+      'href',
+      new RegExp(`/projects/${seed.slug}/runs/${seed.runId}$`),
+    );
     await expect(page.getByText('Analysis finished: 6 of 6 metric analyses succeeded').first()).toBeVisible();
     // Review step: the bar gives way to the card
     await jobRegion(page).getByRole('button', { name: 'Review results' }).click();
@@ -95,7 +110,10 @@ test.describe('Analyze job (7)', () => {
     expect(t.errors, t.errors.join('\n')).toEqual([]);
   });
 
-  test('mocked job: retrying phase note, completed with one error, error-code group', async ({ page, request }) => {
+  test('mocked job: retrying phase note, completed with one error, error-code group', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     let polls = 0;
     const now = new Date().toISOString();
@@ -113,7 +131,12 @@ test.describe('Analyze job (7)', () => {
       if (route.request().method() !== 'POST') return route.continue();
       await route.fulfill({
         status: 202,
-        json: { ...base, status: 'queued', progress: { phase: 'queued', completed: 0, total: 3, errors: 0, retries: 0 }, result: null },
+        json: {
+          ...base,
+          status: 'queued',
+          progress: { phase: 'queued', completed: 0, total: 3, errors: 0, retries: 0 },
+          result: null,
+        },
       });
     });
     await page.route(/\/api\/runs\/[^/]+\/analysis-jobs\/analysis_mock1$/, async (route) => {
@@ -151,7 +174,12 @@ test.describe('Analyze job (7)', () => {
             results: [
               { item_id: 'item-1', metric_name: 'exact_match' },
               { item_id: 'item-2', metric_name: 'exact_match' },
-              { item_id: 'item-3', metric_name: 'exact_match', error: 'The provider timed out', error_code: 'llm_timeout' },
+              {
+                item_id: 'item-3',
+                metric_name: 'exact_match',
+                error: 'The provider timed out',
+                error_code: 'llm_timeout',
+              },
             ],
           },
         },
@@ -159,7 +187,9 @@ test.describe('Analyze job (7)', () => {
     });
     await openRun(page, seed.slug, seed.runId);
     await page.getByRole('button', { name: 'Analyze 4 items' }).click();
-    await expect(jobRegion(page)).toContainText('Retrying exact_match on item-2 (attempt 2 of 3): rate limited');
+    await expect(jobRegion(page)).toContainText(
+      'Retrying exact_match on item-2 (attempt 2 of 3): rate limited',
+    );
     await expect(jobRegion(page).getByText('Retrying', { exact: true })).toBeVisible();
     await expect(jobRegion(page)).toContainText('2 of 3 metric analyses succeeded, 1 failed');
     await jobRegion(page).getByRole('button', { name: 'Review results' }).click();
@@ -169,25 +199,57 @@ test.describe('Analyze job (7)', () => {
     await expect(groups).toContainText('1 target');
   });
 
-  test('mocked job: a dropped status poll shows Reconnecting, then the failure text from the backend', async ({ page, request }) => {
+  test('mocked job: a dropped status poll shows Reconnecting, then the failure text from the backend', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     let polls = 0;
     const now = new Date().toISOString();
-    const base = { job_id: 'analysis_mock2', run_id: seed.runId, pass_number: null, cancel_requested: false, created_at: now, updated_at: now, completed_at: null };
+    const base = {
+      job_id: 'analysis_mock2',
+      run_id: seed.runId,
+      pass_number: null,
+      cancel_requested: false,
+      created_at: now,
+      updated_at: now,
+      completed_at: null,
+    };
     await page.route(/\/api\/runs\/[^/]+\/analysis-jobs$/, async (route) => {
       if (route.request().method() !== 'POST') return route.continue();
       await route.fulfill({
         status: 202,
-        json: { ...base, error: null, status: 'queued', progress: { phase: 'queued', completed: 0, total: 3, errors: 0, retries: 0 }, result: null },
+        json: {
+          ...base,
+          error: null,
+          status: 'queued',
+          progress: { phase: 'queued', completed: 0, total: 3, errors: 0, retries: 0 },
+          result: null,
+        },
       });
     });
     await page.route(/\/api\/runs\/[^/]+\/analysis-jobs\/analysis_mock2$/, async (route) => {
       polls += 1;
       if (polls === 1)
-        return route.fulfill({ json: { ...base, error: null, status: 'running', progress: { phase: 'analyzing', completed: 1, total: 3, errors: 0, retries: 0 }, result: null } });
+        return route.fulfill({
+          json: {
+            ...base,
+            error: null,
+            status: 'running',
+            progress: { phase: 'analyzing', completed: 1, total: 3, errors: 0, retries: 0 },
+            result: null,
+          },
+        });
       if (polls < 6) return route.fulfill({ status: 503, json: { detail: 'unavailable' } });
       await route.fulfill({
-        json: { ...base, status: 'failed', error: 'LLM provider rejected the API key', completed_at: now, progress: { phase: 'failed', completed: 1, total: 3, errors: 1, retries: 0 }, result: null },
+        json: {
+          ...base,
+          status: 'failed',
+          error: 'LLM provider rejected the API key',
+          completed_at: now,
+          progress: { phase: 'failed', completed: 1, total: 3, errors: 1, retries: 0 },
+          result: null,
+        },
       });
     });
     await openRun(page, seed.slug, seed.runId);
@@ -198,7 +260,10 @@ test.describe('Analyze job (7)', () => {
 });
 
 test.describe('cancel, resume and the sample guard (8)', () => {
-  test('cancel mid-job: Cancelling then cancelled; the toast keeps analysed items', async ({ page, request }) => {
+  test('cancel mid-job: Cancelling then cancelled; the toast keeps analysed items', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request, { model: 'slow-model' });
     await openRun(page, seed.slug, seed.runId);
     await page.getByRole('button', { name: 'Analyze 4 items' }).click();
@@ -211,12 +276,17 @@ test.describe('cancel, resume and the sample guard (8)', () => {
     await jobRegion(page).getByRole('button', { name: 'Cancel analysis' }).click();
     await expect(jobRegion(page).getByRole('button', { name: 'Cancelling…' })).toBeDisabled();
     await expect(jobRegion(page).getByText('Cancelled', { exact: true })).toBeVisible({ timeout: 40_000 });
-    await expect(page.getByText('Analysis cancelled. Items already analyzed were kept.').first()).toBeVisible();
+    await expect(
+      page.getByText('Analysis cancelled. Items already analyzed were kept.').first(),
+    ).toBeVisible();
     await expect(jobRegion(page)).toContainText('Stopped at');
     await expect(page.getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeEnabled();
   });
 
-  test('switching sample while a job runs is blocked; reload resumes via analysis-jobs/active', async ({ page, request }) => {
+  test('switching sample while a job runs is blocked; reload resumes via analysis-jobs/active', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request, { model: 'slow-model', withRepeat: true });
     await gotoApp(page, analysisUrl(seed.slug, seed.repeatId!, '&pass=1'));
     await waitWorkspace(page);
@@ -255,16 +325,22 @@ test.describe('re-analyze human labels (9)', () => {
         run_id: seed.runId,
         item_id: 'item-1',
         metric_name: 'exact_match',
-        root_cause_issues: [{ category: 'Wrong Format', subcategory: 'Extra column', finding: 'Selected id only.' }],
+        root_cause_issues: [
+          { category: 'Wrong Format', subcategory: 'Extra column', finding: 'Selected id only.' },
+        ],
       },
     });
     expect(human.ok(), await human.text()).toBeTruthy();
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
     // human labels are protected by default: item-1 only keeps execution_accuracy
-    await expect(page.getByRole('button', { name: /exact_match 0.00, preview target of item-1/ })).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: /exact_match 0.00, preview target of item-1/ }),
+    ).toHaveCount(0);
     await toggleBox(page.getByRole('switch', { name: 'Re-analyze human labels' }));
-    await expect(page.getByRole('button', { name: /exact_match 0.00, preview target of item-1/ })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /exact_match 0.00, preview target of item-1/ }),
+    ).toBeVisible();
     await expect(page.getByText('human', { exact: true }).first()).toBeVisible();
 
     await step(page, 'Run').click();
@@ -285,7 +361,9 @@ test.describe('re-analyze human labels (9)', () => {
     await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
     const req = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/analysis-jobs'));
     await page.getByRole('button', { name: 'Re-analyze human labels' }).click();
-    expect(((await req).postDataJSON() as { allow_human_overwrite: boolean }).allow_human_overwrite).toBe(true);
+    expect(((await req).postDataJSON() as { allow_human_overwrite: boolean }).allow_human_overwrite).toBe(
+      true,
+    );
     await expect(jobRegion(page)).toContainText('metric analyses succeeded', { timeout: 30_000 });
   });
 });

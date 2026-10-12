@@ -16,21 +16,28 @@ const open4 = async (page: Page, extra: Record<string, string> = {}) => {
   await waitLoaded(page);
   if (!extra.filters) await expectShown(page, 40);
 };
-const filtersJson = (page: Page) => JSON.parse(urlParams(page).get('filters') ?? '{}') as Record<string, unknown>;
+const filtersJson = (page: Page) =>
+  JSON.parse(urlParams(page).get('filters') ?? '{}') as Record<string, unknown>;
 
 test('count button in the delta line filters the list; chip and Clear restore it', async ({ page }) => {
   await open4(page);
-  const up = deltaLine(page).getByRole('button', { name: '30 items improved vs baseline on quality; filter items' });
+  const up = deltaLine(page).getByRole('button', {
+    name: '30 items improved vs baseline on quality; filter items',
+  });
   await expect(up).toHaveAttribute('aria-pressed', 'false');
   await up.click();
   await expectShown(page, 30);
   await expect(up).toHaveAttribute('aria-pressed', 'true');
   await expect(pageChips(page)).toContainText('improved on quality');
-  await expect.poll(() => (filtersJson(page).baseline as { kind: string } | undefined)?.kind).toBe('improved');
+  await expect
+    .poll(() => (filtersJson(page).baseline as { kind: string } | undefined)?.kind)
+    .toBe('improved');
   expect((filtersJson(page).baseline as { metric: string }).metric).toBe('quality');
   await expect(page.getByRole('button', { name: /^Filters/ })).toContainText('1');
   // removing the chip restores the list
-  await pageChips(page).getByRole('button', { name: /^Remove filter:/ }).click();
+  await pageChips(page)
+    .getByRole('button', { name: /^Remove filter:/ })
+    .click();
   await expectShown(page, 40);
   await expect(up).toHaveAttribute('aria-pressed', 'false');
   expect(urlParams(page).get('filters')).toBeNull();
@@ -39,7 +46,9 @@ test('count button in the delta line filters the list; chip and Clear restore it
   await expectShown(page, 30);
   await up.click();
   await expectShown(page, 40);
-  await deltaLine(page).getByRole('button', { name: '26 items regressed vs baseline on quality; filter items' }).click();
+  await deltaLine(page)
+    .getByRole('button', { name: '26 items regressed vs baseline on quality; filter items' })
+    .click();
   await expectShown(page, 26);
   await page.getByRole('button', { name: /^Clear \d/ }).click();
   await expectShown(page, 40);
@@ -54,7 +63,10 @@ test('count button in the Metrics table selects that metric and filters the list
   await expectShown(page, 9);
   await expect(btn).toHaveAttribute('aria-pressed', 'true');
   expect(urlParams(page).get('metric')).toBe('correct');
-  expect((filtersJson(page).baseline as { metric: string; kind: string })).toMatchObject({ metric: 'correct', kind: 'improved' });
+  expect(filtersJson(page).baseline as { metric: string; kind: string }).toMatchObject({
+    metric: 'correct',
+    kind: 'improved',
+  });
   await expect(pageChips(page)).toContainText('improved on correct');
   await btn.click();
   await expectShown(page, 40);
@@ -113,14 +125,20 @@ test('rule builder: "+ Condition" adds an editable condition row', async ({ page
   await builder.getByRole('button', { name: '+ Condition' }).click();
   await expect(builder.getByTestId('filter-condition')).toHaveCount(1);
   const cond = builder.getByTestId('filter-condition').first();
-  await cond.getByRole('combobox').or(cond.getByRole('button', { name: /field/i })).first().click();
+  await cond
+    .getByRole('combobox')
+    .or(cond.getByRole('button', { name: /field/i }))
+    .first()
+    .click();
   await page.getByRole('option', { name: 'Comparison · Passing runs' }).click();
   await cond.getByRole('textbox', { name: /Passing runs value/ }).fill('2');
   await expect(page.getByRole('button', { name: /^Filters/ })).toContainText('1');
   await expect.poll(() => JSON.stringify(filtersJson(page).rules ?? {})).toContain('pass_count');
 });
 
-test('rule builder: a rules deep link edits, switches AND/OR and deletes; count and badge follow', async ({ page }) => {
+test('rule builder: a rules deep link edits, switches AND/OR and deletes; count and badge follow', async ({
+  page,
+}) => {
   const rules = (op: string) => ({
     op,
     children: [
@@ -129,16 +147,31 @@ test('rule builder: a rules deep link edits, switches AND/OR and deletes; count 
     ],
   });
   const total = async () =>
-    Number(/(\d+) of/.exec((await page.getByRole('status').filter({ hasText: /of 40 items/ }).textContent()) ?? '')![1]);
+    Number(
+      /(\d+) of/.exec(
+        (await page
+          .getByRole('status')
+          .filter({ hasText: /of 40 items/ })
+          .textContent()) ?? '',
+      )![1],
+    );
   // data cross-check: items with >= 2 passing runs (Overview distribution)
   await open4(page);
   await page.getByRole('tab', { name: 'Overview' }).click();
-  const dist = await page.getByRole('button', { name: /items with \d of 4 runs correct; filter/ }).evaluateAll((els) =>
-    els.map((e) => /^(\d+) items with (\d) of/.exec(e.getAttribute('aria-label') ?? '')!).map((m) => [Number(m[2]), Number(m[1])]),
-  );
+  const dist = await page
+    .getByRole('button', { name: /items with \d of 4 runs correct; filter/ })
+    .evaluateAll((els) =>
+      els
+        .map((e) => /^(\d+) items with (\d) of/.exec(e.getAttribute('aria-label') ?? '')!)
+        .map((m) => [Number(m[2]), Number(m[1])]),
+    );
   const atLeast = (k: number) => dist.filter(([r]) => r >= k).reduce((s, [, n]) => s + n, 0);
 
-  await open4(page, { filters: JSON.stringify({ rules: { op: 'and', children: [{ field: 'pass_count', oper: 'gte', value: '2' }] } }) });
+  await open4(page, {
+    filters: JSON.stringify({
+      rules: { op: 'and', children: [{ field: 'pass_count', oper: 'gte', value: '2' }] },
+    }),
+  });
   const builder = page.getByTestId('filter-builder');
   await expect(builder).toBeVisible(); // a link with rules opens the builder
   await expect(builder.getByTestId('filter-condition')).toHaveCount(1);
@@ -170,7 +203,11 @@ test('rule builder: a rules deep link edits, switches AND/OR and deletes; count 
 });
 
 test('rule builder: "+ Group" adds a nested group', async ({ page }) => {
-  await open4(page, { filters: JSON.stringify({ rules: { op: 'and', children: [{ field: 'pass_count', oper: 'gte', value: '2' }] } }) });
+  await open4(page, {
+    filters: JSON.stringify({
+      rules: { op: 'and', children: [{ field: 'pass_count', oper: 'gte', value: '2' }] },
+    }),
+  });
   const builder = page.getByTestId('filter-builder');
   await builder.getByRole('button', { name: '+ Group' }).click();
   await expect(builder.getByRole('group', { name: 'Rule group' })).toBeVisible();
@@ -210,7 +247,9 @@ test('Display popover: sort and Raw / Rendered', async ({ page }) => {
   await expect(page.getByRole('radiogroup', { name: 'Text mode' })).toHaveCount(0);
 });
 
-test('Categories and Errors tabs: pressing a row / card filters the items and adds a chip', async ({ page }) => {
+test('Categories and Errors tabs: pressing a row / card filters the items and adds a chip', async ({
+  page,
+}) => {
   await open4(page);
   await page.getByRole('tab', { name: 'Categories' }).click();
   const easy = page.getByRole('button', { name: /^easy \d+$/ }).first();
@@ -228,10 +267,19 @@ test('Categories and Errors tabs: pressing a row / card filters the items and ad
   await card.click();
   await expect(pageChips(page)).toContainText(/Task error/);
   await expect(card).toHaveAttribute('aria-pressed', 'true');
-  const shown = Number(/^(\d+) of/.exec((await page.getByRole('status').filter({ hasText: /of 40 items/ }).textContent()) ?? '')![1]);
+  const shown = Number(
+    /^(\d+) of/.exec(
+      (await page
+        .getByRole('status')
+        .filter({ hasText: /of 40 items/ })
+        .textContent()) ?? '',
+    )![1],
+  );
   expect(shown).toBeGreaterThan(0);
   expect(shown).toBeLessThan(40);
   expect(((filtersJson(page).errors ?? {}) as Record<string, unknown>).task).toBeTruthy();
-  await pageChips(page).getByRole('button', { name: /^Remove filter:/ }).click();
+  await pageChips(page)
+    .getByRole('button', { name: /^Remove filter:/ })
+    .click();
   await expectShown(page, 40);
 });

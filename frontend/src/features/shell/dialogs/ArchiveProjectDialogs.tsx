@@ -29,7 +29,9 @@ export function ArchiveProjectDialog(props: ArchiveDialogProps) {
 
 function formatStarted(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : `started ${d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`;
+  return Number.isNaN(d.getTime())
+    ? iso
+    : `started ${d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`;
 }
 
 function ArchiveProjectDialogInner({ project, open, onOpenChange, onArchived }: ArchiveDialogProps) {
@@ -69,7 +71,7 @@ function ArchiveProjectDialogInner({ project, open, onOpenChange, onArchived }: 
         'API keys stop working.',
       ]}
       warning={warning}
-      confirmLabel={warning ? "Archive anyway" : "Archive project"}
+      confirmLabel={warning ? 'Archive anyway' : 'Archive project'}
       onConfirm={async () => {
         try {
           await archive.mutateAsync(project);
@@ -107,7 +109,7 @@ function UnarchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDia
       open={open}
       onOpenChange={onOpenChange}
       title={`Unarchive “${project.name}”?`}
-      tone={keys || previewError ? "danger" : "accent"}
+      tone={keys || previewError ? 'danger' : 'accent'}
       description="Members can change the project again."
       warning={
         keys
@@ -129,7 +131,7 @@ function UnarchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDia
               }
             : undefined
       }
-      confirmLabel={keys || previewError ? "Unarchive anyway" : "Unarchive"}
+      confirmLabel={keys || previewError ? 'Unarchive anyway' : 'Unarchive'}
       altLabel={reviewKeys ? 'Revoke keys first' : undefined}
       onAlternative={
         reviewKeys ? () => navigate(`${projectPath(project.slug, 'settings')}?tab=apikeys`) : undefined

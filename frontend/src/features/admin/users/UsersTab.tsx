@@ -25,7 +25,9 @@ export function UsersTab() {
       {users.isError ? (
         <ErrorState error={users.error} onRetry={() => users.refetch()} compact />
       ) : users.isPending ? (
-        skeleton ? <Skeleton kind="table" rows={4} label="Loading users" /> : null
+        skeleton ? (
+          <Skeleton kind="table" rows={4} label="Loading users" />
+        ) : null
       ) : (
         <UsersTable users={users.data} meId={me.id} onEdit={onEdit} highlightId={highlight} />
       )}

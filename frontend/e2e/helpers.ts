@@ -105,9 +105,25 @@ export interface SeededRun {
 export async function createRun(
   request: APIRequestContext,
   token: string,
-  opts: { name: string; task?: string; dataset?: string; model?: string; items?: number; finish?: boolean; fail?: boolean },
+  opts: {
+    name: string;
+    task?: string;
+    dataset?: string;
+    model?: string;
+    items?: number;
+    finish?: boolean;
+    fail?: boolean;
+  },
 ): Promise<SeededRun> {
-  const { name, task = 'qa', dataset = 'golden', model = 'model-a', items = 4, finish = true, fail = false } = opts;
+  const {
+    name,
+    task = 'qa',
+    dataset = 'golden',
+    model = 'model-a',
+    items = 4,
+    finish = true,
+    fail = false,
+  } = opts;
   const headers = { Authorization: `Bearer ${token}` };
   const created = await request.post('/v1/runs', {
     headers,
@@ -117,18 +133,39 @@ export async function createRun(
   const body = (await created.json()) as { run_id?: string; id?: string };
   const runId = body.run_id ?? body.id!;
   const events: string[] = [
-    runEvent(runId, 'run_started', { task, dataset, metrics: ['exact_match'], started_at: new Date().toISOString(), total_items: items }, 1),
+    runEvent(
+      runId,
+      'run_started',
+      { task, dataset, metrics: ['exact_match'], started_at: new Date().toISOString(), total_items: items },
+      1,
+    ),
   ];
   let seq = 2;
   const done = finish ? items : Math.max(1, Math.floor(items / 2));
   for (let i = 0; i < done; i++) {
     const itemId = `item-${i}`;
     events.push(runEvent(runId, 'item_started', { item_id: itemId, index: i, input: { q: `q${i}` } }, seq++));
-    events.push(runEvent(runId, 'metric_scored', { item_id: itemId, metric_name: 'exact_match', score_numeric: i % 2 }, seq++));
-    events.push(runEvent(runId, 'item_completed', { item_id: itemId, output: `a${i}`, latency_ms: 10 }, seq++));
+    events.push(
+      runEvent(
+        runId,
+        'metric_scored',
+        { item_id: itemId, metric_name: 'exact_match', score_numeric: i % 2 },
+        seq++,
+      ),
+    );
+    events.push(
+      runEvent(runId, 'item_completed', { item_id: itemId, output: `a${i}`, latency_ms: 10 }, seq++),
+    );
   }
   if (finish) {
-    events.push(runEvent(runId, 'run_completed', { ended_at: new Date().toISOString(), final_status: fail ? 'FAILED' : 'COMPLETED' }, seq++));
+    events.push(
+      runEvent(
+        runId,
+        'run_completed',
+        { ended_at: new Date().toISOString(), final_status: fail ? 'FAILED' : 'COMPLETED' },
+        seq++,
+      ),
+    );
   }
   const posted = await request.post(`/v1/runs/${runId}/events`, {
     headers: { ...headers, 'Content-Type': 'application/x-ndjson' },

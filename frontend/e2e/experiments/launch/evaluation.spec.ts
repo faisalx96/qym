@@ -33,7 +33,10 @@ async function setRaw(page: Page, text: string): Promise<void> {
 }
 
 async function rawJson(page: Page): Promise<any> {
-  const text = await page.getByRole('region', { name: /^Raw JSON/ }).locator('.cm-content').innerText();
+  const text = await page
+    .getByRole('region', { name: /^Raw JSON/ })
+    .locator('.cm-content')
+    .innerText();
   return JSON.parse(text);
 }
 
@@ -43,7 +46,11 @@ test.describe('evaluation inputs and run metadata', () => {
     await nameBox(page).fill('eval run');
     const ev = await openSection(page, 'Evaluation configurations');
     await ev.getByRole('textbox', { name: 'Samples' }).fill('5');
-    await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: /^Evaluation configurations/ })).toContainText('1');
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Sections' })
+        .getByRole('button', { name: /^Evaluation configurations/ }),
+    ).toContainText('1');
     await expect(review(page)).toContainText('Evaluation configurations: 1 change');
     await expectReady(page);
     const raw = await openSection(page, 'Raw JSON');
@@ -67,7 +74,10 @@ test.describe('evaluation inputs and run metadata', () => {
     await expect(launchButton(page)).toBeDisabled();
 
     // Collapse the section, click the problem: it opens again and focuses the key field.
-    await page.getByRole('heading', { level: 3, name: /^Evaluation configurations/ }).getByRole('button').click();
+    await page
+      .getByRole('heading', { level: 3, name: /^Evaluation configurations/ })
+      .getByRole('button')
+      .click();
     await expect(page.getByRole('textbox', { name: 'Metadata key 1' })).toBeHidden();
     await problem.click();
     await expect(page.getByRole('textbox', { name: 'Metadata key 1' })).toBeFocused();
@@ -79,7 +89,9 @@ test.describe('evaluation inputs and run metadata', () => {
 });
 
 test.describe('Raw JSON', () => {
-  test('an unknown key lists errors and blocks Launch; fixing it and Apply updates the fields', async ({ page }) => {
+  test('an unknown key lists errors and blocks Launch; fixing it and Apply updates the fields', async ({
+    page,
+  }) => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     await nameBox(page).fill('raw run');
     const raw = await openSection(page, 'Raw JSON');

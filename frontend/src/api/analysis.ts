@@ -26,10 +26,13 @@ const enc = (value: string) => value.split('/').map(encodeURIComponent).join('/'
 export function scopeBase(scope: AnalysisScope): string {
   return scope.runId ? `/api/runs/${enc(scope.runId)}` : `/api/projects/${encodeURIComponent(scope.slug)}`;
 }
-export const scopeKey = (scope: AnalysisScope) => (scope.runId ? `run:${scope.runId}` : `project:${scope.slug}`);
+export const scopeKey = (scope: AnalysisScope) =>
+  scope.runId ? `run:${scope.runId}` : `project:${scope.slug}`;
 
 /** `{code, message, ...}` object details (409 conflicts) that apiFetch keeps on `body.detail`. */
-export function errorDetail(error: unknown): { code?: string; message?: string; [k: string]: unknown } | null {
+export function errorDetail(
+  error: unknown,
+): { code?: string; message?: string; [k: string]: unknown } | null {
   if (!(error instanceof ApiError)) return null;
   const body = error.body as { detail?: unknown } | null;
   const detail = body && typeof body === 'object' ? body.detail : null;
@@ -379,9 +382,7 @@ export function useRunCompact(runId: string | undefined, pass: number | null, en
   return useQuery({
     queryKey: runCompactKey(runId ?? '', pass),
     queryFn: () =>
-      api.get<RunCompact>(
-        `/api/runs/${enc(runId ?? '')}?view=compact${pass ? `&pass_number=${pass}` : ''}`,
-      ),
+      api.get<RunCompact>(`/api/runs/${enc(runId ?? '')}?view=compact${pass ? `&pass_number=${pass}` : ''}`),
     enabled: Boolean(runId) && enabled,
     staleTime: 15_000,
   });
@@ -498,7 +499,8 @@ export function useDeleteDocument(scope: AnalysisScope) {
 
 /* ───────────────────────── rule versions ───────────────────────── */
 
-export const ruleVersionsKey = (scope: AnalysisScope) => ['analysis', 'rule-versions', scopeKey(scope)] as const;
+export const ruleVersionsKey = (scope: AnalysisScope) =>
+  ['analysis', 'rule-versions', scopeKey(scope)] as const;
 
 export function useRuleVersions(scope: AnalysisScope, enabled = true) {
   return useQuery({
@@ -557,10 +559,9 @@ export function usePublishVersion(scope: AnalysisScope) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ version, production }: { version: number; production: boolean }) =>
-      api.post<{ version: RuleVersion }>(
-        `${scopeBase(scope)}/analysis-rule-versions/${version}:publish`,
-        { set_alias: production ? 'production' : null },
-      ),
+      api.post<{ version: RuleVersion }>(`${scopeBase(scope)}/analysis-rule-versions/${version}:publish`, {
+        set_alias: production ? 'production' : null,
+      }),
     onSuccess: () => invalidateRules(qc, scope),
   });
 }
@@ -613,7 +614,10 @@ export interface MergeConflict {
 export interface MergeResponse {
   version?: RuleVersion;
   merge?: { created_new_draft?: boolean };
-  preview?: { summary: { changed: number; added: number; removed: number; conflicts: number }; conflicts: MergeConflict[] };
+  preview?: {
+    summary: { changed: number; added: number; removed: number; conflicts: number };
+    conflicts: MergeConflict[];
+  };
 }
 export type MergeResolution = 'target' | 'source' | { title: string; instruction: string };
 
@@ -656,8 +660,7 @@ export interface RuleJobRequest {
 
 export function useStartRuleJob(scope: AnalysisScope) {
   return useMutation({
-    mutationFn: (body: RuleJobRequest) =>
-      api.post<RuleJob>(`${scopeBase(scope)}/analysis-rule-jobs`, body),
+    mutationFn: (body: RuleJobRequest) => api.post<RuleJob>(`${scopeBase(scope)}/analysis-rule-jobs`, body),
   });
 }
 
@@ -689,7 +692,8 @@ export function useRuleJob(scope: AnalysisScope, jobId: string | null) {
 
 export function useCancelRuleJob(scope: AnalysisScope) {
   return useMutation({
-    mutationFn: (jobId: string) => api.post<RuleJob>(`${scopeBase(scope)}/analysis-rule-jobs/${jobId}/cancel`),
+    mutationFn: (jobId: string) =>
+      api.post<RuleJob>(`${scopeBase(scope)}/analysis-rule-jobs/${jobId}/cancel`),
   });
 }
 
@@ -771,7 +775,8 @@ export interface PreviewRequest extends PassGuard {
 export function usePromptPreview(runId: string, body: PreviewRequest | null) {
   return useQuery({
     queryKey: ['analysis', 'preview', runId, body],
-    queryFn: ({ signal }) => api.post<PreviewResponse>(`/api/runs/${enc(runId)}/analyze-preview`, body, { signal }),
+    queryFn: ({ signal }) =>
+      api.post<PreviewResponse>(`/api/runs/${enc(runId)}/analyze-preview`, body, { signal }),
     enabled: body != null,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
@@ -810,7 +815,8 @@ export interface AnalyzeRequest extends PassGuard {
 
 export function useStartAnalysisJob(runId: string) {
   return useMutation({
-    mutationFn: (body: AnalyzeRequest) => api.post<AnalysisJob>(`/api/runs/${enc(runId)}/analysis-jobs`, body),
+    mutationFn: (body: AnalyzeRequest) =>
+      api.post<AnalysisJob>(`/api/runs/${enc(runId)}/analysis-jobs`, body),
   });
 }
 

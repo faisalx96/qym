@@ -20,15 +20,24 @@ async function seed(request: Parameters<typeof createProject>[0], prefix: string
   const d = await createDataset(request, p.slug, `Dataset ${prefix}`);
   return { p, d, n };
 }
-async function draftWithItems(request: Parameters<typeof createProject>[0], slug: string, d: SeededDataset, n: number): Promise<SeededVersion> {
+async function draftWithItems(
+  request: Parameters<typeof createProject>[0],
+  slug: string,
+  d: SeededDataset,
+  n: number,
+): Promise<SeededVersion> {
   const v = await createVersion(request, slug, d.slug);
   await bulkItems(request, slug, d.slug, v.version, sampleItems(n));
   return v;
 }
-const rowOf = (page: Page, id: string) => page.locator(`[data-item-link="${id}"]`).locator('xpath=ancestor::*[@role="row"]');
+const rowOf = (page: Page, id: string) =>
+  page.locator(`[data-item-link="${id}"]`).locator('xpath=ancestor::*[@role="row"]');
 
 test.describe('detail: versions and URL', () => {
-  test('version resolution: bare URL -> newest published, ?v= and tab are normalised, aliases and unknown labels resolve', async ({ page, request }) => {
+  test('version resolution: bare URL -> newest published, ?v= and tab are normalised, aliases and unknown labels resolve', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'resolve');
     const v1 = await draftWithItems(request, p.slug, d, 3);
     await publishVersion(request, p.slug, d.slug, v1.version, true);
@@ -93,7 +102,10 @@ test.describe('detail: versions and URL', () => {
 });
 
 test.describe('detail: draft lifecycle', () => {
-  test('create first draft, add an item, publish with production, then Create draft / Set as production', async ({ page, request }) => {
+  test('create first draft, add an item, publish with production, then Create draft / Set as production', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'life');
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
     await expect(page.getByText('No versions yet')).toBeVisible();
@@ -123,8 +135,14 @@ test.describe('detail: draft lifecycle', () => {
 
     // second draft copies items; publish without production, then promote it
     await page.getByTestId('create-draft').click();
-    await page.getByRole('dialog', { name: 'Create draft' }).getByRole('textbox', { name: 'Name' }).fill('second');
-    await page.getByRole('dialog', { name: 'Create draft' }).getByRole('button', { name: 'Create draft' }).click();
+    await page
+      .getByRole('dialog', { name: 'Create draft' })
+      .getByRole('textbox', { name: 'Name' })
+      .fill('second');
+    await page
+      .getByRole('dialog', { name: 'Create draft' })
+      .getByRole('button', { name: 'Create draft' })
+      .click();
     await expect(page).toHaveURL(/v=v2/);
     await expect(page.getByTestId('version-switcher')).toContainText('second');
     await expect(page.getByRole('tab', { name: /Items/ })).toContainText('1');
@@ -141,7 +159,10 @@ test.describe('detail: draft lifecycle', () => {
     await expect(page.getByTestId('set-production')).toHaveCount(0);
   });
 
-  test('[BUG] Add item dialog shows the validation error for invalid metadata JSON / missing input', async ({ page, request }) => {
+  test('[BUG] Add item dialog shows the validation error for invalid metadata JSON / missing input', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'addinvalid');
     await draftWithItems(request, p.slug, d, 1);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
@@ -155,7 +176,10 @@ test.describe('detail: draft lifecycle', () => {
     await expect(add.getByText('Metadata is not valid JSON.')).toBeVisible();
   });
 
-  test('rename version from the overflow menu and rename dataset via the pencil', async ({ page, request }) => {
+  test('rename version from the overflow menu and rename dataset via the pencil', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'rename');
     await draftWithItems(request, p.slug, d, 2);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
@@ -169,7 +193,10 @@ test.describe('detail: draft lifecycle', () => {
 });
 
 test.describe('detail: items table', () => {
-  test('search, sort and page live in the URL and survive reload; search resets the page', async ({ page, request }) => {
+  test('search, sort and page live in the URL and survive reload; search resets the page', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'items');
     const v = await draftWithItems(request, p.slug, d, 60);
     await publishVersion(request, p.slug, d.slug, v.version, true);
@@ -189,7 +216,10 @@ test.describe('detail: items table', () => {
     const sortParam = query(page).get('sort');
     await page.reload();
     expect(query(page).get('sort')).toBe(sortParam);
-    await expect(page.getByRole('columnheader', { name: /^Input/ })).toHaveAttribute('aria-sort', /ascending|descending/);
+    await expect(page.getByRole('columnheader', { name: /^Input/ })).toHaveAttribute(
+      'aria-sort',
+      /ascending|descending/,
+    );
 
     const search = page.getByRole('searchbox', { name: 'Search items' });
     await search.fill('#17.');
@@ -204,7 +234,10 @@ test.describe('detail: items table', () => {
     await expect(page.getByText('No items match these filters')).toBeVisible();
   });
 
-  test('pane: string -> number type change is shown, saved, and History records the type change', async ({ page, request }) => {
+  test('pane: string -> number type change is shown, saved, and History records the type change', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'pane');
     const v = await createVersion(request, p.slug, d.slug);
     await bulkItems(request, p.slug, d.slug, v.version, [
@@ -216,7 +249,9 @@ test.describe('detail: items table', () => {
     const pane = page.locator('[data-item-pane=num-1]');
     await expect(pane).toBeVisible();
     await expect(pane.getByTestId('pane-save')).toBeDisabled();
-    const input = pane.locator('section').filter({ has: page.getByRole('textbox', { name: 'Input', exact: true }) });
+    const input = pane
+      .locator('section')
+      .filter({ has: page.getByRole('textbox', { name: 'Input', exact: true }) });
     await expect(input.getByTestId('type-tag')).toHaveText('string');
     await input.getByRole('radiogroup').getByText('JSON').click();
     await expect(input.getByTestId('type-tag')).toHaveText('string → number');
@@ -229,11 +264,16 @@ test.describe('detail: items table', () => {
     await expect(page.locator('[data-item-page=num-1]')).toBeVisible();
     await page.getByRole('tab', { name: 'History' }).click();
     const history = page.locator('[data-item-history]');
-    await expect(history.locator('[data-revision]').filter({ hasText: 'updated' }).first()).toContainText('type changed: input string → number');
+    await expect(history.locator('[data-revision]').filter({ hasText: 'updated' }).first()).toContainText(
+      'type changed: input string → number',
+    );
     expect(query(page).get('tab')).toBe('history');
   });
 
-  test('pane: Esc with unsaved edits opens the guard (Keep editing / Discard / Save and continue)', async ({ page, request }) => {
+  test('pane: Esc with unsaved edits opens the guard (Keep editing / Discard / Save and continue)', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'guard');
     const v = await createVersion(request, p.slug, d.slug);
     await bulkItems(request, p.slug, d.slug, v.version, [
@@ -247,7 +287,9 @@ test.describe('detail: items table', () => {
     await box.fill('first edited');
     await expect(pane).toContainText('Unsaved changes');
     await box.press('Escape');
-    const guard = page.getByRole('dialog', { name: 'Unsaved changes' }).or(page.getByRole('alertdialog', { name: 'Unsaved changes' }));
+    const guard = page
+      .getByRole('dialog', { name: 'Unsaved changes' })
+      .or(page.getByRole('alertdialog', { name: 'Unsaved changes' }));
     await expect(guard).toBeVisible();
     await guard.getByRole('button', { name: 'Keep editing' }).click();
     await expect(pane).toBeVisible();
@@ -273,7 +315,10 @@ test.describe('detail: items table', () => {
     await expect(page.locator('[data-item-pane]')).toHaveCount(0);
   });
 
-  test('pane: j / k step through rows; leaving the tab with unsaved edits asks first; deleting the open row closes the pane', async ({ page, request }) => {
+  test('pane: j / k step through rows; leaving the tab with unsaved edits asks first; deleting the open row closes the pane', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'pane-nav');
     const v = await createVersion(request, p.slug, d.slug);
     await bulkItems(request, p.slug, d.slug, v.version, [
@@ -296,7 +341,9 @@ test.describe('detail: items table', () => {
 
     // switching to the Runs tab with unsaved edits is guarded
     await page.getByRole('tab', { name: /^Runs/ }).click();
-    const leave = page.getByRole('alertdialog', { name: 'Discard unsaved changes?' }).or(page.getByRole('dialog', { name: 'Discard unsaved changes?' }));
+    const leave = page
+      .getByRole('alertdialog', { name: 'Discard unsaved changes?' })
+      .or(page.getByRole('dialog', { name: 'Discard unsaved changes?' }));
     await expect(leave).toBeVisible();
     await leave.getByRole('button', { name: 'Keep editing' }).click();
     await expect(page.locator('[data-item-pane=n-1]')).toBeVisible();
@@ -324,7 +371,10 @@ test.describe('detail: items table', () => {
     await expect(page.locator('[data-item-link]')).toHaveCount(4);
   });
 
-  test('changing the search drops the row selection so bulk delete never hits hidden rows', async ({ page, request }) => {
+  test('changing the search drops the row selection so bulk delete never hits hidden rows', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'bulk-scope');
     await draftWithItems(request, p.slug, d, 6);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
@@ -352,12 +402,18 @@ test.describe('detail: items table', () => {
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
     await page.getByRole('button', { name: 'Actions for item q-001' }).click();
     await page.getByRole('menuitem', { name: 'Delete item' }).click();
-    await page.getByRole('alertdialog', { name: /Delete item q-001/ }).getByRole('button', { name: 'Delete item' }).click();
+    await page
+      .getByRole('alertdialog', { name: /Delete item q-001/ })
+      .getByRole('button', { name: 'Delete item' })
+      .click();
     await expect(page.getByText('Item q-001 deleted')).toBeVisible();
     await expect(page.locator('[data-item-link]')).toHaveCount(2);
   });
 
-  test('published version is read-only: no editor, "Create draft to edit" forks a draft', async ({ page, request }) => {
+  test('published version is read-only: no editor, "Create draft to edit" forks a draft', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'ro');
     const v = await draftWithItems(request, p.slug, d, 3);
     await publishVersion(request, p.slug, d.slug, v.version, true);
@@ -376,7 +432,10 @@ test.describe('detail: items table', () => {
     await expect(page.getByTestId('save-item')).toHaveCount(0);
     await expect(page.getByTestId('delete-item')).toHaveCount(0);
     await page.getByTestId('create-draft-to-edit').click();
-    await page.getByRole('dialog', { name: 'Create draft' }).getByRole('button', { name: 'Create draft' }).click();
+    await page
+      .getByRole('dialog', { name: 'Create draft' })
+      .getByRole('button', { name: 'Create draft' })
+      .click();
     await expect(page).toHaveURL(/v=v2/);
     await expect(page.getByTestId('save-item')).toBeVisible();
     await expect(page.getByTestId('create-draft-to-edit')).toHaveCount(0);
@@ -409,8 +468,16 @@ test.describe('item page', () => {
 
     await page.getByRole('tab', { name: 'History' }).click();
     await expect(page.locator('[data-item-history] [data-revision]')).toHaveCount(2);
-    await page.locator('[data-revision]').filter({ hasText: 'created' }).getByRole('button', { name: /Revert to this/ }).click();
-    await page.getByRole('dialog', { name: /Revert to revision/ }).or(page.getByRole('alertdialog', { name: /Revert to revision/ })).getByRole('button', { name: 'Revert' }).click();
+    await page
+      .locator('[data-revision]')
+      .filter({ hasText: 'created' })
+      .getByRole('button', { name: /Revert to this/ })
+      .click();
+    await page
+      .getByRole('dialog', { name: /Revert to revision/ })
+      .or(page.getByRole('alertdialog', { name: /Revert to revision/ }))
+      .getByRole('button', { name: 'Revert' })
+      .click();
     await expect(page.getByText(/Reverted to revision/)).toBeVisible();
     await expect(page.locator('[data-item-history] [data-revision]')).toHaveCount(3);
     await page.getByRole('tab', { name: 'Details' }).click();
@@ -437,7 +504,10 @@ test.describe('item page', () => {
     await draftWithItems(request, p.slug, d, 3);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?v=v1&item=q-001`);
     await page.getByTestId('delete-item').click();
-    await page.getByRole('alertdialog', { name: /Delete item q-001/ }).getByRole('button', { name: 'Delete item' }).click();
+    await page
+      .getByRole('alertdialog', { name: /Delete item q-001/ })
+      .getByRole('button', { name: 'Delete item' })
+      .click();
     await expect(page.getByText('Item q-001 deleted')).toBeVisible();
     await expect(page.locator('[data-item-page=q-002]')).toBeVisible();
   });

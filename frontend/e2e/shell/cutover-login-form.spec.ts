@@ -50,7 +50,9 @@ test.describe('login forms keep what was typed (session auth)', () => {
     return { email, temp };
   }
 
-  test('a wrong password keeps the email, empties the password and puts focus back on it', async ({ browser }) => {
+  test('a wrong password keeps the email, empties the password and puts focus back on it', async ({
+    browser,
+  }) => {
     const { email, temp } = await userWithTemporaryPassword();
     const context = await browser.newContext();
     await withSessionBootstrap(context);
@@ -67,7 +69,9 @@ test.describe('login forms keep what was typed (session auth)', () => {
     await context.close();
   });
 
-  test('change-password errors keep the new password and send no request for a refused one', async ({ browser }) => {
+  test('change-password errors keep the new password and send no request for a refused one', async ({
+    browser,
+  }) => {
     const { email, temp } = await userWithTemporaryPassword();
     const context = await browser.newContext();
     await withSessionBootstrap(context);

@@ -5,24 +5,58 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Key } from 'react-aria-components';
 import { useSearchParams } from 'react-router-dom';
-import { RESTORE_MAX, TRASH_PAGE, useRestoreRuns, useTrash, useTrashProjects, type TrashRun } from '@/api/trash';
+import {
+  RESTORE_MAX,
+  TRASH_PAGE,
+  useRestoreRuns,
+  useTrash,
+  useTrashProjects,
+  type TrashRun,
+} from '@/api/trash';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { useAuth, useDocumentTitle } from '@/features/shell';
 import { constrained, fullWidth } from '@/features/shell/layout';
-import { Badge, Button, DataTable, EmptyState, ErrorState, Icon, PageHeader, Pagination, RunStatusBadge, SearchField, Select, Skeleton, Tag, Text, Tooltip, useToast, type RunStatus } from '@/ui';
+import {
+  Badge,
+  Button,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  Icon,
+  PageHeader,
+  Pagination,
+  RunStatusBadge,
+  SearchField,
+  Select,
+  Skeleton,
+  Tag,
+  Text,
+  Tooltip,
+  useToast,
+  type RunStatus,
+} from '@/ui';
 import styles from './TrashPage.module.css';
 
 const DAY = 86_400_000;
 
-export function purgeInfo(row: TrashRun, now = Date.now()): { text: string; tone?: 'warning' | 'danger'; sub?: string; soon: boolean } {
-  if (row.purge_paused || row.project_archived) return { text: 'Paused', sub: 'Purge paused while the project is archived', soon: false };
+export function purgeInfo(
+  row: TrashRun,
+  now = Date.now(),
+): { text: string; tone?: 'warning' | 'danger'; sub?: string; soon: boolean } {
+  if (row.purge_paused || row.project_archived)
+    return { text: 'Paused', sub: 'Purge paused while the project is archived', soon: false };
   if (!row.purge_at) return { text: 'Not scheduled', soon: false };
   const days = (Date.parse(row.purge_at) - now) / DAY;
   if (days <= 0) return { text: 'Due now', tone: 'danger', soon: true };
   if (days < 1) return { text: 'in under 1 day', tone: 'danger', soon: true };
   const n = Math.ceil(days);
-  return { text: `in ${n} day${n === 1 ? '' : 's'}`, tone: n < 3 ? 'warning' : undefined, soon: n < 3, sub: new Date(row.purge_at).toLocaleDateString() };
+  return {
+    text: `in ${n} day${n === 1 ? '' : 's'}`,
+    tone: n < 3 ? 'warning' : undefined,
+    soon: n < 3,
+    sub: new Date(row.purge_at).toLocaleDateString(),
+  };
 }
 
 function fmtDate(iso: string) {
@@ -45,14 +79,17 @@ export function TrashPage() {
   const showSkeleton = useDelayedPending(list.isPending && isAdmin);
 
   function setQuery(updates: Record<string, string | null>) {
-    setParams((prev) => {
-      const next = new URLSearchParams(prev);
-      for (const [k, v] of Object.entries(updates)) {
-        if (v === null || v === '') next.delete(k);
-        else next.set(k, v);
-      }
-      return next;
-    }, { replace: true });
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [k, v] of Object.entries(updates)) {
+          if (v === null || v === '') next.delete(k);
+          else next.set(k, v);
+        }
+        return next;
+      },
+      { replace: true },
+    );
   }
 
   useEffect(() => {
@@ -65,13 +102,19 @@ export function TrashPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, q]);
 
-  const rows = useMemo(() => [...(list.data?.runs ?? [])].sort((a, b) => (a.purge_at ?? '9').localeCompare(b.purge_at ?? '9')), [list.data]);
+  const rows = useMemo(
+    () => [...(list.data?.runs ?? [])].sort((a, b) => (a.purge_at ?? '9').localeCompare(b.purge_at ?? '9')),
+    [list.data],
+  );
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r] as const)), [rows]);
-  const restorableSelected = [...selected].map(String).filter((id) => byId.get(id) && !byId.get(id)!.project_archived);
+  const restorableSelected = [...selected]
+    .map(String)
+    .filter((id) => byId.get(id) && !byId.get(id)!.project_archived);
 
   // An emptied last page steps back.
   useEffect(() => {
-    if (list.data && !list.isPlaceholderData && list.data.runs.length === 0 && page > 1) setQuery({ page: String(page - 1) });
+    if (list.data && !list.isPlaceholderData && list.data.runs.length === 0 && page > 1)
+      setQuery({ page: String(page - 1) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list.data, list.isPlaceholderData, page]);
 
@@ -94,7 +137,11 @@ export function TrashPage() {
     return (
       <div className={constrained}>
         <PageHeader title="Deleted runs" />
-        <EmptyState icon={<Icon name="shield" />} title="Admin access required" body="Only platform admins can view and restore deleted runs." />
+        <EmptyState
+          icon={<Icon name="shield" />}
+          title="Admin access required"
+          body="Only platform admins can view and restore deleted runs."
+        />
       </div>
     );
   }
@@ -102,7 +149,11 @@ export function TrashPage() {
     return (
       <div className={constrained}>
         <PageHeader title="Deleted runs" />
-        <EmptyState icon={<Icon name="shield" />} title="Admin access required" body="Only platform admins can view and restore deleted runs." />
+        <EmptyState
+          icon={<Icon name="shield" />}
+          title="Admin access required"
+          body="Only platform admins can view and restore deleted runs."
+        />
       </div>
     );
   }
@@ -121,17 +172,31 @@ export function TrashPage() {
         }
         meta={[
           <span key="r">Retention {grace ? `${grace} days` : 'Off'}</span>,
-          <span key="n">{filtered ? `${total} matching` : `${total} deleted run${total === 1 ? '' : 's'}`}</span>,
+          <span key="n">
+            {filtered ? `${total} matching` : `${total} deleted run${total === 1 ? '' : 's'}`}
+          </span>,
           <span key="a">Only admins can restore runs</span>,
         ]}
       />
       <div className={styles.toolbar}>
-        <SearchField label="Search run name or ID" placeholder="Search run name or ID" value={search} onChange={setSearch} width={280} />
+        <SearchField
+          label="Search run name or ID"
+          placeholder="Search run name or ID"
+          value={search}
+          onChange={setSearch}
+          width={280}
+        />
         <Select
           label="Project"
           hideLabel
           placeholder="All projects"
-          items={[{ key: '', label: 'All projects' }, ...(projects.data ?? []).map((p) => ({ key: p.id, label: `${p.name}${p.archived ? ' (archived)' : ''} · ${p.deleted_runs}` }))]}
+          items={[
+            { key: '', label: 'All projects' },
+            ...(projects.data ?? []).map((p) => ({
+              key: p.id,
+              label: `${p.name}${p.archived ? ' (archived)' : ''} · ${p.deleted_runs}`,
+            })),
+          ]}
           value={projectId ?? ''}
           onChange={(k) => {
             setQuery({ project: k ? String(k) : null, page: null });
@@ -157,9 +222,18 @@ export function TrashPage() {
       {showSkeleton ? (
         <Skeleton kind="table" rows={6} label="Loading deleted runs" />
       ) : list.isError ? (
-        <ErrorState error={list.error} title="Couldn’t load deleted runs" onRetry={() => void list.refetch()} />
+        <ErrorState
+          error={list.error}
+          title="Couldn’t load deleted runs"
+          onRetry={() => void list.refetch()}
+        />
       ) : list.data && rows.length === 0 ? (
-        <EmptyState title={filtered ? 'No deleted runs match' : 'Nothing in the trash'} body={filtered ? 'Try another search or project.' : 'Runs you delete appear here until they are purged.'} />
+        <EmptyState
+          title={filtered ? 'No deleted runs match' : 'Nothing in the trash'}
+          body={
+            filtered ? 'Try another search or project.' : 'Runs you delete appear here until they are purged.'
+          }
+        />
       ) : list.data ? (
         <>
           <DataTable<TrashRun>
@@ -170,7 +244,12 @@ export function TrashPage() {
             rowKey={(r) => r.id}
             selection={{
               selected,
-              onChange: (keys) => setSelected(new Set([...keys].filter((k) => byId.get(String(k)) && !byId.get(String(k))!.project_archived))),
+              onChange: (keys) =>
+                setSelected(
+                  new Set(
+                    [...keys].filter((k) => byId.get(String(k)) && !byId.get(String(k))!.project_archived),
+                  ),
+                ),
             }}
             dimmed={list.isFetching && list.isPlaceholderData}
             columns={[
@@ -184,7 +263,10 @@ export function TrashPage() {
                     <Text as="span" variant="md" weight={600} truncate>
                       {r.run_name}
                     </Text>
-                    <span className={styles.runId} title={`Created ${new Date(r.created_at).toLocaleString()}`}>
+                    <span
+                      className={styles.runId}
+                      title={`Created ${new Date(r.created_at).toLocaleString()}`}
+                    >
                       {r.id}
                     </span>
                   </span>
@@ -226,8 +308,17 @@ export function TrashPage() {
                   </span>
                 ),
               },
-              { id: 'status', label: 'Status', width: 110, cell: (r) => <RunStatusBadge status={r.status as RunStatus} /> },
-              { id: 'model', label: 'Model', width: 140, cell: (r) => (
+              {
+                id: 'status',
+                label: 'Status',
+                width: 110,
+                cell: (r) => <RunStatusBadge status={r.status as RunStatus} />,
+              },
+              {
+                id: 'model',
+                label: 'Model',
+                width: 140,
+                cell: (r) => (
                   <span className={styles.stack}>
                     <span>{r.model ?? '—'}</span>
                     {r.trace_stats?.has_reasoning ? <Tag tone="info">reasoning</Tag> : null}
@@ -245,19 +336,41 @@ export function TrashPage() {
                 cell: (r) =>
                   r.project_archived ? (
                     <Tooltip content="Unarchive the project to restore this run.">
-                      <Button variant="neutral" size="sm" aria-disabled="true" onPress={() => toast.show('Unarchive the project to restore this run.', { tone: 'info' })}>
+                      <Button
+                        variant="neutral"
+                        size="sm"
+                        aria-disabled="true"
+                        onPress={() =>
+                          toast.show('Unarchive the project to restore this run.', { tone: 'info' })
+                        }
+                      >
                         Restore
                       </Button>
                     </Tooltip>
                   ) : (
-                    <Button variant="accent" size="sm" onPress={() => void doRestore([r.id])} isDisabled={restore.isPending} data-testid={`restore-${r.id}`}>
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      onPress={() => void doRestore([r.id])}
+                      isDisabled={restore.isPending}
+                      data-testid={`restore-${r.id}`}
+                    >
                       Restore
                     </Button>
                   ),
               },
             ]}
           />
-          <Pagination total={total} page={page} pageSize={TRASH_PAGE} noun="deleted runs" onPageChange={(p) => { setQuery({ page: p <= 1 ? null : String(p) }); setSelected(new Set()); }} />
+          <Pagination
+            total={total}
+            page={page}
+            pageSize={TRASH_PAGE}
+            noun="deleted runs"
+            onPageChange={(p) => {
+              setQuery({ page: p <= 1 ? null : String(p) });
+              setSelected(new Set());
+            }}
+          />
         </>
       ) : null}
     </div>

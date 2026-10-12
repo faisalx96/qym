@@ -14,7 +14,11 @@ test.beforeAll(async () => {
 });
 
 const items = (value: number): CustomItem[] =>
-  Array.from({ length: 6 }, (_, i) => ({ id: `item-${i}`, input: `question ${i}`, scores: { accuracy: { score: i % 2 ? value : 0.5 } } }));
+  Array.from({ length: 6 }, (_, i) => ({
+    id: `item-${i}`,
+    input: `question ${i}`,
+    scores: { accuracy: { score: i % 2 ? value : 0.5 } },
+  }));
 
 test('without a direction Compare is neutral and says why', async ({ page }) => {
   const spec = { score_type: 'percentage', schema_version: 2 };
@@ -23,8 +27,13 @@ test('without a direction Compare is neutral and says why', async ({ page }) => 
   await page.goto(compareUrl([a, b]));
   await waitLoaded(page);
   await page.getByRole('tab', { name: /^Overview/ }).click();
-  await expect(page.getByText('Winners, passes and Max@K need a declared direction on this metric.')).toBeVisible();
-  await page.getByRole('button', { name: /^Item 2:/ }).first().click();
+  await expect(
+    page.getByText('Winners, passes and Max@K need a declared direction on this metric.'),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: /^Item 2:/ })
+    .first()
+    .click();
   await expect(page.getByText(/✓ PASS|✗ FAIL/)).toHaveCount(0);
   await expect(page.getByRole('slider', { name: /threshold/i })).toHaveCount(0);
 });

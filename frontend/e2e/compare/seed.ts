@@ -354,7 +354,15 @@ export async function seedCompareScenario(client: SeedClient, slug: string): Pro
 export function pushCompareTrace(stream: EventStream, traceId: string): void {
   const base = 1_700_000_000_000_000_000;
   const ms = 1_000_000;
-  const span = (id: string, parent: string | null, name: string, kind: string, startMs: number, durMs: number, attrs: Record<string, unknown>) =>
+  const span = (
+    id: string,
+    parent: string | null,
+    name: string,
+    kind: string,
+    startMs: number,
+    durMs: number,
+    attrs: Record<string, unknown>,
+  ) =>
     stream.push('span_completed', {
       trace_id: traceId,
       span_id: `${traceId}-${id}`,
@@ -369,7 +377,11 @@ export function pushCompareTrace(stream: EventStream, traceId: string): void {
       events: [],
       links: [],
     });
-  span('root', null, 'answer_question', 'AGENT', 0, 400, { 'openinference.span.kind': 'AGENT', 'input.value': 'q', 'output.value': 'a' });
+  span('root', null, 'answer_question', 'AGENT', 0, 400, {
+    'openinference.span.kind': 'AGENT',
+    'input.value': 'q',
+    'output.value': 'a',
+  });
   span('llm', 'root', 'ChatOpenAI', 'LLM', 10, 300, {
     'openinference.span.kind': 'LLM',
     'llm.model_name': 'gpt-5-mini',
@@ -381,7 +393,13 @@ export function pushCompareTrace(stream: EventStream, traceId: string): void {
 }
 
 /** A run on another dataset name / the same items (for the different-data notice). */
-export async function seedCompareRunOnDataset(client: SeedClient, token: string, dataset: string, name: string, items = 10): Promise<string> {
+export async function seedCompareRunOnDataset(
+  client: SeedClient,
+  token: string,
+  dataset: string,
+  name: string,
+  items = 10,
+): Promise<string> {
   const SPEC = SPECS;
   const runId = await createRun(client, token, {
     task: 'qa_task',
@@ -406,12 +424,39 @@ export async function seedCompareRunOnDataset(client: SeedClient, token: string,
   });
   for (let i = 0; i < items; i++) {
     const id = `cmp-${String(i + 1).padStart(3, '0')}`;
-    stream.push('item_started', { item_id: id, index: i, input: `Question ${i + 1}`, expected: 'x', item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] } });
-    stream.push('metric_scored', { item_id: id, metric_name: 'correct', score_numeric: i % 2, score_raw: i % 2 === 1, meta: {} });
-    stream.push('metric_scored', { item_id: id, metric_name: 'quality', score_numeric: 0.4 + (i % 5) / 10, meta: {} });
-    stream.push('item_completed', { item_id: id, index: i, is_final_pass: true, output: `Answer ${i}`, latency_ms: 500, item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] } });
+    stream.push('item_started', {
+      item_id: id,
+      index: i,
+      input: `Question ${i + 1}`,
+      expected: 'x',
+      item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] },
+    });
+    stream.push('metric_scored', {
+      item_id: id,
+      metric_name: 'correct',
+      score_numeric: i % 2,
+      score_raw: i % 2 === 1,
+      meta: {},
+    });
+    stream.push('metric_scored', {
+      item_id: id,
+      metric_name: 'quality',
+      score_numeric: 0.4 + (i % 5) / 10,
+      meta: {},
+    });
+    stream.push('item_completed', {
+      item_id: id,
+      index: i,
+      is_final_pass: true,
+      output: `Answer ${i}`,
+      latency_ms: 500,
+      item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] },
+    });
   }
-  stream.push('run_completed', { ended_at: new Date(Date.UTC(2026, 9, 1, 12, 30, 0)).toISOString(), final_status: 'COMPLETED' });
+  stream.push('run_completed', {
+    ended_at: new Date(Date.UTC(2026, 9, 1, 12, 30, 0)).toISOString(),
+    final_status: 'COMPLETED',
+  });
   await stream.flush();
   return runId;
 }
@@ -442,16 +487,51 @@ export async function seedTracedRun(client: SeedClient, token: string, name: str
   for (let i = 0; i < 12; i++) {
     const id = `cmp-${String(i + 1).padStart(3, '0')}`;
     const traceId = i === 9 ? `trace-${id}` : undefined;
-    stream.push('item_started', { item_id: id, index: i, input: `Question ${i + 1}`, expected: 'x', item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] } });
+    stream.push('item_started', {
+      item_id: id,
+      index: i,
+      input: `Question ${i + 1}`,
+      expected: 'x',
+      item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] },
+    });
     if (traceId) {
-      stream.push('item_attempt_started', { item_id: id, index: i, attempt_number: 1, trace_id: traceId, task_started_at_ms: 1_700_000_000_000 });
+      stream.push('item_attempt_started', {
+        item_id: id,
+        index: i,
+        attempt_number: 1,
+        trace_id: traceId,
+        task_started_at_ms: 1_700_000_000_000,
+      });
       pushCompareTrace(stream, traceId);
     }
-    stream.push('metric_scored', { item_id: id, metric_name: 'correct', score_numeric: i % 2, score_raw: i % 2 === 1, meta: {} });
-    stream.push('metric_scored', { item_id: id, metric_name: 'quality', score_numeric: 0.4 + (i % 5) / 10, meta: {} });
-    stream.push('item_completed', { item_id: id, index: i, is_final_pass: true, output: `Answer ${i}`, latency_ms: 500, trace_id: traceId, task_started_at_ms: 1_700_000_000_000, item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] } });
+    stream.push('metric_scored', {
+      item_id: id,
+      metric_name: 'correct',
+      score_numeric: i % 2,
+      score_raw: i % 2 === 1,
+      meta: {},
+    });
+    stream.push('metric_scored', {
+      item_id: id,
+      metric_name: 'quality',
+      score_numeric: 0.4 + (i % 5) / 10,
+      meta: {},
+    });
+    stream.push('item_completed', {
+      item_id: id,
+      index: i,
+      is_final_pass: true,
+      output: `Answer ${i}`,
+      latency_ms: 500,
+      trace_id: traceId,
+      task_started_at_ms: 1_700_000_000_000,
+      item_metadata: { domain: DOMAINS[i % 4], complexity: COMPLEXITIES[i % 3] },
+    });
   }
-  stream.push('run_completed', { ended_at: new Date(Date.UTC(2026, 9, 1, 12, 30, 0)).toISOString(), final_status: 'COMPLETED' });
+  stream.push('run_completed', {
+    ended_at: new Date(Date.UTC(2026, 9, 1, 12, 30, 0)).toISOString(),
+    final_status: 'COMPLETED',
+  });
   await stream.flush();
   return runId;
 }

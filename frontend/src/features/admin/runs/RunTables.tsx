@@ -33,7 +33,15 @@ export interface RunTableProps {
   variant: 'live' | 'recent';
 }
 
-function ForceStopCell({ run, stopping, onForceStop }: { run: AdminRunSummary; stopping: boolean; onForceStop?: (r: AdminRunSummary) => void }) {
+function ForceStopCell({
+  run,
+  stopping,
+  onForceStop,
+}: {
+  run: AdminRunSummary;
+  stopping: boolean;
+  onForceStop?: (r: AdminRunSummary) => void;
+}) {
   if (!run.can_force_stop || !onForceStop || /^(STOPPED|COMPLETED|FAILED)$/i.test(run.status)) return null;
   return (
     <Button
@@ -50,10 +58,23 @@ function ForceStopCell({ run, stopping, onForceStop }: { run: AdminRunSummary; s
   );
 }
 
-export function RunTable({ runs, stoppingIds, onForceStop, emptyState, storageKey, variant, 'aria-label': label }: RunTableProps) {
+export function RunTable({
+  runs,
+  stoppingIds,
+  onForceStop,
+  emptyState,
+  storageKey,
+  variant,
+  'aria-label': label,
+}: RunTableProps) {
   const columns = useMemo<Column<AdminRunSummary>[]>(
     () => [
-      { id: 'project', label: 'Project', width: 170, cell: (r) => <span className={styles.project}>{projectLabel(r)}</span> },
+      {
+        id: 'project',
+        label: 'Project',
+        width: 170,
+        cell: (r) => <span className={styles.project}>{projectLabel(r)}</span>,
+      },
       { id: 'run', label: 'Run', flex: true, minWidth: 160, cell: (r) => <RunCell run={r} /> },
       { id: 'owner', label: 'Owner', width: 140, cell: (r) => ownerLabel(r) },
       {
@@ -81,7 +102,13 @@ export function RunTable({ runs, stoppingIds, onForceStop, emptyState, storageKe
         id: 'updated',
         label: variant === 'live' ? 'Updated' : 'Created',
         width: 100,
-        cell: (r) => <span className={styles.meta}>{relativeTime(variant === 'live' ? (r.last_event_at ?? r.timestamp) : (r.timestamp ?? r.last_event_at))}</span>,
+        cell: (r) => (
+          <span className={styles.meta}>
+            {relativeTime(
+              variant === 'live' ? (r.last_event_at ?? r.timestamp) : (r.timestamp ?? r.last_event_at),
+            )}
+          </span>
+        ),
       },
       {
         id: 'actions',
@@ -90,10 +117,21 @@ export function RunTable({ runs, stoppingIds, onForceStop, emptyState, storageKe
         width: 110,
         resizable: false,
         align: 'end',
-        cell: (r) => <ForceStopCell run={r} stopping={Boolean(stoppingIds?.has(r.run_id))} onForceStop={onForceStop} />,
+        cell: (r) => (
+          <ForceStopCell run={r} stopping={Boolean(stoppingIds?.has(r.run_id))} onForceStop={onForceStop} />
+        ),
       },
     ],
     [variant, stoppingIds, onForceStop],
   );
-  return <DataTable aria-label={label} columns={columns} rows={runs} rowKey={(r) => r.run_id} storageKey={storageKey} emptyState={emptyState} />;
+  return (
+    <DataTable
+      aria-label={label}
+      columns={columns}
+      rows={runs}
+      rowKey={(r) => r.run_id}
+      storageKey={storageKey}
+      emptyState={emptyState}
+    />
+  );
 }

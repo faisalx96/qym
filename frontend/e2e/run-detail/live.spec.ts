@@ -1,12 +1,6 @@
 /** J2 + scenario 2: follow a RUNNING run; plus the incomplete-ingest warning banner. */
 import { test, expect } from '@playwright/test';
-import {
-  EventStream,
-  completeRun,
-  createRun,
-  pushLiveItem,
-  seedRunningRun,
-} from './seed';
+import { EventStream, completeRun, createRun, pushLiveItem, seedRunningRun } from './seed';
 import { client, itemButton, itemsCount, openRun, scrollTop, seedProject, type Seeded } from './support';
 
 let s: Seeded;
@@ -28,7 +22,9 @@ test.describe('live run (scenario 2, J2)', () => {
     await expect(hero).toContainText('RUNNING');
     await expect(page.getByTestId('live-indicator')).toBeVisible();
     await expect(page.getByTestId('live-indicator')).toContainText(/Live · updated \d+s ago/);
-    await expect(page.getByTestId('hero-runtime')).toBeVisible().catch(() => undefined);
+    await expect(page.getByTestId('hero-runtime'))
+      .toBeVisible()
+      .catch(() => undefined);
     expect(await itemsCount(page)).toEqual([30, 30]);
 
     // expand a card and move the page, then ingest more items
@@ -51,7 +47,9 @@ test.describe('live run (scenario 2, J2)', () => {
     await stream.flush();
 
     // within 10 s the count follows ...
-    await expect.poll(async () => (await itemsCount(page))[1], { timeout: 12_000, intervals: [500] }).toBe(34);
+    await expect
+      .poll(async () => (await itemsCount(page))[1], { timeout: 12_000, intervals: [500] })
+      .toBe(34);
     await expect(page.getByLabel('Run counts')).toContainText('34');
     // ... and the metric card is rebuilt from the new rows
     await expect(page.locator('[data-testid=metric-card][data-metric=quality]')).toContainText('34 scored');
@@ -78,7 +76,9 @@ test.describe('live run (scenario 2, J2)', () => {
     pushLiveItem(stream, next); // "Live question 31" / "32": neither matches the filter
     pushLiveItem(stream, next + 1);
     await stream.flush();
-    await expect.poll(async () => (await itemsCount(page))[1], { timeout: 12_000, intervals: [500] }).toBe(32);
+    await expect
+      .poll(async () => (await itemsCount(page))[1], { timeout: 12_000, intervals: [500] })
+      .toBe(32);
     await expect(search).toHaveValue('Live question 1');
     expect(await itemsCount(page)).toEqual([11, 32]);
     await completeRun(stream);
@@ -97,7 +97,13 @@ test.describe('live run (scenario 2, J2)', () => {
 test.describe('incomplete ingest', () => {
   test('a run that reports more items than arrived shows the ingest warning', async ({ page }) => {
     const specs = {
-      quality: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, primary: true, schema_version: 2 },
+      quality: {
+        score_type: 'percentage',
+        direction: 'maximize',
+        pass_threshold: 0.7,
+        primary: true,
+        schema_version: 2,
+      },
     };
     const runId = await createRun(client, s.token, {
       task: 'rag_answer',

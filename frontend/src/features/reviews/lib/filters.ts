@@ -3,7 +3,14 @@
  * param; multiselects use `__none__` for "none selected"; `status` defaults to
  * pending and `all` is the All tab. Sort moves from localStorage into `?sort=`.
  */
-import type { BulkAction, CorrectionRow, CorrectionStatus, ReviewFilters, ReviewSort, ReviewSource } from '@/api/reviews';
+import type {
+  BulkAction,
+  CorrectionRow,
+  CorrectionStatus,
+  ReviewFilters,
+  ReviewSort,
+  ReviewSource,
+} from '@/api/reviews';
 
 export const REVIEW_NONE = '__none__';
 export const PRIORITY_WAIT_DAYS = 14;
@@ -106,7 +113,9 @@ export interface Priority {
 }
 
 function issueKey(i: { category?: string | null; subcategory?: string | null; finding?: string | null }) {
-  return [i.category ?? '', i.subcategory ?? '', i.finding ?? ''].map((s) => s.trim().toLowerCase()).join('\u0001');
+  return [i.category ?? '', i.subcategory ?? '', i.finding ?? '']
+    .map((s) => s.trim().toLowerCase())
+    .join('\u0001');
 }
 
 /** Human issues differ from the AI issues (the reviewer changed the diagnosis). */
@@ -132,7 +141,8 @@ export function correctionPriority(c: CorrectionRow, now = Date.now()): Priority
   const created = c.created_at ? Date.parse(c.created_at) : NaN;
   const days = Number.isFinite(created) ? Math.floor((now - created) / 86_400_000) : 0;
   if (days >= PRIORITY_WAIT_DAYS) reasons.push(`Waiting ${days} days`);
-  const high = (confidence != null && confidence < 0.5) || (changed && confidence != null && confidence < 0.75);
+  const high =
+    (confidence != null && confidence < 0.5) || (changed && confidence != null && confidence < 0.75);
   if (high) return { level: 'high', label: 'High priority', reasons };
   if (reasons.length) return { level: 'medium', label: 'Medium priority', reasons };
   return null;
@@ -142,8 +152,16 @@ export const BULK_FITS: Record<
   Exclude<BulkAction, 'delete'>,
   { label: string; fits: (c: CorrectionRow) => boolean; rule: string }
 > = {
-  approve: { label: 'Approve', fits: (c) => c.status === 'pending', rule: 'Approve works on pending corrections only.' },
-  reject: { label: 'Reject', fits: (c) => c.status === 'pending', rule: 'Reject works on pending corrections only.' },
+  approve: {
+    label: 'Approve',
+    fits: (c) => c.status === 'pending',
+    rule: 'Approve works on pending corrections only.',
+  },
+  reject: {
+    label: 'Reject',
+    fits: (c) => c.status === 'pending',
+    rule: 'Reject works on pending corrections only.',
+  },
   reset: {
     label: 'Reset',
     fits: (c) => c.status === 'approved' || c.status === 'rejected',
@@ -151,7 +169,11 @@ export const BULK_FITS: Record<
   },
 };
 
-export function bulkSelection(rows: CorrectionRow[], selected: Set<number>, action: Exclude<BulkAction, 'delete'>) {
+export function bulkSelection(
+  rows: CorrectionRow[],
+  selected: Set<number>,
+  action: Exclude<BulkAction, 'delete'>,
+) {
   const byId = new Map(rows.map((c) => [c.id, c] as const));
   const ids: number[] = [];
   for (const id of selected) {
@@ -165,7 +187,8 @@ export function bulkSelection(rows: CorrectionRow[], selected: Set<number>, acti
 export function describeView(f: ReviewFilters): string {
   const parts: string[] = [];
   if (f.status !== 'all') parts.push(f.status === 'pending' ? 'to review' : f.status);
-  if (f.source) parts.push({ ai_only: 'AI only', human_only: 'human only', corrected: 'AI+human corrected' }[f.source]);
+  if (f.source)
+    parts.push({ ai_only: 'AI only', human_only: 'human only', corrected: 'AI+human corrected' }[f.source]);
   if (f.search) parts.push(`matching “${f.search}”`);
   return parts.length ? parts.join(', ') : 'all corrections';
 }

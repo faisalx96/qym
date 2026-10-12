@@ -23,7 +23,8 @@ test('a slow response of an earlier metric never replaces the chosen metric', as
   await expect(radios).toHaveCount(2);
   const first = (await radios.nth(0).isChecked()) ? radios.nth(0) : radios.nth(1);
   const other = (await radios.nth(0).isChecked()) ? radios.nth(1) : radios.nth(0);
-  const otherName = (await other.getAttribute('value')) ?? (await other.evaluate((n) => (n as HTMLInputElement).value));
+  const otherName =
+    (await other.getAttribute('value')) ?? (await other.evaluate((n) => (n as HTMLInputElement).value));
   let delayed = false;
   await page.route(new RegExp(`/group-metrics\\?metric=${otherName}`), async (route) => {
     if (!delayed) {

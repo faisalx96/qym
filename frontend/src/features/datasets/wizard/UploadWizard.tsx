@@ -16,9 +16,31 @@ import {
   type ItemBody,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
-import { Button, Checkbox, ConfirmDialog, Dialog, Select, Tag, Text, TextField, Textarea, useToast } from '@/ui';
+import {
+  Button,
+  Checkbox,
+  ConfirmDialog,
+  Dialog,
+  Select,
+  Tag,
+  Text,
+  TextField,
+  Textarea,
+  useToast,
+} from '@/ui';
 import { CSV_ENCODINGS, encodingLabel } from '../lib/encoding';
-import { COLUMN_ROLES, autoMap, columnRole, csvUpserts, ignoredColumns, jsonUpserts, mappingSummary, setColumnRole, type ColumnMapping, type ColumnRole } from '../lib/mapping';
+import {
+  COLUMN_ROLES,
+  autoMap,
+  columnRole,
+  csvUpserts,
+  ignoredColumns,
+  jsonUpserts,
+  mappingSummary,
+  setColumnRole,
+  type ColumnMapping,
+  type ColumnRole,
+} from '../lib/mapping';
 import { parseFile } from '../lib/parseClient';
 import type { CsvParseResult, JsonParseResult } from '../lib/parse.worker';
 import { nextVersionAfter, slugifyDatasetName } from '../lib/slugify';
@@ -96,31 +118,28 @@ function WizardInner({
     return catalog.find((d) => d.name.toLowerCase() === lower || d.slug === slugPreview) ?? null;
   }, [catalog, mode, name, slugPreview]);
 
-  const loadFile = useCallback(
-    async (f: File, enc?: string) => {
-      const ticket = ++parseTicket.current;
-      setParsing(true);
-      setErrors({});
-      let result: Awaited<ReturnType<typeof parseFile>>;
-      try {
-        result = await parseFile(f, enc);
-      } catch {
-        if (ticket !== parseTicket.current) return;
-        setParsed(null);
-        setErrors({ file: 'Could not read the file.' });
-        setParsing(false);
-        return;
-      }
-      if (ticket !== parseTicket.current) return; // a newer file / encoding superseded this read
-      setParsed(result);
-      if (result.kind === 'csv') {
-        setEncoding(result.encoding);
-        if (!enc || result.headers.length) setMapping(autoMap(result.headers));
-      }
+  const loadFile = useCallback(async (f: File, enc?: string) => {
+    const ticket = ++parseTicket.current;
+    setParsing(true);
+    setErrors({});
+    let result: Awaited<ReturnType<typeof parseFile>>;
+    try {
+      result = await parseFile(f, enc);
+    } catch {
+      if (ticket !== parseTicket.current) return;
+      setParsed(null);
+      setErrors({ file: 'Could not read the file.' });
       setParsing(false);
-    },
-    [],
-  );
+      return;
+    }
+    if (ticket !== parseTicket.current) return; // a newer file / encoding superseded this read
+    setParsed(result);
+    if (result.kind === 'csv') {
+      setEncoding(result.encoding);
+      if (!enc || result.headers.length) setMapping(autoMap(result.headers));
+    }
+    setParsing(false);
+  }, []);
 
   function chooseFile(f: File | null) {
     if (!f) parseTicket.current++;
@@ -147,7 +166,8 @@ function WizardInner({
       for (const e of parsed.errors.slice(0, 8)) list.push(`${e.where} ${e.message}.`);
       if (parsed.errors.length > 8) list.push(`…and ${parsed.errors.length - 8} more.`);
     }
-    if (parsed?.kind === 'csv' && !parsed.error && !parsed.rows.length) list.push('The CSV file has no data rows.');
+    if (parsed?.kind === 'csv' && !parsed.error && !parsed.rows.length)
+      list.push('The CSV file has no data rows.');
     return list;
   }, [parsed]);
 
@@ -212,7 +232,8 @@ function WizardInner({
         let added = 0;
         try {
           for (let i = 0; i < batches; i++) {
-            if (controller.signal.aborted) throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+            if (controller.signal.aborted)
+              throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
             setProgress({ label: `Importing batch ${i + 1} of ${batches}…`, fraction: i / batches });
             const resp = await bulkItems(slug, effectiveTarget.slug, draft.version, {
               upserts: upserts.slice(i * BULK_CHUNK, (i + 1) * BULK_CHUNK),
@@ -223,7 +244,8 @@ function WizardInner({
           // Earlier batches are already saved: say so and refresh the list.
           if (added > 0) {
             invalidateItems(qc, slug, effectiveTarget.slug);
-            const why = e instanceof ApiError ? e.detail || e.message : (e as Error).message || 'Import failed';
+            const why =
+              e instanceof ApiError ? e.detail || e.message : (e as Error).message || 'Import failed';
             if ((e as Error).name === 'AbortError') throw e;
             throw new Error(`${why} ${pluralize(added, 'item')} were already added before the failure.`);
           }
@@ -254,7 +276,8 @@ function WizardInner({
           id_col: mapping.id || undefined,
           metadata_cols: mapping.metadata,
         },
-        (fraction) => setProgress({ label: fraction >= 1 ? 'Processing on the server…' : 'Uploading…', fraction }),
+        (fraction) =>
+          setProgress({ label: fraction >= 1 ? 'Processing on the server…' : 'Uploading…', fraction }),
         controller.signal,
       );
       void qc.invalidateQueries({ queryKey: ['datasets', slug] });
@@ -291,8 +314,14 @@ function WizardInner({
     return () => abortRef.current?.abort();
   }, []);
 
-  const title = mode === 'add-to-draft' ? `Import into ${draft?.version ?? 'draft'}` : mode === 'new-version' ? 'Upload a new version' : 'Upload dataset';
-  const submitLabel = mode === 'new' ? 'Create dataset' : mode === 'new-version' ? 'Create version' : 'Add items';
+  const title =
+    mode === 'add-to-draft'
+      ? `Import into ${draft?.version ?? 'draft'}`
+      : mode === 'new-version'
+        ? 'Upload a new version'
+        : 'Upload dataset';
+  const submitLabel =
+    mode === 'new' ? 'Create dataset' : mode === 'new-version' ? 'Create version' : 'Add items';
   const steps = isCsv || !parsed ? ['Source', 'Map columns', 'Review'] : ['Source', 'Review'];
   const visualStep = step === 3 && !isCsv ? 2 : step;
 
@@ -326,7 +355,12 @@ function WizardInner({
       >
         <ol className={styles.steps} aria-label="Steps">
           {steps.map((label, i) => (
-            <li key={label} className={styles.step} aria-current={i + 1 === visualStep ? 'step' : undefined} data-done={i + 1 < visualStep ? '' : undefined}>
+            <li
+              key={label}
+              className={styles.step}
+              aria-current={i + 1 === visualStep ? 'step' : undefined}
+              data-done={i + 1 < visualStep ? '' : undefined}
+            >
               <span className={styles.stepNum} aria-hidden="true">
                 {i + 1}
               </span>
@@ -373,7 +407,13 @@ function WizardInner({
               </div>
             )}
             {mode === 'new' ? (
-              <Textarea label="Description" value={description} onChange={setDescription} rows={2} placeholder="Optional" />
+              <Textarea
+                label="Description"
+                value={description}
+                onChange={setDescription}
+                rows={2}
+                placeholder="Optional"
+              />
             ) : null}
             <FileDrop
               inputRef={fileInput}
@@ -386,9 +426,17 @@ function WizardInner({
             {parsed ? (
               <div className={styles.fileStatus}>
                 <Text variant="sm" tone="muted">
-                  Detected format: <strong>{parsed.kind === 'csv' ? 'CSV' : parsed.format.toUpperCase()}</strong>
-                  {parsed.kind === 'csv' && !parsed.error ? <> · {pluralize(parsed.rows.length, 'row')} · {pluralize(parsed.headers.length, 'column')}</> : null}
-                  {parsed.kind === 'json' && !parsed.error ? <> · {pluralize(parsed.rows.length, 'record')}</> : null}
+                  Detected format:{' '}
+                  <strong>{parsed.kind === 'csv' ? 'CSV' : parsed.format.toUpperCase()}</strong>
+                  {parsed.kind === 'csv' && !parsed.error ? (
+                    <>
+                      {' '}
+                      · {pluralize(parsed.rows.length, 'row')} · {pluralize(parsed.headers.length, 'column')}
+                    </>
+                  ) : null}
+                  {parsed.kind === 'json' && !parsed.error ? (
+                    <> · {pluralize(parsed.rows.length, 'record')}</>
+                  ) : null}
                 </Text>
                 {parsed.kind === 'csv' ? (
                   <Select
@@ -403,9 +451,12 @@ function WizardInner({
                     width={260}
                   />
                 ) : null}
-                {parsed.kind === 'csv' && parsed.detectedEncoding !== 'utf-8' && (encoding ?? parsed.encoding) === parsed.detectedEncoding ? (
+                {parsed.kind === 'csv' &&
+                parsed.detectedEncoding !== 'utf-8' &&
+                (encoding ?? parsed.encoding) === parsed.detectedEncoding ? (
                   <Text variant="sm" tone="muted" data-testid="encoding-note">
-                    This file is not UTF-8, so it was read as {encodingLabel(parsed.detectedEncoding)}. Pick another encoding if the text looks wrong.
+                    This file is not UTF-8, so it was read as {encodingLabel(parsed.detectedEncoding)}. Pick
+                    another encoding if the text looks wrong.
                   </Text>
                 ) : null}
                 {parsed.kind === 'csv' && parsed.warnings.length ? (
@@ -428,9 +479,9 @@ function WizardInner({
         {step === 2 && parsed?.kind === 'csv' ? (
           <div className={styles.body}>
             <Text variant="base" tone="muted">
-              Choose what each column becomes. Columns you do not recognise default to Metadata so they are kept;
-              choose Ignore to leave a column out. Several Input (or Expected) columns are combined into one JSON
-              object keyed by column name.
+              Choose what each column becomes. Columns you do not recognise default to Metadata so they are
+              kept; choose Ignore to leave a column out. Several Input (or Expected) columns are combined into
+              one JSON object keyed by column name.
             </Text>
             <div className={styles.mapHeader}>
               <Text variant="lg" as="h3">
@@ -461,7 +512,9 @@ function WizardInner({
                         hideLabel
                         items={COLUMN_ROLES.map((r) => ({ key: r.value, label: r.label }))}
                         value={columnRole(mapping, col)}
-                        onChange={(k) => k && setMapping((m) => setColumnRole(m, col, String(k) as ColumnRole))}
+                        onChange={(k) =>
+                          k && setMapping((m) => setColumnRole(m, col, String(k) as ColumnRole))
+                        }
                         searchable={false}
                         width={200}
                       />
@@ -485,7 +538,12 @@ function WizardInner({
           <div className={styles.body}>
             {mode !== 'add-to-draft' ? (
               <>
-                <TextField label="Version name" value={versionName} onChange={setVersionName} placeholder="Optional, e.g. “Q3 refresh”" />
+                <TextField
+                  label="Version name"
+                  value={versionName}
+                  onChange={setVersionName}
+                  placeholder="Optional, e.g. “Q3 refresh”"
+                />
                 <Text variant="base" tone="muted">
                   {mode === 'new'
                     ? `Creates a new dataset "${name.trim()}" (slug ${slugPreview || 'generated'}) with this file as version v1.`
@@ -512,14 +570,17 @@ function WizardInner({
                 ) : null}
                 {publish && setAlias && canSetProduction && effectiveTarget?.production_version ? (
                   <Text variant="sm" tone="warning" role="status">
-                    Production moves from {effectiveTarget.production_version.version} to the new version. Runs that
-                    target the alias will use it immediately.
+                    Production moves from {effectiveTarget.production_version.version} to the new version.
+                    Runs that target the alias will use it immediately.
                   </Text>
                 ) : null}
               </>
             ) : null}
             <Text variant="base" tone="muted">
-              {file?.name} · {parsed.kind === 'csv' ? `CSV · ${encodingLabel(encoding ?? parsed.encoding)}` : parsed.format.toUpperCase()}
+              {file?.name} ·{' '}
+              {parsed.kind === 'csv'
+                ? `CSV · ${encodingLabel(encoding ?? parsed.encoding)}`
+                : parsed.format.toUpperCase()}
               {' · '}
               {pluralize(parsed.rows.length, parsed.kind === 'csv' ? 'row' : 'record')} · preview shows first{' '}
               {Math.min(10, parsed.rows.length)}
@@ -531,8 +592,18 @@ function WizardInner({
                 <Text variant="sm" tone="muted">
                   {progress.label}
                 </Text>
-                <div className={styles.bar} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.fraction === null ? undefined : Math.round(progress.fraction * 100)}>
-                  <div className={styles.barFill} style={{ width: `${Math.round((progress.fraction ?? 0) * 100)}%` }} data-indeterminate={progress.fraction === null ? '' : undefined} />
+                <div
+                  className={styles.bar}
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progress.fraction === null ? undefined : Math.round(progress.fraction * 100)}
+                >
+                  <div
+                    className={styles.barFill}
+                    style={{ width: `${Math.round((progress.fraction ?? 0) * 100)}%` }}
+                    data-indeterminate={progress.fraction === null ? '' : undefined}
+                  />
                 </div>
                 <Button variant="ghost" size="sm" onPress={() => abortRef.current?.abort()}>
                   Cancel upload
@@ -638,7 +709,9 @@ function NotImported({ parsed, mapping }: { parsed: Parsed; mapping: ColumnMappi
   return (
     <Text variant="sm" tone="warning" role="status" as="div">
       Not imported: {ignored.join(', ')}
-      {parsed.kind === 'json' ? ' (unknown keys; only item_id/id, input, expected_output/expected, metadata, labels are read)' : ''}
+      {parsed.kind === 'json'
+        ? ' (unknown keys; only item_id/id, input, expected_output/expected, metadata, labels are read)'
+        : ''}
     </Text>
   );
 }
@@ -653,7 +726,11 @@ function PreviewTable({ parsed }: { parsed: Parsed }) {
     const keys = new Set<string>();
     for (const r of parsed.rows.slice(0, 10)) for (const k of Object.keys(r)) keys.add(k);
     headers = [...keys];
-    rows = parsed.rows.slice(0, 10).map((r) => headers.map((k) => (typeof r[k] === 'string' ? (r[k] as string) : JSON.stringify(r[k] ?? ''))));
+    rows = parsed.rows
+      .slice(0, 10)
+      .map((r) =>
+        headers.map((k) => (typeof r[k] === 'string' ? (r[k] as string) : JSON.stringify(r[k] ?? ''))),
+      );
   }
   return (
     <div className={styles.previewWrap}>

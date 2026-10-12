@@ -6,7 +6,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Key } from 'react-aria-components';
 import { useBlocker, useSearchParams } from 'react-router-dom';
-import { bulkItems, invalidateItems, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
+import {
+  bulkItems,
+  invalidateItems,
+  type Dataset,
+  type DatasetItem,
+  type DatasetVersion,
+} from '@/api/datasets';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/http';
 import { Button, ConfirmDialog, Text, useToast } from '@/ui';
@@ -23,7 +29,14 @@ export interface ItemsWorkspaceProps {
   onImport: () => void;
 }
 
-export function ItemsWorkspace({ slug, dataset, version, readOnly, onAddItem, onImport }: ItemsWorkspaceProps) {
+export function ItemsWorkspace({
+  slug,
+  dataset,
+  version,
+  readOnly,
+  onAddItem,
+  onImport,
+}: ItemsWorkspaceProps) {
   const [params] = useSearchParams();
   const qc = useQueryClient();
   const toast = useToast();
@@ -33,7 +46,11 @@ export function ItemsWorkspace({ slug, dataset, version, readOnly, onAddItem, on
   const [selected, setSelected] = useState<Set<Key>>(new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [guard, setGuard] = useState<{ proceed: () => void } | null>(null);
-  const dirty = useRef<{ dirty: boolean; save: () => Promise<boolean>; reset: () => void }>({ dirty: false, save: async () => true, reset: () => undefined });
+  const dirty = useRef<{ dirty: boolean; save: () => Promise<boolean>; reset: () => void }>({
+    dirty: false,
+    save: async () => true,
+    reset: () => undefined,
+  });
 
   const attempt = useCallback((proceed: () => void) => {
     if (dirty.current.dirty) setGuard({ proceed });
@@ -56,13 +73,24 @@ export function ItemsWorkspace({ slug, dataset, version, readOnly, onAddItem, on
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       if (e.key === 'Escape') {
-        if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"], [role="listbox"], [role="menu"]')) return;
+        if (
+          document.querySelector(
+            '[role="dialog"][aria-modal="true"], [role="alertdialog"], [role="listbox"], [role="menu"]',
+          )
+        )
+          return;
         attempt(() => setPaneId(null));
         return;
       }
       if ((e.key === 'j' || e.key === 'k') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         const t = e.target as HTMLElement | null;
-        if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable || t.closest('[role="dialog"], [role="menu"], [role="listbox"]'))) return;
+        if (
+          t &&
+          (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) ||
+            t.isContentEditable ||
+            t.closest('[role="dialog"], [role="menu"], [role="listbox"]'))
+        )
+          return;
         const list = rowsRef.current;
         const at = list.findIndex((r) => r.item_id === paneId);
         const nextRow = list[at + (e.key === 'j' ? 1 : -1)];
@@ -117,7 +145,9 @@ export function ItemsWorkspace({ slug, dataset, version, readOnly, onAddItem, on
       invalidateItems(qc, slug, dataset.slug);
       setSelected(new Set());
       if (paneId && ids.includes(paneId)) setPaneId(null);
-      toast.show(`${r.summary.deleted} item${r.summary.deleted === 1 ? '' : 's'} deleted`, { tone: 'success' });
+      toast.show(`${r.summary.deleted} item${r.summary.deleted === 1 ? '' : 's'} deleted`, {
+        tone: 'success',
+      });
     } catch (e) {
       toast.show(e instanceof ApiError ? e.detail || e.message : 'Delete failed', { tone: 'error' });
       throw e;
@@ -132,7 +162,12 @@ export function ItemsWorkspace({ slug, dataset, version, readOnly, onAddItem, on
             <Text as="span" variant="md" weight={600}>
               {selected.size} selected
             </Text>
-            <Button variant="danger" size="sm" onPress={() => setConfirmBulk(true)} data-testid="bulk-delete-items">
+            <Button
+              variant="danger"
+              size="sm"
+              onPress={() => setConfirmBulk(true)}
+              data-testid="bulk-delete-items"
+            >
               Delete {selected.size}
             </Button>
             <Button variant="ghost" size="sm" onPress={() => setSelected(new Set())}>

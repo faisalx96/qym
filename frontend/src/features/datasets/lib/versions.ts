@@ -88,6 +88,7 @@ export function filterCatalog(list: Dataset[], query: string): Dataset[] {
   );
 }
 
-export const PRODUCTION_RULE = 'Only project managers can move the production alias; the creator may set it the first time.';
+export const PRODUCTION_RULE =
+  'Only project managers can move the production alias; the creator may set it the first time.';
 export const DELETE_RULE = 'Only the dataset creator or a project manager can delete a dataset.';
 export const RESTORE_RULE = 'Only project managers can restore a deleted dataset.';

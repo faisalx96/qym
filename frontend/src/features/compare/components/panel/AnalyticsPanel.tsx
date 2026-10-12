@@ -25,7 +25,13 @@ export function AnalyticsPanel() {
     setUrlTab(t);
   };
   const traced = model.runs.some((r) => r.run.trace_stats?.has_spans);
-  const tab: Tab = (['metrics', 'overview', 'categories', 'errors', 'root-cause', 'steps'] as Tab[]).includes(wanted as Tab) && (wanted !== 'steps' || traced) ? (wanted as Tab) : 'metrics';
+  const tab: Tab =
+    (['metrics', 'overview', 'categories', 'errors', 'root-cause', 'steps'] as Tab[]).includes(
+      wanted as Tab,
+    ) &&
+    (wanted !== 'steps' || traced)
+      ? (wanted as Tab)
+      : 'metrics';
   const setTab = (t: Tab) => setWanted(t);
   return (
     <aside className={styles.panel} aria-label="Analytics for the filtered items">

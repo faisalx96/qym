@@ -46,8 +46,11 @@ function commonPrefix(values: string[]): string {
 /** A label a user gave, else derived from the run names of the side. */
 export function deriveCohortLabel(runs: CompareRun[], provided: string): string {
   const label = provided.trim();
-  if (label && !GENERIC_LABELS.has(label.toLowerCase()) && !label.includes(',') && !/\+\d+$/.test(label)) return label;
-  const names = Array.from(new Set(runs.map((r) => String(r.run.base_run_name || r.run.run_name || r.base).trim()).filter(Boolean)));
+  if (label && !GENERIC_LABELS.has(label.toLowerCase()) && !label.includes(',') && !/\+\d+$/.test(label))
+    return label;
+  const names = Array.from(
+    new Set(runs.map((r) => String(r.run.base_run_name || r.run.run_name || r.base).trim()).filter(Boolean)),
+  );
   if (!names.length) return 'Cohort';
   if (names.length === 1) return names[0] ?? 'Cohort';
   const pool = names.filter((n) => !opaque(n));
@@ -95,7 +98,12 @@ export function resolveCohorts(
 
 /** `Cohorts` as the URL carries them, with the expanded refs. */
 export function cohortsToUrl(groups: CohortGroups): Cohorts {
-  return { left: groups.left, right: groups.right, leftLabel: groups.leftLabel, rightLabel: groups.rightLabel };
+  return {
+    left: groups.left,
+    right: groups.right,
+    leftLabel: groups.leftLabel,
+    rightLabel: groups.rightLabel,
+  };
 }
 
 export type BucketKey = 'a_sweeps_b' | 'b_sweeps_a' | 'both_pass' | 'both_fail';
@@ -157,7 +165,9 @@ export function computeGroupedComparison(
   groups: CohortGroups,
   ctx: MetricCtx,
 ): GroupedComparison {
-  const empty = Object.fromEntries(BUCKET_KEYS.map((k) => [k, { count: 0, percentage: 0, itemIds: [] as string[] }])) as GroupedComparison['buckets'];
+  const empty = Object.fromEntries(
+    BUCKET_KEYS.map((k) => [k, { count: 0, percentage: 0, itemIds: [] as string[] }]),
+  ) as GroupedComparison['buckets'];
   const result: GroupedComparison = {
     eligibleItems: 0,
     leftRunCount: groups.left.length,
@@ -171,10 +181,19 @@ export function computeGroupedComparison(
   const byRef = new Map(model.runs.map((r) => [r.ref, r]));
   const left = groups.left.map((ref) => byRef.get(ref)).filter(Boolean) as CompareRun[];
   const right = groups.right.map((ref) => byRef.get(ref)).filter(Boolean) as CompareRun[];
-  if (!left.length || !right.length || left.length !== groups.left.length || right.length !== groups.right.length) return result;
+  if (
+    !left.length ||
+    !right.length ||
+    left.length !== groups.left.length ||
+    right.length !== groups.right.length
+  )
+    return result;
 
-  const reportKs = [...left, ...right].map((r) => Number((r.run.config as Record<string, unknown> | undefined)?.report_k) || null);
-  result.reportK = reportKs.length && reportKs.every((v) => v && v === reportKs[0]) ? (reportKs[0] ?? null) : null;
+  const reportKs = [...left, ...right].map(
+    (r) => Number((r.run.config as Record<string, unknown> | undefined)?.report_k) || null,
+  );
+  result.reportK =
+    reportKs.length && reportKs.every((v) => v && v === reportKs[0]) ? (reportKs[0] ?? null) : null;
 
   for (const itemId of model.itemIds) {
     const l = collectSide(model, left, itemId, ctx);
@@ -216,7 +235,9 @@ export function computeGroupedComparison(
     }
   }
   for (const key of BUCKET_KEYS)
-    result.buckets[key].percentage = result.eligibleItems ? result.buckets[key].count / result.eligibleItems : 0;
+    result.buckets[key].percentage = result.eligibleItems
+      ? result.buckets[key].count / result.eligibleItems
+      : 0;
   result.items.sort(defaultSweepSort);
   return result;
 }
@@ -241,7 +262,13 @@ export interface SweepSummary {
   eligibleItems: number;
   left: SideSummary;
   right: SideSummary;
-  deltas: { passAtK: number; passHatK: number; avgAtK: number | null; consistency: number; reliability: number };
+  deltas: {
+    passAtK: number;
+    passHatK: number;
+    avgAtK: number | null;
+    consistency: number;
+    reliability: number;
+  };
   counts: {
     improved: number;
     regressed: number;
@@ -254,7 +281,12 @@ export interface SweepSummary {
   reportK: number | null;
 }
 
-function aggregateSide(items: SweepItem[], side: 'left' | 'right', runCount: number, reportK: number | null): SideSummary {
+function aggregateSide(
+  items: SweepItem[],
+  side: 'left' | 'right',
+  runCount: number,
+  reportK: number | null,
+): SideSummary {
   let atK = 0;
   let hatK = 0;
   let scoreSum = 0;
@@ -308,7 +340,14 @@ export function summarizeSweepItems(
 ): SweepSummary {
   const left = aggregateSide(items, 'left', leftRunCount, reportK);
   const right = aggregateSide(items, 'right', rightRunCount, reportK);
-  const counts = { improved: 0, regressed: 0, unchanged: 0, decisivelyFixed: 0, decisivelyBroken: 0, avgAttemptsDelta: 0 };
+  const counts = {
+    improved: 0,
+    regressed: 0,
+    unchanged: 0,
+    decisivelyFixed: 0,
+    decisivelyBroken: 0,
+    avgAttemptsDelta: 0,
+  };
   let attemptsDelta = 0;
   for (const item of items) {
     if (item.move > 0) counts.improved += 1;
@@ -352,11 +391,17 @@ export function reverseSweepItem(item: SweepItem): SweepItem {
     leftAvgAttempts: item.rightAvgAttempts,
     rightAvgAttempts: item.leftAvgAttempts,
     move: -item.move,
-    bucketKey: item.bucketKey === 'a_sweeps_b' ? 'b_sweeps_a' : item.bucketKey === 'b_sweeps_a' ? 'a_sweeps_b' : item.bucketKey,
+    bucketKey:
+      item.bucketKey === 'a_sweeps_b'
+        ? 'b_sweeps_a'
+        : item.bucketKey === 'b_sweeps_a'
+          ? 'a_sweeps_b'
+          : item.bucketKey,
   };
 }
 
-export type SweepOutcome = 'all' | 'left_sweeps_right' | 'right_sweeps_left' | 'both_pass' | 'both_fail' | 'mixed';
+export type SweepOutcome =
+  'all' | 'left_sweeps_right' | 'right_sweeps_left' | 'both_pass' | 'both_fail' | 'mixed';
 export type SweepMove = 'all' | 'improved' | 'regressed' | 'unchanged';
 
 export function sweepOutcomeOf(item: SweepItem): Exclude<SweepOutcome, 'all'> {

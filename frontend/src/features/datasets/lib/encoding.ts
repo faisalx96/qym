@@ -18,11 +18,7 @@ export const LEGACY_CSV_ENCODINGS = ['windows-1252', 'windows-1256', 'iso-8859-6
 
 export const ENCODING_SAMPLE_CHARS = 262144;
 
-const NEUTRAL_TEXT_CHARS = new Set(
-  Array.from(
-    ' «»“”‘’„–—…•€£¥°©®™§·¿¡×¬،؛؟٪٫٬',
-  ),
-);
+const NEUTRAL_TEXT_CHARS = new Set(Array.from(' «»“”‘’„–—…•€£¥°©®™§·¿¡×¬،؛؟٪٫٬'));
 
 export function encodingLabel(value: string): string {
   return CSV_ENCODINGS.find((e) => e.value === value)?.label ?? value;

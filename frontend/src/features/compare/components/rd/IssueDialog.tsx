@@ -40,7 +40,19 @@ function uuid(): string {
       });
 }
 
-export function IssueDialog({ open, onOpenChange, row, metric: initialMetric, metrics, issue, passNumber, runId, slug, passRevision, onSaved }: IssueDialogProps) {
+export function IssueDialog({
+  open,
+  onOpenChange,
+  row,
+  metric: initialMetric,
+  metrics,
+  issue,
+  passNumber,
+  runId,
+  slug,
+  passRevision,
+  onSaved,
+}: IssueDialogProps) {
   const [pickedMetric, setPickedMetric] = useState(initialMetric);
   const metric = issue ? initialMetric : pickedMetric;
   const catalog = useCategoryCatalogQuery(slug, open);
@@ -168,7 +180,12 @@ export function IssueDialog({ open, onOpenChange, row, metric: initialMetric, me
     >
       <div className={styles.form}>
         {!issue && metrics && metrics.length > 1 ? (
-          <Select label="Metric" items={metrics.map((m) => ({ key: m, label: m }))} value={metric} onChange={(k) => k && setPickedMetric(String(k))} />
+          <Select
+            label="Metric"
+            items={metrics.map((m) => ({ key: m, label: m }))}
+            value={metric}
+            onChange={(k) => k && setPickedMetric(String(k))}
+          />
         ) : null}
         <Select
           label="Category"

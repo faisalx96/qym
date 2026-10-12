@@ -3,12 +3,30 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDeleteDataset, usePatchDataset, type Dataset } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
-import { Button, Checkbox, Chip, ConfirmDialog, SectionHeader, Text, TextField, Textarea, useToast } from '@/ui';
+import {
+  Button,
+  Checkbox,
+  Chip,
+  ConfirmDialog,
+  SectionHeader,
+  Text,
+  TextField,
+  Textarea,
+  useToast,
+} from '@/ui';
 import { catalogPath, datasetPath } from '../lib/route';
 import { DELETE_RULE } from '../lib/versions';
 import styles from './SettingsTab.module.css';
 
-export function SettingsTab({ slug, dataset, readOnly }: { slug: string; dataset: Dataset; readOnly: boolean }) {
+export function SettingsTab({
+  slug,
+  dataset,
+  readOnly,
+}: {
+  slug: string;
+  dataset: Dataset;
+  readOnly: boolean;
+}) {
   const patch = usePatchDataset(slug, dataset.slug);
   const del = useDeleteDataset(slug, dataset.slug);
   const toast = useToast();
@@ -21,7 +39,10 @@ export function SettingsTab({ slug, dataset, readOnly }: { slug: string; dataset
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmPrivate, setConfirmPrivate] = useState<boolean | null>(null);
 
-  const dirty = name !== dataset.name || description !== (dataset.description ?? '') || tags.join('\u0001') !== (dataset.tags ?? []).join('\u0001');
+  const dirty =
+    name !== dataset.name ||
+    description !== (dataset.description ?? '') ||
+    tags.join('\u0001') !== (dataset.tags ?? []).join('\u0001');
 
   function addTag() {
     const t = tagDraft.trim();
@@ -39,7 +60,8 @@ export function SettingsTab({ slug, dataset, readOnly }: { slug: string; dataset
     try {
       const r = await patch.mutateAsync({ name: name.trim(), description: description.trim(), tags });
       toast.show('Settings saved', { tone: 'success' });
-      if (r.dataset.slug !== dataset.slug) navigate(datasetPath(slug, r.dataset.slug, { tab: 'settings' }), { replace: true });
+      if (r.dataset.slug !== dataset.slug)
+        navigate(datasetPath(slug, r.dataset.slug, { tab: 'settings' }), { replace: true });
     } catch (e) {
       toast.show(e instanceof ApiError ? e.detail || e.message : 'Save failed', { tone: 'error' });
     }
@@ -48,9 +70,13 @@ export function SettingsTab({ slug, dataset, readOnly }: { slug: string; dataset
   async function setPrivate(value: boolean) {
     try {
       await patch.mutateAsync({ private_test_set: value });
-      toast.show(value ? 'Items are now hidden from non-admins' : 'Items are visible to the whole project', { tone: 'success' });
+      toast.show(value ? 'Items are now hidden from non-admins' : 'Items are visible to the whole project', {
+        tone: 'success',
+      });
     } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || e.message : 'Could not change visibility', { tone: 'error' });
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Could not change visibility', {
+        tone: 'error',
+      });
     }
   }
 
@@ -59,7 +85,13 @@ export function SettingsTab({ slug, dataset, readOnly }: { slug: string; dataset
       <section className={styles.card} aria-labelledby="ds-general">
         <SectionHeader id="ds-general" title="General" />
         <TextField label="Name" value={name} onChange={setName} isReadOnly={readOnly} isRequired />
-        <Textarea label="Description" value={description} onChange={setDescription} rows={3} isReadOnly={readOnly} />
+        <Textarea
+          label="Description"
+          value={description}
+          onChange={setDescription}
+          rows={3}
+          isReadOnly={readOnly}
+        />
         <div className={styles.tags}>
           <TextField
             label="Tags"
@@ -82,7 +114,12 @@ export function SettingsTab({ slug, dataset, readOnly }: { slug: string; dataset
           {tags.length ? (
             <div className={styles.chipRow} role="list" aria-label="Tags">
               {tags.map((t) => (
-                <Chip key={t} isSelected onRemove={readOnly ? undefined : () => setTags(tags.filter((x) => x !== t))} removeLabel={`Remove tag ${t}`}>
+                <Chip
+                  key={t}
+                  isSelected
+                  onRemove={readOnly ? undefined : () => setTags(tags.filter((x) => x !== t))}
+                  removeLabel={`Remove tag ${t}`}
+                >
                   {t}
                 </Chip>
               ))}
@@ -91,7 +128,12 @@ export function SettingsTab({ slug, dataset, readOnly }: { slug: string; dataset
         </div>
         {!readOnly ? (
           <div>
-            <Button variant="primary" onPress={() => void save()} isDisabled={!dirty || !name.trim()} loading={patch.isPending}>
+            <Button
+              variant="primary"
+              onPress={() => void save()}
+              isDisabled={!dirty || !name.trim()}
+              loading={patch.isPending}
+            >
               Save changes
             </Button>
           </div>
@@ -105,7 +147,12 @@ export function SettingsTab({ slug, dataset, readOnly }: { slug: string; dataset
             title="Visibility"
             description="A private test set hides its items from everyone except admins, including the inputs, expected outputs, outputs, and traces of runs evaluated on it. Members still see versions, run history, and scores."
           />
-          <Checkbox isSelected={dataset.private_test_set} isDisabled={readOnly || patch.isPending} onChange={(v) => setConfirmPrivate(v)} data-testid="private-toggle">
+          <Checkbox
+            isSelected={dataset.private_test_set}
+            isDisabled={readOnly || patch.isPending}
+            onChange={(v) => setConfirmPrivate(v)}
+            data-testid="private-toggle"
+          >
             Private test set (admins only)
           </Checkbox>
         </section>
@@ -138,7 +185,10 @@ export function SettingsTab({ slug, dataset, readOnly }: { slug: string; dataset
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={`Delete “${dataset.name}”?`}
-        description={['The dataset moves to Deleted datasets with every version and item.', 'A project manager can restore it later.']}
+        description={[
+          'The dataset moves to Deleted datasets with every version and item.',
+          'A project manager can restore it later.',
+        ]}
         requireText={dataset.name}
         inputLabel={`Type ${dataset.name} to confirm`}
         confirmLabel="Delete dataset"

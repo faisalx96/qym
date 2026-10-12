@@ -85,17 +85,35 @@ export function parseUpload(req: Omit<ParseRequest, 'id'>): CsvParseResult | Jso
   if (looksGarbled(text)) warnings.push('Some text looks garbled. Try another encoding before importing.');
   const table = csvTable(text);
   if (!table.headers.length) {
-    return { kind: 'csv', encoding, detectedEncoding: detected, delimiter: table.delimiter, headers: [], rows: [], warnings, error: 'The CSV file has no header row.' };
+    return {
+      kind: 'csv',
+      encoding,
+      detectedEncoding: detected,
+      delimiter: table.delimiter,
+      headers: [],
+      rows: [],
+      warnings,
+      error: 'The CSV file has no header row.',
+    };
   }
-  return { kind: 'csv', encoding, detectedEncoding: detected, delimiter: table.delimiter, headers: table.headers, rows: table.rows, warnings };
+  return {
+    kind: 'csv',
+    encoding,
+    detectedEncoding: detected,
+    delimiter: table.delimiter,
+    headers: table.headers,
+    rows: table.rows,
+    warnings,
+  };
 }
 
 // Only inside a worker (the main-thread fallback imports this module too).
-const inWorker = typeof self !== 'undefined' && typeof (self as { importScripts?: unknown }).importScripts === 'function';
+const inWorker =
+  typeof self !== 'undefined' && typeof (self as { importScripts?: unknown }).importScripts === 'function';
 if (inWorker) {
   self.onmessage = (event: MessageEvent<ParseRequest>) => {
-  const { id, ...req } = event.data;
-  const result = parseUpload(req);
+    const { id, ...req } = event.data;
+    const result = parseUpload(req);
     (self as unknown as Worker).postMessage({ id, ...result } satisfies ParseResult);
   };
 }

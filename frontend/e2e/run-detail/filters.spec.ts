@@ -97,13 +97,17 @@ test.describe('search (scenario 4)', () => {
 
   test('search reaches output text, not only inputs', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await page.getByRole('searchbox', { name: 'Search inputs and outputs' }).fill('I am not sure about clause');
+    await page
+      .getByRole('searchbox', { name: 'Search inputs and outputs' })
+      .fill('I am not sure about clause');
     await expect.poll(async () => (await itemsCount(page))[0]).toBeGreaterThan(5);
   });
 
   test('?q= deep link prefills the search box', async ({ page }) => {
     await openRun(page, s.slug, classic, 'q=Question%2017%3A');
-    await expect(page.getByRole('searchbox', { name: 'Search inputs and outputs' })).toHaveValue('Question 17:');
+    await expect(page.getByRole('searchbox', { name: 'Search inputs and outputs' })).toHaveValue(
+      'Question 17:',
+    );
     await expect.poll(async () => (await itemsCount(page))[0]).toBe(1);
   });
 });
@@ -184,7 +188,12 @@ test.describe('rule builder (scenario 5)', () => {
 
 test.describe('URL contract for the view params', () => {
   test('metric + threshold + show + sort + page deep links restore the view', async ({ page }) => {
-    await openRun(page, s.slug, classic, 'metric=hallucination&threshold=20&show=failed&sort=latency_desc&page=2');
+    await openRun(
+      page,
+      s.slug,
+      classic,
+      'metric=hallucination&threshold=20&show=failed&sort=latency_desc&page=2',
+    );
     await expect(page.getByRole('button', { name: /hallucination Analysis metric/ })).toBeVisible();
     await expect(page.getByRole('slider', { name: /Pass if score/ })).toHaveValue('20');
     await expect(page.getByRole('radio', { name: 'Fail' })).toBeChecked();
@@ -202,13 +211,19 @@ test.describe('URL contract for the view params', () => {
 
   test('sorting by latency rewrites ?sort= and orders the table', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await page.getByRole('button', { name: /^Index Sort|Sort/ }).first().click();
+    await page
+      .getByRole('button', { name: /^Index Sort|Sort/ })
+      .first()
+      .click();
     await page.getByRole('option', { name: 'Latency ↓' }).click();
     await expect.poll(() => params(page).get('sort')).toBe('latency_desc');
     const ms = async () => {
-      const texts = await page.getByRole('row').filter({ has: page.getByRole('button', { name: /^Open item/ }) }).evaluateAll((rows) =>
-        rows.map((r) => (r.querySelector('[data-cell=latency]') as HTMLElement | null)?.innerText ?? ''),
-      );
+      const texts = await page
+        .getByRole('row')
+        .filter({ has: page.getByRole('button', { name: /^Open item/ }) })
+        .evaluateAll((rows) =>
+          rows.map((r) => (r.querySelector('[data-cell=latency]') as HTMLElement | null)?.innerText ?? ''),
+        );
       return texts.map((t) => {
         const m = /^([\d.]+)(ms|s)/.exec(t.trim());
         return m ? Number(m[1]) * (m[2] === 's' ? 1000 : 1) : NaN;
@@ -247,7 +262,9 @@ test.describe('URL contract for the view params', () => {
     await openRun(page, s.slug, classic, 'hide_field=source');
     await page.getByRole('button', { name: 'Open item #2', exact: true }).click();
     await expect(page.locator('[data-testid=item-card][data-item-id="item-0002"]')).toBeVisible();
-    await expect(page.locator('[data-testid=item-card][data-item-id="item-0002"]').getByText(/^source: /)).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid=item-card][data-item-id="item-0002"]').getByText(/^source: /),
+    ).toHaveCount(0);
     expect(params(page).getAll('hide_field')).toEqual(['source']);
   });
 
@@ -289,7 +306,10 @@ test.describe('CSV export (J7)', () => {
         .on('end', () => resolve(buf))
         .on('error', reject);
     });
-    const lines = text.replace(/^\uFEFF/, '').trim().split('\n');
+    const lines = text
+      .replace(/^\uFEFF/, '')
+      .trim()
+      .split('\n');
     expect(lines.length).toBeGreaterThan(200);
     expect(lines[0]).toMatch(/item_id|Item|index/i);
   });

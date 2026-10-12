@@ -24,7 +24,9 @@ async function deletePass(runId: string, pass: number, expectedVersion?: number)
   return res.status;
 }
 
-test('run page: a stale page is refused after a pass was deleted; a fresh page edits the remaining pass', async ({ page }) => {
+test('run page: a stale page is refused after a pass was deleted; a fresh page edits the remaining pass', async ({
+  page,
+}) => {
   const runId = await seedRepeat(s);
   await deletePass(runId, 3); // pass revision 0 -> 1
   await openRun(page, s.slug, runId, 'pass=1');
@@ -32,7 +34,10 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
 
   // stale page: edit an item score
   await itemButton(page, 2).click();
-  const chip = page.locator('[data-testid=item-card]').first().locator('[role=listitem][data-metric=quality]');
+  const chip = page
+    .locator('[data-testid=item-card]')
+    .first()
+    .locator('[role=listitem][data-metric=quality]');
   await expect(chip).toBeVisible();
   await chip.getByRole('button', { name: 'Edit quality score' }).click();
   await chip.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
@@ -40,19 +45,26 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
   await chip.getByRole('button', { name: 'Save' }).click();
   const response = await refused;
   expect(response.status()).toBe(409);
-  expect((response.request().postDataJSON() as { expected_pass_version: number }).expected_pass_version).toBe(1);
+  expect((response.request().postDataJSON() as { expected_pass_version: number }).expected_pass_version).toBe(
+    1,
+  );
   await expect(chip.getByRole('alert')).toContainText('Passes changed');
   await expect(chip.getByRole('textbox')).toBeVisible();
 
   // fresh page: the remaining pass is reachable and its edit goes through under the new version
   await openRun(page, s.slug, runId);
   // the remaining pass is renumbered: it is "Pass 1" now
-  const pill = page.getByRole('region', { name: 'Run summary' }).getByRole('link', { name: 'Pass 1', exact: true });
+  const pill = page
+    .getByRole('region', { name: 'Run summary' })
+    .getByRole('link', { name: 'Pass 1', exact: true });
   await expect(pill).toHaveAttribute('href', /\?pass=1$/);
   await pill.click();
   await expect(page).toHaveURL(/pass=1/);
   await itemButton(page, 2).click();
-  const fresh = page.locator('[data-testid=item-card]').first().locator('[role=listitem][data-metric=quality]');
+  const fresh = page
+    .locator('[data-testid=item-card]')
+    .first()
+    .locator('[role=listitem][data-metric=quality]');
   await fresh.getByRole('button', { name: 'Edit quality score' }).click();
   await fresh.getByRole('textbox', { name: 'New quality score' }).fill('0.25');
   const saved = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
@@ -64,7 +76,9 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
   await expect(fresh).toContainText('25');
 });
 
-test('compare: an edit from a page loaded before the deletion is refused with the version it loaded', async ({ page }) => {
+test('compare: an edit from a page loaded before the deletion is refused with the version it loaded', async ({
+  page,
+}) => {
   const a = await seedRepeat(s);
   const b = await seedRepeat(s);
   await deletePass(a, 3);
@@ -72,7 +86,10 @@ test('compare: an edit from a page loaded before the deletion is refused with th
   await waitLoaded(page);
   await deletePass(a, 1, 1);
 
-  await page.getByRole('button', { name: /^Item 2:/ }).first().click();
+  await page
+    .getByRole('button', { name: /^Item 2:/ })
+    .first()
+    .click();
   const chip = page.locator('[data-metric="quality"]').first();
   await chip.getByRole('button', { name: /^Edit quality score of/ }).click();
   await chip.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
@@ -80,6 +97,8 @@ test('compare: an edit from a page loaded before the deletion is refused with th
   await chip.getByRole('button', { name: 'Save' }).click();
   const response = await refused;
   expect(response.status()).toBe(409);
-  expect((response.request().postDataJSON() as { expected_pass_version: number }).expected_pass_version).toBe(1);
+  expect((response.request().postDataJSON() as { expected_pass_version: number }).expected_pass_version).toBe(
+    1,
+  );
   await expect(chip.getByRole('alert')).toContainText('Passes changed');
 });

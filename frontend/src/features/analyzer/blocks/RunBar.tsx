@@ -4,7 +4,15 @@ import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import s from './blocks.module.css';
 
 /** Connection select + Test Selected (<=3) + "Analyze N items". */
-export function RunBar({ ws, config, className }: { ws: RunWorkspace; config: AnalysisConfig; className?: string }) {
+export function RunBar({
+  ws,
+  config,
+  className,
+}: {
+  ws: RunWorkspace;
+  config: AnalysisConfig;
+  className?: string;
+}) {
   const { runner, test } = ws;
   const running = runner.busy;
   const testCount = ws.testKeys.length || 1;
@@ -16,7 +24,7 @@ export function RunBar({ ws, config, className }: { ws: RunWorkspace; config: An
         label="LLM connection"
         items={config.llm_connections.map((c) => ({
           key: c.id,
-          label: `${c.name} · ${c.llm_model}${c.llm_api_key_set ? "" : " · key missing"}`,
+          label: `${c.name} · ${c.llm_model}${c.llm_api_key_set ? '' : ' · key missing'}`,
           disabled: !c.llm_api_key_set,
         }))}
         value={ws.connectionId}
@@ -43,7 +51,9 @@ export function RunBar({ ws, config, className }: { ws: RunWorkspace; config: An
           isDisabled={running || test.testing || !ws.llmReady || noTargets}
           loading={runner.starting}
         >
-          {running ? 'Analysis running' : `Analyze ${ws.targetCount} ${ws.targetCount === 1 ? 'item' : 'items'}`}
+          {running
+            ? 'Analysis running'
+            : `Analyze ${ws.targetCount} ${ws.targetCount === 1 ? 'item' : 'items'}`}
         </Button>
       </div>
       <Text variant="sm" tone="muted" as="p" className={s.runBarHint}>

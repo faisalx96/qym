@@ -53,7 +53,9 @@ const two: RootCauseIssue = {
 
 function open(props: Partial<ComponentProps<typeof IssueDialog>> = {}) {
   const onOpenChange = vi.fn();
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   render(
     <QueryClientProvider client={client}>
       <IssueDialog

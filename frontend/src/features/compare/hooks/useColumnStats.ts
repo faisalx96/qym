@@ -1,5 +1,12 @@
 import { useMemo } from 'react';
-import { columnItemScores, compareWithBaseline, metricColumns, resolveBaseline, type BaselineStats, type MetricColumn } from '../lib/baseline';
+import {
+  columnItemScores,
+  compareWithBaseline,
+  metricColumns,
+  resolveBaseline,
+  type BaselineStats,
+  type MetricColumn,
+} from '../lib/baseline';
 import type { CompareModel } from '../lib/model';
 import type { MetricCtx } from '../lib/scoring';
 import type { CompareView } from '../lib/filters';
@@ -19,7 +26,11 @@ export function useColumns(model: CompareModel | null, view: CompareView): Colum
 }
 
 /** Paired stats of every column vs the baseline on one metric, over all items. */
-export function useColumnStats(model: CompareModel, info: ColumnsInfo, ctx: MetricCtx): Map<string, BaselineStats> {
+export function useColumnStats(
+  model: CompareModel,
+  info: ColumnsInfo,
+  ctx: MetricCtx,
+): Map<string, BaselineStats> {
   return useMemo(() => {
     const base = columnItemScores(model, info.baseline, ctx);
     const out = new Map<string, BaselineStats>();

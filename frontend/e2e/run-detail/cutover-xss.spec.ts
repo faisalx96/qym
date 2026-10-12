@@ -16,12 +16,18 @@ let runB: string;
 const payload = (tag: string) =>
   `${tag}'"><img src=x data-xss=${tag} onerror=window.__xss=1>" data-xssattr="${tag}' data-xssattr='${tag}`;
 const SQL = "SELECT (n * sum_xy - sum_x * sum_y) * 1.0 AS slope FROM t WHERE name LIKE '*a*'";
-const PROSE = 'Answer: **bold** and *soft*. See [docs](https://x.test/" onmouseover="window.__md=1" data-x=").';
+const PROSE =
+  'Answer: **bold** and *soft*. See [docs](https://x.test/" onmouseover="window.__md=1" data-x=").';
 
 async function expectInert(page: Page) {
   const state = await page.evaluate(() => ({
-    xss: (window as unknown as Record<string, unknown>).__xss ?? (window as unknown as Record<string, unknown>).__md ?? null,
-    markers: Array.from(document.querySelectorAll('[data-xss], [data-xssattr], [onmouseover]')).map((n) => n.tagName.toLowerCase()),
+    xss:
+      (window as unknown as Record<string, unknown>).__xss ??
+      (window as unknown as Record<string, unknown>).__md ??
+      null,
+    markers: Array.from(document.querySelectorAll('[data-xss], [data-xssattr], [onmouseover]')).map((n) =>
+      n.tagName.toLowerCase(),
+    ),
   }));
   expect(state).toEqual({ xss: null, markers: [] });
 }
@@ -87,7 +93,10 @@ test('the run page shows text as stored, with opt-in safe rendering', async ({ p
 test('Compare renders run names and outputs as text', async ({ page }) => {
   await page.goto(compareUrl([runA, runB]));
   await waitLoaded(page);
-  await page.getByRole('button', { name: /^Item 1:/ }).first().click();
+  await page
+    .getByRole('button', { name: /^Item 1:/ })
+    .first()
+    .click();
   await expect(page.locator('body')).toContainText(payload('model'));
   await expect(page.locator('body')).toContainText(SQL);
   await expectInert(page);

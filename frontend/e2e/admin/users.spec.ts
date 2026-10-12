@@ -88,7 +88,9 @@ test.describe('edit user', () => {
     await expect(dialog.getByRole('button', { name: /Role/ })).toBeDisabled();
     await expect(dialog.locator('[data-password-section]')).toHaveCount(0);
 
-    const reqPromise = page.waitForRequest((r) => r.method() === 'PUT' && r.url().includes('/v1/admin/users/'));
+    const reqPromise = page.waitForRequest(
+      (r) => r.method() === 'PUT' && r.url().includes('/v1/admin/users/'),
+    );
     await dialog.locator('[data-edit-user-save]').click();
     const body = (await reqPromise).postDataJSON() as Record<string, unknown>;
     expect(body).toHaveProperty('email', 'dev@local');
@@ -106,7 +108,9 @@ test.describe('edit user', () => {
     const dialog = page.getByRole('dialog', { name: /^Edit / });
     await dialog.getByRole('button', { name: /Role/ }).click();
     await page.getByRole('option', { name: 'Admin' }).click();
-    const reqPromise = page.waitForRequest((r) => r.method() === 'PUT' && r.url().includes(`/v1/admin/users/${u.id}`));
+    const reqPromise = page.waitForRequest(
+      (r) => r.method() === 'PUT' && r.url().includes(`/v1/admin/users/${u.id}`),
+    );
     await dialog.locator('[data-edit-user-save]').click();
     const body = (await reqPromise).postDataJSON() as Record<string, unknown>;
     expect(body.role).toBe('ADMIN');
@@ -120,7 +124,11 @@ test.describe('edit user', () => {
     await openUsers(page);
     await page.route(`**/v1/admin/users/${u.id}`, (route) =>
       route.request().method() === 'PUT'
-        ? route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ detail: 'Cannot remove the last admin' }) })
+        ? route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify({ detail: 'Cannot remove the last admin' }),
+          })
         : route.continue(),
     );
     const row = page.getByRole('grid', { name: 'Users' }).getByRole('row').filter({ hasText: u.email });

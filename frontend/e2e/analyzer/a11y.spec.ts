@@ -7,7 +7,9 @@ import { analysisUrl, seedAnalyzer, step, toggleBox, trackErrors, waitWorkspace 
 
 async function expectNoSerious(page: Page, label: string): Promise<void> {
   // dialogs fade in: axe must not sample half-transparent text
-  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
+  await page.evaluate(() =>
+    Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))),
+  );
   const v = await axeSeriousViolations(page);
   expect(v, `${label}\n${describeViolations(v)}`).toEqual([]);
 }
@@ -16,7 +18,10 @@ async function expectNoSerious(page: Page, label: string): Promise<void> {
 async function analyzeToCompletion(page: Page): Promise<void> {
   await step(page, 'Run').click();
   await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
-  await expect(page.getByRole('region', { name: 'Analysis job' })).toContainText('metric analyses succeeded', { timeout: 30_000 });
+  await expect(page.getByRole('region', { name: 'Analysis job' })).toContainText(
+    'metric analyses succeeded',
+    { timeout: 30_000 },
+  );
 }
 
 test.describe('axe (14)', () => {
@@ -29,7 +34,10 @@ test.describe('axe (14)', () => {
 
     // detected variable row + open path picker on Configure
     await page.getByRole('textbox', { name: 'Additional instructions' }).fill('Use {rubric}');
-    await page.getByLabel('Detected variables').getByRole('button', { name: /\{rubric\} source/ }).click();
+    await page
+      .getByLabel('Detected variables')
+      .getByRole('button', { name: /\{rubric\} source/ })
+      .click();
     await page.getByRole('option', { name: 'input', exact: true }).click();
     await expectNoSerious(page, 'configure with a variable');
 
@@ -45,14 +53,20 @@ test.describe('axe (14)', () => {
     await expectNoSerious(page, 'run with a test result');
 
     await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
-    await expect(page.getByRole('region', { name: 'Analysis job' })).toContainText('metric analyses succeeded', { timeout: 30_000 });
+    await expect(page.getByRole('region', { name: 'Analysis job' })).toContainText(
+      'metric analyses succeeded',
+      { timeout: 30_000 },
+    );
     await expectNoSerious(page, 'run with the job bar');
     await step(page, 'Review').click();
     await expect(page.getByText('Analysis complete')).toBeVisible();
     await expectNoSerious(page, 'review');
   });
 
-  test('the three guidance tabs, a populated rule editor and the version dialogs', async ({ page, request }) => {
+  test('the three guidance tabs, a populated rule editor and the version dialogs', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, `/projects/${seed.slug}/analysis?scope=categories`);
     await expect(page.getByRole('tabpanel', { name: /^Diagnosis categories/ })).toBeVisible();
@@ -64,7 +78,9 @@ test.describe('axe (14)', () => {
     await expect(page.getByRole('heading', { name: 'Rules in v1' })).toBeVisible();
     await page.getByRole('button', { name: 'Add rule' }).click();
     await page.getByRole('textbox', { name: 'Title' }).fill('Cite the context');
-    await page.getByRole('textbox', { name: 'Instruction' }).fill('Say which context lines support the answer.');
+    await page
+      .getByRole('textbox', { name: 'Instruction' })
+      .fill('Say which context lines support the answer.');
     await expect(page.getByText('Draft saved')).toBeVisible();
     await expectNoSerious(page, 'rules');
     await page.getByRole('button', { name: 'Publish' }).click();
@@ -76,7 +92,9 @@ test.describe('axe (14)', () => {
     await page.getByRole('tab', { name: /^Documents/ }).click();
     await expect(page.getByRole('heading', { name: 'Reference documents' })).toBeVisible();
     await expectNoSerious(page, 'documents (empty)');
-    await page.getByTestId('document-input').setInputFiles({ name: 'a.txt', mimeType: 'text/plain', buffer: Buffer.from('some reference text') });
+    await page
+      .getByTestId('document-input')
+      .setInputFiles({ name: 'a.txt', mimeType: 'text/plain', buffer: Buffer.from('some reference text') });
     await expect(page.getByRole('list', { name: 'Document library' })).toContainText('a.txt');
     await expectNoSerious(page, 'documents (library)');
   });
@@ -93,7 +111,10 @@ test.describe('axe (14)', () => {
 });
 
 test.describe('keyboard (14)', () => {
-  test('Tab reaches the steps with a visible focus ring; Enter activates a step', async ({ page, request }) => {
+  test('Tab reaches the steps with a visible focus ring; Enter activates a step', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
@@ -109,7 +130,12 @@ test.describe('keyboard (14)', () => {
     expect(reached, 'Configure step is reachable by Tab').toBe(true);
     const ring = await steps.first().evaluate((el) => {
       const cs = getComputedStyle(el);
-      return { outline: cs.outlineStyle, width: cs.outlineWidth, shadow: cs.boxShadow, matches: el.matches(':focus-visible') };
+      return {
+        outline: cs.outlineStyle,
+        width: cs.outlineWidth,
+        shadow: cs.boxShadow,
+        matches: el.matches(':focus-visible'),
+      };
     });
     expect(ring.matches).toBe(true);
     expect(ring.outline !== 'none' || ring.shadow !== 'none', JSON.stringify(ring)).toBe(true);
@@ -133,12 +159,18 @@ test.describe('keyboard (14)', () => {
     await first.focus();
     await page.keyboard.press('ArrowRight');
     await expect(tabs.getByRole('tab', { name: /^Production rules/ })).toBeFocused();
-    await expect(tabs.getByRole('tab', { name: /^Production rules/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.getByRole('tab', { name: /^Production rules/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await expect(page).toHaveURL(/scope=rules/);
     await page.keyboard.press('End');
     await expect(tabs.getByRole('tab', { name: /^Documents/ })).toHaveAttribute('aria-selected', 'true');
     await page.keyboard.press('ArrowLeft');
-    await expect(tabs.getByRole('tab', { name: /^Production rules/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.getByRole('tab', { name: /^Production rules/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await page.keyboard.press('Home');
     await expect(first).toHaveAttribute('aria-selected', 'true');
     await expect(page).toHaveURL(/scope=categories/);
@@ -151,7 +183,9 @@ test.describe('keyboard (14)', () => {
 
     // Escape closes the remove-category confirm without removing anything
     await page.getByRole('button', { name: 'Remove category' }).click();
-    const confirm = page.getByRole('alertdialog', { name: 'Remove category?' }).or(page.getByRole('dialog', { name: 'Remove category?' }));
+    const confirm = page
+      .getByRole('alertdialog', { name: 'Remove category?' })
+      .or(page.getByRole('dialog', { name: 'Remove category?' }));
     await expect(confirm).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(confirm).toBeHidden();
@@ -161,7 +195,12 @@ test.describe('keyboard (14)', () => {
   test('Escape closes the human-label confirm and nothing is posted', async ({ page, request }) => {
     const seed = await seedAnalyzer(request);
     await request.post('/api/runs/update_root_cause', {
-      data: { run_id: seed.runId, item_id: 'item-1', metric_name: 'exact_match', root_cause_issues: [{ category: 'Wrong Format', subcategory: 'x', finding: 'y' }] },
+      data: {
+        run_id: seed.runId,
+        item_id: 'item-1',
+        metric_name: 'exact_match',
+        root_cause_issues: [{ category: 'Wrong Format', subcategory: 'x', finding: 'y' }],
+      },
     });
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
@@ -224,7 +263,10 @@ test.describe('layout', () => {
     await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
     await expectFits('run with a result');
     await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
-    await expect(page.getByRole('region', { name: 'Analysis job' })).toContainText('metric analyses succeeded', { timeout: 30_000 });
+    await expect(page.getByRole('region', { name: 'Analysis job' })).toContainText(
+      'metric analyses succeeded',
+      { timeout: 30_000 },
+    );
     await expectFits('run with the job bar');
     await step(page, 'Review').click();
     await expect(page.getByText('Analysis complete')).toBeVisible();

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeRequest, buildConfigPayload, defaultSettings, fieldsSent, type FieldTrees } from '../settings';
+import {
+  analyzeRequest,
+  buildConfigPayload,
+  defaultSettings,
+  fieldsSent,
+  type FieldTrees,
+} from '../settings';
 import { pathsToTree } from '../mapping';
 
 const trees = (extra: Partial<FieldTrees> = {}): FieldTrees => ({

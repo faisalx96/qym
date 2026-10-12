@@ -3,7 +3,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button, Chip, CopyButton, Tag } from '@/ui';
 import { bodyText } from '@/features/run-detail/lib/itemText';
-import { HIDDEN_METADATA_KEYS, ITEM_METADATA_BADGE_KEYS, itemMetadataBadgeValues, itemMetadataDisplayValue } from '@/features/run-detail/lib/rowMeta';
+import {
+  HIDDEN_METADATA_KEYS,
+  ITEM_METADATA_BADGE_KEYS,
+  itemMetadataBadgeValues,
+  itemMetadataDisplayValue,
+} from '@/features/run-detail/lib/rowMeta';
 import { letterOf, useCompare } from '../../CompareContext';
 import { useDetailsStore, useEnsureBodies, useResolvedRows } from '../../hooks/useDetails';
 import { Collapsible, OutputCard } from './OutputCard';
@@ -29,15 +34,29 @@ export function ItemDetail({ itemId }: { itemId: string }) {
   const first = resolved[firstIdx]?.row ?? null;
   const loadedAll = resolved.every((r) => !r.row || r.loaded);
   const failed = useMemo(
-    () => model.runs.filter((run) => { const row = run.byItem.get(itemId); return row && store.stateOf(run.base, row.item_id)?.status === 'error'; }),
+    () =>
+      model.runs.filter((run) => {
+        const row = run.byItem.get(itemId);
+        return row && store.stateOf(run.base, row.item_id)?.status === 'error';
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [model.runs, itemId, resolved],
   );
   const input = bodyText(first?.input_full ?? first?.input ?? first?.input_preview);
   const expected = bodyText(first?.expected_full ?? first?.expected);
   const md = first?.item_metadata ?? {};
-  const badges = ITEM_METADATA_BADGE_KEYS.flatMap((k) => itemMetadataBadgeValues(k, md[k]).map((v) => ({ k, v })));
-  const tags = Object.entries(md).filter(([k, v]) => !HIDDEN_METADATA_KEYS.has(k) && !ITEM_METADATA_BADGE_KEYS.includes(k) && !ui.hiddenFields.has(k) && v != null && v !== '' && typeof v !== 'object');
+  const badges = ITEM_METADATA_BADGE_KEYS.flatMap((k) =>
+    itemMetadataBadgeValues(k, md[k]).map((v) => ({ k, v })),
+  );
+  const tags = Object.entries(md).filter(
+    ([k, v]) =>
+      !HIDDEN_METADATA_KEYS.has(k) &&
+      !ITEM_METADATA_BADGE_KEYS.includes(k) &&
+      !ui.hiddenFields.has(k) &&
+      v != null &&
+      v !== '' &&
+      typeof v !== 'object',
+  );
   const link = `${window.location.origin}${location.pathname}?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(location.search)), item: itemId }).toString()}`;
   const cards = resolved.map((r, i) => ({ r, i })).filter((x) => x.r.row && !hidden.has(x.i));
   const shown = all ? cards : cards.slice(0, INITIAL_CARDS);
@@ -46,7 +65,11 @@ export function ItemDetail({ itemId }: { itemId: string }) {
       {failed.length ? (
         <div role="alert" className={styles.alert}>
           Item details could not be loaded for {failed.map((r) => r.label).join(', ')}.{' '}
-          <Button size="sm" variant="neutral" onPress={() => failed.forEach((r) => void store.retry(r.base, r.byItem.get(itemId)!.item_id))}>
+          <Button
+            size="sm"
+            variant="neutral"
+            onPress={() => failed.forEach((r) => void store.retry(r.base, r.byItem.get(itemId)!.item_id))}
+          >
             Retry
           </Button>
         </div>
@@ -97,7 +120,14 @@ export function ItemDetail({ itemId }: { itemId: string }) {
               <Chip
                 key={run.ref}
                 isSelected={!hidden.has(i)}
-                onChange={(on) => setHidden((h) => { const n = new Set(h); if (on) n.delete(i); else n.add(i); return n; })}
+                onChange={(on) =>
+                  setHidden((h) => {
+                    const n = new Set(h);
+                    if (on) n.delete(i);
+                    else n.add(i);
+                    return n;
+                  })
+                }
               >
                 {letterOf(i)} {run.label}
               </Chip>
@@ -107,7 +137,13 @@ export function ItemDetail({ itemId }: { itemId: string }) {
       ) : null}
       <div className={styles.grid}>
         {shown.map(({ r, i }) => (
-          <OutputCard key={model.runs[i]!.ref} run={model.runs[i]!} runIndex={i} row={r.row!} itemId={itemId} />
+          <OutputCard
+            key={model.runs[i]!.ref}
+            run={model.runs[i]!}
+            runIndex={i}
+            row={r.row!}
+            itemId={itemId}
+          />
         ))}
       </div>
       {!all && cards.length > INITIAL_CARDS ? (

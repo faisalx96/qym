@@ -33,16 +33,16 @@ export function tryParseJson(value: unknown): object | null {
 
 function readPythonString(text: string, start: number): { value: string; next: number } | null {
   const quote = text[start];
-  let value = "";
+  let value = '';
   for (let i = start + 1; i < text.length; i += 1) {
     const ch = text[i] as string;
-    if (ch === "\\") {
+    if (ch === '\\') {
       i += 1;
       if (i >= text.length) return null;
       const esc = text[i] as string;
-      const simple: Record<string, string> = { n: "\n", r: "\r", t: "\t", b: "\b", f: "\f" };
+      const simple: Record<string, string> = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' };
       if (esc in simple) value += simple[esc];
-      else if (esc === "u" && /^[0-9a-fA-F]{4}$/.test(text.slice(i + 1, i + 5))) {
+      else if (esc === 'u' && /^[0-9a-fA-F]{4}$/.test(text.slice(i + 1, i + 5))) {
         value += String.fromCharCode(parseInt(text.slice(i + 1, i + 5), 16));
         i += 4;
       } else value += esc;
@@ -56,8 +56,8 @@ function readPythonString(text: string, start: number): { value: string; next: n
 
 /** A stringified Python dict/list (`str(dict)`): quotes, True/False/None are converted, then parsed as JSON. */
 function parsePythonLiteral(text: string): object | null {
-  if (text[0] !== "{" && text[0] !== "[") return null;
-  let out = "";
+  if (text[0] !== '{' && text[0] !== '[') return null;
+  let out = '';
   let i = 0;
   while (i < text.length) {
     const ch = text[i] as string;
@@ -72,9 +72,9 @@ function parsePythonLiteral(text: string): object | null {
       const start = i;
       while (i < text.length && /[A-Za-z_]/.test(text[i] as string)) i += 1;
       const word = text.slice(start, i);
-      if (word === "True") out += "true";
-      else if (word === "False") out += "false";
-      else if (word === "None") out += "null";
+      if (word === 'True') out += 'true';
+      else if (word === 'False') out += 'false';
+      else if (word === 'None') out += 'null';
       else return null;
       continue;
     }
@@ -83,7 +83,7 @@ function parsePythonLiteral(text: string): object | null {
   }
   try {
     const parsed = JSON.parse(out);
-    return parsed && typeof parsed === "object" ? parsed : null;
+    return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
     return null;
   }
@@ -113,7 +113,10 @@ export function collectJsonPaths(val: unknown, prefix: string, paths: Set<string
 
 const SAMPLE_ROWS = 20;
 
-export function scanFieldPaths(rows: AnalyzerRow[], field: 'input' | 'expected' | 'output' | 'error'): string[] {
+export function scanFieldPaths(
+  rows: AnalyzerRow[],
+  field: 'input' | 'expected' | 'output' | 'error',
+): string[] {
   const paths = new Set<string>();
   for (const row of rows.slice(0, SAMPLE_ROWS)) {
     const direct = row[field];
@@ -140,7 +143,9 @@ export function scanMetadataGroups(rows: AnalyzerRow[], preferred?: string): Met
     }
   }
   return [...groups.entries()]
-    .sort(([a], [b]) => (preferred && a === preferred ? -1 : preferred && b === preferred ? 1 : a.localeCompare(b)))
+    .sort(([a], [b]) =>
+      preferred && a === preferred ? -1 : preferred && b === preferred ? 1 : a.localeCompare(b),
+    )
     .map(([metric, set]) => ({ metric, paths: [...set].sort() }))
     .filter((g) => g.paths.length > 0);
 }
@@ -248,7 +253,10 @@ export interface FieldSlot {
 export const defaultSlot = (field: SourceField | ''): FieldSlot => ({ field, full: true, selected: [] });
 
 /** Mapping source for one slot: `field`, or `field.path` entries for a custom subset. */
-export function slotSource(slot: FieldSlot, tree: PathNode[]): { source: string | string[]; custom: boolean } | null {
+export function slotSource(
+  slot: FieldSlot,
+  tree: PathNode[],
+): { source: string | string[]; custom: boolean } | null {
   if (!slot.field) return null;
   if (slot.full || tree.length === 0 || slot.field === 'metric_metadata') {
     return { source: slot.field, custom: false };

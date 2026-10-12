@@ -19,7 +19,9 @@ export function IssueList({ issues, tone }: { issues: RootCauseIssue[]; tone: 'a
         <li key={i.issue_id ?? n} className={styles.issue}>
           <div className={styles.issueHead}>
             <span className={styles.issueNum}>Issue {n + 1}</span>
-            {typeof i.confidence === 'number' ? <Tag kind="count">{Math.round(i.confidence * 100)}%</Tag> : null}
+            {typeof i.confidence === 'number' ? (
+              <Tag kind="count">{Math.round(i.confidence * 100)}%</Tag>
+            ) : null}
           </div>
           <Text variant="md" weight={650} dir="auto">
             {i.category}
@@ -57,9 +59,12 @@ export function IssueEditForm({
   onSave: (issues: RootCauseIssue[]) => void;
   onCancel: () => void;
 }) {
-  const [issues, setIssues] = useState<RootCauseIssue[]>(initial.length ? initial.map((i) => ({ ...i })) : [{ category: '', subcategory: '', finding: '' }]);
+  const [issues, setIssues] = useState<RootCauseIssue[]>(
+    initial.length ? initial.map((i) => ({ ...i })) : [{ category: '', subcategory: '', finding: '' }],
+  );
   const [touched, setTouched] = useState(false);
-  const patch = (n: number, p: Partial<RootCauseIssue>) => setIssues((list) => list.map((x, i) => (i === n ? { ...x, ...p } : x)));
+  const patch = (n: number, p: Partial<RootCauseIssue>) =>
+    setIssues((list) => list.map((x, i) => (i === n ? { ...x, ...p } : x)));
   const invalid = issues.some((i) => !i.category.trim());
   return (
     <form
@@ -68,22 +73,57 @@ export function IssueEditForm({
       onSubmit={(e) => {
         e.preventDefault();
         setTouched(true);
-        if (!invalid) onSave(issues.map((i) => ({ ...i, category: i.category.trim(), subcategory: (i.subcategory ?? '').trim(), finding: (i.finding ?? '').trim() })));
+        if (!invalid)
+          onSave(
+            issues.map((i) => ({
+              ...i,
+              category: i.category.trim(),
+              subcategory: (i.subcategory ?? '').trim(),
+              finding: (i.finding ?? '').trim(),
+            })),
+          );
       }}
     >
       {issues.map((i, n) => (
         <fieldset key={n} className={styles.fieldset}>
           <legend>Issue {n + 1}</legend>
           <div className={styles.fieldRow}>
-            <TextField label="Category" value={i.category} onChange={(v) => patch(n, { category: v })} isRequired autoFocus={n === 0} errorMessage={touched && !i.category.trim() ? 'Category is required.' : undefined} />
-            <TextField label="Subcategory" value={i.subcategory ?? ''} onChange={(v) => patch(n, { subcategory: v })} />
-            {issues.length > 1 ? <IconButton label={`Remove issue ${n + 1}`} icon="trash" tone="danger" onPress={() => setIssues((l) => l.filter((_, k) => k !== n))} /> : null}
+            <TextField
+              label="Category"
+              value={i.category}
+              onChange={(v) => patch(n, { category: v })}
+              isRequired
+              autoFocus={n === 0}
+              errorMessage={touched && !i.category.trim() ? 'Category is required.' : undefined}
+            />
+            <TextField
+              label="Subcategory"
+              value={i.subcategory ?? ''}
+              onChange={(v) => patch(n, { subcategory: v })}
+            />
+            {issues.length > 1 ? (
+              <IconButton
+                label={`Remove issue ${n + 1}`}
+                icon="trash"
+                tone="danger"
+                onPress={() => setIssues((l) => l.filter((_, k) => k !== n))}
+              />
+            ) : null}
           </div>
-          <Textarea label="Finding" value={i.finding ?? ''} onChange={(v) => patch(n, { finding: v })} rows={2} />
+          <Textarea
+            label="Finding"
+            value={i.finding ?? ''}
+            onChange={(v) => patch(n, { finding: v })}
+            rows={2}
+          />
         </fieldset>
       ))}
       <div className={styles.formActions}>
-        <Button variant="ghost" size="sm" onPress={() => setIssues((l) => [...l, { category: '', subcategory: '', finding: '' }])}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onPress={() => setIssues((l) => [...l, { category: '', subcategory: '', finding: '' }])}
+        >
           + Add issue
         </Button>
         <span className={styles.grow} />

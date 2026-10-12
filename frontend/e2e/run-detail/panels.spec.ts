@@ -10,8 +10,7 @@ test.beforeAll(async () => {
   classic = await seedClassic(s);
 });
 
-const tab = (page: Page, name: string | RegExp) =>
-  page.getByRole('tab', { name });
+const tab = (page: Page, name: string | RegExp) => page.getByRole('tab', { name });
 
 test.describe('analysis panel tabs', () => {
   test('Overview is the default; tabs switch the panel and write ?panel=', async ({ page }) => {
@@ -127,7 +126,10 @@ test.describe('categories tab', () => {
   test('a metadata key that is not a built-in facet (source) filters the table', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=categories');
     const region = page.getByRole('region', { name: 'source' });
-    await region.getByTestId('category-row').filter({ hasText: /^human/ }).click();
+    await region
+      .getByTestId('category-row')
+      .filter({ hasText: /^human/ })
+      .click();
     await expect.poll(async () => (await itemsCount(page))[0]).toBe(120);
     await expect(page.getByRole('button', { name: /Remove filter source: human/ })).toBeVisible();
     await page.reload();
@@ -158,7 +160,9 @@ test.describe('deep and root cause tabs', () => {
     await expect(rel).toContainText('hallucination');
   });
 
-  test('Root cause: empty state offers Auto-Analyze; the link goes to the analyzer route', async ({ page }) => {
+  test('Root cause: empty state offers Auto-Analyze; the link goes to the analyzer route', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic, 'panel=root-cause');
     await expect(page.getByText(/No root causes recorded yet/)).toBeVisible();
     await expect(page.getByRole('link', { name: 'Auto-Analyze' }).first()).toHaveAttribute(

@@ -6,7 +6,12 @@
  */
 import type { Row } from '@/features/run-detail/types';
 import { collectRowErrors, type ErrorBucket } from '@/features/run-detail/lib/rowErrors';
-import { getMetadataCategoryValues, getRowRootCauseAnalyses, isListCategoryKey, rootCauseIssues } from '@/features/run-detail/lib/rowMeta';
+import {
+  getMetadataCategoryValues,
+  getRowRootCauseAnalyses,
+  isListCategoryKey,
+  rootCauseIssues,
+} from '@/features/run-detail/lib/rowMeta';
 import { columnItemScores, compareWithBaseline, type BaselineStats, type MetricColumn } from './baseline';
 import type { CompareModel } from './model';
 import type { MetricCtx } from './scoring';
@@ -44,12 +49,28 @@ export function columnItemLatencies(model: CompareModel, column: MetricColumn): 
 
 /** Metadata keys offered as category chips: 1..30 distinct values across the compared rows. */
 const EXCLUDED = new Set([
-  'root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_reason', 'root_cause_note',
-  'root_cause_source', 'root_cause_confidence', 'solution', 'solution_note', 'solution_source',
-  'task_started_at_ms', 'retry_count', 'analysis_error', 'trace_stats', 'metric_analyses',
+  'root_cause',
+  'root_causes',
+  'root_cause_issues',
+  'root_cause_detail',
+  'root_cause_reason',
+  'root_cause_note',
+  'root_cause_source',
+  'root_cause_confidence',
+  'solution',
+  'solution_note',
+  'solution_source',
+  'task_started_at_ms',
+  'retry_count',
+  'analysis_error',
+  'trace_stats',
+  'metric_analyses',
 ]);
 
-export function categoryKeys(model: CompareModel, itemIds: ReadonlySet<string>): Array<{ key: string; count: number }> {
+export function categoryKeys(
+  model: CompareModel,
+  itemIds: ReadonlySet<string>,
+): Array<{ key: string; count: number }> {
   const values = new Map<string, Set<string>>();
   for (const run of model.runs)
     for (const [id, row] of run.byItem) {
@@ -102,7 +123,13 @@ export function categoryGroups(
         const sole = values.length === 1;
         values.forEach((value) => {
           // A filtered domain shared by every item says nothing; its other domains still show.
-          if (isList && domainFilter !== null && !sole && domainFilter.some((f) => f.toLowerCase() === value.toLowerCase())) return;
+          if (
+            isList &&
+            domainFilter !== null &&
+            !sole &&
+            domainFilter.some((f) => f.toLowerCase() === value.toLowerCase())
+          )
+            return;
           const name = value || 'unknown';
           groupOf(name).itemIds.add(itemId);
           const sets = perColumn.get(name) ?? columns.map(() => new Set<string>());
@@ -160,7 +187,12 @@ export function categoryDelta(
   baseCell: CategoryCell,
 ): BaselineStats {
   const shared = new Set(Array.from(cell.itemIds).filter((id) => baseCell.itemIds.has(id)));
-  return compareWithBaseline(columnItemScores(model, column, ctx), columnItemScores(model, baseline, ctx), ctx, shared);
+  return compareWithBaseline(
+    columnItemScores(model, column, ctx),
+    columnItemScores(model, baseline, ctx),
+    ctx,
+    shared,
+  );
 }
 
 /* ── errors ── */
@@ -219,7 +251,10 @@ export function rootCauseSummary(
   itemIds: ReadonlySet<string>,
   metric: string | 'all',
 ): RootCauseCategory[] {
-  const cats = new Map<string, { count: number; sub: Map<string, number>; sol: Map<string, number>; counts: number[] }>();
+  const cats = new Map<
+    string,
+    { count: number; sub: Map<string, number>; sol: Map<string, number>; counts: number[] }
+  >();
   columns.forEach((column, ci) =>
     column.runIdxs.forEach((ri) => {
       const run = model.runs[ri];
@@ -229,7 +264,12 @@ export function rootCauseSummary(
         for (const analysis of getRowRootCauseAnalyses(row as Row, metric, false)) {
           for (const issue of rootCauseIssues(analysis)) {
             if (!issue.category) continue;
-            const c = cats.get(issue.category) ?? { count: 0, sub: new Map<string, number>(), sol: new Map<string, number>(), counts: columns.map(() => 0) };
+            const c = cats.get(issue.category) ?? {
+              count: 0,
+              sub: new Map<string, number>(),
+              sol: new Map<string, number>(),
+              counts: columns.map(() => 0),
+            };
             c.count += 1;
             c.counts[ci] = (c.counts[ci] ?? 0) + 1;
             if (issue.subcategory) c.sub.set(issue.subcategory, (c.sub.get(issue.subcategory) ?? 0) + 1);
@@ -254,6 +294,10 @@ export function rootCauseSummary(
 
 export function hasAnyRootCause(model: CompareModel, itemIds: ReadonlySet<string>): boolean {
   return model.runs.some((run) =>
-    Array.from(run.byItem).some(([id, row]) => itemIds.has(id) && getRowRootCauseAnalyses(row as Row, 'all', false).some((a) => rootCauseIssues(a).length)),
+    Array.from(run.byItem).some(
+      ([id, row]) =>
+        itemIds.has(id) &&
+        getRowRootCauseAnalyses(row as Row, 'all', false).some((a) => rootCauseIssues(a).length),
+    ),
   );
 }

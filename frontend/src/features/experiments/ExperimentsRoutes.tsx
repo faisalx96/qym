@@ -19,9 +19,11 @@ export function ExperimentsIndexRoute() {
     drop.forEach((k) => next.delete(k));
     return Object.fromEntries(next.entries());
   };
-  if (params.get('environment')) return <Navigate replace to={environmentPath(slug, params.get('environment') ?? '')} />;
+  if (params.get('environment'))
+    return <Navigate replace to={environmentPath(slug, params.get('environment') ?? '')} />;
   if (params.get('view') === 'environments') return <Navigate replace to={environmentsPath(slug)} />;
-  if (params.get('experiment')) return <Navigate replace to={experimentPath(slug, params.get('experiment') ?? '')} />;
+  if (params.get('experiment'))
+    return <Navigate replace to={experimentPath(slug, params.get('experiment') ?? '')} />;
   if (params.get('new')) return <Navigate replace to={launchPath(slug, rest(['new']))} />;
   return <ExperimentsPage />;
 }

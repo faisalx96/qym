@@ -6,7 +6,19 @@ import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { Button, DataTable, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, Tag, Text, Tooltip, useToast } from '@/ui';
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  LinkButton,
+  PageHeader,
+  Skeleton,
+  Tag,
+  Text,
+  Tooltip,
+  useToast,
+} from '@/ui';
 import { UserPill } from '../components/UserPill';
 import { formatDate } from '../lib/itemValue';
 import { catalogPath, datasetPath } from '../lib/route';
@@ -51,7 +63,11 @@ export function DeletedDatasetsPage() {
       {showSkeleton ? (
         <Skeleton kind="table" rows={4} label="Loading deleted datasets" />
       ) : query.isError ? (
-        <ErrorState error={query.error} title="Couldn’t load deleted datasets" onRetry={() => void query.refetch()} />
+        <ErrorState
+          error={query.error}
+          title="Couldn’t load deleted datasets"
+          onRetry={() => void query.refetch()}
+        />
       ) : query.data && rows.length === 0 ? (
         <EmptyState title="No deleted datasets" body="Datasets you delete appear here and can be restored." />
       ) : query.data ? (
@@ -75,9 +91,27 @@ export function DeletedDatasetsPage() {
                 </span>
               ),
             },
-            { id: 'deleted_at', label: 'Deleted', width: 180, mono: true, cell: (d) => formatDate(d.deleted_at) },
-            { id: 'deleted_by', label: 'Deleted by', width: 180, cell: (d) => <UserPill user={d.deleted_by} /> },
-            { id: 'latest', label: 'Latest version', width: 150, mono: true, cell: (d) => (d.latest_version ? `${d.latest_version.version} ${d.latest_version.status}` : '—') },
+            {
+              id: 'deleted_at',
+              label: 'Deleted',
+              width: 180,
+              mono: true,
+              cell: (d) => formatDate(d.deleted_at),
+            },
+            {
+              id: 'deleted_by',
+              label: 'Deleted by',
+              width: 180,
+              cell: (d) => <UserPill user={d.deleted_by} />,
+            },
+            {
+              id: 'latest',
+              label: 'Latest version',
+              width: 150,
+              mono: true,
+              cell: (d) =>
+                d.latest_version ? `${d.latest_version.version} ${d.latest_version.status}` : '—',
+            },
             {
               id: 'restore',
               label: 'Restore',
@@ -86,7 +120,13 @@ export function DeletedDatasetsPage() {
               align: 'end',
               cell: (d) =>
                 canRestore ? (
-                  <Button variant="accent" size="sm" onPress={() => void onRestore(d)} loading={busyId === d.id} data-testid={`restore-${d.slug}`}>
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    onPress={() => void onRestore(d)}
+                    loading={busyId === d.id}
+                    data-testid={`restore-${d.slug}`}
+                  >
                     Restore
                   </Button>
                 ) : (
@@ -96,7 +136,9 @@ export function DeletedDatasetsPage() {
                       size="sm"
                       aria-disabled="true"
                       data-disabled-reason=""
-                      onPress={() => toast.show(readOnly ? 'This project is archived.' : RESTORE_RULE, { tone: 'info' })}
+                      onPress={() =>
+                        toast.show(readOnly ? 'This project is archived.' : RESTORE_RULE, { tone: 'info' })
+                      }
                     >
                       Restore
                     </Button>

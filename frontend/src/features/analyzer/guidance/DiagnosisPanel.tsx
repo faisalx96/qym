@@ -59,12 +59,28 @@ const clone = (draft: CatalogDraft): CatalogDraft => ({
   categories: draft.categories.map((c) => ({ ...c, subs: c.subs.map((x) => ({ ...x })) })),
 });
 
-export function DiagnosisPanel({ scope, slug, canManage }: { scope: AnalysisScope; slug: string; canManage: boolean }) {
+export function DiagnosisPanel({
+  scope,
+  slug,
+  canManage,
+}: {
+  scope: AnalysisScope;
+  slug: string;
+  canManage: boolean;
+}) {
   const config = useAnalysisConfig(scope);
   const showSkeleton = useDelayedPending(config.isPending);
   if (config.isError && !config.data)
-    return <ErrorState error={config.error} title="Couldn’t load categories" onRetry={() => config.refetch()} compact />;
-  if (!config.data) return showSkeleton ? <Skeleton kind="lines" rows={6} label="Loading categories" /> : null;
+    return (
+      <ErrorState
+        error={config.error}
+        title="Couldn’t load categories"
+        onRetry={() => config.refetch()}
+        compact
+      />
+    );
+  if (!config.data)
+    return showSkeleton ? <Skeleton kind="lines" rows={6} label="Loading categories" /> : null;
   return <DiagnosisEditor config={config.data} scope={scope} slug={slug} canManage={canManage} />;
 }
 
@@ -119,7 +135,9 @@ function DiagnosisEditor({
   const newApprovals = dirty && draft !== null && draft.approvals !== approvals;
 
   const categories = current.categories;
-  const visible = categories.filter((c) => c.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const visible = categories.filter((c) =>
+    c.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+  );
   // The editor always shows a category that is in the (filtered) list.
   const active: CategoryDraft | undefined = visible.find((c) => c.name === selected) ?? visible[0];
   const totalExamples = categories.reduce((n, c) => n + c.exampleCount, 0);
@@ -137,7 +155,10 @@ function DiagnosisEditor({
   const editCategory = (name: string, fn: (c: CategoryDraft) => CategoryDraft) =>
     edit((v) => ({ ...v, categories: v.categories.map((c) => (c.name === name ? fn(c) : c)) }));
   const editSub = (cat: string, sub: string, patch: Partial<SubDraft>) =>
-    editCategory(cat, (c) => ({ ...c, subs: c.subs.map((x) => (x.name === sub ? { ...x, ...patch, touched: true } : x)) }));
+    editCategory(cat, (c) => ({
+      ...c,
+      subs: c.subs.map((x) => (x.name === sub ? { ...x, ...patch, touched: true } : x)),
+    }));
 
   async function submit(overrideRevision?: number) {
     if (hasProblems) {
@@ -152,13 +173,21 @@ function DiagnosisEditor({
       await qc.invalidateQueries({ queryKey: analysisConfigKey(scope) });
       setDraft(null);
       setConflict(null);
-      toast.show(result.created ? 'Categories saved' : 'No changes to save', { tone: result.created ? 'success' : 'info' });
+      toast.show(result.created ? 'Categories saved' : 'No changes to save', {
+        tone: result.created ? 'success' : 'info',
+      });
     } catch (e) {
       const detail = errorDetail(e);
       if (e instanceof ApiError && e.status === 409 && detail?.code === 'catalog_version_conflict') {
-        setConflict((detail.current_catalog as CategoryCatalog | undefined) ?? { version: 0, categories: [] });
+        setConflict(
+          (detail.current_catalog as CategoryCatalog | undefined) ?? { version: 0, categories: [] },
+        );
       } else {
-        setFailure(e instanceof ApiError ? e.detail || 'Could not save diagnosis categories.' : 'Could not save diagnosis categories.');
+        setFailure(
+          e instanceof ApiError
+            ? e.detail || 'Could not save diagnosis categories.'
+            : 'Could not save diagnosis categories.',
+        );
       }
     }
   }
@@ -217,8 +246,8 @@ function DiagnosisEditor({
         ...c.subs,
         {
           name,
-          description: "",
-          whenToUse: "",
+          description: '',
+          whenToUse: '',
           exampleOnly: false,
           isNew: true,
           touched: true,
@@ -232,11 +261,15 @@ function DiagnosisEditor({
   // "Approved" = the subcategory appears in at least one approved example of this category.
   const approvedSubs = new Set(
     (active?.examples ?? []).flatMap((x) =>
-      (x.root_cause_issues ?? []).map((i) => (i.subcategory ?? '').trim().toLocaleLowerCase()).concat((x.detail ?? '').trim().toLocaleLowerCase()),
+      (x.root_cause_issues ?? [])
+        .map((i) => (i.subcategory ?? '').trim().toLocaleLowerCase())
+        .concat((x.detail ?? '').trim().toLocaleLowerCase()),
     ),
   );
   const subsShown = active
-    ? active.subs.filter((x) => subFilter === 'all' || x.isNew || approvedSubs.has(x.name.toLocaleLowerCase()))
+    ? active.subs.filter(
+        (x) => subFilter === 'all' || x.isNew || approvedSubs.has(x.name.toLocaleLowerCase()),
+      )
     : [];
 
   return (
@@ -307,7 +340,8 @@ function DiagnosisEditor({
         <div className={s.banner} role="status" data-tone="warning">
           <Icon name="info" size={14} />
           <Text variant="base" tone="secondary">
-            New approvals are available. Their examples are shown below; save or discard your edits to refresh the catalog.
+            New approvals are available. Their examples are shown below; save or discard your edits to refresh
+            the catalog.
           </Text>
         </div>
       ) : null}
@@ -330,7 +364,14 @@ function DiagnosisEditor({
                 addCategory();
               }}
             >
-              <TextField label="New category name" hideLabel placeholder="New category" value={newName} onChange={setNewName} autoFocus />
+              <TextField
+                label="New category name"
+                hideLabel
+                placeholder="New category"
+                value={newName}
+                onChange={setNewName}
+                autoFocus
+              />
               <Button size="sm" variant="accent" type="submit" isDisabled={!newName.trim()}>
                 Add
               </Button>
@@ -347,9 +388,17 @@ function DiagnosisEditor({
       </div>
 
       {categories.length === 0 ? (
-        <EmptyState compact title="No categories yet" body="Add a category, or approve diagnoses in Reviews." />
+        <EmptyState
+          compact
+          title="No categories yet"
+          body="Add a category, or approve diagnoses in Reviews."
+        />
       ) : !active ? (
-        <EmptyState compact title="No matching categories" body={`No category name contains “${query.trim()}”.`} />
+        <EmptyState
+          compact
+          title="No matching categories"
+          body={`No category name contains “${query.trim()}”.`}
+        />
       ) : (
         <Tabs
           label="Categories"
@@ -401,7 +450,9 @@ function DiagnosisEditor({
                       isReadOnly={!canManage}
                       value={active.description}
                       onChange={(v) => editCategory(active.name, (c) => ({ ...c, description: v }))}
-                      errorMessage={showProblems && !active.description.trim() ? 'Description is required.' : undefined}
+                      errorMessage={
+                        showProblems && !active.description.trim() ? 'Description is required.' : undefined
+                      }
                       isInvalid={showProblems && !active.description.trim()}
                     />
                     <Textarea
@@ -411,7 +462,9 @@ function DiagnosisEditor({
                       isReadOnly={!canManage}
                       value={active.whenToUse}
                       onChange={(v) => editCategory(active.name, (c) => ({ ...c, whenToUse: v }))}
-                      errorMessage={showProblems && !active.whenToUse.trim() ? 'Use when is required.' : undefined}
+                      errorMessage={
+                        showProblems && !active.whenToUse.trim() ? 'Use when is required.' : undefined
+                      }
                       isInvalid={showProblems && !active.whenToUse.trim()}
                     />
                   </div>
@@ -436,8 +489,19 @@ function DiagnosisEditor({
                             addSub();
                           }}
                         >
-                          <TextField label="New subcategory name" hideLabel placeholder="New subcategory" value={newSub} onChange={setNewSub} />
-                          <Button size="sm" type="submit" icon={<Icon name="plus" size={12} />} isDisabled={!newSub.trim()}>
+                          <TextField
+                            label="New subcategory name"
+                            hideLabel
+                            placeholder="New subcategory"
+                            value={newSub}
+                            onChange={setNewSub}
+                          />
+                          <Button
+                            size="sm"
+                            type="submit"
+                            icon={<Icon name="plus" size={12} />}
+                            isDisabled={!newSub.trim()}
+                          >
                             Add subcategory
                           </Button>
                         </form>
@@ -464,7 +528,12 @@ function DiagnosisEditor({
                                   size="sm"
                                   variant="ghost"
                                   aria-label={`Remove subcategory ${x.name}`}
-                                  onPress={() => editCategory(active.name, (c) => ({ ...c, subs: c.subs.filter((y) => y.name !== x.name) }))}
+                                  onPress={() =>
+                                    editCategory(active.name, (c) => ({
+                                      ...c,
+                                      subs: c.subs.filter((y) => y.name !== x.name),
+                                    }))
+                                  }
                                 >
                                   <Icon name="trash" size={12} />
                                 </Button>
@@ -496,7 +565,11 @@ function DiagnosisEditor({
                         ))}
                       </ul>
                     ) : (
-                      <EmptyState compact title="No subcategories" body="Add one, or approve diagnoses in Reviews." />
+                      <EmptyState
+                        compact
+                        title="No subcategories"
+                        body="Add one, or approve diagnoses in Reviews."
+                      />
                     )}
                   </div>
                 </TabPanel>
@@ -504,14 +577,19 @@ function DiagnosisEditor({
                   {active.examples.length ? (
                     <ul className={d.exampleList}>
                       {active.examples.map((x) => {
-                        const issues = rootCauseIssues({ root_cause_issues: x.root_cause_issues, root_cause_detail: x.detail });
+                        const issues = rootCauseIssues({
+                          root_cause_issues: x.root_cause_issues,
+                          root_cause_detail: x.detail,
+                        });
                         return (
                           <li key={x.id}>
                             <details className={d.example}>
                               <summary>
                                 <span className={d.mono}>{x.item_id ?? `#${x.id}`}</span>
                                 {x.metric_name ? <Tag kind="data">{x.metric_name}</Tag> : null}
-                                <span>{issues[0]?.finding || x.note || x.detail || 'Approved correction'}</span>
+                                <span>
+                                  {issues[0]?.finding || x.note || x.detail || 'Approved correction'}
+                                </span>
                               </summary>
                               <dl className={d.exampleBody}>
                                 {(
@@ -526,7 +604,9 @@ function DiagnosisEditor({
                                   .map(([label, v]) => (
                                     <div key={label}>
                                       <dt>{label}</dt>
-                                      <dd dir="auto">{typeof v === 'string' ? v : JSON.stringify(v, null, 2)}</dd>
+                                      <dd dir="auto">
+                                        {typeof v === 'string' ? v : JSON.stringify(v, null, 2)}
+                                      </dd>
                                     </div>
                                   ))}
                               </dl>
@@ -553,7 +633,9 @@ function DiagnosisEditor({
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
         title="Remove category?"
-        description={removing ? `${removing} and its subcategory guidance leave the catalog when you save.` : undefined}
+        description={
+          removing ? `${removing} and its subcategory guidance leave the catalog when you save.` : undefined
+        }
         tone="danger"
         confirmLabel="Remove category"
         onConfirm={() => {

@@ -24,7 +24,11 @@ const envs = [makeEnv(PRODUCTION, 'production')];
 function setup(ui: React.ReactElement, doc?: Partial<LaunchDocument>, mode?: 'launch' | 'editor') {
   const user = userEvent.setup();
   const utils = render(
-    <LaunchTestProvider envs={envs} mode={mode} doc={createDocument({ environmentIds: [PRODUCTION], ...doc })}>
+    <LaunchTestProvider
+      envs={envs}
+      mode={mode}
+      doc={createDocument({ environmentIds: [PRODUCTION], ...doc })}
+    >
       {ui}
       <Probe />
     </LaunchTestProvider>,
@@ -58,7 +62,9 @@ describe('SettingsSection', () => {
   it('shows the raw setting key next to the label', async () => {
     const { user } = setup(<SettingsSection />);
     await openGroup(user, /SQL runner/);
-    const field = screen.getByRole('textbox', { name: 'Sql Result Limit' }).closest('[data-field]') as HTMLElement;
+    const field = screen
+      .getByRole('textbox', { name: 'Sql Result Limit' })
+      .closest('[data-field]') as HTMLElement;
     expect(within(field).getByText('SQL_RESULT_LIMIT')).toBeInTheDocument();
   });
 

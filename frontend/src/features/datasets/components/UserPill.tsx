@@ -4,7 +4,10 @@ import styles from './UserPill.module.css';
 
 export function initials(user: DsUser | null | undefined): string {
   const name = user?.display_name || user?.email || '';
-  const parts = name.replace(/@.*$/, '').split(/[\s._-]+/).filter(Boolean);
+  const parts = name
+    .replace(/@.*$/, '')
+    .split(/[\s._-]+/)
+    .filter(Boolean);
   const letters = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '');
   return letters.join('') || '?';
 }

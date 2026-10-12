@@ -22,7 +22,9 @@ export function CategoriesTab() {
     const filtered = Object.keys(f.categories);
     if (f.complexity) filtered.push('complexity');
     if (f.domain) filtered.push('domain');
-    return Array.from(new Set([...(picked ?? chosen), ...filtered])).filter((k) => keys.some((x) => x.key === k));
+    return Array.from(new Set([...(picked ?? chosen), ...filtered])).filter((k) =>
+      keys.some((x) => x.key === k),
+    );
   }, [chosen, picked, f, keys]);
   const baseIdx = columns.indexOf(baseline);
   const groups = useMemo(
@@ -30,10 +32,12 @@ export function CategoriesTab() {
     [model, selected, columns, ids, ctx, f.domain],
   );
   const setFilter = (key: string, value: string) => {
-    const cur = key === 'complexity' ? f.complexity : key === 'domain' ? f.domain : (f.categories[key] ?? null);
+    const cur =
+      key === 'complexity' ? f.complexity : key === 'domain' ? f.domain : (f.categories[key] ?? null);
     const next = cur && cur.length === 1 && cur[0] === value ? null : [value];
     if (key === 'complexity') c.setView({ filters: { ...f, complexity: next } });
-    else if (key === 'domain') c.setView({ filters: { ...f, domain: next, domainMode: 'include', domainOnly: [] } });
+    else if (key === 'domain')
+      c.setView({ filters: { ...f, domain: next, domainMode: 'include', domainOnly: [] } });
     else {
       const cats = { ...f.categories };
       if (next) cats[key] = next;
@@ -45,7 +49,12 @@ export function CategoriesTab() {
     const cur = key === 'complexity' ? f.complexity : key === 'domain' ? f.domain : f.categories[key];
     return !!cur && cur.includes(value);
   };
-  if (!keys.length) return <Text variant="sm" tone="muted">No item metadata to break the results down by.</Text>;
+  if (!keys.length)
+    return (
+      <Text variant="sm" tone="muted">
+        No item metadata to break the results down by.
+      </Text>
+    );
   return (
     <div className={styles.stack}>
       <Text variant="sm" tone="muted">
@@ -75,19 +84,31 @@ export function CategoriesTab() {
                   {list.map((g) => (
                     <tr key={g.value} data-active={active(key, g.value) || undefined}>
                       <th scope="row">
-                        <button type="button" className={styles.rowButton} aria-pressed={active(key, g.value)} onClick={() => setFilter(key, g.value)}>
+                        <button
+                          type="button"
+                          className={styles.rowButton}
+                          aria-pressed={active(key, g.value)}
+                          onClick={() => setFilter(key, g.value)}
+                        >
                           {g.value} <span className={styles.count}>{g.itemIds.size}</span>
                         </button>
                       </th>
                       {columns.map((col, i) => {
                         const cell = g.cells[i]!;
                         const base = g.cells[baseIdx];
-                        const d = i !== baseIdx && base && cell.score !== null && base.score !== null ? categoryDelta(model, col, baseline, ctx, cell, base) : null;
+                        const d =
+                          i !== baseIdx && base && cell.score !== null && base.score !== null
+                            ? categoryDelta(model, col, baseline, ctx, cell, base)
+                            : null;
                         return (
                           <td key={col.key}>
                             <div className={styles.cell}>
-                              <span className={styles.value}>{cell.score === null ? '—' : formatMetricValue(cell.score, type, 0)}</span>
-                              <span className={styles.sub}>{cell.latency === null ? '' : formatLatency(cell.latency)}</span>
+                              <span className={styles.value}>
+                                {cell.score === null ? '—' : formatMetricValue(cell.score, type, 0)}
+                              </span>
+                              <span className={styles.sub}>
+                                {cell.latency === null ? '' : formatLatency(cell.latency)}
+                              </span>
                               {d ? <DeltaTag stats={d} type={type} metric={metric} /> : null}
                             </div>
                           </td>

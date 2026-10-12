@@ -63,12 +63,19 @@ export interface BuildRowsInput {
   passNumber: number | null;
 }
 
-export function buildAnalyzerRows({ rows, metricNames, metricSpecs, passNumber }: BuildRowsInput): AnalyzerRow[] {
+export function buildAnalyzerRows({
+  rows,
+  metricNames,
+  metricSpecs,
+  passNumber,
+}: BuildRowsInput): AnalyzerRow[] {
   return rows.map((row) => {
     const attempts = Array.isArray(row.pass_attempts) ? row.pass_attempts : [];
     const attempt =
       passNumber != null
-        ? (attempts.find((a) => a && Number(a.pass_number) === passNumber) ?? attempts[passNumber - 1] ?? null)
+        ? (attempts.find((a) => a && Number(a.pass_number) === passNumber) ??
+          attempts[passNumber - 1] ??
+          null)
         : null;
 
     const metricMeta: Record<string, Loose> = passNumber != null ? {} : (row.metric_meta ?? {});
@@ -126,15 +133,26 @@ export function buildAnalyzerRows({ rows, metricNames, metricSpecs, passNumber }
   });
 }
 
-const isMinimize = (direction: string) => ['minimize', 'lower', 'lower_is_better'].includes(direction.toLowerCase());
+const isMinimize = (direction: string) =>
+  ['minimize', 'lower', 'lower_is_better'].includes(direction.toLowerCase());
 
 export function isHumanMetricAnalysis(md: Loose | null | undefined, metricName: string): boolean {
   if (!md || typeof md !== 'object') return false;
   const analyses = isObj(md.metric_analyses) ? md.metric_analyses : {};
   const analysis = analyses[metricName];
   const source = isObj(analysis) ? (analysis.source ?? analysis.root_cause_source) : '';
-  if (String(source ?? '').trim().toLowerCase() === 'human') return true;
-  if (String(md.root_cause_source ?? '').trim().toLowerCase() !== 'human') return false;
+  if (
+    String(source ?? '')
+      .trim()
+      .toLowerCase() === 'human'
+  )
+    return true;
+  if (
+    String(md.root_cause_source ?? '')
+      .trim()
+      .toLowerCase() !== 'human'
+  )
+    return false;
   const legacyMetric = String(md.root_cause_metric_name ?? '').trim();
   return !legacyMetric || legacyMetric === String(metricName ?? '').trim();
 }
@@ -183,7 +201,11 @@ export function matchTargets(rows: AnalyzerRow[], opts: TargetOptions): MatchedT
     if (!Number.isNaN(opts.maxScore)) {
       const hasWithinMax = failed.some((name) => {
         const score = row.metric_scores[name];
-        return isMinimize(String(row.metric_directions[name] ?? 'maximize')) || score == null || score <= opts.maxScore;
+        return (
+          isMinimize(String(row.metric_directions[name] ?? 'maximize')) ||
+          score == null ||
+          score <= opts.maxScore
+        );
       });
       if (!hasWithinMax) continue;
     }
@@ -192,11 +214,14 @@ export function matchTargets(rows: AnalyzerRow[], opts: TargetOptions): MatchedT
   return out;
 }
 
-export function humanOverwriteTargets(matched: MatchedTarget[]): Array<{ item_id: string; metric_name: string }> {
+export function humanOverwriteTargets(
+  matched: MatchedTarget[],
+): Array<{ item_id: string; metric_name: string }> {
   const out: Array<{ item_id: string; metric_name: string }> = [];
   for (const { row, metrics } of matched) {
     for (const name of metrics) {
-      if (isHumanMetricAnalysis(row.item_metadata, name)) out.push({ item_id: row.item_id, metric_name: name });
+      if (isHumanMetricAnalysis(row.item_metadata, name))
+        out.push({ item_id: row.item_id, metric_name: name });
     }
   }
   return out;

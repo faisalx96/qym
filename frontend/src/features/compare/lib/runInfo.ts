@@ -23,7 +23,8 @@ export function ownerLabel(run: Run): string {
   return run.owner?.display_name || run.owner?.email || run.owner?.id || '';
 }
 
-const asText = (v: unknown): string => (v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v));
+const asText = (v: unknown): string =>
+  v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
 
 /** Config keys that never help a comparison (identity, timestamps, huge blobs). */
 const SKIP_KEYS = new Set(['qym_config', 'qym_launch', 'run_name', 'started_at', 'task_started_at_ms']);
@@ -42,14 +43,32 @@ export function differingContext(runs: Run[]): DifferingKey[] {
   const consider = (group: DifferingKey['group'], key: string, values: string[]) => {
     if (new Set(values).size > 1) out.push({ group, key, values });
   };
-  consider('Git', 'branch', runs.map((r) => asText(r.git_branch)));
-  consider('Git', 'commit', runs.map((r) => asText(r.git_commit).slice(0, 10)));
+  consider(
+    'Git',
+    'branch',
+    runs.map((r) => asText(r.git_branch)),
+  );
+  consider(
+    'Git',
+    'commit',
+    runs.map((r) => asText(r.git_commit).slice(0, 10)),
+  );
   const keysOf = (pick: (r: Run) => Record<string, unknown> | undefined) => {
     const keys = new Set<string>();
     runs.forEach((r) => Object.keys(pick(r) ?? {}).forEach((k) => !SKIP_KEYS.has(k) && keys.add(k)));
     return Array.from(keys).sort();
   };
-  for (const k of keysOf((r) => r.config)) consider('Config', k, runs.map((r) => asText(r.config?.[k])));
-  for (const k of keysOf((r) => r.versioning_details)) consider('Versioning', k, runs.map((r) => asText(r.versioning_details?.[k])));
+  for (const k of keysOf((r) => r.config))
+    consider(
+      'Config',
+      k,
+      runs.map((r) => asText(r.config?.[k])),
+    );
+  for (const k of keysOf((r) => r.versioning_details))
+    consider(
+      'Versioning',
+      k,
+      runs.map((r) => asText(r.versioning_details?.[k])),
+    );
   return out;
 }

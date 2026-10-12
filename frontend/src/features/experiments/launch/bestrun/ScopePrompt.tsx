@@ -18,7 +18,8 @@ export function sameDraft(a: ScopeDraft | null, b: ScopeDraft): boolean {
   return (
     a.datasetId === b.datasetId &&
     (a.datasetId ? a.versionId === b.versionId : true) &&
-    JSON.stringify(Object.entries(a.versioning).sort()) === JSON.stringify(Object.entries(b.versioning).sort())
+    JSON.stringify(Object.entries(a.versioning).sort()) ===
+      JSON.stringify(Object.entries(b.versioning).sort())
   );
 }
 
@@ -55,7 +56,9 @@ export function ScopePrompt({
             ...datasets.map((d) => ({ key: d.id, label: `${d.name} · ${runCount(d.run_count)}` })),
           ]}
           value={draft.datasetId || ANY}
-          onChange={(k) => onDraft({ ...draft, datasetId: k === ANY || k == null ? '' : String(k), versionId: '' })}
+          onChange={(k) =>
+            onDraft({ ...draft, datasetId: k === ANY || k == null ? '' : String(k), versionId: '' })
+          }
         />
         <Select
           className={styles.select}

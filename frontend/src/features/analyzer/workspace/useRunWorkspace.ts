@@ -33,7 +33,13 @@ import {
   type FieldTrees,
   type RunGuard,
 } from '../model/settings';
-import { effectiveCount, humanOverwriteTargets, matchTargets, type AnalyzerRow, type MatchedTarget } from '../model/targets';
+import {
+  effectiveCount,
+  humanOverwriteTargets,
+  matchTargets,
+  type AnalyzerRow,
+  type MatchedTarget,
+} from '../model/targets';
 import type { RunData } from './useRunData';
 
 export interface TargetKey {
@@ -55,7 +61,10 @@ export interface WorkspaceInit {
   preselectMetric: string | null;
 }
 
-export function useRunWorkspace({ runId, data, config, preselectMetric }: WorkspaceInit, runner: RunnerState) {
+export function useRunWorkspace(
+  { runId, data, config, preselectMetric }: WorkspaceInit,
+  runner: RunnerState,
+) {
   const [settings, setSettings] = useState<AnalyzerSettings>(() =>
     defaultSettings({
       metrics: data.metricNames,
@@ -67,13 +76,19 @@ export function useRunWorkspace({ runId, data, config, preselectMetric }: Worksp
   const [connectionId, setConnectionId] = useState<string | null>(config.default_connection_id);
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [testKeys, setTestKeys] = useState<string[]>([]);
-  const [testState, setTestState] = useState<{ outcome: TestOutcome | null; error: string | null }>({ outcome: null, error: null });
+  const [testState, setTestState] = useState<{ outcome: TestOutcome | null; error: string | null }>({
+    outcome: null,
+    error: null,
+  });
   const [testing, setTesting] = useState(false);
   const testAbort = useRef<AbortController | null>(null);
   const testMutation = useTestItems(runId);
   const [humanConfirm, setHumanConfirm] = useState<{ count: number; metrics: string[] } | null>(null);
 
-  const update = useCallback((patch: Partial<AnalyzerSettings>) => setSettings((s) => ({ ...s, ...patch })), []);
+  const update = useCallback(
+    (patch: Partial<AnalyzerSettings>) => setSettings((s) => ({ ...s, ...patch })),
+    [],
+  );
 
   /* configuration -> payload */
   const customVars = useMemo(() => customVarsOf(settings), [settings]);
@@ -82,8 +97,12 @@ export function useRunWorkspace({ runId, data, config, preselectMetric }: Worksp
       field === 'input' || field === 'expected' || field === 'output' || field === 'error'
         ? pathsToTree(scanFieldPaths(data.rows, field))
         : [];
-    const std = Object.fromEntries(STD_VARIABLES.map((v) => [v.key, treeFor(settings.std[v.key].field)])) as Record<StdVariable, PathNode[]>;
-    const custom = Object.fromEntries(customVars.map((name) => [name, treeFor(settings.custom[name]?.field ?? '')]));
+    const std = Object.fromEntries(
+      STD_VARIABLES.map((v) => [v.key, treeFor(settings.std[v.key].field)]),
+    ) as Record<StdVariable, PathNode[]>;
+    const custom = Object.fromEntries(
+      customVars.map((name) => [name, treeFor(settings.custom[name]?.field ?? '')]),
+    );
     return { std, custom, metadata: scanMetadataGroups(data.rows, settings.selectedMetrics[0]) };
   }, [data.rows, settings.std, settings.custom, settings.selectedMetrics, customVars]);
   const cfg: PlaygroundConfigPayload = useMemo(() => buildConfigPayload(settings, trees), [settings, trees]);
@@ -100,7 +119,10 @@ export function useRunWorkspace({ runId, data, config, preselectMetric }: Worksp
     [data.rows, settings.selectedMetrics, settings.maxScorePct, settings.skipAnalyzed, settings.allowHuman],
   );
   const targetCount = effectiveCount(matched, settings.limit);
-  const rowById = useMemo(() => new Map<string, AnalyzerRow>(data.rows.map((r) => [r.item_id, r])), [data.rows]);
+  const rowById = useMemo(
+    () => new Map<string, AnalyzerRow>(data.rows.map((r) => [r.item_id, r])),
+    [data.rows],
+  );
 
   const allKeys = useMemo(
     () => matched.flatMap((m) => m.metrics.map((metric) => targetKeyOf(m.row.item_id, metric))),
@@ -119,7 +141,8 @@ export function useRunWorkspace({ runId, data, config, preselectMetric }: Worksp
   };
 
   /* preview (no LLM call) */
-  const previewBody = focus && connectionId !== undefined ? previewRequest(cfg, focus.itemId, focus.metric, guard) : null;
+  const previewBody =
+    focus && connectionId !== undefined ? previewRequest(cfg, focus.itemId, focus.metric, guard) : null;
   const previewKey = previewBody ? JSON.stringify(previewBody) : null;
   const debouncedKey = useDebounced(previewKey, 500);
   const debouncedBody = useMemo(() => (debouncedKey ? JSON.parse(debouncedKey) : null), [debouncedKey]);
@@ -130,7 +153,10 @@ export function useRunWorkspace({ runId, data, config, preselectMetric }: Worksp
   const busy = runner.busy || testing;
   const connection = config.llm_connections.find((c) => c.id === connectionId);
   const llmReady =
-    config.llm_configured && Boolean(connectionId) && connection?.llm_api_key_set !== false && config.can_operate_analyzer;
+    config.llm_configured &&
+    Boolean(connectionId) &&
+    connection?.llm_api_key_set !== false &&
+    config.can_operate_analyzer;
 
   const doAnalyze = useCallback(async () => {
     setHumanConfirm(null);
@@ -173,7 +199,8 @@ export function useRunWorkspace({ runId, data, config, preselectMetric }: Worksp
       }
       setTestState({ outcome: { results, fields: fieldsSent(cfg), at: Date.now() }, error: null });
     } catch (e) {
-      if ((e as { name?: string }).name === 'AbortError') setTestState({ outcome: null, error: 'Test cancelled.' });
+      if ((e as { name?: string }).name === 'AbortError')
+        setTestState({ outcome: null, error: 'Test cancelled.' });
       else
         setTestState({
           outcome: null,
@@ -189,7 +216,9 @@ export function useRunWorkspace({ runId, data, config, preselectMetric }: Worksp
   const cancelTest = useCallback(() => testAbort.current?.abort(), []);
 
   const toggleTest = useCallback((key: string) => {
-    setTestKeys((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : cur.length >= 3 ? cur : [...cur, key]));
+    setTestKeys((cur) =>
+      cur.includes(key) ? cur.filter((k) => k !== key) : cur.length >= 3 ? cur : [...cur, key],
+    );
   }, []);
 
   return {

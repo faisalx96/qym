@@ -342,7 +342,10 @@ test.describe('danger zone and archived state', () => {
     expect(key.ok()).toBeTruthy();
     await archiveProject(request, p.id);
     await gotoApp(page, `/projects/${p.slug}/settings?tab=danger`);
-    await page.locator('[data-danger-zone]').getByRole('button', { name: /^Unarchive( anyway)?$/ }).click();
+    await page
+      .locator('[data-danger-zone]')
+      .getByRole('button', { name: /^Unarchive( anyway)?$/ })
+      .click();
     const dialog = page.getByRole('alertdialog', { name: `Unarchive “${p.name}”?` });
     await expect(dialog.getByText('1 API key will work again')).toBeVisible();
     await expect(dialog.getByText('Still active')).toBeVisible();

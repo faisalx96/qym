@@ -48,7 +48,8 @@ export function RunAnalyze({
   const [bodies, setBodies] = useState(step === 'preview');
   const data = useRunData(runId, route.pass, bodies || step === 'preview');
   const skeleton = useDelayedPending(data.isPending);
-  if (data.isError) return <ErrorState error={data.error} title="Couldn’t load this run" onRetry={data.refetch} />;
+  if (data.isError)
+    return <ErrorState error={data.error} title="Couldn’t load this run" onRetry={data.refetch} />;
   if (data.isPending || !data.run) return skeleton ? <Skeleton kind="cards" label="Loading run" /> : null;
   if (data.needsPass) return <SamplePicker passes={data.passes} onPick={route.setPass} />;
   return (
@@ -92,11 +93,20 @@ function Workspace({
   const idx = STEPS.findIndex((x) => x.id === step);
   const run = data.run!;
   const live = Boolean(runner.job && !isJobTerminal(runner.job.status));
-  const mapped = ws.customVars.length ? `${ws.customVars.length} variable${ws.customVars.length === 1 ? '' : 's'}` : 'Default fields';
+  const mapped = ws.customVars.length
+    ? `${ws.customVars.length} variable${ws.customVars.length === 1 ? '' : 's'}`
+    : 'Default fields';
   const notes: Record<StepId, string> = {
-    configure: ws.settings.selectedMetrics.length === 0 ? 'Pick a metric' : `${ws.targetCount} ${ws.targetCount === 1 ? 'target' : 'targets'}`,
+    configure:
+      ws.settings.selectedMetrics.length === 0
+        ? 'Pick a metric'
+        : `${ws.targetCount} ${ws.targetCount === 1 ? 'target' : 'targets'}`,
     preview: mapped,
-    run: live ? `${runner.job?.progress.completed}/${runner.job?.progress.total}` : ws.test.outcome ? `${ws.test.outcome.results.length} tested` : 'Not run',
+    run: live
+      ? `${runner.job?.progress.completed}/${runner.job?.progress.total}`
+      : ws.test.outcome
+        ? `${ws.test.outcome.results.length} tested`
+        : 'Not run',
     review: runner.job && !live ? (runner.job.status === 'completed' ? 'Complete' : runner.job.status) : '',
   };
   const done: Record<StepId, boolean> = {
@@ -112,15 +122,16 @@ function Workspace({
         <div className={s.banner} role="status">
           <Icon name="info" size={14} />
           <Text variant="base" tone="secondary" as="span">
-            No LLM connection is set up for this project. Preview works, but Test and Analyze need a connection in project settings.
+            No LLM connection is set up for this project. Preview works, but Test and Analyze need a
+            connection in project settings.
           </Text>
         </div>
       ) : !config.can_operate_analyzer ? (
         <div className={s.banner} role="status">
           <Icon name="info" size={14} />
           <Text variant="base" tone="secondary" as="span">
-            You can view this analysis setup. Only project managers and the run’s owner can upload documents or run
-            analysis, and only managers can change rules.
+            You can view this analysis setup. Only project managers and the run’s owner can upload documents
+            or run analysis, and only managers can change rules.
           </Text>
         </div>
       ) : null}
@@ -155,14 +166,32 @@ function Workspace({
           <div className={s.col}>
             <Card title="Run and metrics">
               <div className={s.stack}>
-                <RunHeader slug={slug} runId={runId} run={run} passes={data.passes} pass={data.pass} onPass={route.setPass} busy={ws.busy} />
-                <MetricChips metrics={data.metricNames} selected={ws.settings.selectedMetrics} onChange={(next) => ws.update({ selectedMetrics: next })} />
+                <RunHeader
+                  slug={slug}
+                  runId={runId}
+                  run={run}
+                  passes={data.passes}
+                  pass={data.pass}
+                  onPass={route.setPass}
+                  busy={ws.busy}
+                />
+                <MetricChips
+                  metrics={data.metricNames}
+                  selected={ws.settings.selectedMetrics}
+                  onChange={(next) => ws.update({ selectedMetrics: next })}
+                />
               </div>
             </Card>
-            <Card title="Additional instructions" description="Optional guidance for this analysis. Detected {variables} are mapped right here.">
+            <Card
+              title="Additional instructions"
+              description="Optional guidance for this analysis. Detected {variables} are mapped right here."
+            >
               <Instructions ws={ws} bodiesLoading={data.bodiesLoading} />
             </Card>
-            <Card title="Targets" description="The limit is applied to the most severe matching item–metric targets. Task and metric errors are never analyzed.">
+            <Card
+              title="Targets"
+              description="The limit is applied to the most severe matching item–metric targets. Task and metric errors are never analyzed."
+            >
               <div className={s.stack}>
                 <TargetFilters
                   ws={ws}
@@ -210,7 +239,11 @@ function Workspace({
       </div>
 
       <footer className={s.nav}>
-        <Button isDisabled={idx === 0} onPress={() => onStep(STEP_IDS[idx - 1] as StepId)} icon={<Icon name="prev" size={12} className={s.dirIcon} />}>
+        <Button
+          isDisabled={idx === 0}
+          onPress={() => onStep(STEP_IDS[idx - 1] as StepId)}
+          icon={<Icon name="prev" size={12} className={s.dirIcon} />}
+        >
           Back
         </Button>
         <Text variant="sm" tone="muted" as="span">
@@ -225,7 +258,7 @@ function Workspace({
             {`Next: ${STEPS[idx + 1]?.label}`}
           </Button>
         ) : (
-          <Button variant="accent" onPress={() => onStep("configure")}>
+          <Button variant="accent" onPress={() => onStep('configure')}>
             Back to Configure
           </Button>
         )}
@@ -287,7 +320,15 @@ function PreviewStep({ ws, bodiesLoading }: { ws: RunWorkspace; bodiesLoading: b
   );
 }
 
-function RunStep({ ws, config, onStep }: { ws: RunWorkspace; config: AnalysisConfig; onStep: (s: StepId) => void }) {
+function RunStep({
+  ws,
+  config,
+  onStep,
+}: {
+  ws: RunWorkspace;
+  config: AnalysisConfig;
+  onStep: (s: StepId) => void;
+}) {
   const results = useRef<HTMLDivElement>(null);
   const outcomeAt = ws.test.outcome?.at;
   // Point at the result when a test finishes.
@@ -300,7 +341,10 @@ function RunStep({ ws, config, onStep }: { ws: RunWorkspace; config: AnalysisCon
   });
   return (
     <div className={s.col}>
-      <Card title="Connection and actions" description="Test up to 3 targets first; a test saves nothing. Analyze runs in the background.">
+      <Card
+        title="Connection and actions"
+        description="Test up to 3 targets first; a test saves nothing. Analyze runs in the background."
+      >
         <div className={s.stack}>
           <div className={s.testTargets}>
             <Text variant="sm" tone="muted" as="span">
@@ -308,7 +352,13 @@ function RunStep({ ws, config, onStep }: { ws: RunWorkspace; config: AnalysisCon
             </Text>
             {labels.length ? (
               labels.map((l) => (
-                <Chip key={l.key} isSelected onChange={() => l.explicit && ws.toggleTest(l.key)} onRemove={l.explicit ? () => ws.toggleTest(l.key) : undefined} removeLabel={`Stop testing ${l.label}`}>
+                <Chip
+                  key={l.key}
+                  isSelected
+                  onChange={() => l.explicit && ws.toggleTest(l.key)}
+                  onRemove={l.explicit ? () => ws.toggleTest(l.key) : undefined}
+                  removeLabel={`Stop testing ${l.label}`}
+                >
                   {l.label}
                 </Chip>
               ))

@@ -34,7 +34,10 @@ test.describe('axe: datasets', () => {
     await clean(page, 'empty catalog');
   });
 
-  test('detail: items tab with the editor pane open, runs, lineage, settings, version popover', async ({ page, request }) => {
+  test('detail: items tab with the editor pane open, runs, lineage, settings, version popover', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seedTwoVersions(request, 'axedet');
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?v=v2`);
     await expect(page.locator('[data-item-link]').first()).toBeVisible();
@@ -45,7 +48,10 @@ test.describe('axe: datasets', () => {
     await page.keyboard.press('Escape');
     for (const tab of ['runs', 'settings']) {
       await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?v=v2&tab=${tab}`);
-      await expect(page.getByRole('tab', { name: new RegExp(tab, 'i') })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('tab', { name: new RegExp(tab, 'i') })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
       await expect(page.getByRole('tabpanel')).toBeVisible();
       await clean(page, tab);
     }

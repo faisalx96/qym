@@ -53,7 +53,9 @@ export function computeRunLabels(inputs: LabelInput[], now?: Date): Record<strin
   if (models.size === 1) labels = stripSharedPrefix(inputs.map((i) => i.name));
   if (labels && new Set(labels).size !== labels.length) labels = null;
   if (!labels) {
-    const byDate = inputs.map((i) => [i.model || i.name, dateLabel(i.started, false, now)].filter(Boolean).join(' · '));
+    const byDate = inputs.map((i) =>
+      [i.model || i.name, dateLabel(i.started, false, now)].filter(Boolean).join(' · '),
+    );
     const withTime: string[] = inputs.map((entry, index) =>
       byDate.filter((other) => other === byDate[index]).length > 1
         ? [entry.model || entry.name, dateLabel(entry.started, true, now)].filter(Boolean).join(' · ')

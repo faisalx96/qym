@@ -22,7 +22,15 @@ function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export function NewDatasetDialog({ open, onOpenChange, slug }: { open: boolean; onOpenChange: (o: boolean) => void; slug: string }) {
+export function NewDatasetDialog({
+  open,
+  onOpenChange,
+  slug,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  slug: string;
+}) {
   const create = useCreateDataset(slug);
   const navigate = useNavigate();
   const toast = useToast();
@@ -36,11 +44,18 @@ export function NewDatasetDialog({ open, onOpenChange, slug }: { open: boolean; 
       submittingLabel="Creating…"
       fields={[
         { name: 'name', label: 'Name', required: true, autoFocus: true, placeholder: 'e.g. Support QA' },
-        { name: 'slug', label: 'Slug', mono: true, placeholder: 'auto from the name', help: 'Letters and digits of any script; blank = generated.' },
+        {
+          name: 'slug',
+          label: 'Slug',
+          mono: true,
+          placeholder: 'auto from the name',
+          help: 'Letters and digits of any script; blank = generated.',
+        },
         { name: 'description', label: 'Description', type: 'textarea', rows: 2 },
       ]}
       onChange={(values, changed) => {
-        if (changed === 'name' && !values.__slugTouched) return { ...values, slug: slugifyDatasetName(String(values.name ?? '')) };
+        if (changed === 'name' && !values.__slugTouched)
+          return { ...values, slug: slugifyDatasetName(String(values.name ?? '')) };
         if (changed === 'slug') return { ...values, __slugTouched: true };
         return undefined;
       }}
@@ -95,12 +110,21 @@ export function CreateDraftDialog({
           label: 'Copy items from',
           type: 'select',
           value: current?.version ?? '',
-          options: [{ value: '', label: 'Start empty' }, ...versions.map((v) => ({ value: v.version, label: `${v.version}${v.name ? ` — ${v.name}` : ''} (${v.status})` }))],
+          options: [
+            { value: '', label: 'Start empty' },
+            ...versions.map((v) => ({
+              value: v.version,
+              label: `${v.version}${v.name ? ` — ${v.name}` : ''} (${v.status})`,
+            })),
+          ],
         },
       ]}
       onSubmit={async (values) => {
         try {
-          const r = await create.mutateAsync({ name: String(values.name ?? '').trim() || undefined, from_version: String(values.from ?? '') || undefined });
+          const r = await create.mutateAsync({
+            name: String(values.name ?? '').trim() || undefined,
+            from_version: String(values.from ?? '') || undefined,
+          });
           toast.show(`Draft ${r.version.version} created`, { tone: 'success' });
           onCreated(r.version);
         } catch (e) {
@@ -138,12 +162,33 @@ export function PublishDialog({
       submittingLabel="Publishing…"
       fields={
         canSetProduction
-          ? [{ name: 'alias', label: 'Set as production', type: 'checkbox', value: true, help: dataset.production_version ? `Moves production from ${dataset.production_version.version}.` : undefined }]
-          : [{ name: 'note', label: 'Production alias', type: 'text', value: PRODUCTION_RULE, help: 'You can publish; a manager sets the production alias.' }]
+          ? [
+              {
+                name: 'alias',
+                label: 'Set as production',
+                type: 'checkbox',
+                value: true,
+                help: dataset.production_version
+                  ? `Moves production from ${dataset.production_version.version}.`
+                  : undefined,
+              },
+            ]
+          : [
+              {
+                name: 'note',
+                label: 'Production alias',
+                type: 'text',
+                value: PRODUCTION_RULE,
+                help: 'You can publish; a manager sets the production alias.',
+              },
+            ]
       }
       onSubmit={async (values) => {
         try {
-          await publish.mutateAsync({ version: version.version, setAlias: canSetProduction && Boolean(values.alias) });
+          await publish.mutateAsync({
+            version: version.version,
+            setAlias: canSetProduction && Boolean(values.alias),
+          });
           toast.show(`${version.version} published`, { tone: 'success' });
         } catch (e) {
           return errorText(e);
@@ -153,7 +198,19 @@ export function PublishDialog({
   );
 }
 
-export function NameVersionDialog({ open, onOpenChange, slug, dataset, version }: { open: boolean; onOpenChange: (o: boolean) => void; slug: string; dataset: Dataset; version: DatasetVersion }) {
+export function NameVersionDialog({
+  open,
+  onOpenChange,
+  slug,
+  dataset,
+  version,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  slug: string;
+  dataset: Dataset;
+  version: DatasetVersion;
+}) {
   const patch = usePatchVersion(slug, dataset.slug);
   const toast = useToast();
   return (
@@ -162,7 +219,15 @@ export function NameVersionDialog({ open, onOpenChange, slug, dataset, version }
       onOpenChange={onOpenChange}
       title={`Name ${version.version}`}
       confirmLabel="Save"
-      fields={[{ name: 'name', label: 'Name', value: version.name ?? '', autoFocus: true, placeholder: 'e.g. “Q3 refresh”' }]}
+      fields={[
+        {
+          name: 'name',
+          label: 'Name',
+          value: version.name ?? '',
+          autoFocus: true,
+          placeholder: 'e.g. “Q3 refresh”',
+        },
+      ]}
       onSubmit={async (values) => {
         try {
           await patch.mutateAsync({ version: version.version, name: String(values.name ?? '').trim() });
@@ -202,7 +267,12 @@ export function AddItemDialog({
       confirmLabel="Add item"
       submittingLabel="Adding…"
       fields={[
-        { name: 'item_id', label: 'Item ID', mono: true, placeholder: `auto: item-${version.item_count + 1}` },
+        {
+          name: 'item_id',
+          label: 'Item ID',
+          mono: true,
+          placeholder: `auto: item-${version.item_count + 1}`,
+        },
         { name: 'input', label: 'Input', type: 'textarea', required: true, rows: 4, autoFocus: true },
         { name: 'expected', label: 'Expected output', type: 'textarea', rows: 3 },
         {
@@ -217,7 +287,9 @@ export function AddItemDialog({
             if (!t) return null;
             try {
               const parsed: unknown = JSON.parse(t);
-              return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? null : 'Metadata must be a JSON object.';
+              return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? null
+                : 'Metadata must be a JSON object.';
             } catch {
               return 'Metadata is not valid JSON.';
             }
@@ -230,7 +302,9 @@ export function AddItemDialog({
           const r = await create.mutateAsync({
             item_id: String(values.item_id ?? '').trim() || undefined,
             input: sniffJson(String(values.input ?? '')),
-            expected_output: String(values.expected ?? '').trim() ? sniffJson(String(values.expected)) : undefined,
+            expected_output: String(values.expected ?? '').trim()
+              ? sniffJson(String(values.expected))
+              : undefined,
             metadata: metaText ? (JSON.parse(metaText) as Record<string, unknown>) : undefined,
           });
           toast.show(`Item ${r.item.item_id} added`, { tone: 'success' });

@@ -9,12 +9,34 @@ import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
 import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { Badge, Button, DropdownMenu, EmptyState, ErrorState, Icon, Identicon, LinkButton, PageHeader, SearchField, Select, Skeleton, Text } from '@/ui';
+import {
+  Badge,
+  Button,
+  DropdownMenu,
+  EmptyState,
+  ErrorState,
+  Icon,
+  Identicon,
+  LinkButton,
+  PageHeader,
+  SearchField,
+  Select,
+  Skeleton,
+  Text,
+} from '@/ui';
 import { NewDatasetDialog } from '../components/dialogs';
 import { UserPill } from '../components/UserPill';
 import { formatDate, pluralize, relativeTime } from '../lib/itemValue';
 import { catalogPath, datasetPath } from '../lib/route';
-import { CATALOG_SORTS, catalogItemCount, catalogStateLine, catalogVersionCount, filterCatalog, sortCatalog, type CatalogSort } from '../lib/versions';
+import {
+  CATALOG_SORTS,
+  catalogItemCount,
+  catalogStateLine,
+  catalogVersionCount,
+  filterCatalog,
+  sortCatalog,
+  type CatalogSort,
+} from '../lib/versions';
 import { UploadWizard } from '../wizard/UploadWizard';
 import styles from './CatalogPage.module.css';
 
@@ -57,12 +79,22 @@ export function CatalogPage() {
   const header = (
     <PageHeader
       title="Datasets"
-      description={query.data ? `${pluralize(datasets.length, 'dataset')} · ${pluralize(runTotal, 'run')}` : 'Versioned test sets for this project'}
+      description={
+        query.data
+          ? `${pluralize(datasets.length, 'dataset')} · ${pluralize(runTotal, 'run')}`
+          : 'Versioned test sets for this project'
+      }
       actions={
         <>
           {datasets.length ? (
             <>
-              <SearchField label="Search datasets" placeholder="Search datasets…" value={search} onChange={setSearch} width={240} />
+              <SearchField
+                label="Search datasets"
+                placeholder="Search datasets…"
+                value={search}
+                onChange={setSearch}
+                width={240}
+              />
               <Select
                 label="Sort"
                 hideLabel
@@ -81,13 +113,22 @@ export function CatalogPage() {
             <DropdownMenu
               label="New dataset"
               trigger={
-                <Button variant="primary" icon={<Icon name="plus" size={12} />} iconEnd={<Icon name="chevron-down" size={12} />} data-testid="new-dataset">
+                <Button
+                  variant="primary"
+                  icon={<Icon name="plus" size={12} />}
+                  iconEnd={<Icon name="chevron-down" size={12} />}
+                  data-testid="new-dataset"
+                >
                   New dataset
                 </Button>
               }
               items={[
                 { id: 'blank', label: 'Start blank', description: 'Create an empty dataset' },
-                { id: 'import', label: 'Import CSV / TSV / JSON / JSONL', description: 'Upload a file as version v1' },
+                {
+                  id: 'import',
+                  label: 'Import CSV / TSV / JSON / JSONL',
+                  description: 'Upload a file as version v1',
+                },
               ]}
               onAction={(id) => (id === 'blank' ? setCreating(true) : setImporting(true))}
             />
@@ -108,7 +149,11 @@ export function CatalogPage() {
         <EmptyState
           icon={<Icon name="folder" />}
           title="No datasets yet"
-          body={canCreate ? 'Create a dataset to version your test items and track which runs used them.' : 'This project has no datasets.'}
+          body={
+            canCreate
+              ? 'Create a dataset to version your test items and track which runs used them.'
+              : 'This project has no datasets.'
+          }
           action={
             canCreate ? (
               <div className={styles.emptyActions}>
@@ -123,7 +168,16 @@ export function CatalogPage() {
           }
         />
       ) : query.data && visible.length === 0 ? (
-        <EmptyState compact title="No datasets match" body={`Nothing matches “${search}”.`} action={<Button variant="neutral" onPress={() => setSearch('')}>Clear search</Button>} />
+        <EmptyState
+          compact
+          title="No datasets match"
+          body={`Nothing matches “${search}”.`}
+          action={
+            <Button variant="neutral" onPress={() => setSearch('')}>
+              Clear search
+            </Button>
+          }
+        />
       ) : query.data ? (
         <ul className={styles.grid} aria-label="Datasets">
           {visible.map((d) => (
@@ -134,9 +188,17 @@ export function CatalogPage() {
         </ul>
       ) : null}
       <NewDatasetDialog open={creating} onOpenChange={setCreating} slug={slug} />
-      <UploadWizard open={importing} onOpenChange={setImporting} slug={slug} mode="new" catalog={datasets} canSetProduction onDone={(r) => {
+      <UploadWizard
+        open={importing}
+        onOpenChange={setImporting}
+        slug={slug}
+        mode="new"
+        catalog={datasets}
+        canSetProduction
+        onDone={(r) => {
           if (r.dataset) navigate(datasetPath(slug, r.dataset.slug, { tab: 'items', v: r.version?.version }));
-        }} />
+        }}
+      />
     </div>
   );
 }
@@ -154,7 +216,10 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
             {catalogStateLine(d)
               .split(' · ')
               .map((part, i) => (
-                <span key={part} data-kind={part.endsWith(' prod') ? 'prod' : part.endsWith(' draft') ? 'draft' : undefined}>
+                <span
+                  key={part}
+                  data-kind={part.endsWith(' prod') ? 'prod' : part.endsWith(' draft') ? 'draft' : undefined}
+                >
                   {i ? ' · ' : ''}
                   {part}
                 </span>

@@ -43,8 +43,22 @@ export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
   return (
     <div className={styles.toolbar}>
       <div className={styles.row}>
-        <SearchField label="Search items" hideLabel placeholder="Search id, input, outputs…" value={q} onChange={setQ} onClear={() => setQ('')} width="min(22rem, 100%)" />
-        <Button size="sm" variant="neutral" icon={<Icon name="list" size={14} />} aria-expanded={panel} onPress={() => setPanel((p) => !p)}>
+        <SearchField
+          label="Search items"
+          hideLabel
+          placeholder="Search id, input, outputs…"
+          value={q}
+          onChange={setQ}
+          onClear={() => setQ('')}
+          width="min(22rem, 100%)"
+        />
+        <Button
+          size="sm"
+          variant="neutral"
+          icon={<Icon name="list" size={14} />}
+          aria-expanded={panel}
+          onPress={() => setPanel((p) => !p)}
+        >
           Filters {count ? <Tag kind="count">{count}</Tag> : null}
         </Button>
         <Popover
@@ -56,7 +70,12 @@ export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
           }
         >
           <div className={styles.display}>
-            <Select label="Sort" value={c.view.sort} onChange={(k) => k && c.setView({ sort: String(k) as SortBy })} items={(['index', ...SORT_VALUES] as SortBy[]).map((s) => ({ key: s, label: SORT_LABEL[s] }))} />
+            <Select
+              label="Sort"
+              value={c.view.sort}
+              onChange={(k) => k && c.setView({ sort: String(k) as SortBy })}
+              items={(['index', ...SORT_VALUES] as SortBy[]).map((s) => ({ key: s, label: SORT_LABEL[s] }))}
+            />
             <SegmentedControl<TextMode>
               label="Text mode"
               value={textMode}
@@ -64,7 +83,10 @@ export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
                 setTextMode(m);
                 onTextMode(m);
               }}
-              options={[{ value: 'raw', label: 'Raw' }, { value: 'rendered', label: 'Rendered' }]}
+              options={[
+                { value: 'raw', label: 'Raw' },
+                { value: 'rendered', label: 'Rendered' },
+              ]}
             />
             {metaKeys.length ? (
               <fieldset className={styles.fields}>
@@ -82,7 +104,13 @@ export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
             ) : null}
           </div>
         </Popover>
-        <Button size="sm" variant="neutral" icon={<Icon name="external" size={14} />} onPress={() => setCsv(true)} isDisabled={!items.length}>
+        <Button
+          size="sm"
+          variant="neutral"
+          icon={<Icon name="external" size={14} />}
+          onPress={() => setCsv(true)}
+          isDisabled={!items.length}
+        >
           CSV
         </Button>
         <Popover
@@ -107,7 +135,13 @@ export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
       {chips.length ? (
         <div className={styles.chips} role="group" aria-label="Filters set on the page">
           {chips.map((chip) => (
-            <Chip key={chip.key} isSelected onChange={() => c.setView(chip.clear(c.view))} removeLabel={`Remove filter: ${chip.label}`} onRemove={() => c.setView(chip.clear(c.view))}>
+            <Chip
+              key={chip.key}
+              isSelected
+              onChange={() => c.setView(chip.clear(c.view))}
+              removeLabel={`Remove filter: ${chip.label}`}
+              onRemove={() => c.setView(chip.clear(c.view))}
+            >
               {chip.label.length > 60 ? `${chip.label.slice(0, 60)}…` : chip.label}
             </Chip>
           ))}

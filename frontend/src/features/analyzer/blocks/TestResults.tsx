@@ -8,7 +8,15 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
   const issues = r.error ? [] : rootCauseIssues(r);
   const row = ws.rowById.get(r.item_id);
   const context = row
-    ? JSON.stringify({ input: row.input_full ?? row.input, expected: row.expected_full ?? row.expected, output: row.output_full ?? row.output }, null, 2)
+    ? JSON.stringify(
+        {
+          input: row.input_full ?? row.input,
+          expected: row.expected_full ?? row.expected,
+          output: row.output_full ?? row.output,
+        },
+        null,
+        2,
+      )
     : '';
   const confidence = issues[0]?.confidence ?? r.confidence ?? null;
   return (
@@ -21,7 +29,11 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
           <Badge tone="danger">{r.error_code || 'Error'}</Badge>
         ) : (
           <Badge tone={issues.length ? 'info' : 'warning'}>
-            {issues.length && confidence != null ? `${Math.round(confidence * 100)}% confidence` : issues.length ? 'Diagnosed' : 'No diagnosis'}
+            {issues.length && confidence != null
+              ? `${Math.round(confidence * 100)}% confidence`
+              : issues.length
+                ? 'Diagnosed'
+                : 'No diagnosis'}
           </Badge>
         )}
         {r.retry_count ? (
@@ -47,7 +59,13 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
               <Tag kind="role">{i.category || 'Uncategorized'}</Tag>
               {i.subcategory ? <Tag kind="data">{i.subcategory}</Tag> : null}
               {i.confidence != null ? (
-                <Text variant="sm" mono tone="muted" as="span" aria-label={`confidence ${Math.round(i.confidence * 100)} percent`}>
+                <Text
+                  variant="sm"
+                  mono
+                  tone="muted"
+                  as="span"
+                  aria-label={`confidence ${Math.round(i.confidence * 100)} percent`}
+                >
                   {`${Math.round(i.confidence * 100)}%`}
                 </Text>
               ) : null}
@@ -106,7 +124,13 @@ export function TestResults({ ws }: { ws: RunWorkspace }) {
     );
   }
   if (!test.outcome) {
-    return <EmptyState compact title="No test run yet" body="Test up to 3 items to see the diagnosis before analyzing everything." />;
+    return (
+      <EmptyState
+        compact
+        title="No test run yet"
+        body="Test up to 3 items to see the diagnosis before analyzing everything."
+      />
+    );
   }
   const { results, fields } = test.outcome;
   return (
@@ -117,4 +141,3 @@ export function TestResults({ ws }: { ws: RunWorkspace }) {
     </div>
   );
 }
-

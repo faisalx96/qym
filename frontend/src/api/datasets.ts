@@ -292,7 +292,11 @@ export interface CompareResponse {
 
 const enc = encodeURIComponent;
 
-function withSlug(path: string, slug: string, extra: Record<string, string | number | undefined | null> = {}) {
+function withSlug(
+  path: string,
+  slug: string,
+  extra: Record<string, string | number | undefined | null> = {},
+) {
   const q = new URLSearchParams({ project_slug: slug });
   for (const [k, v] of Object.entries(extra)) {
     if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
@@ -371,7 +375,13 @@ export function useDatasetVersions(slug: string, ref: string, enabled = true) {
   });
 }
 
-export function useDatasetItems(slug: string, ref: string, version: string, params: ItemsParams, enabled = true) {
+export function useDatasetItems(
+  slug: string,
+  ref: string,
+  version: string,
+  params: ItemsParams,
+  enabled = true,
+) {
   return useQuery({
     queryKey: dsKeys.items(slug, ref, version, params),
     queryFn: () =>
@@ -481,7 +491,14 @@ export function useDatasetLineage(slug: string, ref: string) {
 
 export const COMPARE_PAGE = 50;
 
-export function useCompare(slug: string, ref: string, head: string, base: string, kind: CompareKind, enabled = true) {
+export function useCompare(
+  slug: string,
+  ref: string,
+  head: string,
+  base: string,
+  kind: CompareKind,
+  enabled = true,
+) {
   return useInfiniteQuery({
     queryKey: dsKeys.compare(slug, ref, head, base, kind),
     queryFn: ({ pageParam }) =>
@@ -563,7 +580,8 @@ export function usePatchDataset(slug: string, ref: string) {
 export function useDeleteDataset(slug: string, ref: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.delete<{ ok: boolean; restorable: boolean }>(withSlug(`/v1/datasets/${enc(ref)}`, slug)),
+    mutationFn: () =>
+      api.delete<{ ok: boolean; restorable: boolean }>(withSlug(`/v1/datasets/${enc(ref)}`, slug)),
     onSuccess: () => {
       qc.removeQueries({ queryKey: ['dataset', slug, ref] });
       void qc.invalidateQueries({ queryKey: ['datasets', slug] });
@@ -574,7 +592,8 @@ export function useDeleteDataset(slug: string, ref: string) {
 export function useRestoreDataset(slug: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ dataset: Dataset }>(withSlug(`/v1/datasets/${enc(id)}:restore`, slug)),
+    mutationFn: (id: string) =>
+      api.post<{ dataset: Dataset }>(withSlug(`/v1/datasets/${enc(id)}:restore`, slug)),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['datasets', slug] }),
   });
 }
@@ -594,7 +613,10 @@ export function usePatchVersion(slug: string, ref: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ version, ...body }: { version: string; name?: string; description?: string }) =>
-      api.patch<{ version: DatasetVersion }>(withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}`, slug), body),
+      api.patch<{ version: DatasetVersion }>(
+        withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}`, slug),
+        body,
+      ),
     onSuccess: () => invalidateDataset(qc, slug, ref),
   });
 }
@@ -638,7 +660,10 @@ export function useCreateItem(slug: string, ref: string, version: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: ItemBody) =>
-      api.post<{ item: DatasetItem }>(withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items`, slug), body),
+      api.post<{ item: DatasetItem }>(
+        withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items`, slug),
+        body,
+      ),
     onSuccess: () => invalidateItems(qc, slug, ref),
   });
 }

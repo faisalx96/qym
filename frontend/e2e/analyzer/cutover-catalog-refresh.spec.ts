@@ -26,7 +26,9 @@ test('new approvals while editing keep the edits and the starting revision', asy
   await gotoApp(page, `/projects/${seed.slug}/analysis?scope=categories`);
   const category = (current as unknown as { default_categories: string[] } | null)?.default_categories;
   await expect(page.getByRole('tab').first()).toBeVisible();
-  const startRevision = Number((current as unknown as { category_catalog_version: number }).category_catalog_version);
+  const startRevision = Number(
+    (current as unknown as { category_catalog_version: number }).category_catalog_version,
+  );
   const first = (category ?? [])[0]!;
 
   // edit the first category's description: unsaved changes
@@ -41,12 +43,21 @@ test('new approvals while editing keep the edits and the starting revision', asy
     category_examples: Record<string, unknown[]>;
   };
   cfg.category_catalog_version = startRevision + 1;
-  cfg.category_example_counts = { ...cfg.category_example_counts, [first]: (cfg.category_example_counts?.[first] ?? 0) + 1 };
+  cfg.category_example_counts = {
+    ...cfg.category_example_counts,
+    [first]: (cfg.category_example_counts?.[first] ?? 0) + 1,
+  };
   cfg.category_examples = {
     ...cfg.category_examples,
     [first]: [
       ...(cfg.category_examples?.[first] ?? []),
-      { id: 9001, item_id: 'late-item', metric_name: 'exact_match', detail: 'New approval', root_cause_issues: [{ category: first, subcategory: 'New approval' }] },
+      {
+        id: 9001,
+        item_id: 'late-item',
+        metric_name: 'exact_match',
+        detail: 'New approval',
+        root_cause_issues: [{ category: first, subcategory: 'New approval' }],
+      },
     ],
   };
   // the config is stale after 10 s; coming back to the tab refetches it

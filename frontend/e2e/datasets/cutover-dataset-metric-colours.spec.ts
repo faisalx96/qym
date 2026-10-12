@@ -22,9 +22,15 @@ async function seed(page: Page, request: Parameters<typeof createProject>[0]) {
   const p = await createProject(request, 'Metric Colours', uniqueSlug('mcol'));
   const d = await createDataset(request, p.slug, 'Colours DS');
   const v = await createVersion(request, p.slug, d.slug);
-  await bulkItems(request, p.slug, d.slug, v.version, [{ item_id: 'case-1', input: 'q', expected_output: 'a' }]);
+  await bulkItems(request, p.slug, d.slug, v.version, [
+    { item_id: 'case-1', input: 'q', expected_output: 'a' },
+  ]);
   await publishVersion(request, p.slug, d.slug, v.version, true);
-  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  const json = (body: unknown) => ({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  });
   const withDirs = async (route: Route, edit: (body: Record<string, unknown>) => void) => {
     const res = await route.fetch();
     const body = (await res.json()) as Record<string, unknown>;
@@ -37,7 +43,18 @@ async function seed(page: Page, request: Parameters<typeof createProject>[0]) {
     withDirs(route, (body) => {
       body.metric_names = METRICS;
       body.metric_directions = SHARED;
-      body.items = [{ id: 1, item_id: 'case-1', index: 0, input: 'q', expected_output: 'a', metadata: {}, labels: [], result_summary: { run_count: 2, metrics: metricAvg } }];
+      body.items = [
+        {
+          id: 1,
+          item_id: 'case-1',
+          index: 0,
+          input: 'q',
+          expected_output: 'a',
+          metadata: {},
+          labels: [],
+          result_summary: { run_count: 2, metrics: metricAvg },
+        },
+      ];
       body.total = 1;
     }),
   );
@@ -45,8 +62,22 @@ async function seed(page: Page, request: Parameters<typeof createProject>[0]) {
     route.fulfill(
       json({
         runs: [
-          { id: 'run-a', run_name: 'run-a', status: 'COMPLETED', version_label: 'v1', metric_averages: { acc: 0.95, lat: 0.95, mix: 0.95 }, metric_directions: RUN_A },
-          { id: 'run-b', run_name: 'run-b', status: 'COMPLETED', version_label: 'v1', metric_averages: { acc: 0.95, lat: 0.95, mix: 0.95 }, metric_directions: RUN_B },
+          {
+            id: 'run-a',
+            run_name: 'run-a',
+            status: 'COMPLETED',
+            version_label: 'v1',
+            metric_averages: { acc: 0.95, lat: 0.95, mix: 0.95 },
+            metric_directions: RUN_A,
+          },
+          {
+            id: 'run-b',
+            run_name: 'run-b',
+            status: 'COMPLETED',
+            version_label: 'v1',
+            metric_averages: { acc: 0.95, lat: 0.95, mix: 0.95 },
+            metric_directions: RUN_B,
+          },
         ],
         total: 2,
         metric_names: METRICS,
@@ -59,8 +90,22 @@ async function seed(page: Page, request: Parameters<typeof createProject>[0]) {
         item: { id: 1, item_id: 'case-1', index: 0 },
         aggregates: { run_count: 2, error_count: 0, metrics: metricAvg, metric_directions: SHARED },
         runs: [
-          { run_id: 'run-a', run_name: 'run-a', status: 'COMPLETED', created_at: '2026-09-01T00:00:00Z', scores, metric_directions: RUN_A },
-          { run_id: 'run-b', run_name: 'run-b', status: 'COMPLETED', created_at: '2026-09-02T00:00:00Z', scores, metric_directions: RUN_B },
+          {
+            run_id: 'run-a',
+            run_name: 'run-a',
+            status: 'COMPLETED',
+            created_at: '2026-09-01T00:00:00Z',
+            scores,
+            metric_directions: RUN_A,
+          },
+          {
+            run_id: 'run-b',
+            run_name: 'run-b',
+            status: 'COMPLETED',
+            created_at: '2026-09-02T00:00:00Z',
+            scores,
+            metric_directions: RUN_B,
+          },
         ],
       }),
     ),
@@ -70,7 +115,9 @@ async function seed(page: Page, request: Parameters<typeof createProject>[0]) {
 
 /** data-band of every ScoreValue in scope (null: no colour). */
 const bandsOf = (scope: Locator) =>
-  scope.locator('span[class*="_score_"]').evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-band')));
+  scope
+    .locator('span[class*="_score_"]')
+    .evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-band')));
 
 async function runRows(table: Locator) {
   const out: Record<string, (string | null)[]> = {};
@@ -100,7 +147,10 @@ test.describe('dataset metric colours follow the declared direction', () => {
     expect(await runRows(table)).toEqual(RUN_ROWS);
   });
 
-  test('item page runs colour tiles by the shared direction and rows by their own', async ({ page, request }) => {
+  test('item page runs colour tiles by the shared direction and rows by their own', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(page, request);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?item=case-1&tab=runs`);
     const strip = page.getByLabel('Run aggregates');

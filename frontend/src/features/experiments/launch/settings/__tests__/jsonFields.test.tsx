@@ -51,7 +51,12 @@ describe('containerOf / uniformKeys', () => {
   });
 
   it('finds the keys objects of a list all share', () => {
-    expect(uniformKeys([{ a: 1, b: 2 }, { b: 3, a: 4 }])).toEqual(['a', 'b']);
+    expect(
+      uniformKeys([
+        { a: 1, b: 2 },
+        { b: 3, a: 4 },
+      ]),
+    ).toEqual(['a', 'b']);
     expect(uniformKeys([{ a: 1 }, { b: 2 }])).toBeNull();
     expect(uniformKeys([1, 2])).toBeNull();
   });

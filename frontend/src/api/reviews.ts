@@ -214,7 +214,10 @@ export type DecisionAction = 'approve' | 'reject' | 'reset';
 export function useDecide() {
   return useMutation({
     mutationFn: ({ id, action, comment }: { id: number; action: DecisionAction; comment?: string }) =>
-      api.post<CorrectionRow>(`/api/corrections/${id}/${action}`, action === 'reset' ? {} : { comment: comment ?? '' }),
+      api.post<CorrectionRow>(
+        `/api/corrections/${id}/${action}`,
+        action === 'reset' ? {} : { comment: comment ?? '' },
+      ),
   });
 }
 

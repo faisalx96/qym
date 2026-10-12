@@ -69,12 +69,18 @@ export function ItemsUiHost({ children }: { children: ReactNode }) {
   const tracePass = parseInt(params.get('tracePass') ?? '', 10);
   const trace: TraceTarget | null = useMemo(() => {
     if (!traceItem) return null;
-    if (traceRun) return { runId: traceRun, itemId: traceItem, pass: Number.isFinite(tracePass) ? tracePass : null };
-    const run = model.runs.find((r) => r.byItem.get(traceItem)?.trace_id) ?? model.runs.find((r) => r.byItem.has(traceItem));
+    if (traceRun)
+      return { runId: traceRun, itemId: traceItem, pass: Number.isFinite(tracePass) ? tracePass : null };
+    const run =
+      model.runs.find((r) => r.byItem.get(traceItem)?.trace_id) ??
+      model.runs.find((r) => r.byItem.has(traceItem));
     const row = run?.byItem.get(traceItem);
     return run && row ? { runId: run.base, itemId: row.item_id, pass: run.pass } : null;
   }, [traceItem, traceRun, tracePass, model.runs]);
-  const openTrace = useCallback((t: TraceTarget) => replaceUrlQuery({ trace: t.itemId, traceRun: t.runId, tracePass: t.pass }), [replaceUrlQuery]);
+  const openTrace = useCallback(
+    (t: TraceTarget) => replaceUrlQuery({ trace: t.itemId, traceRun: t.runId, tracePass: t.pass }),
+    [replaceUrlQuery],
+  );
   const run = trace ? model.runs.find((r) => r.base === trace.runId) : null;
 
   const value = useMemo<ItemsUiValue>(

@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react';
 import { useJobAction, ACTIVE_JOB_STATUSES, type JobStatus, type MaintenanceJob } from '@/api/admin';
 import { ApiError } from '@/lib/http';
-import { Badge, Button, DataTable, Drawer, KeyValueGrid, Text, useToast, type BadgeTone, type Column } from '@/ui';
+import {
+  Badge,
+  Button,
+  DataTable,
+  Drawer,
+  KeyValueGrid,
+  Text,
+  useToast,
+  type BadgeTone,
+  type Column,
+} from '@/ui';
 import { formatDateTime } from '../format';
 import styles from './maintenance.module.css';
 
@@ -40,7 +50,9 @@ export function JobsTable({ jobs }: JobsTableProps) {
       await act.mutateAsync({ id: job.id, action });
       toast.show(`${action === 'start' ? 'Started' : 'Cancel requested for'} ${job.kind}`, { tone: 'info' });
     } catch (e) {
-      toast.show(`${action} failed: ${e instanceof ApiError ? e.detail || `HTTP ${e.status}` : String(e)}`, { tone: 'error' });
+      toast.show(`${action} failed: ${e instanceof ApiError ? e.detail || `HTTP ${e.status}` : String(e)}`, {
+        tone: 'error',
+      });
     }
   }
 
@@ -53,7 +65,8 @@ export function JobsTable({ jobs }: JobsTableProps) {
         label: 'Progress',
         flex: true,
         minWidth: 160,
-        cell: (j) => (j.error ? <span className={styles.errorText}>{j.error}</span> : (j.progress?.message ?? '—')),
+        cell: (j) =>
+          j.error ? <span className={styles.errorText}>{j.error}</span> : (j.progress?.message ?? '—'),
       },
       { id: 'created', label: 'Created', width: 160, cell: (j) => formatDateTime(j.created_at) },
       { id: 'finished', label: 'Finished', width: 160, cell: (j) => formatDateTime(j.finished_at) },
@@ -66,16 +79,31 @@ export function JobsTable({ jobs }: JobsTableProps) {
         align: 'end',
         cell: (j) => (
           <span className={styles.rowActions}>
-            <Button variant="neutral" onPress={() => setLogJob(j)} aria-label={`Log for ${j.kind}`} data-job-log={j.id}>
+            <Button
+              variant="neutral"
+              onPress={() => setLogJob(j)}
+              aria-label={`Log for ${j.kind}`}
+              data-job-log={j.id}
+            >
               Log
             </Button>
             {j.status === 'paused' ? (
-              <Button variant="accent" onPress={() => void run(j, 'start')} isDisabled={act.isPending} data-job-start={j.id}>
+              <Button
+                variant="accent"
+                onPress={() => void run(j, 'start')}
+                isDisabled={act.isPending}
+                data-job-start={j.id}
+              >
                 Start
               </Button>
             ) : null}
             {ACTIVE_JOB_STATUSES.includes(j.status) || j.status === 'paused' ? (
-              <Button variant="ghost" onPress={() => void run(j, 'cancel')} isDisabled={act.isPending || j.status === 'cancel_requested'} data-job-cancel={j.id}>
+              <Button
+                variant="ghost"
+                onPress={() => void run(j, 'cancel')}
+                isDisabled={act.isPending || j.status === 'cancel_requested'}
+                data-job-cancel={j.id}
+              >
                 Cancel
               </Button>
             ) : null}
@@ -89,7 +117,14 @@ export function JobsTable({ jobs }: JobsTableProps) {
 
   return (
     <>
-      <DataTable aria-label="Maintenance jobs" columns={columns} rows={jobs} rowKey={(j) => j.id} storageKey="admin-jobs" emptyState="No jobs yet." />
+      <DataTable
+        aria-label="Maintenance jobs"
+        columns={columns}
+        rows={jobs}
+        rowKey={(j) => j.id}
+        storageKey="admin-jobs"
+        emptyState="No jobs yet."
+      />
       <Drawer
         open={shown !== null}
         onOpenChange={(o) => !o && setLogJob(null)}
@@ -109,7 +144,12 @@ export function JobsTable({ jobs }: JobsTableProps) {
                 { key: 'started', label: 'Started', value: formatDateTime(shown.started_at) },
                 { key: 'finished', label: 'Finished', value: formatDateTime(shown.finished_at) },
                 { key: 'params', label: 'Params', value: JSON.stringify(shown.params ?? {}), mono: true },
-                { key: 'progress', label: 'Progress', value: JSON.stringify(shown.progress ?? {}), mono: true },
+                {
+                  key: 'progress',
+                  label: 'Progress',
+                  value: JSON.stringify(shown.progress ?? {}),
+                  mono: true,
+                },
               ]}
             />
             {shown.error ? (

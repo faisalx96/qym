@@ -13,10 +13,18 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
   const query = useDatasetLineage(slug, datasetRef);
   const showSkeleton = useDelayedPending(query.isPending);
   if (showSkeleton) return <Skeleton kind="list" rows={4} label="Loading lineage" />;
-  if (query.isError) return <ErrorState error={query.error} title="Couldn’t load the version history" onRetry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState
+        error={query.error}
+        title="Couldn’t load the version history"
+        onRetry={() => void query.refetch()}
+      />
+    );
   if (!query.data) return null;
   const { versions, changes } = query.data;
-  if (!versions.length) return <EmptyState title="No versions yet" body="Create the first draft to start the version history." />;
+  if (!versions.length)
+    return <EmptyState title="No versions yet" body="Create the first draft to start the version history." />;
   const byId = new Map(versions.map((v) => [v.id, v] as const));
   const children = new Map<string | null, DatasetVersion[]>();
   for (const v of versions) {
@@ -30,7 +38,10 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
     <li key={v.id} className={styles.node} style={{ '--depth': depth } as React.CSSProperties}>
       <div className={styles.card} data-version-node={v.version}>
         <div className={styles.cardMain}>
-          <Link to={datasetPath(slug, datasetRef, { tab: 'lineage', v: v.version })} className={styles.versionLink}>
+          <Link
+            to={datasetPath(slug, datasetRef, { tab: 'lineage', v: v.version })}
+            className={styles.versionLink}
+          >
             {v.version}
           </Link>
           <Text as="span" variant="md" weight={600}>
@@ -53,7 +64,14 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
           <UserPill user={v.published_by} label="Published By:" />
           <UserPill user={v.created_by} label="Drafted By:" />
           {v.parent_version_id && byId.has(v.parent_version_id) ? (
-            <LinkButton to={comparePath(slug, datasetRef, { base: byId.get(v.parent_version_id)?.version, head: v.version })} variant="neutral" size="sm">
+            <LinkButton
+              to={comparePath(slug, datasetRef, {
+                base: byId.get(v.parent_version_id)?.version,
+                head: v.version,
+              })}
+              variant="neutral"
+              size="sm"
+            >
               Compare
             </LinkButton>
           ) : null}
@@ -64,15 +82,23 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
           {orphans.includes(v) ? ' · parent version no longer exists' : ''}
         </div>
       </div>
-      {children.get(v.id)?.length ? <ul className={styles.children}>{children.get(v.id)!.map((c) => renderNode(c, depth + 1))}</ul> : null}
+      {children.get(v.id)?.length ? (
+        <ul className={styles.children}>{children.get(v.id)!.map((c) => renderNode(c, depth + 1))}</ul>
+      ) : null}
     </li>
   );
 
   return (
     <div className={styles.wrap} data-dataset-lineage>
-      <SectionHeader title="Version history" description="How each version descends from its parent, and what changed along the way. Open a version from its name." />
+      <SectionHeader
+        title="Version history"
+        description="How each version descends from its parent, and what changed along the way. Open a version from its name."
+      />
       <ul className={styles.tree}>{roots.map((v) => renderNode(v, 0))}</ul>
-      <SectionHeader title="Change log" description="Every change to this dataset’s versions, oldest first." />
+      <SectionHeader
+        title="Change log"
+        description="Every change to this dataset’s versions, oldest first."
+      />
       {changes.length ? (
         <ol className={styles.log}>
           {changes.map((c) => (

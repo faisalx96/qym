@@ -22,11 +22,17 @@ export interface MetricCellView {
   edited: boolean;
 }
 
-export function metricCellFor(model: CompareModel, run: CompareRun, row: Row, metric: string): MetricCellView {
+export function metricCellFor(
+  model: CompareModel,
+  run: CompareRun,
+  row: Row,
+  metric: string,
+): MetricCellView {
   const idx = run.metricIndex[metric];
   const type = model.types[metric] ?? 'score';
   const direction = model.directions[metric] ?? null;
-  const { score, isError } = idx === undefined ? { score: null, isError: false } : getRowScore(row, idx, metric, direction);
+  const { score, isError } =
+    idx === undefined ? { score: null, isError: false } : getRowScore(row, idx, metric, direction);
   const meta = row.metric_meta?.[metric] as Record<string, unknown> | undefined;
   const edited = !!meta && String(meta.modified ?? '').toLowerCase() === 'true';
   let text = '—';
@@ -42,12 +48,24 @@ export function metricCellFor(model: CompareModel, run: CompareRun, row: Row, me
           ? formatMetricObservation(score, type, model.specs[metric])
           : formatPercent(score, 1);
   }
-  return { metric, value: score, text, type, direction, error: isError ? (isItemTaskError(row) ? 'task' : 'metric') : null, edited };
+  return {
+    metric,
+    value: score,
+    text,
+    type,
+    direction,
+    error: isError ? (isItemTaskError(row) ? 'task' : 'metric') : null,
+    edited,
+  };
 }
 
 export type PillState = 'pass' | 'fail' | 'error' | 'none';
 
-export function pillState(run: CompareRun, row: Row | null, ctx: MetricCtx): { state: PillState; score: number | null } {
+export function pillState(
+  run: CompareRun,
+  row: Row | null,
+  ctx: MetricCtx,
+): { state: PillState; score: number | null } {
   if (!row || run.metricIndex[ctx.metric] === undefined) return { state: 'none', score: null };
   const outcome = getRowScore(row, run.metricIndex[ctx.metric] as number, ctx.metric, ctx.direction);
   if (outcome.isError && (ctx.direction === 'minimize' || outcome.score === null || isItemTaskError(row))) {
@@ -60,4 +78,5 @@ export function pillState(run: CompareRun, row: Row | null, ctx: MetricCtx): { s
 
 /** Archived project: no edit controls. A submitted/approved run keeps its scores as reviewed. */
 export const runReadOnly = (run: CompareRun) => !!run.run.project?.archived;
-export const runScoresLocked = (run: CompareRun) => ['SUBMITTED', 'APPROVED'].includes(String(run.run.status).toUpperCase());
+export const runScoresLocked = (run: CompareRun) =>
+  ['SUBMITTED', 'APPROVED'].includes(String(run.run.status).toUpperCase());

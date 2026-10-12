@@ -58,7 +58,9 @@ export function buildColumnRows(
       metrics[metric] = {
         mean,
         n,
-        delta: isBaseline ? null : compareWithBaseline(own, base, { direction: model.directions[metric] ?? null }, itemIds),
+        delta: isBaseline
+          ? null
+          : compareWithBaseline(own, base, { direction: model.directions[metric] ?? null }, itemIds),
       };
     }
     const l = meanOver(lat.get(column.key) ?? new Map()).mean;
@@ -135,8 +137,11 @@ export function buildTraceRows(model: CompareModel, columns: MetricColumn[]): Tr
   // One row per agent span name any compared run carries.
   const names: string[] = [];
   for (const s of stats) {
-    const spans = Array.isArray(s?.outer_scope_parent_spans) ? (s!.outer_scope_parent_spans as Array<{ name?: string; avg_ms?: unknown }>) : [];
-    for (const sp of spans) if (sp?.name && finite(sp.avg_ms) && !names.includes(sp.name)) names.push(sp.name);
+    const spans = Array.isArray(s?.outer_scope_parent_spans)
+      ? (s!.outer_scope_parent_spans as Array<{ name?: string; avg_ms?: unknown }>)
+      : [];
+    for (const sp of spans)
+      if (sp?.name && finite(sp.avg_ms) && !names.includes(sp.name)) names.push(sp.name);
   }
   for (const name of names) {
     rows.push({
@@ -145,12 +150,20 @@ export function buildTraceRows(model: CompareModel, columns: MetricColumn[]): Tr
       format: 'latency',
       best: 'low',
       values: stats.map((s) => {
-        const spans = Array.isArray(s?.outer_scope_parent_spans) ? (s!.outer_scope_parent_spans as Array<{ name?: string; avg_ms?: unknown }>) : [];
+        const spans = Array.isArray(s?.outer_scope_parent_spans)
+          ? (s!.outer_scope_parent_spans as Array<{ name?: string; avg_ms?: unknown }>)
+          : [];
         const hit = spans.find((sp) => sp?.name === name && finite(sp.avg_ms));
         return hit ? Number(hit.avg_ms) : null;
       }),
     });
   }
-  rows.push({ id: 'evaluator-ms', label: 'Avg evaluator latency', format: 'latency', best: 'low', values: stats.map((s, i) => num(s as Record<string, unknown> | null, 'avg_evaluator_ms', null, i)) });
+  rows.push({
+    id: 'evaluator-ms',
+    label: 'Avg evaluator latency',
+    format: 'latency',
+    best: 'low',
+    values: stats.map((s, i) => num(s as Record<string, unknown> | null, 'avg_evaluator_ms', null, i)),
+  });
   return rows.filter((r) => r.values.some((v) => v !== null));
 }

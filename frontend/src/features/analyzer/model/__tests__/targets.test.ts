@@ -18,7 +18,12 @@ function rows(extra: Partial<CompactRow>[]): CompactRow[] {
   }));
 }
 
-const opts = { selectedMetrics: ['acc', 'lat'], maxScore: 0.8, skipAnalyzed: true, allowHumanOverwrite: false };
+const opts = {
+  selectedMetrics: ['acc', 'lat'],
+  maxScore: 0.8,
+  skipAnalyzed: true,
+  allowHumanOverwrite: false,
+};
 
 describe('matchTargets', () => {
   it('keeps only failed metrics per threshold and direction', () => {
@@ -91,7 +96,9 @@ describe('matchTargets', () => {
 
   it('reads per-pass scores for repeat runs', () => {
     const built = buildAnalyzerRows({
-      rows: rows([{ pass_scores: { acc: [1, 0.1], lat: [1, 1] }, pass_attempts: [{ pass_number: 2, output: 'p2' }] }]),
+      rows: rows([
+        { pass_scores: { acc: [1, 0.1], lat: [1, 1] }, pass_attempts: [{ pass_number: 2, output: 'p2' }] },
+      ]),
       metricNames: ['acc', 'lat'],
       metricSpecs: specs,
       passNumber: 2,

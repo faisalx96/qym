@@ -19,7 +19,12 @@ export function useItemEditor(slug: string, ref: string, version: string, item: 
       edit && edit.key === editKey
         ? edit
         : item
-          ? { key: editKey, input: initialFieldState(item.input), expected: initialFieldState(item.expected_output), metadata: initialFieldState(item.metadata, true) }
+          ? {
+              key: editKey,
+              input: initialFieldState(item.input),
+              expected: initialFieldState(item.expected_output),
+              metadata: initialFieldState(item.metadata, true),
+            }
           : null,
     [edit, editKey, item],
   );
@@ -34,10 +39,14 @@ export function useItemEditor(slug: string, ref: string, version: string, item: 
         : null,
     [item, state],
   );
-  const dirty = Boolean(statuses && (statuses.input.touched || statuses.expected.touched || statuses.metadata.touched));
+  const dirty = Boolean(
+    statuses && (statuses.input.touched || statuses.expected.touched || statuses.metadata.touched),
+  );
   const valid = Boolean(statuses && statuses.input.ok && statuses.expected.ok && statuses.metadata.ok);
   const typeChanges = statuses
-    ? (['input', 'expected', 'metadata'] as const).filter((k) => statuses[k].touched && statuses[k].toType && statuses[k].toType !== statuses[k].fromType)
+    ? (['input', 'expected', 'metadata'] as const).filter(
+        (k) => statuses[k].touched && statuses[k].toType && statuses[k].toType !== statuses[k].fromType,
+      )
     : [];
 
   const set = useCallback(

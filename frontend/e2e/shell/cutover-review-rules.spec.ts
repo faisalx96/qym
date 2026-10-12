@@ -22,7 +22,9 @@ test('General: the review rules save to the project and survive a reload', async
   await card.getByText('Require a different reviewer than the author').click();
   await expect(different).toBeChecked();
   await expect(save).toBeEnabled();
-  const put = page.waitForRequest((r) => r.method() === 'PATCH' && r.url().endsWith(`/v1/projects/${project.id}/review-rules`));
+  const put = page.waitForRequest(
+    (r) => r.method() === 'PATCH' && r.url().endsWith(`/v1/projects/${project.id}/review-rules`),
+  );
   await save.click();
   expect((await put).postDataJSON()).toEqual({
     correction_approvers: 'managers',
@@ -32,7 +34,9 @@ test('General: the review rules save to the project and survive a reload', async
 
   await page.reload();
   const again = page.locator('section[aria-labelledby="general-rules"]');
-  await expect(again.getByRole('checkbox', { name: 'Require a different reviewer than the author' })).toBeChecked();
+  await expect(
+    again.getByRole('checkbox', { name: 'Require a different reviewer than the author' }),
+  ).toBeChecked();
   await expect(again.getByRole('button', { name: /Approvers/ })).toContainText('Managers only');
   await expect(again.getByRole('button', { name: 'Save rules' })).toBeDisabled();
 });

@@ -27,10 +27,18 @@ function errorText(e: unknown): string {
  */
 export function EditUserDialog(props: EditUserDialogProps) {
   // Remount per user/open so field state resets without effects.
-  return props.open && props.user ? <EditUserDialogInner key={props.user.id} {...props} user={props.user} /> : null;
+  return props.open && props.user ? (
+    <EditUserDialogInner key={props.user.id} {...props} user={props.user} />
+  ) : null;
 }
 
-function EditUserDialogInner({ user, open, onOpenChange, meId, localAuth }: EditUserDialogProps & { user: AdminUser }) {
+function EditUserDialogInner({
+  user,
+  open,
+  onOpenChange,
+  meId,
+  localAuth,
+}: EditUserDialogProps & { user: AdminUser }) {
   const isSelf = user.id === meId;
   const [email, setEmail] = useState(user.email);
   const [name, setName] = useState(user.display_name ?? '');
@@ -87,7 +95,14 @@ function EditUserDialogInner({ user, open, onOpenChange, meId, localAuth }: Edit
             <Button variant="neutral" size="md" onPress={close} isDisabled={busy} data-edit-user-cancel>
               Cancel
             </Button>
-            <Button variant="primary" size="md" onPress={save} isDisabled={busy} loading={update.isPending} data-edit-user-save>
+            <Button
+              variant="primary"
+              size="md"
+              onPress={save}
+              isDisabled={busy}
+              loading={update.isPending}
+              data-edit-user-save
+            >
               {update.isPending ? 'Saving…' : 'Save changes'}
             </Button>
           </>
@@ -113,7 +128,14 @@ function EditUserDialogInner({ user, open, onOpenChange, meId, localAuth }: Edit
             autoComplete="off"
             name="email"
           />
-          <TextField ref={nameRef} label="Display name" value={name} onChange={setName} isDisabled={busy} name="display_name" />
+          <TextField
+            ref={nameRef}
+            label="Display name"
+            value={name}
+            onChange={setName}
+            isDisabled={busy}
+            name="display_name"
+          />
           <Select
             label="Role"
             items={[
@@ -134,7 +156,11 @@ function EditUserDialogInner({ user, open, onOpenChange, meId, localAuth }: Edit
             </Text>
           ) : null}
           {localAuth && !isSelf ? (
-            <section className={styles.resetSection} aria-labelledby="edit-user-password-title" data-password-section>
+            <section
+              className={styles.resetSection}
+              aria-labelledby="edit-user-password-title"
+              data-password-section
+            >
               <Text variant="md" as="h3" id="edit-user-password-title">
                 Password
               </Text>

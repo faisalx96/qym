@@ -16,7 +16,10 @@ async function openRun(page: Page, slug: string, runId: string, query = ''): Pro
 }
 
 test.describe('job outcome (1, 6, 12)', () => {
-  test('every analysis failed: bar, Review card and toast say "Analysis failed"', async ({ page, request }) => {
+  test('every analysis failed: bar, Review card and toast say "Analysis failed"', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request, { model: 'bad-model' });
     await openRun(page, seed.slug, seed.runId);
     await page.getByRole('button', { name: 'Analyze 4 items' }).click();
@@ -24,7 +27,9 @@ test.describe('job outcome (1, 6, 12)', () => {
       timeout: 30_000,
     });
     await expect(jobRegion(page).getByText('Analysis failed', { exact: true })).toBeVisible();
-    await expect(page.getByText('Analysis failed: 0 of 6 metric analyses succeeded, 6 failed').first()).toBeVisible();
+    await expect(
+      page.getByText('Analysis failed: 0 of 6 metric analyses succeeded, 6 failed').first(),
+    ).toBeVisible();
     await jobRegion(page).getByRole('button', { name: 'Review results' }).click();
     const card = jobRegion(page);
     await expect(card).toContainText('0 of 6 metric analyses succeeded, 6 failed.');
@@ -45,7 +50,10 @@ test.describe('job outcome (1, 6, 12)', () => {
     await step(page, 'Run').click();
     await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
     await expect(jobRegion(page)).toContainText('metric analyses succeeded', { timeout: 30_000 });
-    await expect(jobRegion(page).getByRole('link', { name: 'View run' })).toHaveAttribute('href', /\?pass=2$/);
+    await expect(jobRegion(page).getByRole('link', { name: 'View run' })).toHaveAttribute(
+      'href',
+      /\?pass=2$/,
+    );
     await jobRegion(page).getByRole('button', { name: 'Review results' }).click();
     await expect(jobRegion(page)).toContainText(/Created \d+ categor/);
   });
@@ -64,18 +72,26 @@ test.describe('project and run errors (7, 8)', () => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, 'nope'));
     await expect(page.getByRole('heading', { name: 'Unable to load auto-analysis' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open Runs' })).toHaveAttribute('href', `/projects/${seed.slug}`);
+    await expect(page.getByRole('link', { name: 'Open Runs' })).toHaveAttribute(
+      'href',
+      `/projects/${seed.slug}`,
+    );
   });
 });
 
 test.describe('settings (4, 15, 16, 21)', () => {
-  test('an emptied or 0 timeout / max issues restores the default; help text is present', async ({ page, request }) => {
+  test('an emptied or 0 timeout / max issues restores the default; help text is present', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
     const timeout = page.getByRole('textbox', { name: 'Timeout (s)' });
     const issues = page.getByRole('textbox', { name: 'Max issues per item' });
-    await expect(page.getByText(/each retry doubles the previous timeout|retries are disabled/)).toBeVisible();
+    await expect(
+      page.getByText(/each retry doubles the previous timeout|retries are disabled/),
+    ).toBeVisible();
     await expect(page.getByText('Limits how many root-cause issues')).toBeVisible();
     const before = await timeout.inputValue();
     const beforeIssues = await issues.inputValue();
@@ -141,11 +157,17 @@ test.describe('guidance (2, 3, 9)', () => {
     await dialog.getByRole('button', { name: 'Keep' }).click();
     await expect(page.getByTestId('rule-count')).toContainText('2 rules');
     await page.getByRole('button', { name: 'Delete rule Rule 1' }).click();
-    await page.getByRole('alertdialog', { name: 'Delete this rule?' }).getByRole('button', { name: 'Delete' }).click();
+    await page
+      .getByRole('alertdialog', { name: 'Delete this rule?' })
+      .getByRole('button', { name: 'Delete' })
+      .click();
     await expect(page.getByTestId('rule-count')).toContainText('1 rule ');
     await toggleBox(page.getByRole('checkbox', { name: 'Select Rule 2' }));
     await page.getByRole('button', { name: /^Delete selected/ }).click();
-    await page.getByRole('alertdialog', { name: 'Delete this rule?' }).getByRole('button', { name: 'Delete' }).click();
+    await page
+      .getByRole('alertdialog', { name: 'Delete this rule?' })
+      .getByRole('button', { name: 'Delete' })
+      .click();
     await expect(page.getByTestId('rule-count')).toContainText('0 rules');
   });
 

@@ -13,7 +13,9 @@ import { metricCtx } from '../scoring';
 import { makePayload } from './fixtures';
 
 const items = (n: number, f: (i: number) => number) =>
-  Object.fromEntries(Array.from({ length: n }, (_, i) => [`i${i}`, { correct: f(i) >= 0.7 ? 1 : 0, quality: f(i) }]));
+  Object.fromEntries(
+    Array.from({ length: n }, (_, i) => [`i${i}`, { correct: f(i) >= 0.7 ? 1 : 0, quality: f(i) }]),
+  );
 
 describe('the change and its verdict come from the items both runs scored', () => {
   it('run-2 stopped half way: every paired item improved even though its average is lower', () => {
@@ -47,7 +49,12 @@ describe('run average (Avg@k) is the run mean when items have unequal passes', (
         id,
         model: id,
         samples: 3,
-        scores: Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`i${i}`, { correct: i % 2 ? [0, 0, 0] : [1, 1, 1], quality: i % 2 ? [0, 0, 0] : [1, 1, 1] }])),
+        scores: Object.fromEntries(
+          Array.from({ length: 20 }, (_, i) => [
+            `i${i}`,
+            { correct: i % 2 ? [0, 0, 0] : [1, 1, 1], quality: i % 2 ? [0, 0, 0] : [1, 1, 1] },
+          ]),
+        ),
       })),
     );
     payload.runs.forEach((run) =>
@@ -70,7 +77,9 @@ describe('run average (Avg@k) is the run mean when items have unequal passes', (
 
 describe('object-valued categories read as JSON, never [object Object]', () => {
   it('names the group by the object serialised', () => {
-    const rows = Object.fromEntries(Array.from({ length: 4 }, (_, i) => [`i${i}`, { correct: 1, quality: 0.9 }]));
+    const rows = Object.fromEntries(
+      Array.from({ length: 4 }, (_, i) => [`i${i}`, { correct: 1, quality: 0.9 }]),
+    );
     const payload = makePayload([
       { id: 'run-1', model: 'a', scores: rows },
       { id: 'run-2', model: 'b', scores: rows },
@@ -81,7 +90,13 @@ describe('object-valued categories read as JSON, never [object Object]', () => {
       }),
     );
     const model = buildCompareModel(payload, ['run-1', 'run-2']);
-    const groups = categoryGroups(model, 'complexity', metricColumns(model, 'run'), model.itemIds, metricCtx(model, 'quality'));
+    const groups = categoryGroups(
+      model,
+      'complexity',
+      metricColumns(model, 'run'),
+      model.itemIds,
+      metricCtx(model, 'quality'),
+    );
     const names = groups.map((g) => g.value);
     expect(names.join('|')).not.toContain('[object Object]');
     expect(names).toEqual(expect.arrayContaining(['{"level":"hard"}', '{"level":"easy"}']));
@@ -90,7 +105,9 @@ describe('object-valued categories read as JSON, never [object Object]', () => {
 
 describe('category metadata without scores has no performance report (test_report_section_visibility_browser.py)', () => {
   it('compare: no category group when no run scored the items', () => {
-    const rows = Object.fromEntries(Array.from({ length: 4 }, (_, i) => [`i${i}`, { correct: 0, quality: 0 }]));
+    const rows = Object.fromEntries(
+      Array.from({ length: 4 }, (_, i) => [`i${i}`, { correct: 0, quality: 0 }]),
+    );
     const payload = makePayload([
       { id: 'run-1', model: 'a', scores: rows },
       { id: 'run-2', model: 'b', scores: rows },
@@ -102,7 +119,15 @@ describe('category metadata without scores has no performance report (test_repor
       }),
     );
     const model = buildCompareModel(payload, ['run-1', 'run-2']);
-    expect(categoryGroups(model, 'domain', metricColumns(model, 'run'), model.itemIds, metricCtx(model, 'quality'))).toEqual([]);
+    expect(
+      categoryGroups(
+        model,
+        'domain',
+        metricColumns(model, 'run'),
+        model.itemIds,
+        metricCtx(model, 'quality'),
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -110,12 +135,12 @@ describe('a reviewed run has no editor (test_review_rules_browser.py)', () => {
   it('SUBMITTED and APPROVED runs lock their scores; the others keep them editable', async () => {
     const { runScoresLocked } = await import('../rowCells');
     const lock = (status: string) => runScoresLocked({ run: { status } } as never);
-    expect([lock('SUBMITTED'), lock('APPROVED'), lock('COMPLETED'), lock('REJECTED'), lock('approved')]).toEqual([
-      true,
-      true,
-      false,
-      false,
-      true,
-    ]);
+    expect([
+      lock('SUBMITTED'),
+      lock('APPROVED'),
+      lock('COMPLETED'),
+      lock('REJECTED'),
+      lock('approved'),
+    ]).toEqual([true, true, false, false, true]);
   });
 });

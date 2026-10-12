@@ -67,45 +67,44 @@ class ChunkBoundary extends Component<{ fallback: ReactNode; children: ReactNode
  * A JSON editor with a plain-textarea fallback. `focus()` goes into whichever editor is shown.
  * The text is data: the editor never evaluates it.
  */
-export const JsonConfigEditor = forwardRef<EditorHandle, JsonConfigEditorProps>(function JsonConfigEditor(
-  props,
-  ref,
-) {
-  const cm = useRef<EditorHandle>(null);
-  const plain = useRef<HTMLTextAreaElement>(null);
-  const lostFocus = useRef(false);
-  useImperativeHandle(
-    ref,
-    () => ({
-      focus: () => {
-        if (cm.current) cm.current.focus();
-        else plain.current?.focus();
-      },
-    }),
-    [],
-  );
-  const fallback = <PlainEditor {...props} innerRef={plain} lostFocus={lostFocus} />;
-  return (
-    <div className={styles.editor} data-invalid={props.invalid ? '' : undefined} data-json-editor>
-      <ChunkBoundary fallback={fallback}>
-        <Suspense fallback={fallback}>
-          <CodeMirrorEditor
-            ref={cm}
-            value={props.value}
-            onChange={props.onChange}
-            readOnly={props.readOnly}
-            label={props.label}
-            lint={props.lint}
-            onReady={() => {
-              // The textarea that had focus was swapped for the editor: keep the user where they were.
-              if (lostFocus.current) {
-                lostFocus.current = false;
-                setTimeout(() => cm.current?.focus(), 0);
-              }
-            }}
-          />
-        </Suspense>
-      </ChunkBoundary>
-    </div>
-  );
-});
+export const JsonConfigEditor = forwardRef<EditorHandle, JsonConfigEditorProps>(
+  function JsonConfigEditor(props, ref) {
+    const cm = useRef<EditorHandle>(null);
+    const plain = useRef<HTMLTextAreaElement>(null);
+    const lostFocus = useRef(false);
+    useImperativeHandle(
+      ref,
+      () => ({
+        focus: () => {
+          if (cm.current) cm.current.focus();
+          else plain.current?.focus();
+        },
+      }),
+      [],
+    );
+    const fallback = <PlainEditor {...props} innerRef={plain} lostFocus={lostFocus} />;
+    return (
+      <div className={styles.editor} data-invalid={props.invalid ? '' : undefined} data-json-editor>
+        <ChunkBoundary fallback={fallback}>
+          <Suspense fallback={fallback}>
+            <CodeMirrorEditor
+              ref={cm}
+              value={props.value}
+              onChange={props.onChange}
+              readOnly={props.readOnly}
+              label={props.label}
+              lint={props.lint}
+              onReady={() => {
+                // The textarea that had focus was swapped for the editor: keep the user where they were.
+                if (lostFocus.current) {
+                  lostFocus.current = false;
+                  setTimeout(() => cm.current?.focus(), 0);
+                }
+              }}
+            />
+          </Suspense>
+        </ChunkBoundary>
+      </div>
+    );
+  },
+);

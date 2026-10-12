@@ -65,8 +65,8 @@ export function OtherValues() {
     <section className={styles.panel} aria-label="Other values" data-eval-other>
       <h4 className={styles.panelTitle}>Other values</h4>
       <p className={styles.hint}>
-        Inputs from the starting point or Raw JSON that this environment’s schema has no field for. They are sent
-        as they are.
+        Inputs from the starting point or Raw JSON that this environment’s schema has no field for. They are
+        sent as they are.
       </p>
       <div className={styles.grid}>
         {names.map((n) => (

@@ -34,7 +34,8 @@ export async function acquireFakesLock(): Promise<void> {
       return;
     } catch {
       try {
-        if (Date.now() - statSync(LOCK).mtimeMs > LOCK_STALE_MS) rmSync(LOCK, { recursive: true, force: true });
+        if (Date.now() - statSync(LOCK).mtimeMs > LOCK_STALE_MS)
+          rmSync(LOCK, { recursive: true, force: true });
       } catch {
         /* released by its owner in the meantime */
       }

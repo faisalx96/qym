@@ -22,7 +22,9 @@ export function RunCards() {
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
   const diff = differingContext(cards.map((x) => x.payload.run));
-  const live = cards.filter((x) => ['RUNNING', 'PENDING', 'STOPPING'].includes(String(x.payload.run.status).toUpperCase())).length;
+  const live = cards.filter((x) =>
+    ['RUNNING', 'PENDING', 'STOPPING'].includes(String(x.payload.run.status).toUpperCase()),
+  ).length;
   return (
     <section className={styles.wrap} aria-label="Run details">
       <div className={styles.head}>
@@ -53,19 +55,33 @@ export function RunCards() {
               const exp = run.experiment;
               const expSlug = run.project?.slug ?? slug;
               return (
-                <li key={base} className={styles.card} data-testid="run-card" data-run={base} data-status={String(run.status).toUpperCase()}>
+                <li
+                  key={base}
+                  className={styles.card}
+                  data-testid="run-card"
+                  data-run={base}
+                  data-status={String(run.status).toUpperCase()}
+                >
                   <div className={styles.cardHead}>
                     <RunDot index={idx} />
                     <span className={styles.letter}>{letterOf(idx)}</span>
                     <span className={styles.name} title={run.run_name || base}>
                       {label}
                     </span>
-                    <RunStatusBadge status={String(run.status).toUpperCase()} label={String(run.status).toUpperCase()} />
-                    {run.origin === 'official' ? <Tag kind="accent" title="Run launched by an official experiment">Official</Tag> : null}
+                    <RunStatusBadge
+                      status={String(run.status).toUpperCase()}
+                      label={String(run.status).toUpperCase()}
+                    />
+                    {run.origin === 'official' ? (
+                      <Tag kind="accent" title="Run launched by an official experiment">
+                        Official
+                      </Tag>
+                    ) : null}
                   </div>
                   <dl className={styles.facts}>
                     <Fact label="Items">
-                      {counts.items} · {counts.completed} completed · {counts.errors} error{counts.errors === 1 ? '' : 's'}
+                      {counts.items} · {counts.completed} completed · {counts.errors} error
+                      {counts.errors === 1 ? '' : 's'}
                     </Fact>
                     <Fact label="Model">{run.model_name}</Fact>
                     <Fact label="Owner">{owner}</Fact>
@@ -75,7 +91,9 @@ export function RunCards() {
                     </Fact>
                     <Fact label="Runtime">{runtime === '—' ? '' : runtime}</Fact>
                     <Fact label="Experiment">
-                      {exp && expSlug ? <Link to={projectPath(expSlug, `experiments/${exp.id}`)}>{exp.name || exp.id}</Link> : null}
+                      {exp && expSlug ? (
+                        <Link to={projectPath(expSlug, `experiments/${exp.id}`)}>{exp.name || exp.id}</Link>
+                      ) : null}
                     </Fact>
                   </dl>
                 </li>

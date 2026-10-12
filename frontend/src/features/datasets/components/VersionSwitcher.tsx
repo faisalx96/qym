@@ -25,7 +25,10 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
     const q = query.trim().toLowerCase();
     if (!q) return versions;
     return versions.filter(
-      (v) => v.version.toLowerCase().includes(q) || v.name.toLowerCase().includes(q) || v.aliases.some((a) => a.toLowerCase().includes(q)),
+      (v) =>
+        v.version.toLowerCase().includes(q) ||
+        v.name.toLowerCase().includes(q) ||
+        v.aliases.some((a) => a.toLowerCase().includes(q)),
     );
   }, [versions, query]);
 
@@ -50,7 +53,14 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
       {({ close }) => (
         <div className={styles.panel}>
           {versions.length > 6 ? (
-            <SearchField label="Search versions" hideLabel value={query} onChange={setQuery} placeholder="Search versions…" autoFocus />
+            <SearchField
+              label="Search versions"
+              hideLabel
+              value={query}
+              onChange={setQuery}
+              placeholder="Search versions…"
+              autoFocus
+            />
           ) : null}
           <ListBox
             aria-label="Versions"
@@ -74,7 +84,8 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
                   <VersionBadge version={v} />
                 </span>
                 <span className={styles.rowMeta}>
-                  {pluralize(v.item_count, 'item')} · {pluralize(v.run_count, 'run')} · {relativeTime(v.updated_at)}
+                  {pluralize(v.item_count, 'item')} · {pluralize(v.run_count, 'run')} ·{' '}
+                  {relativeTime(v.updated_at)}
                 </span>
               </ListBoxItem>
             )}

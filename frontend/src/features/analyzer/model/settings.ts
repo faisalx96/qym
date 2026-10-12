@@ -168,7 +168,11 @@ export function testRequest(
   };
 }
 
-export function analyzeRequest(cfg: PlaygroundConfigPayload, s: AnalyzerSettings, g: RunGuard): AnalyzeRequest {
+export function analyzeRequest(
+  cfg: PlaygroundConfigPayload,
+  s: AnalyzerSettings,
+  g: RunGuard,
+): AnalyzeRequest {
   return {
     metric: null,
     metrics: s.selectedMetrics,

@@ -1,6 +1,16 @@
 /** Run chips (baseline star, remove), the cohort banner with inline-editable labels, and the metric / pass controls. */
 import { useState } from 'react';
-import { Button, Chip, IconButton, RunStatusBadge, Select, SegmentedControl, Tag, Text, TextField } from '@/ui';
+import {
+  Button,
+  Chip,
+  IconButton,
+  RunStatusBadge,
+  Select,
+  SegmentedControl,
+  Tag,
+  Text,
+  TextField,
+} from '@/ui';
 import { useCompare, letterOf } from '../CompareContext';
 import { MIN_COMPARE_RUNS } from '../lib/refs';
 import { RunDot } from './common';
@@ -13,11 +23,23 @@ export function RunChips() {
   // "Each pass" lists every pass as its own candidate baseline; otherwise one chip per run.
   const each = c.view.columns === 'each' && columns.some((col) => col.pass);
   const entries = each
-    ? columns.map((col) => ({ key: col.key, base: col.base, idx: col.runIdxs[0] ?? 0, label: col.label, isBase: baseline.key === col.key }))
+    ? columns.map((col) => ({
+        key: col.key,
+        base: col.base,
+        idx: col.runIdxs[0] ?? 0,
+        label: col.label,
+        isBase: baseline.key === col.key,
+      }))
     : bases.map((base) => {
         const idx = model.runs.findIndex((r) => r.base === base);
         const run = model.runs[idx];
-        return { key: base, base, idx, label: (run?.label ?? base).replace(/ · pass \d+$/, ''), isBase: baseline.base === base };
+        return {
+          key: base,
+          base,
+          idx,
+          label: (run?.label ?? base).replace(/ · pass \d+$/, ''),
+          isBase: baseline.base === base,
+        };
       });
   return (
     <div className={styles.chips} role="group" aria-label="Runs in this comparison">
@@ -61,7 +83,8 @@ function CohortSide({ side }: { side: 'left' | 'right' }) {
   const count = (side === 'left' ? cohorts.left : cohorts.right).length;
   const commit = (value: string) => {
     setEditing(false);
-    if (value.trim() !== label) c.setCohortLabels(side === 'left' ? { leftLabel: value.trim() } : { rightLabel: value.trim() });
+    if (value.trim() !== label)
+      c.setCohortLabels(side === 'left' ? { leftLabel: value.trim() } : { rightLabel: value.trim() });
   };
   return (
     <span className={styles.side}>

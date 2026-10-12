@@ -6,10 +6,24 @@ const run = (p: Partial<Run>): Run => ({ run_id: 'r', status: 'COMPLETED', ...p 
 
 describe('differingContext', () => {
   it('lists only the keys that differ, grouped, with one value per run', () => {
-    const a = run({ git_branch: 'main', git_commit: 'abcdef1234567', config: { temperature: 0, top_p: 1 }, versioning_details: { prompt: 'v1' } });
-    const b = run({ git_branch: 'feat', git_commit: 'abcdef1234567', config: { temperature: 0.7, top_p: 1 }, versioning_details: { prompt: 'v1', extra: 'x' } });
+    const a = run({
+      git_branch: 'main',
+      git_commit: 'abcdef1234567',
+      config: { temperature: 0, top_p: 1 },
+      versioning_details: { prompt: 'v1' },
+    });
+    const b = run({
+      git_branch: 'feat',
+      git_commit: 'abcdef1234567',
+      config: { temperature: 0.7, top_p: 1 },
+      versioning_details: { prompt: 'v1', extra: 'x' },
+    });
     const diff = differingContext([a, b]);
-    expect(diff.map((d) => `${d.group}:${d.key}`)).toEqual(['Git:branch', 'Config:temperature', 'Versioning:extra']);
+    expect(diff.map((d) => `${d.group}:${d.key}`)).toEqual([
+      'Git:branch',
+      'Config:temperature',
+      'Versioning:extra',
+    ]);
     expect(diff[1]!.values).toEqual(['0', '0.7']);
     expect(diff[2]!.values).toEqual(['', 'x']);
   });
@@ -28,7 +42,10 @@ describe('runCounts', () => {
       { item_id: 'd', status: 'completed', metric_values: [1] },
     ];
     // run.error_count + execution_error_count would say 5 here; the page counts items: 2 task + 1 scorer.
-    const p = { run: run({ error_count: 2, execution_error_count: 3 }), snapshot: { rows, stats: { total: 40, completed: 37, failed: 3 } } } as unknown as RunPayload;
+    const p = {
+      run: run({ error_count: 2, execution_error_count: 3 }),
+      snapshot: { rows, stats: { total: 40, completed: 37, failed: 3 } },
+    } as unknown as RunPayload;
     expect(runCounts(p)).toEqual({ items: 40, completed: 37, errors: 3 });
   });
 });

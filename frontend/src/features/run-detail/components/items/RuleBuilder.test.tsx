@@ -10,11 +10,21 @@ import type { FieldDef, FilterGroup } from '../../lib/filterRules';
 import { RuleBuilder } from './RuleBuilder';
 
 const defs: FieldDef[] = [
-  { id: 'metric:accuracy', label: 'accuracy', group: 'Metrics', kind: 'number', percent: true, get: () => null },
+  {
+    id: 'metric:accuracy',
+    label: 'accuracy',
+    group: 'Metrics',
+    kind: 'number',
+    percent: true,
+    get: () => null,
+  },
   { id: 'metric:tokens', label: 'tokens', group: 'Metrics', kind: 'number', percent: false, get: () => null },
 ];
 
-const rules = (field: string, value: string): FilterGroup => ({ op: 'and', children: [{ field, oper: 'gt', value }] });
+const rules = (field: string, value: string): FilterGroup => ({
+  op: 'and',
+  children: [{ field, oper: 'gt', value }],
+});
 
 describe('RuleBuilder score values', () => {
   it('shows a stored 0.6 as 60 with a % unit and stores what is typed as a fraction', async () => {

@@ -30,14 +30,18 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
   }, [highlightId]);
 
   const label = (u: AdminUser) => u.display_name || u.email;
-  const errText = (e: unknown) => (e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e));
+  const errText = (e: unknown) =>
+    e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e);
 
   async function setActive(user: AdminUser, active: boolean, { silent = false } = {}) {
     setPendingId(user.id);
     try {
       await update.mutateAsync({ id: user.id, body: { is_active: active } });
       if (active) {
-        toast.show(silent ? `Enabled ${label(user)} again. They need to sign in again.` : `Enabled ${label(user)}`, { tone: 'success' });
+        toast.show(
+          silent ? `Enabled ${label(user)} again. They need to sign in again.` : `Enabled ${label(user)}`,
+          { tone: 'success' },
+        );
       } else {
         toast.show(`Disabled ${label(user)}`, {
           tone: 'info',
@@ -85,7 +89,8 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
         id: 'status',
         label: 'Status',
         width: 110,
-        cell: (u) => (u.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="neutral">Disabled</Badge>),
+        cell: (u) =>
+          u.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="neutral">Disabled</Badge>,
       },
       {
         id: 'actions',
@@ -99,7 +104,12 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
           const busy = pendingId === u.id;
           return (
             <span className={styles.rowActions}>
-              <Button variant="neutral" onPress={() => onEdit(u)} aria-label={`Edit ${label(u)}`} data-user-edit={u.id}>
+              <Button
+                variant="neutral"
+                onPress={() => onEdit(u)}
+                aria-label={`Edit ${label(u)}`}
+                data-user-edit={u.id}
+              >
                 Edit
               </Button>
               {self ? (
@@ -119,11 +129,25 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
                   </Focusable>
                 </Tooltip>
               ) : u.is_active ? (
-                <Button variant="ghost" onPress={() => setDisabling(u)} isDisabled={busy} loading={busy} aria-label={`Disable ${label(u)}`} data-user-disable={u.id}>
+                <Button
+                  variant="ghost"
+                  onPress={() => setDisabling(u)}
+                  isDisabled={busy}
+                  loading={busy}
+                  aria-label={`Disable ${label(u)}`}
+                  data-user-disable={u.id}
+                >
                   Disable
                 </Button>
               ) : (
-                <Button variant="neutral" onPress={() => void setActive(u, true)} isDisabled={busy} loading={busy} aria-label={`Enable ${label(u)}`} data-user-enable={u.id}>
+                <Button
+                  variant="neutral"
+                  onPress={() => void setActive(u, true)}
+                  isDisabled={busy}
+                  loading={busy}
+                  aria-label={`Enable ${label(u)}`}
+                  data-user-enable={u.id}
+                >
                   Enable
                 </Button>
               )}
@@ -138,7 +162,14 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
 
   return (
     <>
-      <DataTable aria-label="Users" columns={columns} rows={users} rowKey={(u) => u.id} storageKey="admin-users" emptyState="No users yet." />
+      <DataTable
+        aria-label="Users"
+        columns={columns}
+        rows={users}
+        rowKey={(u) => u.id}
+        storageKey="admin-users"
+        emptyState="No users yet."
+      />
       <ConfirmDialog
         open={disabling !== null}
         onOpenChange={(o) => !o && setDisabling(null)}

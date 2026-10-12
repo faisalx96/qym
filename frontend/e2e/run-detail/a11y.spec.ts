@@ -57,9 +57,17 @@ test.describe('axe', () => {
   });
 
   test('filter rules popover', async ({ page }) => {
-    await openRun(page, s.slug, classic, 'filters=' + encodeURIComponent(JSON.stringify({
-      rules: { op: 'and', children: [{ field: 'latency', oper: 'gt', value: '1000' }] },
-    })));
+    await openRun(
+      page,
+      s.slug,
+      classic,
+      'filters=' +
+        encodeURIComponent(
+          JSON.stringify({
+            rules: { op: 'and', children: [{ field: 'latency', oper: 'gt', value: '1000' }] },
+          }),
+        ),
+    );
     await page.getByTestId('open-filters').click();
     await expect(page.getByRole('dialog', { name: 'Filter rules' })).toBeVisible();
     await audit(page, 'rule builder', '[role=dialog]');

@@ -154,7 +154,14 @@ export function DataTable<Row>({
       >
         <TableHeader className={styles.thead}>
           {selection && (selection.mode ?? 'multiple') === 'multiple' ? (
-            <Column id="__select" width={40} minWidth={40} maxWidth={40} className={styles.th} aria-label="Select">
+            <Column
+              id="__select"
+              width={40}
+              minWidth={40}
+              maxWidth={40}
+              className={styles.th}
+              aria-label="Select"
+            >
               <Checkbox slot="selection" aria-label="Select all rows" hideLabel />
             </Column>
           ) : null}

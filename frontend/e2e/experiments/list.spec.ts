@@ -11,7 +11,8 @@ import {
   experimentSpec,
   finishJob,
   launchExperiment,
-  resetFakes, test,
+  resetFakes,
+  test,
   seedProject,
   waitForSubmitted,
 } from './support';

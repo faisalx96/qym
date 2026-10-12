@@ -4,7 +4,14 @@ import { api } from '@/lib/http';
 import type { EvalPriority } from './evalCommon';
 
 export type QueueStatus = 'QUEUED' | 'SUBMITTING' | 'SUBMITTED' | 'RUNNING' | 'BLOCKED' | 'CANCELLING';
-export const QUEUE_STATUSES: QueueStatus[] = ['QUEUED', 'SUBMITTING', 'SUBMITTED', 'RUNNING', 'BLOCKED', 'CANCELLING'];
+export const QUEUE_STATUSES: QueueStatus[] = [
+  'QUEUED',
+  'SUBMITTING',
+  'SUBMITTED',
+  'RUNNING',
+  'BLOCKED',
+  'CANCELLING',
+];
 /** Jobs that never reached the service: cancelling removes them locally. */
 export const QUEUED_HERE: QueueStatus[] = ['QUEUED', 'BLOCKED'];
 
@@ -84,13 +91,18 @@ export function queueQueryString(filters: QueueFilters, limit = 500): string {
   return q.toString();
 }
 
-export const queueKey = (projectId: string, filters: QueueFilters) => ['eval-queue', projectId, filters] as const;
+export const queueKey = (projectId: string, filters: QueueFilters) =>
+  ['eval-queue', projectId, filters] as const;
 
 export function fetchQueue(projectId: string, filters: QueueFilters, limit = 500): Promise<QueueResponse> {
   return api.get<QueueResponse>(`/v1/projects/${projectId}/eval-queue?${queueQueryString(filters, limit)}`);
 }
 
-export function useQueue(projectId: string | undefined, filters: QueueFilters, refetchInterval: number | false) {
+export function useQueue(
+  projectId: string | undefined,
+  filters: QueueFilters,
+  refetchInterval: number | false,
+) {
   return useQuery({
     queryKey: queueKey(projectId ?? '', filters),
     enabled: Boolean(projectId),
@@ -156,8 +168,7 @@ export interface CancelResult {
 }
 
 export type QueueCancelBody =
-  | { job_ids: string[]; reason?: string }
-  | { experiment_id: string; statuses?: string[]; reason?: string };
+  { job_ids: string[]; reason?: string } | { experiment_id: string; statuses?: string[]; reason?: string };
 
 export function useCancelQueueJobs(projectId: string | undefined) {
   const qc = useQueryClient();

@@ -35,7 +35,12 @@ function row(over: Partial<Row> = {}): Row {
   } as Row;
 }
 
-function run(id: string, rows: Array<Row | null>, specs: Record<string, Record<string, unknown>> = SPECS, samples = 1) {
+function run(
+  id: string,
+  rows: Array<Row | null>,
+  specs: Record<string, Record<string, unknown>> = SPECS,
+  samples = 1,
+) {
   return {
     run: {
       run_id: id,
@@ -49,12 +54,19 @@ function run(id: string, rows: Array<Row | null>, specs: Record<string, Record<s
       config: { samples },
       metadata: {},
     },
-    snapshot: { rows: rows.filter(Boolean) as Row[], metric_names: ['accuracy', 'quality'], metric_specs: specs },
+    snapshot: {
+      rows: rows.filter(Boolean) as Row[],
+      metric_names: ['accuracy', 'quality'],
+      metric_specs: specs,
+    },
   } as unknown as ComparePayload['runs'][number];
 }
 
 const model = (runs: ComparePayload['runs'], refs?: string[]) =>
-  buildCompareModel({ runs, compare_alignment_status: 'aligned', unalignable_runs: [], missing_runs: [] }, refs ?? runs.map((r) => r.run.run_id));
+  buildCompareModel(
+    { runs, compare_alignment_status: 'aligned', unalignable_runs: [], missing_runs: [] },
+    refs ?? runs.map((r) => r.run.run_id),
+  );
 
 describe('a metric error marks only its own surfaces', () => {
   const cases: Array<[string, number | null, Record<string, unknown>]> = [];
@@ -89,7 +101,10 @@ describe('a metric error marks only its own surfaces', () => {
 
   it('lower is better: the error is left out and the pill says error, never a pass', () => {
     const specs = { ...SPECS, accuracy: { ...SPECS.accuracy, direction: 'minimize' } };
-    const r = row({ metric_values: [0, 1], metric_meta: { accuracy: { status: 'error', error: 'Judge unavailable' } } });
+    const r = row({
+      metric_values: [0, 1],
+      metric_meta: { accuracy: { status: 'error', error: 'Judge unavailable' } },
+    });
     const m = model([run('A', [r], specs)]);
     expect(pillState(m.runs[0]!, r, metricCtx(m, 'accuracy')).state).toBe('error');
   });
@@ -169,7 +184,9 @@ describe('a pass does not leak another pass error', () => {
     expect(rows.map((r) => hasMetricError(r, 'accuracy'))).toEqual([false, true, false]);
     // Pass 3 passes accuracy: the other passes' errors do not touch it.
     const m = model([source], ['r::pass1', 'r::pass2', 'r::pass3']);
-    expect(pillState(m.runs[2]!, m.runs[2]!.byItem.get('item_2')!, metricCtx(m, 'accuracy')).state).toBe('pass');
+    expect(pillState(m.runs[2]!, m.runs[2]!.byItem.get('item_2')!, metricCtx(m, 'accuracy')).state).toBe(
+      'pass',
+    );
     expect(slices.map((s) => s.snapshot.stats?.failed)).toEqual([1, 0, 0]);
   });
 
@@ -177,8 +194,18 @@ describe('a pass does not leak another pass error', () => {
     const parent = run(
       'run',
       [
-        row({ item_id: 'a', compare_item_id: 'a', status: 'error', pass_scores: { accuracy: [1, 0, null] } } as Partial<Row>),
-        row({ item_id: 'b', compare_item_id: 'b', status: 'error', pass_scores: { accuracy: [0, 0, null] } } as Partial<Row>),
+        row({
+          item_id: 'a',
+          compare_item_id: 'a',
+          status: 'error',
+          pass_scores: { accuracy: [1, 0, null] },
+        } as Partial<Row>),
+        row({
+          item_id: 'b',
+          compare_item_id: 'b',
+          status: 'error',
+          pass_scores: { accuracy: [0, 0, null] },
+        } as Partial<Row>),
       ],
       SPECS,
       3,
@@ -208,9 +235,16 @@ describe('failed counts count each errored item once and "completed" means finis
       failed: 3,
     });
     const empty = runCounts([], false);
-    expect({ total: empty.total, completed: empty.completed, failed: empty.errors }).toEqual({ total: 0, completed: 0, failed: 0 });
+    expect({ total: empty.total, completed: empty.completed, failed: empty.errors }).toEqual({
+      total: 0,
+      completed: 0,
+      failed: 0,
+    });
     // A trace/provider warning alone is not a task or metric exception.
-    expect(runCounts([{ status: 'completed', trace_stats: { provider_errors: 2 } } as unknown as Row], false).errors).toBe(0);
+    expect(
+      runCounts([{ status: 'completed', trace_stats: { provider_errors: 2 } } as unknown as Row], false)
+        .errors,
+    ).toBe(0);
   });
 
   it.each(['accuracy', 'quality', 'missing'])('3 + 3 failures equal the overview for %s', (metric) => {
@@ -218,7 +252,13 @@ describe('failed counts count each errored item once and "completed" means finis
       run(id, [
         { compare_item_id: 'pass', item_id: 'pass', status: 'completed', metric_values: [1, 1] },
         { compare_item_id: 'judge', item_id: 'judge', status: 'completed', metric_values: [0, 0] },
-        { compare_item_id: 'metric', item_id: 'metric', status: 'completed', metric_values: [0, 1], metric_meta: { accuracy: { status: 'error' } } },
+        {
+          compare_item_id: 'metric',
+          item_id: 'metric',
+          status: 'completed',
+          metric_values: [0, 1],
+          metric_meta: { accuracy: { status: 'error' } },
+        },
         { compare_item_id: 'task', item_id: 'task', status: 'error', metric_values: [] },
         { compare_item_id: 'timeout', item_id: 'timeout', status: 'error', metric_values: [] },
       ] as unknown as Row[]);
@@ -238,7 +278,11 @@ describe('failed counts count each errored item once and "completed" means finis
 
 describe('error buckets', () => {
   it('count a metric error per pass and task errors once per row, filtering kinds separately', () => {
-    const metricRow = { item_id: 'a', status: 'completed', metric_meta: { accuracy: { status: 'timeout', error: 'Provider timed out' } } } as unknown as Row;
+    const metricRow = {
+      item_id: 'a',
+      status: 'completed',
+      metric_meta: { accuracy: { status: 'timeout', error: 'Provider timed out' } },
+    } as unknown as Row;
     const buckets = collectErrors(
       [
         metricRow,
@@ -259,7 +303,11 @@ describe('error buckets', () => {
   });
 
   it('the Errors tab lists every kind per compared column', () => {
-    const failed = row({ status: 'error', error: 'Task failed', metric_meta: { accuracy: { status: 'error', error: 'Parser unavailable' } } });
+    const failed = row({
+      status: 'error',
+      error: 'Task failed',
+      metric_meta: { accuracy: { status: 'error', error: 'Parser unavailable' } },
+    });
     const m = model([run('A', [failed]), run('B', [row({ metric_meta: {} })])]);
     const entries = errorDistribution(m, metricColumns(m, 'run'), [{ itemId: 'item_2' }]);
     expect(entries.map((e) => [e.kind, e.counts]).sort()).toEqual([
@@ -277,13 +325,19 @@ describe('error groups appear only when the filtered results contain them (run a
     status: 'completed',
     metric_meta: { accuracy: { status: 'error', error: 'Judge timed out' } },
   } as unknown as Row;
-  const trace = { item_id: 'trace', status: 'completed', trace_stats: { provider_errors: 2 } } as unknown as Row;
+  const trace = {
+    item_id: 'trace',
+    status: 'completed',
+    trace_stats: { provider_errors: 2 },
+  } as unknown as Row;
   const analysis = {
     item_id: 'analysis',
     status: 'completed',
     item_metadata: { analysis_error: 'accuracy: Context limit exceeded' },
   } as unknown as Row;
-  const kinds = (rows: Row[]) => [...new Set(Array.from(collectErrors(rows, false).values()).map((b) => b.kind))];
+  const kinds = (rows: Row[]) => [
+    ...new Set(Array.from(collectErrors(rows, false).values()).map((b) => b.kind)),
+  ];
 
   it('run page: only the kinds present in the rows, in a stable order', () => {
     expect(kinds([])).toEqual([]);
@@ -305,10 +359,17 @@ describe('error groups appear only when the filtered results contain them (run a
   });
 
   it('compare: the Errors tab reads the filtered items only', () => {
-    const rows = [good, task, metric, trace, analysis].map((r) => ({ ...r, compare_item_id: r.item_id }) as Row);
+    const rows = [good, task, metric, trace, analysis].map(
+      (r) => ({ ...r, compare_item_id: r.item_id }) as Row,
+    );
     const m = model([run('A', rows)]);
     const columns = metricColumns(m, 'run');
-    const of = (ids: string[]) => errorDistribution(m, columns, ids.map((itemId) => ({ itemId })));
+    const of = (ids: string[]) =>
+      errorDistribution(
+        m,
+        columns,
+        ids.map((itemId) => ({ itemId })),
+      );
     expect(of([])).toEqual([]);
     expect(of(['good'])).toEqual([]);
     expect(of(['good', 'task']).map((e) => e.kind)).toEqual(['Task error']);

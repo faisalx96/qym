@@ -17,7 +17,11 @@ export interface MetricCtx {
   isBoolean: boolean;
 }
 
-export function metricCtx(model: CompareModel, metric: string, thresholds: Record<string, number> = {}): MetricCtx {
+export function metricCtx(
+  model: CompareModel,
+  metric: string,
+  thresholds: Record<string, number> = {},
+): MetricCtx {
   return {
     metric,
     direction: model.directions[metric] ?? null,
@@ -61,7 +65,12 @@ function matrixFor(model: CompareModel, ctx: MetricCtx): Map<string, RowScore | 
 }
 
 /** The row's outcome on the metric, or null when the run has no row or no such metric. */
-export function runOutcome(run: CompareRun, itemId: string, ctx: MetricCtx, model?: CompareModel): RowScore | null {
+export function runOutcome(
+  run: CompareRun,
+  itemId: string,
+  ctx: MetricCtx,
+  model?: CompareModel,
+): RowScore | null {
   if (model) return matrixFor(model, ctx)[run.position]?.get(itemId) ?? null;
   return computeOutcome(run, itemId, ctx);
 }

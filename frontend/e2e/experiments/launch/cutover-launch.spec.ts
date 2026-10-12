@@ -8,7 +8,17 @@
  */
 import { expect, type Page } from '@playwright/test';
 import { PRIMARY, resetFakes, saveSavedPreset, test } from '../support';
-import { listPresets, captureExperimentPosts, ensureOpen, nameBox, openLaunch, openSection, expectReady, seedLaunch, type LaunchFixture } from './launchSupport';
+import {
+  listPresets,
+  captureExperimentPosts,
+  ensureOpen,
+  nameBox,
+  openLaunch,
+  openSection,
+  expectReady,
+  seedLaunch,
+  type LaunchFixture,
+} from './launchSupport';
 
 test.setTimeout(90_000);
 test.use({ actionTimeout: 10_000 });
@@ -44,7 +54,9 @@ async function openSavedPreset(page: Page, request: any, name: string): Promise<
   await saveSavedPreset(request, f.project.id, f.env.id, name, presetDoc(f.connectionId));
   const saved = (await listPresets(request, f.project.id, f.env.id)).find((p) => p.name === name)!;
   await openLaunch(page, f.project.slug, `?env=${f.env.id}&base=saved&preset=${saved.id}`);
-  await expect(page.getByRole('status').filter({ hasText: 'Based on' })).toContainText(`Saved preset “${name}”`);
+  await expect(page.getByRole('status').filter({ hasText: 'Based on' })).toContainText(
+    `Saved preset “${name}”`,
+  );
 }
 
 test('a saved preset fills every field of the configuration sections and what is shown is sent', async ({
@@ -57,14 +69,22 @@ test('a saved preset fills every field of the configuration sections and what is
 
   const env = await openSection(page, 'Environment configurations');
   // the preset's values are the starting point, not changes
-  await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: /^Environment configurations/ })).not.toContainText('1');
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Sections' })
+      .getByRole('button', { name: /^Environment configurations/ }),
+  ).not.toContainText('1');
   const groupButtons = env.getByRole('heading', { level: 4 }).getByRole('button');
   for (let i = 0; i < (await groupButtons.count()); i++) await ensureOpen(groupButtons.nth(i));
   await expect(env.getByRole('textbox', { name: 'Timeout', exact: true })).toHaveValue('60');
   await expect(env.getByRole('textbox', { name: 'Milvus Search Threshold' })).toHaveValue('0.7');
   await expect(env.getByRole('textbox', { name: 'Sql Result Limit' })).toHaveValue('50');
-  await expect(env.getByRole('combobox', { name: 'Table Selection Mode' }).locator('option:checked')).toHaveText('rag');
-  await expect(env.getByRole('combobox', { name: 'Brief Enabled' }).locator('option:checked')).toHaveText('false');
+  await expect(
+    env.getByRole('combobox', { name: 'Table Selection Mode' }).locator('option:checked'),
+  ).toHaveText('rag');
+  await expect(env.getByRole('combobox', { name: 'Brief Enabled' }).locator('option:checked')).toHaveText(
+    'false',
+  );
 
   const ev = await openSection(page, 'Evaluation configurations');
   await expect(ev.getByRole('textbox', { name: 'Samples' })).toHaveValue('3');
@@ -98,14 +118,15 @@ test('typing the experiment name keeps the focus and does not rebuild the field'
   expect(await page.evaluate(() => document.activeElement === (window as any).__name)).toBe(true);
 });
 
-test('settings groups stay closed unless opened and keep exactly the user\'s choice across a search', async ({
+test("settings groups stay closed unless opened and keep exactly the user's choice across a search", async ({
   page,
 }) => {
   await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
   const env = await openSection(page, 'Environment configurations');
   const groups = env.getByRole('heading', { level: 4 }).getByRole('button');
   await expect(groups.first()).toBeVisible();
-  const expanded = () => groups.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-expanded') === 'true'));
+  const expanded = () =>
+    groups.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-expanded') === 'true'));
   expect((await expanded()).some(Boolean)).toBe(false);
 
   await groups.first().click();

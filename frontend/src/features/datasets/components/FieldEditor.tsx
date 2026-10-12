@@ -64,22 +64,45 @@ export interface FieldEditorProps {
   actions?: ReactNode;
 }
 
-export function FieldEditor({ label, value, editable, jsonOnly, state, onChange, compact, actions }: FieldEditorProps) {
+export function FieldEditor({
+  label,
+  value,
+  editable,
+  jsonOnly,
+  state,
+  onChange,
+  compact,
+  actions,
+}: FieldEditorProps) {
   const id = useId();
   const [expanded, setExpanded] = useState(false);
   const local = state ?? initialFieldState(value, jsonOnly);
   const status = useMemo(() => fieldStatus(value, local, jsonOnly), [value, local, jsonOnly]);
-  const dir = useMemo(() => textDirAttrs(typeof value === 'string' ? value : local.text), [value, local.text]);
+  const dir = useMemo(
+    () => textDirAttrs(typeof value === 'string' ? value : local.text),
+    [value, local.text],
+  );
   const copyText = () => (typeof value === 'string' ? value : formatJson(value));
 
   const typeTag = (
-    <Tag kind="data" data-testid="type-tag" tone={status.touched && status.toType && status.toType !== status.fromType ? 'warning' : undefined}>
-      {status.touched && status.toType && status.toType !== status.fromType ? `${status.fromType} → ${status.toType}` : status.fromType}
+    <Tag
+      kind="data"
+      data-testid="type-tag"
+      tone={status.touched && status.toType && status.toType !== status.fromType ? 'warning' : undefined}
+    >
+      {status.touched && status.toType && status.toType !== status.fromType
+        ? `${status.fromType} → ${status.toType}`
+        : status.fromType}
     </Tag>
   );
 
   return (
-    <section className={styles.panel} data-compact={compact ? '' : undefined} data-expanded={expanded ? '' : undefined} aria-labelledby={`${id}-label`}>
+    <section
+      className={styles.panel}
+      data-compact={compact ? '' : undefined}
+      data-expanded={expanded ? '' : undefined}
+      aria-labelledby={`${id}-label`}
+    >
       <header className={styles.head}>
         <div className={styles.headLeft}>
           <span id={`${id}-label`} className={styles.label}>
@@ -89,7 +112,11 @@ export function FieldEditor({ label, value, editable, jsonOnly, state, onChange,
         </div>
         <div className={styles.headActions}>
           {actions}
-          <IconButton label={expanded ? `Collapse ${label}` : `Expand ${label}`} icon={expanded ? 'collapse' : 'expand'} onPress={() => setExpanded((e) => !e)} />
+          <IconButton
+            label={expanded ? `Collapse ${label}` : `Expand ${label}`}
+            icon={expanded ? 'collapse' : 'expand'}
+            onPress={() => setExpanded((e) => !e)}
+          />
           <CopyButton text={copyText} label={`Copy ${label}`} />
         </div>
       </header>
@@ -127,7 +154,12 @@ export function FieldEditor({ label, value, editable, jsonOnly, state, onChange,
             ) : (
               <span />
             )}
-            <span id={`${id}-status`} className={styles.status} data-state={!status.ok ? 'error' : status.touched ? 'changed' : 'same'} aria-live="polite">
+            <span
+              id={`${id}-status`}
+              className={styles.status}
+              data-state={!status.ok ? 'error' : status.touched ? 'changed' : 'same'}
+              aria-live="polite"
+            >
               <span className={styles.dot} aria-hidden="true" />
               {!status.ok
                 ? status.error === METADATA_SHAPE_ERROR
@@ -148,11 +180,23 @@ export function FieldEditor({ label, value, editable, jsonOnly, state, onChange,
   );
 }
 
-export function ReadOnlyValue({ value, dir, compact }: { value: unknown; dir?: ReturnType<typeof textDirAttrs>; compact?: boolean }) {
+export function ReadOnlyValue({
+  value,
+  dir,
+  compact,
+}: {
+  value: unknown;
+  dir?: ReturnType<typeof textDirAttrs>;
+  compact?: boolean;
+}) {
   if (typeof value === 'string') {
     return (
       <pre className={styles.pre} data-compact={compact ? '' : undefined} {...(dir ?? textDirAttrs(value))}>
-        {value || <Text as="span" variant="sm" tone="muted">(empty)</Text>}
+        {value || (
+          <Text as="span" variant="sm" tone="muted">
+            (empty)
+          </Text>
+        )}
       </pre>
     );
   }
@@ -182,8 +226,18 @@ export function JsonHighlight({ text }: { text: string }) {
           </span>,
         );
         if (m[2]) out.push(m[2]);
-      } else if (m[3] !== undefined) out.push(<span key={i++} className={styles.tokLit}>{m[3]}</span>);
-      else if (m[4] !== undefined) out.push(<span key={i++} className={styles.tokNum}>{m[4]}</span>);
+      } else if (m[3] !== undefined)
+        out.push(
+          <span key={i++} className={styles.tokLit}>
+            {m[3]}
+          </span>,
+        );
+      else if (m[4] !== undefined)
+        out.push(
+          <span key={i++} className={styles.tokNum}>
+            {m[4]}
+          </span>,
+        );
       last = m.index + m[0].length;
     }
     if (last < text.length) out.push(text.slice(last));

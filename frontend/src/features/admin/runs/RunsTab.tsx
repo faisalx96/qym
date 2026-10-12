@@ -35,9 +35,16 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
           }
         />
         {live.isError ? (
-          <ErrorState error={live.error} title="Failed to load live runs" onRetry={() => live.refetch()} compact />
+          <ErrorState
+            error={live.error}
+            title="Failed to load live runs"
+            onRetry={() => live.refetch()}
+            compact
+          />
         ) : live.isPending ? (
-          showLiveSkeleton ? <Skeleton kind="table" rows={3} label="Loading live runs" /> : null
+          showLiveSkeleton ? (
+            <Skeleton kind="table" rows={3} label="Loading live runs" />
+          ) : null
         ) : (
           <RunTable
             aria-label="Live runs"
@@ -50,11 +57,22 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
         )}
       </section>
       <section aria-labelledby="recent-runs-title">
-        <SectionHeader id="recent-runs-title" title="Most recent eval runs" description={`${recent.data?.total_count ?? 0} total finished runs`} />
+        <SectionHeader
+          id="recent-runs-title"
+          title="Most recent eval runs"
+          description={`${recent.data?.total_count ?? 0} total finished runs`}
+        />
         {recent.isError ? (
-          <ErrorState error={recent.error} title="Failed to load recent runs" onRetry={() => recent.refetch()} compact />
+          <ErrorState
+            error={recent.error}
+            title="Failed to load recent runs"
+            onRetry={() => recent.refetch()}
+            compact
+          />
         ) : recent.isPending ? (
-          showRecentSkeleton ? <Skeleton kind="table" rows={4} label="Loading recent runs" /> : null
+          showRecentSkeleton ? (
+            <Skeleton kind="table" rows={4} label="Loading recent runs" />
+          ) : null
         ) : (
           <>
             <RunTable
@@ -62,7 +80,7 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
               variant="recent"
               storageKey="admin-recent-runs"
               runs={recent.data.runs}
-                onForceStop={setTarget}
+              onForceStop={setTarget}
               emptyState="No recent eval runs"
             />
             <Pagination

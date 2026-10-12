@@ -25,11 +25,36 @@ export function OverviewTab() {
           { key: 'err', label: 'Errors', value: String(errors), tone: errors ? 'danger' : undefined },
         ]
       : [
-          { key: 'pass', label: `Pass@${n}`, value: dir ? pct(rates.passAtK) : '—', help: 'Share of items on which at least one run passes.' },
-          { key: 'hat', label: `Pass^${n}`, value: dir ? pct(rates.passHatK) : '—', help: 'Share of items on which every run passes.' },
-          { key: 'max', label: dir === 'minimize' ? `Min@${n}` : `Max@${n}`, value: dir ? pct(rates.maxAtK) : '—', help: 'Average of the best score per item across runs.' },
-          { key: 'cons', label: 'Consistency', value: pct(rates.consistency), help: 'Do runs agree on pass or fail? 0% is a 50/50 split, 100% is full agreement.' },
-          { key: 'rel', label: 'Reliability', value: pct(rates.reliability), help: 'When any run can solve an item, how often does a run do it?' },
+          {
+            key: 'pass',
+            label: `Pass@${n}`,
+            value: dir ? pct(rates.passAtK) : '—',
+            help: 'Share of items on which at least one run passes.',
+          },
+          {
+            key: 'hat',
+            label: `Pass^${n}`,
+            value: dir ? pct(rates.passHatK) : '—',
+            help: 'Share of items on which every run passes.',
+          },
+          {
+            key: 'max',
+            label: dir === 'minimize' ? `Min@${n}` : `Max@${n}`,
+            value: dir ? pct(rates.maxAtK) : '—',
+            help: 'Average of the best score per item across runs.',
+          },
+          {
+            key: 'cons',
+            label: 'Consistency',
+            value: pct(rates.consistency),
+            help: 'Do runs agree on pass or fail? 0% is a 50/50 split, 100% is full agreement.',
+          },
+          {
+            key: 'rel',
+            label: 'Reliability',
+            value: pct(rates.reliability),
+            help: 'When any run can solve an item, how often does a run do it?',
+          },
           { key: 'avg', label: 'Avg score', value: formatMetricValue(stats.overallAvgScore, type, 1) },
           { key: 'lat', label: 'Avg latency', value: formatLatency(stats.overallAvgLatency) },
           { key: 'err', label: 'Errors', value: String(errors), tone: errors ? 'danger' : undefined },
@@ -40,7 +65,12 @@ export function OverviewTab() {
   const setWinner = (value: string) => c.setView({ winner: active === value ? 'any' : value });
   const passRate = c.view.filters.passRate;
   const setDist = (k: number) =>
-    c.setView({ filters: { ...c.view.filters, passRate: passRate && passRate[0] === 'eq' && passRate[1] === k ? null : ['eq', k] } });
+    c.setView({
+      filters: {
+        ...c.view.filters,
+        passRate: passRate && passRate[0] === 'eq' && passRate[1] === k ? null : ['eq', k],
+      },
+    });
   const maxDist = Math.max(1, ...stats.correctDistribution);
   return (
     <div className={styles.stack}>
@@ -87,7 +117,15 @@ export function OverviewTab() {
               ) : null,
             )}
             {stats.ties ? (
-              <button type="button" className={styles.seg} data-tie style={{ flexGrow: stats.ties }} aria-pressed={active === 'tie'} aria-label={`${stats.ties} ties; filter`} onClick={() => setWinner('tie')}>
+              <button
+                type="button"
+                className={styles.seg}
+                data-tie
+                style={{ flexGrow: stats.ties }}
+                aria-pressed={active === 'tie'}
+                aria-label={`${stats.ties} ties; filter`}
+                onClick={() => setWinner('tie')}
+              >
                 tie {stats.ties}
               </button>
             ) : null}

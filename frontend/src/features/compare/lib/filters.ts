@@ -163,7 +163,8 @@ export function filterRuleCountRaw(node: FilterNode, complete: (c: FilterConditi
 export function conditionHasValue(c: FilterCondition): boolean {
   if (!c.field) return false;
   if (Array.isArray(c.value)) return c.value.length > 0;
-  if (c.oper === 'is') return c.value === 'true' || c.value === 'false' || c.value === 'passed' || c.value === 'failed';
+  if (c.oper === 'is')
+    return c.value === 'true' || c.value === 'false' || c.value === 'passed' || c.value === 'failed';
   return String(c.value ?? '').trim().length > 0;
 }
 
@@ -223,7 +224,8 @@ export function decodeFiltersParam(raw: string | null | undefined, ctx: DecodeCo
   }
   if (isStringList(p.rootCause)) {
     f.rootCause = p.rootCause;
-    if (typeof p.rootCauseMetric === 'string' && ctx.metrics.includes(p.rootCauseMetric)) f.rootCauseMetric = p.rootCauseMetric;
+    if (typeof p.rootCauseMetric === 'string' && ctx.metrics.includes(p.rootCauseMetric))
+      f.rootCauseMetric = p.rootCauseMetric;
   }
   const errors = p.errors && typeof p.errors === 'object' ? (p.errors as Record<string, unknown>) : {};
   (['task', 'metric', 'trace', 'analysis'] as ErrorSlot[]).forEach((slot) => {
@@ -252,7 +254,12 @@ export function decodeFiltersParam(raw: string | null | undefined, ctx: DecodeCo
     ctx.metrics.includes(b.metric) &&
     ['columnKey', 'baselineKey', 'kind'].every((k) => typeof b[k] === 'string')
   )
-    f.baseline = { metric: b.metric, columnKey: b.columnKey as string, baselineKey: b.baselineKey as string, kind: b.kind as string };
+    f.baseline = {
+      metric: b.metric,
+      columnKey: b.columnKey as string,
+      baselineKey: b.baselineKey as string,
+      kind: b.kind as string,
+    };
   const cats = p.categories;
   if (cats && typeof cats === 'object' && !Array.isArray(cats)) {
     for (const [key, value] of Object.entries(cats as Record<string, unknown>)) {
@@ -296,7 +303,10 @@ export function readView(params: URLSearchParams, ctx: DecodeContext): CompareVi
 }
 
 /** Updates for `replaceUrlQuery`: defaults drop their key. */
-export function writeView(v: CompareView, defaultMetric: string | null): Record<string, string | string[] | null> {
+export function writeView(
+  v: CompareView,
+  defaultMetric: string | null,
+): Record<string, string | string[] | null> {
   return {
     metric: v.metric && v.metric !== defaultMetric ? v.metric : null,
     filter: v.show && v.show !== 'all' ? v.show : null,
@@ -382,7 +392,10 @@ export function buildFieldDefs(model: CompareModel, metric: string | null): Fiel
     list.map((c) => (typeof c === 'string' ? { value: c, label: c } : c));
   const defs: FieldDef[] = [
     {
-      id: 'outcome', label: 'Outcome', group: 'Comparison', kind: 'enum',
+      id: 'outcome',
+      label: 'Outcome',
+      group: 'Comparison',
+      kind: 'enum',
       choices: choices([
         { value: 'different', label: 'Different outputs' },
         { value: 'errors', label: 'With errors' },
@@ -401,12 +414,29 @@ export function buildFieldDefs(model: CompareModel, metric: string | null): Fiel
     winnerChoices.push({ value: `win_${i}`, label: `${run.label} won` });
     winnerChoices.push({ value: `only_${i}`, label: `Only ${run.label} solved` });
   });
-  defs.push({ id: 'winner', label: 'Winner', group: 'Comparison', kind: 'enum', choices: winnerChoices, get: (c) => c.winners });
-  defs.push({ id: 'pass_count', label: 'Passing runs', group: 'Comparison', kind: 'number', get: (c) => c.passCount });
+  defs.push({
+    id: 'winner',
+    label: 'Winner',
+    group: 'Comparison',
+    kind: 'enum',
+    choices: winnerChoices,
+    get: (c) => c.winners,
+  });
+  defs.push({
+    id: 'pass_count',
+    label: 'Passing runs',
+    group: 'Comparison',
+    kind: 'number',
+    get: (c) => c.passCount,
+  });
   const percent = (model.types[metric ?? ''] ?? 'score') === 'score';
   model.runs.forEach((run, i) =>
     defs.push({
-      id: `score:${i}`, label: `${run.label} · ${metric ?? 'score'}`, group: 'Scores', kind: 'number', percent,
+      id: `score:${i}`,
+      label: `${run.label} · ${metric ?? 'score'}`,
+      group: 'Scores',
+      kind: 'number',
+      percent,
       get: (c) => c.scores[i],
     }),
   );
@@ -414,8 +444,12 @@ export function buildFieldDefs(model: CompareModel, metric: string | null): Fiel
   model.runs.forEach((r) => r.rows.forEach((row) => runRowRootCauses(row).forEach((v) => rc.add(v))));
   if (rc.size)
     defs.push({
-      id: 'cat:root_cause', label: 'Root cause', group: 'Metadata', kind: 'enum',
-      choices: choices(Array.from(rc).sort((a, b) => a.localeCompare(b))), get: (c) => c.rootCauses,
+      id: 'cat:root_cause',
+      label: 'Root cause',
+      group: 'Metadata',
+      kind: 'enum',
+      choices: choices(Array.from(rc).sort((a, b) => a.localeCompare(b))),
+      get: (c) => c.rootCauses,
     });
   const seen = new Map<string, { values: Set<string>; numeric: boolean }>();
   model.runs.forEach((r) =>
@@ -440,22 +474,42 @@ export function buildFieldDefs(model: CompareModel, metric: string | null): Fiel
       const values = Array.from(info.values);
       if (!values.length) return;
       const base = { id: `cat:${key}`, label: formatFieldName(key), group: 'Metadata' as const };
-      const valuesOf = (c: ItemContext) => c.rows.flatMap((row) => (row ? getMetadataCategoryValues(row.item_metadata, key) : []));
+      const valuesOf = (c: ItemContext) =>
+        c.rows.flatMap((row) => (row ? getMetadataCategoryValues(row.item_metadata, key) : []));
       if (values.length <= 40) {
         values.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true }));
         defs.push({ ...base, kind: 'enum', choices: choices(values), get: valuesOf });
-      } else if (info.numeric) defs.push({ ...base, kind: 'number', get: (c) => valuesOf(c).map(Number).filter(Number.isFinite) });
+      } else if (info.numeric)
+        defs.push({ ...base, kind: 'number', get: (c) => valuesOf(c).map(Number).filter(Number.isFinite) });
       else defs.push({ ...base, kind: 'text', get: (c) => valuesOf(c).join(', ') });
     });
   defs.push({
-    id: 'approval', label: 'Approval', group: 'Review', kind: 'enum',
-    choices: choices([{ value: 'approved', label: 'Approved' }, { value: 'not_approved', label: 'Not approved' }]),
+    id: 'approval',
+    label: 'Approval',
+    group: 'Review',
+    kind: 'enum',
+    choices: choices([
+      { value: 'approved', label: 'Approved' },
+      { value: 'not_approved', label: 'Not approved' },
+    ]),
     get: (c) => c.approvals,
   });
   defs.push({ id: 'error', label: 'Has error', group: 'State', kind: 'bool', get: (c) => c.hasError });
-  defs.push({ id: 'edited', label: 'Edited metrics', group: 'State', kind: 'bool', get: (c) => c.hasEditedMetric });
+  defs.push({
+    id: 'edited',
+    label: 'Edited metrics',
+    group: 'State',
+    kind: 'bool',
+    get: (c) => c.hasEditedMetric,
+  });
   defs.push({ id: 'output', label: 'Output text', group: 'Content', kind: 'text', get: (c) => c.outputText });
-  defs.push({ id: 'latency', label: 'Max latency (ms)', group: 'Performance', kind: 'number', get: (c) => c.maxLatency });
+  defs.push({
+    id: 'latency',
+    label: 'Max latency (ms)',
+    group: 'Performance',
+    kind: 'number',
+    get: (c) => c.maxLatency,
+  });
   return defs;
 }
 
@@ -481,7 +535,9 @@ export function evalFilterNode(
   match?: TextMatcher,
 ): boolean {
   if (isFilterGroup(node)) {
-    const active = node.children.filter((ch) => filterRuleCountRaw(ch, (x) => conditionHasValue(x) && defs.has(x.field)) > 0);
+    const active = node.children.filter(
+      (ch) => filterRuleCountRaw(ch, (x) => conditionHasValue(x) && defs.has(x.field)) > 0,
+    );
     if (!active.length) return true;
     return node.op === 'or'
       ? active.some((ch) => evalFilterNode(ch, c, defs, match))
@@ -491,9 +547,12 @@ export function evalFilterNode(
   const f = defs.get(node.field);
   if (!f) return true;
   const value = f.get(c);
-  if (f.kind === 'number') return (Array.isArray(value) ? value : [value]).some((x) => numCompare(node.oper, x, node.value));
+  if (f.kind === 'number')
+    return (Array.isArray(value) ? value : [value]).some((x) => numCompare(node.oper, x, node.value));
   if (f.kind === 'enum') {
-    const wanted = (Array.isArray(node.value) ? node.value : [node.value]).map((x) => String(x).toLowerCase());
+    const wanted = (Array.isArray(node.value) ? node.value : [node.value]).map((x) =>
+      String(x).toLowerCase(),
+    );
     const have = (Array.isArray(value) ? value : [value]).map((x) => String(x).toLowerCase());
     const hit = have.some((x) => wanted.includes(x));
     return node.oper === 'notin' ? !hit : hit;
@@ -501,7 +560,11 @@ export function evalFilterNode(
   if (f.kind === 'bool') return node.value === 'false' ? !value : !!value;
   const needle = String(node.value ?? '');
   const hit =
-    f.id === 'output' && match ? match('output', needle, c) : String(value ?? '').toLowerCase().includes(needle.toLowerCase());
+    f.id === 'output' && match
+      ? match('output', needle, c)
+      : String(value ?? '')
+          .toLowerCase()
+          .includes(needle.toLowerCase());
   return node.oper === 'notcontains' ? !hit : hit;
 }
 
@@ -553,10 +616,7 @@ export function rowText(row: Row | null): string {
 export const localMatcher: TextMatcher = (field, needle, c) => {
   const q = needle.toLowerCase();
   if (field === 'output') return c.outputText.toLowerCase().includes(q);
-  return (
-    c.itemId.toLowerCase().includes(q) ||
-    c.rows.some((r) => rowText(r).toLowerCase().includes(q))
-  );
+  return c.itemId.toLowerCase().includes(q) || c.rows.some((r) => rowText(r).toLowerCase().includes(q));
 };
 
 export function buildItemContext(
@@ -580,7 +640,8 @@ export function buildItemContext(
   if (hasEditedMetric) outcomes.push('edited_metrics');
   if (hasDirection && judged.length >= 2 && judged.every((v) => v === true)) outcomes.push('all_correct');
   if (hasDirection && judged.length >= 2 && judged.every((v) => v === false)) outcomes.push('all_wrong');
-  if (judged.length >= 2 && correct.length > 0 && correct.length < judged.length) outcomes.push('partially_correct');
+  if (judged.length >= 2 && correct.length > 0 && correct.length < judged.length)
+    outcomes.push('partially_correct');
   const rare = Math.max(1, Math.floor(model.runs.length * 0.25));
   if (correct.length > 0 && correct.length <= rare) outcomes.push('rarely_solved');
   if (correct.length === 1) outcomes.push('unique_solve');
@@ -600,10 +661,15 @@ export function buildItemContext(
     hasError,
     hasEditedMetric,
     get approvals() {
-      return rows.filter((r): r is Row => !!r).map((r) => (getApprovalState(r, ctx.metric) === 'approved' ? 'approved' : 'not_approved'));
+      return rows
+        .filter((r): r is Row => !!r)
+        .map((r) => (getApprovalState(r, ctx.metric) === 'approved' ? 'approved' : 'not_approved'));
     },
     get outputText() {
-      return rows.map((r) => String((r && (r.output_full ?? r.output)) ?? '')).filter(Boolean).join('\n');
+      return rows
+        .map((r) => String((r && (r.output_full ?? r.output)) ?? ''))
+        .filter(Boolean)
+        .join('\n');
     },
     maxLatency: Math.max(0, ...rows.map((r) => Number(r?.latency_ms) || 0)),
     get rootCauses() {
@@ -629,7 +695,12 @@ export function applyFilters(input: ApplyInput): ApplyResult {
       ? new Set(computeGroupedComparison(model, groups, ctx).buckets[bucketKey as 'both_pass']?.itemIds ?? [])
       : null;
 
-  let baseScores: { col: Map<string, number>; base: Map<string, number>; kind: DeltaKind; dir: ReturnType<typeof metricDirection> } | null = null;
+  let baseScores: {
+    col: Map<string, number>;
+    base: Map<string, number>;
+    kind: DeltaKind;
+    dir: ReturnType<typeof metricDirection>;
+  } | null = null;
   if (f.baseline) {
     const columns = metricColumns(model, view.columns);
     const col = columns.find((c) => c.key === f.baseline!.columnKey);
@@ -686,7 +757,11 @@ export function applyFilters(input: ApplyInput): ApplyResult {
     if (catFail) continue;
     if (f.approval !== null && !c.approvals.includes(f.approval)) continue;
     const errSlots = Object.entries(f.errors) as Array<[ErrorSlot, ErrorFilter]>;
-    if (errSlots.length && !c.rows.some((r) => !!r && errSlots.every(([, e]) => rowMatchesErrorFilter(r, e, false)))) continue;
+    if (
+      errSlots.length &&
+      !c.rows.some((r) => !!r && errSlots.every(([, e]) => rowMatchesErrorFilter(r, e, false)))
+    )
+      continue;
 
     if (view.show === 'different') {
       if (c.outcomes.indexOf('different') < 0) continue;

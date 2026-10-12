@@ -1,7 +1,7 @@
-import { viewRunTo } from "./JobStatus";
-import type { RunPasses, RunSummary } from "@/api/analysis";
-import { LinkButton, Select, Tag, Text } from "@/ui";
-import s from "./blocks.module.css";
+import { viewRunTo } from './JobStatus';
+import type { RunPasses, RunSummary } from '@/api/analysis';
+import { LinkButton, Select, Tag, Text } from '@/ui';
+import s from './blocks.module.css';
 
 /** Run name, task / model / dataset, sample select for repeat runs, View run. */
 export function RunHeader({
@@ -30,17 +30,26 @@ export function RunHeader({
         <div className={s.runMeta}>
           {run.task_name ? (
             <Text variant="sm" tone="muted" as="span">
-              Task <Text variant="sm" mono tone="secondary" as="span">{run.task_name}</Text>
+              Task{' '}
+              <Text variant="sm" mono tone="secondary" as="span">
+                {run.task_name}
+              </Text>
             </Text>
           ) : null}
           {run.model_name ? (
             <Text variant="sm" tone="muted" as="span">
-              Model <Text variant="sm" mono tone="secondary" as="span">{run.model_name}</Text>
+              Model{' '}
+              <Text variant="sm" mono tone="secondary" as="span">
+                {run.model_name}
+              </Text>
             </Text>
           ) : null}
           {run.dataset_name ? (
             <Text variant="sm" tone="muted" as="span">
-              Dataset <Text variant="sm" mono tone="secondary" as="span">{run.dataset_name}</Text>
+              Dataset{' '}
+              <Text variant="sm" mono tone="secondary" as="span">
+                {run.dataset_name}
+              </Text>
             </Text>
           ) : null}
           <Tag kind="data">{runId}</Tag>

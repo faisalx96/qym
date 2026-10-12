@@ -72,7 +72,6 @@ export interface CompareModel {
   bases: string[];
 }
 
-
 export function getRowCompareId(row: Row | null | undefined): string | null {
   return (row?.compare_item_id as string | undefined) || null;
 }
@@ -107,7 +106,10 @@ export function slicePayloadToPass(base: RunPayload, ref: string, pass: number):
 
 export function buildCompareModel(payload: ComparePayload, requested: string[]): CompareModel {
   const loaded = payload.runs ?? [];
-  const refs = expandRefs(requested, loaded.map((r) => r.run));
+  const refs = expandRefs(
+    requested,
+    loaded.map((r) => r.run),
+  );
   const byBase = new Map(loaded.map((r) => [r.run.file_path || r.run.run_id, r]));
 
   const picked: Array<{ ref: string; base: string; pass: number | null; data: RunPayload }> = [];
@@ -189,10 +191,15 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
         else if (!specs[metric]) specs[metric] = spec;
       }
       const idx = run.metricIndex[metric];
-      if (idx !== undefined) for (const row of run.rows) rowsForType.push({ metric_values: [row.metric_values?.[idx]] });
+      if (idx !== undefined)
+        for (const row of run.rows) rowsForType.push({ metric_values: [row.metric_values?.[idx]] });
     }
     const inferred = detectMetricType(rowsForType, 0);
-    const type: MetricType = conflict ? 'numeric' : specs[metric] ? metricTypeFromSpec(specs[metric]) : inferred;
+    const type: MetricType = conflict
+      ? 'numeric'
+      : specs[metric]
+        ? metricTypeFromSpec(specs[metric])
+        : inferred;
     types[metric] = type;
     isBoolean[metric] = type === 'boolean';
     directions[metric] = declared.size === 1 ? (Array.from(declared)[0] ?? null) : null;
@@ -203,13 +210,19 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
   for (const run of runs)
     for (const row of run.rows) {
       const md = row.item_metadata;
-      if (md && typeof md === 'object') for (const k of Object.keys(md)) if (!SKIPPED_METADATA.has(k)) metaKeys.add(k);
+      if (md && typeof md === 'object')
+        for (const k of Object.keys(md)) if (!SKIPPED_METADATA.has(k)) metaKeys.add(k);
     }
 
   const unalignable = runs
     .filter((r) => (r.run.compare_alignment_status ?? 'aligned') !== 'aligned')
-    .map((r) => ({ run_name: r.run.base_run_name || r.run.run_name || 'Unnamed run', issues: r.run.compare_alignment_issues ?? [] }));
-  const dedupedUnalignable = unalignable.filter((u, i) => unalignable.findIndex((o) => o.run_name === u.run_name) === i);
+    .map((r) => ({
+      run_name: r.run.base_run_name || r.run.run_name || 'Unnamed run',
+      issues: r.run.compare_alignment_issues ?? [],
+    }));
+  const dedupedUnalignable = unalignable.filter(
+    (u, i) => unalignable.findIndex((o) => o.run_name === u.run_name) === i,
+  );
 
   const first = loaded[0]?.run;
   return {

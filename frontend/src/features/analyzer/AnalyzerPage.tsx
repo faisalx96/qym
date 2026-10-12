@@ -1,25 +1,35 @@
-import { useMemo } from "react";
-import { useRunSummary } from "@/api/analysis";
-import { PageHeader, SegmentedControl } from "@/ui";
-import { useDocumentTitle } from "@/features/shell/hooks";
-import { useProjectContext } from "@/features/shell/ProjectContext";
-import { fullWidth } from "@/features/shell/layout";
-import { GuidanceArea } from "./GuidanceArea";
-import { ProjectLanding } from "./ProjectLanding";
-import { RunShell } from "./RunShell";
-import { useAnalyzerRoute } from "./useAnalyzerRoute";
-import s from "./analyzer.module.css";
+import { useMemo } from 'react';
+import { useRunSummary } from '@/api/analysis';
+import { PageHeader, SegmentedControl } from '@/ui';
+import { useDocumentTitle } from '@/features/shell/hooks';
+import { useProjectContext } from '@/features/shell/ProjectContext';
+import { fullWidth } from '@/features/shell/layout';
+import { GuidanceArea } from './GuidanceArea';
+import { ProjectLanding } from './ProjectLanding';
+import { RunShell } from './RunShell';
+import { useAnalyzerRoute } from './useAnalyzerRoute';
+import s from './analyzer.module.css';
 
 /** /projects/:slug/analysis[?run=&pass=&metric=&scope=] — the auto-analysis workspace. */
 export function AnalyzerPage() {
   const { slug, canManage, readOnly } = useProjectContext();
   const route = useAnalyzerRoute();
   const runName = useRunSummary(route.runId || undefined).data?.run;
-  useDocumentTitle(runName ? `Auto-analysis · ${runName.run_name || runName.run_id}` : "Auto-analysis");
+  useDocumentTitle(runName ? `Auto-analysis · ${runName.run_name || runName.run_id}` : 'Auto-analysis');
   const manage = canManage && !readOnly;
   const scope = useMemo(() => ({ slug, runId: route.runId || undefined }), [slug, route.runId]);
 
-  if (route.runId) return <RunShell key={route.runId} slug={slug} runId={route.runId} canManage={manage} scope={scope} route={route} />;
+  if (route.runId)
+    return (
+      <RunShell
+        key={route.runId}
+        slug={slug}
+        runId={route.runId}
+        canManage={manage}
+        scope={scope}
+        route={route}
+      />
+    );
 
   const area = route.scope === 'run' ? 'run' : 'guidance';
   return (
@@ -43,7 +53,13 @@ export function AnalyzerPage() {
       {area === 'run' ? (
         <ProjectLanding slug={slug} onGuidance={() => route.setScope('categories')} />
       ) : (
-        <GuidanceArea scope={scope} slug={slug} canManage={manage} tab={route.scope as 'categories'} onTab={route.setScope} />
+        <GuidanceArea
+          scope={scope}
+          slug={slug}
+          canManage={manage}
+          tab={route.scope as 'categories'}
+          onTab={route.setScope}
+        />
       )}
     </div>
   );

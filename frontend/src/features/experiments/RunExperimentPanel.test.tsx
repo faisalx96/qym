@@ -28,8 +28,12 @@ describe('RunExperimentPanel', () => {
   });
   it('links rerun with clone and job and enables promote for completed runs', () => {
     wrap(<RunExperimentPanel panel={panel} slug="p" runId="r1" runStatus="COMPLETED" />);
-    expect(screen.getByRole('link', { name: 'Rerun with this config' }).getAttribute('href')).toContain('clone=x1&job=j1');
-    expect(screen.getByRole('link', { name: 'Promote to default preset' }).getAttribute('href')).toContain('promote=run&id=r1');
+    expect(screen.getByRole('link', { name: 'Rerun with this config' }).getAttribute('href')).toContain(
+      'clone=x1&job=j1',
+    );
+    expect(screen.getByRole('link', { name: 'Promote to default preset' }).getAttribute('href')).toContain(
+      'promote=run&id=r1',
+    );
     expect(screen.getByText('#2 · retry 1')).toBeTruthy();
   });
   it('disables promote for running runs', () => {

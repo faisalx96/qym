@@ -17,7 +17,13 @@ export interface FixtureRun {
 
 const DEFAULT_SPECS = {
   correct: { score_type: 'boolean', direction: 'maximize', pass_threshold: 1, schema_version: 2 },
-  quality: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, primary: true, schema_version: 2 },
+  quality: {
+    score_type: 'percentage',
+    direction: 'maximize',
+    pass_threshold: 0.7,
+    primary: true,
+    schema_version: 2,
+  },
 };
 
 export function makeRun(f: FixtureRun, metrics = ['correct', 'quality']): RunPayload {

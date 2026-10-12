@@ -17,7 +17,11 @@ import {
 } from '../filterRules';
 import type { Row, RunPayload } from '../../types';
 
-function contextOf(rows: Row[], metricNames: string[], specs: Record<string, Record<string, unknown>>): { ctx: FilterContext; defs: Map<string, FieldDef> } {
+function contextOf(
+  rows: Row[],
+  metricNames: string[],
+  specs: Record<string, Record<string, unknown>>,
+): { ctx: FilterContext; defs: Map<string, FieldDef> } {
   const payload = {
     run: { run_id: 'r', status: 'COMPLETED', samples: 1, metric_names: metricNames, metric_specs: specs },
     snapshot: { rows, metric_names: metricNames, metric_specs: specs },
@@ -73,7 +77,13 @@ describe('run page Filters fields', () => {
     );
     const { defs } = contextOf(rows, [], {});
     const metadata = [...defs.values()].filter((f) => f.group === 'Metadata');
-    expect(metadata.map((f) => f.id).sort()).toEqual(['cat:complexity', 'cat:domain', 'cat:request_id', 'cat:tags', 'cat:tokens']);
+    expect(metadata.map((f) => f.id).sort()).toEqual([
+      'cat:complexity',
+      'cat:domain',
+      'cat:request_id',
+      'cat:tags',
+      'cat:tokens',
+    ]);
     const field = (id: string) => defs.get(id)!;
     expect(field('cat:tags').kind).toBe('enum');
     expect(field('cat:tags').values).toEqual(['billing', 'refunds']);
@@ -97,20 +107,38 @@ describe('run page Filters fields', () => {
   });
 
   it('Root cause offers only the causes this run applied, custom ones included', () => {
-    const issues = (...categories: string[]) => ({ root_cause_issues: categories.map((category) => ({ category })) });
+    const issues = (...categories: string[]) => ({
+      root_cause_issues: categories.map((category) => ({ category })),
+    });
     const rows = [
-      { item_id: 'a', metric_values: [], item_metadata: { metric_analyses: { accuracy: issues('Retrieval') } } },
-      { item_id: 'b', metric_values: [], item_metadata: { metric_analyses: { accuracy: issues('Prompt'), tone: issues('Brand voice drift') } } },
+      {
+        item_id: 'a',
+        metric_values: [],
+        item_metadata: { metric_analyses: { accuracy: issues('Retrieval') } },
+      },
+      {
+        item_id: 'b',
+        metric_values: [],
+        item_metadata: { metric_analyses: { accuracy: issues('Prompt'), tone: issues('Brand voice drift') } },
+      },
       { item_id: 'c', metric_values: [], item_metadata: {} },
     ] as unknown as Row[];
     const { defs } = contextOf(rows, ['accuracy', 'tone'], {});
     // Catalog categories no item carries ("Tooling") are not offered.
     expect(defs.get('cat:root_cause')!.values).toEqual(['Brand voice drift', 'Prompt', 'Retrieval']);
     // An item matches through any metric's analysis, custom causes included.
-    expect(matching(rows, defs, { field: 'cat:root_cause', oper: 'in', value: ['Brand voice drift'] })).toEqual(['b']);
-    expect(matching(rows, defs, { field: 'cat:root_cause', oper: 'in', value: ['retrieval', 'prompt'] })).toEqual(['a', 'b']);
+    expect(
+      matching(rows, defs, { field: 'cat:root_cause', oper: 'in', value: ['Brand voice drift'] }),
+    ).toEqual(['b']);
+    expect(
+      matching(rows, defs, { field: 'cat:root_cause', oper: 'in', value: ['retrieval', 'prompt'] }),
+    ).toEqual(['a', 'b']);
     // A run without root causes has no Root cause field.
-    const empty = contextOf([{ item_id: 'x', metric_values: [], item_metadata: {} }] as unknown as Row[], ['accuracy', 'tone'], {});
+    const empty = contextOf(
+      [{ item_id: 'x', metric_values: [], item_metadata: {} }] as unknown as Row[],
+      ['accuracy', 'tone'],
+      {},
+    );
     expect(empty.defs.get('cat:root_cause')).toBeUndefined();
   });
 });

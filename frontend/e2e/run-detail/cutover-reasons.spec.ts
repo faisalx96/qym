@@ -15,14 +15,26 @@ let runId: string;
 const LONG_REASON = 'Result rows differ from the gold rows. '.repeat(10).trim();
 const EXPLANATION = 'The query filters on ship_date instead of delivered_date. '.repeat(3).trim();
 
-const pass = (id: string): CustomItem => ({ id, input: `question ${id}`, scores: { accuracy: { score: 0.95 } } });
+const pass = (id: string): CustomItem => ({
+  id,
+  input: `question ${id}`,
+  scores: { accuracy: { score: 0.95 } },
+});
 const items: CustomItem[] = [
-  { id: 'item-0', input: 'question 0', scores: { accuracy: { score: 0, meta: { reason: 'Expected 12 rows, got 9' } } } },
+  {
+    id: 'item-0',
+    input: 'question 0',
+    scores: { accuracy: { score: 0, meta: { reason: 'Expected 12 rows, got 9' } } },
+  },
   pass('item-1'),
   // meta.error without a status is a verdict reason, not a scorer crash (C010)
   { id: 'item-2', input: 'question 2', scores: { accuracy: { score: 0, meta: { error: 'Empty output' } } } },
   pass('item-3'),
-  { id: 'item-4', input: 'question 4', scores: { accuracy: { score: 0, meta: { status: 'error', error: 'judge 429' } } } },
+  {
+    id: 'item-4',
+    input: 'question 4',
+    scores: { accuracy: { score: 0, meta: { status: 'error', error: 'judge 429' } } },
+  },
   pass('item-5'),
   { id: 'item-6', input: 'question 6', scores: { accuracy: { score: 0, explanation: EXPLANATION } } },
   pass('item-7'),
@@ -41,10 +53,11 @@ test.beforeAll(async () => {
   runId = await seedCustomRun(s, { name: 'reasons', specs: { accuracy: PERCENT }, items });
 });
 
-const row = (page: Page, n: number) =>
-  page.getByRole('row', { name: new RegExp(`^Open item #${n} `) });
+const row = (page: Page, n: number) => page.getByRole('row', { name: new RegExp(`^Open item #${n} `) });
 
-test('every failing row shows its reason and where it came from; passing rows leave the column empty', async ({ page }) => {
+test('every failing row shows its reason and where it came from; passing rows leave the column empty', async ({
+  page,
+}) => {
   // the Reason column needs a table wider than 760px
   await page.setViewportSize({ width: 1900, height: 1000 });
   await openRun(page, s.slug, runId);
@@ -60,19 +73,25 @@ test('every failing row shows its reason and where it came from; passing rows le
   ];
   // the reasons the index cannot hold (long text, explanations) are fetched by the page
   for (const [n, text, source] of expected) {
-    const cell = row(page, n + 1).locator('[role=cell][title]').filter({ hasText: source });
+    const cell = row(page, n + 1)
+      .locator('[role=cell][title]')
+      .filter({ hasText: source });
     await expect(cell, `item-${n}`).toBeVisible();
     await expect(cell).toHaveAttribute('title', text);
     await expect(cell).toContainText(text.slice(0, 20));
   }
   for (const n of [1, 3, 5, 7]) {
-    const hit = row(page, n + 1).locator('[role=cell][title]').filter({ hasText: /reason|scorer error|explanation|label|task error|no reason recorded/ });
+    const hit = row(page, n + 1)
+      .locator('[role=cell][title]')
+      .filter({ hasText: /reason|scorer error|explanation|label|task error|no reason recorded/ });
     await expect(hit, `item-${n}`).toHaveCount(0);
   }
 });
 
 // 8 items score 0; the scorer error and the task error are errors, the other 6 are failures
-test('only rows whose reason the index cannot hold are fetched, once, for the displayed metric', async ({ page }) => {
+test('only rows whose reason the index cannot hold are fetched, once, for the displayed metric', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1900, height: 1000 });
   const asked: Array<{ item_ids: string[]; metric: string }> = [];
   page.on('request', (r) => {
@@ -91,7 +110,9 @@ test('only rows whose reason the index cannot hold are fetched, once, for the di
 });
 
 // 8 items score 0; the scorer error and the task error are errors, the other 6 are failures
-test('the filtered list explains where a reason comes from, and the filter can be cleared', async ({ page }) => {
+test('the filtered list explains where a reason comes from, and the filter can be cleared', async ({
+  page,
+}) => {
   await openRun(page, s.slug, runId, 'show=failed&metric=accuracy');
   const banner = page.getByTestId('filter-banner');
   await expect(banner).toBeVisible();
@@ -153,7 +174,10 @@ test('compare: structured item metadata never renders as [object Object]', async
   const [a, b] = [await make('cmp-meta-a'), await make('cmp-meta-b')];
   await page.goto(compareUrl([a, b]));
   await waitLoaded(page);
-  await page.getByRole('button', { name: /^Item 1:/ }).first().click();
+  await page
+    .getByRole('button', { name: /^Item 1:/ })
+    .first()
+    .click();
   // scalars and lists show as badges; the structured value shows as nothing wrong, never as [object Object]
   await expect(page.locator('body')).toContainText('hard');
   await expect(page.locator('body')).toContainText('finance');

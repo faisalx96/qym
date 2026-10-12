@@ -3,10 +3,24 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { runPath } from '@/app/routes';
 import { formatLatency, isInternalMetaKey, metricMetaDisplayKey } from '@/lib/metrics';
-import { Button, CopyButton, Icon, IconButton, JsonPreview, LinkButton, ScoreValue, Tag, TextBlock } from '@/ui';
+import {
+  Button,
+  CopyButton,
+  Icon,
+  IconButton,
+  JsonPreview,
+  LinkButton,
+  ScoreValue,
+  Tag,
+  TextBlock,
+} from '@/ui';
 import type { Row, RootCauseIssue } from '@/features/run-detail/types';
 import { bodyText } from '@/features/run-detail/lib/itemText';
-import { getRowRootCauseAnalyses, itemMetadataDisplayValue, rootCauseIssues } from '@/features/run-detail/lib/rowMeta';
+import {
+  getRowRootCauseAnalyses,
+  itemMetadataDisplayValue,
+  rootCauseIssues,
+} from '@/features/run-detail/lib/rowMeta';
 import { buildLangfuseTraceUrl } from '@/features/run-detail/lib/traceTree';
 import { letterOf, useCompare } from '../../CompareContext';
 import { useRowPatch } from '../../hooks/useRowPatch';
@@ -24,7 +38,10 @@ export function Collapsible({ text, lines = 12 }: { text: string; lines?: number
   const long = text.length > 600 || text.split('\n').length > lines;
   return (
     <div>
-      <div className={long && !open ? styles.clamped : undefined} style={long && !open ? ({ ['--lines' as string]: lines } as React.CSSProperties) : undefined}>
+      <div
+        className={long && !open ? styles.clamped : undefined}
+        style={long && !open ? ({ ['--lines' as string]: lines } as React.CSSProperties) : undefined}
+      >
         <TextBlock text={text} mode={textMode} />
       </div>
       {long ? (
@@ -37,14 +54,22 @@ export function Collapsible({ text, lines = 12 }: { text: string; lines?: number
 }
 
 function MetaList({ meta, hidden }: { meta: Record<string, unknown>; hidden: Set<string> }) {
-  const entries = Object.entries(meta).filter(([k, v]) => !isInternalMetaKey(k) && !hidden.has(k) && v !== null && v !== undefined && v !== '');
+  const entries = Object.entries(meta).filter(
+    ([k, v]) => !isInternalMetaKey(k) && !hidden.has(k) && v !== null && v !== undefined && v !== '',
+  );
   if (!entries.length) return <div className={styles.muted}>No judge metadata recorded.</div>;
   return (
     <dl className={styles.metaList}>
       {entries.map(([k, v]) => (
         <div key={k} className={styles.metaRow}>
           <dt>{metricMetaDisplayKey(k, meta)}</dt>
-          <dd>{v !== null && typeof v === 'object' ? <JsonPreview value={v} title={k} compact /> : itemMetadataDisplayValue(v)}</dd>
+          <dd>
+            {v !== null && typeof v === 'object' ? (
+              <JsonPreview value={v} title={k} compact />
+            ) : (
+              itemMetadataDisplayValue(v)
+            )}
+          </dd>
         </div>
       ))}
     </dl>
@@ -57,7 +82,11 @@ function MetricChips({ run, row, itemId }: { run: CompareRun; row: Row; itemId: 
   const patch = useRowPatch();
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
-  const canEdit = !runReadOnly(run) && !runScoresLocked(run) && !run.run.items_restricted && String(row.status) !== 'not_received';
+  const canEdit =
+    !runReadOnly(run) &&
+    !runScoresLocked(run) &&
+    !run.run.items_restricted &&
+    String(row.status) !== 'not_received';
   void c;
   return (
     <div className={styles.metrics} role="list" aria-label="Metrics">
@@ -70,17 +99,39 @@ function MetricChips({ run, row, itemId }: { run: CompareRun; row: Row; itemId: 
         return (
           <div key={metric} role="listitem" className={styles.chip} data-metric={metric}>
             <div className={styles.chipHead}>
-              <button type="button" className={styles.caret} aria-expanded={open === metric} aria-label={`${open === metric ? 'Hide' : 'Show'} ${metric} details`} onClick={() => setOpen(open === metric ? null : metric)}>
+              <button
+                type="button"
+                className={styles.caret}
+                aria-expanded={open === metric}
+                aria-label={`${open === metric ? 'Hide' : 'Show'} ${metric} details`}
+                onClick={() => setOpen(open === metric ? null : metric)}
+              >
                 <Icon name={open === metric ? 'chevron-down' : 'chevron-right'} size={12} />
               </button>
               <span className={styles.metricName}>{metric}</span>
-              <ScoreValue value={cell.value} type={cell.type} direction={cell.direction} error={cell.error} text={cell.text} />
+              <ScoreValue
+                value={cell.value}
+                type={cell.type}
+                direction={cell.direction}
+                error={cell.error}
+                text={cell.text}
+              />
               {cell.edited ? (
-                <Tag kind="accent" tone="warning" title={`Edited${meta.original_score !== undefined ? `; scorer value ${String(meta.original_score)}` : ''}`}>
+                <Tag
+                  kind="accent"
+                  tone="warning"
+                  title={`Edited${meta.original_score !== undefined ? `; scorer value ${String(meta.original_score)}` : ''}`}
+                >
                   edited
                 </Tag>
               ) : null}
-              {canEdit ? <IconButton label={`Edit ${metric} score of ${run.label}`} icon="edit" onPress={() => setEditing(isEditing ? null : metric)} /> : null}
+              {canEdit ? (
+                <IconButton
+                  label={`Edit ${metric} score of ${run.label}`}
+                  icon="edit"
+                  onPress={() => setEditing(isEditing ? null : metric)}
+                />
+              ) : null}
             </div>
             {isEditing ? (
               <CompareScoreEditor
@@ -89,7 +140,13 @@ function MetricChips({ run, row, itemId }: { run: CompareRun; row: Row; itemId: 
                 row={row}
                 metric={metric}
                 spec={model.specs[metric]}
-                initial={cell.value === null ? '' : cell.type === 'score' ? `${Math.round(cell.value * 1000) / 10}%` : String(cell.value)}
+                initial={
+                  cell.value === null
+                    ? ''
+                    : cell.type === 'score'
+                      ? `${Math.round(cell.value * 1000) / 10}%`
+                      : String(cell.value)
+                }
                 passNumber={run.pass}
                 passVersion={Number(run.run.metadata?.pass_revision ?? 0)}
                 edited={cell.edited}
@@ -116,7 +173,10 @@ function Issues({ run, row, metricIdsOnly }: { run: CompareRun; row: Row; metric
   const canEdit = !runReadOnly(run) && !runScoresLocked(run) && !run.run.items_restricted;
   const analyses = getRowRootCauseAnalyses(row, 'all', false);
   const byMetric = model.metrics
-    .map((metric) => ({ metric, issues: analyses.filter((a) => a.metric_name === metric).flatMap((a) => rootCauseIssues(a, false)) }))
+    .map((metric) => ({
+      metric,
+      issues: analyses.filter((a) => a.metric_name === metric).flatMap((a) => rootCauseIssues(a, false)),
+    }))
     .filter((x) => x.issues.length);
   const { metric: pageMetric } = useCompare();
   const own = model.metrics.filter((m) => run.metricIndex[m] !== undefined);
@@ -182,13 +242,31 @@ function Issues({ run, row, metricIdsOnly }: { run: CompareRun; row: Row; metric
   );
 }
 
-export function OutputCard({ run, runIndex, row, itemId }: { run: CompareRun; runIndex: number; row: Row; itemId: string }) {
+export function OutputCard({
+  run,
+  runIndex,
+  row,
+  itemId,
+}: {
+  run: CompareRun;
+  runIndex: number;
+  row: Row;
+  itemId: string;
+}) {
   const { ctx, model } = useCompare();
   const ui = useItemsUi();
   const pill = pillState(run, row, ctx);
   const failed = String(row.status) === 'error' || !!row.error;
-  const output = failed ? `ERROR: ${row.error || row.__execution_error || 'The task failed'}` : bodyText(row.output_full ?? row.output);
-  const langfuse = row.trace_url || buildLangfuseTraceUrl(model.langfuseHost || run.run.langfuse_host, model.langfuseProjectId || run.run.langfuse_project_id, row.trace_id);
+  const output = failed
+    ? `ERROR: ${row.error || row.__execution_error || 'The task failed'}`
+    : bodyText(row.output_full ?? row.output);
+  const langfuse =
+    row.trace_url ||
+    buildLangfuseTraceUrl(
+      model.langfuseHost || run.run.langfuse_host,
+      model.langfuseProjectId || run.run.langfuse_project_id,
+      row.trace_id,
+    );
   const slug = run.run.project?.slug;
   return (
     <article className={styles.card} data-testid="output-card" data-run={run.ref} data-state={pill.state}>
@@ -196,7 +274,11 @@ export function OutputCard({ run, runIndex, row, itemId }: { run: CompareRun; ru
         <RunDot index={runIndex} />
         <span className={styles.letter}>{letterOf(runIndex)}</span>
         {slug ? (
-          <Link className={styles.runLink} to={`${runPath(slug, run.base)}?item=${encodeURIComponent(row.item_id)}${run.pass ? `&pass=${run.pass}` : ''}`} title={run.title}>
+          <Link
+            className={styles.runLink}
+            to={`${runPath(slug, run.base)}?item=${encodeURIComponent(row.item_id)}${run.pass ? `&pass=${run.pass}` : ''}`}
+            title={run.title}
+          >
             {run.label}
           </Link>
         ) : (
@@ -205,17 +287,37 @@ export function OutputCard({ run, runIndex, row, itemId }: { run: CompareRun; ru
           </span>
         )}
         <Tag tone={pill.state === 'pass' ? 'success' : pill.state === 'none' ? undefined : 'danger'}>
-          {pill.state === 'pass' ? '✓ PASS' : pill.state === 'fail' ? '✗ FAIL' : pill.state === 'error' ? '⚠ ERROR' : '—'}
+          {pill.state === 'pass'
+            ? '✓ PASS'
+            : pill.state === 'fail'
+              ? '✗ FAIL'
+              : pill.state === 'error'
+                ? '⚠ ERROR'
+                : '—'}
         </Tag>
-        {row.latency_ms != null ? <span className={styles.meta}>{row.latency_ms === 0 ? '0ms' : formatLatency(row.latency_ms)}</span> : null}
+        {row.latency_ms != null ? (
+          <span className={styles.meta}>{row.latency_ms === 0 ? '0ms' : formatLatency(row.latency_ms)}</span>
+        ) : null}
         <span className={styles.actions}>
           {row.trace_id ? (
-            <Button size="sm" variant="neutral" icon={<Icon name="list" size={12} />} onPress={() => ui.openTrace({ runId: run.base, itemId: row.item_id, pass: run.pass })}>
+            <Button
+              size="sm"
+              variant="neutral"
+              icon={<Icon name="list" size={12} />}
+              onPress={() => ui.openTrace({ runId: run.base, itemId: row.item_id, pass: run.pass })}
+            >
               Trace
             </Button>
           ) : null}
           {langfuse ? (
-            <LinkButton size="sm" variant="neutral" href={langfuse} target="_blank" rel="noopener noreferrer" icon={<Icon name="external" size={12} />}>
+            <LinkButton
+              size="sm"
+              variant="neutral"
+              href={langfuse}
+              target="_blank"
+              rel="noopener noreferrer"
+              icon={<Icon name="external" size={12} />}
+            >
               Langfuse
             </LinkButton>
           ) : null}

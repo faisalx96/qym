@@ -19,7 +19,17 @@ function getWorker(): Worker | null {
     };
     worker.onerror = () => {
       for (const done of pending.values())
-        done({ id: -1, kind: 'csv', encoding: 'utf-8', detectedEncoding: 'utf-8', delimiter: ',', headers: [], rows: [], warnings: [], error: 'Could not read the file.' });
+        done({
+          id: -1,
+          kind: 'csv',
+          encoding: 'utf-8',
+          detectedEncoding: 'utf-8',
+          delimiter: ',',
+          headers: [],
+          rows: [],
+          warnings: [],
+          error: 'Could not read the file.',
+        });
       pending.clear();
       worker = null;
     };

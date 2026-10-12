@@ -23,14 +23,29 @@ export interface ItemPaneProps {
   onTypeChangeConfirm?: (names: string[]) => Promise<boolean>;
 }
 
-export function ItemPane({ slug, dataset, version, itemId, editable, position, query, onClose, onNavigate, onDirtyChange, onTypeChangeConfirm }: ItemPaneProps) {
+export function ItemPane({
+  slug,
+  dataset,
+  version,
+  itemId,
+  editable,
+  position,
+  query,
+  onClose,
+  onNavigate,
+  onDirtyChange,
+  onTypeChangeConfirm,
+}: ItemPaneProps) {
   const toast = useToast();
   const q = useDatasetItem(slug, dataset.slug, version.version, itemId);
   const item: DatasetItem | undefined = q.data;
   const editor = useItemEditor(slug, dataset.slug, version.version, item);
   // Saving a field as a different type (string -> number ...) asks first (UX must-fix 7).
-  const [typeConfirm, setTypeConfirm] = useState<{ names: string[]; resolve: (ok: boolean) => void } | null>(null);
-  const askTypeChange = (names: string[]) => new Promise<boolean>((resolve) => setTypeConfirm({ names, resolve }));
+  const [typeConfirm, setTypeConfirm] = useState<{ names: string[]; resolve: (ok: boolean) => void } | null>(
+    null,
+  );
+  const askTypeChange = (names: string[]) =>
+    new Promise<boolean>((resolve) => setTypeConfirm({ names, resolve }));
   const answerTypeChange = (ok: boolean) => {
     typeConfirm?.resolve(ok);
     setTypeConfirm(null);
@@ -39,7 +54,8 @@ export function ItemPane({ slug, dataset, version, itemId, editable, position, q
   // Publish dirtiness + imperative save/reset to the workspace on every render.
   const saveAll = async (): Promise<boolean> => {
     if (!editor.valid) return false;
-    if (editor.typeChanges.length && !(await (onTypeChangeConfirm ?? askTypeChange)(editor.typeChanges))) return false;
+    if (editor.typeChanges.length && !(await (onTypeChangeConfirm ?? askTypeChange)(editor.typeChanges)))
+      return false;
     try {
       const saved = await editor.save();
       if (saved) toast.show(`Item ${saved.item_id} saved`, { tone: 'success' });
@@ -65,7 +81,12 @@ export function ItemPane({ slug, dataset, version, itemId, editable, position, q
         <div className={styles.headActions}>
           <IconButton label="Previous item" icon="chevron-up" onPress={() => onNavigate(-1)} />
           <IconButton label="Next item" icon="chevron-down" onPress={() => onNavigate(1)} />
-          <LinkButton to={`${datasetPath(slug, dataset.slug)}?${query}`} variant="ghost" size="sm" data-testid="pane-open-page">
+          <LinkButton
+            to={`${datasetPath(slug, dataset.slug)}?${query}`}
+            variant="ghost"
+            size="sm"
+            data-testid="pane-open-page"
+          >
             Open page
           </LinkButton>
           <IconButton label="Close editor" icon="close" onPress={onClose} data-testid="pane-close" />
@@ -73,21 +94,60 @@ export function ItemPane({ slug, dataset, version, itemId, editable, position, q
       </header>
       <div className={styles.scroll}>
         {q.isPending ? <Skeleton kind="lines" rows={5} label="Loading item" /> : null}
-        {q.isError ? <ErrorState compact error={q.error} title="Couldn’t load this item" onRetry={() => void q.refetch()} /> : null}
+        {q.isError ? (
+          <ErrorState
+            compact
+            error={q.error}
+            title="Couldn’t load this item"
+            onRetry={() => void q.refetch()}
+          />
+        ) : null}
         {item && editor.state ? (
           <div className={styles.fields}>
-            <FieldEditor compact label="Input" value={item.input} editable={editable} state={editor.state.input} onChange={(s) => editor.set('input', s)} />
-            <FieldEditor compact label="Expected output" value={item.expected_output} editable={editable} state={editor.state.expected} onChange={(s) => editor.set('expected', s)} />
-            <FieldEditor compact label="Metadata" value={item.metadata} editable={editable} jsonOnly state={editor.state.metadata} onChange={(s) => editor.set('metadata', s)} />
+            <FieldEditor
+              compact
+              label="Input"
+              value={item.input}
+              editable={editable}
+              state={editor.state.input}
+              onChange={(s) => editor.set('input', s)}
+            />
+            <FieldEditor
+              compact
+              label="Expected output"
+              value={item.expected_output}
+              editable={editable}
+              state={editor.state.expected}
+              onChange={(s) => editor.set('expected', s)}
+            />
+            <FieldEditor
+              compact
+              label="Metadata"
+              value={item.metadata}
+              editable={editable}
+              jsonOnly
+              state={editor.state.metadata}
+              onChange={(s) => editor.set('metadata', s)}
+            />
           </div>
         ) : null}
       </div>
       {editable ? (
         <footer className={styles.foot}>
           <Text as="span" variant="sm" tone="muted" aria-live="polite">
-            {editor.dirty ? (editor.valid ? 'Unsaved changes' : 'Fix the invalid field to save') : 'No changes'}
+            {editor.dirty
+              ? editor.valid
+                ? 'Unsaved changes'
+                : 'Fix the invalid field to save'
+              : 'No changes'}
           </Text>
-          <Button variant="primary" onPress={() => void saveAll()} isDisabled={!editor.dirty || !editor.valid} loading={editor.saving} data-testid="pane-save">
+          <Button
+            variant="primary"
+            onPress={() => void saveAll()}
+            isDisabled={!editor.dirty || !editor.valid}
+            loading={editor.saving}
+            data-testid="pane-save"
+          >
             Save changes
           </Button>
         </footer>

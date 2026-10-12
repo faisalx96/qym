@@ -50,7 +50,9 @@ export function useRunData(runId: string, passParam: number | null, loadBodies: 
   const repeat = Number(run?.samples ?? 1) > 1 || Boolean(run?.metadata?.has_repeat_pass_context);
   const passes = useRunPasses(runId, repeat);
   const validPass =
-    repeat && passParam != null && (passes.data ? passes.data.passes.some((p) => p.pass_number === passParam) : true);
+    repeat &&
+    passParam != null &&
+    (passes.data ? passes.data.passes.some((p) => p.pass_number === passParam) : true);
   const pass = repeat && validPass ? passParam : null;
   const needsPass = repeat && pass == null && !passes.isPending;
   const compact = useRunCompact(runId, pass, Boolean(run) && !needsPass && !(repeat && passes.isPending));
@@ -68,7 +70,8 @@ export function useRunData(runId: string, passParam: number | null, loadBodies: 
       const full = index < SAMPLE_ROWS ? byId.get(String(row.item_id ?? row.index)) : undefined;
       if (!full) return row;
       const copy: CompactRow = { ...row };
-      for (const key of DETAIL_KEYS) if (full[key] !== undefined) (copy as Record<string, unknown>)[key] = full[key];
+      for (const key of DETAIL_KEYS)
+        if (full[key] !== undefined) (copy as Record<string, unknown>)[key] = full[key];
       return copy;
     });
     return buildAnalyzerRows({
@@ -90,7 +93,8 @@ export function useRunData(runId: string, passParam: number | null, loadBodies: 
     metricSpecs: snapshot?.metric_specs ?? run?.metric_specs ?? {},
     rows,
     passRevision: typeof run?.metadata?.pass_revision === 'number' ? run.metadata.pass_revision : undefined,
-    isPending: summary.isPending || (repeat && passes.isPending) || (!needsPass && Boolean(run) && compact.isPending),
+    isPending:
+      summary.isPending || (repeat && passes.isPending) || (!needsPass && Boolean(run) && compact.isPending),
     isError: Boolean(firstError),
     error: firstError,
     refetch: () => {

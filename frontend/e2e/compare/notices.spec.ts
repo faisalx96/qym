@@ -35,7 +35,9 @@ test('same-dataset runs need no notice', async ({ page }) => {
   await expect(page.locator('[data-notice]')).toHaveCount(0);
 });
 
-test('a shorter run on the same dataset: only shared items are aligned and the missing ones show no score', async ({ page }) => {
+test('a shorter run on the same dataset: only shared items are aligned and the missing ones show no score', async ({
+  page,
+}) => {
   const { base, other } = seed.runs;
   await page.goto(compareUrl([base, other, seed.runs.a]));
   await waitLoaded(page);

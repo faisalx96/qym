@@ -31,7 +31,7 @@ interface Confirm {
   resolve: (full: boolean) => void;
 }
 
-const ACCEPT = ".pdf,.docx,.txt,.text,.log,.rst,.md,.markdown,.html,.htm,.csv,.json,.yaml,.yml";
+const ACCEPT = '.pdf,.docx,.txt,.text,.log,.rst,.md,.markdown,.html,.htm,.csv,.json,.yaml,.yml';
 
 export function DocumentsPanel({
   scope,
@@ -71,7 +71,9 @@ export function DocumentsPanel({
             await upload.mutateAsync({ file, full: true });
             return true;
           } catch (again) {
-            toast.show(`${file.name}: ${again instanceof ApiError ? again.detail : 'upload failed'}`, { tone: 'error' });
+            toast.show(`${file.name}: ${again instanceof ApiError ? again.detail : 'upload failed'}`, {
+              tone: 'error',
+            });
             return false;
           }
         }
@@ -101,7 +103,11 @@ export function DocumentsPanel({
         if (await uploadOne(file)) added += 1; // sequential on purpose: server-side size/limit checks
       }
       setUploading(false);
-      setStatus(added ? `Added ${added} of ${list.length} ${list.length === 1 ? 'document' : 'documents'}.` : 'No documents were added.');
+      setStatus(
+        added
+          ? `Added ${added} of ${list.length} ${list.length === 1 ? 'document' : 'documents'}.`
+          : 'No documents were added.',
+      );
       if (input.current) input.current.value = '';
     },
     [canManage, uploadOne],
@@ -117,7 +123,11 @@ export function DocumentsPanel({
       <SectionHeader
         title="Reference documents"
         description="Documents the analyzer can use as context, and the rule writer as a source."
-        aside={documents.length ? <Badge tone="info">{`${enabled.length} of ${documents.length} enabled`}</Badge> : null}
+        aside={
+          documents.length ? (
+            <Badge tone="info">{`${enabled.length} of ${documents.length} enabled`}</Badge>
+          ) : null
+        }
       />
       {canManage ? (
         <div
@@ -165,9 +175,16 @@ export function DocumentsPanel({
       </Text>
 
       {docs.isError ? (
-        <ErrorState error={docs.error} title="Couldn’t load documents" onRetry={() => docs.refetch()} compact />
+        <ErrorState
+          error={docs.error}
+          title="Couldn’t load documents"
+          onRetry={() => docs.refetch()}
+          compact
+        />
       ) : docs.isPending ? (
-        showSkeleton ? <Skeleton kind="lines" rows={3} label="Loading documents" /> : null
+        showSkeleton ? (
+          <Skeleton kind="lines" rows={3} label="Loading documents" />
+        ) : null
       ) : documents.length === 0 ? (
         <EmptyState
           compact
@@ -203,7 +220,12 @@ export function DocumentsPanel({
                   {d.selected ? 'Included' : 'Excluded'}
                 </Switch>
                 {canManage ? (
-                  <Button size="sm" variant="ghost" aria-label={`Delete ${d.name}`} onPress={() => setDeleting(d)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Delete ${d.name}`}
+                    onPress={() => setDeleting(d)}
+                  >
                     <Icon name="trash" size={12} />
                   </Button>
                 ) : null}
@@ -244,7 +266,11 @@ export function DocumentsPanel({
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
         title="Delete document?"
-        description={deleting ? `${deleting.name} will be removed from this project and from future analyses.` : undefined}
+        description={
+          deleting
+            ? `${deleting.name} will be removed from this project and from future analyses.`
+            : undefined
+        }
         tone="danger"
         confirmLabel="Delete document"
         onConfirm={async () => {
@@ -253,9 +279,14 @@ export function DocumentsPanel({
             await remove.mutateAsync(deleting.id);
             toast.show('Document deleted', { tone: 'success' });
           } catch (e) {
-            toast.show(e instanceof ApiError ? e.detail || 'Could not delete the document' : 'Could not delete the document', {
-              tone: 'error',
-            });
+            toast.show(
+              e instanceof ApiError
+                ? e.detail || 'Could not delete the document'
+                : 'Could not delete the document',
+              {
+                tone: 'error',
+              },
+            );
           }
           setDeleting(null);
         }}

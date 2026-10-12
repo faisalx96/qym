@@ -48,8 +48,12 @@ test('Compare view shows the cohort verdict word, which agrees with the Sweep ba
   await page.goto(url());
   await waitLoaded(page);
   const line = page.locator('[aria-label="Change against the baseline"]');
-  await expect(line).toContainText(/Strong vs Weak: (Avg|Pass)@2 [+−][\d.]+ pts, (improved|regressed|within noise)/);
-  const word = /(improved|regressed|within noise)$/.exec((await line.innerText()).split('Open Sweep')[0]!.trim().replace(/\s+/g, ' '))?.[1];
+  await expect(line).toContainText(
+    /Strong vs Weak: (Avg|Pass)@2 [+−][\d.]+ pts, (improved|regressed|within noise)/,
+  );
+  const word = /(improved|regressed|within noise)$/.exec(
+    (await line.innerText()).split('Open Sweep')[0]!.trim().replace(/\s+/g, ' '),
+  )?.[1];
   expect(word).toBeTruthy();
   // "Open Sweep" and the View switch both go to the Sweep tab
   await line.getByRole('button', { name: 'Open Sweep' }).click();
@@ -113,10 +117,14 @@ test('Sweep: outcome cards set sweepMove / sweepOutcome and filter the table', a
   await expect(card('Decisively fixed')).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('Sweep: a row opens the item dialog with a focus trap; Escape closes and focus returns', async ({ page }) => {
+test('Sweep: a row opens the item dialog with a focus trap; Escape closes and focus returns', async ({
+  page,
+}) => {
   await page.goto(url({ tab: 'sweep' }));
   await expect(sweep(page)).toBeVisible();
-  const opener = sweep(page).getByRole('button', { name: /^Open item cmp-/ }).first();
+  const opener = sweep(page)
+    .getByRole('button', { name: /^Open item cmp-/ })
+    .first();
   const label = (await opener.getAttribute('aria-label')) ?? '';
   const id = label.replace('Open item ', '');
   await opener.click();
@@ -137,16 +145,29 @@ test('Sweep: a row opens the item dialog with a focus trap; Escape closes and fo
 test('Sweep: Reverse sides flips the sides and the delta sign', async ({ page }) => {
   await page.goto(url({ tab: 'sweep' }));
   await expect(sweep(page)).toBeVisible();
-  const headers = () => sweep(page).getByRole('region', { name: 'Items' }).getByRole('columnheader').allInnerTexts();
-  expect((await headers()).map((h) => h.replace(/[↕↑↓]/g, '').trim())).toEqual(['Item', 'Metadata', 'Weak', 'Strong', 'Move']);
+  const headers = () =>
+    sweep(page).getByRole('region', { name: 'Items' }).getByRole('columnheader').allInnerTexts();
+  expect((await headers()).map((h) => h.replace(/[↕↑↓]/g, '').trim())).toEqual([
+    'Item',
+    'Metadata',
+    'Weak',
+    'Strong',
+    'Move',
+  ]);
   const word = await verdictWord(page);
   const btn = sweep(page).getByRole('button', { name: 'Reverse sides' });
   await btn.click();
   await expect.poll(() => urlParams(page).get('sweepReverse')).toBe('1');
   await expect(btn).toHaveAttribute('aria-pressed', 'true');
-  await expect.poll(async () => (await headers()).map((h) => h.replace(/[↕↑↓]/g, '').trim())).toEqual(['Item', 'Metadata', 'Strong', 'Weak', 'Move']);
+  await expect
+    .poll(async () => (await headers()).map((h) => h.replace(/[↕↑↓]/g, '').trim()))
+    .toEqual(['Item', 'Metadata', 'Strong', 'Weak', 'Move']);
   const flipped = await verdictWord(page);
-  const mirror: Record<string, string> = { IMPROVED: 'REGRESSED', REGRESSED: 'IMPROVED', 'WITHIN NOISE': 'WITHIN NOISE' };
+  const mirror: Record<string, string> = {
+    IMPROVED: 'REGRESSED',
+    REGRESSED: 'IMPROVED',
+    'WITHIN NOISE': 'WITHIN NOISE',
+  };
   expect(flipped).toBe(mirror[word]);
   await btn.click();
   await expect.poll(() => urlParams(page).get('sweepReverse')).toBeNull();

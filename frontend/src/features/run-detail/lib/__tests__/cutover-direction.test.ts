@@ -6,7 +6,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildRunModel } from '../runModel';
-import { applyItemFilters, buildFieldDefs, effectiveThresholds, emptyView, type FilterContext } from '../filterRules';
+import {
+  applyItemFilters,
+  buildFieldDefs,
+  effectiveThresholds,
+  emptyView,
+  type FilterContext,
+} from '../filterRules';
 import { metricCardModel } from '../overviewModel';
 import { rowStatus } from '../rowDisplay';
 import type { Row, RunPayload } from '../../types';
@@ -18,7 +24,12 @@ const ctxOf = (rows: Row[], specs: Record<string, Record<string, unknown>>): Fil
     snapshot: { rows, metric_names: names, metric_specs: specs },
   } as unknown as RunPayload;
   const model = buildRunModel(payload, null);
-  return { model, thresholds: effectiveThresholds(model, emptyView()), selectedMetric: model.defaultMetric, repeatAggregate: false };
+  return {
+    model,
+    thresholds: effectiveThresholds(model, emptyView()),
+    selectedMetric: model.defaultMetric,
+    repeatAggregate: false,
+  };
 };
 
 const MINIMIZE_BOOL = {
@@ -48,7 +59,11 @@ describe('a lower-is-better boolean metric with errors (C008 x C015)', () => {
   const card = metricCardModel(ctx, rows, 'accuracy')!;
 
   it('an errored item sits in one segment only and the legend says what errors count as', () => {
-    expect(Object.fromEntries(card.segments!.map((x) => [x.key, x.count]))).toEqual({ passed: 5, failed: 2, metric_errors: 3 });
+    expect(Object.fromEntries(card.segments!.map((x) => [x.key, x.count]))).toEqual({
+      passed: 5,
+      failed: 2,
+      metric_errors: 3,
+    });
     expect(card.segments!.map((x) => x.label)).toEqual(['Pass (False)', 'Fail (True)', 'Error']);
     expect(card.errorLegend!.label).toBe('not counted in the mean');
     // 2 True of the 7 items without an error
@@ -94,7 +109,10 @@ describe('a lower-is-better score histogram', () => {
     })) as unknown as Row[];
 
   it('keeps errors out of the best bucket and the mean', () => {
-    const ctx = ctxOf(rowsWith((i) => i >= 1 && i <= 3, 10), specs);
+    const ctx = ctxOf(
+      rowsWith((i) => i >= 1 && i <= 3, 10),
+      specs,
+    );
     const card = metricCardModel(ctx, ctx.model.rows, 'accuracy')!;
     expect(card.avgText).toBe('55.0%');
     expect(card.errorNote!.text.endsWith('3 errors · not counted in the mean')).toBe(true);
@@ -105,7 +123,10 @@ describe('a lower-is-better score histogram', () => {
   });
 
   it('keeps the card when every item errored, with no mean (0 would read as best)', () => {
-    const ctx = ctxOf(rowsWith(() => true, 4), specs);
+    const ctx = ctxOf(
+      rowsWith(() => true, 4),
+      specs,
+    );
     const card = metricCardModel(ctx, ctx.model.rows, 'accuracy')!;
     expect(card.avgText).toBe('—');
     expect(card.errorNote!.text.endsWith('4 errors · not counted in the mean')).toBe(true);
@@ -156,7 +177,10 @@ describe('category metadata without scores has no performance report (test_repor
       metric_meta: {},
       item_metadata: { domain: 'finance' },
     })) as unknown as Row[];
-    const ctx = ctxOf(rows, { accuracy: { score_type: 'percentage', direction: 'maximize' }, count: { score_type: 'number' } });
+    const ctx = ctxOf(rows, {
+      accuracy: { score_type: 'percentage', direction: 'maximize' },
+      count: { score_type: 'number' },
+    });
     expect(categoryBreakdown(ctx, ctx.model.rows, 'domain', 'accuracy', null)).toBeNull();
   });
 });

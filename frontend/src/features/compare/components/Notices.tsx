@@ -7,7 +7,14 @@ import styles from './Notices.module.css';
 export function Notices() {
   const { model } = useCompare();
   const readOnlyRuns = useMemo(
-    () => Array.from(new Set(model.runs.filter((r) => r.run.project?.archived).map((r) => r.run.base_run_name || r.run.run_name || r.base))),
+    () =>
+      Array.from(
+        new Set(
+          model.runs
+            .filter((r) => r.run.project?.archived)
+            .map((r) => r.run.base_run_name || r.run.run_name || r.base),
+        ),
+      ),
     [model],
   );
   const data = useMemo(() => {
@@ -26,7 +33,8 @@ export function Notices() {
     const entries = Array.from(groups.values());
     const datasets = new Set(entries.map((e) => e.dataset));
     const versioned = entries.filter((e) => e.version);
-    const mismatch = datasets.size > 1 || (versioned.length > 1 && new Set(versioned.map((e) => e.version)).size > 1);
+    const mismatch =
+      datasets.size > 1 || (versioned.length > 1 && new Set(versioned.map((e) => e.version)).size > 1);
     return mismatch ? { entries, multipleDatasets: datasets.size > 1 } : null;
   }, [model]);
   return (
@@ -41,9 +49,17 @@ export function Notices() {
       ) : null}
       {data ? (
         <div className={styles.note} role="note" data-notice="different-data">
-          <strong>Different data.</strong> These runs used {data.multipleDatasets ? 'different datasets' : `different versions of ${data.entries[0]?.dataset}`}:{' '}
-          {data.entries.map((e) => `${data.multipleDatasets ? `${e.dataset}${e.version ? ` ${e.version}` : ''}` : e.version || 'no version'} (${e.runs.join(', ')})`).join('; ')}. Score changes can come from the data as well as from the runs, and only
-          items present in both runs are paired.
+          <strong>Different data.</strong> These runs used{' '}
+          {data.multipleDatasets ? 'different datasets' : `different versions of ${data.entries[0]?.dataset}`}
+          :{' '}
+          {data.entries
+            .map(
+              (e) =>
+                `${data.multipleDatasets ? `${e.dataset}${e.version ? ` ${e.version}` : ''}` : e.version || 'no version'} (${e.runs.join(', ')})`,
+            )
+            .join('; ')}
+          . Score changes can come from the data as well as from the runs, and only items present in both runs
+          are paired.
         </div>
       ) : null}
       {model.alignment.status !== 'aligned' ? (
@@ -52,7 +68,8 @@ export function Notices() {
             These runs cannot be aligned item by item
           </Text>
           <Text variant="base" tone="muted">
-            They do not share reliable item identities, so item-level comparison is disabled; run-level averages below are still shown.
+            They do not share reliable item identities, so item-level comparison is disabled; run-level
+            averages below are still shown.
           </Text>
           <ul>
             {model.alignment.runs.map((r) => (

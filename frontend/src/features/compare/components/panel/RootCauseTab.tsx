@@ -74,7 +74,9 @@ export function RootCauseTab() {
       ) : (
         <ScrollRegion className={styles.scroll} label="Root cause table">
           <table className={styles.table}>
-            <caption className={styles.caption}>Issues per root-cause category; pressing a category filters the items.</caption>
+            <caption className={styles.caption}>
+              Issues per root-cause category; pressing a category filters the items.
+            </caption>
             <thead>
               <tr>
                 <th scope="col">Category</th>
@@ -87,9 +89,17 @@ export function RootCauseTab() {
             </thead>
             <tbody>
               {cats.map((cat) => (
-                <tr key={cat.category} data-active={(f.rootCause?.includes(cat.category) ?? false) || undefined}>
+                <tr
+                  key={cat.category}
+                  data-active={(f.rootCause?.includes(cat.category) ?? false) || undefined}
+                >
                   <th scope="row">
-                    <button type="button" className={styles.rowButton} aria-pressed={!!f.rootCause?.includes(cat.category)} onClick={() => toggle(cat.category)}>
+                    <button
+                      type="button"
+                      className={styles.rowButton}
+                      aria-pressed={!!f.rootCause?.includes(cat.category)}
+                      onClick={() => toggle(cat.category)}
+                    >
                       {cat.category} <span className={styles.count}>{cat.count}</span>
                     </button>
                     {cat.subcauses.length ? (

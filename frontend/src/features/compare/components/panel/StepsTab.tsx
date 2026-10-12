@@ -16,22 +16,51 @@ export function StepsTab() {
   const rows = useMemo(() => {
     const by = q.data?.groups_by_ref ?? {};
     const names = new Map<string, { phase: string; name: string }>();
-    columns.forEach((c) => (by[c.key] ?? []).forEach((g) => names.set(`${g.phase}|${g.name ?? g.step_type ?? ''}`, { phase: g.phase, name: g.name ?? g.step_type ?? '' })));
+    columns.forEach((c) =>
+      (by[c.key] ?? []).forEach((g) =>
+        names.set(`${g.phase}|${g.name ?? g.step_type ?? ''}`, {
+          phase: g.phase,
+          name: g.name ?? g.step_type ?? '',
+        }),
+      ),
+    );
     return Array.from(names.entries()).map(([key, info]) => ({
       key,
       ...info,
-      cells: columns.map((c) => (by[c.key] ?? []).find((g) => `${g.phase}|${g.name ?? g.step_type ?? ''}` === key)),
+      cells: columns.map((c) =>
+        (by[c.key] ?? []).find((g) => `${g.phase}|${g.name ?? g.step_type ?? ''}` === key),
+      ),
     }));
   }, [q.data, columns]);
-  if (!traced) return <Text variant="sm" tone="muted">None of the compared runs recorded traces.</Text>;
+  if (!traced)
+    return (
+      <Text variant="sm" tone="muted">
+        None of the compared runs recorded traces.
+      </Text>
+    );
   if (q.isPending) return <Skeleton kind="table" rows={4} />;
-  if (q.error) return <ErrorState compact error={q.error} title="Couldn’t load step latency" onRetry={() => void q.refetch()} />;
-  if (!rows.length) return <Text variant="sm" tone="muted">No traced steps for these runs.</Text>;
+  if (q.error)
+    return (
+      <ErrorState
+        compact
+        error={q.error}
+        title="Couldn’t load step latency"
+        onRetry={() => void q.refetch()}
+      />
+    );
+  if (!rows.length)
+    return (
+      <Text variant="sm" tone="muted">
+        No traced steps for these runs.
+      </Text>
+    );
   const bi = columns.indexOf(baseline);
   return (
     <ScrollRegion className={styles.scroll} label="Step latency">
       <table className={styles.table}>
-        <caption className={styles.caption}>Mean latency per traced step; change is against the baseline.</caption>
+        <caption className={styles.caption}>
+          Mean latency per traced step; change is against the baseline.
+        </caption>
         <thead>
           <tr>
             <th scope="col">Step</th>

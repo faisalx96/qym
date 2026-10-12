@@ -7,12 +7,34 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Key } from 'react-aria-components';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useDatasetItems, useDeleteItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
+import {
+  useDatasetItems,
+  useDeleteItem,
+  type Dataset,
+  type DatasetItem,
+  type DatasetVersion,
+} from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { copyText } from '@/lib/copy';
-import { Button, Chip, ConfirmDialog, DataTable, DropdownMenu, EmptyState, ErrorState, Icon, IconButton, Pagination, ScoreValue, SearchField, Skeleton, Text, useToast } from '@/ui';
+import {
+  Button,
+  Chip,
+  ConfirmDialog,
+  DataTable,
+  DropdownMenu,
+  EmptyState,
+  ErrorState,
+  Icon,
+  IconButton,
+  Pagination,
+  ScoreValue,
+  SearchField,
+  Skeleton,
+  Text,
+  useToast,
+} from '@/ui';
 import { formatLatency, formatJson, previewValue } from '../lib/itemValue';
 import { metricDir } from '../lib/metricDir';
 import { ITEM_PAGE_SIZES, datasetPath, itemSortKey, parseDatasetRoute, parseItemSort } from '../lib/route';
@@ -37,7 +59,19 @@ export interface ItemsTabProps {
   onFilterChange?: () => void;
 }
 
-export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport, selection, onOpenItem, onRows, onDeleted, onFilterChange }: ItemsTabProps) {
+export function ItemsTab({
+  slug,
+  dataset,
+  version,
+  readOnly,
+  onAddItem,
+  onImport,
+  selection,
+  onOpenItem,
+  onRows,
+  onDeleted,
+  onFilterChange,
+}: ItemsTabProps) {
   const [params, setParams] = useSearchParams();
   const route = parseDatasetRoute(dataset.slug, params);
   const navigate = useNavigate();
@@ -72,7 +106,13 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
     slug,
     dataset.slug,
     version.version,
-    { limit: route.pageSize, offset: route.page * route.pageSize, search: route.search || undefined, sort: route.sort || undefined, label: route.label || undefined },
+    {
+      limit: route.pageSize,
+      offset: route.page * route.pageSize,
+      search: route.search || undefined,
+      sort: route.sort || undefined,
+      label: route.label || undefined,
+    },
     visible,
   );
   const showSkeleton = useDelayedPending(query.isPending && visible);
@@ -120,12 +160,24 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
   const toolbar = (
     <div className={styles.toolbar}>
       <div className={styles.toolbarStart}>
-        <SearchField label="Search items" hideLabel placeholder="Search items…" value={search} onChange={setSearch} width={260} data-testid="items-search" />
+        <SearchField
+          label="Search items"
+          hideLabel
+          placeholder="Search items…"
+          value={search}
+          onChange={setSearch}
+          width={260}
+          data-testid="items-search"
+        />
         {route.label ? (
-          <Chip isSelected onRemove={() => {
+          <Chip
+            isSelected
+            onRemove={() => {
               onFilterChange?.();
               setQuery({ label: null, page: null });
-            }} removeLabel="Clear label filter">
+            }}
+            removeLabel="Clear label filter"
+          >
             label: {route.label}
           </Chip>
         ) : null}
@@ -205,11 +257,50 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
         </Link>
       ),
     },
-    ...(hasUserIds ? [{ id: 'item_id', label: 'ID', sortKey: 'item_id', width: 140, mono: true, cell: (item: DatasetItem) => <span dir="ltr">{item.item_id}</span> }] : []),
-    { id: 'input', label: 'Input', sortKey: 'input', flex: true, minWidth: 220, cell: (item: DatasetItem) => <Preview value={item.input} /> },
-    { id: 'expected', label: 'Expected', sortKey: 'expected', flex: true, minWidth: 180, cell: (item: DatasetItem) => <Preview value={item.expected_output} /> },
-    { id: 'metadata', label: 'Metadata', sortKey: 'metadata', width: 180, cell: (item: DatasetItem) => <Preview value={item.metadata} /> },
-    { id: 'runs', label: 'Runs', sortKey: 'runs', width: 70, align: 'end' as const, mono: true, cell: (item: DatasetItem) => item.run_count ?? item.result_summary?.run_count ?? 0 },
+    ...(hasUserIds
+      ? [
+          {
+            id: 'item_id',
+            label: 'ID',
+            sortKey: 'item_id',
+            width: 140,
+            mono: true,
+            cell: (item: DatasetItem) => <span dir="ltr">{item.item_id}</span>,
+          },
+        ]
+      : []),
+    {
+      id: 'input',
+      label: 'Input',
+      sortKey: 'input',
+      flex: true,
+      minWidth: 220,
+      cell: (item: DatasetItem) => <Preview value={item.input} />,
+    },
+    {
+      id: 'expected',
+      label: 'Expected',
+      sortKey: 'expected',
+      flex: true,
+      minWidth: 180,
+      cell: (item: DatasetItem) => <Preview value={item.expected_output} />,
+    },
+    {
+      id: 'metadata',
+      label: 'Metadata',
+      sortKey: 'metadata',
+      width: 180,
+      cell: (item: DatasetItem) => <Preview value={item.metadata} />,
+    },
+    {
+      id: 'runs',
+      label: 'Runs',
+      sortKey: 'runs',
+      width: 70,
+      align: 'end' as const,
+      mono: true,
+      cell: (item: DatasetItem) => item.run_count ?? item.result_summary?.run_count ?? 0,
+    },
     ...metrics.map((m) => ({
       id: `metric:${m}`,
       label: m,
@@ -217,10 +308,31 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
       width: 110,
       align: 'end' as const,
       mono: true,
-      cell: (item: DatasetItem) => <ScoreValue value={item.result_summary?.metrics?.[m]?.avg ?? null} direction={metricDir(directions[m])} />,
+      cell: (item: DatasetItem) => (
+        <ScoreValue
+          value={item.result_summary?.metrics?.[m]?.avg ?? null}
+          direction={metricDir(directions[m])}
+        />
+      ),
     })),
-    { id: 'latency', label: 'Latency', sortKey: 'latency', width: 90, align: 'end' as const, mono: true, cell: (item: DatasetItem) => formatLatency(item.result_summary?.avg_latency_ms) },
-    { id: 'edits', label: 'Edits', sortKey: 'edits', width: 70, align: 'end' as const, mono: true, cell: (item: DatasetItem) => item.edit_count ?? 0 },
+    {
+      id: 'latency',
+      label: 'Latency',
+      sortKey: 'latency',
+      width: 90,
+      align: 'end' as const,
+      mono: true,
+      cell: (item: DatasetItem) => formatLatency(item.result_summary?.avg_latency_ms),
+    },
+    {
+      id: 'edits',
+      label: 'Edits',
+      sortKey: 'edits',
+      width: 70,
+      align: 'end' as const,
+      mono: true,
+      cell: (item: DatasetItem) => item.edit_count ?? 0,
+    },
     {
       id: 'actions',
       label: 'Actions',
@@ -234,12 +346,22 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
           items={[
             { id: 'open', label: 'Open item' },
             { id: 'copy', label: 'Copy as JSON' },
-            ...(canEdit ? [{ id: 'delete', label: 'Delete item', tone: 'danger' as const, separatorBefore: true }] : []),
+            ...(canEdit
+              ? [{ id: 'delete', label: 'Delete item', tone: 'danger' as const, separatorBefore: true }]
+              : []),
           ]}
           onAction={(id) => {
             if (id === 'open') (onOpenItem ?? ((i: DatasetItem) => navigate(itemHref(i))))(item);
             else if (id === 'copy') {
-              void copyText(formatJson({ item_id: item.item_id, input: item.input, expected_output: item.expected_output, metadata: item.metadata, labels: item.labels })).then((ok) =>
+              void copyText(
+                formatJson({
+                  item_id: item.item_id,
+                  input: item.input,
+                  expected_output: item.expected_output,
+                  metadata: item.metadata,
+                  labels: item.labels,
+                }),
+              ).then((ok) =>
                 toast.show(ok ? 'Copied item as JSON' : 'Copy failed', { tone: ok ? 'success' : 'error' }),
               );
             } else if (id === 'delete') setDeleting(item);
@@ -254,7 +376,15 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
     <div className={styles.wrap} data-items-tab aria-busy={query.isFetching || undefined}>
       {toolbar}
       {items.length === 0 ? (
-        <EmptyState compact title="No items match these filters" action={<Button variant="neutral" onPress={() => setSearch('')}>Clear search</Button>} />
+        <EmptyState
+          compact
+          title="No items match these filters"
+          action={
+            <Button variant="neutral" onPress={() => setSearch('')}>
+              Clear search
+            </Button>
+          }
+        />
       ) : (
         <DataTable<DatasetItem>
           aria-label={`Items in ${version.version}`}
@@ -339,7 +469,16 @@ export function Preview({ value }: { value: unknown }) {
       {text || <span className={styles.empty}>—</span>}
       {tip
         ? createPortal(
-            <div className={styles.hoverTip} role="tooltip" style={{ left: Math.max(8, Math.min(tip.x, window.innerWidth - 488)), top: Math.min(tip.y, window.innerHeight - 248) }} {...dir} data-cell-popover>
+            <div
+              className={styles.hoverTip}
+              role="tooltip"
+              style={{
+                left: Math.max(8, Math.min(tip.x, window.innerWidth - 488)),
+                top: Math.min(tip.y, window.innerHeight - 248),
+              }}
+              {...dir}
+              data-cell-popover
+            >
               {typeof value === 'string' ? value : formatJson(value)}
             </div>,
             document.body,

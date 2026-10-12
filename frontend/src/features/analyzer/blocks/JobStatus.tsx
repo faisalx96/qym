@@ -17,7 +17,15 @@ const PHASE: Record<string, string> = {
 export function ProgressBar({ value, max, label }: { value: number; max: number; label: string }) {
   const pct = max ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
-    <div className={s.progress} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={value} aria-valuetext={`${value} of ${max}`}>
+    <div
+      className={s.progress}
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={value}
+      aria-valuetext={`${value} of ${max}`}
+    >
       <div className={s.progressFill} style={{ width: `${pct}%` }} />
     </div>
   );
@@ -26,7 +34,8 @@ export function ProgressBar({ value, max, label }: { value: number; max: number;
 function retryNote(job: AnalysisJob): string | null {
   const p = job.progress;
   if (p.phase !== 'retrying') return null;
-  const attempt = p.retry_attempt && p.retry_max_attempts ? ` (attempt ${p.retry_attempt} of ${p.retry_max_attempts})` : '';
+  const attempt =
+    p.retry_attempt && p.retry_max_attempts ? ` (attempt ${p.retry_attempt} of ${p.retry_max_attempts})` : '';
   return `Retrying ${p.metric_name ?? 'item'}${p.item_id ? ` on ${p.item_id}` : ''}${attempt}${p.retry_reason ? `: ${p.retry_reason}` : ''}`;
 }
 
@@ -37,7 +46,7 @@ const count = (v: unknown): number => {
 
 /** Link to the run page, keeping the analysed sample (`?pass=N`) of a repeat run. */
 export function viewRunTo(slug: string, runId: string, pass: number | null | undefined): string {
-  return `${runPath(slug, runId)}${pass != null ? `?pass=${pass}` : ""}`;
+  return `${runPath(slug, runId)}${pass != null ? `?pass=${pass}` : ''}`;
 }
 
 /**
@@ -48,7 +57,7 @@ export function viewRunTo(slug: string, runId: string, pass: number | null | und
 export function summarize(job: AnalysisJob) {
   const result = job.result;
   const results = result?.results ?? [];
-  const errored = results.filter((r) => String(r?.error ?? "").trim());
+  const errored = results.filter((r) => String(r?.error ?? '').trim());
   const failed = Math.max(
     count(result?.errors),
     count(result?.total_analysis_failed),
@@ -63,13 +72,13 @@ export function summarize(job: AnalysisJob) {
   const analyzed = Math.max(0, attempted - failed);
   const groups = new Map<string, number>();
   for (const r of errored) {
-    const code = String(r.error_code ?? "").trim() || "analysis_error";
+    const code = String(r.error_code ?? '').trim() || 'analysis_error';
     groups.set(code, (groups.get(code) ?? 0) + 1);
   }
   const cats = result?.categories;
   const categories = Array.isArray(cats)
     ? cats.length
-    : cats && typeof cats === "object"
+    : cats && typeof cats === 'object'
       ? Object.keys(cats).length
       : 0;
   return {
@@ -120,51 +129,66 @@ export function JobStatus({
   if (!job) return null;
   const live = job.status === 'queued' || job.status === 'running' || job.status === 'cancelling';
   const sum = summarize(job);
-  const note = runner.reconnecting ? "Reconnecting to the background analysis…" : retryNote(job);
-  const completedLabel = sum.allFailed ? "Analysis failed" : sum.failed ? "Completed with errors" : "Completed";
+  const note = runner.reconnecting ? 'Reconnecting to the background analysis…' : retryNote(job);
+  const completedLabel = sum.allFailed
+    ? 'Analysis failed'
+    : sum.failed
+      ? 'Completed with errors'
+      : 'Completed';
   const statusText =
-    job.status === "completed"
+    job.status === 'completed'
       ? completedLabel
-      : job.status === "cancelling"
-        ? "Cancelling"
-        : job.status === "cancelled"
-          ? "Cancelled"
-          : job.status === "failed"
-            ? "Failed"
-            : (PHASE[job.progress.phase] ?? "Running");
+      : job.status === 'cancelling'
+        ? 'Cancelling'
+        : job.status === 'cancelled'
+          ? 'Cancelled'
+          : job.status === 'failed'
+            ? 'Failed'
+            : (PHASE[job.progress.phase] ?? 'Running');
   const tone =
-    job.status === "completed"
+    job.status === 'completed'
       ? sum.allFailed
-        ? "danger"
+        ? 'danger'
         : sum.failed
-          ? "warning"
-          : "success"
-      : job.status === "failed"
-        ? "danger"
-        : job.status === "cancelled"
-          ? "neutral"
-          : job.progress.phase === "retrying"
-            ? "warning"
-            : "info";
+          ? 'warning'
+          : 'success'
+      : job.status === 'failed'
+        ? 'danger'
+        : job.status === 'cancelled'
+          ? 'neutral'
+          : job.progress.phase === 'retrying'
+            ? 'warning'
+            : 'info';
   const done = job.progress.completed;
   const total = job.progress.total;
 
   if (mode === 'bar') {
     return (
-      <div ref={region} tabIndex={-1} className={s.jobBar} role="region" aria-label="Analysis job" data-status={job.status}>
+      <div
+        ref={region}
+        tabIndex={-1}
+        className={s.jobBar}
+        role="region"
+        aria-label="Analysis job"
+        data-status={job.status}
+      >
         <Badge tone={tone} dot>
           {statusText}
         </Badge>
         <Text variant="base" tone="secondary" as="span" className={s.jobText} role="status">
           {live
-            ? `${done} / ${total} targets${note ? ` · ${note}` : ""}`
-            : job.status === "completed"
+            ? `${done} / ${total} targets${note ? ` · ${note}` : ''}`
+            : job.status === 'completed'
               ? outcomeText(sum)
-              : job.status === "failed"
-                ? (job.error ?? "The job failed.")
+              : job.status === 'failed'
+                ? (job.error ?? 'The job failed.')
                 : `Stopped at ${done} / ${total}; analyzed items were kept.`}
         </Text>
-        {live ? <ProgressBar value={done} max={total} label="Analysis progress" /> : <span className={s.spacer} />}
+        {live ? (
+          <ProgressBar value={done} max={total} label="Analysis progress" />
+        ) : (
+          <span className={s.spacer} />
+        )}
         {live ? (
           <Button size="sm" variant="danger" onPress={runner.cancel} isDisabled={runner.cancelling}>
             {runner.cancelling ? 'Cancelling…' : 'Cancel analysis'}
@@ -197,15 +221,15 @@ export function JobStatus({
         <Text variant="md" weight={600} as="span">
           {live
             ? `Running ${done} / ${total}`
-            : job.status === "completed"
+            : job.status === 'completed'
               ? sum.allFailed
-                ? "Analysis failed"
+                ? 'Analysis failed'
                 : sum.failed
-                  ? "Completed with errors"
-                  : "Analysis complete"
-              : job.status === "failed"
-                ? "Analysis failed"
-                : "Analysis cancelled"}
+                  ? 'Completed with errors'
+                  : 'Analysis complete'
+              : job.status === 'failed'
+                ? 'Analysis failed'
+                : 'Analysis cancelled'}
         </Text>
         <span className={s.spacer} />
         {live ? (
@@ -232,7 +256,7 @@ export function JobStatus({
               variant="base"
               tone="secondary"
               as="p"
-            >{`Created ${sum.categories} ${sum.categories === 1 ? "category" : "categories"}`}</Text>
+            >{`Created ${sum.categories} ${sum.categories === 1 ? 'category' : 'categories'}`}</Text>
           ) : null}
           {sum.retries > 0 ? (
             <Text variant="base" tone="secondary" as="p">{`Timeout retries: ${sum.retries}`}</Text>
@@ -244,13 +268,21 @@ export function JobStatus({
                   <Tag kind="data" tone="danger">
                     {code}
                   </Tag>
-                  <Text variant="base" tone="secondary" as="span">{`${count} ${count === 1 ? 'target' : 'targets'}`}</Text>
+                  <Text
+                    variant="base"
+                    tone="secondary"
+                    as="span"
+                  >{`${count} ${count === 1 ? 'target' : 'targets'}`}</Text>
                 </li>
               ))}
             </ul>
           ) : null}
           {job.result?.aggregation_error ? (
-            <Text variant="sm" tone="warning" as="p">{`Category aggregation did not finish: ${job.result.aggregation_error}`}</Text>
+            <Text
+              variant="sm"
+              tone="warning"
+              as="p"
+            >{`Category aggregation did not finish: ${job.result.aggregation_error}`}</Text>
           ) : null}
         </div>
       ) : null}

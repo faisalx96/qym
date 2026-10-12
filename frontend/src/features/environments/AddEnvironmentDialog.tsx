@@ -92,7 +92,8 @@ function AddEnvironmentDialogInner({
       const mapped = mapEnvironmentError(e);
       setErrors(mapped.fields);
       setError(
-        mapped.general || (Object.keys(mapped.fields).length ? '' : 'Could not connect to the Evaluation Service.'),
+        mapped.general ||
+          (Object.keys(mapped.fields).length ? '' : 'Could not connect to the Evaluation Service.'),
       );
       const first = (['name', 'base_url', 'api_key'] as const).find((k) => mapped.fields[k]);
       if (first) setTimeout(() => inputs.current[first]?.focus(), 0);

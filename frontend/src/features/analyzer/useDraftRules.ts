@@ -43,7 +43,9 @@ export function useDraftRules(scope: AnalysisScope, version: RuleVersion, editab
           onSuccess: (data) => {
             // Adopt server ids for newly created rules without disturbing text being typed.
             const saved = data.analysis_rules;
-            rulesRef.current = rulesRef.current.map((r, i) => (r.id ? r : { ...r, id: saved[i]?.id ?? r.id }));
+            rulesRef.current = rulesRef.current.map((r, i) =>
+              r.id ? r : { ...r, id: saved[i]?.id ?? r.id },
+            );
             setRules(rulesRef.current);
             setState('saved');
             setError(null);
@@ -86,9 +88,9 @@ export function useDraftRules(scope: AnalysisScope, version: RuleVersion, editab
       timer.current = null;
       if (rulesRef.current.every(ruleIsComplete)) flushRef.current(rulesRef.current);
     };
-    window.addEventListener("beforeunload", flushPending);
+    window.addEventListener('beforeunload', flushPending);
     return () => {
-      window.removeEventListener("beforeunload", flushPending);
+      window.removeEventListener('beforeunload', flushPending);
       flushPending();
     };
   }, []);

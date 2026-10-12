@@ -88,7 +88,13 @@ export async function pushRun(request: APIRequestContext, token: string, spec: R
       const scores = Array.isArray(item.scores) ? (item.scores[pass - 1] ?? item.scores[0]) : item.scores;
       seq += 1;
       lines.push(
-        nd('item_started', runId, seq, { item_id: itemId, index: i, pass_number: pass, input: item.input, expected: item.expected }),
+        nd('item_started', runId, seq, {
+          item_id: itemId,
+          index: i,
+          pass_number: pass,
+          input: item.input,
+          expected: item.expected,
+        }),
       );
       for (const m of metrics) {
         seq += 1;
@@ -98,7 +104,10 @@ export async function pushRun(request: APIRequestContext, token: string, spec: R
             pass_number: pass,
             metric_name: m,
             score_numeric: scores?.[m] ?? 1,
-            meta: { verdict: (scores?.[m] ?? 1) >= 0.5 ? 'correct' : 'incorrect', detail: { reason: 'seeded', rows: 3 } },
+            meta: {
+              verdict: (scores?.[m] ?? 1) >= 0.5 ? 'correct' : 'incorrect',
+              detail: { reason: 'seeded', rows: 3 },
+            },
           }),
         );
       }
@@ -143,7 +152,9 @@ export async function pushRun(request: APIRequestContext, token: string, spec: R
     }
   }
   seq += 1;
-  lines.push(nd('run_completed', runId, seq, { ended_at: new Date().toISOString(), final_status: 'COMPLETED' }));
+  lines.push(
+    nd('run_completed', runId, seq, { ended_at: new Date().toISOString(), final_status: 'COMPLETED' }),
+  );
   const res = await request.post(`/v1/runs/${runId}/events`, {
     headers: { ...headers, 'Content-Type': 'application/x-ndjson' },
     data: lines.join('\n') + '\n',
@@ -214,7 +225,15 @@ export async function seedAnalyzer(request: APIRequestContext, opts: SeedOptions
     out.repeatId = await pushRun(request, token, {
       name: `repeat-${slug}`,
       samples: 2,
-      items: failingItems('r').slice(0, 4).map((it) => ({ ...it, scores: [{ exact_match: 0, execution_accuracy: 0.2 }, { exact_match: 0, execution_accuracy: 0.3 }] })),
+      items: failingItems('r')
+        .slice(0, 4)
+        .map((it) => ({
+          ...it,
+          scores: [
+            { exact_match: 0, execution_accuracy: 0.2 },
+            { exact_match: 0, execution_accuracy: 0.3 },
+          ],
+        })),
     });
   }
   if (opts.withArabic) {
@@ -231,7 +250,8 @@ export async function seedAnalyzer(request: APIRequestContext, opts: SeedOptions
   return out;
 }
 
-export const analysisUrl = (slug: string, runId: string, query = '') => `/projects/${slug}/analysis?run=${runId}${query}`;
+export const analysisUrl = (slug: string, runId: string, query = '') =>
+  `/projects/${slug}/analysis?run=${runId}${query}`;
 
 /** Pass the real response of `pattern` through `patch` (e.g. analysis-config flags). */
 export async function patchJson(

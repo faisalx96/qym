@@ -12,7 +12,16 @@ import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
 import { platformUrl } from '@/lib/runtime';
 import { KEYS, readLocal } from '@/lib/storage';
-import { EmptyState, ErrorState, LinkButton, PageHeader, SegmentedControl, Skeleton, Stack, useToast } from '@/ui';
+import {
+  EmptyState,
+  ErrorState,
+  LinkButton,
+  PageHeader,
+  SegmentedControl,
+  Skeleton,
+  Stack,
+  useToast,
+} from '@/ui';
 import { CompareCtx, type CompareValue } from './CompareContext';
 import { DeltaLine } from './components/DeltaLine';
 import { ItemsSection } from './components/items/ItemsSection';
@@ -53,18 +62,42 @@ export function ComparePage() {
 
   let body;
   if (c.selectionState === 'none')
-    body = <EmptyState title="No runs to compare" body="Select two or more runs on the Runs page and press Compare." action={<BackLink slug={slug} />} />;
+    body = (
+      <EmptyState
+        title="No runs to compare"
+        body="Select two or more runs on the Runs page and press Compare."
+        action={<BackLink slug={slug} />}
+      />
+    );
   else if (c.selectionState === 'too_few')
-    body = <EmptyState title="Select at least two runs" body="A comparison needs two or more runs." action={<BackLink slug={slug} />} />;
+    body = (
+      <EmptyState
+        title="Select at least two runs"
+        body="A comparison needs two or more runs."
+        action={<BackLink slug={slug} />}
+      />
+    );
   else if (c.tooMany)
-    body = <ErrorState error={new Error(`Compare at most ${MAX_COMPARE_RUNS} runs at once (${c.refs.length} requested)`)} title="Too many runs" message={`Compare at most ${MAX_COMPARE_RUNS} runs at once; this link has ${c.refs.length}.`} />;
-  else if (c.query.error) body = <ErrorState error={c.query.error} title="Couldn’t load this comparison" onRetry={c.retry} />;
-  else if (c.query.isPending) body = pending ? <Skeleton kind="cards" count={3} label="Loading comparison" /> : null;
+    body = (
+      <ErrorState
+        error={new Error(`Compare at most ${MAX_COMPARE_RUNS} runs at once (${c.refs.length} requested)`)}
+        title="Too many runs"
+        message={`Compare at most ${MAX_COMPARE_RUNS} runs at once; this link has ${c.refs.length}.`}
+      />
+    );
+  else if (c.query.error)
+    body = <ErrorState error={c.query.error} title="Couldn’t load this comparison" onRetry={c.retry} />;
+  else if (c.query.isPending)
+    body = pending ? <Skeleton kind="cards" count={3} label="Loading comparison" /> : null;
   else if (!c.model || c.model.runs.length < 2)
     body = (
       <ErrorState
         error={Object.assign(new Error('Not found'), { status: 404 })}
-        title={c.missing.length === 1 ? 'A run in this comparison was not found' : 'Runs in this comparison were not found'}
+        title={
+          c.missing.length === 1
+            ? 'A run in this comparison was not found'
+            : 'Runs in this comparison were not found'
+        }
         message={`${c.missing.length || 'Some'} of the runs in this link ${c.missing.length === 1 ? 'was' : 'were'} deleted or ${c.missing.length === 1 ? 'is' : 'are'} not visible to you. A comparison needs at least 2 runs.${c.missing.length ? ` Missing: ${c.missing.join(', ')}` : ''}`}
         notFoundMessage="Not found"
         action={<BackLink slug={slug} />}
@@ -80,7 +113,12 @@ export function ComparePage() {
 
   return (
     <div className={`${fullWidth} ${styles.page}`} data-testid="compare-page">
-      {c.model && c.selectionState === 'ok' ? null : <PageHeader title="Compare runs" description="Review configuration, performance and item-level differences." />}
+      {c.model && c.selectionState === 'ok' ? null : (
+        <PageHeader
+          title="Compare runs"
+          description="Review configuration, performance and item-level differences."
+        />
+      )}
       {body}
     </div>
   );
@@ -92,24 +130,55 @@ function MissingToast({ missing }: { missing: string[] }) {
   useEffect(() => {
     if (!key) return;
     const n = key.split(',').length;
-    toast.show(`${n} run${n === 1 ? '' : 's'} in this link ${n === 1 ? 'was' : 'were'} deleted or ${n === 1 ? 'is' : 'are'} not visible to you, so ${n === 1 ? 'it is' : 'they are'} left out. Missing: ${key.split(',').join(', ')}`, { tone: 'warning' });
+    toast.show(
+      `${n} run${n === 1 ? '' : 's'} in this link ${n === 1 ? 'was' : 'were'} deleted or ${n === 1 ? 'is' : 'are'} not visible to you, so ${n === 1 ? 'it is' : 'they are'} left out. Missing: ${key.split(',').join(', ')}`,
+      { tone: 'warning' },
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   return null;
 }
 
-function CompareLoaded({ c, model, slug }: { c: CompareController; model: CompareModel; slug: string | undefined }) {
+function CompareLoaded({
+  c,
+  model,
+  slug,
+}: {
+  c: CompareController;
+  model: CompareModel;
+  slug: string | undefined;
+}) {
   const info = useColumns(model, c.view);
   const metric = c.metric;
   const search = useCompareSearch(model, c.view.q, c.view.filters.rules);
   const result = useMemo(
-    () => (metric ? applyFilters({ model, view: c.view, metric, thresholds: c.thresholds, groups: c.cohorts, match: search.matcher }) : null),
+    () =>
+      metric
+        ? applyFilters({
+            model,
+            view: c.view,
+            metric,
+            thresholds: c.thresholds,
+            groups: c.cohorts,
+            match: search.matcher,
+          })
+        : null,
     [model, c.view, metric, c.thresholds, c.cohorts, search.matcher],
   );
   const itemIds = useMemo(() => (result ? result.items.map((i) => i.itemId) : []), [result]);
-  const stats = useMemo(() => (c.ctx ? computeComparisonStats(model, c.ctx, itemIds) : null), [model, c.ctx, itemIds]);
+  const stats = useMemo(
+    () => (c.ctx ? computeComparisonStats(model, c.ctx, itemIds) : null),
+    [model, c.ctx, itemIds],
+  );
   const [panel, setPanel] = useState(true);
-  if (!info || !metric || !c.ctx || !result || !stats) return <ErrorState error={new Error('These runs have no metrics to compare.')} title="Nothing to compare" compact />;
+  if (!info || !metric || !c.ctx || !result || !stats)
+    return (
+      <ErrorState
+        error={new Error('These runs have no metrics to compare.')}
+        title="Nothing to compare"
+        compact
+      />
+    );
   const value: CompareValue = {
     c,
     model,
@@ -133,7 +202,11 @@ function CompareLoaded({ c, model, slug }: { c: CompareController; model: Compar
       <PageHeader
         title="Compare runs"
         description="Scan the items that changed; the analytics follow your filter."
-        meta={[`${info.columns.length} column${info.columns.length === 1 ? '' : 's'}`, first?.dataset_name ?? '', `${model.itemIds.length} aligned items`].filter(Boolean)}
+        meta={[
+          `${info.columns.length} column${info.columns.length === 1 ? '' : 's'}`,
+          first?.dataset_name ?? '',
+          `${model.itemIds.length} aligned items`,
+        ].filter(Boolean)}
         actions={
           <>
             {c.cohorts ? (
@@ -167,7 +240,9 @@ function CompareLoaded({ c, model, slug }: { c: CompareController; model: Compar
       </Stack>
       <div className={styles.sticky}>
         <SelectionBar />
-        {sweep ? null : <DeltaLine info={info} analyticsOpen={panel} onToggleAnalytics={() => setPanel((p) => !p)} />}
+        {sweep ? null : (
+          <DeltaLine info={info} analyticsOpen={panel} onToggleAnalytics={() => setPanel((p) => !p)} />
+        )}
       </div>
       <RunCards />
       <ItemsUiHost>

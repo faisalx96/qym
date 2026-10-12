@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { estimateTokens, type SaveState, type useDraftRules } from "../useDraftRules";
+import { useMemo, useState } from 'react';
+import { estimateTokens, type SaveState, type useDraftRules } from '../useDraftRules';
 import {
   Button,
   Checkbox,
@@ -12,8 +12,8 @@ import {
   Text,
   Textarea,
   TextField,
-} from "@/ui";
-import s from "./rules.module.css";
+} from '@/ui';
+import s from './rules.module.css';
 
 const PAGE = 10;
 
@@ -26,7 +26,13 @@ const SAVE_TEXT: Record<SaveState, string> = {
   invalid: 'Every rule needs a title and an instruction before it saves',
 };
 
-export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDraftRules>; editable: boolean }) {
+export function RuleEditor({
+  draft,
+  editable,
+}: {
+  draft: ReturnType<typeof useDraftRules>;
+  editable: boolean;
+}) {
   const { rules, state, error, update, add, remove } = draft;
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -131,13 +137,17 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
                     <Icon name={isOpen ? 'collapse' : 'expand'} size={12} />
                     <span dir="auto">{r.title || 'Untitled rule'}</span>
                   </button>
-                  {invalid ? <Tag kind="data" tone="warning">incomplete</Tag> : null}
+                  {invalid ? (
+                    <Tag kind="data" tone="warning">
+                      incomplete
+                    </Tag>
+                  ) : null}
                   {r.inferred_from ? <Tag kind="data">{r.inferred_from}</Tag> : null}
                   {editable ? (
                     <Button
                       size="sm"
                       variant="ghost"
-                      aria-label={`Delete rule ${r.title || "untitled"}`}
+                      aria-label={`Delete rule ${r.title || 'untitled'}`}
                       onPress={() => setDeleting([r.key])}
                     >
                       <Icon name="trash" size={12} />
@@ -161,7 +171,9 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
                       value={r.instruction}
                       isReadOnly={!editable}
                       onChange={(v) => update(r.key, { instruction: v })}
-                      errorMessage={editable && !r.instruction.trim() ? 'Instruction is required.' : undefined}
+                      errorMessage={
+                        editable && !r.instruction.trim() ? 'Instruction is required.' : undefined
+                      }
                       isInvalid={editable && !r.instruction.trim()}
                     />
                     {r.explanation ? (
@@ -189,7 +201,7 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}
-        title={deleting && deleting.length > 1 ? `Delete ${deleting.length} rules?` : "Delete this rule?"}
+        title={deleting && deleting.length > 1 ? `Delete ${deleting.length} rules?` : 'Delete this rule?'}
         description="The rules are removed from this draft and the draft is saved."
         cancelLabel="Keep"
         confirmLabel="Delete"
@@ -201,7 +213,13 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
         }}
       />
       {filtered.length > PAGE ? (
-        <Pagination total={filtered.length} page={current} pageSize={PAGE} noun="rules" onPageChange={setPage} />
+        <Pagination
+          total={filtered.length}
+          page={current}
+          pageSize={PAGE}
+          noun="rules"
+          onPageChange={setPage}
+        />
       ) : null}
     </div>
   );

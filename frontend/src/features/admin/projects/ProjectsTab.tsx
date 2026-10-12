@@ -23,7 +23,9 @@ export function ProjectsTab() {
       {projects.isError ? (
         <ErrorState error={projects.error} onRetry={() => projects.refetch()} compact />
       ) : projects.isPending ? (
-        skeleton ? <Skeleton kind="table" rows={3} label="Loading projects" /> : null
+        skeleton ? (
+          <Skeleton kind="table" rows={3} label="Loading projects" />
+        ) : null
       ) : (
         <ProjectsTable projects={projects.data} />
       )}

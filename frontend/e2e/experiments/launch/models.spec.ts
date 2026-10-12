@@ -10,7 +10,8 @@ import {
   fakeJobs,
   getExperiment,
   launchExperiment,
-  resetFakes, test,
+  resetFakes,
+  test,
   waitForSubmitted,
 } from '../support';
 import {
@@ -153,10 +154,7 @@ test.describe('models', () => {
     await expect(page.getByRole('article', { name: /fast/i })).toHaveCount(0);
   });
 
-  test('re-enter a temporary key after a clone', async ({
-    page,
-    request,
-  }) => {
+  test('re-enter a temporary key after a clone', async ({ page, request }) => {
     const spec = experimentSpec(f.connectionId, 60) as any;
     spec.slot_bindings = {
       'endpoint:primary': {

@@ -63,7 +63,10 @@ test.describe('session auth admin', () => {
     expect(res.ok(), await res.text()).toBeTruthy();
   }
 
-  test('reset password: locks while pending, shows the one-time password, clears on close', async ({ page, baseURL }) => {
+  test('reset password: locks while pending, shows the one-time password, clears on close', async ({
+    page,
+    baseURL,
+  }) => {
     await signUpAdmin(page, baseURL);
     const email = `${uniqueSlug('victim')}@e2e.local`;
     const created = await admin.post('/v1/admin/users', { data: { email, display_name: 'Reset Victim' } });
@@ -97,14 +100,23 @@ test.describe('session auth admin', () => {
     await expect(page.locator('body')).not.toContainText(value);
   });
 
-  test('a member sees the forbidden state at /admin and no Admin link', async ({ browser, playwright, baseURL }) => {
+  test('a member sees the forbidden state at /admin and no Admin link', async ({
+    browser,
+    playwright,
+    baseURL,
+  }) => {
     const email = `${uniqueSlug('plain')}@e2e.local`;
     const created = await admin.post('/v1/admin/users', { data: { email, display_name: 'Plain Member' } });
     const { id } = (await created.json()) as { id: string };
-    const { temporary_password: temp } = (await (await admin.post(`/v1/admin/users/${id}/reset-password`)).json()) as {
+    const { temporary_password: temp } = (await (
+      await admin.post(`/v1/admin/users/${id}/reset-password`)
+    ).json()) as {
       temporary_password: string;
     };
-    const anon = await playwright.request.newContext({ baseURL, extraHTTPHeaders: { Origin: baseURL ?? '' } });
+    const anon = await playwright.request.newContext({
+      baseURL,
+      extraHTTPHeaders: { Origin: baseURL ?? '' },
+    });
     const changed = await anon.post('/v1/auth/password/change', {
       data: { email, current_password: temp, new_password: PASSWORD },
     });
@@ -121,7 +133,9 @@ test.describe('session auth admin', () => {
     await form.getByRole('button', { name: 'Sign in' }).click();
     await expect(page.locator('[data-admin-forbidden]')).toBeVisible();
     await expect(page.getByText('Admin access required')).toBeVisible();
-    await expect(page.locator('[data-app-shell]').getByRole('link', { name: 'Admin', exact: true })).toHaveCount(0);
+    await expect(
+      page.locator('[data-app-shell]').getByRole('link', { name: 'Admin', exact: true }),
+    ).toHaveCount(0);
     await context.close();
   });
 });

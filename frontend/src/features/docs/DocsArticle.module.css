@@ -206,14 +206,30 @@
 }
 
 /* Syntax palette: classes emitted by the build plugin from the --code-* theme. */
-.codeblock :global(.tok-comment) { color: var(--code-comment); }
-.codeblock :global(.tok-keyword) { color: var(--code-keyword); }
-.codeblock :global(.tok-string) { color: var(--code-string); }
-.codeblock :global(.tok-number) { color: var(--code-number); }
-.codeblock :global(.tok-builtin) { color: var(--code-builtin); }
-.codeblock :global(.tok-class) { color: var(--code-class); }
-.codeblock :global(.tok-muted) { color: var(--text-secondary); }
-.codeblock :global(.tok-italic) { font-style: italic; }
+.codeblock :global(.tok-comment) {
+  color: var(--code-comment);
+}
+.codeblock :global(.tok-keyword) {
+  color: var(--code-keyword);
+}
+.codeblock :global(.tok-string) {
+  color: var(--code-string);
+}
+.codeblock :global(.tok-number) {
+  color: var(--code-number);
+}
+.codeblock :global(.tok-builtin) {
+  color: var(--code-builtin);
+}
+.codeblock :global(.tok-class) {
+  color: var(--code-class);
+}
+.codeblock :global(.tok-muted) {
+  color: var(--text-secondary);
+}
+.codeblock :global(.tok-italic) {
+  font-style: italic;
+}
 
 /* ── Callouts (left-border semantics: tip accent, warn warning, danger error) ── */
 .article :global(.docs-callout) {
@@ -240,12 +256,24 @@
   margin-top: 2px;
 }
 
-.article :global(.docs-callout.tip) { border-left-color: var(--accent-primary); }
-.article :global(.docs-callout.tip .docs-callout-icon) { color: var(--accent-primary); }
-.article :global(.docs-callout.warn) { border-left-color: var(--warning); }
-.article :global(.docs-callout.warn .docs-callout-icon) { color: var(--warning); }
-.article :global(.docs-callout.danger) { border-left-color: var(--error); }
-.article :global(.docs-callout.danger .docs-callout-icon) { color: var(--error); }
+.article :global(.docs-callout.tip) {
+  border-left-color: var(--accent-primary);
+}
+.article :global(.docs-callout.tip .docs-callout-icon) {
+  color: var(--accent-primary);
+}
+.article :global(.docs-callout.warn) {
+  border-left-color: var(--warning);
+}
+.article :global(.docs-callout.warn .docs-callout-icon) {
+  color: var(--warning);
+}
+.article :global(.docs-callout.danger) {
+  border-left-color: var(--error);
+}
+.article :global(.docs-callout.danger .docs-callout-icon) {
+  color: var(--error);
+}
 
 .article :global(.docs-callout-title) {
   color: var(--text-primary);

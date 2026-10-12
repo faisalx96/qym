@@ -42,7 +42,12 @@ const listData = (over: Partial<BestRunsPayload> = {}): BestRunsPayload => ({
   environment_id: 'e1',
   dataset: { id: 'd1', name: 'golden' },
   dataset_version: null,
-  scope: { dataset: { name: 'golden' }, dataset_version: null, versioning: { agent_version: ['1.4'] }, global: false },
+  scope: {
+    dataset: { name: 'golden' },
+    dataset_version: null,
+    versioning: { agent_version: ['1.4'] },
+    global: false,
+  },
   metric: 'accuracy',
   k: 3,
   exclude_errored: true,
@@ -187,7 +192,12 @@ describe('BestRunPicker', () => {
     expect(screen.getByText('Temporary models were left unbound')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Use it again' }));
     const binding = live.current?.doc.bindings['endpoint:primary'];
-    expect(binding).toMatchObject({ kind: 'temporary', model: 'gpt-4o-mini', secretRef: null, needsKey: true });
+    expect(binding).toMatchObject({
+      kind: 'temporary',
+      model: 'gpt-4o-mini',
+      secretRef: null,
+      needsKey: true,
+    });
     expect(screen.getByRole('button', { name: 'In use' })).toBeDisabled();
   });
 

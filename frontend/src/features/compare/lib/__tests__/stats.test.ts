@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { buildCompareModel } from '../model';
-import { metricColumns, resolveBaseline, columnItemScores, compareWithBaseline, deltaKind, formatDelta, formatBand } from '../baseline';
+import {
+  metricColumns,
+  resolveBaseline,
+  columnItemScores,
+  compareWithBaseline,
+  deltaKind,
+  formatDelta,
+  formatBand,
+} from '../baseline';
 import { computeComparisonStats, statRates } from '../stats';
 import { metricCtx } from '../scoring';
 import {
-  computeGroupedComparison, filterSweepItems, resolveCohorts, summarizeSweepItems, DEFAULT_SWEEP_FILTERS,
-  reverseSweepItem, sweepOutcomeOf,
+  computeGroupedComparison,
+  filterSweepItems,
+  resolveCohorts,
+  summarizeSweepItems,
+  DEFAULT_SWEEP_FILTERS,
+  reverseSweepItem,
+  sweepOutcomeOf,
 } from '../cohort';
 import { makePayload } from './fixtures';
 
@@ -48,8 +61,16 @@ describe('comparison stats', () => {
 
   it('with no direction there are no winners, passes or Max@K', () => {
     const noDir = makePayload([
-      { id: 'A', scores: mk(2, () => 0.5), specs: { correct: { score_type: 'boolean' }, quality: { score_type: 'percentage' } } },
-      { id: 'B', scores: mk(2, () => 0.6), specs: { correct: { score_type: 'boolean' }, quality: { score_type: 'percentage' } } },
+      {
+        id: 'A',
+        scores: mk(2, () => 0.5),
+        specs: { correct: { score_type: 'boolean' }, quality: { score_type: 'percentage' } },
+      },
+      {
+        id: 'B',
+        scores: mk(2, () => 0.6),
+        specs: { correct: { score_type: 'boolean' }, quality: { score_type: 'percentage' } },
+      },
     ]);
     const m = buildCompareModel(noDir, ['A', 'B']);
     const s = computeComparisonStats(m, metricCtx(m, 'quality'));
@@ -63,7 +84,17 @@ describe('baseline paired stats', () => {
   const payload = makePayload([
     { id: 'A', model: 'm1', scores: mk(6, (i) => 0.5 + i * 0.01) },
     { id: 'B', model: 'm2', scores: mk(6, (i) => 0.7 + i * 0.01) },
-    { id: 'R', model: 'm3', samples: 2, scores: Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`i${i + 1}`, { correct: [1, 1], quality: [0.5 + i * 0.01, 0.7 + i * 0.01] }])) },
+    {
+      id: 'R',
+      model: 'm3',
+      samples: 2,
+      scores: Object.fromEntries(
+        Array.from({ length: 6 }, (_, i) => [
+          `i${i + 1}`,
+          { correct: [1, 1], quality: [0.5 + i * 0.01, 0.7 + i * 0.01] },
+        ]),
+      ),
+    },
   ]);
   const model = buildCompareModel(payload, ['A', 'B', 'R']);
   const ctx = metricCtx(model, 'quality');
@@ -94,8 +125,18 @@ describe('baseline paired stats', () => {
   });
 
   it('noise band and p-value on varying diffs; subset restricts items', () => {
-    const base = new Map([['x', 0.5], ['y', 0.5], ['z', 0.5], ['w', 0.5]]);
-    const cand = new Map([['x', 0.6], ['y', 0.4], ['z', 0.7], ['w', 0.5]]);
+    const base = new Map([
+      ['x', 0.5],
+      ['y', 0.5],
+      ['z', 0.5],
+      ['w', 0.5],
+    ]);
+    const cand = new Map([
+      ['x', 0.6],
+      ['y', 0.4],
+      ['z', 0.7],
+      ['w', 0.5],
+    ]);
     const r = compareWithBaseline(cand, base, { direction: 'maximize' });
     expect(r.counts).toEqual({ improved: 2, regressed: 1, same: 1 });
     expect(r.mean).toBeCloseTo(0.05);
@@ -133,12 +174,30 @@ describe('cohorts and sweep', () => {
 
   it('infers cohorts by model when counts match, explicit cohorts win', () => {
     const inferred = resolveCohorts(model, null)!;
-    expect(inferred).toMatchObject({ left: ['A1', 'A2'], right: ['B1', 'B2'], leftLabel: 'm1', k: 2, explicit: false });
-    const explicit = resolveCohorts(model, { left: ['A1', 'B1'], right: ['A2', 'B2'], leftLabel: 'Cohort A', rightLabel: 'mine' })!;
+    expect(inferred).toMatchObject({
+      left: ['A1', 'A2'],
+      right: ['B1', 'B2'],
+      leftLabel: 'm1',
+      k: 2,
+      explicit: false,
+    });
+    const explicit = resolveCohorts(model, {
+      left: ['A1', 'B1'],
+      right: ['A2', 'B2'],
+      leftLabel: 'Cohort A',
+      rightLabel: 'mine',
+    })!;
     expect(explicit.explicit).toBe(true);
     expect(explicit.rightLabel).toBe('mine');
     expect(explicit.leftLabel).toBe('A1');
-    const three = buildCompareModel(makePayload([{ id: 'x', model: 'a', scores: mk(1, () => 1) }, { id: 'y', model: 'b', scores: mk(1, () => 1) }, { id: 'z', model: 'c', scores: mk(1, () => 1) }]), ['x', 'y', 'z']);
+    const three = buildCompareModel(
+      makePayload([
+        { id: 'x', model: 'a', scores: mk(1, () => 1) },
+        { id: 'y', model: 'b', scores: mk(1, () => 1) },
+        { id: 'z', model: 'c', scores: mk(1, () => 1) },
+      ]),
+      ['x', 'y', 'z'],
+    );
     expect(resolveCohorts(three, null)).toBeNull();
   });
 
@@ -155,7 +214,13 @@ describe('cohorts and sweep', () => {
     expect(g.buckets.both_fail.itemIds).toEqual(['i4']);
     expect(g.items[0]!.itemId).toBe('i3'); // biggest move first
     const sum = summarizeSweepItems(g.items, 2, 2, null, 'maximize');
-    expect(sum.counts).toMatchObject({ improved: 2, regressed: 0, unchanged: 2, decisivelyFixed: 1, decisivelyBroken: 0 });
+    expect(sum.counts).toMatchObject({
+      improved: 2,
+      regressed: 0,
+      unchanged: 2,
+      decisivelyFixed: 1,
+      decisivelyBroken: 0,
+    });
     expect(sum.left.passAtK).toBeCloseTo((1 + 1 + 0 + 0) / 4);
     expect(sum.right.passAtK).toBeCloseTo(3 / 4);
     expect(sum.left.avgAtK).toBeCloseTo((0.9 + 0.9 + 0.2 + 0.2 + 0.9 + 0.2 + 0.2 + 0.2) / 8);
@@ -165,9 +230,19 @@ describe('cohorts and sweep', () => {
   it('filters by move/outcome/metadata and reverses sides', () => {
     const groups = resolveCohorts(model, null)!;
     const g = computeGroupedComparison(model, groups, ctx);
-    expect(filterSweepItems(g.items, { ...DEFAULT_SWEEP_FILTERS, move: 'improved' }).map((i) => i.itemId).sort()).toEqual(['i2', 'i3']);
-    expect(filterSweepItems(g.items, { ...DEFAULT_SWEEP_FILTERS, outcome: 'right_sweeps_left' }).map((i) => i.itemId)).toEqual(['i3']);
-    expect(filterSweepItems(g.items, { ...DEFAULT_SWEEP_FILTERS, q: 'i4' }).map((i) => i.itemId)).toEqual(['i4']);
+    expect(
+      filterSweepItems(g.items, { ...DEFAULT_SWEEP_FILTERS, move: 'improved' })
+        .map((i) => i.itemId)
+        .sort(),
+    ).toEqual(['i2', 'i3']);
+    expect(
+      filterSweepItems(g.items, { ...DEFAULT_SWEEP_FILTERS, outcome: 'right_sweeps_left' }).map(
+        (i) => i.itemId,
+      ),
+    ).toEqual(['i3']);
+    expect(filterSweepItems(g.items, { ...DEFAULT_SWEEP_FILTERS, q: 'i4' }).map((i) => i.itemId)).toEqual([
+      'i4',
+    ]);
     const rev = g.items.map(reverseSweepItem);
     expect(rev.find((i) => i.itemId === 'i3')!.move).toBe(-2);
     expect(sweepOutcomeOf(rev.find((i) => i.itemId === 'i3')!)).toBe('left_sweeps_right');
@@ -175,7 +250,11 @@ describe('cohorts and sweep', () => {
 
   it('items missing from any cohort run are ineligible; scorer errors count as failures', () => {
     const p = makePayload([
-      { id: 'A', model: 'm1', scores: { i1: { correct: 1, quality: 0.9 }, i2: { correct: 1, quality: 'error' } } },
+      {
+        id: 'A',
+        model: 'm1',
+        scores: { i1: { correct: 1, quality: 0.9 }, i2: { correct: 1, quality: 'error' } },
+      },
       { id: 'B', model: 'm2', scores: { i1: { correct: 1, quality: 0.9 } } },
     ]);
     const m = buildCompareModel(p, ['A', 'B']);

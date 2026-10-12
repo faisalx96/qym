@@ -70,7 +70,9 @@ export function BaseStatus() {
           tone="warning"
           title={`${base.dropped.length} setting${base.dropped.length === 1 ? '' : 's'} could not be carried over`}
         >
-          <List items={base.dropped.map((d) => `${d.label || d.pointer}: ${d.message || d.reason || 'dropped'}`)} />
+          <List
+            items={base.dropped.map((d) => `${d.label || d.pointer}: ${d.message || d.reason || 'dropped'}`)}
+          />
         </Callout>
       ) : null}
       {base.errors.length ? (

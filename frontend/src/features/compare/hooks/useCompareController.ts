@@ -90,8 +90,14 @@ export function useCompareController(): CompareController {
     if (!model || !query.data) return null;
     const explicit = selection.cohorts
       ? {
-          left: expandRefs(selection.cohorts.left, query.data.runs.map((r) => r.run)),
-          right: expandRefs(selection.cohorts.right, query.data.runs.map((r) => r.run)),
+          left: expandRefs(
+            selection.cohorts.left,
+            query.data.runs.map((r) => r.run),
+          ),
+          right: expandRefs(
+            selection.cohorts.right,
+            query.data.runs.map((r) => r.run),
+          ),
           leftLabel: selection.cohorts.leftLabel,
           rightLabel: selection.cohorts.rightLabel,
         }
@@ -111,7 +117,10 @@ export function useCompareController(): CompareController {
   );
   const metric = view.metric ?? model?.defaultMetric ?? null;
   const thresholds = view.thresholds;
-  const ctx = useMemo(() => (model && metric ? metricCtx(model, metric, thresholds) : null), [model, metric, thresholds]);
+  const ctx = useMemo(
+    () => (model && metric ? metricCtx(model, metric, thresholds) : null),
+    [model, metric, thresholds],
+  );
 
   const write = useCallback(
     (next: CompareView) => replaceUrlQuery(writeView(next, model?.defaultMetric ?? null)),
@@ -120,7 +129,9 @@ export function useCompareController(): CompareController {
   const setView = useCallback<CompareController['setView']>(
     (patch, opts) => {
       // Any filter-like change returns to page 1 unless the caller says otherwise.
-      const resets = Object.keys(patch).some((k) => k !== 'page' && k !== 'item' && k !== 'tab' && k !== 'columns' && k !== 'baseline');
+      const resets = Object.keys(patch).some(
+        (k) => k !== 'page' && k !== 'item' && k !== 'tab' && k !== 'columns' && k !== 'baseline',
+      );
       write({ ...view, ...patch, page: patch.page ?? (resets && !opts?.keepPage ? 1 : view.page) });
     },
     [view, write],

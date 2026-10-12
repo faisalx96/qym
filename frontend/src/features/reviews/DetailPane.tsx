@@ -55,29 +55,63 @@ export function DetailPane(p: DetailPaneProps) {
           </span>
         </div>
         <div className={styles.meta}>
-          {typeof row.ai_confidence === 'number' ? <span>AI confidence {Math.round(row.ai_confidence * 100)}%</span> : null}
-          {row.corrected_by ? <span>by {row.corrected_by.display_name || row.corrected_by.email}</span> : null}
+          {typeof row.ai_confidence === 'number' ? (
+            <span>AI confidence {Math.round(row.ai_confidence * 100)}%</span>
+          ) : null}
+          {row.corrected_by ? (
+            <span>by {row.corrected_by.display_name || row.corrected_by.email}</span>
+          ) : null}
           <span>{formatDate(row.created_at)}</span>
         </div>
         <div className={styles.actions}>
           {pending ? (
             <>
-              <Button variant="accent" size="sm" onPress={p.onApprove} isDisabled={p.busy || Boolean(row.review_block)} data-testid="detail-approve">
+              <Button
+                variant="accent"
+                size="sm"
+                onPress={p.onApprove}
+                isDisabled={p.busy || Boolean(row.review_block)}
+                data-testid="detail-approve"
+              >
                 Approve <Kbd>a</Kbd>
               </Button>
-              <Button variant="danger" size="sm" onPress={p.onReject} isDisabled={p.busy || Boolean(row.review_block)} data-testid="detail-reject">
+              <Button
+                variant="danger"
+                size="sm"
+                onPress={p.onReject}
+                isDisabled={p.busy || Boolean(row.review_block)}
+                data-testid="detail-reject"
+              >
                 Reject <Kbd>r</Kbd>
               </Button>
             </>
           ) : (
-            <Button variant="neutral" size="sm" onPress={p.onReset} isDisabled={p.busy || Boolean(row.review_block)} data-testid="detail-reset">
+            <Button
+              variant="neutral"
+              size="sm"
+              onPress={p.onReset}
+              isDisabled={p.busy || Boolean(row.review_block)}
+              data-testid="detail-reset"
+            >
               Reset
             </Button>
           )}
-          <Button variant="neutral" size="sm" onPress={p.onEdit} isDisabled={p.editing} data-testid="detail-edit">
+          <Button
+            variant="neutral"
+            size="sm"
+            onPress={p.onEdit}
+            isDisabled={p.editing}
+            data-testid="detail-edit"
+          >
             Edit <Kbd>e</Kbd>
           </Button>
-          <Button variant="ghost" size="sm" onPress={p.onToggle} aria-expanded={p.expanded} data-testid="detail-toggle">
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={p.onToggle}
+            aria-expanded={p.expanded}
+            data-testid="detail-toggle"
+          >
             {p.expanded ? 'Hide details' : 'Details'} <Kbd>o</Kbd>
           </Button>
           <Button variant="ghost" size="sm" onPress={p.onDelete} isDisabled={p.busy}>
@@ -94,11 +128,20 @@ export function DetailPane(p: DetailPaneProps) {
       <div className={styles.chips}>
         <Chipline label="Task" value={row.task} />
         <Chipline label="Metric" value={row.metric_name} />
-        {p.showProject ? <Chipline label="Project" value={row.project_name} href={`/projects/${encodeURIComponent(row.project_slug)}/reviews`} /> : null}
+        {p.showProject ? (
+          <Chipline
+            label="Project"
+            value={row.project_name}
+            href={`/projects/${encodeURIComponent(row.project_slug)}/reviews`}
+          />
+        ) : null}
         <Chipline label="Run" value={row.run_name} href={runHref} />
         {row.pass_number != null ? <Chipline label="Pass" value={String(row.pass_number)} /> : null}
         <Chipline label="Dataset" value={row.dataset} />
-        <Chipline label="Model" value={row.has_reasoning && row.model ? `${row.model} (reasoning)` : row.model} />
+        <Chipline
+          label="Model"
+          value={row.has_reasoning && row.model ? `${row.model} (reasoning)` : row.model}
+        />
       </div>
 
       <div className={styles.columns}>
@@ -113,7 +156,12 @@ export function DetailPane(p: DetailPaneProps) {
             HUMAN ROOT-CAUSE ISSUES
           </Text>
           {p.editing ? (
-            <IssueEditForm initial={row.human_root_cause_issues ?? []} saving={p.saving} onSave={p.onSaveEdit} onCancel={p.onCancelEdit} />
+            <IssueEditForm
+              initial={row.human_root_cause_issues ?? []}
+              saving={p.saving}
+              onSave={p.onSaveEdit}
+              onCancel={p.onCancelEdit}
+            />
           ) : (
             <IssueList issues={row.human_root_cause_issues ?? []} tone="human" />
           )}
@@ -141,7 +189,15 @@ export function DetailPane(p: DetailPaneProps) {
   );
 }
 
-function Chipline({ label, value, href }: { label: string; value: string | null | undefined; href?: string | null }) {
+function Chipline({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: string | null | undefined;
+  href?: string | null;
+}) {
   if (!value) return null;
   return (
     <span className={styles.chip}>
@@ -176,7 +232,11 @@ function Snapshot({ label, value }: { label: string; value: unknown }) {
       <Text variant="sm" tone="muted" weight={650}>
         {label.toUpperCase()}
       </Text>
-      {typeof value === 'string' ? <TextBlock text={value} /> : <JsonTree data={value} expandDepth={1} label={label} />}
+      {typeof value === 'string' ? (
+        <TextBlock text={value} />
+      ) : (
+        <JsonTree data={value} expandDepth={1} label={label} />
+      )}
     </section>
   );
 }
@@ -184,7 +244,10 @@ function Snapshot({ label, value }: { label: string; value: unknown }) {
 function FullDetail({ id }: { id: number }) {
   const q = useCorrection(id);
   if (q.isPending) return <Skeleton kind="lines" rows={4} label="Loading details" />;
-  if (q.isError) return <ErrorState compact error={q.error} title="Couldn’t load details" onRetry={() => void q.refetch()} />;
+  if (q.isError)
+    return (
+      <ErrorState compact error={q.error} title="Couldn’t load details" onRetry={() => void q.refetch()} />
+    );
   const d = q.data;
   const scores = Object.entries(d.scores_snapshot ?? {});
   return (
@@ -200,7 +263,8 @@ function FullDetail({ id }: { id: number }) {
           <div className={styles.scoreRow}>
             {scores.map(([k, v]) => (
               <Tag key={k} kind="data">
-                {k}: {typeof v === 'number' ? v.toFixed(2) : typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                {k}:{' '}
+                {typeof v === 'number' ? v.toFixed(2) : typeof v === 'object' ? JSON.stringify(v) : String(v)}
               </Tag>
             ))}
           </div>
@@ -224,7 +288,9 @@ function FullDetail({ id }: { id: number }) {
           </ol>
         </section>
       ) : null}
-      {d.item_metadata && Object.keys(d.item_metadata).length ? <Snapshot label="Item metadata" value={d.item_metadata} /> : null}
+      {d.item_metadata && Object.keys(d.item_metadata).length ? (
+        <Snapshot label="Item metadata" value={d.item_metadata} />
+      ) : null}
     </div>
   );
 }

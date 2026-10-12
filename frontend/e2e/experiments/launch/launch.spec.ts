@@ -58,7 +58,10 @@ test('Launch navigates to the experiment detail, the experiment exists, no guard
   await expect.poll(async () => (await fakeJobs(request)).length).toBe(1);
 });
 
-test('HIGH priority asks for confirmation first and sends acknowledge_preemption', async ({ page, request }) => {
+test('HIGH priority asks for confirmation first and sends acknowledge_preemption', async ({
+  page,
+  request,
+}) => {
   const posts = captureExperimentPosts(page);
   await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
   await nameBox(page).fill('high run');
@@ -127,7 +130,9 @@ test('server 422 validation errors are listed, toasted and the first one is focu
       status: 422,
       contentType: 'application/json',
       body: JSON.stringify({
-        detail: { errors: [{ pointer: '/evaluator/config/samples', message: 'samples is too large for Alpha' }] },
+        detail: {
+          errors: [{ pointer: '/evaluator/config/samples', message: 'samples is too large for Alpha' }],
+        },
       }),
     });
   });
@@ -200,5 +205,8 @@ test('keyboard only: pick the environment, name the run, launch', async ({ page,
   await expect(page).toHaveURL(EXPERIMENT_URL);
   const exp = await getExperiment(request, f.project.id, page.url().split('/').pop()!);
   expect(exp.name).toBe('keyboard run');
-  expect(logs.filter((l) => /^(error|pageerror)/.test(l)), 'console errors').toEqual([]);
+  expect(
+    logs.filter((l) => /^(error|pageerror)/.test(l)),
+    'console errors',
+  ).toEqual([]);
 });

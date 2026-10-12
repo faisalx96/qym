@@ -47,7 +47,10 @@ describe('json paths', () => {
     const tree = pathsToTree(['a.b', 'a.c', 'd']);
     const out = slotSource({ field: 'input', full: false, selected: ['a.b', 'a.c'] }, tree);
     expect(out).toEqual({ source: ['input.a'], custom: true });
-    expect(slotSource({ field: 'input', full: true, selected: [] }, tree)).toEqual({ source: 'input', custom: false });
+    expect(slotSource({ field: 'input', full: true, selected: [] }, tree)).toEqual({
+      source: 'input',
+      custom: false,
+    });
     expect(slotSource({ field: '', full: true, selected: [] }, tree)).toBeNull();
   });
 
@@ -68,8 +71,8 @@ describe('custom variables and root causes', () => {
     ]);
   });
   it('normalises the legacy single-cause shape', () => {
-    expect(rootCauseIssues({ root_cause: 'Retrieval', root_cause_detail: 'Missing', confidence: 2 })).toEqual([
-      { category: 'Retrieval', subcategory: 'Missing', finding: '', category_reason: '', confidence: 1 },
-    ]);
+    expect(rootCauseIssues({ root_cause: 'Retrieval', root_cause_detail: 'Missing', confidence: 2 })).toEqual(
+      [{ category: 'Retrieval', subcategory: 'Missing', finding: '', category_reason: '', confidence: 1 }],
+    );
   });
 });
