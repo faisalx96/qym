@@ -82,12 +82,16 @@ export async function ensureProject(
 ): Promise<{ id: string; slug: string }> {
   try {
     return await call<{ id: string; slug: string }>(client, 'POST', '/v1/projects', { name, slug });
-  } catch {
-    return call<{ id: string; slug: string }>(
-      client,
-      'GET',
-      `/v1/projects/by-slug/${encodeURIComponent(slug)}`,
-    );
+  } catch (createError) {
+    try {
+      return await call<{ id: string; slug: string }>(
+        client,
+        'GET',
+        `/v1/projects/by-slug/${encodeURIComponent(slug)}`,
+      );
+    } catch {
+      throw createError;
+    }
   }
 }
 

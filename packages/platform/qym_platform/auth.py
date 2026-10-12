@@ -245,8 +245,14 @@ def require_ui_principal(
         if not user:
             user = User(email=email, display_name="Dev User", role=UserRole.ADMIN)
             db.add(user)
-            db.commit()
-            db.refresh(user)
+            try:
+                db.commit()
+            except IntegrityError:
+                # Two first requests raced to create the dev user: use the winner's row.
+                db.rollback()
+                user = db.query(User).filter(User.email == email).one()
+            else:
+                db.refresh(user)
         return Principal(user=user, auth_type="none")
 
     if session_auth_enabled(settings):
