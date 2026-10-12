@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { EmptyState, Icon, LinkButton, Skeleton, Text, type IconName } from '@/ui';
+import { EmptyState, ErrorState, Icon, LinkButton, Skeleton, Text, type IconName } from '@/ui';
 import { useDelayedPending } from '@/lib/pending';
 import { SECTIONS, docsPath, type DocsHeading } from './content';
 import { DocsArticle, scrollToHeading } from './DocsArticle';
@@ -101,6 +101,8 @@ export function DocsPage() {
         <div ref={h1} tabIndex={-1} className={styles.focusTarget}>
           {payload === undefined ? (
             skeleton ? <Skeleton kind="lines" rows={8} label={`Loading ${ref.title}`} /> : null
+          ) : payload === null && state.error ? (
+            <ErrorState error={state.error} title={`Couldn’t load ${ref.title}`} onRetry={() => window.location.reload()} compact />
           ) : payload === null ? (
             <article>
               <p className={styles.notWrittenEyebrow}>{ref.sectionTitle}</p>

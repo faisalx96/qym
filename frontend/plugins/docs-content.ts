@@ -258,7 +258,7 @@ export function docsContentPlugin(): Plugin {
               sectionTitle: s.title,
               title: p.title,
               headings: compiled.headings,
-              text: compiled.text.slice(0, 24_000),
+              text: compiled.text.slice(0, 80_000),
             });
           }
         }

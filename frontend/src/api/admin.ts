@@ -249,9 +249,6 @@ export function useForceStop() {
 // ── Maintenance ──────────────────────────────────────────────────────────
 
 export function useMaintenance(enabled = true) {
-  const qc = useQueryClient();
-  const current = qc.getQueryData<MaintenanceOverview>(adminKeys.maintenance);
-  const active = Boolean(current?.jobs.some((j) => ACTIVE_JOB_STATUSES.includes(j.status)));
   const interval = usePollingInterval(JOB_POLL_MS);
   return useQuery({
     queryKey: adminKeys.maintenance,
@@ -261,8 +258,6 @@ export function useMaintenance(enabled = true) {
       const jobs = q.state.data?.jobs ?? [];
       return enabled && interval && jobs.some((j) => ACTIVE_JOB_STATUSES.includes(j.status)) ? interval : false;
     },
-    // keep the first `active` read consistent for callers that render a "polling" hint
-    meta: { active },
   });
 }
 

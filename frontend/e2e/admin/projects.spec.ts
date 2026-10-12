@@ -13,7 +13,9 @@ test('New project creates a row', async ({ page }) => {
   await dialog.getByRole('button', { name: /^Create/ }).click();
   // Creating navigates to the new project.
   await expect(page).toHaveURL(/\/app\/projects\/admin-new-/);
-  await gotoApp(page, '/admin/projects');
+  // Back in-app (no reload): the cached admin list must already include the new project.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/app\/admin\/projects$/);
   await expect(page.getByRole('grid', { name: 'Projects' }).getByRole('row').filter({ hasText: name })).toBeVisible();
 });
 
