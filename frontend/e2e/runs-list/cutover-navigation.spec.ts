@@ -46,7 +46,8 @@ test.describe('Runs list history', () => {
     await page.keyboard.press('Enter');
     await expect.poll(() => new URL(page.url()).searchParams.get('sort')).toBe('model-asc');
     await expect(page.locator('th', { hasText: 'Model' })).toHaveAttribute('aria-sort', 'ascending');
-    // Page 1: a run opened, Back.
+    // Page 1: a run opened, Back. (Wait for the sorted rows: the old order stays dimmed while they load.)
+    await expect(page.getByRole('table', { name: 'Runs' })).not.toHaveAttribute('data-dimmed', '');
     await expect(dataRows(page).first()).toBeVisible();
     const first = await firstRunName(page);
     await dataRows(page).nth(12).locator('td[data-col="run"] a').click();
