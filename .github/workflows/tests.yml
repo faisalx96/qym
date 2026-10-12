@@ -69,6 +69,15 @@ jobs:
           echo "NODE_PATH=$RUNNER_TEMP/qym-node-tests/node_modules" >> "$GITHUB_ENV"
       - name: Test SDK, platform, PostgreSQL and browser workflows
         run: python -m pytest -q -n auto --junitxml=test-results.xml
+      - name: Set up Node 24 for the frontend builds
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Build the React bundles
+        run: |
+          npm ci --prefix frontend --no-audit --no-fund
+          npm run --prefix frontend build
+          npm run --prefix frontend build:sdk
       - name: Build both distributions
         run: |
           python -m build --wheel packages/sdk
