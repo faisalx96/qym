@@ -298,13 +298,14 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     const p = await createProject(request, 'Deep Links', uniqueSlug('deep'));
     const runId = 'eval/2026-01-01/abc';
     const encodedRun = runId.split('/').map(encodeURIComponent).join('/');
-    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' }[] = [
+    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'compare' }[] = [
       { path: '/', expect: 'projects' },
       { path: '/profile', expect: 'profile' },
       { path: '/admin', expect: 'coming-soon' },
       { path: '/admin/users', expect: 'coming-soon' },
       { path: '/trash', expect: 'coming-soon' },
-      { path: '/compare', expect: 'coming-soon' },
+      { path: '/compare', expect: 'compare' },
+      { path: `/projects/${p.slug}/compare`, expect: 'compare' },
       { path: '/reviews', expect: 'coming-soon' },
       { path: '/docs-guide', expect: 'coming-soon' },
       { path: '/docs/sdk', expect: 'coming-soon' },
@@ -335,6 +336,9 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
         await expect(page.getByRole('heading', { name: /coming soon/ }), u.path).toBeVisible();
       } else if (u.expect === 'settings') {
         await expect(page.locator('[data-settings-page]'), u.path).toBeVisible();
+      } else if (u.expect === 'compare') {
+        // Implemented by the compare area: with no ?runs= it shows its empty state.
+        await expect(page.getByText('No runs to compare'), u.path).toBeVisible();
       } else if (u.expect === 'projects') {
         await expect(page.locator('[data-projects-page]'), u.path).toBeVisible();
       } else {
