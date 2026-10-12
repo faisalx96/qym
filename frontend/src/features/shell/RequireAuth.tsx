@@ -50,7 +50,8 @@ export function RequireAuth() {
       </div>
     );
   }
-  if (me.isError) {
+  // A failed background refetch keeps the cached user: never tear the app down for it.
+  if (!me.data) {
     return (
       <div className={styles.frame}>
         <ErrorState error={me.error} title="Couldn’t load your account" onRetry={() => me.refetch()} />

@@ -53,7 +53,7 @@ export function ProjectLayout() {
     return <ProjectNotFound slug={slug} kind="not_found" archived />;
   }
   return (
-    <ProjectContext.Provider value={value}>
+    <ProjectContext.Provider key={slug} value={value}>
       {value.readOnly && ARCHIVED_NOTICE.test(sub) ? <ArchivedBanner project={value.project} /> : null}
       <Outlet />
     </ProjectContext.Provider>
