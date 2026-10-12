@@ -1,5 +1,6 @@
 /** What one collapsed item row shows: status, per-metric cells, failure reason (brief 04 J6 / §3i, §3n). */
 import {
+  formatLatency,
   formatMetricObservation,
   formatPercent,
   hasMetricError,
@@ -122,3 +123,9 @@ export function rowFailureInput(ctx: FilterContext, row: Row, metric: string) {
 
 export type { PickedReason };
 export { pickReason };
+
+/** Latency text: a real 0 ms renders as "0ms"; only a missing value is a dash. */
+export function latencyLabel(ms: number | null | undefined): string {
+  if (ms == null) return '—';
+  return ms === 0 ? '0ms' : formatLatency(ms);
+}

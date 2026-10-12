@@ -1,13 +1,14 @@
 /** One chip per metric: value, judge metadata disclosure, edit pencil, edited badge (brief 04 §3j). */
 import { useState } from 'react';
+import { useUpdateMetric } from '@/api/runs';
 import { isInternalMetaKey, metricMetaDisplayKey } from '@/lib/metrics';
-import { Icon, IconButton, JsonPreview, ScoreValue, Tag } from '@/ui';
+import { Icon, IconButton, JsonPreview, ScoreValue, Tag, useToast } from '@/ui';
 import { itemMetadataDisplayValue } from '../../lib/rowMeta';
 import { metricCell } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
 import type { Row } from '../../types';
 import { useItemsUi } from './ItemsUi';
-import { ScoreEditor } from './ScoreEditor';
+import { messageFor, ScoreEditor } from './ScoreEditor';
 import styles from './MetricStrip.module.css';
 
 export function useCanEdit(row: Row): boolean {
@@ -35,6 +36,86 @@ export function MetaList({ meta, hidden }: { meta: Record<string, unknown>; hidd
         </div>
       ))}
     </dl>
+  );
+}
+
+function editValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return 'no score';
+  return String(typeof value === 'number' ? Number(value.toFixed(4)) : value);
+}
+
+/** Who edited the score, when, and from what to what (meta.last_edit), plus the scorer's original value. */
+export function editTooltip(meta: Record<string, unknown>): string {
+  const record =
+    meta.last_edit && typeof meta.last_edit === 'object' ? (meta.last_edit as Record<string, unknown>) : null;
+  const lines: string[] = [];
+  if (record) {
+    const when = record.at ? new Date(String(record.at)) : null;
+    const whenText =
+      when && !Number.isNaN(when.getTime())
+        ? when.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
+    lines.push(
+      `${record.action === 'reset' ? 'Reset by ' : 'Edited by '}${String(record.by || 'a reviewer')}${whenText ? ` on ${whenText}` : ''}`,
+    );
+    lines.push(`${editValue(record.from)} \u2192 ${editValue(record.to)}`);
+  } else {
+    lines.push('Edited by a reviewer');
+  }
+  if (meta.original_score !== undefined) lines.push(`Original score: ${editValue(meta.original_score)}`);
+  return lines.join('\n');
+}
+
+function EditedBadge({
+  row,
+  metric,
+  meta,
+  canEdit,
+}: {
+  row: Row;
+  metric: string;
+  meta: Record<string, unknown>;
+  canEdit: boolean;
+}) {
+  const { runId, model, payload } = useRunPage();
+  const toast = useToast();
+  const mutation = useUpdateMetric(runId);
+  const original = meta.original_score !== undefined ? ` (${editValue(meta.original_score)})` : '';
+  const passNumber = model.viewPass;
+  const reset = () =>
+    mutation.mutate(
+      {
+        file_path: payload.run.file_path ?? payload.run.run_id,
+        row_index: row.index,
+        metric_name: metric,
+        reset: true,
+        ...(passNumber ? { pass_number: passNumber, expected_pass_version: model.passRevision } : {}),
+      },
+      {
+        onSuccess: () => toast.show(`${metric} reset to its original score${original}.`),
+        onError: (e) => toast.show(messageFor(e), { tone: 'error' }),
+      },
+    );
+  return (
+    <>
+      <Tag kind="accent" tone="warning" title={editTooltip(meta)}>
+        edited
+      </Tag>
+      {canEdit ? (
+        <IconButton
+          label={`Reset ${metric}${passNumber ? ` pass ${passNumber}` : ''} to its original score${original}`}
+          icon="retry"
+          onPress={reset}
+          isDisabled={mutation.isPending}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -90,13 +171,7 @@ export function MetricStrip({ row }: { row: Row }) {
                 text={cell.text}
               />
               {cell.edited ? (
-                <Tag
-                  kind="accent"
-                  tone="warning"
-                  title={`Edited${meta.original_score !== undefined ? `; scorer value ${String(meta.original_score)}` : ''}`}
-                >
-                  edited
-                </Tag>
+                <EditedBadge row={row} metric={metric} meta={meta} canEdit={canEdit && !repeatAggregate} />
               ) : null}
               {canEdit && !repeatAggregate ? (
                 <IconButton

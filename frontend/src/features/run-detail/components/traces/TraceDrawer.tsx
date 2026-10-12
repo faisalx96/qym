@@ -376,99 +376,106 @@ export function TraceDrawer({
                 ))}
               </div>
             ) : null}
-            <div className={styles.split}>
-              <section className={styles.treePane} aria-label="Spans">
-                <div className={styles.treeTools}>
-                  <label className={styles.search}>
-                    <span className={styles.srOnly}>Filter spans</span>
-                    <input
-                      ref={searchRef}
-                      type="search"
-                      className={styles.searchInput}
-                      placeholder="Filter spans… (/)"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape' && search) {
-                          e.stopPropagation();
-                          setSearch('');
-                        } else if (e.key === 'ArrowDown') {
-                          e.preventDefault();
-                          scroller?.focus();
-                        }
-                      }}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className={styles.tool}
-                    onClick={() =>
-                      setExpandedBy((s) => ({
-                        ...s,
-                        [key]: new Set(
-                          flattenTree(active.tree.roots)
-                            .filter((n) => n._children.length)
-                            .map((n) => n.span_id),
-                        ),
-                      }))
-                    }
-                  >
-                    Expand all
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.tool}
-                    onClick={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}
-                  >
-                    Collapse all
-                  </button>
-                </div>
-                <div
-                  ref={setScroller}
-                  className={styles.tree}
-                  role="tree"
-                  aria-label="Span tree"
-                  tabIndex={0}
-                  aria-activedescendant={selectedId ? `span-${selectedId}` : undefined}
-                  onKeyDown={onTreeKey}
-                >
-                  <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-                    {virtualizer.getVirtualItems().map((v) => {
-                      const row = rows[v.index]!;
-                      return (
-                        <div
-                          key={v.key}
-                          className={styles.vrow}
-                          style={{ height: ROW, transform: `translateY(${v.start}px)` }}
-                        >
-                          <Row
-                            row={row}
-                            bounds={active.bounds}
-                            selected={row.node.span_id === selectedId}
-                            onSelect={() => select(row.node.span_id)}
-                            onToggle={() => setOpen(row.node.span_id, !row.open)}
-                          />
-                        </div>
-                      );
-                    })}
+            {active.tree.nodes.length === 0 ? (
+              <p className={styles.empty} role="status" data-testid="trace-empty">
+                Spans were not captured for this item. The run recorded a trace id, but no spans reached the
+                platform{langfuse ? '; open it in Langfuse for the full trace' : ''}.
+              </p>
+            ) : (
+              <div className={styles.split}>
+                <section className={styles.treePane} aria-label="Spans">
+                  <div className={styles.treeTools}>
+                    <label className={styles.search}>
+                      <span className={styles.srOnly}>Filter spans</span>
+                      <input
+                        ref={searchRef}
+                        type="search"
+                        className={styles.searchInput}
+                        placeholder="Filter spans… (/)"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape' && search) {
+                            e.stopPropagation();
+                            setSearch('');
+                          } else if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            scroller?.focus();
+                          }
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className={styles.tool}
+                      onClick={() =>
+                        setExpandedBy((s) => ({
+                          ...s,
+                          [key]: new Set(
+                            flattenTree(active.tree.roots)
+                              .filter((n) => n._children.length)
+                              .map((n) => n.span_id),
+                          ),
+                        }))
+                      }
+                    >
+                      Expand all
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.tool}
+                      onClick={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}
+                    >
+                      Collapse all
+                    </button>
                   </div>
-                  {rows.length === 0 ? (
+                  <div
+                    ref={setScroller}
+                    className={styles.tree}
+                    role="tree"
+                    aria-label="Span tree"
+                    tabIndex={0}
+                    aria-activedescendant={selectedId ? `span-${selectedId}` : undefined}
+                    onKeyDown={onTreeKey}
+                  >
+                    <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+                      {virtualizer.getVirtualItems().map((v) => {
+                        const row = rows[v.index]!;
+                        return (
+                          <div
+                            key={v.key}
+                            className={styles.vrow}
+                            style={{ height: ROW, transform: `translateY(${v.start}px)` }}
+                          >
+                            <Row
+                              row={row}
+                              bounds={active.bounds}
+                              selected={row.node.span_id === selectedId}
+                              onSelect={() => select(row.node.span_id)}
+                              onToggle={() => setOpen(row.node.span_id, !row.open)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {rows.length === 0 ? (
+                      <Text variant="sm" tone="muted">
+                        No spans match.
+                      </Text>
+                    ) : null}
+                  </div>
+                </section>
+                <section className={styles.detailPane} aria-label="Span details">
+                  {selectedNode ? (
+                    <SpanDetail key={selectedNode.span_id} node={selectedNode} />
+                  ) : (
                     <Text variant="sm" tone="muted">
-                      No spans match.
+                      Select a span.
                     </Text>
-                  ) : null}
-                </div>
-              </section>
-              <section className={styles.detailPane} aria-label="Span details">
-                {selectedNode ? (
-                  <SpanDetail key={selectedNode.span_id} node={selectedNode} />
-                ) : (
-                  <Text variant="sm" tone="muted">
-                    Select a span.
-                  </Text>
-                )}
-              </section>
-            </div>
+                  )}
+                </section>
+              </div>
+            )}
           </>
         ) : null}
       </div>

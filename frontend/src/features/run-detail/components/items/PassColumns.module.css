@@ -118,3 +118,32 @@
 .caret:focus-visible {
   outline: 2px solid var(--accent-primary);
 }
+
+.compare {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.compareList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin: 0;
+}
+
+.compareItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.compareItem dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.compareItem dd {
+  margin: 0;
+}
