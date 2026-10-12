@@ -256,3 +256,28 @@ Ordered by user impact.
 - E17 transfer-in-archived and `owned_deleted_runs` behaviour: read from code; I could not seed a member who owns only deleted runs.
 - E42 prompt tablist orientation below 900 px, GitLab/SSO provider rows, the OIDC callback round trip, and axe on every settings tab were not exercised.
 - Topbar stats "blank on reload" (CUTOVER) did not reproduce in three reloads at 768/900/1280 px.
+
+## Re-review
+
+Rebuilt from the ui/qa tree (`npm run build`), served by the platform on 8830, driven with Playwright against
+`none`, `proxy_headers` (admin/member) and `oidc` + local password on a fresh DB. Every FIXED row was exercised.
+
+Verified fixed (all stay FIXED): A21 (stats hidden at 768/900 px, no overlap), A25 (link renders as `<a>`; Enter and
+padding click go to `/`), A45 (`/compare` and `/reviews` keep project nav and "Beta Project / Compare"), B5, B11
+(login and change-password), B14 (focus returns to the confirm field), B15 (sessionStorage empty in change mode and
+after Back), B19 (labels not doubled, icons and descriptions present), C3 ("1 member", "1 run"), D6 (password field),
+D7 (retry after wrong token sends the request and grants admin), E5 (archived note), E13 (no-match message), E17 (dialog
+lists "Revokes 1 API key they created here: default"), E21 (member sees Revoke only on their own key), E29 ("boom"
+toast on a failed Set default), E31 (Edit B after Edit A shows B's values), E39/F1 (empty prompt shows
+"value: String should have at least 1 character", no raw JSON; still no client-side "must contain text" check, acceptable).
+Also confirmed: A14 single Escape closes the switcher, E9 members see the review rules read-only, E11 Added column.
+
+Still broken: none.
+
+Not exercised: E17 transfer hidden on an archived project and `owned_deleted_runs` (no seed path; the mocked e2e covers them).
+
+Regression spot-check (about 25 previously OK rows, no regressions): A2/E1 tab set, A6 collapse persistence, A13 switcher
+focus/list/create, A15 last slug, A19 sign out, A22 archived banner and hidden nav, A42 palette, A46 legacy run
+redirect, B6/B7 next sanitising, B9 wrong-password message, B12 temporary-password change, B17 sign-up, C6 create
+project, D1 profile, D5/D8 bootstrap, E7 rename sync, E12 combobox add, E14, E18, E22 (focus on Cancel), E36 prompt
+save badge, E43 archive, E45 unarchive, E46 delete blocked.
