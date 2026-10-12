@@ -1,11 +1,40 @@
 /** Root-cause categories over the filtered items, per run (brief 05 J5); the Sankey was dropped (OPEN_QUESTIONS Q5). */
 import { useMemo } from 'react';
 import { Select, Tag, Text } from '@/ui';
+import { platformUrl } from '@/lib/runtime';
 import { hasAnyRootCause, rootCauseSummary } from '../../lib/breakdown';
 import { letterOf, useCompare } from '../../CompareContext';
 import { RunDot } from '../common';
 import { ScrollRegion } from '../ScrollRegion';
 import styles from './Panel.module.css';
+
+/** Auto-analysis still lives on the legacy page until the analyzer area ships (OPEN_QUESTIONS Q4). */
+function AnalyzeLinks() {
+  const { model, slug } = useCompare();
+  return (
+    <div className={styles.stack}>
+      <Text variant="sm" tone="muted">
+        Analyze a run (legacy page):
+      </Text>
+      <ul className={styles.subList} aria-label="Analyze a run">
+        {model.runs.map((run, i) => {
+          const project = slug ?? run.run.project?.slug;
+          const id = encodeURIComponent(run.base);
+          const href = project
+            ? `/projects/${encodeURIComponent(project)}/analysis?run=${id}${run.pass ? `&pass=${run.pass}` : ''}`
+            : `/run/${run.base.split('/').map(encodeURIComponent).join('/')}/analyzer`;
+          return (
+            <li key={run.ref}>
+              <a href={platformUrl(href)} title={`Analyze ${run.title}`}>
+                <RunDot index={i} /> {letterOf(i)} · {run.label}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 export function RootCauseTab() {
   const { model, columns, items, c } = useCompare();
@@ -20,9 +49,12 @@ export function RootCauseTab() {
   };
   if (!any)
     return (
-      <Text variant="sm" tone="muted">
-        No root-cause analyses on the filtered items. Run the analyzer on a run to add them.
-      </Text>
+      <div className={styles.stack}>
+        <Text variant="sm" tone="muted">
+          No root-cause analyses on the filtered items. Run the analyzer on a run to add them.
+        </Text>
+        <AnalyzeLinks />
+      </div>
     );
   return (
     <div className={styles.stack}>
@@ -81,6 +113,7 @@ export function RootCauseTab() {
           </table>
         </ScrollRegion>
       )}
+      <AnalyzeLinks />
     </div>
   );
 }
