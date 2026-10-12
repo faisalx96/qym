@@ -64,3 +64,14 @@
 .tabs {
   margin-bottom: calc(-1 * var(--space-md));
 }
+
+/* Phones: the actions drop under the title instead of overlapping it. */
+@media (max-width: 640px) {
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .titleBlock {
+    flex: 1 1 100%;
+  }
+}
