@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useProject } from '@/api/projects';
+import { KEYS, readLocal } from '@/lib/storage';
 import { Icon, IconButton, Kbd, Tag } from '@/ui';
 import { useAuth } from './AuthContext';
 import { TopbarStatsProvider } from './TopbarStats';
@@ -10,6 +11,8 @@ import { UserMenu } from './chrome/UserMenu';
 import { TopbarStatsBar } from './chrome/TopbarStatsBar';
 import { CommandPalette } from './chrome/CommandPalette';
 import { GLOBAL_NAV, PLATFORM_NAV, isNavActive, parseRoute, projectNav, type NavItem } from './chrome/nav';
+import brandIcon from '@/assets/brand/qym-icon.png';
+import brandText from '@/assets/brand/qym-text.png';
 import styles from './AppShell.module.css';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -33,7 +36,14 @@ function ShellFrame() {
   const { me, isAdmin } = useAuth();
   const location = useLocation();
   const route = parseRoute(location.pathname);
-  const project = useProject(route.projectSlug ?? undefined, me).data ?? null;
+  // /compare, /reviews and legacy /run/:id carry no project in the URL: keep the
+  // last project as the sidebar / breadcrumb context.
+  const contextSlug =
+    route.projectSlug ??
+    (['compare', 'reviews', 'run-detail', 'analyzer'].includes(route.page)
+      ? readLocal(KEYS.lastProjectSlug)
+      : null);
+  const project = useProject(contextSlug ?? undefined, me).data ?? null;
   const [collapsed, toggleCollapsed, narrow] = useSidebarCollapsed();
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -127,10 +137,8 @@ function ShellFrame() {
       >
         <div className={styles.sidebarTop}>
           <Link to="/" className={styles.brand} title="Projects">
-            <span className={styles.brandMark} aria-hidden="true">
-              ق
-            </span>
-            <span className={styles.brandName}>qym</span>
+            <img src={brandIcon} alt="" className={styles.brandIcon} width={32} height={32} />
+            <img src={brandText} alt="qym" className={styles.brandName} width={51} height={32} />
           </Link>
         </div>
         <div className={styles.sidebarScroll}>
@@ -178,11 +186,6 @@ function ShellFrame() {
             data-sidebar-toggle
           />
           <Breadcrumbs route={route} project={project} />
-          {project && !project.is_active ? (
-            <Tag kind="data" tone="warning" className={styles.readOnly}>
-              Read-only
-            </Tag>
-          ) : null}
           <div className={styles.topbarEnd}>
             <TopbarStatsBar />
             <button

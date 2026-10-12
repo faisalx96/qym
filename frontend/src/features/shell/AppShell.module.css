@@ -72,32 +72,28 @@
   outline-offset: 2px;
 }
 
-.brandMark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+.brandIcon {
+  display: block;
+  width: 32px;
+  height: 32px;
   flex: none;
-  border-radius: var(--radius-md);
-  background: var(--accent-primary);
-  color: var(--bg-void);
-  font-size: var(--shell-font-md);
-  font-weight: 700;
-  line-height: 1;
+  object-fit: contain;
 }
 
 .brandName {
-  font-size: var(--shell-font-md);
-  font-weight: 650;
+  display: block;
+  width: 51px;
+  height: 32px;
+  object-fit: contain;
+  opacity: 0.92;
+}
+
+.brand:hover .brandName {
+  opacity: 1;
 }
 
 .shell[data-collapsed] .brandName {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+  display: none;
 }
 
 .sidebarScroll {
@@ -230,10 +226,6 @@
   padding: 0 var(--space-md);
   background: var(--bg-base);
   border-bottom: 1px solid var(--border-subtle);
-}
-
-.readOnly {
-  flex: none;
 }
 
 .topbarEnd {

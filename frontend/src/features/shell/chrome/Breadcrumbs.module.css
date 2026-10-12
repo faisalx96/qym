@@ -1,6 +1,7 @@
 /* Topbar breadcrumbs (shell.css .topbar-breadcrumbs). */
 .nav {
-  min-width: 0;
+  flex: 0 1 auto;
+  min-width: 96px;
 }
 
 .list {

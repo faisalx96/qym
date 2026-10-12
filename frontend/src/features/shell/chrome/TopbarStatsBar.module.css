@@ -3,6 +3,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-lg);
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
 }
@@ -53,6 +54,14 @@
 
 @media (max-width: 1199px) {
   .secondary {
+    display: none;
+  }
+}
+
+/* Below 1000px the breadcrumb and the chips cannot share the bar: the chips
+   move out (the same numbers are on the page itself). */
+@media (max-width: 999px) {
+  .stats {
     display: none;
   }
 }
