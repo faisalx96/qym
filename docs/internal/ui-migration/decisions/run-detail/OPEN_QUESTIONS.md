@@ -36,3 +36,8 @@
 ## Bundle
 
 `npm run build` (gzip): entry `index-*.js` 120.80 kB; `react` 74.88 kB; `aria` 115.36 kB; `query` 13.21 kB; CSS 18.38 kB. The run-detail feature is not code-split: it is part of the entry chunk (there is no separate run-detail chunk). Splitting it with `lazy()` in `router.tsx` is a follow-up if the entry budget matters.
+
+## Review pass (2026-10-12)
+
+- Not rebuilt, listed honestly (each roughly 0.5-1 day): item x metric matrix, quality-latency frontier, by-pass trend, stability map, Sankey, Categories "Compare", legacy item-level diagnosis editors, category-catalog editing in the issue dialog, pager peek card, offline HTML export page (the Export HTML button opens the classic endpoint), server-side `pass_number` scoping.
+- Fixed in review: shell scroll reset on REPLACE (affected every in-page URL change), legacy `/run/<id>` redirect picking the last visited project, trace dedupe O(n^2) (10k spans took 26 s), highlight stuck after a deep link, final live reload dropped when a reload was in flight.
