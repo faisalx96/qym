@@ -98,6 +98,8 @@ export function ItemsWorkspace({ slug, dataset, version, readOnly, onAddItem, on
     if (!paneId) dirty.current = { dirty: false, save: async () => true, reset: () => undefined };
   }, [paneId]);
 
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
   const index = paneId ? rows.findIndex((r) => r.item_id === paneId) : -1;
   const open = (item: DatasetItem) => {
     if (item.item_id === paneId) return;
@@ -148,6 +150,7 @@ export function ItemsWorkspace({ slug, dataset, version, readOnly, onAddItem, on
           onRows={setRows}
           selection={editable ? { selected, onChange: setSelected } : undefined}
           onOpenItem={open}
+          onFilterChange={clearSelection}
           onDeleted={(id) => {
             if (id === paneId) setPaneId(null);
             setSelected((s) => {

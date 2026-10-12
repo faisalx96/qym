@@ -323,6 +323,20 @@ test.describe('detail: items table', () => {
     await expect(page.locator('[data-item-link]')).toHaveCount(4);
   });
 
+  test('changing the search drops the row selection so bulk delete never hits hidden rows', async ({ page, request }) => {
+    const { p, d } = await seed(request, 'bulk-scope');
+    await draftWithItems(request, p.slug, d, 6);
+    await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
+    await expect(page.locator('[data-item-link]')).toHaveCount(6);
+    await rowOf(page, 'q-000').focus();
+    await page.keyboard.press('Space');
+    const bulk = page.getByRole('region', { name: 'Bulk actions' });
+    await expect(bulk).toContainText('1 selected');
+    await page.getByRole('searchbox', { name: 'Search items' }).fill('order #3');
+    await expect(page.locator('[data-item-link]')).toHaveCount(1);
+    await expect(bulk).toHaveCount(0);
+  });
+
   test('[BUG] items table exposes a selection checkbox per row on drafts', async ({ page, request }) => {
     const { p, d } = await seed(request, 'selbox');
     await draftWithItems(request, p.slug, d, 3);

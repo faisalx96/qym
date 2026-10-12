@@ -32,9 +32,11 @@ export interface ItemsTabProps {
   onRows?: (rows: DatasetItem[]) => void;
   /** Called after a single-row delete succeeds (the workspace closes a pane showing that item). */
   onDeleted?: (itemId: string) => void;
+  /** Search or label filter changed: the workspace drops its row selection. */
+  onFilterChange?: () => void;
 }
 
-export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport, selection, onOpenItem, onRows, onDeleted }: ItemsTabProps) {
+export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport, selection, onOpenItem, onRows, onDeleted, onFilterChange }: ItemsTabProps) {
   const [params, setParams] = useSearchParams();
   const route = parseDatasetRoute(dataset.slug, params);
   const navigate = useNavigate();
@@ -50,6 +52,7 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
   useEffect(() => {
     if (search === route.search) return;
     const t = setTimeout(() => {
+      onFilterChange?.();
       setParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -62,7 +65,7 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
       );
     }, 200);
     return () => clearTimeout(t);
-  }, [search, route.search, setParams]);
+  }, [search, route.search, setParams, onFilterChange]);
 
   const query = useDatasetItems(
     slug,
@@ -118,7 +121,10 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
       <div className={styles.toolbarStart}>
         <SearchField label="Search items" hideLabel placeholder="Search items…" value={search} onChange={setSearch} width={260} data-testid="items-search" />
         {route.label ? (
-          <Chip isSelected onRemove={() => setQuery({ label: null, page: null })} removeLabel="Clear label filter">
+          <Chip isSelected onRemove={() => {
+              onFilterChange?.();
+              setQuery({ label: null, page: null });
+            }} removeLabel="Clear label filter">
             label: {route.label}
           </Chip>
         ) : null}
