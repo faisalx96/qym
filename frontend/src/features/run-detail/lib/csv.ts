@@ -2,6 +2,7 @@
 import { isInternalMetaKey } from '@/lib/metrics';
 import { bodyText } from './itemText';
 import { pickReason } from './itemReasons';
+import { rootCauseIssues } from './rowMeta';
 import type { RunModel } from './runModel';
 import type { Row } from '../types';
 
@@ -9,6 +10,8 @@ export interface CsvColumn {
   id: string;
   label: string;
   group: 'Core' | 'Content' | 'Metadata' | string;
+  /** The CSV header cell when it differs from the picker label (the old page's keys: `#`, `meta:k`, `m_score`). */
+  header?: string;
   value: (row: Row) => string;
 }
 
@@ -17,7 +20,7 @@ export function csvEscape(value: string): string {
 }
 
 export function buildCsv(columns: CsvColumn[], rows: Row[]): string {
-  const lines = [columns.map((c) => csvEscape(c.label)).join(',')];
+  const lines = [columns.map((c) => csvEscape(c.header ?? c.label)).join(',')];
   rows.forEach((row) => lines.push(columns.map((c) => csvEscape(c.value(row))).join(',')));
   return lines.join('\r\n');
 }
@@ -42,7 +45,7 @@ const scalar = (v: unknown): string =>
 
 export function discoverColumns(rows: Row[], model: RunModel): CsvColumn[] {
   const cols: CsvColumn[] = [
-    { id: 'index', label: 'index', group: 'Core', value: (r) => String(r.index + 1) },
+    { id: 'index', label: 'index', header: '#', group: 'Core', value: (r) => String(r.index + 1) },
     { id: 'item_id', label: 'item_id', group: 'Core', value: (r) => r.item_id },
     { id: 'status', label: 'status', group: 'Core', value: (r) => String(r.status ?? '') },
     { id: 'error', label: 'error', group: 'Core', value: (r) => String(r.error ?? '') },
@@ -50,7 +53,7 @@ export function discoverColumns(rows: Row[], model: RunModel): CsvColumn[] {
       id: 'latency_ms',
       label: 'latency_ms',
       group: 'Core',
-      value: (r) => (r.latency_ms ? String(r.latency_ms) : ''),
+      value: (r) => (r.latency_ms != null ? String(r.latency_ms) : ''),
     },
     { id: 'retry_count', label: 'retry_count', group: 'Core', value: (r) => String(r.retry_count ?? 0) },
     { id: 'trace_id', label: 'trace_id', group: 'Core', value: (r) => String(r.trace_id ?? '') },
@@ -83,18 +86,41 @@ export function discoverColumns(rows: Row[], model: RunModel): CsvColumn[] {
   Array.from(metaKeys)
     .sort()
     .forEach((k) =>
-      cols.push({ id: `meta.${k}`, label: k, group: 'Metadata', value: (r) => scalar(r.item_metadata?.[k]) }),
+      cols.push({
+        id: `meta.${k}`,
+        label: k,
+        header: `meta:${k}`,
+        group: 'Metadata',
+        value: (r) => scalar(r.item_metadata?.[k]),
+      }),
     );
   model.metricNames.forEach((m, i) => {
     const group = `Metric: ${m}`;
-    cols.push({ id: `${m}.score`, label: m, group, value: (r) => scalar(r.metric_values?.[i]) });
+    cols.push({
+      id: `${m}.score`,
+      label: m,
+      header: `${m}_score`,
+      group,
+      value: (r) => scalar(r.metric_values?.[i]),
+    });
     cols.push({
       id: `${m}.reason`,
       label: `${m}.reason`,
+      header: `${m}:reason`,
       group,
       value: (r) => {
         const picked = pickReason({ meta: r.metric_meta?.[m] });
         return picked.kind === 'none' ? '' : picked.text;
+      },
+    });
+    cols.push({
+      id: `${m}.root_cause_issues`,
+      label: `${m}.root_cause_issues`,
+      header: `${m}:root_cause_issues`,
+      group,
+      value: (r) => {
+        const issues = rootCauseIssues(r.item_metadata?.metric_analyses?.[m]);
+        return issues.length ? JSON.stringify(issues) : '';
       },
     });
     const keys = new Set<string>();
@@ -111,6 +137,7 @@ export function discoverColumns(rows: Row[], model: RunModel): CsvColumn[] {
         cols.push({
           id: `${m}.meta.${k}`,
           label: `${m}.${k}`,
+          header: `${m}:${k}`,
           group,
           value: (r) => scalar((r.metric_meta?.[m] as Record<string, unknown> | undefined)?.[k]),
         }),

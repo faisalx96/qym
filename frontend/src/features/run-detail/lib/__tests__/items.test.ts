@@ -101,9 +101,13 @@ describe('csv', () => {
       rows,
     );
     const lines = csv.split('\r\n');
-    expect(lines[0]).toBe('index,input,q,q.reason');
+    expect(lines[0]).toBe('#,input,q_score,q:reason');
     expect(lines[1]).toBe('1,"hi, ""there""",0.9,');
     expect(lines[2]).toBe('2,,0.2,bad');
+    // The old page's headers: meta: prefix, <metric>:root_cause_issues, <metric>:<meta key>.
+    const all = buildCsv(cols, rows).split('\r\n')[0]!.split(',');
+    expect(all).toContain('meta:domain');
+    expect(all).toContain('q:root_cause_issues');
   });
 });
 
