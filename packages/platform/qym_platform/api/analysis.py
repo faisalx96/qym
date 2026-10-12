@@ -5585,28 +5585,28 @@ def _analysis_example_filter_query(
     run_name_expr = func.coalesce(
         cast(Run.run_config.op("->>")("run_name"), String), ""
     )
-    ai_root_cause_expr = func.btrim(func.coalesce(ReviewCorrection.ai_root_cause, ""))
+    ai_root_cause_expr = func.trim(func.coalesce(ReviewCorrection.ai_root_cause, ""))
     ai_issues_expr = func.coalesce(
         cast(ReviewCorrection.ai_root_cause_issues, String), ""
     )
-    ai_detail_expr = func.btrim(func.coalesce(ReviewCorrection.ai_root_cause_detail, ""))
-    ai_note_expr = func.btrim(func.coalesce(ReviewCorrection.ai_root_cause_note, ""))
-    human_root_cause_expr = func.btrim(
+    ai_detail_expr = func.trim(func.coalesce(ReviewCorrection.ai_root_cause_detail, ""))
+    ai_note_expr = func.trim(func.coalesce(ReviewCorrection.ai_root_cause_note, ""))
+    human_root_cause_expr = func.trim(
         func.coalesce(ReviewCorrection.human_root_cause, "")
     )
     human_issues_expr = func.coalesce(
         cast(ReviewCorrection.human_root_cause_issues, String), ""
     )
-    human_detail_expr = func.btrim(
+    human_detail_expr = func.trim(
         func.coalesce(ReviewCorrection.human_root_cause_detail, "")
     )
-    human_note_expr = func.btrim(func.coalesce(ReviewCorrection.human_root_cause_note, ""))
-    ai_solution_expr = func.btrim(func.coalesce(ReviewCorrection.ai_solution, ""))
-    ai_solution_note_expr = func.btrim(
+    human_note_expr = func.trim(func.coalesce(ReviewCorrection.human_root_cause_note, ""))
+    ai_solution_expr = func.trim(func.coalesce(ReviewCorrection.ai_solution, ""))
+    ai_solution_note_expr = func.trim(
         func.coalesce(ReviewCorrection.ai_solution_note, "")
     )
-    human_solution_expr = func.btrim(func.coalesce(ReviewCorrection.human_solution, ""))
-    human_solution_note_expr = func.btrim(
+    human_solution_expr = func.trim(func.coalesce(ReviewCorrection.human_solution, ""))
+    human_solution_note_expr = func.trim(
         func.coalesce(ReviewCorrection.human_solution_note, "")
     )
     has_ai_data = or_(
@@ -9375,34 +9375,34 @@ def list_corrections(
     run_name_expr = func.coalesce(
         cast(Run.run_config.op("->>")("run_name"), String), ""
     )
-    ai_root_cause_expr = func.btrim(func.coalesce(ReviewCorrection.ai_root_cause, ""))
+    ai_root_cause_expr = func.trim(func.coalesce(ReviewCorrection.ai_root_cause, ""))
     ai_issues_expr = func.coalesce(
         cast(ReviewCorrection.ai_root_cause_issues, String), ""
     )
-    ai_root_cause_detail_expr = func.btrim(
+    ai_root_cause_detail_expr = func.trim(
         func.coalesce(ReviewCorrection.ai_root_cause_detail, "")
     )
-    ai_root_cause_note_expr = func.btrim(
+    ai_root_cause_note_expr = func.trim(
         func.coalesce(ReviewCorrection.ai_root_cause_note, "")
     )
-    ai_solution_expr = func.btrim(func.coalesce(ReviewCorrection.ai_solution, ""))
-    ai_solution_note_expr = func.btrim(
+    ai_solution_expr = func.trim(func.coalesce(ReviewCorrection.ai_solution, ""))
+    ai_solution_note_expr = func.trim(
         func.coalesce(ReviewCorrection.ai_solution_note, "")
     )
-    human_root_cause_expr = func.btrim(
+    human_root_cause_expr = func.trim(
         func.coalesce(ReviewCorrection.human_root_cause, "")
     )
     human_issues_expr = func.coalesce(
         cast(ReviewCorrection.human_root_cause_issues, String), ""
     )
-    human_root_cause_detail_expr = func.btrim(
+    human_root_cause_detail_expr = func.trim(
         func.coalesce(ReviewCorrection.human_root_cause_detail, "")
     )
-    human_root_cause_note_expr = func.btrim(
+    human_root_cause_note_expr = func.trim(
         func.coalesce(ReviewCorrection.human_root_cause_note, "")
     )
-    human_solution_expr = func.btrim(func.coalesce(ReviewCorrection.human_solution, ""))
-    human_solution_note_expr = func.btrim(
+    human_solution_expr = func.trim(func.coalesce(ReviewCorrection.human_solution, ""))
+    human_solution_note_expr = func.trim(
         func.coalesce(ReviewCorrection.human_solution_note, "")
     )
 

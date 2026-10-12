@@ -163,6 +163,21 @@ def test_item_page_neighbors_follow_the_list_sort_without_loading_every_row(env)
     assert first["previous"] is None and first["next"]["item_id"] == "c"
 
 
+def test_item_neighbors_index_is_the_zero_based_position_in_the_view(env):
+    client, _, _ = env
+    rows = [(f"i{n}", f"text {n:02d}", "x", "t") for n in range(1, 6)]
+    _upload(client, MGR, "qa", rows, publish="true")
+    base = f"/v1/datasets/qa/versions/v1/items"
+    for position, item_id in enumerate(["i1", "i2", "i3", "i4", "i5"]):
+        data = client.get(f"{base}/{item_id}/neighbors", params={"project_slug": "pa"}, headers=MGR).json()
+        assert (data["index"], data["total"]) == (position, 5)
+    # The position is within the filtered view, not the stored item index.
+    filtered = client.get(f"{base}/i4/neighbors", params={"project_slug": "pa", "search": "text 0"}, headers=MGR).json()
+    assert (filtered["index"], filtered["total"]) == (3, 5)
+    only = client.get(f"{base}/i4/neighbors", params={"project_slug": "pa", "sort": "item_id_desc"}, headers=MGR).json()
+    assert only["index"] == 1
+
+
 # ---------------------------------------------------------------- C033 cost
 
 
