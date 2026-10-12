@@ -43,10 +43,19 @@
 }
 
 .logo {
-  font-size: var(--font-stat); /* wordmark, decorative */
-  font-weight: 700;
-  color: var(--accent-primary);
-  line-height: 1.2;
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin-bottom: var(--space-sm);
+  object-fit: contain;
+}
+
+.wordmark {
+  display: block;
+  width: 57px;
+  height: 36px;
+  margin-bottom: var(--space-sm);
+  object-fit: contain;
 }
 
 .form {
@@ -113,9 +122,9 @@
 .provider {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-sm);
-  min-height: 42px;
+  gap: var(--space-md);
+  min-height: 52px;
+  padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
@@ -132,4 +141,38 @@
   border-color: var(--border-strong);
   background: var(--bg-hover);
   text-decoration: none;
+}
+
+.providerIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
+}
+
+.providerIcon[data-provider-icon='google'] {
+  background: var(--text-primary);
+}
+
+.providerText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  text-align: start;
+}
+
+.providerLabel {
+  font-weight: 600;
+}
+
+.providerDesc {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 400;
 }

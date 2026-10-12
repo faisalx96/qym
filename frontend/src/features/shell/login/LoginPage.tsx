@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuthProviders } from '@/api/me';
 import type { AuthProvider } from '@/api/types';
@@ -7,6 +7,9 @@ import { appUrl, bootstrap, platformUrl } from '@/lib/runtime';
 import { useDelayedPending } from '@/lib/pending';
 import { Button, EmptyState, ErrorState, Icon, Skeleton, Stack, Text, TextField } from '@/ui';
 import { useDocumentTitle } from '../hooks';
+import brandIcon from '@/assets/brand/qym-icon.png';
+import brandText from '@/assets/brand/qym-text.png';
+import { ProviderIcon, providerDescription } from './ProviderIcon';
 import styles from './LoginPage.module.css';
 
 type Mode = 'signin' | 'signup' | 'change-password';
@@ -40,9 +43,8 @@ export function LoginPage() {
       <div className={styles.backdrop} aria-hidden="true" />
       <section className={styles.card} aria-labelledby="login-title">
         <header className={styles.header}>
-          <span className={styles.logo} aria-hidden="true">
-            قيِّم
-          </span>
+          <img src={brandIcon} alt="" className={styles.logo} width={64} height={64} />
+          <img src={brandText} alt="qym" className={styles.wordmark} width={57} height={36} />
           <Text variant="xl" as="h1" id="login-title">
             Sign in to qym
           </Text>
@@ -78,6 +80,8 @@ function LoginBody({
 }) {
   const enabled = providers.filter((p) => p.enabled);
   const [mode, setMode] = useState<Mode>('signin');
+  // Held in memory only: never written to storage.
+  const [pending, setPending] = useState<{ email: string; temporary: string }>({ email: '', temporary: '' });
   if (!localAuth.enabled && enabled.length === 0) {
     const { authMode } = bootstrap();
     return (
@@ -107,10 +111,25 @@ function LoginBody({
           {mode === 'change-password' ? null : mode === 'signup' ? (
             <SignupForm next={next} onBack={() => setMode('signin')} />
           ) : (
-            <PasswordForm next={next} onNeedsChange={() => setMode('change-password')} />
+            <PasswordForm
+              next={next}
+              initialEmail={pending.email}
+              onNeedsChange={(email, temporary) => {
+                setPending({ email, temporary });
+                setMode('change-password');
+              }}
+            />
           )}
           {mode === 'change-password' ? (
-            <ChangePasswordForm next={next} onBack={() => setMode('signin')} />
+            <ChangePasswordForm
+              next={next}
+              email={pending.email}
+              temporary={pending.temporary}
+              onBack={() => {
+                setPending({ email: pending.email, temporary: '' });
+                setMode('signin');
+              }}
+            />
           ) : null}
           {mode === 'signin' && localAuth.signup_enabled ? (
             <Text variant="sm" as="p" className={styles.switch}>
@@ -141,8 +160,14 @@ function LoginBody({
               href={`${platformUrl(`/v1/auth/login/${encodeURIComponent(p.id)}`)}?next=${encodeURIComponent(next)}`}
               data-provider={p.id}
             >
-              <Icon name="external" size={14} />
-              <span>Continue with {p.label}</span>
+              <span className={styles.providerIcon} data-provider-icon={p.id}>
+                <ProviderIcon id={p.id} />
+              </span>
+              <span className={styles.providerText}>
+                <span className={styles.providerLabel}>{p.label || `Continue with ${p.id}`}</span>
+                <span className={styles.providerDesc}>{providerDescription(p.id)}</span>
+              </span>
+              <Icon name="chevron-right" size={14} />
             </a>
           ))}
         </Stack>
@@ -164,12 +189,24 @@ function StatusLine({ status }: { status: Status | null }) {
   );
 }
 
-function PasswordForm({ next, onNeedsChange }: { next: string; onNeedsChange: () => void }) {
-  const [email, setEmail] = useState(() => sessionStorage.getItem('qym:login-email') ?? '');
+function PasswordForm({
+  next,
+  initialEmail,
+  onNeedsChange,
+}: {
+  next: string;
+  initialEmail: string;
+  onNeedsChange: (email: string, temporary: string) => void;
+}) {
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [clearKey, setClearKey] = useState(0);
+
+  function clearError() {
+    setStatus((s) => (s?.tone === 'error' ? null : s));
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -184,9 +221,7 @@ function PasswordForm({ next, onNeedsChange }: { next: string; onNeedsChange: ()
       window.location.assign(sameOriginTarget(res.next, next));
     } catch (err) {
       if (err instanceof ApiError && err.status === 403 && err.code === 'password_change_required') {
-        sessionStorage.setItem('qym:login-email', email.trim());
-        sessionStorage.setItem('qym:login-temp', password);
-        onNeedsChange();
+        onNeedsChange(email.trim(), password);
         return;
       }
       const text =
@@ -210,8 +245,12 @@ function PasswordForm({ next, onNeedsChange }: { next: string; onNeedsChange: ()
         name="email"
         size="auth"
         value={email}
-        onChange={setEmail}
+        onChange={(v) => {
+          setEmail(v);
+          clearError();
+        }}
         autoComplete="username"
+        placeholder="name@company.com"
         isRequired
         autoFocus
       />
@@ -222,8 +261,13 @@ function PasswordForm({ next, onNeedsChange }: { next: string; onNeedsChange: ()
         name="password"
         size="auth"
         value={password}
-        onChange={setPassword}
+        onChange={(v) => {
+          setPassword(v);
+          clearError();
+        }}
         autoComplete="current-password"
+        placeholder="Enter your password"
+        help="Forgot your password? Ask an admin to reset it."
         isRequired
         autoFocus={clearKey > 0}
       />
@@ -235,9 +279,18 @@ function PasswordForm({ next, onNeedsChange }: { next: string; onNeedsChange: ()
   );
 }
 
-function ChangePasswordForm({ next, onBack }: { next: string; onBack: () => void }) {
-  const email = sessionStorage.getItem('qym:login-email') ?? '';
-  const temporary = sessionStorage.getItem('qym:login-temp') ?? '';
+function ChangePasswordForm({
+  next,
+  email,
+  temporary,
+  onBack,
+}: {
+  next: string;
+  email: string;
+  temporary: string;
+  onBack: () => void;
+}) {
+  const confirmRef = useRef<HTMLInputElement>(null);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -246,9 +299,17 @@ function ChangePasswordForm({ next, onBack }: { next: string; onBack: () => void
     text: 'Your password was reset. Choose a new one to continue.',
   });
 
+  function clearError() {
+    setStatus((s) => (s?.tone === 'error' ? null : s));
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (password !== confirm) return setStatus({ tone: 'error', text: 'The passwords do not match.' });
+    if (password !== confirm) {
+      setStatus({ tone: 'error', text: 'The passwords do not match.' });
+      confirmRef.current?.focus();
+      return;
+    }
     if (password.length < 8) return setStatus({ tone: 'error', text: 'Use at least 8 characters.' });
     if (password === temporary)
       return setStatus({ tone: 'error', text: 'Choose a password different from the temporary one.' });
@@ -259,11 +320,9 @@ function ChangePasswordForm({ next, onBack }: { next: string; onBack: () => void
         { email, current_password: temporary, new_password: password },
         { silent401: true },
       );
-      sessionStorage.removeItem('qym:login-temp');
       window.location.assign(sameOriginTarget(res.next, next));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        sessionStorage.removeItem('qym:login-temp');
         setStatus({ tone: 'error', text: 'The temporary password is no longer valid. Sign in again.' });
         setTimeout(onBack, 1200);
         return;
@@ -291,18 +350,27 @@ function ChangePasswordForm({ next, onBack }: { next: string; onBack: () => void
         type="password"
         size="auth"
         value={password}
-        onChange={setPassword}
+        onChange={(v) => {
+          setPassword(v);
+          clearError();
+        }}
         autoComplete="new-password"
+        placeholder="At least 8 characters"
         isRequired
         autoFocus
       />
       <TextField
+        ref={confirmRef}
         label="Confirm new password"
         type="password"
         size="auth"
         value={confirm}
-        onChange={setConfirm}
+        onChange={(v) => {
+          setConfirm(v);
+          clearError();
+        }}
         autoComplete="new-password"
+        placeholder="Enter the new password again"
         isRequired
       />
       <StatusLine status={status} />
@@ -359,6 +427,7 @@ function SignupForm({ next, onBack }: { next: string; onBack: () => void }) {
         value={displayName}
         onChange={setDisplayName}
         autoComplete="name"
+        placeholder="Team member"
         autoFocus
       />
       <TextField
@@ -368,6 +437,7 @@ function SignupForm({ next, onBack }: { next: string; onBack: () => void }) {
         value={email}
         onChange={setEmail}
         autoComplete="username"
+        placeholder="name@company.com"
         isRequired
       />
       <TextField
@@ -377,6 +447,7 @@ function SignupForm({ next, onBack }: { next: string; onBack: () => void }) {
         value={password}
         onChange={setPassword}
         autoComplete="new-password"
+        placeholder="At least 8 characters"
         isRequired
         help="At least 8 characters."
       />
