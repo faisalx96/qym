@@ -19,14 +19,15 @@ export function parsePass(raw: string | null | undefined): number | null {
 
 /** URL state of the workspace: `run`, `pass`, `metric`, `scope` (names are a backend contract). */
 export function useAnalyzerRoute() {
-  const { params, replaceUrlQuery } = useSearchParamsState();
+  const { params, replaceUrlQuery, pushUrlQuery } = useSearchParamsState();
   const runId = params.get('run') ?? '';
   const pass = parsePass(params.get('pass'));
   const metric = params.get('metric') ?? '';
   const scope = parseScope(params.get('scope'));
+  // Switching between the run workspace and the guidance tabs is navigation: Back returns to the previous one.
   const setScope = useCallback(
-    (next: AnalyzerScope) => replaceUrlQuery({ scope: next === 'run' ? null : next }),
-    [replaceUrlQuery],
+    (next: AnalyzerScope) => pushUrlQuery({ scope: next === 'run' ? null : next }),
+    [pushUrlQuery],
   );
   const setPass = useCallback((next: number | null) => replaceUrlQuery({ pass: next }), [replaceUrlQuery]);
   return useMemo(

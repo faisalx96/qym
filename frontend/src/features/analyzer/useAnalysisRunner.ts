@@ -73,8 +73,12 @@ export function useAnalysisRunner(
     onFinishedRef.current?.(job);
   }, [job, qc, runId, pass]);
 
+  // A double click must not queue two jobs: `isPending` only flips after the next render.
+  const startInFlight = useRef(false);
   const start = useCallback(
     async (body: AnalyzeRequest) => {
+      if (startInFlight.current) return null;
+      startInFlight.current = true;
       setError(null);
       try {
         const created = await startMutation.mutateAsync(body);
@@ -91,6 +95,8 @@ export function useAnalysisRunner(
             : 'The analysis could not be started.';
         setError({ key, value: message });
         return null;
+      } finally {
+        startInFlight.current = false;
       }
     },
     [startMutation, key],

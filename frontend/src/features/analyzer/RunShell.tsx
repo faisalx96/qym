@@ -31,10 +31,11 @@ export function RunShell({
   const config = useAnalysisConfig(scope);
   const summary = useRunSummary(runId);
   const location = useLocation();
-  const { params, replaceUrlQuery } = useSearchParamsState();
+  const { params, pushUrlQuery } = useSearchParamsState();
   const stepParam = params.get('step');
   const step: StepId = (STEP_IDS as string[]).includes(stepParam ?? '') ? (stepParam as StepId) : 'configure';
-  const setStep = (next: StepId) => replaceUrlQuery({ step: next === 'configure' ? null : next });
+  // A step is a place in a wizard: Back returns to the previous step instead of leaving the workspace.
+  const setStep = (next: StepId) => pushUrlQuery({ step: next === 'configure' ? null : next });
 
   const runner = useAnalysisRunner(runId, route.pass, (job: AnalysisJob) => {
     const sum = summarize(job);
@@ -107,10 +108,8 @@ export function RunShell({
             onReview={
               area === 'run'
                 ? () => setStep('review')
-                : () => {
-                    route.setScope('run');
-                    setStep('review');
-                  }
+                : // one URL write: two router updates in a row would drop the first (scope stayed on guidance)
+                  () => pushUrlQuery({ scope: null, step: 'review' })
             }
           />
         </div>

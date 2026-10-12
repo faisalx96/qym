@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useBlocker } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   analysisConfigKey,
@@ -128,6 +129,22 @@ function DiagnosisEditor({
       }),
     };
   }, [draft, dirty, baseline]);
+
+  // Unsaved-changes guard: leaving the page or this tab (the draft lives in this panel) and closing the tab.
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (!dirty) return false;
+    const scopeOf = (search: string) => new URLSearchParams(search).get('scope');
+    return (
+      currentLocation.pathname !== nextLocation.pathname ||
+      scopeOf(currentLocation.search) !== scopeOf(nextLocation.search)
+    );
+  });
+  useEffect(() => {
+    if (!dirty) return;
+    const onUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [dirty]);
 
   const problems = useMemo(() => validateCatalog(current), [current]);
   const incomplete = new Set(problems.categories);
@@ -629,6 +646,19 @@ function DiagnosisEditor({
         </Tabs>
       )}
 
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(o) => !o && blocker.state === 'blocked' && blocker.reset()}
+        title="Discard unsaved changes?"
+        description="The diagnosis categories have edits that are not saved."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        tone="danger"
+        onConfirm={() => {
+          setDraft(null);
+          if (blocker.state === 'blocked') blocker.proceed();
+        }}
+      />
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
