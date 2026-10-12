@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PLATFORM = ROOT / "packages" / "platform"
-DASHBOARD_DOCS = PLATFORM / "qym_platform" / "_static" / "dashboard" / "docs"
+DASHBOARD_DOCS = ROOT / "frontend" / "src" / "features" / "docs" / "partials"
 
 
 def _read(path: Path) -> str:
@@ -28,32 +28,10 @@ def test_react_docs_ia_only_references_existing_pages() -> None:
     pages = _ia_pages()
     assert len(pages) == 27
     assert len(set(pages)) == len(pages)
+    for page in ("navigation", "runs", "run-detail", "projects-data-review"):
+        assert ("platform-guide", page) in pages
     for section_id, page_id in pages:
         assert (DASHBOARD_DOCS / section_id / f"{page_id}.html").is_file(), (section_id, page_id)
-
-
-def test_in_app_docs_navigation_only_references_existing_pages() -> None:
-    source = _read(DASHBOARD_DOCS.parent / "docs.js")
-    section_pattern = re.compile(
-        r"id: '([^']+)',\s+title: '[^']+',\s+icon: .*?\s+pages: \[(.*?)\]\s+}",
-        re.DOTALL,
-    )
-    page_pattern = re.compile(r"\{ id: '([^']+)', title: '[^']+' }")
-
-    pages = [
-        (section_id, page_id)
-        for section_id, body in section_pattern.findall(source)
-        for page_id in page_pattern.findall(body)
-    ]
-    assert pages
-    assert ("platform-guide", "navigation") in pages
-    assert ("platform-guide", "runs") in pages
-    assert ("platform-guide", "run-detail") in pages
-    assert ("platform-guide", "projects-data-review") in pages
-    for section_id, page_id in pages:
-        assert (DASHBOARD_DOCS / section_id / f"{page_id}.html").is_file()
-    # The vanilla docs.js and the React ia.json describe the same pages until the cutover.
-    assert pages == _ia_pages()
 
 
 def test_platform_guides_describe_current_project_and_repeat_model() -> None:

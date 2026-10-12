@@ -40,5 +40,8 @@ def test_startup_caps_the_anyio_threadpool() -> None:
     async def threads() -> dict:
         return {"total": anyio.to_thread.current_default_thread_limiter().total_tokens}
 
+    # The SPA catch-all is registered by create_app; put the probe ahead of it.
+    app.router.routes.insert(0, app.router.routes.pop())
+
     with TestClient(app) as client:
         assert client.get("/_threads").json() == {"total": 7}

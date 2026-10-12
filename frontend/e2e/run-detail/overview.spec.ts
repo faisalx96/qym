@@ -91,25 +91,25 @@ test.describe('open a run (J1, scenario 1)', () => {
     await expect(metricCard(page, 'tokens_used')).toContainText('Total');
   });
 
-  test('legacy /app/run/<id> redirects to the project-scoped page', async ({ page }) => {
-    await page.goto(`/app/run/${classic}`);
-    await expect(page).toHaveURL(new RegExp(`/app/projects/[^/]+/runs/${classic}`));
+  test('legacy /run/<id> redirects to the project-scoped page', async ({ page }) => {
+    await page.goto(`/run/${classic}`);
+    await expect(page).toHaveURL(new RegExp(`/projects/[^/]+/runs/${classic}`));
     await expect(page.getByTestId('items-count')).toBeVisible();
   });
 
-  test('legacy /app/run/<id> lands under the run\u2019s own project, not the last visited one', async ({
+  test('legacy /run/<id> lands under the run\u2019s own project, not the last visited one', async ({
     page,
   }) => {
     const other = await seedProject('rd-other');
-    await page.goto(`/app/projects/${other.slug}`);
-    await page.goto(`/app/run/${classic}?item=item-0003`);
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${s.slug}/runs/${classic}\\?item=item-0003`));
+    await page.goto(`/projects/${other.slug}`);
+    await page.goto(`/run/${classic}?item=item-0003`);
+    await expect(page).toHaveURL(new RegExp(`/projects/${s.slug}/runs/${classic}\\?item=item-0003`));
   });
 
   test('a run link carrying the wrong project is corrected to the run\u2019s project', async ({ page }) => {
     const other = await seedProject('rd-wrong');
-    await page.goto(`/app/projects/${other.slug}/runs/${classic}?show=failed`);
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${s.slug}/runs/${classic}\\?show=failed`));
+    await page.goto(`/projects/${other.slug}/runs/${classic}?show=failed`);
+    await expect(page).toHaveURL(new RegExp(`/projects/${s.slug}/runs/${classic}\\?show=failed`));
     await expect(page.getByTestId('items-count')).toBeVisible();
   });
 

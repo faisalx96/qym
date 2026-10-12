@@ -67,17 +67,18 @@ jobs:
           qym_playwright_version=$(python -c "from importlib.metadata import version; print(version('playwright'))")
           npm install --prefix "$RUNNER_TEMP/qym-node-tests" "playwright@$qym_playwright_version"
           echo "NODE_PATH=$RUNNER_TEMP/qym-node-tests/node_modules" >> "$GITHUB_ENV"
-      - name: Test SDK, platform, PostgreSQL and browser workflows
-        run: python -m pytest -q -n auto --junitxml=test-results.xml
       - name: Set up Node 24 for the frontend builds
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
+      # The platform wheel and the serving tests need the built app (_static/app).
       - name: Build the React bundles
         run: |
           npm ci --prefix frontend --no-audit --no-fund
           npm run --prefix frontend build
           npm run --prefix frontend build:sdk
+      - name: Test SDK, platform, PostgreSQL and browser workflows
+        run: python -m pytest -q -n auto --junitxml=test-results.xml
       - name: Build both distributions
         run: |
           python -m build --wheel packages/sdk
@@ -91,3 +92,48 @@ jobs:
         with:
           name: test-results-python-${{ matrix.python }}
           path: test-results.xml
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: '1'
+      QYM_PYTHON: python
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            packages/*/pyproject.toml
+            requirements-test.txt
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install the platform (the e2e suite boots it) and the frontend
+        run: |
+          python -m pip install -e packages/sdk -e packages/platform -r requirements-test.txt
+          npm ci --prefix frontend --no-audit --no-fund
+      - name: Typecheck, lint, Vitest and the design-language test
+        run: npm run --prefix frontend check
+      - name: Build the app and the SDK viewer
+        run: |
+          npm run --prefix frontend build
+          npm run --prefix frontend build:sdk
+      - name: Install Chromium for Playwright
+        run: npx --prefix frontend playwright install --with-deps chromium
+      - name: Playwright (platform app)
+        run: npm run --prefix frontend e2e -- --workers 2
+      - name: Playwright (SDK viewer)
+        run: npm run --prefix frontend e2e:sdk
+      - name: Save Playwright report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results

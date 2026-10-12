@@ -4,7 +4,9 @@
 - An official run gets its experiment's keys merged in (the experiment wins).
 - Run detail, run list and the dashboard descriptor return it.
 - Experiments store it, return it and carry it in the clone prefill.
-- The run page renders it with a self-contained, design-compliant panel.
+- The offline run export renders it with a self-contained, design-compliant panel (the live run page
+  is React: frontend/e2e/run-detail/overview.spec.ts "run details toggle ... versioning details";
+  the launch form sends it: frontend/src/features/experiments/launch/model/spec.test.ts).
 """
 
 from __future__ import annotations
@@ -32,14 +34,13 @@ from test_eval_run_linking import (  # noqa: F401  (pytest fixtures)
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-RUN_HTML = (DASHBOARD / "run.html").read_text(encoding="utf-8")
-PANEL_JS = (DASHBOARD / "run_versioning_details.js").read_text(encoding="utf-8")
-PANEL_CSS = (DASHBOARD / "run_versioning_details.css").read_text(encoding="utf-8")
-LAUNCH_JS = (DASHBOARD / "experiment_launch.js").read_text(encoding="utf-8")
-RUNS_API = (ROOT / "packages" / "platform" / "qym_platform" / "api" / "runs.py").read_text(
-    encoding="utf-8"
-)
+EXPORT = ROOT / "packages" / "platform" / "qym_platform" / "export_templates" / "run"
+RUN_HTML = (EXPORT / "run.html").read_text(encoding="utf-8")
+PANEL_JS = (EXPORT / "run_versioning_details.js").read_text(encoding="utf-8")
+PANEL_CSS = (EXPORT / "run_versioning_details.css").read_text(encoding="utf-8")
+HTML_EXPORT = (
+    ROOT / "packages" / "platform" / "qym_platform" / "services" / "html_export.py"
+).read_text(encoding="utf-8")
 
 
 def _create(client, details=None, launch=None, key=ENV_INGEST_KEY):
@@ -204,7 +205,7 @@ def test_dashboard_descriptor_carries_versioning_details(client, sessions, seed)
 # ------------------------------------------------------------------ UI (static)
 
 
-def test_run_page_mounts_the_versioning_details_panel():
+def test_export_page_mounts_the_versioning_details_panel():
     head = RUN_HTML.split("</head>", 1)[0]
     assert '<script src="/static/run_versioning_details.js?v=' in head
     assert '<link rel="stylesheet" href="/static/run_versioning_details.css?v=' in head
@@ -226,12 +227,5 @@ def test_panel_escapes_and_follows_the_design_language():
 
 
 def test_export_inlines_the_panel():
-    assert '"run_versioning_details.js",' in RUNS_API
-    assert "run_versioning_details\\.css" in RUNS_API
-
-
-def test_launch_form_sends_versioning_details():
-    assert "versioningText: ''," in LAUNCH_JS
-    assert "body.versioning_details = versioning;" in LAUNCH_JS
-    assert "st.versioningText = versioningText(data.versioning_details);" in LAUNCH_JS
-    assert "'data-xl-pointer': '#versioning-details'" in LAUNCH_JS
+    assert '"run_versioning_details.js",' in HTML_EXPORT
+    assert "run_versioning_details\\.css" in HTML_EXPORT

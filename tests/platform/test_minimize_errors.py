@@ -9,14 +9,13 @@ direction, keep the C015 rule (errors count as 0). The server
 same rule on every surface.
 """
 
-import json
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+from _support_a1 import share_run_page
 from fastapi.testclient import TestClient
 from qym.core.reducers import group_stats
+from qym_platform.api import dashboard_stats
 from qym_platform.api import insights as insights_api
 from qym_platform.api import runs as runs_api
 from qym_platform.auth import Principal
@@ -63,7 +62,6 @@ from test_repeat_runs_platform import (
 )
 
 REPO = Path(__file__).resolve().parents[2]
-METRICS_JS = REPO / "packages/platform/qym_platform/_static/dashboard/metrics.js"
 
 
 def _approx(values):
@@ -84,46 +82,6 @@ def _spec(run_id, name, position, direction, **kwargs):
         direction=direction,
         **kwargs,
     )
-
-
-def _node(script, data):
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("Node.js is required to check metrics.js")
-    source = (
-        "const fs = require('fs'), vm = require('vm');\n"
-        "const ctx = vm.createContext({ window: {} });\n"
-        "vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), ctx);\n"
-        "const m = ctx.window.QymMetrics;\n"
-        "const input = JSON.parse(fs.readFileSync(0, 'utf8'));\n" + script
-    )
-    result = subprocess.run(
-        [node, "-e", source, str(METRICS_JS)],
-        input=json.dumps(data),
-        text=True,
-        capture_output=True,
-        timeout=60,
-    )
-    assert result.returncode == 0, result.stderr
-    return json.loads(result.stdout)
-
-
-# The run page's mean: metrics.js getRowScore with each metric's declared
-# direction, averaged over the rows that have a score.
-JS_MEANS = """
-const specs = input.specs || {};
-const out = {};
-input.metrics.forEach((name, idx) => {
-  const direction = m.metricDirection(specs[name]);
-  let sum = 0, cnt = 0;
-  for (const row of input.rows) {
-    const { score } = m.getRowScore(row, idx, name, direction);
-    if (score !== null) { sum += score; cnt++; }
-  }
-  out[name] = cnt ? sum / cnt : null;
-});
-process.stdout.write(JSON.stringify(out));
-"""
 
 
 def test_rule_leaves_errors_out_only_for_lower_is_better_metrics():
@@ -272,268 +230,60 @@ def test_classic_run_list_summary_insights_run_page_agree(database):
     assert point["metric_averages"] == _approx(CLASSIC)
     assert point["metric_counts"] == {"h": 2, "q": 5, "u": 5}
 
-    snapshot = _rows(database)
-    means = _node(
-        JS_MEANS,
-        {
-            "rows": snapshot["rows"],
-            "metrics": ["h", "q", "u"],
-            "specs": snapshot["metric_specs"],
-        },
-    )
-    assert means == _approx(CLASSIC)
-
-
-PASS_VERDICTS = """
-const run = input.run;
-const specs = run.snapshot.metric_specs || {};
-const out = {};
-for (const name of ['h', 'q']) {
-  const direction = m.metricDirection(specs[name]);
-  const result = m.calculateItemLevelMetrics({
-    runsData: [run],
-    metricName: name,
-    threshold: m.defaultPassThreshold(specs[name]),
-    direction,
-    isBoolean: false,
-    getMetricIndex: data => (data.snapshot.metric_names || []).indexOf(name),
-    getItemId: row => row.item_id,
-    trackDistribution: true,
-  });
-  out[name] = {
-    passAtK: result.passAtK, avgScore: result.avgScore,
-    items: result.totalItems, failed: result.failedCount,
-    distribution: result.correctDistribution,
-  };
-}
-process.stdout.write(JSON.stringify(out));
-"""
+    # The run page (React lib/metrics.ts) averages these rows to the same means:
+    # frontend/src/features/run-detail/lib/__tests__/cutover-server-payloads.test.ts.
+    share_run_page("minimize_classic_means", _rows(database), {"means": CLASSIC})
 
 
 def test_models_and_run_page_never_count_an_errored_item_as_a_pass(database):
     with Session(database) as db:
         _classic(db)
-        models = runs_api.models_runs_data(
-            files=["r"], db=db, principal=_principal(db)
-        )["runs"][0]
-    run_page = _rows(database)
-    for name, data in (
-        ("models", models),
-        ("run page", {"run": {"samples": 1}, "snapshot": run_page}),
-    ):
-        verdicts = _node(PASS_VERDICTS, {"run": data})
+    drain(database)
+    groups = [{"key": "g", "runs": ["r"]}]
+    for metric, direction, threshold, passed, average in (
         # h passes at <= 0.3: only a. The scorer errors (c, d) and the task
         # error (e) fail; they were passes when an error counted as 0.
-        assert verdicts["h"]["passAtK"] == pytest.approx(0.2), name
-        assert verdicts["h"]["avgScore"] == pytest.approx(0.4), name
-        assert verdicts["h"]["items"] == 5, name
-        assert verdicts["h"]["distribution"] == [4, 1], name
+        ("h", "minimize", 0.3, 0.2, 0.4),
         # q passes at >= 0.8 (a, c); errors fail through their 0 as before.
-        assert verdicts["q"]["passAtK"] == pytest.approx(0.4), name
-        assert verdicts["q"]["avgScore"] == pytest.approx(0.46), name
-
-
-COHORT = """
-const rows = (values, metas) => values.map((value, i) => ({
-  item_id: 'item-' + i, status: metas[i] === 'task' ? 'error' : 'completed',
-  metric_values: [value],
-  metric_meta: metas[i] && metas[i] !== 'task' ? { h: metas[i] } : {},
-}));
-const left = { run: { run_id: 'L', samples: 1 }, snapshot: { metric_names: ['h'],
-  rows: rows([0, 0, 0.1], [{ status: 'error' }, 'task', null]) } };
-const right = { run: { run_id: 'R', samples: 1 }, snapshot: { metric_names: ['h'],
-  rows: rows([0.1, 0.1, 0.1], [null, null, null]) } };
-const repeat = { run: { run_id: 'P', samples: 3 }, snapshot: { metric_names: ['h'],
-  rows: [{ item_id: 'item-0', status: 'completed', metric_values: [0.05],
-    pass_scores: { h: [0, 0.1, 0] },
-    pass_metric_meta: { h: [{ status: 'error' }, null, { label: 'error' }] },
-    pass_attempts: [{ status: 'completed' }, { status: 'completed' }, { status: 'error' }] }] } };
-const options = direction => ({
-  threshold: 0.2, direction, isBoolean: false, metricName: 'h',
-  getMetricIndex: () => 0, getItemId: row => row.item_id, getRunId: data => data.run.run_id,
-});
-const minimize = m.calculateGroupedCohortComparison({
-  runsData: [left, right], leftRunIds: ['L'], rightRunIds: ['R'], ...options('minimize') });
-const perPass = m.calculateGroupedCohortComparison({
-  runsData: [repeat, right], leftRunIds: ['P'], rightRunIds: ['R'], ...options('minimize') });
-process.stdout.write(JSON.stringify({
-  eligible: minimize.eligibleItems,
-  leftPassAtK: minimize.left.passAtK,
-  rightPassAtK: minimize.right.passAtK,
-  leftAvg: minimize.left.avgAtK,
-  buckets: Object.fromEntries(Object.entries(minimize.buckets).map(([k, v]) => [k, v.count])),
-  improved: minimize.summary.improvedCount,
-  repeatPasses: perPass.items[0].leftPasses,
-  repeatScores: perPass.items[0].leftScores,
-}));
-"""
-
-
-def test_sweep_counts_errored_items_and_passes_as_failures():
-    result = _node(COHORT, {})
-    # Both errored left items fail and have no score; item-2 passes on both.
-    assert result["eligible"] == 3
-    assert result["leftPassAtK"] == pytest.approx(1 / 3)
-    assert result["rightPassAtK"] == pytest.approx(1.0)
-    assert result["leftAvg"] == pytest.approx(0.1)
-    assert result["buckets"] == {
-        "a_sweeps_b": 0,
-        "b_sweeps_a": 2,
-        "both_pass": 1,
-        "both_fail": 0,
-    }
-    assert result["improved"] == 2
-    # A repeat item: the scorer-error and task-error passes fail, unscored.
-    assert result["repeatPasses"] == [False, True, False]
-    assert result["repeatScores"] == [0.1]
-
-
-EMPTY_AVERAGES = """
-const run = (id, values) => ({ run: { run_id: id, samples: 1 }, snapshot: { metric_names: ['h'],
-  rows: values.map((value, i) => ({ item_id: 'item-' + i, status: 'completed',
-    metric_values: [value === null ? 0 : value],
-    metric_meta: value === null ? { h: { status: 'error' } } : {} })) } });
-const runs = [run('E', [null, null]), run('M', [0.6, 0.1]), run('Z', [0, 0])];
-const cohort = (left, right, direction) => {
-  const result = m.calculateGroupedCohortComparison({
-    runsData: runs, leftRunIds: [left], rightRunIds: [right],
-    threshold: 0.2, direction, isBoolean: false, metricName: 'h',
-    getMetricIndex: () => 0, getItemId: row => row.item_id, getRunId: data => data.run.run_id });
-  return [result.left.avgAtK, result.right.avgAtK, result.deltas.avgAtK,
-    result.left.passAtK, result.right.passAtK];
-};
-process.stdout.write(JSON.stringify({
-  left: cohort('E', 'M', 'minimize'),
-  right: cohort('M', 'E', 'minimize'),
-  both: cohort('E', 'E', 'minimize'),
-  zero: cohort('Z', 'M', 'minimize'),
-  maximize: cohort('E', 'M', 'maximize'),
-}));
-"""
-
-
-def test_sweep_cohort_without_a_score_has_no_average_and_no_delta():
-    result = _node(EMPTY_AVERAGES, {})
-    # [left avg, right avg, avg delta, left Pass@k, right Pass@k]. Every h
-    # entry of run E errored: no average and no delta, never 0.0 -> 0.35;
-    # its errors still fail in the pass rates.
-    assert result["left"] == [None, pytest.approx(0.35), None, 0, 0.5]
-    assert result["right"] == [pytest.approx(0.35), None, None, 0.5, 0]
-    assert result["both"] == [None, None, None, 0, 0]
-    # Measured zeros are scores.
-    assert result["zero"] == [0, pytest.approx(0.35), pytest.approx(0.35), 1, 0.5]
-    # Higher is better: errors still count as 0.
-    assert result["maximize"] == [0, pytest.approx(0.35), pytest.approx(0.35), 0, 0.5]
-
-
-PASS_TOOLTIPS = """
-const out = {};
-for (const [name, args] of Object.entries(input)) {
-  const tips = m.getMetricTooltips(...args);
-  out[name] = [tips.passAtK, tips.passHatK, tips.maxAtK, tips.failedCount];
-}
-process.stdout.write(JSON.stringify(out));
-"""
-
-
-def test_pass_tooltips_follow_the_metric_direction():
-    """getMetricTooltips (the repeat run page): lower is better passes at or
-    below the threshold, its boolean best is 0%, and its errors are left out.
-    Callers without a direction keep the higher-is-better wording."""
-    tips = _node(
-        PASS_TOOLTIPS,
+        ("q", "maximize", 0.8, 0.4, 0.46),
+    ):
+        with Session(database) as db:
+            stats = dashboard_stats.dashboard_model_stats(
+                {
+                    "metric": metric,
+                    "threshold": threshold,
+                    "direction": direction,
+                    "groups": groups,
+                },
+                db=db,
+                principal=_principal(db),
+            )["groups"]["g"]
+        assert stats["passAtK"] == pytest.approx(passed), metric
+        assert stats["avgScore"] == pytest.approx(average), metric
+        assert stats["totalItems"] == 5, metric
+    assert stats["totalItems"] == 5
+    with Session(database) as db:
+        h = dashboard_stats.dashboard_model_stats(
+            {
+                "metric": "h",
+                "threshold": 0.3,
+                "direction": "minimize",
+                "groups": groups,
+            },
+            db=db,
+            principal=_principal(db),
+        )["groups"]["g"]
+    assert h["correctDistribution"] == [4, 1]
+    # The run page (React rowStatus) judges the same items the same way.
+    share_run_page(
+        "minimize_classic_verdicts",
+        _rows(database),
         {
-            "maximize": [3, False, 80, "maximize"],
-            "minimize": [3, False, 20, "minimize"],
-            "boolean maximize": [3, True, 80, "maximize"],
-            "boolean minimize": [3, True, 20, "minimize"],
-            "omitted": [3, False, 80],
-            "undeclared": [3, False, 80, None],
+            "status_counts": {
+                "h": {"pass": 1, "fail": 1, "error": 3},
+                "q": {"pass": 2, "fail": 1, "error": 2},
+            }
         },
-    )
-    at_least = "Percentage of items where at least one of the 3 runs "
-    every = "Percentage of items where all 3 runs "
-    best = "Average of the best score across all 3 runs for each item"
-    zero = (
-        "Item evaluations that returned a task or scorer error, across all "
-        "passes of the selected runs. Errors are scored as 0%."
-    )
-    maximize = [at_least + "scored ≥80%.", every + "scored ≥80%.", best + ".", zero]
-    assert tips["maximize"] == tips["omitted"] == tips["undeclared"] == maximize
-    assert tips["minimize"] == [
-        at_least + "scored ≤20%.",
-        every + "scored ≤20%.",
-        best + " (the lowest, since lower is better).",
-        "Item evaluations that returned a task or scorer error, across all "
-        "passes of the selected runs. Lower is better for this metric, so "
-        "errors are left out of its scores and count as fails.",
-    ]
-    assert tips["boolean maximize"][:2] == [
-        at_least + "achieved a perfect score (100%).",
-        every + "achieved a perfect score (100%).",
-    ]
-    assert tips["boolean minimize"][:2] == [
-        at_least + "achieved the best score (0%).",
-        every + "achieved the best score (0%).",
-    ]
-
-
-def test_compare_sweep_shows_no_average_and_no_verdict_for_a_side_without_scores():
-    from test_metric_semantics import _compare_functions, run_metrics_js
-
-    functions = _compare_functions(
-        "sweepPassAtK", "sweepPassHatK", "sweepBinomPmf", "sweepLutMoments",
-        "sweepPassMetricLuts", "normalCdf", "SWEEP_Z_95", "computeSweepNoise",
-        "summarizeSweepItems", "escapeHtml", "getDeltaClass", "getNoiseDeltaClass",
-        "renderSweepDelta", "formatSweepMetricValue", "renderSweepStatCard",
-        "formatSweepCompactMetricValue", "formatSweepCompactDelta",
-        "renderSweepMetadataMetricCell",
-    )
-    run_metrics_js(
-        "const document = {createElement: () => ({set textContent(v) { this.v = String(v); }, get innerHTML() { return this.v; }})};\n"
-        "var state = {selectedOverviewMetric: 'h'};\n"
-        "function metricDirectionFor() { return 'minimize'; }\n"
-        + functions
-        + r"""
-    // h is lower-is-better (pass at <= 0.2). Item a errored on the left (no
-    // score, a fail); item b passed on both sides.
-    const entry = (left, right) => ({
-      leftScores: left === null ? [] : [left], rightScores: [right],
-      leftPasses: [left !== null && left <= 0.2], rightPasses: [right <= 0.2],
-      leftAttempts: [1], rightAttempts: [1], move: 0,
-    });
-    const a = entry(null, 0.6), b = entry(0.1, 0.1);
-    const all = summarizeSweepItems([a, b], 1, 1, null);
-    assert.equal(all.left.avgAtK, 0.1);
-    assert.ok(Math.abs(all.deltas.avgAtK - 0.25) < 1e-9);
-    // A filter that leaves only item a: no left average, delta or verdict.
-    const only = summarizeSweepItems([a], 1, 1, null);
-    assert.equal(only.left.avgAtK, null);
-    assert.equal(only.right.avgAtK, 0.6);
-    assert.equal(only.deltas.avgAtK, null);
-    assert.equal(only.noise.avgAtK, null);
-    assert.ok(only.noise.passAtK);
-    assert.deepEqual([only.left.passAtK, only.right.passAtK], [0, 0]);
-    assert.equal(summarizeSweepItems([], 1, 1, null).left.avgAtK, null);
-    // A measured zero is a score.
-    const zero = summarizeSweepItems([entry(0, 0.6)], 1, 1, null);
-    assert.equal(zero.left.avgAtK, 0);
-    assert.equal(zero.deltas.avgAtK, 0.6);
-
-    const card = renderSweepStatCard('Avg@1', only.left.avgAtK, only.right.avgAtK,
-      only.deltas.avgAtK, only.noise.avgAtK, 'minimize');
-    assert.match(card, /sweep-stat-card qym-stat-strip__item neutral/);
-    assert.match(card, /sweep-stat-from">—</);
-    assert.match(card, /sweep-stat-to">60.0%</);
-    assert.match(card, /sweep-delta-pill neutral">—</);
-    const cell = renderSweepMetadataMetricCell(only.left.avgAtK, only.right.avgAtK,
-      only.deltas.avgAtK, 'minimize');
-    assert.match(cell, /class="from">—</);
-    assert.match(cell, /sweep-metadata-delta neutral">—</);
-    // The zero side still compares (a regression for lower-is-better).
-    assert.match(renderSweepStatCard('Avg@1', 0, 0.6, 0.6, null, 'minimize'),
-      /sweep-delta-pill negative">\+60.0%</);
-    """
     )
 
 
@@ -654,16 +404,22 @@ def test_repeat_run_list_summary_run_page_and_passes_agree(database):
         number: _approx(means) for number, means in PASS_MEANS.items()
     }
 
-    snapshot = _rows(database, "rr")
-    means = _node(
-        JS_MEANS,
+    share_run_page(
+        "minimize_repeat_means",
+        _rows(database, "rr"),
         {
-            "rows": snapshot["rows"],
-            "metrics": ["h", "q"],
-            "specs": snapshot["metric_specs"],
+            "means": REPEAT,
+            # Compare shows the list mean for the run column and the server's pass means pass by pass.
+            "compare_means": {
+                "run": REPEAT,
+                "passes": {str(number): means for number, means in PASS_MEANS.items()},
+            },
+            # Each bar of the repeat distribution lists the items the server counted in it: h passes at
+            # <= 0.3, an errored pass of the lower-is-better h never passes.
+            "repeat_buckets": {"h": {"a": 1, "b": 2, "c": 0, "d": 2}},
         },
+        samples=3,
     )
-    assert means == _approx(REPEAT)
 
 
 def test_models_payload_judges_repeat_items_without_their_errored_passes(database):
@@ -680,14 +436,31 @@ def test_models_payload_judges_repeat_items_without_their_errored_passes(databas
     assert rows["b"]["pass_metric_meta"]["h"][1] == {"label": "error", "task_error": True}
     assert "pass_scores" not in rows["c"]
     assert models["snapshot"]["pass_scores_scope"] == "errored"
-    verdicts = _node(PASS_VERDICTS, {"run": models})
+    drain(database)
+    groups = [{"key": "g", "runs": ["rr"]}]
+    stats = {}
+    for metric, direction, threshold in (
+        ("h", "minimize", 0.3),
+        ("q", "maximize", 0.8),
+    ):
+        with Session(database) as db:
+            stats[metric] = dashboard_stats.dashboard_model_stats(
+                {
+                    "metric": metric,
+                    "threshold": threshold,
+                    "direction": direction,
+                    "groups": groups,
+                },
+                db=db,
+                principal=_principal(db),
+            )["groups"]["g"]
     # h: a (0.2, 0.4) and b (0.1, 0.3) without their errored passes, c 0.5;
     # d is a task error. a and b errored, so none passes at <= 0.3.
-    assert verdicts["h"]["avgScore"] == pytest.approx(REPEAT["h"])
-    assert verdicts["h"]["passAtK"] == 0.0
-    assert verdicts["h"]["failed"] == 3
+    assert stats["h"]["avgScore"] == pytest.approx(REPEAT["h"])
+    assert stats["h"]["passAtK"] == 0.0
+    assert stats["h"]["failedCount"] == 3
     # q counts errored passes as 0 (the stored item values).
-    assert verdicts["q"]["avgScore"] == pytest.approx(REPEAT["q"])
+    assert stats["q"]["avgScore"] == pytest.approx(REPEAT["q"])
 
 
 def test_repeat_group_metrics_count_errored_passes_as_failures(database):
@@ -935,7 +708,7 @@ def test_ingest_reads_the_direction_of_a_run_started_in_the_same_batch():
 
 
 def test_guides_describe_how_direction_decides_the_error_rule():
-    docs = REPO / "packages/platform/qym_platform/_static/dashboard/docs"
+    docs = REPO / "frontend/src/features/docs/partials"
     metrics = (docs / "sdk-guide/metrics.html").read_text()
     assert (
         "For a lower-is-better metric 0 is the best score, so its errors are left out of its mean"
@@ -1157,15 +930,20 @@ def test_scorer_label_error_and_reviewed_task_failures_are_scores():
             "pass_attempts": [{"status": "error"}, {"status": "completed"}],
         },
     ]
-    out = _node(
-        "process.stdout.write(JSON.stringify(input.rows.map("
-        "r => m.getRowScore(r, 0, 'h', 'minimize'))));",
-        {"rows": rows},
+    # The run page reads both rows as judged 0.3 (React lib/metrics.ts getRowScore):
+    # frontend/src/features/run-detail/lib/__tests__/cutover-server-payloads.test.ts.
+    share_run_page(
+        "minimize_scorer_label_rows",
+        {
+            "metric_names": ["h"],
+            "metric_specs": {
+                "h": {"score_type": "percentage", "direction": "minimize"}
+            },
+            "rows": rows,
+        },
+        {"means": {"h": 0.3}, "clean_means": {"h": {"score": 0.3, "errors": 0}}},
+        samples=2,
     )
-    assert out == [
-        {"score": pytest.approx(0.3), "isError": False},
-        {"score": pytest.approx(0.3), "isError": False},
-    ]
 
 
 @pytest.mark.parametrize(
@@ -1310,17 +1088,6 @@ def test_run_payload_flag_keeps_the_classification_through_compaction():
     for row in compact:
         meta = row["pass_metric_meta"]["h"][0]
         assert "explanation" not in meta and "details" not in meta
-    script = (
-        "process.stdout.write(JSON.stringify(input.rows.map(r => [\n"
-        "  m.isTaskErrorPass(r, 'h', 0) || m.isMetricErrorMeta(r.pass_metric_meta.h[0]),\n"
-        "  m.getRowScore(r, 0, 'h', 'minimize').isError,\n"
-        "])));"
-    )
-    for view in (rows, compact):
-        out = _node(script, {"rows": view})
-        assert dict(zip(_LABELED_PASSES, (verdict for verdict, _ in out))) == dict(
-            zip(_LABELED_PASSES, expected)
-        )
     assert dict(zip(_LABELED_PASSES, expected)) == {
         "long_reason": False,
         "nested": False,
@@ -1332,13 +1099,25 @@ def test_run_payload_flag_keeps_the_classification_through_compaction():
         "scorer_error": True,
         "imported": False,
     }
-    # The flag is the platform's, never a scorer field.
-    hidden = _node(
-        "process.stdout.write(JSON.stringify(['task_error', 'modified', "
-        "'original_score', 'reason'].map(m.isInternalMetaKey)));",
-        {},
+    # The run page (React lib/metrics.ts isTaskErrorPass / getRowScore) reads the
+    # same verdicts from full rows and from index rows:
+    # frontend/src/features/run-detail/lib/__tests__/cutover-server-payloads.test.ts.
+    snapshot = {
+        "metric_names": ["h"],
+        "metric_specs": {"h": {"score_type": "percentage", "direction": "minimize"}},
+    }
+    share_run_page(
+        "minimize_labeled_full",
+        {**snapshot, "rows": rows},
+        {"label_verdicts": {"h": expected}},
+        samples=3,
     )
-    assert hidden == [True, True, True, False]
+    share_run_page(
+        "minimize_labeled_compact",
+        {**snapshot, "rows": compact},
+        {"label_verdicts": {"h": expected}},
+        samples=3,
+    )
 
 
 def test_ingest_stores_a_scorer_error_label_as_a_verdict():

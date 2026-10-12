@@ -128,7 +128,7 @@ export function expandRefs(requested: string[], loaded: RunSummaryLite[]): strin
   return dedupe(out);
 }
 
-/** Query params for a selection (the compare URL, `/app/compare?...`). */
+/** Query params for a selection (the compare URL, `/compare?...`). */
 export function selectionParams(refs: string[], cohorts: Cohorts | null): URLSearchParams {
   const p = new URLSearchParams();
   if (cohorts) {

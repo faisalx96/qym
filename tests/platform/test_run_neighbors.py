@@ -32,7 +32,7 @@ from qym_platform.db.models import (
     UserRole,
 )
 from qym_platform.deps import get_db
-from test_archived_project_browser import _publish
+from _support_a2 import _publish
 
 RUNS = 64
 MODELS = ("openai/gpt-4o", "anthropic/claude-x", "qwen/qwen3")

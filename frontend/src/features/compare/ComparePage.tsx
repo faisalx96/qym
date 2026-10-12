@@ -5,7 +5,7 @@
  * `/projects/:slug/compare` share this page; the URL is the whole state.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { useDocumentTitle, useOptionalProject } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
@@ -30,6 +30,13 @@ import { MAX_COMPARE_RUNS } from './lib/refs';
 import type { CompareModel } from './lib/model';
 import { computeComparisonStats } from './lib/stats';
 import styles from './ComparePage.module.css';
+
+/** `GET /api/compare/export-html`: a summary of the runs plus each run's offline report, in one file. */
+const MAX_EXPORT_RUNS = 8;
+function compareExportUrl(bases: string[]): string {
+  const query = bases.map((id) => `files=${encodeURIComponent(id)}`).join('&');
+  return platformUrl(`/api/compare/export-html?${query}`);
+}
 
 function BackLink({ slug }: { slug: string | undefined }) {
   return <Link to={slug ? projectPath(slug) : '/'}>{'←'} Back to runs</Link>;
@@ -100,7 +107,6 @@ function CompareLoaded({ c, model, slug }: { c: CompareController; model: Compar
   const itemIds = useMemo(() => (result ? result.items.map((i) => i.itemId) : []), [result]);
   const stats = useMemo(() => (c.ctx ? computeComparisonStats(model, c.ctx, itemIds) : null), [model, c.ctx, itemIds]);
   const [panel, setPanel] = useState(true);
-  const location = useLocation();
   if (!info || !metric || !c.ctx || !result || !stats) return <ErrorState error={new Error('These runs have no metrics to compare.')} title="Nothing to compare" compact />;
   const value: CompareValue = {
     c,
@@ -139,9 +145,17 @@ function CompareLoaded({ c, model, slug }: { c: CompareController; model: Compar
                 ]}
               />
             ) : null}
-            {/* The self-contained HTML export is not rebuilt (OPEN_QUESTIONS Q7): the legacy page still has it. */}
-            <LinkButton href={`${platformUrl('/compare')}${location.search}`} title="Opens the legacy compare page, which can export a self-contained HTML copy">
-              Legacy page (HTML export)
+            <LinkButton
+              href={compareExportUrl(model.bases)}
+              download
+              isDisabled={model.bases.length < 2 || model.bases.length > MAX_EXPORT_RUNS}
+              title={
+                model.bases.length > MAX_EXPORT_RUNS
+                  ? `Export at most ${MAX_EXPORT_RUNS} runs at once`
+                  : 'Download this comparison as one self-contained HTML file'
+              }
+            >
+              Export HTML
             </LinkButton>
           </>
         }

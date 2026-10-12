@@ -10,12 +10,12 @@ export async function seedScenario(prefix: string): Promise<CompareSeed> {
   return seedCompareScenario(client, uniqueSlug(prefix));
 }
 
-/** `/app/compare?runs=..&runs=..&extra` */
+/** `/compare?runs=..&runs=..&extra` */
 export function compareUrl(refs: string[], extra: Record<string, string | string[]> = {}): string {
   const p = new URLSearchParams();
   refs.forEach((r) => p.append('runs', r));
   for (const [k, v] of Object.entries(extra)) (Array.isArray(v) ? v : [v]).forEach((x) => p.append(k, x));
-  return `/app/compare?${p.toString()}`;
+  return `/compare?${p.toString()}`;
 }
 
 export function cohortUrl(a: string[], b: string[], extra: Record<string, string> = {}): string {
@@ -23,7 +23,7 @@ export function cohortUrl(a: string[], b: string[], extra: Record<string, string
   a.forEach((r) => p.append('cohortA', r));
   b.forEach((r) => p.append('cohortB', r));
   for (const [k, v] of Object.entries(extra)) p.append(k, v);
-  return `/app/compare?${p.toString()}`;
+  return `/compare?${p.toString()}`;
 }
 
 export function urlParams(page: Page): URLSearchParams {

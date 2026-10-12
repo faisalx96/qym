@@ -8,6 +8,8 @@ WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY frontend/ ./
+# Vitest suites compare React against the server's golden payloads; `tsc -b` in the build type-checks them too.
+COPY tests/platform/fixtures/golden /build/tests/platform/fixtures/golden
 # vite.config.ts writes to ../packages/platform/qym_platform/_static/app and
 # vite.sdk.config.ts (the SDK's offline results viewer) to ../packages/sdk/qym/_static/ui
 RUN mkdir -p /build/packages/platform/qym_platform /build/packages/sdk/qym && npm run build && npm run build:sdk

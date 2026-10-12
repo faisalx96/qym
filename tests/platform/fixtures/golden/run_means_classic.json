@@ -1,0 +1,110 @@
+{
+ "expected": {
+  "other": 0.56,
+  "score": 0.3
+ },
+ "metrics": [
+  "score",
+  "other"
+ ],
+ "rows": [
+  {
+   "error": "",
+   "index": 0,
+   "item_id": "ok1",
+   "item_metadata": {},
+   "latency_ms": 10.0,
+   "metric_meta": {},
+   "metric_values": [
+    1.0,
+    0.8
+   ],
+   "pass_attempts": null,
+   "pass_metric_meta": null,
+   "pass_scores": null,
+   "retry_count": 0,
+   "status": "completed"
+  },
+  {
+   "error": "",
+   "index": 0,
+   "item_id": "ok2",
+   "item_metadata": {},
+   "latency_ms": 10.0,
+   "metric_meta": {},
+   "metric_values": [
+    0.5,
+    0.6
+   ],
+   "pass_attempts": null,
+   "pass_metric_meta": null,
+   "pass_scores": null,
+   "retry_count": 0,
+   "status": "completed"
+  },
+  {
+   "error": "",
+   "index": 0,
+   "item_id": "unscored",
+   "item_metadata": {},
+   "latency_ms": 10.0,
+   "metric_meta": {
+    "other": {
+     "error": "Empty output"
+    },
+    "score": {
+     "error": "429",
+     "status": "error"
+    }
+   },
+   "metric_values": [
+    null,
+    0.4
+   ],
+   "pass_attempts": null,
+   "pass_metric_meta": null,
+   "pass_scores": null,
+   "retry_count": 0,
+   "status": "completed"
+  },
+  {
+   "error": "",
+   "index": 0,
+   "item_id": "zeroed",
+   "item_metadata": {},
+   "latency_ms": 10.0,
+   "metric_meta": {
+    "score": {
+     "error": "judge failed",
+     "status": "error"
+    }
+   },
+   "metric_values": [
+    0.0,
+    1.0
+   ],
+   "pass_attempts": null,
+   "pass_metric_meta": null,
+   "pass_scores": null,
+   "retry_count": 0,
+   "status": "completed"
+  },
+  {
+   "error": "task unavailable",
+   "index": 0,
+   "item_id": "task",
+   "item_metadata": {},
+   "latency_ms": 10.0,
+   "metric_meta": {},
+   "metric_values": [
+    "",
+    ""
+   ],
+   "pass_attempts": null,
+   "pass_metric_meta": null,
+   "pass_scores": null,
+   "retry_count": 0,
+   "status": "error"
+  }
+ ]
+}

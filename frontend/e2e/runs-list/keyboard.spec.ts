@@ -113,7 +113,7 @@ test.describe('runs list: keyboard', () => {
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/runs\//);
     // and the preference survives a reload
-    await page.goto(`/app/projects/${s.project.slug}`);
+    await page.goto(`/projects/${s.project.slug}`);
     await expect(dataRows(page).first()).toBeVisible();
     await blurToBody(page);
     await page.keyboard.press('j');

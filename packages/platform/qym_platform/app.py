@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -30,7 +29,7 @@ from qym_platform.api.insights import router as insights_router
 from qym_platform.api.dashboard import router as dashboard_router
 from qym_platform.api.dashboard_stats import router as dashboard_stats_router
 from qym_platform.api.admin import router as admin_router
-from qym_platform.api.spa import SPA_ASSETS_PREFIX, router as spa_router, spa_dir
+from qym_platform.api.spa import RESERVED_PREFIXES, SPA_ASSETS_PREFIX, include_spa_fallback, router as spa_router, spa_dir
 from qym_platform.services.analysis_jobs import (
     analysis_job_manager,
     rule_inference_job_manager,
@@ -224,18 +223,9 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     def healthz() -> JSONResponse:
         return JSONResponse({"ok": True, "service": "qym-platform", "env": settings.environment})
 
-    # Serve UI assets from the platform package (no longer from SDK). Text
-    # assets are gzipped once per file version, not on every request.
-    platform_static = Path(__file__).resolve().parent / "_static"
-
-    dashboard_dir = platform_static / "dashboard"
-
-    # Dashboard (historical + approvals + profile + admin)
-    if dashboard_dir.exists():
-        app.mount("/static", PrecompressedStaticFiles(directory=str(dashboard_dir)), name="dashboard_static")
-
-    # React SPA (frontend/, built to _static/app/): hashed assets are mounted
-    # first so they win over the history-API fallback below.
+    # The React app (frontend/, built to _static/app/): hashed assets are
+    # mounted here; text assets are gzipped once per file version, not on every
+    # request. The page routes (history fallback) are registered last.
     spa_assets = spa_dir() / "assets"
     if spa_assets.exists():
         app.mount(SPA_ASSETS_PREFIX.rstrip("/"), PrecompressedStaticFiles(directory=str(spa_assets)), name="spa_assets")
@@ -258,7 +248,6 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(dashboard_router)
     app.include_router(dashboard_stats_router)
     app.include_router(admin_router)
-    app.include_router(spa_router)
     app.include_router(step_latency_router)
     app.include_router(runs_router)
     serves_ingest = layout.service != "main" or layout.main_include_ingest
@@ -291,6 +280,13 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
                 service=layout.service,
             )
         )
+
+    # Last: every page URL answers the React app; anything above wins over it.
+    app.include_router(spa_router)
+    include_spa_fallback(
+        app,
+        reserved=(*RESERVED_PREFIXES, layout.ingestion_prefix.strip("/"), layout.workers_prefix.strip("/")),
+    )
 
     @app.on_event("shutdown")
     def shutdown_analysis_jobs() -> None:

@@ -4,7 +4,7 @@ Dashboard HTML and JSON carry user data. Without an explicit policy a browser
 may keep them in its HTTP cache or back/forward cache, so pressing Back after
 signing out can show the previous user's pages. Every dynamic response gets
 ``Cache-Control: no-store`` unless the route set its own policy. Static assets
-(``/static``, ``/ui``, the hashed SPA bundle under ``/app/assets``) hold no
+(the hashed app bundle under ``/assets``) hold no
 user data and stay cacheable.
 
 A plain ASGI middleware (no ``BaseHTTPMiddleware``) so streaming responses and
@@ -18,7 +18,7 @@ from typing import Tuple
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-STATIC_PREFIXES: Tuple[str, ...] = ("/static/", "/app/assets/")
+STATIC_PREFIXES: Tuple[str, ...] = ("/assets/",)
 
 
 class NoStoreMiddleware:

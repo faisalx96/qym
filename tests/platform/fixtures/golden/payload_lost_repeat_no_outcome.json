@@ -1,0 +1,172 @@
+{
+ "expected": {
+  "means": {
+   "h": 0.3,
+   "u": 0.8
+  }
+ },
+ "kind": "run_page",
+ "samples": 2,
+ "snapshot": {
+  "metric_names": [
+   "u",
+   "h"
+  ],
+  "metric_specs": {
+   "h": {
+    "direction": "minimize",
+    "pass_threshold": null,
+    "precision": null,
+    "primary": false,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   },
+   "u": {
+    "direction": null,
+    "pass_threshold": null,
+    "precision": null,
+    "primary": false,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   }
+  },
+  "rows": [
+   {
+    "error": "",
+    "index": 0,
+    "item_id": "item-0",
+    "item_metadata": {
+     "task_started_at_ms": 1790726399995
+    },
+    "latency_ms": 5.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 2
+     },
+     "u": {
+      "sample_reducer": "mean",
+      "samples_observed": 2
+     }
+    },
+    "metric_values": [
+     0.8,
+     0.2
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 5.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 5.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": null,
+    "pass_scores": {
+     "h": [
+      0.2,
+      0.2
+     ],
+     "u": [
+      0.8,
+      0.8
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 1,
+    "item_id": "item-1",
+    "item_metadata": {},
+    "latency_ms": 5.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 1
+     },
+     "u": {
+      "sample_reducer": "mean",
+      "samples_observed": 1
+     }
+    },
+    "metric_values": [
+     0.8,
+     0.4
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 5.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": false,
+      "error": "",
+      "latency_ms": null,
+      "output_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": null,
+    "pass_scores": {
+     "h": [
+      0.4,
+      null
+     ],
+     "u": [
+      0.8,
+      null
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   }
+  ]
+ }
+}

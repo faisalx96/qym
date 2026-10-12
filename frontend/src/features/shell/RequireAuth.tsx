@@ -10,7 +10,7 @@ import styles from './RequireAuth.module.css';
 
 /**
  * Gate: renders nothing until ['me'] resolves. 401 → full navigation to
- * /app/login?next=… when a login exists; otherwise (proxy_headers / none) a
+ * /login?next=… when a login exists; otherwise (proxy_headers / none) a
  * static "identity missing" panel so the app never loops (brief 01 §8.4).
  */
 export function RequireAuth() {

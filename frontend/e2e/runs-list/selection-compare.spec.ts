@@ -90,7 +90,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     await expect(selected(page)).toHaveText('4 executions selected');
   });
 
-  test('c compares: /app/compare?runs=... and sessionStorage.compareRuns; repeat runs expand to pass refs', async ({
+  test('c compares: /compare?runs=... and sessionStorage.compareRuns; repeat runs expand to pass refs', async ({
     page,
     request,
   }) => {
@@ -103,7 +103,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     await tick(page, 'summarize-gpt-4o-001');
     await page.locator('body').click({ position: { x: 3, y: 3 } });
     await page.keyboard.press('c');
-    await expect(page).toHaveURL(/\/app\/compare\?runs=/);
+    await expect(page).toHaveURL(/\/compare\?runs=/);
     const params = new URL(page.url()).searchParams.getAll('runs');
     expect(params).toHaveLength(2);
     const stored = await page.evaluate(() => JSON.parse(sessionStorage.getItem('compareRuns') ?? 'null'));
@@ -115,7 +115,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     await page.getByRole('button', { name: 'Select', exact: true }).click();
     await tick(page, REPEAT);
     await page.getByTestId('selection-bar').getByRole('button', { name: 'Compare' }).click();
-    await expect(page).toHaveURL(/\/app\/compare\?runs=/);
+    await expect(page).toHaveURL(/\/compare\?runs=/);
     const refs = new URL(page.url()).searchParams.getAll('runs');
     expect(refs.filter((r) => r.includes('::pass')).sort()).toHaveLength(3);
     expect(refs).toHaveLength(3);
@@ -191,7 +191,7 @@ test.describe('runs list: selection and compare (J4)', () => {
     await tick(page, 'text2sql-gpt-4o-000');
     await tick(page, 'summarize-gpt-4o-004');
     await cohortBtn.click();
-    await expect(page).toHaveURL(/\/app\/compare\?cohortA=/);
+    await expect(page).toHaveURL(/\/compare\?cohortA=/);
     const sp = new URL(page.url()).searchParams;
     expect(sp.getAll('cohortA')).toHaveLength(2);
     expect(sp.getAll('cohortB')).toHaveLength(2);

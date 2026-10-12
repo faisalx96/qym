@@ -1,4 +1,4 @@
-/** Brief 01 J5: /app/profile. */
+/** Brief 01 J5: /profile. */
 import { test, expect } from '@playwright/test';
 import { createProject, gotoApp, trackPageLoads, uniqueSlug } from '../helpers';
 
@@ -23,10 +23,10 @@ test.describe('profile (J5)', () => {
 
     const row = page.getByRole('row').filter({ hasText: p.slug });
     await expect(row).toBeVisible();
-    await expect(row.getByRole('link', { name: 'Open' })).toHaveAttribute('href', new RegExp(`/app/projects/${p.slug}$`));
+    await expect(row.getByRole('link', { name: 'Open' })).toHaveAttribute('href', new RegExp(`/projects/${p.slug}$`));
     const loads = trackPageLoads(page);
     await row.getByRole('link', { name: 'Settings' }).click();
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${p.slug}/settings$`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${p.slug}/settings$`));
     await expect(page.locator('[data-settings-page]')).toBeVisible();
     expect(loads.count()).toBe(0);
   });
@@ -34,7 +34,7 @@ test.describe('profile (J5)', () => {
   test('breadcrumb "Projects" link goes home from the profile', async ({ page }) => {
     await gotoApp(page, '/profile');
     await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' }).click();
-    await expect(page).toHaveURL(/\/app\/?$/);
+    await expect(page).toHaveURL(/\/?$/);
     await expect(page.locator('[data-projects-page]')).toBeVisible();
   });
 });

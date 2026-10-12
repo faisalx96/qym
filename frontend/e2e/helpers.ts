@@ -4,7 +4,8 @@
  */
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
-export const APP = '/app';
+/** The app is served at the platform root; kept so specs can build URLs the same way everywhere. */
+export const APP = '';
 
 export interface SeededProject {
   id: string;

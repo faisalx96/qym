@@ -282,25 +282,3 @@ def test_deselecting_the_environment_fixes_it(client, envs):
     alpha, _beta = envs
     data = _create(client, [alpha.id], spec=_spec(), dry_run=True).json()
     assert data["ok"] is True, data["errors"]
-
-
-# --------------------------------------------------------------------------- form
-
-MODULE = (
-    ROOT / "packages/platform/qym_platform/_static/dashboard/experiment_launch.js"
-).read_text()
-
-
-def test_form_flags_missing_fields_locally_next_to_the_field():
-    # Union badges on fields, objects and role rows.
-    assert MODULE.count("tag('not in ' + envName(id), 'warning')") >= 4
-    # Each selected env's own descriptor decides (mirrors match_pointer).
-    assert "function matchPointer(descriptor, pointer)" in MODULE
-    assert "!matchPointer(st.envData[id].form, pointer)" in MODULE
-    # A set value missing from an env is a local error (blocks launch before submit),
-    # shown inline under the field with the env name.
-    assert "rule: 'not_in_environment', message: notInEnvMessage(p, id)" in MODULE
-    assert "'data-xl-env-error': '1'" in MODULE
-    assert "' is not in environment \"' + envName(id)" in MODULE
-    # Edits no selected env knows are dropped, like bindings.
-    assert "pruneOrphanValues();" in MODULE

@@ -1,20 +1,23 @@
-"""Server summary views match the original browser's numerical definitions."""
+"""Server summary views match the original browser's numerical definitions.
+
+The golden file holds the output of the former vanilla dashboard reducers
+(dashboard.js computeAggregations / computeChartData / flattenRuns) for the
+seeded cases below; it was generated once from the last vanilla revision and
+replaces the live Node oracle, whose source was removed with that dashboard.
+"""
 
 from __future__ import annotations
 
 import json
 import math
 import random
-import shutil
-import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 
 from qym_platform.services.dashboard_views import build_overview_data
 
-ROOT = Path(__file__).resolve().parents[2]
+GOLDEN = Path(__file__).parent / "fixtures" / "dashboard_views_golden.json"
 
 
 def close(actual, expected, path="root"):
@@ -38,9 +41,6 @@ def close(actual, expected, path="root"):
 
 
 def test_streamed_overview_matches_browser_reducers_randomized():
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("Node is needed for the independent browser reducer oracle")
     rng = random.Random(94117)
     now = datetime(2026, 9, 5, 10, 25, tzinfo=timezone.utc)
     cases = []
@@ -102,18 +102,8 @@ def test_streamed_overview_matches_browser_reducers_randomized():
                 "computed": computed,
             }
         )
-    response = subprocess.run(
-        [
-            node,
-            str(ROOT / "tests/platform/fixtures/dashboard_views_oracle.cjs"),
-            str(ROOT),
-        ],
-        input=json.dumps(cases),
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    results = json.loads(response.stdout)
+    results = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    assert len(results) == len(cases)
     for case, result in zip(cases, results):
         close(case["computed"]["aggregations"], result["aggregations"])
         close(case["computed"]["metric_types"], result["metric_types"])

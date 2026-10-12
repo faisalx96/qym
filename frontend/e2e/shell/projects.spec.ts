@@ -39,7 +39,7 @@ test.describe('projects landing (J4)', () => {
     await gotoApp(page, '/');
     const loads = trackPageLoads(page);
     await page.locator(`[data-project-card="${p.slug}"]`).click();
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${p.slug}$`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${p.slug}$`));
     await expect(page.locator('[data-project-switcher]')).toContainText(p.name);
     await expect(page.locator('[data-nav="runs"]')).toHaveAttribute('aria-current', 'page');
     expect(loads.count()).toBe(0);
@@ -61,7 +61,7 @@ test.describe('projects landing (J4)', () => {
     await expect(dialog.getByRole('textbox', { name: /^Slug/ })).toHaveValue(`created-${slug}`);
     await dialog.getByRole('textbox', { name: /^Slug/ }).fill(slug);
     await name.press('Enter');
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${slug}$`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${slug}$`));
     await expect(page.locator('[data-project-switcher]')).toContainText(`Created ${slug}`);
     expect(loads.count()).toBe(0);
     // the new project is in the switcher list without a reload
@@ -83,7 +83,7 @@ test.describe('projects landing (J4)', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('alert')).toBeVisible();
     await expect(dialog.getByRole('alert')).not.toHaveText('');
-    await expect(page).toHaveURL(/\/app\/?$/);
+    await expect(page).toHaveURL(/\/?$/);
   });
 });
 
@@ -110,7 +110,7 @@ test.describe('project switcher (§8.7 scenario 5)', () => {
     await expect(popover.locator(`[data-switch-to="${to.slug}"]`)).toBeVisible();
     await popover.locator(`[data-switch-to="${to.slug}"]`).click();
 
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${to.slug}$`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${to.slug}$`));
     await expect(trigger).toContainText(to.name);
     await expect(page.locator('[data-nav="runs"]')).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('[data-nav="charts"]')).not.toHaveAttribute('aria-current', 'page');
@@ -141,7 +141,7 @@ test.describe('project switcher (§8.7 scenario 5)', () => {
     await dialog.getByRole('textbox', { name: /^Name/ }).fill('Via Popover');
     await dialog.getByRole('textbox', { name: /^Slug/ }).fill(slug);
     await dialog.getByRole('button', { name: 'Create project' }).click();
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${slug}$`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${slug}$`));
     await expect(page.locator('[data-project-switcher]')).toContainText('Via Popover');
     expect(loads.count()).toBe(0);
   });

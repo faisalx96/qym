@@ -65,7 +65,7 @@ qym turns LLM evaluation from scattered testing into a centralized, observable, 
 | Package | What it is for | Install / Access |
 |---------|-----------------|------------------|
 | **SDK** (`packages/sdk`) | Run evaluations from Python or CLI | `pip install qym` |
-| **Platform** (`packages/platform`) | Shared dashboard, review, analysis, admin, and history | Self-host with Docker / `pip install -e packages/platform`, or use a hosted deployment if you have one |
+| **Platform** (`packages/platform`) | Shared web UI (React app), review, analysis, admin, and history | Self-host with Docker / `pip install -e packages/platform`, or use a hosted deployment if you have one |
 
 ## Choose Your Path
 
@@ -139,7 +139,8 @@ score `0`. Ordinary task exceptions still follow `max_retries`.
 ```text
 packages/
   sdk/        qym SDK package
-  platform/   qym-platform web application
+  platform/   qym-platform web application (API + serves the built UI)
+frontend/     React + TypeScript + Vite source of the platform UI and the SDK local viewer
 docker/       Docker Compose and container assets
 docs/         Product and operator documentation
 examples/     Runnable examples
@@ -169,6 +170,19 @@ Run the platform with Docker:
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up --build
 ```
 
+The web UI is built from `frontend/` (Node 24) and is not committed. Docker
+builds it for you; for a local checkout run:
+
+```bash
+cd frontend && npm ci && npm run build        # writes packages/platform/qym_platform/_static/app/
+npm run build:sdk                             # offline SDK viewer, before building the SDK wheel
+npm run check                                 # typecheck, lint, tests, design-language test
+npm run dev                                   # UI development at http://127.0.0.1:5800/ (see frontend/README.md)
+```
+
+Build the frontend before `pip wheel packages/platform`. UI work follows
+[docs/DESIGN_LANGUAGE.md](docs/DESIGN_LANGUAGE.md).
+
 For non-Docker platform setup and admin operations, see the [Platform README](packages/platform/README.md).
 
 ## Documentation
@@ -182,7 +196,7 @@ For non-Docker platform setup and admin operations, see the [Platform README](pa
 **Platform**
 
 - [Platform README](packages/platform/README.md) - local setup and operator overview
-- [Platform User Guide](packages/platform/docs/USER_GUIDE.md) - dashboard workflows, analysis features, and Evaluation Service experiments
+- [Platform User Guide](packages/platform/docs/USER_GUIDE.md) - web UI workflows, analysis features, and Evaluation Service experiments
 - [Operations runbook](docs/internal/OPERATIONS.md) - storage maintenance, recovery, and the Evaluation Service dispatcher
 - [LLM analyzer branch record](docs/BRANCH_CHANGES_LLM_ANALYZER.md) - analyzer behavior, API surface, security, migrations, and verification coverage
 

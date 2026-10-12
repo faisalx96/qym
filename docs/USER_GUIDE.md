@@ -1,5 +1,20 @@
 # qym user guide
 
+## Platform web UI
+
+When you stream runs to a qym platform (`QYM_BASE_URL`, `QYM_API_KEY`), the UI is
+served by the platform itself at its root URL:
+
+- `/` lists your projects; `/projects/<slug>/...` holds a project's runs, datasets,
+  experiments, charts and settings.
+- `/run/<run id>` opens a run; `/compare` compares runs side by side.
+- `/docs/...` is the in-app documentation; `/admin/...` is for administrators.
+- Run pages and comparisons can be downloaded as a single self-contained HTML file
+  that opens offline (the export action on the run page and on Compare).
+
+Views keep their filters in the URL, so any page can be shared as a link. The
+offline viewer below is a separate, smaller tool that needs no platform.
+
 ## Local results viewer (offline)
 
 The SDK ships a small browser viewer that needs no platform account and no network.

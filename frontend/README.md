@@ -1,10 +1,10 @@
 # qym frontend (React + TypeScript + Vite)
 
-The React rewrite of the platform dashboard. It is served by FastAPI under
-`/app/*` next to the legacy pages (which stay at their old URLs until the
-cut-over). Read `docs/internal/ui-migration/00-PLAYBOOK.md` and your area
-brief first; every visual decision follows **`docs/DESIGN_LANGUAGE.md`**
-(enforced by `src/__tests__/design-language.test.ts`).
+The qym platform UI. FastAPI serves the built app at the canonical URLs (`/`,
+`/login`, `/projects/<slug>/...`, `/admin/...`, `/docs/...`, `/compare`,
+`/run/<id>`). The same sources also build the offline SDK run viewer
+(`src/sdk-viewer/`). Every visual decision follows
+**`docs/DESIGN_LANGUAGE.md`** (enforced by `src/__tests__/design-language.test.ts`).
 
 ## Five-minute start
 
@@ -12,56 +12,63 @@ brief first; every visual decision follows **`docs/DESIGN_LANGUAGE.md`**
 export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"       # Node 24
 cd frontend && npm ci                                   # exact versions (package-lock.json)
 
-# terminal 1: the platform on your agent's port (playbook table), SQLite, no auth
+# terminal 1: the platform, SQLite, no auth
 cd .. && source .venv/bin/activate && export PYTHONPATH=packages/sdk:packages/platform
 python frontend/scripts/dev_db.py sqlite:///$PWD/.qym-dev.db     # schema from the ORM (alembic is Postgres-only)
 QYM_AUTH_MODE=none QYM_DATABASE_URL=sqlite:///$PWD/.qym-dev.db QYM_ENVIRONMENT=development \
   QYM_BASE_URL=http://127.0.0.1:5800 uvicorn qym_platform.main:app --port 8800
 
-# terminal 2: Vite with a same-origin proxy to that port (no CORS anywhere)
+# terminal 2: Vite with a same-origin proxy to that port (no CORS anywhere);
+# the dev server needs no build, so it works before `npm run build`
 cd frontend && QYM_PLATFORM_PORT=8800 npm run dev -- --port 5800
 ```
 
-Open `http://127.0.0.1:5800/app/` (projects), `http://127.0.0.1:5800/app/__ui`
-(every primitive in every state) or `/app/__mock/<area>/<variant>`.
+Open `http://127.0.0.1:5800/` (projects), `http://127.0.0.1:5800/__ui`
+(every primitive in every state) or `/__mock/<area>/<variant>` (dev only).
 
 Scripts (`package.json`):
 
 | Script | What |
 |---|---|
-| `npm run dev` | Vite dev server (port 5800 by default; `QYM_VITE_PORT`, `QYM_PLATFORM_PORT` override) |
+| `npm run dev` | Vite dev server at the root path (port 5800; `QYM_VITE_PORT`, `QYM_PLATFORM_PORT` override) |
 | `npm run build` | `tsc -b` + Vite build → `packages/platform/qym_platform/_static/app/` (gitignored) |
 | `npm run build:sdk` / `npm run dev:sdk` | Offline SDK viewer (`src/sdk-viewer/`, `vite.sdk.config.ts`) → flat `packages/sdk/qym/_static/ui/` (gitignored); dev proxies `/api` to the SDK server on 8818 |
 | `npm run check` | typecheck + eslint + stylelint + vitest + design-language test — run before every commit |
 | `npm test` / `npm run test:design` | Vitest (jsdom, Testing Library, axe) / only the design-language lint |
-| `npm run e2e` | Playwright: boots the platform (SQLite, `QYM_AUTH_MODE=none`) on 8800 and Vite on 5800, runs `e2e/**` |
+| `npm run e2e` / `npm run e2e:ui` | Playwright: boots the platform (SQLite, `QYM_AUTH_MODE=none`) on 8800 and Vite on 5800, runs `e2e/**` (headless / UI mode) |
+| `npm run e2e:sdk` | Playwright against the built SDK viewer (`playwright.sdk.config.ts`, `e2e/sdk-viewer/`) |
 | `npm run lint`, `npm run stylelint`, `npm run format` | ESLint (TSX design rules included), Stylelint (no px font sizes, no hex colours), Prettier |
 
-Ports: foundation = platform 8800 / Vite 5800; area agents use their own pair
-from the playbook (`QYM_PLATFORM_PORT=880N QYM_VITE_PORT=580N` for dev, e2e
-and the proxy).
+Ports: platform 8800 / Vite 5800 by default. To run two checkouts side by side
+use another pair (`QYM_PLATFORM_PORT=880N QYM_VITE_PORT=580N` for dev, e2e and
+the proxy).
 
 ## Folder layout
 
 ```
 frontend/
   index.html                  the single page; the platform injects <base href> + window.__QYM_APP__
-  vite.config.ts              base './', proxy for /v1 /api /static /ui /login …, chunking
-  playwright.config.ts        e2e web servers (platform + Vite)
+  vite.config.ts              base './', proxy for /v1 /api /healthz /api-docs /ingestion /workers, chunking
+  vite.sdk.config.ts          the offline SDK viewer build
+  playwright.config.ts        e2e web servers (platform + Vite); baseURL is the Vite dev server at the root
   e2e/<area>/*.spec.ts        Playwright specs per area; e2e/helpers.ts seeds through the API
   src/
     main.tsx                  imports styles/tokens.css, base.css, shell.css, then <App/>
     app/                      App (providers), router.tsx (every route), routes.ts (URL contract), mocks.ts
-    styles/                   tokens.css (verbatim :root from dashboard.css + migration tokens), base.css, shell.css
+    styles/                   tokens.css (the design tokens), base.css, shell.css
     ui/<Name>/                primitives: <Name>.tsx, <Name>.module.css (first line names its recipe), index.ts
     lib/                      runtime (root path / bootstrap), http (apiFetch, ApiError, classifyError, loginUrl),
                               metrics, text (RTL, code detection, safe markdown), url-state (replaceUrlQuery),
-                              run-status (BroadcastChannel bus), storage (legacy keys), pending (skeleton timing), …
+                              run-status (BroadcastChannel bus), storage (localStorage keys), pending (skeleton timing), …
     api/                      typed TanStack Query hooks per backend route (useMe, useProject, useMembers, …)
     features/shell/           shell, auth gate, project layout, login, projects, profile, settings (brief 01)
-    features/<area>/          your area: pages, components, ANALYSIS.md; __mocks__/ while designing
-    features/dev/             dev-only pages: UI gallery (/app/__ui), mock host, ComingSoon placeholders
-    __tests__/design-language.test.ts   the ported design-language lint
+    features/docs/            docs pages; partials/<section>/<page>.html compiled by plugins/docs-content.ts
+    features/<area>/          pages and components per area (runs-list, run-detail, compare, analyzer, datasets, experiments, admin, …); __mocks__/ while designing
+    features/dev/             dev-only pages: the UI gallery (/__ui) and the mock host (/__mock/…)
+    sdk-viewer/               entry for the offline SDK viewer
+    __tests__/design-language.test.ts   the design-language lint (single source of truth for the rules)
+  plugins/                    Vite plugins (docs-content.ts)
+  scripts/dev_db.py           creates the dev SQLite schema
 ```
 
 Import with the `@/` alias (`@/ui`, `@/lib/http`, `@/api`). Styles are CSS
@@ -70,12 +77,14 @@ Aria exposes `data-hovered`, `data-selected`, `data-focus-visible`, …).
 
 ## Adding a route
 
-1. The path already exists in `src/app/routes.ts` (every legacy URL is listed;
-   keep every current deep link and query parameter working). Add new paths there.
-2. In `src/app/router.tsx` replace the `<ComingSoon …/>` element for your path
-   with your page. Pages under `/projects/:slug/*` render inside
+1. Add the path to `src/app/routes.ts` (the URL contract; keep every existing
+   deep link and query parameter working).
+2. In `src/app/router.tsx` add the route element with your page (lazy-load
+   it via `lazyPage`). Pages under `/projects/:slug/*` render inside
    `<ProjectLayout>` and read `useProjectContext()` (`project`, `readOnly`,
-   `canManage`); everything else reads `useAuth()` (`me`, `isAdmin`).
+   `canManage`); everything else reads `useAuth()` (`me`, `isAdmin`). Server
+   side nothing needs to change: `api/spa.py` already answers every non-API path
+   with the app, and an unknown client route renders the app's own not-found.
 3. Page container: `constrained` (1120px: settings, admin, profile, overview)
    or `fullWidth` from `@/features/shell/layout`.
 4. Page chrome: `<PageHeader title description meta actions tabs/>`; set the
@@ -103,10 +112,16 @@ registerMock({ area: 'runs', variant: 'dense', title: 'Dense table', component: 
 
 Import that registration file once from `src/app/mocks.ts` (append an `import
 '@/features/<area>/__mocks__/register'` line) and open
-`/app/__mock/<area>/<variant>` on the dev server. Mocks render inside nothing
+`/__mock/<area>/<variant>` on the dev server. Mocks render inside nothing
 but the providers, so wrap them in `<AppShell>` chrome yourself if the variant
 needs it (compose chrome from `@/features/shell/chrome/*`). Mock routes are
 only registered when `import.meta.env.DEV` and are deleted once implemented.
+
+## Testing
+
+- Unit and component tests: Vitest (jsdom, Testing Library, axe), `npm test`; files sit next to the code or in `__tests__/`.
+- Design language: `npm run test:design` (also part of `npm run check`); `tests/platform/test_design_language.py` runs the same test from pytest.
+- Browser journeys: Playwright, below. Backend serving tests: `tests/platform/test_spa_serving.py`.
 
 ## Writing an e2e test
 
@@ -121,7 +136,7 @@ test('settings tab deep link', async ({ page, request }) => {
 });
 ```
 
-`npm run e2e` starts a fresh SQLite platform (`QYM_AUTH_MODE=none`, so you are
+`npm run e2e` (`npm run e2e:sdk` for the SDK viewer) starts a fresh SQLite platform (`QYM_AUTH_MODE=none`, so you are
 `dev@local`, an ADMIN) and the Vite proxy; seed through the API with the
 `request` fixture (`e2e/helpers.ts`), never by editing the DB. Specs live in
 `e2e/<area>/`. For session-auth journeys run with `QYM_E2E_AUTH_MODE=proxy_headers`
@@ -135,11 +150,24 @@ SDK (`QYM_BASE_URL=http://127.0.0.1:8800 QYM_API_KEY=<key from
 /v1/projects/{id}/api-keys>`) or the import scripts under
 `packages/platform/qym_platform/tools/`.
 
-## Serving in production
+## Build and serving
 
-`npm run build` writes to `packages/platform/qym_platform/_static/app/`;
-`qym_platform/api/spa.py` serves `index.html` for every `/app/*` route (login
-redirect kept, `QYM_ROOT_PATH` injected as `<base href>` and
-`window.__QYM_APP__`), hashed assets from `/app/assets/` (cacheable). The
-Docker image builds the bundle in a Node 24 stage. Backend tests:
+`npm run build` (`tsc -b` + Vite) writes the app to
+`packages/platform/qym_platform/_static/app/` (gitignored; `npm run build:sdk`
+likewise writes the SDK viewer to `packages/sdk/qym/_static/ui/`).
+`qym_platform/api/spa.py` serves it from the main app (the `all` and `main`
+services only; the ingestion and workers apps never serve the UI):
+
+- every page URL gets `index.html` (history fallback), with `<base href>` and
+  `window.__QYM_APP__` injected so the app works under `QYM_ROOT_PATH` /
+  `QYM_MAIN_PREFIX`; the router basename is that root path;
+- hashed assets come from `/assets/` (cacheable); pages are `no-store`;
+- API-looking paths that match no route (`/v1`, `/api`, `/assets`, …) answer a
+  JSON 404, never `index.html`;
+- `/app` and `/app/...` redirect (302) to the canonical URL, keeping the query,
+  so links shared before the cut-over still work;
+- an unauthenticated session is sent to `/login?next=...` before the bundle loads.
+
+The Docker image builds the bundle in a Node 24 stage. A platform wheel must be
+built after `npm run build`, or it ships without the UI. Backend tests:
 `tests/platform/test_spa_serving.py`.

@@ -58,7 +58,8 @@ from test_dashboard_durable_summaries import (
     projected,
 )
 from test_ingest_partial_rejection import _emulate_postgres_value_checks
-from test_minimize_errors import JS_MEANS, _approx, _node, _principal, _rows
+from _support_a1 import share_run_page
+from test_minimize_errors import _approx, _principal, _rows
 
 def rid(name):
     """Run ids are UUIDs; derive readable, stable ones from test names."""
@@ -241,11 +242,10 @@ def _views(engine, run_id):
     )
 
 
-def _js_means(snapshot, metrics):
-    return _node(
-        JS_MEANS,
-        {"rows": snapshot["rows"], "metrics": metrics, "specs": snapshot["metric_specs"]},
-    )
+def _react_means(name, snapshot, expected, *, samples=1):
+    """The run page (React lib/metrics.ts) averages these rows to ``expected``:
+    frontend/src/features/run-detail/lib/__tests__/cutover-server-payloads.test.ts."""
+    share_run_page(f"lost_{name}", snapshot, {"means": expected}, samples=samples)
 
 
 def _classic(emitter, name, third):
@@ -294,7 +294,7 @@ def test_classic_item_whose_item_failed_was_rejected_is_a_task_error(database, e
         assert payload["metric_averages"] == _approx({"q": 0.5, "h": 0.3}), name
     rows = {row["item_id"]: row for row in snapshot["rows"]}
     assert rows["item-2"]["status"] == "error"
-    assert _js_means(snapshot, ["q", "h"]) == _approx({"q": 0.5, "h": 0.3})
+    _react_means("classic_failed", snapshot, {"q": 0.5, "h": 0.3})
 
 
 @pytest.mark.parametrize(
@@ -347,7 +347,7 @@ def test_classic_item_without_any_outcome_is_not_received(database, emitter, cas
     assert snapshot["stats"]["not_received"] == 1
     assert snapshot["stats"]["execution_count"] == 2
     assert snapshot["stats"]["success_rate"] == pytest.approx(100.0)
-    assert _js_means(snapshot, ["q", "h"]) == _approx({"q": 0.75, "h": 0.3})
+    _react_means("classic_not_received_" + case, snapshot, {"q": 0.75, "h": 0.3})
     with Session(database) as db:
         models = runs_api.models_runs_data(
             files=[run_id], db=db, principal=_principal(db)
@@ -441,7 +441,12 @@ def test_repeat_pass_whose_item_failed_was_rejected_counts_as_a_failed_task(
             for p in runs_api.run_passes(run_id, db, _principal(db))["passes"]
         }
     assert means[2] == _approx({"u": 0.4, "h": 0.2})
-    assert _js_means(snapshot, ["u", "h"]) == _approx({"u": 0.6, "h": 0.3})
+    _react_means(
+        "repeat_failed_pass_" + ("-".join(refused) or "accepted"),
+        snapshot,
+        {"u": 0.6, "h": 0.3},
+        samples=2,
+    )
 
 
 def test_repeat_pass_without_any_outcome_stays_out_of_the_means(database, emitter):
@@ -462,7 +467,7 @@ def test_repeat_pass_without_any_outcome_stays_out_of_the_means(database, emitte
     for name, payload in views.items():
         assert payload["metric_averages"] == _approx({"u": 0.8, "h": 0.3}), name
         assert payload["task_error_count"] == 0, name
-    assert _js_means(snapshot, ["u", "h"]) == _approx({"u": 0.8, "h": 0.3})
+    _react_means("repeat_no_outcome", snapshot, {"u": 0.8, "h": 0.3}, samples=2)
 
 
 def test_not_received_rule_matches_in_python_and_sql(database):
@@ -555,7 +560,7 @@ COUNTED = (
 )
 
 
-def _counts(engine, run_id, *, repair=False):
+def _counts(engine, run_id, *, repair=False, means=None):
     """The execution counts and means of one run in every view that shows
     them. ``repair`` rebuilds its published summary from the source first."""
     if repair:
@@ -563,6 +568,8 @@ def _counts(engine, run_id, *, repair=False):
             assert dashboard_summaries.request_dashboard_repair(db, run_id)
             db.commit()
     views, snapshot = _views(engine, run_id)
+    if means is not None:
+        _react_means("reviewed_" + means[0], snapshot, means[1])
     found = {
         name: {key: payload[key] for key in COUNTED} for name, payload in views.items()
     }
@@ -572,7 +579,7 @@ def _counts(engine, run_id, *, repair=False):
             for key in ("not_received", "execution_count", "success_rate")
         },
         "rows": {row["item_id"]: row["status"] for row in snapshot["rows"]},
-        "means": _js_means(snapshot, ["q", "h"]),
+        "scores": {row["item_id"]: row["metric_values"] for row in snapshot["rows"]},
     }
     with Session(engine) as db:
         principal = _principal(db)
@@ -705,7 +712,7 @@ def test_review_transitions_keep_a_failed_runs_counts(database, emitter):
     ):
         _reviewed(database, emitter, name, outcome)
         run_id = rid(name)
-        before = _counts(database, run_id)
+        before = _counts(database, run_id, means=(name.replace("-", "_"), means))
         # item-1 is a task error; item-2 is a success where it was executed.
         success_rate = (2 - not_received) / (3 - not_received)
         for view in ("legacy", "projected", "detail"):

@@ -481,6 +481,40 @@ spec:
 And on the API Deployment set `QYM_ROLE=api` so it no longer runs the background
 loops. Without that setting the API keeps running them, which is safe but redundant.
 
+## Serving the UI
+
+The web UI is the React app in `frontend/`. It is a build output, not source in
+the Python package:
+
+- **Where it lives.** `npm run build` (in `frontend/`, Node 24) writes it to
+  `packages/platform/qym_platform/_static/app/` (gitignored). The Docker image
+  builds it in a Node stage and copies it in. A wheel carries whatever is in
+  `_static/app/` when it is built, so build the frontend before
+  `pip wheel packages/platform`; without it the pages answer 404 "The app bundle
+  is not built".
+- **Which service.** Only the `all` and `main` services serve the UI. The
+  ingestion and workers apps never do (any non-API path there is 404).
+- **URLs.** Pages are served at the canonical paths (`/`, `/login`,
+  `/projects/<slug>/...`, `/admin/...`, `/docs/...`, `/compare`, `/run/<id>`) with a
+  history fallback to `index.html`. `QYM_ROOT_PATH` / `QYM_MAIN_PREFIX` are
+  honoured: the page carries a `<base href>` and `window.__QYM_APP__` (root
+  path, auth mode, environment), and the router basename is that root path.
+  Hashed assets are mounted at `/assets`. Paths under `/v1`, `/api`, `/api-docs`,
+  `/ingestion`, `/workers`, `/assets`, `/healthz` that match no route return a
+  JSON 404, never the app. Ingress rules must send `/assets` and the page paths
+  to main (the `/` rule in the split ingress covers them).
+- **Auth.** With session auth, an unauthenticated page request is redirected to
+  `/login?next=...` before the bundle loads.
+- **Caching.** `/assets/*` (content-hashed, gzipped once per file version) is
+  cacheable; pages and API responses are `Cache-Control: no-store`.
+- **Old links.** `/app` and `/app/...` answer a 302 to the canonical URL and
+  keep the query string, so links shared during the migration still work.
+- **Exports.** `GET /api/runs/{id}/export-html` returns one self-contained HTML
+  file for a run; `GET /api/compare/export-html?files=a&files=b` (2 to 8 runs)
+  returns a summary table plus one tab per run, each tab that run's offline
+  export. Both are built from the frozen templates in
+  `qym_platform/export_templates/run/` and need no running server to open.
+
 ## Service split deployment
 
 Optional. The single server (`QYM_SERVICE` unset or `all`, the default) keeps

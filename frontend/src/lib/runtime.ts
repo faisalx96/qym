@@ -48,9 +48,9 @@ export function _resetBootstrap(): void {
   cached = null;
 }
 
-/** The SPA lives under `{root}/app`. React Router basename. */
+/** The SPA lives at the platform root (`QYM_ROOT_PATH`, "" when unmounted). React Router basename. */
 export function appBase(): string {
-  return `${bootstrap().rootPath}/app`;
+  return bootstrap().rootPath || '/';
 }
 
 /** Absolute URL for an API/platform path ("/v1/me" → "/qym/v1/me"). */
@@ -59,10 +59,10 @@ export function platformUrl(path: string): string {
   return `${bootstrap().rootPath}${path}`;
 }
 
-/** Absolute URL for an in-app route ("/projects/x" → "/qym/app/projects/x"). */
+/** Absolute URL for an in-app route ("/projects/x" → "/qym/projects/x"; "/" → "/qym/"). */
 export function appUrl(path: string): string {
   if (!path.startsWith('/')) path = `/${path}`;
-  return `${appBase()}${path === '/' ? '' : path}` || '/';
+  return `${bootstrap().rootPath}${path}`;
 }
 
 export const isDev = import.meta.env.DEV;

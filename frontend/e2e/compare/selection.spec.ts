@@ -112,7 +112,7 @@ test('sessionStorage.compareRuns hand-off loads and moves into the URL', async (
   await page.addInitScript((ids) => {
     window.sessionStorage.setItem('compareRuns', JSON.stringify(ids));
   }, [base, a, b]);
-  await page.goto('/app/compare');
+  await page.goto('/compare');
   await waitLoaded(page);
   await expect.poll(() => urlParams(page).getAll('runs')).toEqual([base, a, b]);
   await expect(page.getByText('3 columns')).toBeVisible();
@@ -126,7 +126,7 @@ test('sessionStorage.compareCohorts hand-off loads and gains cohortA / cohortB',
     },
     { left: [base, a], right: [b, c], leftLabel: 'Left side', rightLabel: 'Right side' },
   );
-  await page.goto('/app/compare');
+  await page.goto('/compare');
   await waitLoaded(page);
   await expect.poll(() => urlParams(page).getAll('cohortA')).toEqual([base, a]);
   expect(urlParams(page).getAll('cohortB')).toEqual([b, c]);
@@ -136,7 +136,7 @@ test('sessionStorage.compareCohorts hand-off loads and gains cohortA / cohortB',
 });
 
 test('empty and too-few states', async ({ page }) => {
-  await page.goto('/app/compare');
+  await page.goto('/compare');
   await expect(page.getByText('No runs to compare')).toBeVisible();
   await expect(page.getByRole('link', { name: /Back to runs/ })).toBeVisible();
   // a single ?runs= ref is below the minimum, so it is treated as no selection

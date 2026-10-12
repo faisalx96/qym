@@ -12,14 +12,14 @@ const ia = JSON.parse(readFileSync(path.resolve(here, '../../src/features/docs/i
   sections: { id: string; pages: { id: string; title: string }[] }[];
 };
 const PAGES = ia.sections.flatMap((s) => s.pages.map((p) => ({ section: s.id, page: p.id, title: p.title })));
-const FIRST = '/app/docs/get-started/what-is-qym';
+const FIRST = '/docs/get-started/what-is-qym';
 
 const scroller = (page: Page) => page.evaluate(() => document.getElementById('shell-content')?.scrollTop ?? -1);
 
 test.describe('routing', () => {
   test('legacy /docs-guide#developer/endpoints/conventions lands on the heading with the TOC entry current', async ({ page }) => {
     await gotoApp(page, '/docs-guide#developer/endpoints/conventions');
-    await expect(page).toHaveURL(/\/app\/docs\/developer\/endpoints#conventions$/);
+    await expect(page).toHaveURL(/\/docs\/developer\/endpoints#conventions$/);
     await expect(page.locator('#conventions')).toBeInViewport();
     await expect(page.locator('[data-docs-toc]:visible').getByRole('link', { name: 'Conventions' })).toHaveAttribute('aria-current', 'location');
   });
@@ -90,11 +90,11 @@ test.describe('every page renders', () => {
     await gotoApp(page, '/docs/developer/api-overview');
     const loads = trackPageLoads(page);
     await expect(page.locator('[data-docs-article] h1')).toBeVisible();
-    const link = page.locator('[data-docs-article] a[href="/app/docs/sdk-guide/observers"], [data-docs-article] a[href$="/docs/sdk-guide/observers"]').first();
+    const link = page.locator('[data-docs-article] a[href="/docs/sdk-guide/observers"], [data-docs-article] a[href$="/docs/sdk-guide/observers"]').first();
     await expect(link).toBeVisible();
     await link.scrollIntoViewIfNeeded();
     await link.click();
-    await expect(page).toHaveURL(/\/app\/docs\/sdk-guide\/observers$/);
+    await expect(page).toHaveURL(/\/docs\/sdk-guide\/observers$/);
     await expect(page.locator('[data-docs-article] h1')).toBeVisible();
     expect(loads.count()).toBe(0);
   });
@@ -122,7 +122,7 @@ test.describe('search', () => {
     const pageTitle = crumb.split('›')[1]!.trim();
     await page.keyboard.press('Enter');
     await expect(list).toHaveCount(0);
-    await expect(page).toHaveURL(/\/app\/docs\/[^/]+\/[^/#]+/);
+    await expect(page).toHaveURL(/\/docs\/[^/]+\/[^/#]+/);
     await expect(page.locator('[data-docs-article] h1')).toContainText(pageTitle.split(' ')[0]!);
     await expect(input).toHaveValue('');
 

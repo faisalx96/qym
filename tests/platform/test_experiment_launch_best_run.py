@@ -8,15 +8,13 @@
 - ``base_source: {kind: best_run, run_id}`` is validated on launch: the run is
   official, in this project, and ran on one of the selected environments.
 - P5 exit: launching from a best run reproduces its config; drift warnings are shown.
-- Static checks on the picker module and its hook in the launch form.
+- The picker UI is covered by frontend BestRunPicker.test.tsx.
 """
 
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pytest
 
@@ -53,13 +51,6 @@ from test_experiments_api import (  # noqa: F401  (pytest fixtures)
     env,
     session_factory,
 )
-
-ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-LAUNCH = (DASHBOARD / "experiment_launch.js").read_text(encoding="utf-8")
-MODULE = (DASHBOARD / "experiment_launch_best_run.js").read_text(encoding="utf-8")
-STYLES = (DASHBOARD / "experiment_launch_best_run.css").read_text(encoding="utf-8")
-PAGE = (DASHBOARD / "experiments.html").read_text(encoding="utf-8")
 
 T0 = datetime(2026, 9, 30, 12, 0, 0)
 RUN_VERSIONS = {"agent_version": "v1.12", "kb_version": "381"}
@@ -561,70 +552,6 @@ def test_environment_without_schema_answers_409(
         s.get(EvalEnvironment, env.id).current_schema_id = None
         s.commit()
     assert _base(client, env.id, run_id).status_code == 409
-
-
-# --------------------------------------------------------------------------- static UI
-
-
-def test_best_run_option_is_enabled_and_wired():
-    base = re.search(r"const BASE_OPTIONS = \[(.*?)\];", LAUNCH, re.S).group(1)
-    assert re.search(r"kind: 'best_run'[^}]*available: true", base)
-    assert "'Coming soon' };" not in LAUNCH.split("function baseAvailability")[1][:400]
-    # Only needs an environment: the picker asks for the scope itself (§10.2).
-    availability = LAUNCH.split("if (kind === 'best_run') {")[1][:400]
-    assert "return { ok: true };" in availability
-    assert "Pick a project dataset first" not in LAUNCH
-    # Nothing is retrieved before the user picks a scope: the base stays pending.
-    assert "if (out.pending) {" in LAUNCH and "info.pending = true;" in LAUNCH
-    # base_source for the launch, validated server-side.
-    assert "return { kind: 'best_run', run_id: info.runId };" in LAUNCH
-    # The picker is created through the hook and its env follows the base env.
-    assert "window.QymLaunchBestRun.create({" in LAUNCH
-    assert "picker.load(envId, runId)" in LAUNCH
-    assert "st.bestRunEnv === envId ? st.bestRunId : ''" in LAUNCH
-    assert "kind === 'official' || kind === 'saved' || kind === 'best_run'" in LAUNCH
-    # Header "Base: run … · metric score · agent … / kb …" and the drift marker.
-    assert "bestRun.header(info)" in LAUNCH
-    assert "'data-xl-base-drift': '1'" in LAUNCH and "bestRun.drifted(" in LAUNCH
-    # Temporary models come back without a key and ask for it (§7.5).
-    assert "needsKey: true" in LAUNCH.split("function reuseTemporary")[1][:900]
-    assert "'static/experiment_launch_best_run.css" in LAUNCH
-
-
-def test_picker_module_uses_the_best_run_apis_safely():
-    assert "window.QymLaunchBestRun = { create" in MODULE
-    assert "'/best-runs?'" in MODULE
-    # Scope prompt (§10.2): dataset, version, one select per versioning key, Find.
-    assert "'/best-runs/scope'" in MODULE
-    assert "'data-xlb-scope-dataset'" in MODULE and "'data-xlb-scope-version'" in MODULE
-    assert "'data-xlb-scope-versioning'" in MODULE and "'data-xlb-find': '1'" in MODULE
-    assert "q.append('versioning', key + '=' + applied.versioning[key])" in MODULE
-    assert "q.set('dataset_version_id', applied.versionId)" in MODULE
-    assert "return { runId: '', pending: true };" in MODULE
-    assert "if (!applied) {" in MODULE.split("function fetchList")[1][:400]
-    assert "'/best-runs/' + encodeURIComponent(id) + '/base'" in MODULE
-    assert "q.set('exclude_errored', 'false')" in MODULE
-    assert "'data-xlb-metric': '1'" in MODULE  # metric selector
-    assert "const LIMIT = 5;" in MODULE  # top 5 (§10.2)
-    assert "latest_version_with_runs" in MODULE
-    assert "'data-xlb-drift': '1'" in MODULE and "'data-xlb-prompts': '1'" in MODULE
-    assert "['run ' + shortId(base.run.id)]" in MODULE
-    assert "innerHTML" not in MODULE and "insertAdjacentHTML" not in MODULE
-    assert "api_key" not in MODULE and "localStorage" not in MODULE
-
-
-def test_picker_assets_are_loaded_by_the_page():
-    script = 'src="/static/experiment_launch_best_run.js'
-    assert script in PAGE
-    assert PAGE.index(script) < PAGE.index('src="/static/experiment_launch.js')
-    assert 'href="/static/experiment_launch_best_run.css' in PAGE
-    # Tokens only (docs/DESIGN_LANGUAGE.md); page-local classes use the xlb- prefix.
-    assert not re.search(r"font-size:\s*\d", STYLES)
-    assert "#" not in re.sub(r"/\*.*?\*/", "", STYLES, flags=re.S)
-    assert all(
-        sel.startswith(".xlb-")
-        for sel in re.findall(r"^(\.[\w-]+)", STYLES, flags=re.M)
-    )
 
 
 # --------------------------------------------------------------------------- loading

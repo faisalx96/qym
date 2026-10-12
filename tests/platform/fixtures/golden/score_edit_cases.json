@@ -1,0 +1,219 @@
+{
+ "cases": [
+  {
+   "expected": {
+    "value": 0.6
+   },
+   "raw": "0.6",
+   "score_type": null
+  },
+  {
+   "expected": {
+    "value": 0.25
+   },
+   "raw": " 0.25 ",
+   "score_type": "percentage"
+  },
+  {
+   "expected": {
+    "value": 0.8
+   },
+   "raw": "80%",
+   "score_type": "percentage"
+  },
+  {
+   "expected": {
+    "value": 0.8
+   },
+   "raw": "80%",
+   "score_type": null
+  },
+  {
+   "expected": {
+    "value": 0.5
+   },
+   "raw": ".5",
+   "score_type": "number"
+  },
+  {
+   "expected": {
+    "value": 100.0
+   },
+   "raw": "1e2",
+   "score_type": "number"
+  },
+  {
+   "expected": {
+    "value": -3.0
+   },
+   "raw": -3,
+   "score_type": "number"
+  },
+  {
+   "expected": {
+    "value": 1.0
+   },
+   "raw": 1,
+   "score_type": "boolean"
+  },
+  {
+   "expected": {
+    "value": 1.0
+   },
+   "raw": "true",
+   "score_type": "boolean"
+  },
+  {
+   "expected": {
+    "value": 0.0
+   },
+   "raw": "No",
+   "score_type": "boolean"
+  },
+  {
+   "expected": {
+    "value": 0.0
+   },
+   "raw": false,
+   "score_type": null
+  },
+  {
+   "expected": {
+    "value": 7.0
+   },
+   "raw": "7",
+   "score_type": "count"
+  },
+  {
+   "expected": {
+    "error": "Enter a number."
+   },
+   "raw": "abc",
+   "score_type": null
+  },
+  {
+   "expected": {
+    "error": "Enter a score. Enter a number."
+   },
+   "raw": "",
+   "score_type": null
+  },
+  {
+   "expected": {
+    "error": "Use a dot for decimals (0.7, not 0,7)."
+   },
+   "raw": "0,7",
+   "score_type": null
+  },
+  {
+   "expected": {
+    "error": "Enter a number."
+   },
+   "raw": "1_000",
+   "score_type": "number"
+  },
+  {
+   "expected": {
+    "error": "Enter a number."
+   },
+   "raw": "nan",
+   "score_type": "number"
+  },
+  {
+   "expected": {
+    "error": "Enter a number."
+   },
+   "raw": "inf",
+   "score_type": null
+  },
+  {
+   "expected": {
+    "error": "Enter a value from 0 to 1, or 0% to 100%."
+   },
+   "raw": "1.5",
+   "score_type": "percentage"
+  },
+  {
+   "expected": {
+    "error": "Enter a value from 0 to 1, or 0% to 100%."
+   },
+   "raw": "150%",
+   "score_type": "percentage"
+  },
+  {
+   "expected": {
+    "error": "Enter true or false (1 or 0)."
+   },
+   "raw": "0.5",
+   "score_type": "boolean"
+  },
+  {
+   "expected": {
+    "error": "Enter true or false (1 or 0)."
+   },
+   "raw": "maybe",
+   "score_type": "boolean"
+  },
+  {
+   "expected": {
+    "error": "Enter a value from 0 to 1, or 0% to 100%."
+   },
+   "raw": "true",
+   "score_type": "percentage"
+  },
+  {
+   "expected": {
+    "error": "Enter a whole number, 0 or more."
+   },
+   "raw": true,
+   "score_type": "count"
+  },
+  {
+   "expected": {
+    "error": "Enter a whole number, 0 or more."
+   },
+   "raw": "2.5",
+   "score_type": "count"
+  },
+  {
+   "expected": {
+    "error": "Enter a whole number, 0 or more."
+   },
+   "raw": "-1",
+   "score_type": "count"
+  },
+  {
+   "expected": {
+    "error": "Enter a whole number, 0 or more."
+   },
+   "raw": "50%",
+   "score_type": "count"
+  }
+ ],
+ "reduced": [
+  {
+   "expected": {
+    "value": 0.5
+   },
+   "raw": "0.5",
+   "reduced": true,
+   "score_type": "boolean"
+  },
+  {
+   "expected": {
+    "error": "Enter true or false (1 or 0)."
+   },
+   "raw": "0.5",
+   "reduced": false,
+   "score_type": "boolean"
+  },
+  {
+   "expected": {
+    "value": 2.5
+   },
+   "raw": "2.5",
+   "reduced": true,
+   "score_type": "count"
+  }
+ ]
+}

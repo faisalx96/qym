@@ -130,7 +130,7 @@ test.describe('shell chrome', () => {
     const loads = trackPageLoads(page);
     await trigger.click();
     await page.getByRole('menuitem', { name: 'Profile' }).click();
-    await expect(page).toHaveURL(/\/app\/profile$/);
+    await expect(page).toHaveURL(/\/profile$/);
     await expect(page.locator('[data-profile-page]')).toBeVisible();
     expect(loads.count()).toBe(0);
     // auth mode none: there is no session, so no Sign out item
@@ -148,7 +148,7 @@ test.describe('shell chrome', () => {
     await page.locator('[data-nav="datasets"]').click();
     await expect(page).toHaveURL(/\/datasets$/);
     await page.goBack();
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${p.slug}$`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${p.slug}$`));
     await expect(page.locator('[data-nav="runs"]')).toHaveAttribute('aria-current', 'page');
     expect(loads.count()).toBe(0);
   });
@@ -199,7 +199,7 @@ test.describe('command palette (UX_DECISION adjustment 2)', () => {
     await expect(palette.getByRole('option', { selected: true })).toContainText(there.name);
     await page.keyboard.press('Enter');
     await expect(palette).toBeHidden();
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${there.slug}$`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${there.slug}$`));
     expect(loads.count()).toBe(0);
     expect(await page.evaluate(() => localStorage.getItem('qym:last-project-slug'))).toBe(there.slug);
   });
@@ -414,11 +414,11 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     await expect(nav.locator('[aria-current="page"]')).toHaveText(runId);
     await expect(nav.getByRole('link', { name: 'Runs' })).toHaveAttribute(
       'href',
-      new RegExp(`/app/projects/${p.slug}$`),
+      new RegExp(`/projects/${p.slug}$`),
     );
   });
 
-  test('legacy /app/run/<id> resolves: redirects to the project run page (guessed) or shows the error state', async ({
+  test('legacy /run/<id> resolves: redirects to the project run page (guessed) or shows the error state', async ({
     page,
     request,
   }) => {
@@ -430,7 +430,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     await gotoApp(page, '/run/no-such-run?view=compact');
     await expect
       .poll(async () => {
-        if (/\/app\/projects\/[^/]+\/runs\/no-such-run\?view=compact$/.test(page.url())) return 'redirected';
+        if (/\/projects\/[^/]+\/runs\/no-such-run\?view=compact$/.test(page.url())) return 'redirected';
         if (await page.getByRole('alert').filter({ hasText: 'Couldn’t open this run' }).isVisible())
           return 'error';
         return 'pending';
@@ -439,7 +439,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     await expect(page.locator('[data-not-found]')).toHaveCount(0);
     // the run does not exist, so the remembered project is the guess
     if (/\/runs\//.test(page.url())) {
-      expect(page.url()).toContain(`/app/projects/${p.slug}/runs/no-such-run?view=compact`);
+      expect(page.url()).toContain(`/projects/${p.slug}/runs/no-such-run?view=compact`);
     }
     expect(loads.count()).toBeLessThanOrEqual(1);
   });
@@ -452,7 +452,7 @@ test.describe('cross-tab run status (§8.7 scenario 11)', () => {
   }) => {
     const p = await createProject(request, 'Broadcast', uniqueSlug('bc'));
     const first = await context.newPage();
-    await first.goto(`/app/projects/${p.slug}`);
+    await first.goto(`/projects/${p.slug}`);
     await expect(first.locator('[data-app-shell]')).toBeVisible();
     await first.evaluate(() => {
       const w = window as unknown as { __received: unknown[] };
@@ -472,7 +472,7 @@ test.describe('cross-tab run status (§8.7 scenario 11)', () => {
       });
     });
     const second = await context.newPage();
-    await second.goto(`/app/projects/${p.slug}`);
+    await second.goto(`/projects/${p.slug}`);
     await expect(second.locator('[data-app-shell]')).toBeVisible();
     await second.evaluate(() => {
       new BroadcastChannel('qym-run-status').postMessage({ runIds: ['run-1', 'run-2'], status: 'STOPPED' });

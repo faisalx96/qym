@@ -104,7 +104,17 @@ function ShellFrame() {
       data-collapsed={sidebarCollapsed ? '' : undefined}
       data-narrow={narrow ? '' : undefined}
     >
-      <a href="#shell-content" className={styles.skip}>
+      <a
+        href="#shell-content"
+        className={styles.skip}
+        onClick={(e) => {
+          // The page has a <base href>, so a bare #fragment would navigate to the base URL.
+          e.preventDefault();
+          const target = document.getElementById('shell-content');
+          target?.focus();
+          target?.scrollIntoView?.();
+        }}
+      >
         Skip to content
       </a>
       <aside

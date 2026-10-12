@@ -116,7 +116,7 @@ export function csvUpserts(headers: string[], rows: string[][], mapping: ColumnM
 export function jsonUpserts(rows: Record<string, unknown>[]): ItemBody[] {
   return rows.map((r) => {
     const entry: ItemBody = {};
-    const id = String(r.item_id ?? r.id ?? '').trim();
+    const id = String(r.item_id || r.id || '').trim(); // `or` like the server: an id of 0 or "" means generated
     if (id) entry.item_id = id;
     entry.input = r.input;
     if (r.expected_output !== undefined) entry.expected_output = r.expected_output;

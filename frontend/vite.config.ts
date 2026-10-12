@@ -3,25 +3,20 @@ import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 import { docsContentPlugin } from './plugins/docs-content';
 
-// The platform may be mounted under QYM_ROOT_PATH (e.g. /qym). The served
-// index.html gets `<base href="{root}/app/">`, so every asset URL is relative
-// and resolves against it. React Router gets its basename at runtime from the
-// injected window.__QYM_APP__.rootPath (see src/lib/runtime.ts).
+// The platform serves this app at its root (QYM_ROOT_PATH, e.g. /qym, when
+// mounted). The served index.html gets `<base href="{root}/">`, so every asset
+// URL is relative and resolves against it. React Router gets its basename at
+// runtime from the injected window.__QYM_APP__.rootPath (see src/lib/runtime.ts).
 const PLATFORM_PORT = process.env.QYM_PLATFORM_PORT ?? '8800';
 const VITE_PORT = Number(process.env.QYM_VITE_PORT ?? '5800');
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 
-/**
- * In production the platform serves `public/` files from /app/assets/*
- * (vite copies public/assets → _static/app/assets). The dev server keeps
- * `public/` at the root, so map /app/assets/<file> back to /assets/<file>
- * when no built chunk matches.
- */
-function devPublicUnderApp(): Plugin {
+/** In `vite dev` nothing serves the page, so mirror what qym_platform/api/spa.py injects in production. */
+function devBootstrap(): Plugin {
   return {
-    name: 'qym-dev-public-under-app',
+    name: 'qym-dev-bootstrap',
+    apply: 'serve',
     transformIndexHtml(html) {
-      // Mirror what qym_platform/api/spa.py injects in production so the client sees one shape.
       const boot = {
         rootPath: '',
         authMode: process.env.QYM_AUTH_MODE ?? 'none',
@@ -30,20 +25,14 @@ function devPublicUnderApp(): Plugin {
       };
       return html.replace(
         '<!--__QYM_APP_BOOTSTRAP__-->',
-        `<script>window.__QYM_APP__ = ${JSON.stringify(boot)};</script>`,
+        `<base href="/"><script>window.__QYM_APP__ = ${JSON.stringify(boot)};</script>`,
       );
-    },
-    configureServer(server) {
-      server.middlewares.use((req, _res, next) => {
-        if (req.url?.startsWith('/app/assets/')) req.url = req.url.slice('/app'.length);
-        next();
-      });
     },
   };
 }
 
 export default defineConfig({
-  plugins: [react(), devPublicUnderApp(), docsContentPlugin()],
+  plugins: [react(), devBootstrap(), docsContentPlugin()],
   base: './',
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   css: { modules: { localsConvention: 'camelCaseOnly' } },
@@ -72,9 +61,6 @@ export default defineConfig({
       [
         '/v1',
         '/api',
-        '/static',
-        '/ui',
-        '/login',
         '/healthz',
         '/api-docs',
         '/openapi.json',

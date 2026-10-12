@@ -89,7 +89,7 @@ const PAGE_LABELS: Record<string, string> = {
   'not-found': 'Not found',
 };
 
-/** Parse an app-relative pathname (no /app prefix) into the shell's route context. */
+/** Parse an app-relative pathname (no root-path prefix) into the shell's route context. */
 export function parseRoute(pathname: string): RouteContext {
   const path = pathname.replace(/\/+$/, '') || '/';
   const project = /^\/projects\/([^/]+)(?:\/(.*))?$/.exec(path);

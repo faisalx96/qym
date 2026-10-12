@@ -6,12 +6,8 @@ neutrally. Views open on the declared primary metric, else the first metric
 by spec position (never alphabetical order).
 """
 
-import json
-import shutil
-import subprocess
-from pathlib import Path
-
 import pytest
+from _support_a1 import share_with_react
 from fastapi import HTTPException
 from qym_platform.api import ingest as ingest_api
 from qym_platform.api import runs as runs_api
@@ -24,7 +20,6 @@ from qym_platform.db.models import (
 )
 from qym_platform.services.metric_semantics import declared_direction
 from sqlalchemy.orm import Session
-from test_compare_error_counts import run_compare_js
 from test_dashboard_durable_summaries import (
     drain,
     item,
@@ -33,29 +28,7 @@ from test_dashboard_durable_summaries import (
     run,
 )
 
-REPO = Path(__file__).resolve().parents[2]
-METRICS_JS = REPO / "packages/platform/qym_platform/_static/dashboard/metrics.js"
-# Pages load the shared escaping layer before any other script.
-SAFE_JS = REPO / "packages/platform/qym_platform/_static/dashboard/qym_safe.js"
-
-
-def run_metrics_js(body: str) -> None:
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("Node.js is required to check metrics.js")
-    script = (
-        "const assert = require('node:assert/strict'); const window = {};\n"
-        + SAFE_JS.read_text()
-        + "\nconst QymSafe = window.QymSafe;\n"
-        + METRICS_JS.read_text()
-        + "\nconst m = window.QymMetrics;\n"
-        + body
-    )
-    result = subprocess.run([node], input=script, text=True, capture_output=True, timeout=30)
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-# ── one rule: metrics.js and the server agree ─────────────────────────────
+# ── one rule: the React lib/metrics.ts and the server agree ─────────────────────────────
 
 
 SPEC_CASES = [
@@ -100,205 +73,12 @@ def test_server_reads_the_declared_direction(spec, expected):
 
 
 def test_client_reads_the_same_direction():
-    run_metrics_js(
-        "const cases = " + json.dumps(SPEC_CASES) + ";\n"
-        + "for (const [spec, expected] of cases) assert.equal(m.metricDirection(spec), expected, JSON.stringify(spec));\n"
+    """The React lib/metrics.ts metricDirection reads every case the server does:
+    frontend/src/lib/__tests__/cutover-metric-rules.test.ts."""
+    share_with_react(
+        "metric_direction_cases",
+        {"cases": [[spec, expected] for spec, expected in SPEC_CASES]},
     )
-
-
-def test_client_semantics_helpers():
-    run_metrics_js(r"""
-    // Default metric: declared primary, else first by position (not alphabetical).
-    assert.equal(m.defaultMetricName(['spider2', 'output_empty'], {}), 'spider2');
-    assert.equal(m.defaultMetricName(['output_empty', 'spider2'], {spider2: {primary: true}}), 'spider2');
-    assert.equal(m.defaultMetricName([], {}), null);
-    assert.deepEqual(m.mergeMetricNames([['b', 'a'], ['a', 'c']]), ['b', 'a', 'c']);
-
-    // Best / compare by direction; none without a direction.
-    assert.deepEqual(m.bestMetricIndexes([0.015, 0.007, null], 'minimize'), [1]);
-    assert.deepEqual(m.bestMetricIndexes([0.015, 0.007], 'maximize'), [0]);
-    assert.deepEqual(m.bestMetricIndexes([0.2, 0.2], 'maximize'), [0, 1]);
-    assert.deepEqual(m.bestMetricIndexes([0.015, 0.007], null), []);
-    assert.equal(m.compareMetricValues(0.1, 0.2, 'minimize'), 1);
-    assert.equal(m.compareMetricValues(0.1, 0.2, null), 0);
-
-    // Pass/fail: booleans pass on True (maximize) or False (minimize).
-    assert.equal(m.metricPasses(1, 0.8, 'maximize', true), true);
-    assert.equal(m.metricPasses(0, 0.8, 'minimize', true), true);
-    assert.equal(m.metricPasses(1, 0.8, 'minimize', true), false);
-    assert.equal(m.metricPasses(0.1, 0.2, 'minimize'), true);
-    assert.equal(m.metricPasses(0.9, 0.8, null), null);
-    assert.equal(m.defaultPassThreshold({direction: 'minimize', score_type: 'percentage'}), 0.2);
-    assert.equal(m.defaultPassThreshold({pass_threshold: 0.3}), 0.3);
-    assert.equal(m.defaultPassThreshold(null, null), 0.8);
-
-    // Colors: inverted for lower-is-better, none without a direction.
-    assert.equal(m.getMetricColorClass(0.015, 'score', 'minimize'), 'score-5');
-    assert.equal(m.getMetricColorClass(0.015, 'score', 'maximize'), 'score-1');
-    assert.equal(m.getMetricColorClass(0.015, 'score', null), '');
-    assert.equal(m.getMetricColorClass(0.015, 'score'), '');
-    assert.equal(m.getMetricColorClass(5, 'numeric', 'maximize'), '');
-
-    // Sweep verdicts: a drop in a lower-is-better rate is an improvement.
-    assert.equal(m.metricDeltaVerdict(-0.026, 0.01, 'minimize'), 'improved');
-    assert.equal(m.metricDeltaVerdict(-0.026, 0.01, 'maximize'), 'regressed');
-    assert.equal(m.metricDeltaVerdict(-0.026, 0.01, null), 'changed');
-    assert.equal(m.metricDeltaVerdict(0.005, 0.01, 'minimize'), 'within_noise');
-    """)
-
-
-def test_item_level_and_cohort_math_follow_the_direction():
-    run_metrics_js(r"""
-    const run = values => ({snapshot: {metric_names: ['empty'], rows: values.map((v, i) => ({index: i, status: 'completed', metric_values: [v]}))}});
-    const runsData = [run([1, 0, 0]), run([0, 0, 1])];
-    const base = {runsData, metricName: 'empty', threshold: 0.8, isBoolean: true,
-      getMetricIndex: () => 0, trackDistribution: true};
-    // Lower is better: False (0) passes; Max@K is the per-item minimum.
-    const lower = m.calculateItemLevelMetrics({...base, direction: 'minimize'});
-    assert.equal(lower.passAtK, 1);
-    assert.equal(lower.passHatK, 1 / 3);
-    assert.equal(lower.maxAtK, 0);
-    // Higher is better keeps the historical result.
-    const higher = m.calculateItemLevelMetrics({...base, direction: 'maximize'});
-    assert.equal(higher.passAtK, 2 / 3);
-    assert.equal(higher.maxAtK, 2 / 3);
-    // No direction: no passes at all (views show values only).
-    const neutral = m.calculateItemLevelMetrics({...base, direction: null});
-    assert.equal(neutral.passAtK, 0);
-    assert.equal(neutral.avgScore, 1 / 3);
-
-    const cohort = m.calculateGroupedCohortComparison({
-      runsData: [{...run([1, 1]), id: 'a'}, {...run([0, 0]), id: 'b'}],
-      leftRunIds: ['a'], rightRunIds: ['b'], threshold: 0.8, metricName: 'empty',
-      direction: 'minimize', isBoolean: true,
-      getMetricIndex: () => 0, getItemId: row => String(row.index), getRunId: r => r.id,
-    });
-    assert.equal(cohort.summary.improvedCount, 2);
-    assert.equal(cohort.buckets.b_sweeps_a.count, 2);
-    """)
-
-
-# ── compare: winners, best and Max@K by direction ───────────────────────────
-
-
-def test_compare_winners_follow_direction_and_neutral_has_none():
-    run_compare_js(r"""
-        const fixture = values => ({run:{metric_names:['empty']},snapshot:{metric_names:['empty'],rows:
-          values.map((v,i)=>({compare_item_id:'i'+i,status:'completed',metric_values:[v]}))}});
-        const state = {runs:[fixture([0.3,0.1]),fixture([0.1,0.1])],compareItemIds:['i0','i1'],
-          metricIsBoolean:{empty:false},metricThresholds:{empty:0.2},metricDirections:{empty:'minimize'}};
-        let stats = calculateComparisonStatsForMetric('empty');
-        // Lower wins: run 2 wins item 0; item 1 ties.
-        assert.deepEqual(stats.wins,[0,1]);
-        assert.equal(stats.ties,1);
-        assert.equal(stats.itemWinners[0],1);
-        assert.equal(stats.maxAtK,0.2);
-        assert.equal(stats.passAtK,2);
-        state.metricDirections.empty = null;
-        stats = calculateComparisonStatsForMetric('empty');
-        assert.deepEqual(stats.wins,[0,0]);
-        assert.equal(stats.ties,0);
-        assert.deepEqual(stats.itemWinners,[null,null]);
-        assert.equal(stats.passAtK,0);
-        assert.equal(stats.maxAtK,0);
-    """)
-
-
-def _compare_functions(*names):
-    import re
-
-    source = (REPO / "packages/platform/qym_platform/_static/dashboard/compare.html").read_text()
-    chunks = []
-    for name in names:
-        match = re.search(
-            rf"^      (?:function {name}\([^\n]*\n.*?^      }}|const {name} = [^\n]*;)$",
-            source,
-            re.M | re.S,
-        )
-        assert match, f"Missing production function: {name}"
-        chunks.append(match.group())
-    return "\n".join(chunks)
-
-
-def test_sweep_verdict_follows_direction_and_names_the_metric():
-    """The review's case: empty outputs fell 3.0% -> 0.4%, shown as REGRESSED."""
-    functions = _compare_functions(
-        "sweepPassAtK", "sweepPassHatK", "sweepBinomPmf", "sweepLutMoments",
-        "sweepPassMetricLuts", "normalCdf", "SWEEP_Z_95", "computeSweepNoise",
-        "escapeHtml", "renderSweepVerdict",
-    )
-    run_metrics_js(
-        "const document = {createElement: () => ({set textContent(v) { this.v = String(v); }, get innerHTML() { return this.v; }})};\n"
-        + functions
-        + r"""
-    // 500 items, 2 passes per side; empty on 15 left items, 2 right items.
-    const items = Array.from({length: 500}, (_, i) => {
-      const left = i < 15 ? [1, 1] : [0, 0];
-      const right = i < 2 ? [1, 1] : [0, 0];
-      return {leftScores: left, rightScores: right,
-        leftPasses: left.map(v => v <= 0.0001), rightPasses: right.map(v => v <= 0.0001)};
-    });
-    const lower = computeSweepNoise(items, null, 'minimize');
-    assert.equal(lower.avgAtK.verdict, 'improved');
-    assert.equal(lower.passAtK.verdict, 'improved');
-    const higher = computeSweepNoise(items, null, 'maximize');
-    assert.equal(higher.avgAtK.verdict, 'regressed');
-    var state = {selectedOverviewMetric: 'output_empty', defaultMetric: 'spider2', defaultMetricDeclared: true,
-      metricDirections: {output_empty: 'minimize'}};
-    globalThis.metricDirectionFor = name => state.metricDirections[name] || null;
-    const html = renderSweepVerdict(lower, 'Avg@2', 'avgAtK');
-    assert.match(html, /IMPROVED/);
-    assert.match(html, /output_empty · lower is better/);
-    assert.match(html, /selected metric/);
-    state.selectedOverviewMetric = 'spider2';
-    state.metricDirections.spider2 = 'maximize';
-    assert.match(renderSweepVerdict(higher, 'Avg@2', 'avgAtK'), /declared primary metric/);
-    state.defaultMetricDeclared = false;
-    assert.match(renderSweepVerdict(higher, 'Avg@2', 'avgAtK'), /first metric \(no primary declared\)/);
-    """
-    )
-
-
-def test_sweep_delta_colors_follow_direction_without_a_noise_band():
-    """Single-pass cohorts have no Avg@k noise band, so the delta's sign alone
-    colored it: a lower-is-better metric that dropped 60.9% -> 59.1% showed a
-    red -1.8% card and red per-domain drops (review finding)."""
-    functions = _compare_functions(
-        "escapeHtml", "getDeltaClass", "getNoiseDeltaClass", "renderSweepDelta",
-        "formatSweepMetricValue", "renderSweepStatCard",
-        "formatSweepCompactMetricValue", "formatSweepCompactDelta",
-        "renderSweepMetadataMetricCell",
-    )
-    run_metrics_js(
-        "const document = {createElement: () => ({set textContent(v) { this.v = String(v); }, get innerHTML() { return this.v; }})};\n"
-        + functions
-        + r"""
-    const cardClass = html => html.match(/sweep-stat-card qym-stat-strip__item (\w+)/)[1];
-    const pillClass = html => html.match(/sweep-delta-pill (\w+)/)[1];
-    // Avg@k with no band: a drop is better when lower is better.
-    const lower = renderSweepStatCard('Avg@1', 0.609, 0.591, -0.018, null, 'minimize');
-    assert.equal(cardClass(lower), 'positive');
-    assert.equal(pillClass(lower), 'positive');
-    const higher = renderSweepStatCard('Avg@1', 0.609, 0.591, -0.018, null, 'maximize');
-    assert.equal(cardClass(higher), 'negative');
-    // Pass rates stay higher-is-better (the default).
-    assert.equal(cardClass(renderSweepStatCard('Pass@1', 0.2, 0.3, 0.1, null)), 'positive');
-    // A band without a verdict also reads the direction.
-    assert.equal(getNoiseDeltaClass(-0.05, {halfWidth: 0.01}, 'minimize'), 'positive');
-    assert.equal(getNoiseDeltaClass(-0.005, {halfWidth: 0.01}, 'minimize'), 'neutral');
-    // Per-domain breakdown cells.
-    const cell = (delta, direction) => renderSweepMetadataMetricCell(0.64, 0.64 + delta, delta, direction)
-      .match(/sweep-metadata-delta (\w+)/)[1];
-    assert.equal(cell(-0.06, 'minimize'), 'positive');
-    assert.equal(cell(0.01, 'minimize'), 'negative');
-    assert.equal(cell(-0.06), 'negative');
-    """
-    )
-
-    source = (REPO / "packages/platform/qym_platform/_static/dashboard/compare.html").read_text()
-    # The Avg@k card and column pass the selected metric's direction.
-    assert "noise.avgAtK, metricDirectionFor(metricName) || 'maximize')" in source
-    assert "row.summary.deltas.avgAtK, avgDirection)" in source
 
 
 # ── server: ingest stores what the SDK declares ─────────────────────────────
@@ -464,20 +244,5 @@ def test_server_primary_metric_rule_matches_the_client():
     assert primary_metric(["a", "b"], {"b": {"primary": True}}) == "b"
     assert primary_metric(["a", "b"], {"b": {"primary": False}}) == "a"
     assert primary_metric([], {}) is None
-    run_metrics_js(r"""
-    assert.equal(m.defaultMetricName(['a', 'b'], {}), 'a');
-    assert.equal(m.defaultMetricName(['a', 'b'], {b: {primary: true}}), 'b');
-    assert.equal(m.defaultMetricName(['a', 'b'], {b: {primary: false}}), 'a');
-    """)
-
-
-def test_repeat_drawer_labels_optimistic_scores_and_seeds_the_threshold():
-    """The optimistic drawer used the first metric's value under the primary
-    column and an 80% threshold until the fetch landed (C008)."""
-    source = (REPO / "packages/platform/qym_platform/_static/dashboard/dashboard.js").read_text()
-    block = source[source.index("function buildSamplesDetailMarkup"):]
-    block = block[: block.index("const optimistic = !!data._optimistic;")]
-    assert "s.primary_metric" in block
-    assert "[scoredMetric]: s.primary_score" in block
-    assert "defaultPassThreshold(" in block
-    assert "group: { metric: primary, threshold: primaryThreshold }" in block
+    # The client rule (React lib/metrics.ts defaultMetricName) is pinned to the same
+    # cases in cutover-metric-rules.test.ts.

@@ -1194,29 +1194,6 @@ def test_purge_due_at_matches_the_purge_cutoff():
     assert purge_due_at(None, 30) is None
 
 
-def test_trash_page_no_longer_promises_runs_stay_until_restored():
-    page = (
-        ROOT / "packages/platform/qym_platform/_static/dashboard/trash.html"
-    ).read_text(encoding="utf-8")
-    assert "remain here until restored" not in page
-    assert "X-Qym-Deleted-Run-Grace-Days" in page
-    assert "label: 'Purges'" in page
-
-
-def test_run_page_shows_history_and_runs_list_credits_only_decisions_in_effect():
-    static = ROOT / "packages/platform/qym_platform/_static/dashboard"
-    run_html = (static / "run.html").read_text(encoding="utf-8")
-    dashboard_js = (static / "dashboard.js").read_text(encoding="utf-8")
-    assert '<script src="/static/review_history.js?v=' in run_html
-    assert '<div id="review-history-section"></div>' in run_html
-    assert "window.QymReviewHistory.load(" in run_html
-    # A withdrawn decision stays on the approval row; the status tooltip must
-    # not credit it to the reviewer once the run has moved on.
-    assert "approval.decision_by && approval.decision === status" in dashboard_js
-    assert "return the run to completed" not in dashboard_js
-    assert "Run returned to ${restored}" in dashboard_js
-
-
 def test_review_history_migration_is_quick_ddl_and_reversible(monkeypatch):
     import importlib.util
 

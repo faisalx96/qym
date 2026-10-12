@@ -107,22 +107,6 @@ def test_auth_providers_reports_local_auth_disabled(session_factory, monkeypatch
     assert response.json()["local_auth"] == {"enabled": False, "signup_enabled": False}
 
 
-def test_login_page_marks_local_auth_when_enabled(session_factory, monkeypatch):
-    _configure_env(monkeypatch, auth_local_enabled=True)
-    with _client(session_factory) as client:
-        response = client.get("/login")
-    assert response.status_code == 200
-    assert 'name="qym-local-auth" content="enabled"' in response.text
-
-
-def test_login_page_omits_local_auth_marker_when_disabled(session_factory, monkeypatch):
-    _configure_env(monkeypatch, auth_local_enabled=False)
-    with _client(session_factory) as client:
-        response = client.get("/login")
-    assert response.status_code == 200
-    assert 'name="qym-local-auth" content="enabled"' not in response.text
-
-
 def test_signup_creates_user_identity_credential_and_session(session_factory, monkeypatch):
     _configure_env(monkeypatch, auth_local_enabled=True)
     with _client(session_factory) as client:

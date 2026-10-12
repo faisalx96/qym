@@ -25,9 +25,17 @@ for filename in sys.argv[1:]:
             for required in ["index.html", "app.js", "app.css"]:
                 assert "qym/_static/ui/" + required in viewer, "SDK wheel lacks the built viewer (run npm run build:sdk): " + required
         if platform:
-            for asset in ["run_details.js", "dashboard.js", "run.html", "compare.html", "overview.html", "metrics.js"]:
-                relative = "_static/dashboard/" + asset
-                assert archive.read(package + "/" + relative) == (source / relative).read_bytes(), asset
+            app_files = {n for n in names if n.startswith("qym_platform/_static/app/")}
+            assert "qym_platform/_static/app/index.html" in app_files, (
+                "Platform wheel lacks the built React app (run `npm run build` in frontend/ before building the wheel)"
+            )
+            assets = [n for n in app_files if n.startswith("qym_platform/_static/app/assets/") and n.endswith(".js")]
+            assert assets, "Platform wheel carries index.html but no built JS assets"
+            stale = [n for n in names if n.startswith("qym_platform/_static/dashboard/")]
+            assert not stale, ("The removed vanilla dashboard is back in the wheel", stale[:5])
+            for template in ["run.html", "dashboard.css", "metrics.js", "qym_safe.js"]:
+                relative = "export_templates/run/" + template
+                assert archive.read(package + "/" + relative) == (source / relative).read_bytes(), template
         results.append({"wheel": wheel.name, "python_files": len(expected), "source_matches": True, "no_stale_or_nested_build_modules": True})
 assert len(results) == 2, "Pass the SDK and platform wheels"
 print(json.dumps(results, indent=2))

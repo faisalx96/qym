@@ -28,7 +28,7 @@ export const EVAL_PORT_B = Number(PLATFORM_PORT) + 101;
 
 export const STUB_LLM_PORT = Number(PLATFORM_PORT) + 1000;
 export const BASE_URL = `http://127.0.0.1:${VITE_PORT}`;
-export const APP = '/app';
+export const APP = '';
 
 export default defineConfig({
   testDir: './e2e',
@@ -90,7 +90,7 @@ export default defineConfig({
     },
     {
       command: `QYM_PLATFORM_PORT=${PLATFORM_PORT} QYM_VITE_PORT=${VITE_PORT} ${AUTH_MODE === 'none' ? '' : 'QYM_AUTH_MODE=proxy_headers QYM_AUTH_LOCAL_ENABLED=true'} npx vite --port ${VITE_PORT} --strictPort --host 127.0.0.1`,
-      url: `${BASE_URL}/app/__ui`,
+      url: `${BASE_URL}/__ui`,
       reuseExistingServer: false,
       timeout: 120_000,
     },

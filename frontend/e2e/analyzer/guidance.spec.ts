@@ -325,7 +325,7 @@ test.describe('project scope (15)', () => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, `/projects/${seed.slug}/analysis`);
     await expect(page.getByText('Select a run to analyze')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open Runs' })).toHaveAttribute('href', new RegExp(`/app/projects/${seed.slug}$`));
+    await expect(page.getByRole('link', { name: 'Open Runs' })).toHaveAttribute('href', new RegExp(`/projects/${seed.slug}$`));
     await page.getByRole('button', { name: 'Open project guidance' }).click();
     await expect(page).toHaveURL(/scope=categories/);
     const tabs = page.getByRole('tablist', { name: 'Project guidance' });

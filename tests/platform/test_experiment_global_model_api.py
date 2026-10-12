@@ -9,10 +9,13 @@ into one axis. These round trips check the service accepts and dispatches that.
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
-from qym_platform.db.models import EvalEnvironment, EvalEnvironmentSchema, EvalExperiment
+from qym_platform.db.models import (
+    EvalEnvironment,
+    EvalEnvironmentSchema,
+    EvalExperiment,
+)
 from qym_platform.services.eval_bindings import prepare_dispatch
 from qym_platform.services.eval_model_slots import (
     descriptor_for_schema,
@@ -34,9 +37,6 @@ from test_experiments_api import (  # noqa: F401  (fixtures)
 
 FAST = "endpoint:fast"
 ROOT = Path(__file__).resolve().parents[2]
-LAUNCH = (
-    ROOT / "packages/platform/qym_platform/_static/dashboard/experiment_launch.js"
-).read_text(encoding="utf-8")
 
 
 def _dispatched(session_factory, job, experiment_id):
@@ -105,16 +105,3 @@ def test_global_model_sweep_is_one_linked_axis(
         assert endpoints["primary"]["model"] == endpoints["fast"]["model"]
         models.add(endpoints["primary"]["model"])
     assert models == {"gpt-4o", "qwen-72b"}
-
-
-def test_launch_form_contract():
-    # Shared key refs survive unbinding one endpoint; the global value is derived
-    # from the bindings (no new spec field) whenever st.bindings is replaced.
-    assert "const used = refsInUse(slotKey);" in LAUNCH
-    assert "bindingSecretRefs(st.globalModel)" in LAUNCH
-    assert "if (st.globalBindingsRef === st.bindings) return;" in LAUNCH
-    assert "st.globalModel = commonEndpointBinding();" in LAUNCH
-    assert not re.search(r"spec\.global|global_model", LAUNCH)
-    # Clearing never touches the endpoints' bindings.
-    clear = LAUNCH.split("async function setGlobalModel(binding) {", 1)[1].split("st.globalModel = deepCopy(binding);", 1)[0]
-    assert "st.bindings" not in clear

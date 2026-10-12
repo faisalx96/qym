@@ -22,11 +22,12 @@ from qym_platform.db.models import Run, RunItem
 from qym_platform.services import dashboard_summaries as summaries_service
 from test_dashboard_durable_summaries import (
     drain,
-    legacy,
     projected,
 )
-from test_lost_outcome_events import _js_means, _views, emitter, rid  # noqa: F401
-from test_minimize_errors import PASS_VERDICTS, _approx, _node, _principal
+from _support_a1 import share_run_page
+from qym_platform.api import dashboard_stats
+from test_lost_outcome_events import _views, emitter, rid  # noqa: F401
+from test_minimize_errors import _approx, _principal
 
 # h is lower-is-better (the primary metric), q higher-is-better, u declares no
 # direction. Item x fails one of its three passes; the other two score
@@ -37,19 +38,21 @@ EXPECTED = {
     "u": (0.5 + 1.6 / 3) / 2,  # x: (0.8 + 0.8 + 0) / 3
 }
 
-ERROR_COUNTS = """
-const out = {};
-for (const name of input.metrics) {
-  let task = 0, scorer = 0;
-  for (const row of input.rows) {
-    const counts = m.rowMetricErrorCounts(row, name);
-    task += counts.task; scorer += counts.scorer;
-  }
-  out[name] = [task, scorer];
-}
-out.errorRows = input.rows.filter(row => m.isErrorRow(row)).map(row => row.item_id);
-process.stdout.write(JSON.stringify(out));
-"""
+
+def _model_stats(database, run_id, metric, direction):
+    """What the Models page reads: the server's K-run statistics of one run."""
+    drain(database)
+    with Session(database) as db:
+        return dashboard_stats.dashboard_model_stats(
+            {
+                "metric": metric,
+                "threshold": 0.3 if metric == "h" else 0.8,
+                "direction": direction,
+                "groups": [{"key": "g", "runs": [run_id]}],
+            },
+            db=db,
+            principal=_principal(db),
+        )["groups"]["g"]
 
 
 def _run(emitter, name, failed_pass):
@@ -90,27 +93,25 @@ def test_the_same_passes_give_the_same_means_whichever_pass_failed(database, emi
                 payload["execution_count"],
                 payload["execution_success_count"],
             ) == (6, 5), (run_id, name)
-        assert _js_means(snapshot, ["h", "q", "u"]) == _approx(EXPECTED), run_id
-        counts = _node(
-            ERROR_COUNTS, {"rows": snapshot["rows"], "metrics": ["h", "q", "u"]}
+        # The run page (React lib/metrics.ts) reads the same means, and counts the
+        # one failed pass once per metric, whichever pass it was:
+        # frontend/src/features/run-detail/lib/__tests__/cutover-server-payloads.test.ts.
+        share_run_page(
+            "repeat_task_errors_" + ("last" if run_id == last else "first"),
+            snapshot,
+            {
+                "means": EXPECTED,
+                "error_counts": {"h": [1, 0], "q": [1, 0], "u": [1, 0]},
+                "error_rows": ["x"],
+            },
+            samples=3,
         )
-        # One failed pass, counted once per metric; the item has an error
-        # whichever pass it was.
-        assert counts == {
-            "h": [1, 0],
-            "q": [1, 0],
-            "u": [1, 0],
-            "errorRows": ["x"],
-        }, run_id
-        with Session(database) as db:
-            models = runs_api.models_runs_data(
-                files=[run_id], db=db, principal=_principal(db)
-            )["runs"][0]
-        verdicts = _node(PASS_VERDICTS, {"run": models})
-        assert verdicts["h"]["avgScore"] == pytest.approx(EXPECTED["h"]), run_id
-        assert verdicts["q"]["avgScore"] == pytest.approx(EXPECTED["q"]), run_id
+        h = _model_stats(database, run_id, "h", "minimize")
+        q = _model_stats(database, run_id, "q", "maximize")
+        assert h["avgScore"] == pytest.approx(EXPECTED["h"]), run_id
+        assert q["avgScore"] == pytest.approx(EXPECTED["q"]), run_id
         # x errored on h (lower is better): it never passes, on either run.
-        assert verdicts["h"]["failed"] == 1, run_id
+        assert h["failedCount"] == 1, run_id
 
 
 def test_root_cause_and_insight_verdicts_judge_repeat_items_per_pass(
@@ -171,44 +172,33 @@ def test_pass_means_follow_the_pass_that_failed(database, emitter):
 def test_group_analysis_pass_rows_judge_each_pass_by_its_own_outcome(database, emitter):
     """dashboard.js expands a repeat run into one pseudo-run per pass: a pass
     that succeeded is not a task error because the item's last pass failed."""
-    from pathlib import Path
-
     last = _run(emitter, "fails-last", 3)
     with Session(database) as db:
         data = runs_api.legacy_run_data(last, db=db, principal=_principal(db))
-    dashboard_js = (
-        Path(__file__).resolve().parents[2]
-        / "packages/platform/qym_platform/_static/dashboard/dashboard.js"
+    # The React compare/run libraries expand a repeat run into one pseudo-run per
+    # pass (run-detail scopeRowToPass): item x reads completed, completed, error,
+    # with the scores below, whichever pass failed last.
+    share_run_page(
+        "repeat_task_errors_pass_rows",
+        data["snapshot"],
+        {
+            "pass_rows": {
+                "item_id": "x",
+                "status": ["completed", "completed", "error"],
+                "q": [
+                    {"score": 1.0, "isError": False},
+                    {"score": 1.0, "isError": False},
+                    {"score": 0, "isError": True},
+                ],
+                "h": [
+                    {"score": 0.4, "isError": False},
+                    {"score": 0.4, "isError": False},
+                    {"score": None, "isError": True},
+                ],
+            }
+        },
+        samples=3,
     )
-    source = dashboard_js.read_text()
-    start = source.index("  function expandSampledRunsData(runsData) {")
-    end = source.index("\n  }\n", start) + 4
-    script = (
-        "const expand = (function () {\n"
-        + source[start:end]
-        + "\nreturn expandSampledRunsData; })();\n"
-        "globalThis.window = { QymMetrics: m };\n"
-        "const runs = expand([input.data]);\n"
-        "process.stdout.write(JSON.stringify(runs.map(rd => {\n"
-        "  const row = rd.snapshot.rows.find(r => r.item_id === 'x');\n"
-        "  const specs = rd.snapshot.metric_specs || {};\n"
-        "  return { status: row.status,\n"
-        "    q: m.getRowScore(row, 1, 'q', m.metricDirection(specs.q)),\n"
-        "    h: m.getRowScore(row, 0, 'h', m.metricDirection(specs.h)) };\n"
-        "})));"
-    )
-    out = _node(script, {"data": data})
-    assert [entry["status"] for entry in out] == ["completed", "completed", "error"]
-    assert [entry["q"] for entry in out] == [
-        {"score": 1.0, "isError": False},
-        {"score": 1.0, "isError": False},
-        {"score": 0, "isError": True},
-    ]
-    assert [entry["h"] for entry in out] == [
-        {"score": 0.4, "isError": False},
-        {"score": 0.4, "isError": False},
-        {"score": None, "isError": True},
-    ]
 
 
 def test_published_repeat_summaries_are_refreshed_without_reading_source_rows(
@@ -277,16 +267,15 @@ def test_models_reads_a_reviewed_repeat_item_per_pass_whichever_pass_failed(
     views, snapshot = _views(database, last)
     for name, payload in views.items():
         assert payload["metric_averages"] == _approx(expected), name
-    assert _js_means(snapshot, ["h", "q", "u"]) == _approx(expected)
-    run_page = _node(ERROR_COUNTS, {"rows": snapshot["rows"], "metrics": ["h", "q"]})
-    with Session(database) as db:
-        models = runs_api.models_runs_data(
-            files=[last], db=db, principal=_principal(db)
-        )["runs"][0]
-    verdicts = _node(PASS_VERDICTS, {"run": models})
-    assert verdicts["h"]["avgScore"] == pytest.approx(expected["h"])
-    assert verdicts["q"]["avgScore"] == pytest.approx(expected["q"])
+    share_run_page(
+        "repeat_task_errors_reviewed",
+        snapshot,
+        {"means": expected, "error_counts": {"h": [1, 0], "q": [1, 0]}},
+        samples=3,
+    )
+    h = _model_stats(database, last, "h", "minimize")
+    q = _model_stats(database, last, "q", "maximize")
+    assert h["avgScore"] == pytest.approx(expected["h"])
+    assert q["avgScore"] == pytest.approx(expected["q"])
     # Its failed pass still counts as one error, as on the run page.
-    assert [verdicts[m]["failed"] for m in ("h", "q")] == [
-        sum(run_page[m]) for m in ("h", "q")
-    ]
+    assert [h["failedCount"], q["failedCount"]] == [1, 1]

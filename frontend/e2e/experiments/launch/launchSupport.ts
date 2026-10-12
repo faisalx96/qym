@@ -11,7 +11,7 @@ import {
   type SeededEnv,
 } from '../support';
 
-export const APP_BASE = '/app';
+export const APP_BASE = '';
 export const launchUrl = (slug: string, q = '') => `/projects/${slug}/experiments/new${q}`;
 
 export async function createDataset(

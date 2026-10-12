@@ -62,7 +62,7 @@ export async function seedLocked(s: Seeded): Promise<string> {
 }
 
 export function runUrl(slug: string, runId: string, query = ''): string {
-  return `/app/projects/${slug}/runs/${runId}${query ? (query.startsWith('?') ? query : `?${query}`) : ''}`;
+  return `/projects/${slug}/runs/${runId}${query ? (query.startsWith('?') ? query : `?${query}`) : ''}`;
 }
 
 /** Open the run page and wait until the items table has rendered. */
@@ -122,7 +122,8 @@ export function settleDashboard(): void {
   const repoVenv = path.join(repo, '.venv', 'bin', 'python');
   const python =
     process.env.QYM_E2E_PYTHON ?? process.env.QYM_PYTHON ?? (fs.existsSync(repoVenv) ? repoVenv : 'python');
-  const db = process.env.QYM_E2E_DB_URL ?? `sqlite:///${path.resolve(here, '..', '..', '.qym-e2e.db')}`;
+  const db = process.env.QYM_E2E_DB_URL ??
+    `sqlite:///${process.env.QYM_E2E_DB ?? path.resolve(here, '..', '..', '.qym-e2e.db')}`;
   execFileSync(python, [path.join(here, 'dashboard_tick.py')], {
     cwd: repo,
     stdio: 'pipe',

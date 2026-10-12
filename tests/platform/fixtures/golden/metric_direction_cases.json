@@ -1,0 +1,78 @@
+{
+ "cases": [
+  [
+   null,
+   null
+  ],
+  [
+   {},
+   null
+  ],
+  [
+   {
+    "direction": null,
+    "score_type": "boolean"
+   },
+   null
+  ],
+  [
+   {
+    "direction": "maximize",
+    "score_type": "legacy"
+   },
+   null
+  ],
+  [
+   {
+    "direction": "minimize",
+    "score_type": "legacy"
+   },
+   "minimize"
+  ],
+  [
+   {
+    "direction": "maximize",
+    "score_type": "percentage"
+   },
+   "maximize"
+  ],
+  [
+   {
+    "direction": "minimize",
+    "score_type": "boolean"
+   },
+   "minimize"
+  ],
+  [
+   {
+    "direction": "sideways",
+    "score_type": "count"
+   },
+   null
+  ],
+  [
+   {
+    "direction": "maximize",
+    "schema_version": 1,
+    "score_type": "legacy"
+   },
+   null
+  ],
+  [
+   {
+    "direction": "maximize",
+    "schema_version": 2,
+    "score_type": "legacy"
+   },
+   "maximize"
+  ],
+  [
+   {
+    "direction": null,
+    "schema_version": 2,
+    "score_type": "legacy"
+   },
+   null
+  ]
+ ]
+}

@@ -19,7 +19,7 @@ test.beforeEach(async ({ request }) => {
   f = await seedLaunch(request);
 });
 
-const editorUrl = (envId: string, q = '') => `/app/projects/${f.project.slug}/environments/${envId}/default-preset/edit${q}`;
+const editorUrl = (envId: string, q = '') => `/projects/${f.project.slug}/environments/${envId}/default-preset/edit${q}`;
 
 async function versionsOf(request: APIRequestContext, envId: string, kind: 'official' | 'saved'): Promise<any[]> {
   const preset = (await listPresets(request, f.project.id, envId)).find((p) => p.kind === kind)!;
@@ -78,7 +78,7 @@ test('an environment without a default preset publishes v1', async ({ page, requ
 test('promote a saved preset to the default preset', async ({ page, request }) => {
   const saved = (await listPresets(request, f.project.id, f.env.id)).find((p) => p.kind === 'saved')!;
   // From the environment page, as a manager would.
-  await page.goto(`/app/projects/${f.project.slug}/environments/${f.env.id}`);
+  await page.goto(`/projects/${f.project.slug}/environments/${f.env.id}`);
   await page.getByRole('button', { name: /^Promote Slow timeout to default preset/ }).click();
   await expect(page).toHaveURL(new RegExp(`default-preset/edit\\?.*promote=saved.*id=${saved.id}|default-preset/edit\\?.*id=${saved.id}.*promote=saved`));
   await expect(pane(page)).toContainText('Compared with');

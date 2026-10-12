@@ -1,6 +1,6 @@
 /**
  * Dev-only mock route registry. An area's design agent registers its variants
- * here; each one is reachable at /app/__mock/<area>/<variant> on the dev
+ * here; each one is reachable at /__mock/<area>/<variant> on the dev
  * server. Entries are tree-shaken out of production builds (import.meta.env.DEV).
  */
 import type { ComponentType, LazyExoticComponent } from 'react';

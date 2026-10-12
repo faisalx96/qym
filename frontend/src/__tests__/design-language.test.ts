@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FRONTEND = join(SRC, '..');
-const REPO = join(FRONTEND, '..');
 
 const read = (p: string) => readFileSync(p, 'utf-8');
 const rel = (p: string) => relative(SRC, p);
@@ -89,18 +88,6 @@ describe('typography tokens', () => {
     }
     const shell = read(join(SRC, 'styles/shell.css'));
     for (const decl of ['--shell-font-sm: 13px', '--shell-font-md: 15px']) expect(shell).toContain(decl);
-  });
-
-  it('matches the legacy dashboard.css :root token for token', () => {
-    const legacy = read(join(REPO, 'packages/platform/qym_platform/_static/dashboard/dashboard.css'));
-    const ours = read(join(SRC, 'styles/tokens.css'));
-    const decls = (text: string) =>
-      new Map([...text.matchAll(/^\s*(--[\w-]+):\s*([^;]+);/gm)].map((m) => [m[1]!, m[2]!.trim()]));
-    const legacyRoot = decls(
-      legacy.slice(legacy.indexOf(':root {'), legacy.indexOf('}', legacy.indexOf(':root {'))),
-    );
-    const ourTokens = decls(ours);
-    for (const [name, value] of legacyRoot) expect(ourTokens.get(name), `token ${name} drifted`).toBe(value);
   });
 
   it('defines the shared scale in one place only', () => {
@@ -315,6 +302,6 @@ describe('documentation wiring', () => {
   it('README points at the design language', () => {
     const readme = read(join(FRONTEND, 'README.md'));
     expect(readme).toContain('docs/DESIGN_LANGUAGE.md');
-    expect(readme).toContain('/app/__ui');
+    expect(readme).toContain('/__ui');
   });
 });

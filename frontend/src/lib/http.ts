@@ -76,7 +76,7 @@ export function classifyError(error: unknown): ClassifiedError {
   return { kind, status, message, detail };
 }
 
-/** `{root}/app/login?next=<current app path>` (or a custom next). */
+/** `{root}/login?next=<current app path>` (or a custom next). */
 export function loginUrl(next?: string): string {
   const target = next ?? `${window.location.pathname}${window.location.search}`;
   return `${appUrl('/login')}?next=${encodeURIComponent(target)}`;

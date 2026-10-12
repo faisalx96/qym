@@ -58,7 +58,7 @@ test.describe('detail: versions and URL', () => {
     await expect.poll(() => query(page).get('v')).toBe('v1');
   });
 
-  test('[BUG] version switcher navigates in-app (no reload, stays under /app)', async ({ page, request }) => {
+  test('[BUG] version switcher navigates in-app (no reload, stays in the app)', async ({ page, request }) => {
     const { p, d } = await seed(request, 'switch');
     const v1 = await draftWithItems(request, p.slug, d, 3);
     await publishVersion(request, p.slug, d.slug, v1.version, true);
@@ -68,7 +68,7 @@ test.describe('detail: versions and URL', () => {
     const loads = trackPageLoads(page);
     await page.getByTestId('version-switcher').click();
     await page.getByRole('option', { name: /v2/ }).click();
-    await expect(page).toHaveURL(/\/app\/projects\/.*v=v2/);
+    await expect(page).toHaveURL(/\/projects\/.*v=v2/);
     await expect(page.getByTestId('version-switcher')).toContainText('v2');
     await expect(page.getByRole('tab', { name: /Items/ })).toContainText('4');
     expect(loads.count()).toBe(0);
@@ -443,13 +443,13 @@ test.describe('item page', () => {
 });
 
 test.describe('detail: links', () => {
-  test('[BUG] "forked from" meta link stays under /app without a full reload', async ({ page, request }) => {
+  test('[BUG] "forked from" meta link stays in the app without a full reload', async ({ page, request }) => {
     const { p, d } = await seed(request, 'forklink');
     const v1 = await draftWithItems(request, p.slug, d, 2);
     await publishVersion(request, p.slug, d.slug, v1.version, true);
     await createVersion(request, p.slug, d.slug, { from_version: 'v1' });
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?v=v2`);
     const link = page.getByRole('link', { name: 'v1', exact: true }).first();
-    await expect(link).toHaveAttribute('href', /^\/app\/projects\//);
+    await expect(link).toHaveAttribute('href', /^\/projects\//);
   });
 });
