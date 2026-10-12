@@ -2,7 +2,7 @@
  * UI state shared by the item rows and cards (text mode, hidden metadata fields,
  * expansion) and the trace drawer, hosted once around the list and the Sweep dialog.
  */
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getTextMode, type TextMode } from '@/lib/text';
 import { useSearchParamsState } from '@/lib/url-state';
 import { useCompare } from '../../CompareContext';
@@ -40,6 +40,8 @@ export function ItemsUiHost({ children }: { children: ReactNode }) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(c.view.item ? [c.view.item] : []));
 
+  // The item ?item= currently names. A ref, not c.view.item: the URL lags a fast open-then-close.
+  const named = useRef<string | null>(c.view.item);
   const toggleExpanded = useCallback(
     (itemId: string, open?: boolean) => {
       const want = open ?? !expanded.has(itemId);
@@ -50,10 +52,15 @@ export function ItemsUiHost({ children }: { children: ReactNode }) {
         return next;
       });
       // ?item= names the open item (the last one opened); closing it drops the param.
-      if (want) replaceUrlQuery({ item: itemId });
-      else if (c.view.item === itemId) replaceUrlQuery({ item: null });
+      if (want) {
+        named.current = itemId;
+        replaceUrlQuery({ item: itemId });
+      } else if (named.current === itemId) {
+        named.current = null;
+        replaceUrlQuery({ item: null });
+      }
     },
-    [expanded, replaceUrlQuery, c.view.item],
+    [expanded, replaceUrlQuery],
   );
 
   // ?trace=<item_id>[&traceRun=<base run id>][&tracePass=N]

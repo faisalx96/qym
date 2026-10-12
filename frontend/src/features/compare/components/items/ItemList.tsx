@@ -69,9 +69,17 @@ export function ItemList() {
     if (scrolled.current === target) return;
     scrolled.current = target;
     ui.toggleExpanded(target, true);
-    const land = () => document.getElementById(`item-${target}`)?.scrollIntoView({ block: 'start' });
+    // Land once; the second pass only corrects a layout shift (details loading) and
+    // never fights a reader who has scrolled since.
+    let landedAt: number | null = null;
+    const land = () => {
+      document.getElementById(`item-${target}`)?.scrollIntoView({ block: 'start' });
+      landedAt = window.scrollY;
+    };
     requestAnimationFrame(land);
-    window.setTimeout(land, 400);
+    window.setTimeout(() => {
+      if (landedAt === null || Math.abs(window.scrollY - landedAt) < 2) land();
+    }, 400);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, items, clamped]);
 
@@ -102,7 +110,11 @@ export function ItemList() {
                 type="button"
                 className={styles.row}
                 aria-expanded={open}
-                onClick={() => ui.toggleExpanded(item.itemId)}
+                onClick={() => {
+                  // A row the reader opened is not a deep link to scroll to when the URL catches up.
+                  scrolled.current = item.itemId;
+                  ui.toggleExpanded(item.itemId);
+                }}
               >
                 <span className={styles.srOnly}>Item {index}: </span>
                 <span className={styles.index} aria-hidden>

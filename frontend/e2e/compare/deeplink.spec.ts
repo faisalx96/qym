@@ -55,7 +55,7 @@ test('?item= lands on the item\'s page, expands it and scrolls it into view once
   await waitLoaded(page);
   expect(urlParams(page).get('page')).toBe('2');
   await expect(page.locator('[data-testid="item-row"][data-item-id="cmp-040"]').getByTestId('item-detail')).toBeVisible();
-  // BUG (see report): the row is expanded but never scrolled into view (window scrollY stays ~50).
+  // The late layout-shift correction must not re-scroll a reader who moved away.
   await expect.poll(() => inViewport(page, '#item-cmp-040'), { timeout: 4000 }).toBe(true);
   // once: scrolling away is not undone
   await page.evaluate(() => window.scrollTo(0, 0));
