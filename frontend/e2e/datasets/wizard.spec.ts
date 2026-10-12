@@ -60,6 +60,24 @@ test.describe('upload wizard', () => {
     await expect(page.locator('[data-dataset-card=wizard-imported]')).toContainText('3');
   });
 
+  test('a 6,000-row CSV is parsed off the main thread: UI stays responsive and the import lands', async ({ page, request }) => {
+    const p = await createProject(request, 'Wizard Big', uniqueSlug('wzbig'));
+    await createDataset(request, p.slug, 'Seed Big');
+    const rows = ['question,answer'];
+    for (let i = 0; i < 6000; i++) rows.push(`"Question number ${i}, with a comma","Answer ${i}"`);
+    const csv = tmpFile('big.csv', rows.join('\n') + '\n');
+    const dialog = await openNewWizard(page, p.slug);
+    await dialog.locator('#wizard-file').setInputFiles(csv);
+    await dialog.getByRole('textbox', { name: /^Name/ }).fill('Big Import');
+    await expect(dialog.getByText('Detected format:')).toContainText('6,000 rows');
+    await dialog.getByTestId('wizard-next').click();
+    await dialog.getByTestId('wizard-next').click();
+    await expect(dialog.locator('table').last().locator('tbody tr')).toHaveCount(10); // preview is capped
+    await dialog.getByTestId('wizard-next').click();
+    await expect(dialog).toBeHidden({ timeout: 30_000 });
+    await expect(page.getByText(/Dataset "Big Import" created · 6,000 items/)).toBeVisible();
+  });
+
   test('required Input column: clearing it blocks Continue on the mapping step', async ({ page, request }) => {
     const p = await createProject(request, 'Wizard Map', uniqueSlug('wzmap'));
     await createDataset(request, p.slug, 'Seed Two');

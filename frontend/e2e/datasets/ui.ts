@@ -1,10 +1,10 @@
 /** Shared UI helpers for the datasets / reviews / trash e2e specs. */
 import { expect, type Locator, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-
-export const TMP_DIR = '/tmp/claude-1000/-home-meshari-aldossari-Documents-qym-qym/61846e82-dc0e-402d-b3ec-d3565a3b1b04/scratchpad/dsx-test';
+export const TMP_DIR = path.join(tmpdir(), 'qym-e2e-uploads');
 
 export function tmpFile(name: string, content: string | Buffer): string {
   mkdirSync(TMP_DIR, { recursive: true });
