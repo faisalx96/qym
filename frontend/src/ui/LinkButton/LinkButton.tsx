@@ -11,7 +11,7 @@ export interface LinkButtonProps extends Omit<AnchorHTMLAttributes<HTMLAnchorEle
   variant?: ButtonVariant;
   size?: ButtonSize;
   icon?: ReactNode;
-  /** Renders an inert aria-disabled link (no href, so nothing navigates). */
+  /** Renders an inert aria-disabled link (focusable, no href, so nothing navigates). */
   isDisabled?: boolean;
   children?: ReactNode;
 }
@@ -34,6 +34,7 @@ export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(functio
         ref={ref}
         role="link"
         aria-disabled="true"
+        tabIndex={0}
         className={cls}
         data-variant={variant}
         data-size={size}

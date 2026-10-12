@@ -18,6 +18,7 @@ import {
   useToast,
   Dialog,
   HelpMarker,
+  JsonTree,
   LinkButton,
   ScoreValue,
 } from '@/ui';
@@ -262,10 +263,11 @@ describe('status primitives', () => {
 });
 
 describe('Button and LinkButton states', () => {
-  it('a loading Button is disabled', () => {
+  it('a loading Button is disabled and announces Loading', () => {
     render(<Button loading>Save</Button>);
     const btn = screen.getByRole('button', { name: 'Save' });
     expect(btn).toBeDisabled();
+    expect(within(btn).getByText('Loading')).toHaveTextContent('Loading');
   });
 
   it('a disabled LinkButton is aria-disabled and is inert', async () => {
@@ -280,6 +282,8 @@ describe('Button and LinkButton states', () => {
     const link = screen.getByRole('link', { name: 'Open' });
     expect(link).toHaveAttribute('aria-disabled', 'true');
     expect(link).not.toHaveAttribute('href');
+    link.focus();
+    expect(link).toHaveFocus();
   });
 });
 
@@ -313,5 +317,12 @@ describe('Toast', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('JsonViewer strings', () => {
+  it('carry dir=auto', () => {
+    const { container } = render(<JsonTree data={{ q: 'مرحبا' }} />);
+    expect(container.querySelector('[dir="auto"]')).toHaveTextContent('مرحبا');
   });
 });

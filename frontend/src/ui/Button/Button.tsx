@@ -36,7 +36,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...rest}
     >
       {loading ? (
-        <span className={styles.spinner} aria-hidden="true" />
+        <>
+          <span className={styles.spinner} aria-hidden="true" />
+          <span className={styles.srOnly}>Loading</span>
+        </>
       ) : icon ? (
         <span className={styles.icon}>{icon}</span>
       ) : null}

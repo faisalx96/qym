@@ -37,7 +37,11 @@ function Value({ value }: { value: unknown }) {
   if (value === null) return <span className={styles.null}>null</span>;
   switch (typeof value) {
     case 'string':
-      return <span className={styles.string}>"{value}"</span>;
+      return (
+        <span className={styles.string} dir="auto">
+          "{value}"
+        </span>
+      );
     case 'number':
       return <span className={styles.number}>{String(value)}</span>;
     case 'boolean':
