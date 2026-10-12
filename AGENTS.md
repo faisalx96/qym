@@ -11,7 +11,7 @@ This is a monorepo with two independently-buildable packages under `packages/`:
   - `metrics/`: built-ins and registry for custom metrics
   - `adapters/`: task adapters (functions, LangChain/OpenAI)
   - `platform/`: platform client and defaults
-  - `utils/`: errors and HTML/HTTP frontend helpers
+  - `utils/`: errors, env and text helpers
   - `server/`: local UIServer (offline viewer: live run SSE + saved .csv/.xlsx files)
   - `cli/`: agent-native CLI package (Typer-based, noun-verb subcommands)
   - `_static/ui/`: the offline local run viewer (build output of `frontend/`, gitignored)

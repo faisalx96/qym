@@ -250,8 +250,8 @@ Regression spot-check (about 25 OK rows: search incl. Arabic, status filter, sor
 
 Still broken (new findings from the re-review):
 
-- **R1 (minor, BUGGY)** Idle `qym ui` (no file) shows a red error banner "The connection to the evaluation closed unexpectedly. Reload" above the new "No evaluation is running here" message, and a "NO RUN" badge. Repro: `qym ui --port 8838 --no-open`, open `/`. Expected: only the idle message. Hint: in `use-viewer-data.ts` skip opening the stream (or treat `connection==='closed'`) when `api/run` returns `{"live": false}`, and gate the banners at `App.tsx` on a live run.
-- **R2 (minor, BUGGY)** `AGENTS.md:14` still says `utils/` holds "errors and HTML/HTTP frontend helpers" (no such helpers exist). Reword to "errors, env and text helpers".
-- **R3 (low, CHANGED)** With `qym --json run create ... --local-ui --ui-port <busy>` the busy-port warning is not printed to stderr (json mode swallows it); the run still gets a free port and `local_ui_url`. Acceptable, noted.
+- **R1 (minor, FIXED)** Idle `qym ui` (no file) shows a red error banner "The connection to the evaluation closed unexpectedly. Reload" above the new "No evaluation is running here" message, and a "NO RUN" badge. Repro: `qym ui --port 8838 --no-open`, open `/`. Expected: only the idle message. Hint: in `use-viewer-data.ts` skip opening the stream (or treat `connection==='closed'`) when `api/run` returns `{"live": false}`, and gate the banners at `App.tsx` on a live run.
+- **R2 (minor, FIXED)** `AGENTS.md:14` still says `utils/` holds "errors and HTML/HTTP frontend helpers" (no such helpers exist). Reword to "errors, env and text helpers".
+- **R3 (low, FIXED: the warning already reaches stderr in --json mode; pytest added)** With `qym --json run create ... --local-ui --ui-port <busy>` the busy-port warning is not printed to stderr (json mode swallows it); the run still gets a free port and `local_ui_url`. Acceptable, noted.
 
 Counts: verified fixed 14 (of 16 fix-list items; 2 deferred by agreement), still broken 2 (R1, R2), regressions 0.

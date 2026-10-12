@@ -402,6 +402,30 @@ class TestCliWiring:
         )
         assert "local_ui" not in seen
 
+    def test_busy_port_warning_reaches_stderr_in_json_mode(self, static_dir, tmp_path, monkeypatch):
+        import socket
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "t.py").write_text("def f(input):\n    return input\n", encoding="utf-8")
+        (tmp_path / "d.csv").write_text("input,expected_output\na,A\n", encoding="utf-8")
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen(1)
+        busy = blocker.getsockname()[1]
+        try:
+            result = CliRunner().invoke(
+                app,
+                [
+                    "--json", "run", "create", "--task-file", "t.py", "--task-function", "f",
+                    "--dataset-file", "d.csv", "--metrics", "exact_match",
+                    "--local-ui", "--ui-port", str(busy), "--no-open",
+                ],
+            )
+        finally:
+            blocker.close()
+        assert f"Port {busy} is in use" in result.output
+        assert f"Port {busy} is in use" not in result.stdout.split("{", 1)[-1]
+
     def test_ui_command_reports_missing_file(self, tmp_path):
         result = CliRunner().invoke(app, ["ui", str(tmp_path / "nope.csv"), "--no-open"])
         assert result.exit_code == 3

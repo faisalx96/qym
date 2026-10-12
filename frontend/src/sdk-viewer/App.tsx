@@ -66,7 +66,7 @@ function Header({ data }: { data: ViewerData }) {
         {run.status === 'STOPPED' ? 'Stopped' : 'Completed'}
       </Badge>
     );
-  else if (data.noLiveRun) badge = <Badge tone="neutral">No run</Badge>;
+  else if (data.noLiveRun) badge = <></>;
   else if (data.connection === 'reconnecting') badge = <Badge tone="warning">Reconnecting</Badge>;
   else if (data.connection === 'live')
     badge = (
@@ -251,12 +251,12 @@ export function App() {
         {loaded ? (
           <h1 className={s.srOnly}>{data.run.run_name || data.run.dataset_name || 'Evaluation results'}</h1>
         ) : null}
-        {live && !data.finished && data.connection === 'reconnecting' ? (
+        {live && !data.noLiveRun && !data.finished && data.connection === 'reconnecting' ? (
           <Notice tone="warning" action={{ label: 'Reload', run: data.reload }}>
             Lost the connection to the evaluation. Retrying automatically; the run may have stopped.
           </Notice>
         ) : null}
-        {live && !data.finished && data.connection === 'closed' ? (
+        {live && !data.noLiveRun && !data.finished && data.connection === 'closed' ? (
           <Notice tone="error" action={{ label: 'Reload', run: data.reload }}>
             The connection to the evaluation closed unexpectedly.
           </Notice>

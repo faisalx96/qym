@@ -110,7 +110,9 @@ test.describe('landmarks and idle viewer', () => {
     await expect(page.getByRole('heading', { name: 'No evaluation is running here' })).toBeVisible();
     await expect(page.getByText('qym ui FILE')).toBeVisible();
     await expect(page.getByText('Live', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('No run', { exact: true })).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.getByText('closed unexpectedly')).toHaveCount(0);
+    await expect(page.getByText('No run', { exact: true })).toHaveCount(0);
   });
 });
 
