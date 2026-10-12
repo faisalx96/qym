@@ -21,6 +21,8 @@ export interface MatrixCardProps {
   onShowAttempts: (job: ExperimentJob) => void;
   flows: ExperimentFlows;
   canControl: boolean;
+  /** Any project member may save a job's configuration as a preset (the server only asks for access). */
+  canSavePreset: boolean;
   canPromote: boolean;
   onPromote: (job: ExperimentJob) => void;
 }
@@ -36,6 +38,7 @@ export function MatrixCard({
   onShowAttempts,
   flows,
   canControl,
+  canSavePreset,
   canPromote,
   onPromote,
 }: MatrixCardProps) {
@@ -104,6 +107,7 @@ export function MatrixCard({
                           onShowAttempts={onShowAttempts}
                           flows={flows}
                           canControl={canControl}
+                          canSavePreset={canSavePreset}
                           canPromote={canPromote}
                           onPromote={onPromote}
                         />
@@ -133,6 +137,8 @@ interface CellProps {
   onShowAttempts: (job: ExperimentJob) => void;
   flows: ExperimentFlows;
   canControl: boolean;
+  /** Any project member may save a job's configuration as a preset (the server only asks for access). */
+  canSavePreset: boolean;
   canPromote: boolean;
   onPromote: (job: ExperimentJob) => void;
 }
@@ -148,6 +154,7 @@ function MatrixCell({
   onShowAttempts,
   flows,
   canControl,
+  canSavePreset,
   canPromote,
   onPromote,
 }: CellProps) {
@@ -230,7 +237,7 @@ function MatrixCell({
         ) : null}
         <Button
           variant="neutral"
-          isDisabled={Boolean(presetReason) || !canControl}
+          isDisabled={Boolean(presetReason) || !canSavePreset}
           onPress={() => flows.savePreset(job)}
           aria-label={`Save as preset: ${comboLabel} on ${env.name}`}
           data-exp-save-preset={job.id}
