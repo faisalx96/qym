@@ -38,6 +38,7 @@ export function ItemsSection({
   const hiddenMetricFields = useMemo(() => new Set(view.hideMetricFields), [view.hideMetricFields]);
   const { itemParam, setItemParam, setTraceParam } = api;
 
+  const handled = useRef<string | null>(null);
   const toggleExpanded = useCallback(
     (itemId: string, open?: boolean) => {
       setExpanded((prev) => {
@@ -48,6 +49,8 @@ export function ItemsSection({
         return next;
       });
       const willOpen = open ?? !expanded.has(itemId);
+      // A click is not a deep link: don't scroll or highlight the row the reader just opened.
+      if (willOpen) handled.current = itemId;
       if (willOpen) setItemParam(itemId);
       else if (itemParam === itemId) setItemParam(null);
     },
@@ -55,9 +58,12 @@ export function ItemsSection({
   );
 
   // Deep link: ?item=ID opens that item on the right page and scrolls it into view with a highlight.
-  const handled = useRef<string | null>(null);
   useEffect(() => {
-    if (!itemParam || handled.current === itemParam) return;
+    if (!itemParam) {
+      handled.current = null;
+      return;
+    }
+    if (handled.current === itemParam) return;
     const exists = model.rows.some((r) => r.item_id === itemParam);
     if (!exists) return;
     const idx = items.findIndex((i) => i.row.item_id === itemParam);
@@ -76,9 +82,14 @@ export function ItemsSection({
     setExpanded((prev) => new Set(prev).add(itemParam));
     setScrollTarget(itemParam);
     setHighlight(itemParam);
+  }, [itemParam, items, model.rows, view, api]);
+
+  // Its own effect: the deep-link effect re-runs on every page/filter change and must not cancel the timer.
+  useEffect(() => {
+    if (!highlight) return undefined;
     const t = setTimeout(() => setHighlight(null), HIGHLIGHT_MS);
     return () => clearTimeout(t);
-  }, [itemParam, items, model.rows, view, api]);
+  }, [highlight]);
 
   const openTrace = useCallback(
     (itemId: string, pass: number | null) => setTraceParam(itemId, pass),

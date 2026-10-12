@@ -33,6 +33,10 @@ export function CsvExport() {
       const current = qc.getQueryData<RunPayload>(runKeys.compact(runId));
       const byId = new Map((current?.snapshot.rows ?? []).map((r) => [r.item_id, r]));
       const full = ids.map((id) => byId.get(id)).filter((r): r is Row => !!r);
+      // ensure() settles even when a batch failed; an export of preview-only rows would be silently wrong.
+      if (current?.snapshot.detail_mode === 'lazy' && full.some((r) => r.__details_loaded !== true)) {
+        throw new Error('item bodies missing');
+      }
       setRows(full);
       const cols = discoverColumns(full, model);
       setSelected(new Set(cols.map((c) => c.id)));

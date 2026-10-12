@@ -40,9 +40,13 @@ test.describe('open an item (scenario 6, J6)', () => {
     await itemButton(page, 2).click();
     const c = card(page, 'item-0002');
     await expect(c).toBeVisible();
-    await expect(c.getByText('Question 2: what does clause 1 of the finance policy require?').first()).toBeVisible();
+    await expect(
+      c.getByText('Question 2: what does clause 1 of the finance policy require?').first(),
+    ).toBeVisible();
     await expect(c.getByText('Clause 1 requires written approval.')).toBeVisible();
-    await expect(c.locator('[data-kind=output]')).toContainText('Clause 1 requires written approval from the finance lead');
+    await expect(c.locator('[data-kind=output]')).toContainText(
+      'Clause 1 requires written approval from the finance lead',
+    );
     for (const m of ['exact_match', 'quality', 'hallucination', 'tokens_used']) {
       await expect(c.locator(`[role=listitem][data-metric="${m}"]`)).toBeVisible();
     }
@@ -87,6 +91,34 @@ test.describe('open an item (scenario 6, J6)', () => {
     expect(params(page).get('item')).toBe('item-0100');
   });
 
+  test('the deep-link highlight clears even when the page changes under it, and a click does not highlight', async ({
+    page,
+  }) => {
+    await openRun(page, s.slug, classic, 'item=item-0100');
+    const row = page.locator('[data-item-id="item-0100"][data-open]');
+    await expect(row).toHaveAttribute('data-highlight', 'true');
+    await expect(row).not.toHaveAttribute('data-highlight', 'true', { timeout: 6000 });
+    await openRun(page, s.slug, classic);
+    await itemButton(page, 4).click();
+    await expect(card(page, 'item-0004')).toBeVisible();
+    await expect(page.locator('[data-item-id="item-0004"][data-highlight]')).toHaveCount(0);
+  });
+
+  test('in-page URL changes (analysis tab, opening an item) keep the scroll position', async ({ page }) => {
+    await openRun(page, s.slug, classic);
+    await page.evaluate(() => {
+      document.getElementById('shell-content')!.scrollTop = 300;
+    });
+    await expect.poll(() => scrollTop(page)).toBe(300);
+    await page.getByRole('tab', { name: /Errors/ }).click({ force: true });
+    await expect(page).toHaveURL(/panel=errors/);
+    expect(await scrollTop(page)).toBe(300);
+    await itemButton(page, 5).evaluate((el) => (el as HTMLElement).click());
+    await expect(page).toHaveURL(/item=item-0005/);
+    await expect(card(page, 'item-0005')).toBeVisible();
+    expect(await scrollTop(page)).toBe(300);
+  });
+
   test('Copy link copies the deep link of the item', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 2).click();
@@ -116,12 +148,15 @@ test.describe('open an item (scenario 6, J6)', () => {
     await expect(card(page, 'item-0005').locator('[data-kind=output]')).toBeVisible();
     let last = -1;
     await expect
-      .poll(async () => {
-        const now = await scrollTop(page);
-        const stable = now === last;
-        last = now;
-        return stable;
-      }, { intervals: [300] })
+      .poll(
+        async () => {
+          const now = await scrollTop(page);
+          const stable = now === last;
+          last = now;
+          return stable;
+        },
+        { intervals: [300] },
+      )
       .toBe(true);
     const settled = await scrollTop(page);
     await page.waitForTimeout(800);
@@ -159,7 +194,9 @@ test.describe('score edits (scenario 7, J8)', () => {
     await expect(chip.getByRole('textbox')).toHaveCount(0);
     // persisted: survives a reload
     await page.reload();
-    await expect(card(page, 'item-0005').locator('[role=listitem][data-metric=quality]')).toContainText('edited');
+    await expect(card(page, 'item-0005').locator('[role=listitem][data-metric=quality]')).toContainText(
+      'edited',
+    );
     // reset to the scorer value
     const chip2 = card(page, 'item-0005').locator('[role=listitem][data-metric=quality]');
     await chip2.getByRole('button', { name: 'Edit quality score' }).click();
@@ -221,7 +258,14 @@ test.describe('score edits (scenario 7, J8)', () => {
 test.describe('read-only (archived) project', () => {
   test('hides editors and shows the read-only notice', async ({ page, request }) => {
     const p = await seedProject('rd-archived');
-    const id = await seedClassic(p, { items: 12, taskErrors: 1, scorerErrors: 1, retries: 0, notReceived: 0, traced: 1 });
+    const id = await seedClassic(p, {
+      items: 12,
+      taskErrors: 1,
+      scorerErrors: 1,
+      retries: 0,
+      notReceived: 0,
+      traced: 1,
+    });
     const res = await request.post(`/v1/admin/projects/${p.projectId}/archive`);
     expect(res.ok(), await res.text()).toBeTruthy();
     await openRun(page, p.slug, id);
@@ -245,7 +289,10 @@ test.describe('root-cause issues (scenario 9)', () => {
     const dlg = page.getByTestId('issue-dialog');
     await expect(dlg).toBeVisible();
     await dlg.getByRole('button', { name: /Category/ }).click();
-    await page.getByRole('listbox', { name: /Category/ }).getByRole('option', { name: 'Hallucination' }).click();
+    await page
+      .getByRole('listbox', { name: /Category/ })
+      .getByRole('option', { name: 'Hallucination' })
+      .click();
     await expect(dlg.getByRole('button', { name: /Hallucination/ })).toBeVisible();
     await dlg.getByRole('textbox', { name: 'Subcategory' }).fill('wrong clause');
     await dlg.getByRole('textbox', { name: 'Finding' }).fill('The answer cites the wrong clause.');
@@ -275,7 +322,10 @@ test.describe('root-cause issues (scenario 9)', () => {
     await rc.getByRole('button', { name: '+ Add issue' }).click();
     const dlg = page.getByTestId('issue-dialog');
     await dlg.getByRole('button', { name: /Category/ }).click();
-    await page.getByRole('listbox', { name: /Category/ }).getByRole('option', { name: 'New category…' }).click();
+    await page
+      .getByRole('listbox', { name: /Category/ })
+      .getByRole('option', { name: 'New category…' })
+      .click();
     await dlg.getByRole('textbox', { name: 'New category' }).fill('Scoring quirk');
     await dlg.getByRole('textbox', { name: 'Finding' }).fill('Verbatim match too strict.');
     await dlg.getByTestId('issue-save').click();
@@ -319,12 +369,18 @@ test.describe('root-cause issues (scenario 9)', () => {
     await rc.getByRole('button', { name: '+ Add issue' }).click();
     const dlg = page.getByTestId('issue-dialog');
     await dlg.getByRole('button', { name: /Category/ }).click();
-    await page.getByRole('listbox', { name: /Category/ }).getByRole('option', { name: 'New category…' }).click();
+    await page
+      .getByRole('listbox', { name: /Category/ })
+      .getByRole('option', { name: 'New category…' })
+      .click();
     await dlg.getByRole('textbox', { name: 'New category' }).fill('SQL schema');
     await dlg.getByRole('textbox', { name: 'Finding' }).fill('Relation does not exist.');
     await dlg.getByTestId('issue-save').click();
     await expect(rc.getByTestId('issue')).toContainText('Pending review');
-    await rc.getByTestId('issue').getByRole('button', { name: /Approve issue/ }).click();
+    await rc
+      .getByTestId('issue')
+      .getByRole('button', { name: /Approve issue/ })
+      .click();
     await expect(rc.getByTestId('issue')).toContainText('Approved');
   });
 });
