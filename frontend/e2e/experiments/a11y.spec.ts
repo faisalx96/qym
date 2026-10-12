@@ -26,6 +26,7 @@ import {
   seedProject,
   waitForDashboardRuns,
   waitForSubmitted,
+  withFakesLock,
   type ExperimentView,
   type Seeded,
   type SeededEnv,
@@ -46,36 +47,39 @@ let world: World;
 
 test.beforeAll(async ({ request }) => {
   test.setTimeout(180_000);
-  await resetFakes(request);
-  const seeded = await seedProject(request, 'a11y');
-  const { project, connectionId } = seeded;
-  const staging = await createEnvironment(request, project.id, 'staging');
-  const production = await createEnvironment(request, project.id, 'production', { port: FAKE_B });
-  await publishDefaultPreset(request, project.id, staging.id, experimentSpec(connectionId));
-  await saveSavedPreset(request, project.id, staging.id, 'Fast timeouts', experimentSpec(connectionId, 15));
-  const key = await createApiKey(request, project.id);
-  const sweep = await launchExperiment(request, project.id, {
-    name: 'timeout sweep',
-    environment_ids: [staging.id],
-    spec: experimentSpec(connectionId, { sweep: [10, 30, 60] }),
+  // The seeding below resets and drives the shared fake services: hold the lock the tests take.
+  await withFakesLock(async () => {
+    await resetFakes(request);
+    const seeded = await seedProject(request, 'a11y');
+    const { project, connectionId } = seeded;
+    const staging = await createEnvironment(request, project.id, 'staging');
+    const production = await createEnvironment(request, project.id, 'production', { port: FAKE_B });
+    await publishDefaultPreset(request, project.id, staging.id, experimentSpec(connectionId));
+    await saveSavedPreset(request, project.id, staging.id, 'Fast timeouts', experimentSpec(connectionId, 15));
+    const key = await createApiKey(request, project.id);
+    const sweep = await launchExperiment(request, project.id, {
+      name: 'timeout sweep',
+      environment_ids: [staging.id],
+      spec: experimentSpec(connectionId, { sweep: [10, 30, 60] }),
+    });
+    const live = await waitForSubmitted(request, project.id, sweep.id);
+    const jobs = [...live.jobs].sort((a, b) => a.combo_index - b.combo_index);
+    for (const [i, job] of jobs.slice(0, 2).entries()) {
+      await linkRunToJob(request, key, job, sweep.id, `sweep-${i}`);
+      await finishJob(request, project.id, sweep.id, job.id, 'SUCCEEDED');
+    }
+    await pauseEnvironment(request, project.id, production.id, FAKE_B);
+    const held = await launchExperiment(request, project.id, {
+      name: 'held on production',
+      environment_ids: [production.id],
+      spec: experimentSpec(connectionId),
+    });
+    await ingestRun(request, key, { name: 'model-a-1', model: 'model-a', scores: [1, 1] });
+    await ingestRun(request, key, { name: 'model-a-2', model: 'model-a', scores: [1, 1] });
+    await ingestRun(request, key, { name: 'model-b-1', model: 'model-b', scores: [0, 0] });
+    await waitForDashboardRuns(request, project.slug, 5, 'qa');
+    world = { seeded, staging, production, sweep, held };
   });
-  const live = await waitForSubmitted(request, project.id, sweep.id);
-  const jobs = [...live.jobs].sort((a, b) => a.combo_index - b.combo_index);
-  for (const [i, job] of jobs.slice(0, 2).entries()) {
-    await linkRunToJob(request, key, job, sweep.id, `sweep-${i}`);
-    await finishJob(request, project.id, sweep.id, job.id, 'SUCCEEDED');
-  }
-  await pauseEnvironment(request, project.id, production.id, FAKE_B);
-  const held = await launchExperiment(request, project.id, {
-    name: 'held on production',
-    environment_ids: [production.id],
-    spec: experimentSpec(connectionId),
-  });
-  await ingestRun(request, key, { name: 'model-a-1', model: 'model-a', scores: [1, 1] });
-  await ingestRun(request, key, { name: 'model-a-2', model: 'model-a', scores: [1, 1] });
-  await ingestRun(request, key, { name: 'model-b-1', model: 'model-b', scores: [0, 0] });
-  await waitForDashboardRuns(request, project.slug, 5, 'qa');
-  world = { seeded, staging, production, sweep, held };
 });
 
 const pages = (w: World) => [

@@ -27,29 +27,46 @@ const LOCK_STALE_MS = 5 * 60_000;
  * starts by resetting them. Tests that touch them therefore take this lock (an atomic mkdir) so
  * that two workers never reset the fakes under each other; the shell specs still run in parallel.
  */
+export async function acquireFakesLock(): Promise<void> {
+  for (;;) {
+    try {
+      mkdirSync(LOCK);
+      return;
+    } catch {
+      try {
+        if (Date.now() - statSync(LOCK).mtimeMs > LOCK_STALE_MS) rmSync(LOCK, { recursive: true, force: true });
+      } catch {
+        /* released by its owner in the meantime */
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+}
+
+export function releaseFakesLock(): void {
+  rmSync(LOCK, { recursive: true, force: true });
+}
+
+/** Run `fn` (a beforeAll that seeds the fakes) under the same lock the tests take. */
+export async function withFakesLock<T>(fn: () => Promise<T>): Promise<T> {
+  await acquireFakesLock();
+  try {
+    return await fn();
+  } finally {
+    releaseFakesLock();
+  }
+}
+
 export const test = base.extend<{ fakeServicesLock: void }>({
   fakeServicesLock: [
     // Playwright requires the destructuring pattern, even when no fixture is used.
     // eslint-disable-next-line no-empty-pattern
     async ({}, run) => {
-      for (;;) {
-        try {
-          mkdirSync(LOCK);
-          break;
-        } catch {
-          try {
-            if (Date.now() - statSync(LOCK).mtimeMs > LOCK_STALE_MS)
-              rmSync(LOCK, { recursive: true, force: true });
-          } catch {
-            /* released by its owner in the meantime */
-          }
-          await new Promise((r) => setTimeout(r, 150));
-        }
-      }
+      await acquireFakesLock();
       try {
         await run();
       } finally {
-        rmSync(LOCK, { recursive: true, force: true });
+        releaseFakesLock();
       }
     },
     { auto: true, timeout: 15 * 60_000 },
