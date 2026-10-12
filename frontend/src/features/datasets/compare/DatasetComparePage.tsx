@@ -90,7 +90,9 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
       );
   }, [versions.length, head, base, route.head, route.base, route.compareTab, navigate, slug, datasetRef]);
 
-  const showSkeleton = useDelayedPending(dsQuery.isPending || versionsQuery.isPending);
+  const showSkeleton = useDelayedPending(
+    dsQuery.isPending || (Boolean(dsQuery.data) && versionsQuery.isPending),
+  );
   if (showSkeleton && !dataset)
     return (
       <div className={fullWidth}>
