@@ -46,6 +46,22 @@ describe('SettingsSection', () => {
     expect(screen.queryByLabelText('Sql Result Limit')).not.toBeInTheDocument();
   });
 
+  it('says the settings apply to the experiment in launch mode and to the default preset in the editor', () => {
+    const launch = setup(<SettingsSection />);
+    expect(screen.getByText(/applied to every run of this experiment/)).toBeInTheDocument();
+    launch.unmount();
+    setup(<SettingsSection />, undefined, 'editor');
+    expect(screen.queryByText(/every run of this experiment/)).not.toBeInTheDocument();
+    expect(screen.getByText(/saved in the default preset/)).toBeInTheDocument();
+  });
+
+  it('shows the raw setting key next to the label', async () => {
+    const { user } = setup(<SettingsSection />);
+    await openGroup(user, /SQL runner/);
+    const field = screen.getByRole('textbox', { name: 'Sql Result Limit' }).closest('[data-field]') as HTMLElement;
+    expect(within(field).getByText('SQL_RESULT_LIMIT')).toBeInTheDocument();
+  });
+
   it('marks a changed leaf, writes it to the document and resets it', async () => {
     const { user } = setup(<SettingsSection />);
     await openGroup(user, /SQL runner/);

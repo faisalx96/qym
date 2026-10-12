@@ -229,9 +229,12 @@ function leaf(
     ? envsMissing(s.ctx.envs, pointer).map((id) => notInEnvMessage(pointer, envLabel(s.ctx, id)))
     : [];
   const boundBy = s.bound[pointer] ?? null;
-  const searchText = [label, entry.name, pointer, entry.description ?? ''].join(' ').toLowerCase();
-  const matches = (!s.query || searchText.includes(s.query)) && (!s.changedOnly || changed);
   const docPointer = '/env_overrides' + pointer;
+  // Label, setting key, both spellings of the JSON pointer (the Raw JSON tab shows the long one), description.
+  const searchText = [label, entry.name, pointer, docPointer, entry.description ?? '']
+    .join(' ')
+    .toLowerCase();
+  const matches = (!s.query || searchText.includes(s.query)) && (!s.changedOnly || changed);
   return {
     type: 'leaf',
     pointer,

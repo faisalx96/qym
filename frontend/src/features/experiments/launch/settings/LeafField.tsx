@@ -404,6 +404,11 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
     <div className={styles.field} data-field={node.fieldName} data-changed={node.changed ? '' : undefined}>
       <div className={styles.fieldHead}>
         {labelEl}
+        {node.entry.name && node.entry.name !== node.title ? (
+          <span className={styles.keyName} title="Setting key">
+            {node.entry.name}
+          </span>
+        ) : null}
         {dot}
         {tags}
         <span className={styles.spacer} />

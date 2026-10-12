@@ -135,7 +135,11 @@ export function SettingsSection() {
   return (
     <LaunchSection
       id="settings"
-      description="Overrides of the environment's own settings, applied to every run of this experiment."
+      description={
+        mode === 'editor'
+          ? "Overrides of the environment's own settings, saved in the default preset for the next experiments."
+          : "Overrides of the environment's own settings, applied to every run of this experiment."
+      }
     >
       <SettingsActionsCtx.Provider value={actions}>
         <div className={styles.toolbar} role="search" aria-label="Filter settings">

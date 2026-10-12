@@ -103,6 +103,13 @@
   color: var(--text-muted);
 }
 
+.keyName {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 .labelMono {
   font-family: var(--font-mono);
 }

@@ -187,6 +187,15 @@ describe('search and changed-only filtering', () => {
     ).toEqual(['/SQL_RESULT_LIMIT']);
   });
 
+  it('matches the Raw JSON spelling of the pointer too (/env_overrides/...)', () => {
+    const view = buildSettingsView(doc, ctx, { search: '/env_overrides/SQL_RESULT_LIMIT' });
+    expect(
+      allLeaves(view)
+        .filter((l) => l.visible)
+        .map((l) => l.pointer),
+    ).toEqual(['/SQL_RESULT_LIMIT']);
+  });
+
   it('says when nothing matches', () => {
     const view = buildSettingsView(doc, ctx, { search: 'zzzz-nothing' });
     expect(view.empty).toBe(true);
