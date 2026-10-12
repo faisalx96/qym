@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useEvalEnvironment } from '@/api/evalEnvironments';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
+import { useCrumbLabel } from '@/lib/crumb-label';
 import { fullWidth } from '@/features/shell/layout';
 import { Icon, LinkButton, PageHeader, Tag } from '@/ui';
 import { ExperimentsTabs } from '@/features/experiments/ExperimentsTabs';
@@ -15,6 +16,7 @@ export function EnvironmentPage({ environmentId }: { environmentId: string }) {
   const query = useEvalEnvironment(project.id, environmentId);
   const env = query.data;
   useDocumentTitle(`${project.name} · ${env?.name ?? 'Environment'}`);
+  useCrumbLabel(env?.name);
   return (
     <div className={fullWidth} data-environment-page>
       <PageHeader

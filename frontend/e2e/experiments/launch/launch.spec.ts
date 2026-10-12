@@ -37,6 +37,9 @@ test('Launch navigates to the experiment detail, the experiment exists, no guard
 }) => {
   const posts = captureExperimentPosts(page);
   await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
+  const trail = page.getByRole('navigation', { name: 'Breadcrumb' });
+  await expect(trail.getByRole('link', { name: 'Experiments' })).toBeVisible();
+  await expect(trail.getByText('New experiment')).toHaveAttribute('aria-current', 'page');
   await nameBox(page).fill('first launch');
   const field = await maxAttempts(page);
   await field.fill('3');

@@ -16,6 +16,7 @@ import {
   type PresetConfig,
 } from '@/api/evalEnvironments';
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
+import { useCrumbLabel } from '@/lib/crumb-label';
 import { fullWidth } from '@/features/shell/layout';
 import { Outline } from '@/features/experiments/launch/components/Outline';
 import { useLaunch, type SectionId } from '@/features/experiments/launch/LaunchContext';
@@ -246,6 +247,7 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
   const envs = useEvalEnvironments(project.id, { active: true });
   const envName = envs.data?.find((e) => e.id === environmentId)?.name;
   useDocumentTitle(`${project.name} · Default preset${envName ? ` · ${envName}` : ''}`);
+  useCrumbLabel(envName);
   const setup = useMemo(() => editorSetupFrom(params, environmentId), [params, environmentId]);
   const back = environmentPath(slug, environmentId);
   const header = (
