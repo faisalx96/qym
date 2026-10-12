@@ -333,14 +333,14 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     const p = await createProject(request, 'Deep Links', uniqueSlug('deep'));
     const runId = 'eval/2026-01-01/abc';
     const encodedRun = runId.split('/').map(encodeURIComponent).join('/');
-    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' }[] = [
+    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' }[] = [
       { path: '/', expect: 'projects' },
       { path: '/profile', expect: 'profile' },
       { path: '/admin', expect: 'coming-soon' },
       { path: '/admin/users', expect: 'coming-soon' },
-      { path: '/trash', expect: 'coming-soon' },
+      { path: '/trash', expect: 'trash' },
       { path: '/compare', expect: 'coming-soon' },
-      { path: '/reviews', expect: 'coming-soon' },
+      { path: '/reviews', expect: 'reviews' },
       { path: '/docs-guide', expect: 'coming-soon' },
       { path: '/docs/sdk', expect: 'coming-soon' },
       { path: `/projects/${p.slug}`, expect: 'coming-soon' },
@@ -351,10 +351,10 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       { path: `/projects/${p.slug}/experiments/queue`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/experiments/exp-1`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/environments/env-1`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/datasets`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/datasets/ds-1`, expect: 'coming-soon' },
+      { path: `/projects/${p.slug}/datasets`, expect: 'datasets' },
+      { path: `/projects/${p.slug}/datasets/ds-1`, expect: 'datasets' },
       { path: `/projects/${p.slug}/analysis`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/reviews`, expect: 'coming-soon' },
+      { path: `/projects/${p.slug}/reviews`, expect: 'reviews' },
       { path: `/projects/${p.slug}/runs/${encodedRun}`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/runs/${encodedRun}/analyzer`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/settings`, expect: 'settings' },
@@ -370,6 +370,13 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
         await expect(page.getByRole('heading', { name: /coming soon/ }), u.path).toBeVisible();
       } else if (u.expect === 'settings') {
         await expect(page.locator('[data-settings-page]'), u.path).toBeVisible();
+      } else if (u.expect === 'trash') {
+        await expect(page.locator('[data-trash-page]'), u.path).toBeVisible();
+      } else if (u.expect === 'reviews') {
+        await expect(page.locator('[data-reviews-page]'), u.path).toBeVisible();
+      } else if (u.expect === 'datasets') {
+        // catalog, or the dataset detail / not-found state for an unknown ref
+        await expect(page.locator('[data-datasets-catalog], [data-dataset-detail], [role="alert"], [data-error-state]').first(), u.path).toBeVisible();
       } else if (u.expect === 'projects') {
         await expect(page.locator('[data-projects-page]'), u.path).toBeVisible();
       } else {

@@ -46,7 +46,11 @@ export type IconName =
   | 'clock'
   | 'eye'
   | 'eye-off'
-  | 'grid';
+  | 'grid'
+  | 'lock'
+  | 'upload'
+  | 'download'
+  | 'swap';
 
 const PATHS: Record<IconName, string> = {
   'chevron-down': 'M6 9l6 6 6-6',
@@ -97,6 +101,10 @@ const PATHS: Record<IconName, string> = {
   'eye-off':
     'M3 3l18 18M10 6a10 10 0 0 1 12 6 13 13 0 0 1-3 4M6 8a13 13 0 0 0-4 4s4 7 10 7a9 9 0 0 0 4-1M10 10a3 3 0 0 0 4 4',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4M12 15v2',
+  upload: 'M12 16V4M6 10l6-6 6 6M4 20h16',
+  download: 'M12 4v12M6 10l6 6 6-6M4 20h16',
+  swap: 'M4 7h14M14 3l4 4-4 4M20 17H6M10 13l-4 4 4 4',
 };
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

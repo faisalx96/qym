@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, Outlet, type RouteObject } from 'react-router-dom';
 import { appBase, isDev } from '@/lib/runtime';
 import { ROUTES } from './routes';
@@ -17,6 +18,25 @@ import { AdminPage } from '@/features/admin/AdminPage';
 import { DocsPage } from '@/features/docs/DocsPage';
 import { DocsRedirect } from '@/features/docs/DocsRedirect';
 
+const ReviewsPageLazy = lazy(() => import('@/features/reviews/ReviewsPage').then((m) => ({ default: m.ReviewsPage })));
+const TrashPageLazy = lazy(() => import('@/features/trash/TrashPage').then((m) => ({ default: m.TrashPage })));
+const DatasetsRoutesLazy = lazy(() => import('@/features/datasets/DatasetsRoutes').then((m) => ({ default: m.DatasetsRoutes })));
+const ReviewsPage = () => (
+  <Suspense fallback={null}>
+    <ReviewsPageLazy />
+  </Suspense>
+);
+const TrashPage = () => (
+  <Suspense fallback={null}>
+    <TrashPageLazy />
+  </Suspense>
+);
+const DatasetsRoutes = () => (
+  <Suspense fallback={null}>
+    <DatasetsRoutesLazy />
+  </Suspense>
+);
+
 const C = ROUTES.projectChildren;
 
 /** Placeholder routes for every current URL (brief 01 §8). Area agents replace the elements. */
@@ -29,10 +49,10 @@ const projectChildren: RouteObject[] = [
   { path: C.experiments, element: <ComingSoon brief="06-experiments-eval-queue" title="Experiments" /> },
   { path: C.experimentsSplat, element: <ComingSoon brief="06-experiments-eval-queue" title="Experiment" /> },
   { path: C.environments, element: <ComingSoon brief="06-experiments-eval-queue" title="Environments" /> },
-  { path: C.datasets, element: <ComingSoon brief="07-datasets-reviews-trash" title="Datasets" /> },
-  { path: C.datasetsSplat, element: <ComingSoon brief="07-datasets-reviews-trash" title="Dataset" /> },
+  { path: C.datasets, element: <DatasetsRoutes /> },
+  { path: C.datasetsSplat, element: <DatasetsRoutes /> },
   { path: C.analysis, element: <ComingSoon brief="08-playground" title="Auto-analysis" /> },
-  { path: C.reviews, element: <ComingSoon brief="07-datasets-reviews-trash" title="Reviews" /> },
+  { path: C.reviews, element: <ReviewsPage /> },
   { path: C.settings, element: <ProjectSettingsPage /> },
   { path: C.runs_detail, element: <ComingSoon brief="04-run-detail" title="Run" /> },
 ];
@@ -71,10 +91,10 @@ export const routes: RouteObject[] = [
           },
           {
             path: ROUTES.trash,
-            element: <ComingSoon brief="07-datasets-reviews-trash" title="Deleted runs" />,
+            element: <TrashPage />,
           },
           { path: ROUTES.compare, element: <ComingSoon brief="05-compare-analyzer" title="Compare" /> },
-          { path: ROUTES.reviews, element: <ComingSoon brief="07-datasets-reviews-trash" title="Reviews" /> },
+          { path: ROUTES.reviews, element: <ReviewsPage /> },
           { path: ROUTES.docs, element: <DocsRedirect /> },
           { path: ROUTES.docsIndex, element: <DocsRedirect /> },
           { path: ROUTES.docsPage, element: <DocsPage /> },
