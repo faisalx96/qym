@@ -239,3 +239,19 @@ Ordered by user impact.
 - Exit code of the `--local-ui` hold after Ctrl+C in a pty: the viewer stayed up and answered until SIGINT, the final exit status was not captured.
 - Old live viewer: reproduced by feeding the old `UIServer` synthetic snapshots (the old SDK never started it), so timing and event cadence are approximate; the old file viewer ran against the real `DashboardServer`.
 - Platform pages are out of scope here (no platform was started).
+
+## Re-review
+
+Rebuilt with `npm run build:sdk` from ui/qa at 7c66b5ef (app.js 173,574 B, app.css 18,520 B, still under 300 KB). Re-ran my files and scripts on :8838 (real evaluation csv, xlsx copy, file outside the results dir, 2,100-row copy, live run killed mid-run).
+
+Verified FIXED (14): fix-list 1 (busy `--ui-port`: warning "Port 8838 is in use ... using a free port" plus `Local viewer: <free port>`, with and without `--quiet`), 2 (two `Evaluator(local_ui=True, ui_port=8838)` runs in one process: both get `local_ui_url` 8838), 3 (xlsx and an out-of-dir csv: `run.editable=false`, no inputs, note "read-only: only .csv files inside the viewer's results folder can be edited"), 4 (after an edit: "EDITED | Original: 0.0"; raw meta rows gone), 5 (export now has `exact_match_modified`, `exact_match_original_score`, `length_ok_reason`, `trace_id`, `item_id`), 6 (headers read in full: EXACT_MATCH, LENGTH_OK, FUZZY_MATCH), 7 (`qym ui` busy port: "Could not start the viewer on port 8838 ... Pick another port", exit 1), 8 (URL no longer wraps at COLUMNS=60), 9 (one `h1`, one `main`; axe reports no violations at all in idle, list, detail, error row and diff), 10 (idle `qym ui`: "No run", "No evaluation is running here. Open a results file with qym ui FILE ..."; but see R1), 11 (docs: cli.html and config.html describe `--local-ui`, `--ui-port`, `--no-ui` correctly and cli.html has `qym ui`; AGENTS.md CLI list updated; but see R2), 12 (Min 214 ms back), 13 (Elapsed frozen at 0:05 across 10 s of "Reconnecting"), 14 partly (Concurrency 4 and Timeout 300s chips present; counters deferred), 16 (trace_url renders an anchor with `rel="noreferrer noopener" target=_blank`, checked by rewriting the API response). Deferred as agreed: C8/C9, G3.
+
+Regression spot-check (about 25 OK rows: search incl. Arabic, status filter, sorts and URL state, bad URL params, detail open/Escape focus return, diff, copy, edit save and validation, reload, Export, windowing at 2,100 rows with `?row=1500`, live counts and ribbon, reconnect banner, no external requests, no console output, no horizontal scroll at 1024 and 390 px, Tab order, `<b>` text not rendered): no regressions.
+
+Still broken (new findings from the re-review):
+
+- **R1 (minor, BUGGY)** Idle `qym ui` (no file) shows a red error banner "The connection to the evaluation closed unexpectedly. Reload" above the new "No evaluation is running here" message, and a "NO RUN" badge. Repro: `qym ui --port 8838 --no-open`, open `/`. Expected: only the idle message. Hint: in `use-viewer-data.ts` skip opening the stream (or treat `connection==='closed'`) when `api/run` returns `{"live": false}`, and gate the banners at `App.tsx` on a live run.
+- **R2 (minor, BUGGY)** `AGENTS.md:14` still says `utils/` holds "errors and HTML/HTTP frontend helpers" (no such helpers exist). Reword to "errors, env and text helpers".
+- **R3 (low, CHANGED)** With `qym --json run create ... --local-ui --ui-port <busy>` the busy-port warning is not printed to stderr (json mode swallows it); the run still gets a free port and `local_ui_url`. Acceptable, noted.
+
+Counts: verified fixed 14 (of 16 fix-list items; 2 deferred by agreement), still broken 2 (R1, R2), regressions 0.
