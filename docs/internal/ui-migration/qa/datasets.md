@@ -4,7 +4,7 @@ Area: `/projects/{slug}/datasets[/..]`, `/projects/{slug}/reviews`, `/reviews`, 
 
 ## Summary
 
-Total rows **131**: OK **86**, CHANGED **26**, BUGGY **9**, MISSING **10**.
+Total rows **170**: OK **128**, CHANGED **28**, BUGGY **8**, MISSING **6**.
 
 The port is close to the old behaviour on every data path I compared: catalog filtering, item sort keys and paging (same first rows for every header, both directions), CSV/TSV/JSON/JSONL/Windows-1256 imports, version aliases, compare numbers, lineage counts, trash paging and search, and the correction queue counters. The docked editor pane, bulk delete, Revert, URL-backed filters, archived banner and web-worker parsing are real improvements (a 60k-row, 11 MB CSV parses in 0.3 s with no main-thread stall; the old page blocked for the whole parse). The defects are mostly in the Reviews All tab and bulk path, the catalog's empty-project header, wizard hand-off navigation, and a handful of dropped details (reasoning badge, hover popover, encoding note, breadcrumb name).
 
@@ -14,7 +14,7 @@ The port is close to the old behaviour on every data path I compared: catalog fi
 - Wizard inputs (scratchpad `files/`): UTF-8 BOM CSV, Windows-1256 Arabic CSV, `;`-delimited CSV, TSV, JSON array (with an unknown key), JSONL (20 and 2,500 rows), a malformed JSONL (non-object lines, broken JSON), empty CSV, header-only CSV, a binary blob, and a 60,000-row 11 MB CSV.
 - Old behaviours come from the brief (07 sections 2 and 3), the vanilla sources and the running old pages. Each row was verified in the new app unless the notes say "code only" or "not verifiable".
 - Spec column names the area spec file(s) under `frontend/e2e/{datasets,reviews,trash}` that exercise that surface (file-level mapping; I did not map each row to a single test title).
-- CUTOVER.md gaps in this area (Reviews All-tab focus/advance, "Approve 0" dialog, review history not refetched after approve, 0 ms latency items, trash Restore column sticky, dataset metric without direction) are rows R022, R042, R043, I010, T024, I009 and were each re-checked.
+- CUTOVER.md gaps in this area (Reviews All-tab focus/advance, "Approve 0" dialog, review history not refetched after approve, 0 ms latency items, trash Restore column sticky, dataset metric without direction) are rows Q022, Q031, Q032, I010, T017, I008 and were each re-checked.
 
 ## Not verifiable here
 
@@ -154,11 +154,11 @@ Status: OK = same behaviour; CHANGED = different but judged acceptable; BUGGY = 
 | Q007 | Reviews | "Clear filters" resets to pending | `lib/filters.ts:113-125` | reviews.spec | OK | Button present when any filter is set. |
 | Q008 | Reviews | Result count text and Showing X of Y | `ReviewsPage.tsx` | reviews.spec | CHANGED | New shows "N corrections" (total matching); old showed "Showing 25 of 46". |
 | Q009 | Reviews | Every filter mirrored to the URL (`status`, `source`, `conf_*`, `q`, `task`, `dataset`, `model`, `run`) | `lib/filters.ts:22-90` | reviews.spec | OK | Deep link with six filters restores six chips. |
-| Q010 | Reviews | `?id=` deep link fetches the correction, switches tab to its status, rings the card | `ReviewsPage.tsx:170-180` | reviews.spec | CHANGED | Pane opens on the linked id with a "Linked" tag; the tab does not switch: `?id=2` of a (reset) pending item stayed on To review, and linking to a decided correction while on the default tab was not re-verified. Unknown id gives a toast "Correction #99999 could not be opened". |
+| Q010 | Reviews | `?id=` deep link fetches the correction, switches tab to its status, rings the card | `ReviewsPage.tsx:170-180` | reviews.spec | OK | `?id=64` (rejected) switched to the Rejected tab and opened the pane with a "Linked" tag; `?id=60` (pending) stayed on To review. Unknown id gives a toast "Correction #99999 could not be opened". |
 | Q011 | Reviews | `/reviews` across projects with Project chip linking to the project queue | `DetailPane.tsx:103`, `ReviewRow.tsx:41` | reviews.spec | OK | 63 corrections across `qa` and `qa2`; project name in the row context. |
 | Q012 | Reviews | Archived project refused | shell guard | reviews.spec | OK | Verified: "Not available for an archived project". |
 | Q013 | Reviews | Card: checkbox, #id, item id, status badge, Self-approved tag, priority tag, confidence, "by X MM/DD HH:MM" | `FE/reviews/ReviewRow.tsx:36-60` | reviews.spec | CHANGED | Row shows id, item, status, priority, Self-approved, confidence; corrector and date moved to the detail pane. Priority tooltips list the reasons. |
-| Q014 | Reviews | Context chips: Task, Metric, Project, Run link (`?pass=&item=`), Pass, Dataset, Model with reasoning badge | `DetailPane.tsx:97-109` | reviews.spec | CHANGED | Chips present; the reasoning badge next to the model is gone (`has_reasoning` is never read). Counted separately as R-row Q014b. |
+| Q014 | Reviews | Context chips: Task, Metric, Project, Run link (`?pass=&item=`), Pass, Dataset, Model with reasoning badge | `DetailPane.tsx:97-109` | reviews.spec | CHANGED | Chips present; the reasoning badge next to the model is gone (`has_reasoning` is never read). Reasoning badge is tracked as Q014b. |
 | Q014b | Reviews | Reasoning-model badge on the Model chip | `FE/reviews/DetailPane.tsx:108` | none | MISSING | Old `renderModelLabel` showed a bulb badge when `has_reasoning`; the shared model label used by runs list is not used here. Not logged. |
 | Q015 | Reviews | AI vs Human "Root-cause issues" columns, "Why this category" details, per-issue confidence | `FE/reviews/IssueList.tsx:11-50` | reviews.spec | OK | The old changed/removed highlight colours (human `changed`, AI `removed`) are not reproduced; the human column has a left accent. Cosmetic. |
 | Q016 | Reviews | Collapsed previews: Input / Expected / Output one-liners | `DetailPane.tsx:140-146` | reviews.spec | OK | |
@@ -221,4 +221,4 @@ Ordered by user impact.
 14. **minor** Version switcher rows are not links and the search only appears above 6 versions (D031, D032). Hint: render `ListBoxItem href`, always show the search field.
 15. **minor** Items History tab lists revisions oldest first and adds a "type changed null -> string" line to the created revision (P011). Hint: reverse within a version (or label the order) and suppress type-change text when `before` is empty.
 16. **minor** Trash table at 1440 px hides Task and Dataset columns behind horizontal scroll (T007). Hint: reduce Run/Project column widths or allow the table to use the full shell width.
-17. **cosmetic** State line colours (D002), `0.0%` formatting (I009), dataset-runs pager end label (R002), error-state body text (D014), `?id=` deep link does not switch the status tab (Q010).
+17. **cosmetic** State line colours (D002), `0.0%` formatting (I009), dataset-runs pager end label (R002), error-state body text (D014).
