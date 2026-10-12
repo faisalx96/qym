@@ -15,7 +15,7 @@ test('one card per model for the chosen task and dataset, with a ranking', async
   await page.goto(url(s.project.slug));
   await expect(cards(page)).toHaveCount(2);
   await expect(page.getByRole('heading', { name: /^Ranking by/ })).toBeVisible();
-  await expect(page.getByRole('list').filter({ hasText: /#1/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Rank 1' })).toBeVisible();
   // every metric of the runs is offered, whichever run carries it
   await page
     .getByRole('button', { name: /Metric/ })

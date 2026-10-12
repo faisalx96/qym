@@ -8,7 +8,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button as AriaButton, ToggleButton } from 'react-aria-components';
-import { useModelsStats, useOverview, usePoints } from '@/api/dashboard';
+import { useModelsStats, useOverview, usePoints, useRunsPage } from '@/api/dashboard';
 import type { Combo, GroupStats, MetricType, RunRow } from '@/api/dashboardTypes';
 import {
   Button,
@@ -272,8 +272,25 @@ function useRunsDataLite(slug: string, view: RunsView, visibleKeys: Set<string> 
   const overviewQ = useOverview(slug, filters, { refetchInterval: () => cadence.current });
   const overview = overviewQ.data;
   const refetchOverview = overviewQ.refetch;
-  const onAnnounce = useCallback(() => void refetchOverview(), [refetchOverview]);
-  const interval = useRunsCadence({ rows: [], hasActiveRuns: overview?.has_active_runs }, onAnnounce);
+  // The overview does not say whether runs are live: ask the runs list for the live ones (RUNNING/PENDING).
+  const liveQ = useRunsPage(
+    {
+      project_slug: slug,
+      filters: { ...filters, statuses: ['RUNNING', 'PENDING'] },
+      sort: 'activity-desc',
+      limit: 8,
+      offset: 0,
+    },
+    { refetchInterval: () => cadence.current },
+  );
+  const onAnnounce = useCallback(() => {
+    void refetchOverview();
+    void liveQ.refetch();
+  }, [refetchOverview, liveQ]);
+  const interval = useRunsCadence(
+    { rows: liveQ.data?.rows ?? [], freshness: liveQ.data?.freshness },
+    onAnnounce,
+  );
   useEffect(() => {
     cadence.current = interval;
   }, [interval]);

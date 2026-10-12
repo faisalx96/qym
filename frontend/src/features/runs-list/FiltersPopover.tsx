@@ -4,7 +4,7 @@
  * action (UX_DECISION: inline lists, not nested portalled selects, which closed
  * the popover). One disclosure is open at a time so the Tab order stays short.
  */
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button as AriaButton } from 'react-aria-components';
 import type { Facets } from '@/api/dashboardTypes';
 import {
@@ -117,6 +117,7 @@ export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopove
   const defs = useMemo(() => buildFacetDefs(view, facets, owners), [view, facets, owners]);
   const [open, setOpen] = useState<string | null>(null);
   const [rangeOpen, setRangeOpen] = useState(false);
+  const footRef = useRef<HTMLDivElement>(null);
   return (
     <>
       <Popover
@@ -183,15 +184,19 @@ export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopove
                 />
               ))}
             </div>
-            <div className={styles.foot}>
+            <div className={styles.foot} ref={footRef}>
               <Button
                 variant="ghost"
-                onPress={() => onChange({ ...DEFAULT_VIEW, versioning: {}, q: view.q, sort: view.sort })}
+                onPress={() => {
+                  onChange({ ...DEFAULT_VIEW, versioning: {}, q: view.q, sort: view.sort });
+                  // the button disables itself: keep focus inside the popover so Esc still closes it
+                  footRef.current?.querySelector<HTMLElement>('[data-filters-done]')?.focus();
+                }}
                 isDisabled={!count}
               >
                 Clear all
               </Button>
-              <Button variant="primary" onPress={close}>
+              <Button variant="primary" onPress={close} data-filters-done="">
                 Done
               </Button>
             </div>

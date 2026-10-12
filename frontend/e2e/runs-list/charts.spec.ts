@@ -208,6 +208,23 @@ test.describe('charts (J7)', () => {
     await expect(table.locator('thead th', { hasText: 'Pass@K' })).toBeVisible();
   });
 
+  test('with live runs the Charts overview refetches on the 15 s live cadence, not the 60 s idle one', async ({
+    page,
+    request,
+  }) => {
+    const s = await freshProject(request, 12, { running: true });
+    await page.clock.install();
+    const overview = capture(page, 'overview');
+    await page.goto(chartsUrl(s.project.slug));
+    await expect(card(page, 'text2sql')).toBeVisible();
+    await expect.poll(() => overview.count()).toBeGreaterThanOrEqual(1);
+    await page.clock.runFor(1_000); // let the live-runs read land and set the cadence
+    await page.waitForTimeout(500);
+    overview.clear();
+    await page.clock.runFor(20_000);
+    await expect.poll(() => overview.count()).toBeGreaterThanOrEqual(1);
+  });
+
   test('filters apply to the charts (task filter leaves one card) and Clear filters restores', async ({
     page,
     request,
