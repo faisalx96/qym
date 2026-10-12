@@ -1,0 +1,6 @@
+/** Internal item-metadata keys that are never offered as filter / breakdown / export fields. */
+export const SKIPPED_METADATA = new Set([
+  'root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_reason', 'root_cause_note',
+  'root_cause_source', 'root_cause_confidence', 'root_cause_metric_name', 'solution', 'solution_note',
+  'solution_source', 'metric_analyses', 'analysis_error', 'task_started_at_ms', 'trace_stats', 'retry_count',
+]);

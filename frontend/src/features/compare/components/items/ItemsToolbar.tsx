@@ -6,6 +6,7 @@ import { useCompare } from '../../CompareContext';
 import { activeChips, clearedView } from '../../lib/activeChips';
 import { activeFilterCount, SORT_VALUES, type SortBy } from '../../lib/filters';
 import { useItemsUi } from './ItemsUi';
+import { AnalyzeLinks } from '../panel/RootCauseTab';
 import { FilterBuilder } from './FilterBuilder';
 import { CsvDialog } from './CsvDialog';
 import styles from './ItemsToolbar.module.css';
@@ -84,6 +85,16 @@ export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
         <Button size="sm" variant="neutral" icon={<Icon name="external" size={14} />} onPress={() => setCsv(true)} isDisabled={!items.length}>
           CSV
         </Button>
+        <Popover
+          label="Analyze runs"
+          trigger={
+            <Button size="sm" variant="neutral" icon={<Icon name="search" size={14} />}>
+              Analyze
+            </Button>
+          }
+        >
+          <AnalyzeLinks />
+        </Popover>
         <Text variant="sm" tone="muted" className={styles.count} role="status">
           {items.length} of {model.itemIds.length} items{searchPending ? ' · searching…' : ''}
         </Text>

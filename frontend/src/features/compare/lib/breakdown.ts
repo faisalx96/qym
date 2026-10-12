@@ -207,6 +207,8 @@ export interface RootCauseCategory {
   category: string;
   count: number;
   subcauses: Array<[string, number]>;
+  /** Solutions recorded on the category's issues, most common first (the Sankey's right-hand side). */
+  solutions: Array<[string, number]>;
   /** Issue count per column. */
   counts: number[];
 }
@@ -217,7 +219,7 @@ export function rootCauseSummary(
   itemIds: ReadonlySet<string>,
   metric: string | 'all',
 ): RootCauseCategory[] {
-  const cats = new Map<string, { count: number; sub: Map<string, number>; counts: number[] }>();
+  const cats = new Map<string, { count: number; sub: Map<string, number>; sol: Map<string, number>; counts: number[] }>();
   columns.forEach((column, ci) =>
     column.runIdxs.forEach((ri) => {
       const run = model.runs[ri];
@@ -227,10 +229,12 @@ export function rootCauseSummary(
         for (const analysis of getRowRootCauseAnalyses(row as Row, metric, false)) {
           for (const issue of rootCauseIssues(analysis)) {
             if (!issue.category) continue;
-            const c = cats.get(issue.category) ?? { count: 0, sub: new Map<string, number>(), counts: columns.map(() => 0) };
+            const c = cats.get(issue.category) ?? { count: 0, sub: new Map<string, number>(), sol: new Map<string, number>(), counts: columns.map(() => 0) };
             c.count += 1;
             c.counts[ci] = (c.counts[ci] ?? 0) + 1;
             if (issue.subcategory) c.sub.set(issue.subcategory, (c.sub.get(issue.subcategory) ?? 0) + 1);
+            const solution = typeof issue.solution === 'string' ? issue.solution.trim() : '';
+            if (solution) c.sol.set(solution, (c.sol.get(solution) ?? 0) + 1);
             cats.set(issue.category, c);
           }
         }
@@ -243,6 +247,7 @@ export function rootCauseSummary(
       count: c.count,
       counts: c.counts,
       subcauses: Array.from(c.sub.entries()).sort((a, b) => b[1] - a[1]),
+      solutions: Array.from(c.sol.entries()).sort((a, b) => b[1] - a[1]),
     }))
     .sort((a, b) => b.count - a.count);
 }

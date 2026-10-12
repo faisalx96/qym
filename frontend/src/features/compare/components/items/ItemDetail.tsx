@@ -1,12 +1,12 @@
 /** Expanded item: input, expected output, metadata and one output card per compared run (bodies load lazily). */
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Button, Chip, CopyButton, TextBlock, Tag } from '@/ui';
+import { Button, Chip, CopyButton, Tag } from '@/ui';
 import { bodyText } from '@/features/run-detail/lib/itemText';
 import { HIDDEN_METADATA_KEYS, ITEM_METADATA_BADGE_KEYS, itemMetadataBadgeValues, itemMetadataDisplayValue } from '@/features/run-detail/lib/rowMeta';
 import { letterOf, useCompare } from '../../CompareContext';
 import { useDetailsStore, useEnsureBodies, useResolvedRows } from '../../hooks/useDetails';
-import { OutputCard } from './OutputCard';
+import { Collapsible, OutputCard } from './OutputCard';
 import { useItemsUi } from './ItemsUi';
 import styles from './ItemDetail.module.css';
 
@@ -60,11 +60,11 @@ export function ItemDetail({ itemId }: { itemId: string }) {
           <header className={styles.blockHead}>
             <span className={styles.label}>Input</span>
             <span>
-              <CopyButton text={link} label="Copy link to this item" />
+              <CopyButton text={link} label="Copy link to this item" icon="link" />
               <CopyButton text={input} label="Copy input" />
             </span>
           </header>
-          <TextBlock text={input} mode={ui.textMode} />
+          <Collapsible text={input} lines={14} />
         </section>
         {expected ? (
           <section className={styles.block} data-kind="expected">
@@ -72,7 +72,7 @@ export function ItemDetail({ itemId }: { itemId: string }) {
               <span className={styles.label}>Expected output</span>
               <CopyButton text={expected} label="Copy expected output" />
             </header>
-            <TextBlock text={expected} mode={ui.textMode} />
+            <Collapsible text={expected} lines={14} />
           </section>
         ) : null}
       </div>

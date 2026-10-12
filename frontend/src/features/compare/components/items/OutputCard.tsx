@@ -18,7 +18,7 @@ import { RunDot } from '../common';
 import { useItemsUi } from './ItemsUi';
 import styles from './OutputCard.module.css';
 
-function Collapsible({ text, lines = 12 }: { text: string; lines?: number }) {
+export function Collapsible({ text, lines = 12 }: { text: string; lines?: number }) {
   const { textMode } = useItemsUi();
   const [open, setOpen] = useState(false);
   const long = text.length > 600 || text.split('\n').length > lines;
@@ -118,7 +118,10 @@ function Issues({ run, row, metricIdsOnly }: { run: CompareRun; row: Row; metric
   const byMetric = model.metrics
     .map((metric) => ({ metric, issues: analyses.filter((a) => a.metric_name === metric).flatMap((a) => rootCauseIssues(a, false)) }))
     .filter((x) => x.issues.length);
-  const first = model.metrics.find((m) => run.metricIndex[m] !== undefined);
+  const { metric: pageMetric } = useCompare();
+  const own = model.metrics.filter((m) => run.metricIndex[m] !== undefined);
+  // New issues target the metric the page is on, not whichever the run lists first.
+  const first = own.includes(pageMetric) ? pageMetric : own[0];
   return (
     <section className={styles.issues} aria-label={`Root-cause issues for ${run.label}`}>
       <header className={styles.issuesHead}>
@@ -138,6 +141,19 @@ function Issues({ run, row, metricIdsOnly }: { run: CompareRun; row: Row; metric
               {issue.subcategory ? <span className={styles.muted}>{issue.subcategory}</span> : null}
               <span className={styles.muted}>{metric}</span>
               {issue.finding ? <span className={styles.finding}>{issue.finding}</span> : null}
+              {issue.category_reason ? (
+                <span className={styles.finding} data-field="reason">
+                  <span className={styles.label}>Why: </span>
+                  {issue.category_reason}
+                </span>
+              ) : null}
+              {issue.solution ? (
+                <span className={styles.finding} data-field="solution">
+                  <span className={styles.label}>Solution: </span>
+                  {issue.solution}
+                  {issue.solution_note ? <span className={styles.muted}> {issue.solution_note}</span> : null}
+                </span>
+              ) : null}
               {canEdit ? (
                 <Button size="sm" variant="ghost" onPress={() => setDialog({ metric, issue })}>
                   Edit
@@ -153,6 +169,7 @@ function Issues({ run, row, metricIdsOnly }: { run: CompareRun; row: Row; metric
           onOpenChange={(o) => !o && setDialog(null)}
           row={row}
           metric={dialog.metric}
+          metrics={own}
           issue={dialog.issue}
           passNumber={run.pass}
           runId={run.base}
@@ -190,7 +207,7 @@ export function OutputCard({ run, runIndex, row, itemId }: { run: CompareRun; ru
         <Tag tone={pill.state === 'pass' ? 'success' : pill.state === 'none' ? undefined : 'danger'}>
           {pill.state === 'pass' ? '✓ PASS' : pill.state === 'fail' ? '✗ FAIL' : pill.state === 'error' ? '⚠ ERROR' : '—'}
         </Tag>
-        {row.latency_ms ? <span className={styles.meta}>{formatLatency(row.latency_ms)}</span> : null}
+        {row.latency_ms != null ? <span className={styles.meta}>{row.latency_ms === 0 ? '0ms' : formatLatency(row.latency_ms)}</span> : null}
         <span className={styles.actions}>
           {row.trace_id ? (
             <Button size="sm" variant="neutral" icon={<Icon name="list" size={12} />} onPress={() => ui.openTrace({ runId: run.base, itemId: row.item_id, pass: run.pass })}>

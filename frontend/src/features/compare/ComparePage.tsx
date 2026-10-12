@@ -19,6 +19,7 @@ import { ItemsSection } from './components/items/ItemsSection';
 import { ItemsUiHost } from './components/items/ItemsUi';
 import { Notices } from './components/Notices';
 import { AnalyticsPanel } from './components/panel/AnalyticsPanel';
+import { RunCards } from './components/RunCards';
 import { SelectionBar } from './components/SelectionBar';
 import { SweepView } from './components/sweep/SweepView';
 import { DetailsProvider, useNewDetailsStore } from './hooks/useDetails';
@@ -64,8 +65,9 @@ export function ComparePage() {
       <ErrorState
         error={Object.assign(new Error('Not found'), { status: 404 })}
         title={c.missing.length === 1 ? 'A run in this comparison was not found' : 'Runs in this comparison were not found'}
-        message={`${c.missing.length || 'Some'} of the runs in this link were deleted or are not visible to you. A comparison needs at least 2 runs.`}
+        message={`${c.missing.length || 'Some'} of the runs in this link ${c.missing.length === 1 ? 'was' : 'were'} deleted or ${c.missing.length === 1 ? 'is' : 'are'} not visible to you. A comparison needs at least 2 runs.${c.missing.length ? ` Missing: ${c.missing.join(', ')}` : ''}`}
         notFoundMessage="Not found"
+        action={<BackLink slug={slug} />}
         compact
       />
     );
@@ -90,7 +92,7 @@ function MissingToast({ missing }: { missing: string[] }) {
   useEffect(() => {
     if (!key) return;
     const n = key.split(',').length;
-    toast.show(`${n} run${n === 1 ? '' : 's'} in this link ${n === 1 ? 'was' : 'were'} deleted or ${n === 1 ? 'is' : 'are'} not visible to you, so ${n === 1 ? 'it is' : 'they are'} left out.`, { tone: 'info' });
+    toast.show(`${n} run${n === 1 ? '' : 's'} in this link ${n === 1 ? 'was' : 'were'} deleted or ${n === 1 ? 'is' : 'are'} not visible to you, so ${n === 1 ? 'it is' : 'they are'} left out. Missing: ${key.split(',').join(', ')}`, { tone: 'warning' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   return null;
@@ -167,6 +169,7 @@ function CompareLoaded({ c, model, slug }: { c: CompareController; model: Compar
         <SelectionBar />
         {sweep ? null : <DeltaLine info={info} analyticsOpen={panel} onToggleAnalytics={() => setPanel((p) => !p)} />}
       </div>
+      <RunCards />
       <ItemsUiHost>
         {sweep ? (
           <SweepView />

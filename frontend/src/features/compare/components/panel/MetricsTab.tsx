@@ -3,11 +3,57 @@ import { useMemo } from 'react';
 import { formatLatency, formatMetricValue } from '@/lib/metrics';
 import { Tag, Text } from '@/ui';
 import { letterOf, useCompare } from '../../CompareContext';
-import { buildColumnRows } from '../../lib/panelData';
+import { buildColumnRows, buildTraceRows, type TraceFormat } from '../../lib/panelData';
 import type { DeltaKind } from '../../lib/baseline';
 import { CountButtons, DeltaTag, Forest, RunDot } from '../common';
 import { ScrollRegion } from '../ScrollRegion';
 import styles from './Panel.module.css';
+
+const fmtTrace = (v: number, f: TraceFormat) =>
+  f === 'latency' ? formatLatency(v) : f === 'tokens' ? Math.round(v).toLocaleString() : f === 'percent' ? `${(v * 100).toFixed(1)}%` : v.toFixed(1);
+
+function TraceStatsTable() {
+  const { model, columns } = useCompare();
+  const rows = useMemo(() => buildTraceRows(model, columns), [model, columns]);
+  if (!rows.length) return null;
+  return (
+    <table className={styles.table} data-testid="trace-stats-table">
+      <caption className={styles.caption}>Trace statistics per run (a repeat run&apos;s passes share them). A dash means the run did not capture it.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Trace stat</th>
+          {columns.map((col) => (
+            <th scope="col" key={col.key} title={col.title}>
+              <span className={styles.runCell}>
+                <RunDot index={col.runIdxs[0] ?? 0} />
+                <span className={styles.letter}>{letterOf(col.runIdxs[0] ?? 0)}</span>
+              </span>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => {
+          const valid = r.values.filter((v): v is number => v !== null);
+          const bestVal = valid.length ? (r.best === 'high' ? Math.max(...valid) : Math.min(...valid)) : null;
+          return (
+            <tr key={r.id} data-trace-row={r.id}>
+              <th scope="row">{r.label}</th>
+              {r.values.map((v, i) => (
+                <td key={columns[i]!.key}>
+                  <span className={styles.mono} title={v !== null && v === bestVal && valid.length > 1 ? 'Best across runs' : undefined}>
+                    {v === null ? '—' : fmtTrace(v, r.format)}
+                    {v !== null && v === bestVal && valid.length > 1 ? ' ★' : ''}
+                  </span>
+                </td>
+              ))}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
 
 export function MetricsTab() {
   const { model, columns, baseline, items, ctx, c } = useCompare();
@@ -99,6 +145,7 @@ export function MetricsTab() {
           })}
         </tbody>
       </table>
+      <TraceStatsTable />
     </ScrollRegion>
   );
 }

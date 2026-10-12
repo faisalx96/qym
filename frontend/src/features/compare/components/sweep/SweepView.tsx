@@ -6,7 +6,7 @@ import { useSearchParamsState } from '@/lib/url-state';
 import { getMetadataCategoryValues } from '@/features/run-detail/lib/rowMeta';
 import { useCompare } from '../../CompareContext';
 import {
-  DEFAULT_SWEEP_FILTERS, computeGroupedComparison, defaultSweepSort, filterSweepItems, reverseSweepItem, sweepKeySupportsOnly,
+  DEFAULT_SWEEP_FILTERS, breakdownDeltaGood, computeGroupedComparison, defaultSweepSort, filterSweepItems, reverseSweepItem, sweepKeySupportsOnly,
   sweepMetadataKeys, sweepMetadataValues, sweepOutcomeOf, summarizeSweepItems, type SweepFilters, type SweepItem, type SweepMove, type SweepOutcome,
 } from '../../lib/cohort';
 import type { NoiseStat } from '../../lib/noise';
@@ -253,16 +253,20 @@ export function SweepView() {
                           </button>
                         </th>
                         <td>{r.n}</td>
-                        {([['passAtK'], ['avgAtK'], ['consistency'], ['reliability'], ['passHatK']] as const).map(([m]) => (
+                        {([['passAtK'], ['avgAtK'], ['consistency'], ['reliability'], ['passHatK']] as const).map(([m]) => {
+                          // Avg@k is the metric's own value: on a minimize metric a drop is the improvement.
+                          const good = breakdownDeltaGood(m, r.s.deltas[m] ?? 0, direction);
+                          return (
                           <td key={m}>
                             <span className={styles.mono}>
                               {pct(r.s.left[m] as number | null, 0)} {'→'} <strong>{pct(r.s.right[m] as number | null, 0)}</strong>
                             </span>{' '}
-                            <Tag kind="data" tone={(r.s.deltas[m] ?? 0) > 0.0005 ? 'success' : (r.s.deltas[m] ?? 0) < -0.0005 ? 'danger' : undefined}>
+                            <Tag kind="data" tone={good > 0.0005 ? 'success' : good < -0.0005 ? 'danger' : undefined}>
                               {signed(r.s.deltas[m] ?? 0, 0)}
                             </Tag>
                           </td>
-                        ))}
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>

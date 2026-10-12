@@ -1,4 +1,4 @@
-/** Root-cause categories over the filtered items, per run (brief 05 J5); the Sankey was dropped (OPEN_QUESTIONS Q5). */
+/** Root-cause categories over the filtered items, per run (brief 05 J5); solutions sit under each category (the Sankey's right-hand side). */
 import { useMemo } from 'react';
 import { Select, Tag, Text } from '@/ui';
 import { platformUrl } from '@/lib/runtime';
@@ -9,7 +9,7 @@ import { ScrollRegion } from '../ScrollRegion';
 import styles from './Panel.module.css';
 
 /** Links to each run's auto-analysis workspace. */
-function AnalyzeLinks() {
+export function AnalyzeLinks() {
   const { model, slug } = useCompare();
   return (
     <div className={styles.stack}>
@@ -97,6 +97,15 @@ export function RootCauseTab() {
                         {cat.subcauses.map(([name, n]) => (
                           <Tag key={name} kind="data" title={name}>
                             {name} {n}
+                          </Tag>
+                        ))}
+                      </span>
+                    ) : null}
+                    {cat.solutions.length ? (
+                      <span className={styles.subList} aria-label={`Solutions for ${cat.category}`}>
+                        {cat.solutions.map(([name, n]) => (
+                          <Tag key={name} kind="data" tone="info" title={`Solution: ${name}`}>
+                            {'→'} {name} {n}
                           </Tag>
                         ))}
                       </span>

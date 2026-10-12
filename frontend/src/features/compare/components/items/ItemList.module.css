@@ -57,6 +57,8 @@
 }
 
 .item {
+  /* a deep-linked row lands below the sticky selection + delta header, not under it */
+  scroll-margin-top: 7rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--bg-surface);

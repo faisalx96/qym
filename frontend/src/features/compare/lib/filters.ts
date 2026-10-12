@@ -5,6 +5,7 @@
  * applyCompareViewFiltersParam, brief 05 J6). The `filters` JSON stays
  * byte-compatible with the vanilla page (`tests/platform/test_compare_filter_fields_javascript.py`).
  */
+import { SKIPPED_METADATA } from './skipMetadata';
 import type { metricDirection } from '@/lib/metrics';
 import { isErrorRow } from '@/lib/metrics';
 import type { Row } from '@/features/run-detail/types';
@@ -349,11 +350,6 @@ const rank = (v: string) => {
   const i = COMPLEXITY_ORDER.indexOf(v.toLowerCase());
   return i < 0 ? COMPLEXITY_ORDER.length : i;
 };
-const SKIPPED_METADATA = new Set([
-  'root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_reason', 'root_cause_note',
-  'root_cause_source', 'root_cause_confidence', 'root_cause_metric_name', 'solution', 'solution_note',
-  'solution_source', 'metric_analyses', 'analysis_error', 'task_started_at_ms', 'trace_stats', 'retry_count',
-]);
 
 export function runRowRootCauses(row: Row | null, metric: string | 'all' = 'all'): string[] {
   return row ? getRowRootCauseAnalyses(row, metric, false).flatMap((a) => rootCauseCategories(a)) : [];

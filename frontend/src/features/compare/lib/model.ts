@@ -17,6 +17,7 @@ import {
 import type { Row, Run, RunPayload } from '@/features/run-detail/types';
 import { scopeRowToPass } from '@/features/run-detail/lib/passScope';
 import { computeRunLabels, modelShortName, type RunLabel } from './labels';
+import { SKIPPED_METADATA } from './skipMetadata';
 import { expandRefs, makePassRef, passRefBase, passRefNumber } from './refs';
 
 export interface ComparePayload {
@@ -71,7 +72,6 @@ export interface CompareModel {
   bases: string[];
 }
 
-const META_SKIP = new Set(['task_started_at_ms', 'trace_stats']);
 
 export function getRowCompareId(row: Row | null | undefined): string | null {
   return (row?.compare_item_id as string | undefined) || null;
@@ -203,7 +203,7 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
   for (const run of runs)
     for (const row of run.rows) {
       const md = row.item_metadata;
-      if (md && typeof md === 'object') for (const k of Object.keys(md)) if (!META_SKIP.has(k)) metaKeys.add(k);
+      if (md && typeof md === 'object') for (const k of Object.keys(md)) if (!SKIPPED_METADATA.has(k)) metaKeys.add(k);
     }
 
   const unalignable = runs

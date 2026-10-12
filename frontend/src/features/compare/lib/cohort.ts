@@ -12,6 +12,7 @@ import { getMetadataCategoryValues, isListCategoryKey } from '@/features/run-det
 import type { CompareModel, CompareRun } from './model';
 import { computeSweepNoise, passAtK, passHatK, type NoiseReport } from './noise';
 import { runOutcome, verdictOf, type MetricCtx } from './scoring';
+import { SKIPPED_METADATA } from './skipMetadata';
 import type { Cohorts } from './refs';
 
 export interface CohortGroups {
@@ -441,12 +442,19 @@ export function sweepKeySupportsOnly(items: SweepItem[], key: string): boolean {
 export function sweepMetadataKeys(items: SweepItem[]): string[] {
   const keys = new Set<string>();
   for (const item of items) for (const k of Object.keys(item.metadata ?? {})) keys.add(k);
-  const skip = new Set(['task_started_at_ms', 'trace_stats', 'retry_count', 'analysis_error']);
   return Array.from(keys)
-    .filter((k) => !skip.has(k) && !k.startsWith('root_cause') && !k.startsWith('solution'))
+    .filter((k) => !SKIPPED_METADATA.has(k) && !k.startsWith('root_cause') && !k.startsWith('solution'))
     .filter((k) => {
       const n = sweepMetadataValues(items, k).length;
       return n >= 1 && n <= 30;
     })
     .sort();
+}
+
+/**
+ * Whether a breakdown delta is good news. Avg@k is the metric's own value, so on a
+ * minimize metric a drop is the improvement; pass-based columns are already "higher is better".
+ */
+export function breakdownDeltaGood(column: string, delta: number, direction: MetricDirection): number {
+  return column === 'avgAtK' && direction === 'minimize' ? -delta : delta;
 }
