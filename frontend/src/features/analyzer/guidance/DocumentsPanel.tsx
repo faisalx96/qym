@@ -31,7 +31,7 @@ interface Confirm {
   resolve: (full: boolean) => void;
 }
 
-const ACCEPT = '.pdf,.docx,.txt,.md,.markdown,.html,.htm,.csv,.json,.yaml,.yml';
+const ACCEPT = ".pdf,.docx,.txt,.text,.log,.rst,.md,.markdown,.html,.htm,.csv,.json,.yaml,.yml";
 
 export function DocumentsPanel({
   scope,

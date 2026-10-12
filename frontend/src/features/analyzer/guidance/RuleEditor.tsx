@@ -1,7 +1,19 @@
-import { useMemo, useState } from 'react';
-import { estimateTokens, type SaveState, type useDraftRules } from '../useDraftRules';
-import { Button, Checkbox, EmptyState, Icon, Pagination, SearchField, Tag, Text, Textarea, TextField } from '@/ui';
-import s from './rules.module.css';
+import { useMemo, useState } from "react";
+import { estimateTokens, type SaveState, type useDraftRules } from "../useDraftRules";
+import {
+  Button,
+  Checkbox,
+  ConfirmDialog,
+  EmptyState,
+  Icon,
+  Pagination,
+  SearchField,
+  Tag,
+  Text,
+  Textarea,
+  TextField,
+} from "@/ui";
+import s from "./rules.module.css";
 
 const PAGE = 10;
 
@@ -20,6 +32,8 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  /** Rule keys waiting for delete confirmation. */
+  const [deleting, setDeleting] = useState<string[] | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase();
@@ -60,10 +74,7 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
               size="sm"
               variant="danger"
               isDisabled={checked.size === 0}
-              onPress={() => {
-                remove([...checked]);
-                setChecked(new Set());
-              }}
+              onPress={() => setDeleting([...checked])}
             >
               {`Delete selected${checked.size ? ` (${checked.size})` : ''}`}
             </Button>
@@ -126,8 +137,8 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
                     <Button
                       size="sm"
                       variant="ghost"
-                      aria-label={`Delete rule ${r.title || 'untitled'}`}
-                      onPress={() => remove([r.key])}
+                      aria-label={`Delete rule ${r.title || "untitled"}`}
+                      onPress={() => setDeleting([r.key])}
                     >
                       <Icon name="trash" size={12} />
                     </Button>
@@ -175,6 +186,20 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
           }
         />
       )}
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={deleting && deleting.length > 1 ? `Delete ${deleting.length} rules?` : "Delete this rule?"}
+        description="The rules are removed from this draft and the draft is saved."
+        cancelLabel="Keep"
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => {
+          if (deleting) remove(deleting);
+          setChecked(new Set());
+          setDeleting(null);
+        }}
+      />
       {filtered.length > PAGE ? (
         <Pagination total={filtered.length} page={current} pageSize={PAGE} noun="rules" onPageChange={setPage} />
       ) : null}

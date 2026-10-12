@@ -34,14 +34,18 @@ test.describe('Rules tab as manager (10)', () => {
     expect(patches).toBe(1);
 
     // publish with "Set as production"
-    await page.getByRole('button', { name: 'Publish' }).click();
-    const publish = page.getByRole('dialog', { name: 'Publish v1' });
-    await expect(publish.getByRole('switch', { name: 'Set as production' })).toBeChecked();
-    await publish.getByRole('button', { name: 'Publish' }).click();
-    await expect(page.getByText('v1 published and live').first()).toBeVisible();
-    const list = page.getByRole('complementary', { name: 'Rule versions' });
-    await expect(list.getByText('Live')).toBeVisible();
-    await expect(page.getByText('Read-only', { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Publish" }).click();
+    const publish = page.getByRole("dialog", { name: "Publish v1" });
+    // Publishing is not a go-live by default (old behaviour): the switch starts off.
+    const prod = publish.getByRole("switch", { name: "Set as production" });
+    await expect(prod).not.toBeChecked();
+    await toggleBox(prod);
+    await expect(prod).toBeChecked();
+    await publish.getByRole("button", { name: "Publish" }).click();
+    await expect(page.getByText("v1 published and live").first()).toBeVisible();
+    const list = page.getByRole("complementary", { name: "Rule versions" });
+    await expect(list.getByText("Live")).toBeVisible();
+    await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
 
     // create a draft from the live version, change the rule
     await page.getByRole('button', { name: 'Create draft', exact: true }).first().click();
@@ -112,10 +116,14 @@ test.describe('Documents (11)', () => {
   test('upload, exclude (PATCH), delete after a confirm (DELETE)', async ({ page, request }) => {
     const seed = await seedAnalyzer(request);
     const t = trackErrors(page);
-    await gotoApp(page, guidanceUrl(seed.slug, 'documents'));
-    await expect(page.getByText('No project documents yet')).toBeVisible();
-    const upload = page.waitForRequest((r) => r.method() === 'POST' && /analysis-documents$/.test(r.url()));
-    await page.getByTestId('document-input').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello analyzer, short notes') });
+    await gotoApp(page, guidanceUrl(seed.slug, "documents"));
+    await expect(page.getByText("No project documents yet")).toBeVisible();
+    const upload = page.waitForRequest((r) => r.method() === "POST" && /analysis-documents$/.test(r.url()));
+    await page.getByTestId("document-input").setInputFiles({
+      name: "notes.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("hello analyzer, short notes"),
+    });
     await upload;
     const library = page.getByRole('list', { name: 'Document library' });
     await expect(library).toContainText('notes.txt');
@@ -278,7 +286,11 @@ test.describe('read-only view (13)', () => {
       can_manage_category_catalog: false,
       can_operate_analyzer: false,
     }));
-    await patchJson(page, /analysis-rule-versions\?/, (v) => ({ ...v, can_activate: false, can_delete: false }));
+    await patchJson(page, /analysis-rule-versions\?/, (v) => ({
+      ...v,
+      can_activate: false,
+      can_delete: false,
+    }));
 
     await gotoApp(page, guidanceUrl(seed.slug, 'categories'));
     await expect(page.getByText('Project manager access is required to edit categories.')).toBeVisible();
@@ -302,10 +314,14 @@ test.describe('read-only view (13)', () => {
     // the run workspace explains that running needs member access and disables Test / Analyze
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await expect(page.getByText('You can read this workspace, but running analyses needs project member access.')).toBeVisible();
-    await step(page, 'Run').click();
-    await expect(page.getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeDisabled();
-    await expect(page.getByRole('button', { name: /^Test Selected/ })).toBeDisabled();
+    await expect(
+      page.getByText(
+        "You can view this analysis setup. Only project managers and the run’s owner can upload documents or run analysis, and only managers can change rules.",
+      ),
+    ).toBeVisible();
+    await step(page, "Run").click();
+    await expect(page.getByRole("button", { name: /^Analyze \d+ items?$/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /^Test Selected/ })).toBeDisabled();
   });
 
   test('no LLM connection: banner and disabled Test / Analyze; Preview still works', async ({ page, request }) => {

@@ -26,13 +26,14 @@ import {
   Skeleton,
   Text,
   useToast,
-} from '@/ui';
-import { useDraftRules } from '../useDraftRules';
-import { useRuleGenerator } from '../useRuleGenerator';
-import { RuleEditor } from './RuleEditor';
-import { CompareDialog, MergeDialog, PublishDialog } from './VersionDialogs';
-import { ExamplePicker, allExampleFields, type ExampleSelection } from './ExamplePicker';
-import s from './rules.module.css';
+} from "@/ui";
+import { formatDateParts } from "@/lib/format";
+import { useDraftRules } from "../useDraftRules";
+import { useRuleGenerator } from "../useRuleGenerator";
+import { RuleEditor } from "./RuleEditor";
+import { CompareDialog, MergeDialog, PublishDialog } from "./VersionDialogs";
+import { ExamplePicker, allExampleFields, type ExampleSelection } from "./ExamplePicker";
+import s from "./rules.module.css";
 
 function relative(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -99,9 +100,15 @@ function RulesView({
     if (job.status === 'completed' && job.result) {
       setOpenId(job.result.rule_version.id);
       const added = job.result.changes?.added ?? job.result.generated_rule_count ?? 0;
-      toast.show(added ? `Added ${added} new ${added === 1 ? 'rule' : 'rules'}` : 'Rule generation finished with no new rules', { tone: 'success' });
-    } else if (job.status === 'cancelled') toast.show('Rule generation cancelled', { tone: 'info' });
-    else toast.show(job.error || 'Rule generation failed', { tone: 'error' });
+      const docs = job.result.documents_used ?? 0;
+      const ex = job.result.examples_used ?? 0;
+      const used = ` Used ${docs} ${docs === 1 ? "document" : "documents"} and ${ex} approved ${ex === 1 ? "example" : "examples"}.`;
+      toast.show(
+        `${added ? `Added ${added} new ${added === 1 ? "rule" : "rules"}.` : "Rule generation finished with no new rules."}${used}`,
+        { tone: "success" },
+      );
+    } else if (job.status === "cancelled") toast.show("Rule generation cancelled", { tone: "info" });
+    else toast.show(job.error || "Rule generation failed", { tone: "error" });
   });
 
   if (!open) {
@@ -195,7 +202,14 @@ function RulesView({
                   { id: 'compare', label: 'Compare with…' },
                   ...(canManage ? [{ id: 'merge', label: 'Merge with…' }] : []),
                   ...(data.can_delete && v.id !== productionId && !v.is_active
-                    ? [{ id: 'delete', label: 'Delete version', tone: 'danger' as const, separatorBefore: true }]
+                    ? [
+                        {
+                          id: "delete",
+                          label: "Delete version",
+                          tone: "danger" as const,
+                          separatorBefore: true,
+                        },
+                      ]
                     : []),
                 ]}
               />
@@ -276,6 +290,23 @@ function RulesView({
                 <Text variant="base" tone="secondary">
                   Rule generation progress
                 </Text>
+                {generator.job.progress.phase === "generating" || generator.job.progress.phase === "preparing" ? (
+                  <Text
+                    variant="sm"
+                    mono
+                    tone="muted"
+                    as="span"
+                    aria-label={
+                      Number(generator.job.progress.total) > 0
+                        ? `${generator.job.progress.completed ?? 0} of ${generator.job.progress.total} LLM patches`
+                        : "Preparing LLM patches"
+                    }
+                  >
+                    {Number(generator.job.progress.total) > 0
+                      ? `${generator.job.progress.completed ?? 0} / ${generator.job.progress.total}`
+                      : "Preparing…"}
+                  </Text>
+                ) : null}
                 <span className={s.spacer} />
                 {generator.busy ? (
                   <Button size="sm" loading={generator.cancelling} onPress={generator.cancel}>
@@ -293,6 +324,15 @@ function RulesView({
               {generator.job.error ? (
                 <Text variant="sm" tone="danger" as="p">
                   {generator.job.error}
+                </Text>
+              ) : null}
+              {generator.job.status === "completed" && generator.job.result ? (
+                <Text variant="sm" tone="muted" as="p">
+                  {`Used ${generator.job.result.documents_used ?? 0} ${generator.job.result.documents_used === 1 ? "document" : "documents"} and ${generator.job.result.examples_used ?? 0} approved ${generator.job.result.examples_used === 1 ? "example" : "examples"}.${
+                    generator.job.result.inference_stats?.writer_calls
+                      ? ` ${generator.job.result.inference_stats.writer_calls} writer ${generator.job.result.inference_stats.writer_calls === 1 ? "call" : "calls"}${generator.job.result.inference_stats.patching_used ? " across bounded patches" : ""}.`
+                      : ""
+                  }`}
                 </Text>
               ) : null}
             </div>
@@ -334,7 +374,13 @@ function RulesView({
   );
 }
 
-const PHASE_PCT: Record<string, number> = { queued: 5, preparing: 25, generating: 60, persisting: 90, completed: 100 };
+const PHASE_PCT: Record<string, number> = {
+  queued: 5,
+  preparing: 25,
+  generating: 60,
+  persisting: 90,
+  completed: 100,
+};
 
 function VersionWorkspace({
   scope,
@@ -389,6 +435,13 @@ function VersionWorkspace({
           </div>
         }
       />
+      <Text variant="sm" tone="muted" as="p" data-testid="version-meta">
+        {[
+          `Created ${formatDateParts(version.created_at).full || "—"}`,
+          `Updated ${formatDateParts(version.updated_at).full || "—"}`,
+          `By ${version.created_by?.display_name ?? "—"}`,
+        ].join(" · ")}
+      </Text>
       {generation}
       <RuleEditor draft={draft} editable={editable} />
       {sources}

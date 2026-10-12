@@ -119,8 +119,9 @@ function DiagnosisEditor({
   const newApprovals = dirty && draft !== null && draft.approvals !== approvals;
 
   const categories = current.categories;
-  const active: CategoryDraft | undefined = categories.find((c) => c.name === selected) ?? categories[0];
   const visible = categories.filter((c) => c.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  // The editor always shows a category that is in the (filtered) list.
+  const active: CategoryDraft | undefined = visible.find((c) => c.name === selected) ?? visible[0];
   const totalExamples = categories.reduce((n, c) => n + c.exampleCount, 0);
 
   function edit(fn: (value: CatalogDraft) => CatalogDraft) {
@@ -214,7 +215,15 @@ function DiagnosisEditor({
       ...c,
       subs: [
         ...c.subs,
-        { name, description: '', whenToUse: '', exampleOnly: false, isNew: true, touched: true, hadTaxonomy: false },
+        {
+          name,
+          description: "",
+          whenToUse: "",
+          exampleOnly: false,
+          isNew: true,
+          touched: true,
+          hadTaxonomy: false,
+        },
       ],
     }));
     setNewSub('');
@@ -337,8 +346,10 @@ function DiagnosisEditor({
         ) : null}
       </div>
 
-      {categories.length === 0 || !active ? (
+      {categories.length === 0 ? (
         <EmptyState compact title="No categories yet" body="Add a category, or approve diagnoses in Reviews." />
+      ) : !active ? (
+        <EmptyState compact title="No matching categories" body={`No category name contains “${query.trim()}”.`} />
       ) : (
         <Tabs
           label="Categories"

@@ -33,7 +33,7 @@ export function PublishDialog({
 }) {
   const publish = usePublishVersion(scope);
   const toast = useToast();
-  const [production, setProduction] = useState(true);
+  const [production, setProduction] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
@@ -235,8 +235,13 @@ export function MergeDialog({
       else if (choice) resolutions[c.key] = choice;
     }
     try {
-      const res = await merge.mutateAsync({ target: target.version, source: sourceVersion, apply: true, resolutions });
-      toast.show('Versions merged', { tone: 'success' });
+      const res = await merge.mutateAsync({
+        target: target.version,
+        source: sourceVersion,
+        apply: true,
+        resolutions,
+      });
+      toast.show("Versions merged", { tone: "success" });
       onMerged(res.version);
       onOpenChange(false);
     } catch (e) {
@@ -322,8 +327,13 @@ export function MergeDialog({
                   <Textarea
                     label="Instruction"
                     rows={3}
-                    value={custom[c.key]?.instruction ?? ''}
-                    onChange={(v) => setCustom((cur) => ({ ...cur, [c.key]: { title: cur[c.key]?.title ?? '', instruction: v } }))}
+                    value={custom[c.key]?.instruction ?? ""}
+                    onChange={(v) =>
+                      setCustom((cur) => ({
+                        ...cur,
+                        [c.key]: { title: cur[c.key]?.title ?? "", instruction: v },
+                      }))
+                    }
                   />
                 </>
               ) : null}
