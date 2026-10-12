@@ -122,6 +122,7 @@ frontend/test-results/
 frontend/playwright-report*/
 frontend/blob-report/
 frontend/.qym-e2e.db*
+frontend/*.tsbuildinfo
 .qym-dev.db*
 
 # frontend/src/lib is source, not a Python lib/ build dir
