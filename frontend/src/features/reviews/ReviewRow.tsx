@@ -38,6 +38,7 @@ export function ReviewRow({ row, current, selected, linked, busy, showProject, o
           {priority ? <Tag tone={priority.level === 'high' ? 'danger' : 'warning'}>{priority.level === 'high' ? 'High' : 'Medium'}</Tag> : null}
           {linked ? <Tag tone="info">Linked</Tag> : null}
           {row.self_reviewed ? <Tag>Self-approved</Tag> : null}
+          {row.has_reasoning ? <Tag tone="info">reasoning</Tag> : null}
           {typeof row.ai_confidence === 'number' ? <span className={styles.conf}>{Math.round(row.ai_confidence * 100)}%</span> : null}
         </span>
         <span className={styles.summary} {...textDirAttrs(summary)}>

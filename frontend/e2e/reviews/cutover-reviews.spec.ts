@@ -119,13 +119,11 @@ test.describe('keyboard and focus', () => {
     await expect(row(page, c0!.id)).toHaveAttribute('data-current', '');
     await page.keyboard.press('a');
     await expect(row(page, c0!.id)).toHaveAttribute('data-status', 'approved');
-    // the approved card stays in All. FINDING: the current row does not move on by itself (the old queue did), so j
-    await page.keyboard.press('j');
+    // the approved card stays in All and the current row moves on to the next pending card
     await expect(row(page, c1!.id)).toHaveAttribute('data-current', '');
     await page.keyboard.press('a');
     await expect(row(page, c1!.id)).toHaveAttribute('data-status', 'approved');
     await expect(tab(page, 'Approved')).toContainText('2');
-    await page.keyboard.press('j');
     await expect(row(page, c2!.id)).toHaveAttribute('data-current', '');
   });
 
@@ -223,9 +221,9 @@ test.describe('All-tab bulk actions act only on the rows they fit', () => {
       if (r.method() === 'POST' && new URL(r.url()).pathname === '/api/corrections/bulk') sent.push(r.postData() ?? '');
     });
     await row(page, approved[0]!.id).locator('[data-review-card]').focus();
-    // Shift+A opens the dialog (FINDING: "Approve 0 corrections"); confirming sends nothing and names the rule.
+    // Shift+A refuses with the rule instead of opening an "Approve 0 corrections" dialog.
     await page.keyboard.press('Shift+A');
-    await page.getByRole('dialog', { name: /Approve/ }).getByTestId('comment-confirm').click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByText('Approve works on pending corrections only.')).toBeVisible();
     expect(sent).toEqual([]);
     await page.getByTestId('bulk-reset').click();

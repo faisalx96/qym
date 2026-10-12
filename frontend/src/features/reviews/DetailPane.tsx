@@ -98,7 +98,7 @@ export function DetailPane(p: DetailPaneProps) {
         <Chipline label="Run" value={row.run_name} href={runHref} />
         {row.pass_number != null ? <Chipline label="Pass" value={String(row.pass_number)} /> : null}
         <Chipline label="Dataset" value={row.dataset} />
-        <Chipline label="Model" value={row.model} />
+        <Chipline label="Model" value={row.has_reasoning && row.model ? `${row.model} (reasoning)` : row.model} />
       </div>
 
       <div className={styles.columns}>

@@ -141,6 +141,8 @@ export function ReviewsPage() {
           }),
         };
       });
+      void qc.invalidateQueries({ queryKey: reviewKeys.detail(old.id) });
+      if (updated.id !== old.id) void qc.invalidateQueries({ queryKey: reviewKeys.detail(updated.id) });
       setLinked((l) => (l && l.id === old.id ? (leaves ? null : updated) : l));
       setSelected((s) => {
         if (!s.has(old.id)) return s;
@@ -190,10 +192,13 @@ export function ReviewsPage() {
       inflight.current.add(row.id);
       setBusy(new Set(inflight.current));
       const next = neighborOf(row.id);
+      // On the All tab a decided row stays listed, so advance to the next pending row instead.
+      const nextPending = rows.slice(rows.findIndex((r) => r.id === row.id) + 1).find((r) => r.status === 'pending')?.id ?? null;
       try {
         const updated = await decideMut.mutateAsync({ id: row.id, action, comment });
         applyUpdate(row, updated);
         if (!fitsStatusTab(updated, filters.status) && currentId === row.id) moveTo(next);
+        else if (filters.status === 'all' && action !== 'reset' && currentId === row.id) moveTo(nextPending);
         toast.show(`${action === 'approve' ? 'Approved' : action === 'reject' ? 'Rejected' : 'Reset'} #${row.id}`, { tone: 'success' });
       } catch (e) {
         toast.show(e instanceof ApiError ? e.detail || e.message : 'Action failed', { tone: 'error' });
@@ -203,7 +208,7 @@ export function ReviewsPage() {
         setBusy(new Set(inflight.current));
       }
     },
-    [toast, neighborOf, decideMut, applyUpdate, filters.status, currentId, moveTo, qc],
+    [toast, neighborOf, rows, decideMut, applyUpdate, filters.status, currentId, moveTo, qc],
   );
 
   async function saveEdit(issues: CorrectionRow['human_root_cause_issues']) {
@@ -242,6 +247,14 @@ export function ReviewsPage() {
   }
 
   // ---- bulk -------------------------------------------------------------
+  function openBulk(action: 'approve' | 'reject') {
+    if (!bulkSelection(rows, selected, action).ids.length) {
+      toast.show(BULK_FITS[action].rule, { tone: 'error' });
+      return;
+    }
+    setDialog({ kind: 'bulk', action });
+  }
+
   async function runBulk(action: BulkAction, comment = '') {
     const ids = action === 'delete' ? [...selected] : bulkSelection(rows, selected, action).ids;
     if (!ids.length) {
@@ -304,7 +317,7 @@ export function ReviewsPage() {
     },
     bulkApprove: () => {
       if (!selected.size) toast.show('Select corrections with x first.', { tone: 'info' });
-      else setDialog({ kind: 'bulk', action: 'approve' });
+      else openBulk('approve');
     },
     focusSearch: () => searchRef.current?.focus(),
     help: () => setHelp(true),
@@ -386,10 +399,10 @@ export function ReviewsPage() {
                 <Text as="span" variant="md" weight={600}>
                   {selected.size} selected
                 </Text>
-                <Button variant="accent" size="sm" onPress={() => setDialog({ kind: 'bulk', action: 'approve' })} isDisabled={!approveFit.ids.length} data-testid="bulk-approve">
+                <Button variant="accent" size="sm" onPress={() => openBulk('approve')} isDisabled={!approveFit.ids.length} data-testid="bulk-approve">
                   Approve{approveFit.skipped ? ` (${approveFit.ids.length} of ${approveFit.selected})` : ''}
                 </Button>
-                <Button variant="danger" size="sm" onPress={() => setDialog({ kind: 'bulk', action: 'reject' })} isDisabled={!approveFit.ids.length} data-testid="bulk-reject">
+                <Button variant="danger" size="sm" onPress={() => openBulk('reject')} isDisabled={!approveFit.ids.length} data-testid="bulk-reject">
                   Reject{approveFit.skipped ? ` (${approveFit.ids.length} of ${approveFit.selected})` : ''}
                 </Button>
                 <Button variant="neutral" size="sm" onPress={() => void runBulk('reset')} isDisabled={!resetFit.ids.length} data-testid="bulk-reset">
