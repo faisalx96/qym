@@ -73,7 +73,7 @@ test('item rows: visible keyboard focus ring; Enter and Space expand and collaps
   await page.keyboard.press('Enter');
   await expect(rowBtn).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByTestId('item-detail')).toBeVisible();
-  // let ?item= settle first: collapsing in the same frame as the expand is racy (see report: ItemList deep-link effect re-opens it)
+  // collapsing right after the expand must not be undone when the ?item= URL catches up
   await expect.poll(() => new URL(page.url()).searchParams.get('item')).toBe('cmp-001');
   await expect(page.getByTestId('output-card')).toHaveCount(4); // bodies loaded
   await page.keyboard.press('Space');
@@ -105,8 +105,7 @@ test('every control has an accessible name; remove buttons say what they remove'
 
 const axeScan = async (page: Page) => {
   const v = await axeSeriousViolations(page, '[data-testid="compare-page"]');
-  // Known gap: the foundation Tag[data-tone=danger] colours miss AA on --bg-surface (shared primitive, see the area report).
-  return v.filter((x) => x.id !== 'color-contrast').map((x) => `${x.id} (${x.impact}): ${x.help} x${x.nodes.length} e.g. ${x.nodes[0]?.target.join(' ')}`);
+  return v.map((x) => `${x.id} (${x.impact}): ${x.help} x${x.nodes.length} e.g. ${x.nodes[0]?.target.join(' ')}`);
 };
 
 test('axe: no serious or critical violations on the loaded Compare page', async ({ page }) => {
