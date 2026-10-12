@@ -77,7 +77,11 @@
 }
 
 .link[data-tone='danger'] .count {
-  color: var(--danger);
+  /* `--danger` is not a token; match the Tabs count: tinted pill, readable numeral */
+  padding: 0 var(--space-xs);
+  border-radius: var(--control-radius);
+  color: var(--text-primary);
+  background: rgba(239, 68, 68, 0.3);
 }
 
 .sep {

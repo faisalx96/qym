@@ -6,6 +6,7 @@ import { runKeys, fetchNeighbors } from '@/api/runs';
 import { runPath } from '@/app/routes';
 import { Icon, Kbd } from '@/ui';
 import { formatIsoDateTime } from '../lib/heroModel';
+import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard';
 import { collation, neighborQuery, normalizeContext, runHref } from '../lib/runsOrder';
 import type { NeighborRun } from '../types';
 import styles from './RunPager.module.css';
@@ -120,6 +121,7 @@ export function RunPager({
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       const key = event.key.toLowerCase();
       if (key !== 'j' && key !== 'k') return;
+      if (!singleKeyShortcutsEnabled()) return; // WCAG 2.1.4 opt-out (Runs list > Shortcuts)
       const el = event.target as HTMLElement | null;
       if (
         el?.closest?.(

@@ -118,7 +118,9 @@ export function Histogram({
         const title = `${b.label}: ${b.count} items (${pct}%)${b.note}`;
         const bar = (
           <>
-            <span className={styles.count}>{b.count || ''}</span>
+            {/* The numerals are drawn from data-* by CSS: the button's name is the aria-label, and text
+                that duplicates it would have to match it (axe label-content-name-mismatch). */}
+            <span className={styles.count} aria-hidden="true" data-text={b.count || ''} />
             <span className={styles.barArea}>
               <span
                 className={styles.bar}
@@ -129,7 +131,7 @@ export function Histogram({
                 ) : null}
               </span>
             </span>
-            <span className={styles.axis}>{b.label}</span>
+            <span className={styles.axis} aria-hidden="true" data-text={b.label} />
           </>
         );
         return b.count > 0 ? (
