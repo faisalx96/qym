@@ -1,5 +1,6 @@
 /* Checkbox: 14px box, accent fill when selected. */
 .checkbox {
+  position: relative; /* anchors the visually hidden input so focusing it never scrolls the page */
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);

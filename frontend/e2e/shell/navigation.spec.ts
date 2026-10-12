@@ -339,7 +339,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     const p = await createProject(request, 'Deep Links', uniqueSlug('deep'));
     const runId = 'eval/2026-01-01/abc';
     const encodedRun = runId.split('/').map(encodeURIComponent).join('/');
-    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' | 'runs' | 'overview' | 'charts' | 'run' | 'compare' }[] = [
+    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' | 'runs' | 'overview' | 'charts' | 'run' | 'compare' | 'analysis' | 'analyzer-redirect' }[] = [
       { path: '/', expect: 'projects' },
       { path: '/profile', expect: 'profile' },
       { path: '/admin', expect: 'coming-soon' },
@@ -360,10 +360,10 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       { path: `/projects/${p.slug}/environments/env-1`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/datasets`, expect: 'datasets' },
       { path: `/projects/${p.slug}/datasets/ds-1`, expect: 'datasets' },
-      { path: `/projects/${p.slug}/analysis`, expect: 'coming-soon' },
+      { path: `/projects/${p.slug}/analysis`, expect: 'analysis' },
       { path: `/projects/${p.slug}/reviews`, expect: 'reviews' },
       { path: `/projects/${p.slug}/runs/${encodedRun}`, expect: 'run' },
-      { path: `/projects/${p.slug}/runs/${encodedRun}/analyzer`, expect: 'coming-soon' },
+      { path: `/projects/${p.slug}/runs/${encodedRun}/analyzer`, expect: 'analyzer-redirect' },
       { path: `/projects/${p.slug}/settings`, expect: 'settings' },
       { path: `/projects/${p.slug}/settings?tab=apikeys`, expect: 'settings' },
       { path: `/projects/${p.slug}/settings?tab=environments&env=e1&promote=saved&id=x`, expect: 'settings' },
@@ -389,6 +389,11 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       } else if (u.expect === 'datasets') {
         // catalog, or the dataset detail / not-found state for an unknown ref
         await expect(page.locator('[data-datasets-catalog], [data-dataset-detail], [role="alert"], [data-error-state]').first(), u.path).toBeVisible();
+      } else if (u.expect === 'analysis') {
+        await expect(page.getByRole('heading', { name: 'Auto-analysis' }), u.path).toBeVisible();
+      } else if (u.expect === 'analyzer-redirect') {
+        // /runs/<id>/analyzer lands on the analysis workspace with ?run=
+        await expect(page, u.path).toHaveURL(/\/analysis\?(.*&)?run=/);
       } else if (u.expect === 'compare') {
         // Implemented by the compare area: with no ?runs= it shows its empty state.
         await expect(page.getByText('No runs to compare'), u.path).toBeVisible();

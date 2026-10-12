@@ -40,6 +40,8 @@ const DatasetsRoutes = () => (
 );
 import { RunDetailPage } from '@/features/run-detail/RunDetailPage';
 import { ComparePage } from '@/features/compare/ComparePage';
+import { AnalyzerPage } from '@/features/analyzer';
+import { RunAnalyzerRedirect } from '@/features/analyzer/RunAnalyzerRedirect';
 
 const C = ROUTES.projectChildren;
 
@@ -55,11 +57,18 @@ const projectChildren: RouteObject[] = [
   { path: C.environments, element: <ComingSoon brief="06-experiments-eval-queue" title="Environments" /> },
   { path: C.datasets, element: <DatasetsRoutes /> },
   { path: C.datasetsSplat, element: <DatasetsRoutes /> },
-  { path: C.analysis, element: <ComingSoon brief="08-playground" title="Auto-analysis" /> },
+  { path: C.analysis, element: <AnalyzerPage /> },
   { path: C.reviews, element: <ReviewsPage /> },
   { path: C.compare, element: <ComparePage /> },
   { path: C.settings, element: <ProjectSettingsPage /> },
-  { path: C.runs_detail, element: <RunDetailPage /> },
+  {
+    path: C.runs_detail,
+    element: (
+      <RunAnalyzerRedirect>
+        <RunDetailPage />
+      </RunAnalyzerRedirect>
+    ),
+  },
 ];
 
 const devRoutes: RouteObject[] = isDev
