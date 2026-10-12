@@ -5,15 +5,15 @@ import { metricCell } from '../lib/metric-cell';
 import { parseTime, STATUS_LABEL } from './format';
 import s from './Summary.module.css';
 
-function useElapsed(run: RunInfo, finished: boolean): number | null {
+function useElapsed(run: RunInfo, finished: boolean, paused: boolean): number | null {
   const start = parseTime(run.started_at);
   const end = parseTime(run.ended_at);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (start === null || finished) return;
+    if (start === null || finished || paused) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [start, finished]);
+  }, [start, finished, paused]);
   if (start === null) return null;
   return ((finished && end !== null ? end : now) - start) / 1000;
 }
@@ -29,15 +29,25 @@ export interface SummaryProps {
   snapshot: Snapshot;
   run: RunInfo;
   finished: boolean;
+  /** the live stream dropped: the clock stops until it is back */
+  paused?: boolean;
   visible: Set<number>;
   selected: number | null;
   onOpen: (index: number) => void;
 }
 
 /** Progress, latency and the ribbon: one coloured cell per row, doubling as navigation. */
-export function Summary({ snapshot, run, finished, visible, selected, onOpen }: SummaryProps) {
+export function Summary({
+  snapshot,
+  run,
+  finished,
+  paused = false,
+  visible,
+  selected,
+  onOpen,
+}: SummaryProps) {
   const { stats, rows } = snapshot;
-  const elapsed = useElapsed(run, finished);
+  const elapsed = useElapsed(run, finished, paused);
   const latency = latencySummary(rows);
   const means = metricMeans(rows, snapshot.metric_names);
   const done = stats.completed + stats.failed;
@@ -93,6 +103,7 @@ export function Summary({ snapshot, run, finished, visible, selected, onOpen }: 
           <dl className={s.stats} aria-label="Latency">
             {(
               [
+                ['Min', latency.min],
                 ['P50', latency.p50],
                 ['P90', latency.p90],
                 ['P99', latency.p99],

@@ -88,8 +88,31 @@ function csvEscape(value: unknown): string {
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
+/** `<metric>_<key>` columns for every metric_meta key present (judge reasons, edit audit). */
+function metaColumns(rows: Row[], metricNames: string[]): Array<{ metric: string; key: string }> {
+  const out: Array<{ metric: string; key: string }> = [];
+  for (const metric of metricNames) {
+    const keys = new Set<string>();
+    for (const row of rows) for (const k of Object.keys(row.metric_meta?.[metric] ?? {})) keys.add(k);
+    for (const key of keys) out.push({ metric, key });
+  }
+  return out;
+}
+
 export function rowsToCsv(rows: Row[], metricNames: string[]): string {
-  const header = ['index', 'status', 'input', 'output', 'expected', ...metricNames, 'latency_ms'];
+  const meta = metaColumns(rows, metricNames);
+  const header = [
+    'index',
+    'status',
+    'input',
+    'output',
+    'expected',
+    ...metricNames,
+    ...meta.map((m) => `${m.metric}_${m.key}`),
+    'latency_ms',
+    'trace_id',
+    'item_id',
+  ];
   const lines = [header.map(csvEscape).join(',')];
   for (const row of rows) {
     lines.push(
@@ -100,7 +123,10 @@ export function rowsToCsv(rows: Row[], metricNames: string[]): string {
         row.output_full,
         row.expected_full,
         ...metricNames.map((_, i) => row.metric_values[i] ?? ''),
+        ...meta.map((m) => row.metric_meta?.[m.metric]?.[m.key] ?? ''),
         row.latency_ms ?? '',
+        row.trace_id ?? '',
+        row.item_id ?? '',
       ]
         .map(csvEscape)
         .join(','),

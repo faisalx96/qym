@@ -51,6 +51,10 @@ export interface RunInfo {
   config?: { max_concurrency?: number; timeout?: number; [k: string]: unknown };
   /** historical only: absolute path of the results file (needed for score edits) */
   file_path?: string;
+  /** historical only: false for .xlsx files and files outside the server's results dir */
+  editable?: boolean;
+  /** `qym ui` without a file answers `{live: false}`: no evaluation will ever register */
+  live?: boolean;
 }
 
 export interface RunFile {

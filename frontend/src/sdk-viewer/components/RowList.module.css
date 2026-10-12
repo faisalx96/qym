@@ -29,6 +29,7 @@
   text-align: start;
   padding: 0 var(--space-sm);
   height: var(--tab-height);
+  padding-block: var(--space-xs);
   overflow: hidden;
 }
 .table th.num,
@@ -36,14 +37,6 @@
   text-align: end;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  width: 11ch;
-}
-.table th:first-child,
-.table td:first-child {
-  width: 6ch;
-}
-.table th:nth-child(2) {
-  width: 11ch;
 }
 .thBtn {
   all: unset;
@@ -59,10 +52,20 @@
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
+/* Long metric names wrap instead of truncating ("EXACT..."); the full name is also the title. */
 .thText {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.2;
+  text-align: start;
+}
+.edited {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-end: var(--space-xs);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-pill);
 }
 .sortHint {
   color: var(--text-muted);

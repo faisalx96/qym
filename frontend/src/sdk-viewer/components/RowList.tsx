@@ -19,10 +19,11 @@ export interface RowListProps {
   onOpen: (index: number) => void;
 }
 
-function Cell({ value }: { value: string | number | undefined }) {
+function Cell({ value, edited }: { value: string | number | undefined; edited?: boolean }) {
   const cell = metricCell(value);
   return (
-    <span className={s.score} data-kind={cell.kind} title={cell.text}>
+    <span className={s.score} data-kind={cell.kind} title={edited ? `${cell.text} (edited)` : cell.text}>
+      {edited ? <i aria-hidden="true" className={s.edited} /> : null}
       {cell.kind === 'pass' || cell.kind === 'fail' ? <i aria-hidden="true" className={s.dot} /> : null}
       {formatScore(cell)}
     </span>
@@ -100,6 +101,19 @@ export function RowList({ rows, metricNames, selected, sort, dir, onSort, onOpen
         <caption className={s.srOnly}>
           Evaluation rows. Arrow keys move between rows, Enter opens the detail.
         </caption>
+        <colgroup>
+          <col style={{ width: '6ch' }} />
+          <col style={{ width: '11ch' }} />
+          <col />
+          <col />
+          {metricNames.map((name) => (
+            <col
+              key={name}
+              style={{ width: `${Math.min(28, Math.max(11, Math.ceil(name.length * 1.2) + 5))}ch` }}
+            />
+          ))}
+          <col style={{ width: '11ch' }} />
+        </colgroup>
         <thead>
           <tr>
             {th('index', '#', 'Row number', true)}
@@ -135,7 +149,7 @@ export function RowList({ rows, metricNames, selected, sort, dir, onSort, onOpen
               </td>
               {metricNames.map((name, k) => (
                 <td key={name} className={s.num}>
-                  <Cell value={r.metric_values[k]} />
+                  <Cell value={r.metric_values[k]} edited={r.metric_meta?.[name]?.modified === 'true'} />
                 </td>
               ))}
               <td className={s.num}>{formatLatency(r.latency_ms)}</td>
