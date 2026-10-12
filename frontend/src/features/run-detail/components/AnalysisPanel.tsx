@@ -33,6 +33,24 @@ export interface AnalysisPanelProps {
   wide: boolean;
 }
 
+/** The analysis tabs this run offers (shared with the section nav). */
+export function usePanelEntries(): TabItem[] {
+  const { runId, model } = useRunPage();
+  const reviews = useReviewHistoryQuery(runId, true);
+  const reviewCount = reviews.data?.events.length ?? 0;
+  const errorCount = errorBucketCount(model.rows, model.isRepeat && !model.viewPass);
+  return [
+    { id: 'overview', label: 'Overview' },
+    { id: 'errors', label: 'Errors', count: errorCount, tone: errorCount ? 'danger' : undefined },
+    { id: 'categories', label: 'Categories' },
+    { id: 'latency', label: 'Latency' },
+    { id: 'deep', label: 'Deep' },
+    { id: 'root-cause', label: 'Root cause' },
+    ...(model.isRepeat && !model.viewPass ? [{ id: 'repeat', label: 'Repeat' }] : []),
+    ...(reviewCount ? [{ id: 'reviews', label: 'Reviews', count: reviewCount }] : []),
+  ];
+}
+
 function PanelContents({
   tab,
   onTab,
@@ -44,20 +62,8 @@ function PanelContents({
   onClose: () => void;
   wide: boolean;
 }) {
-  const { runId, items, model, payload } = useRunPage();
-  const reviews = useReviewHistoryQuery(runId, true);
-  const reviewCount = reviews.data?.events.length ?? 0;
-  const errorCount = errorBucketCount(model.rows, model.isRepeat && !model.viewPass);
-  const entries: TabItem[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'errors', label: 'Errors', count: errorCount, tone: errorCount ? 'danger' : undefined },
-    { id: 'categories', label: 'Categories' },
-    { id: 'latency', label: 'Latency' },
-    { id: 'deep', label: 'Deep' },
-    { id: 'root-cause', label: 'Root cause' },
-    ...(model.isRepeat && !model.viewPass ? [{ id: 'repeat', label: 'Repeat' }] : []),
-    ...(reviewCount ? [{ id: 'reviews', label: 'Reviews', count: reviewCount }] : []),
-  ];
+  const { items, payload } = useRunPage();
+  const entries = usePanelEntries();
   const current = entries.some((e) => e.id === tab) ? tab : 'overview';
   const body = (id: PanelTab) => {
     if (id !== current) return null;

@@ -142,6 +142,11 @@ export function RunHero({
             <RunStatusBadge status={statusKey} label={statusText + runningPass} />
           </span>
           <LiveIndicator live={live} run={run} />
+          {liveNow && runtimeMs != null ? (
+            <span className={styles.live} data-testid="hero-runtime-live">
+              Runtime <span className={styles.mono}>{formatDurationMs(runtimeMs)}</span>
+            </span>
+          ) : null}
           <LinkButton
             variant="accent"
             size="sm"

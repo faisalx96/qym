@@ -1,0 +1,87 @@
+/* Sticky section nav under the shell topbar; the filter bar sticks right below it. */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+  padding: var(--space-xs) 0;
+  background: var(--bg-void);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.identity {
+  display: none;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  max-width: 28ch;
+}
+
+.nav[data-compact] .identity {
+  display: inline-flex;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-base);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: none;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--control-radius);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.link[aria-current='location'] {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  font-weight: 650;
+}
+
+.count {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.link[data-tone='danger'] .count {
+  color: var(--danger);
+}
+
+.sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--border-subtle);
+}

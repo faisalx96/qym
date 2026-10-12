@@ -197,7 +197,9 @@ export function ItemsSection({
             }
           />
         </div>
-        <FilterBar display={{ textMode, onTextMode: setTextMode }} />
+        <div className={styles.sticky} data-run-filters="">
+          <FilterBar display={{ textMode, onTextMode: setTextMode }} />
+        </div>
         {showBanner && metric ? (
           <div className={styles.banner} role="status" data-testid="filter-banner">
             Filtered to {items.length.toLocaleString('en-US')} items that {bannerKinds[view.show]} {metric}
@@ -214,9 +216,9 @@ export function ItemsSection({
           <Heatmap
             items={items}
             onOpen={(itemId, pass) => {
-              api.replaceView({ ...view, view: 'cards', page: 1 }, { item: itemId });
+              // The cell's own pass opens: that item as that pass produced it.
+              api.replaceView({ ...view, view: 'cards', page: 1 }, { item: itemId, pass: String(pass) });
               setExpanded((prev) => new Set(prev).add(itemId));
-              void pass;
             }}
           />
         ) : (

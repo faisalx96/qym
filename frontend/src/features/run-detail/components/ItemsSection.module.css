@@ -5,7 +5,7 @@
   flex-direction: column;
   gap: var(--space-sm);
   min-width: 0;
-  scroll-margin-top: var(--space-md);
+  scroll-margin-top: calc(var(--run-nav-h, 0px) + var(--space-sm));
 }
 
 .head {
@@ -47,4 +47,34 @@
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
+}
+
+/* The filter bar stays under the section nav while the table scrolls (tall viewports only). */
+.sticky {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  background: var(--bg-void);
+}
+
+@media (min-width: 761px) and (min-height: 640px) {
+  .sticky {
+    position: sticky;
+    top: var(--run-nav-h, 0px);
+    z-index: 5;
+    padding-bottom: var(--space-xs);
+  }
+}
+
+/* Narrow: the Items header stacks (description gets the full line, actions wrap) and the table scrolls sideways. */
+@container (max-width: 640px) {
+  .head > div {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-sm);
+  }
+
+  .head > div > div:last-child {
+    flex-wrap: wrap;
+  }
 }

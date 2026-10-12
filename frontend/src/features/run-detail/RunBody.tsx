@@ -14,6 +14,7 @@ import { Stack } from '@/ui';
 import { AnalysisPanel, PANEL_TABS, type PanelTab } from './components/AnalysisPanel';
 import { ExperimentPanel, RunNotices, VersioningDetails } from './components/RunPanels';
 import { RunHero } from './components/RunHero';
+import { SectionNav, type SectionId } from './components/SectionNav';
 import { ItemsSection } from './components/ItemsSection';
 import { TraceHost } from './components/TraceHost';
 import { useItemSearch } from './hooks/useItemSearch';
@@ -31,7 +32,8 @@ const HERO_KEY = 'qym:run-hero-expanded';
 export const WIDE_QUERY = '(min-width: 1200px)';
 
 /** Legacy section anchors (#overview …) → the panel tab that now holds them. */
-const HASH_TAB: Record<string, PanelTab | 'items'> = {
+const HASH_TAB: Record<string, PanelTab | 'items' | 'summary'> = {
+  summary: 'summary',
   overview: 'overview',
   latency: 'latency',
   deep: 'deep',
@@ -113,10 +115,14 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
   );
 
   // Section anchors from old links.
-  const hash = location.hash.replace(/^#(section-)?/, '');
+  const hash = location.hash.replace(/^#(run-section-|section-)?/, '');
   useEffect(() => {
     const target = HASH_TAB[hash];
     if (!target) return;
+    if (target === 'summary') {
+      document.getElementById('shell-content')?.scrollTo({ top: 0 });
+      return;
+    }
     if (target === 'items') {
       document.getElementById('run-items')?.scrollIntoView({ block: 'start' });
       return;
@@ -126,6 +132,19 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
     selectTab(target);
   }, [hash, selectTab]);
 
+  const onSection = useCallback(
+    (id: SectionId | PanelTab) => {
+      if (id === 'summary') {
+        document.getElementById('shell-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (id === 'items') {
+        document.getElementById('run-items')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      } else {
+        setPanelOpen(true);
+        selectTab(id);
+      }
+    },
+    [selectTab],
+  );
   const basePath = runPath(slug, runId);
   const value: RunPageValue = {
     slug,
@@ -164,6 +183,7 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
           ) : null}
           <RunNotices run={run} readOnly={readOnly} />
         </Stack>
+        <SectionNav tab={tab} panelOpen={panelOpen} onSection={onSection} />
         <div className={styles.split} data-panel={panelOpen && wide ? 'open' : 'closed'}>
           <ItemsSection panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} wide={wide} />
           <AnalysisPanel
