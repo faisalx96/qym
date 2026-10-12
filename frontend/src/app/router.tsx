@@ -38,6 +38,7 @@ const DatasetsRoutes = () => (
     <DatasetsRoutesLazy />
   </Suspense>
 );
+import { RunDetailPage } from '@/features/run-detail/RunDetailPage';
 
 const C = ROUTES.projectChildren;
 
@@ -56,7 +57,7 @@ const projectChildren: RouteObject[] = [
   { path: C.analysis, element: <ComingSoon brief="08-playground" title="Auto-analysis" /> },
   { path: C.reviews, element: <ReviewsPage /> },
   { path: C.settings, element: <ProjectSettingsPage /> },
-  { path: C.runs_detail, element: <ComingSoon brief="04-run-detail" title="Run" /> },
+  { path: C.runs_detail, element: <RunDetailPage /> },
 ];
 
 const devRoutes: RouteObject[] = isDev

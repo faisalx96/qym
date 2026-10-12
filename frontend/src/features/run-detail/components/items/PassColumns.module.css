@@ -1,0 +1,120 @@
+/* Per-pass output columns of a repeat item. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.label {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-sm);
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding: var(--space-sm);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+}
+
+.col[data-status='error'] {
+  border-color: var(--error);
+}
+
+.colHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.passLabel {
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.actions {
+  display: inline-flex;
+  margin-inline-start: auto;
+}
+
+.output {
+  flex: 1;
+  min-height: 3em;
+  max-height: 14em;
+  overflow: auto;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+}
+
+.metricHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.metricName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.caret {
+  display: inline-flex;
+  padding: var(--space-xs);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.caret:focus-visible {
+  outline: 2px solid var(--accent-primary);
+}

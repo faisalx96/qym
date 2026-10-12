@@ -8,9 +8,9 @@ import { ErrorState, Skeleton } from '@/ui';
 import { useAuth } from './AuthContext';
 import { constrained } from './layout';
 
+/** `?view=compact` answers `{ run, snapshot }`; the project hangs off `run`. */
 interface CompactRun {
-  /** `?view=compact` answers `{run: {project: {slug}}, snapshot}`. */
-  run?: { project?: { slug?: string } | null } | null;
+  run?: { run_id?: string; project?: { slug?: string } | null; project_slug?: string | null } | null;
   project?: { slug?: string } | null;
   project_slug?: string | null;
 }
@@ -37,6 +37,7 @@ export function LegacyRunRedirect() {
         if (cancelled) return;
         const slug =
           res.run?.project?.slug ??
+          res.run?.project_slug ??
           res.project?.slug ??
           res.project_slug ??
           readLocal(KEYS.lastProjectSlug) ??

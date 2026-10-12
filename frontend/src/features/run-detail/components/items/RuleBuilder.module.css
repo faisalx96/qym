@@ -1,0 +1,54 @@
+/* Filter rule builder popover body (nested AND/OR groups). */
+.builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: min(560px, 90vw);
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--space-md);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.group[data-depth='0'] {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.hint {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.empty {
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.condition {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.addRow {
+  display: flex;
+  gap: var(--space-sm);
+}

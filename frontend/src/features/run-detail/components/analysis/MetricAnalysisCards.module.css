@@ -1,0 +1,107 @@
+/* Root cause cards and the issue dialog form. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.issues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.issue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.issueHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.sub {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.conf {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.actions {
+  display: inline-flex;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.finding {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.muted b {
+  color: var(--text-secondary);
+}
+
+.errorText,
+.error {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--error);
+}
+
+.link {
+  margin-inline-end: var(--space-sm);
+  color: var(--accent-primary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.guide {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}

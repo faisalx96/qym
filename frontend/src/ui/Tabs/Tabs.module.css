@@ -136,3 +136,7 @@
   padding-top: 0;
   padding-inline-start: var(--space-lg);
 }
+
+.panel[data-inert] {
+  display: none;
+}

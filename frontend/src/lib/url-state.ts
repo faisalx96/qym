@@ -6,13 +6,16 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams, type NavigateOptions } from 'react-router-dom';
 
-export type QueryUpdates = Record<string, string | number | boolean | null | undefined>;
+export type QueryUpdates = Record<string, string | number | boolean | string[] | null | undefined>;
 
 export function applyQueryUpdates(params: URLSearchParams, updates: QueryUpdates): URLSearchParams {
   const next = new URLSearchParams(params);
   for (const [key, value] of Object.entries(updates)) {
     if (value === null || value === undefined || value === '' || value === false) next.delete(key);
-    else next.set(key, String(value === true ? '1' : value));
+    else if (Array.isArray(value)) {
+      next.delete(key);
+      value.forEach((item) => next.append(key, item));
+    } else next.set(key, String(value === true ? '1' : value));
   }
   return next;
 }

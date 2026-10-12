@@ -339,7 +339,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     const p = await createProject(request, 'Deep Links', uniqueSlug('deep'));
     const runId = 'eval/2026-01-01/abc';
     const encodedRun = runId.split('/').map(encodeURIComponent).join('/');
-    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' | 'runs' | 'overview' | 'charts' }[] = [
+    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' | 'runs' | 'overview' | 'charts' | 'run' }[] = [
       { path: '/', expect: 'projects' },
       { path: '/profile', expect: 'profile' },
       { path: '/admin', expect: 'coming-soon' },
@@ -361,7 +361,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       { path: `/projects/${p.slug}/datasets/ds-1`, expect: 'datasets' },
       { path: `/projects/${p.slug}/analysis`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/reviews`, expect: 'reviews' },
-      { path: `/projects/${p.slug}/runs/${encodedRun}`, expect: 'coming-soon' },
+      { path: `/projects/${p.slug}/runs/${encodedRun}`, expect: 'run' },
       { path: `/projects/${p.slug}/runs/${encodedRun}/analyzer`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/settings`, expect: 'settings' },
       { path: `/projects/${p.slug}/settings?tab=apikeys`, expect: 'settings' },
@@ -376,6 +376,9 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
         await expect(page.getByRole('heading', { name: /coming soon/ }), u.path).toBeVisible();
       } else if (u.expect === 'runs' || u.expect === 'overview' || u.expect === 'charts') {
         await expect(page.getByTestId(`${u.expect}-page`), u.path).toBeVisible();
+      } else if (u.expect === 'run') {
+        // the run page (run-detail area) renders its own loaded or error state inside the shell
+        await expect(page.getByRole('main'), u.path).toBeVisible();
       } else if (u.expect === 'settings') {
         await expect(page.locator('[data-settings-page]'), u.path).toBeVisible();
       } else if (u.expect === 'trash') {

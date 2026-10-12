@@ -56,7 +56,9 @@ export function useContentScrollRestoration(ref: React.RefObject<HTMLElement | n
   const navigationType = useNavigationType();
   const offsets = useRef(new Map<string, number>());
   const currentKey = useRef(location.key);
+  const currentPath = useRef(location.pathname);
   const restoring = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Record the offset as the user scrolls: by the time a route change commits the
   // new page is already in the scroller, so reading scrollTop then is too late.
@@ -70,10 +72,29 @@ export function useContentScrollRestoration(ref: React.RefObject<HTMLElement | n
     return () => el.removeEventListener('scroll', onScroll);
   }, [ref]);
 
+  useEffect(
+    () => () => {
+      clearTimeout(timer.current);
+      restoring.current = false;
+    },
+    [],
+  );
+
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const previousKey = currentKey.current;
+    const samePath = currentPath.current === location.pathname;
     currentKey.current = location.key;
+    currentPath.current = location.pathname;
+    // A replace that only rewrites the query string (filters, tabs, ?item=) is in-page
+    // state: keep the scroll, carry the entry's offset to its new key, and let any
+    // in-flight Back restore finish.
+    if (navigationType === 'REPLACE' && samePath) {
+      offsets.current.set(location.key, offsets.current.get(previousKey) ?? el.scrollTop);
+      return;
+    }
+    clearTimeout(timer.current);
     if (navigationType !== 'POP') {
       restoring.current = false;
       el.scrollTop = 0;
@@ -83,18 +104,13 @@ export function useContentScrollRestoration(ref: React.RefObject<HTMLElement | n
     // Content may still be loading; retry for up to ~6 s until the offset holds.
     restoring.current = true;
     let tries = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = () => {
       el.scrollTop = saved;
-      if (Math.abs(el.scrollTop - saved) > 2 && tries++ < 40) timer = setTimeout(tick, 150);
+      if (Math.abs(el.scrollTop - saved) > 2 && tries++ < 40) timer.current = setTimeout(tick, 150);
       else restoring.current = false;
     };
     tick();
-    return () => {
-      clearTimeout(timer);
-      restoring.current = false;
-    };
-  }, [location.key, navigationType, ref]);
+  }, [location.key, location.pathname, navigationType, ref]);
 }
 
 /** Last visited active project (used by /reviews, /compare, /run/*). */

@@ -60,13 +60,20 @@ export function TabPanel({
   id,
   children,
   className,
+  forceMount,
 }: {
   id: string;
   children: ReactNode;
   className?: string;
+  /** Keep the panel element mounted (inert) while inactive so `aria-controls` always resolves. */
+  forceMount?: boolean;
 }) {
   return (
-    <AriaTabPanel id={id} className={[styles.panel, className].filter(Boolean).join(' ')}>
+    <AriaTabPanel
+      id={id}
+      shouldForceMount={forceMount}
+      className={[styles.panel, className].filter(Boolean).join(' ')}
+    >
       {children}
     </AriaTabPanel>
   );
