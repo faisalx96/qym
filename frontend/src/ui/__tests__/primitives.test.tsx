@@ -181,7 +181,7 @@ describe('ErrorState', () => {
     expect(screen.getByRole('alert')).toHaveAttribute('data-error-kind', 'auth');
     expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute(
       'href',
-      expect.stringContaining('/app/login?next='),
+      expect.stringContaining('/login?next='),
     );
     rerender(
       <MemoryRouter>

@@ -1,8 +1,8 @@
-"""The React SPA is served under /app with a history-API fallback.
+"""The React app is served at the canonical URLs with a history-API fallback.
 
-Covers brief 01 §8.5: index.html for every client route, never for API or
-asset paths; runtime bootstrap + <base href> injected; login redirect kept;
-QYM_ROOT_PATH respected; hashed assets cacheable while the page is no-store.
+index.html for every client route, never for API or asset paths; runtime
+bootstrap + <base href> injected; login redirect kept; QYM_ROOT_PATH respected;
+hashed assets cacheable while the page is no-store; /app/* redirects.
 """
 
 from __future__ import annotations
@@ -89,12 +89,12 @@ def session_auth_env(monkeypatch):
 class TestFallback:
     def test_app_root_serves_index_with_bootstrap(self, built_spa, no_auth_env):
         with _client(_session_factory()) as client:
-            for path in ("/app", "/app/", "/app/profile", "/app/projects/p1/runs/a/b/c?pass=2", "/app/projects/p1/settings"):
+            for path in ("/", "/profile", "/projects/p1/runs/a/b/c?pass=2", "/projects/p1/settings", "/admin/users", "/docs/sdk-guide/observers", "/compare?files=a&files=b", "/run/abc"):
                 res = client.get(path)
                 assert res.status_code == 200, path
                 assert res.headers["content-type"].startswith("text/html")
                 assert res.headers["cache-control"] == "no-store"
-                assert '<base href="/app/">' in res.text
+                assert '<base href="/">' in res.text
                 boot = _bootstrap(res.text)
                 assert boot == {"rootPath": "", "authMode": "none", "sessionAuth": False, "environment": "test"}
                 assert 'window.__QYM_ROOT_PATH__ = ""' in res.text
@@ -102,23 +102,23 @@ class TestFallback:
 
     def test_assets_are_served_and_cacheable(self, built_spa, no_auth_env):
         with _client(_session_factory()) as client:
-            asset = client.get("/app/assets/index-abc123.js")
+            asset = client.get("/assets/index-abc123.js")
             assert asset.status_code == 200
             assert "no-store" not in asset.headers.get("cache-control", "")
             assert "javascript" in asset.headers["content-type"]
-            gz = client.get("/app/assets/index-abc123.js", headers={"Accept-Encoding": "gzip"})
+            gz = client.get("/assets/index-abc123.js", headers={"Accept-Encoding": "gzip"})
             assert gz.headers.get("content-encoding") == "gzip"
 
     def test_missing_assets_and_files_never_get_index(self, built_spa, no_auth_env):
         with _client(_session_factory()) as client:
-            for path in ("/app/assets/missing-xyz.js", "/app/favicon.png", "/app/projects/x/data.json"):
+            for path in ("/assets/missing-xyz.js", "/favicon.png", "/projects/x/data.json"):
                 res = client.get(path)
                 assert res.status_code == 404, path
                 assert "<html" not in res.text.lower()
 
     def test_api_and_other_prefixes_never_fall_back(self, built_spa, no_auth_env):
         with _client(_session_factory()) as client:
-            for path in ("/v1/nope", "/api/nope", "/static/nope.js", "/ui/nope", "/ingestion/nope", "/workers/nope"):
+            for path in ("/v1/nope", "/api/nope", "/assets/nope.js", "/static/nope.js", "/ui/nope", "/ingestion/nope", "/workers/nope"):
                 res = client.get(path)
                 assert res.status_code == 404, path
                 assert "<base href" not in res.text, path
@@ -140,16 +140,30 @@ class TestFallback:
         monkeypatch.setattr(spa, "spa_dir", lambda: empty)
         monkeypatch.setattr("qym_platform.app.spa_dir", lambda: empty)
         with _client(_session_factory()) as client:
-            res = client.get("/app/profile")
+            res = client.get("/profile")
             assert res.status_code == 404
             assert "npm run build" in res.json()["detail"]
 
-    def test_legacy_pages_are_untouched(self, built_spa, no_auth_env):
+    def test_app_prefix_redirects_to_the_canonical_url(self, built_spa, no_auth_env):
         with _client(_session_factory()) as client:
-            legacy = client.get("/profile")
-            assert legacy.status_code == 200
-            assert "<base href" not in legacy.text
-            assert "window.__QYM_ROOT_PATH__" in legacy.text
+            for old, new in (
+                ("/app", "/"),
+                ("/app/", "/"),
+                ("/app/projects/p1/settings?tab=members", "/projects/p1/settings?tab=members"),
+                ("/app/run/a/b?item=1&pass=2", "/run/a/b?item=1&pass=2"),
+                ("/app/login?next=%2Fprofile", "/login?next=%2Fprofile"),
+            ):
+                res = client.get(old, follow_redirects=False)
+                assert res.status_code == 302, old
+                assert res.headers["location"] == new, old
+
+    def test_dashboard_static_mount_is_gone(self, built_spa, no_auth_env):
+        with _client(_session_factory()) as client:
+            assert client.get("/static/dashboard.js").status_code == 404
+
+    def test_post_to_a_page_url_is_not_served(self, built_spa, no_auth_env):
+        with _client(_session_factory()) as client:
+            assert client.post("/projects/p1").status_code == 405
 
 
 class TestRootPath:
@@ -160,12 +174,12 @@ class TestRootPath:
         settings = PlatformSettings(environment="test", auth_mode="none", root_path="/qym")
         monkeypatch.setattr(main, "PlatformSettings", lambda: settings)
         client = TestClient(main.build_app())
-        res = client.get("/qym/app/projects/p1/overview")
+        res = client.get("/qym/projects/p1/overview")
         assert res.status_code == 200
-        assert '<base href="/qym/app/">' in res.text
+        assert '<base href="/qym/">' in res.text
         assert _bootstrap(res.text)["rootPath"] == "/qym"
         assert res.headers["cache-control"] == "no-store"
-        asset = client.get("/qym/app/assets/index-abc123.js")
+        asset = client.get("/qym/assets/index-abc123.js")
         assert asset.status_code == 200
         assert "no-store" not in asset.headers.get("cache-control", "")
 
@@ -181,10 +195,10 @@ class TestSessionAuth:
     def test_unauthenticated_deep_link_bounces_to_spa_login(self, built_spa, session_auth_env):
         make = _session_factory()
         with _client(make) as client:
-            res = client.get("/app/projects/p1/settings?tab=members", follow_redirects=False)
+            res = client.get("/projects/p1/settings?tab=members", follow_redirects=False)
             assert res.status_code == 303
-            assert res.headers["location"] == "/app/login?next=/app/projects/p1/settings%3Ftab%3Dmembers"
-            login = client.get("/app/login?next=/app/profile")
+            assert res.headers["location"] == "/login?next=/projects/p1/settings%3Ftab%3Dmembers"
+            login = client.get("/login?next=/profile")
             assert login.status_code == 200
             boot = _bootstrap(login.text)
             assert boot["sessionAuth"] is True and boot["authMode"] == "proxy_headers"
@@ -195,19 +209,19 @@ class TestSessionAuth:
         self._seed(make)
         with _client(make) as client:
             res = client.post(
-                "/v1/auth/login/password?next=/app/profile",
+                "/v1/auth/login/password?next=/profile",
                 json={"email": "person@example.com", "password": "correct horse battery"},
                 headers={"Origin": "http://qym.test"},
             )
             assert res.status_code == 200, res.text
-            assert res.json()["next"] == "/app/profile"
-            login = client.get("/app/login?next=/app/projects/p1", follow_redirects=False)
+            assert res.json()["next"] == "/profile"
+            login = client.get("/login?next=/projects/p1", follow_redirects=False)
             assert login.status_code == 303
-            assert login.headers["location"] == "/app/projects/p1"
+            assert login.headers["location"] == "/projects/p1"
             # an unsafe next is replaced by the SPA root
-            evil = client.get("/app/login?next=//evil.test/x", follow_redirects=False)
-            assert evil.headers["location"] == "/app/"
-            page = client.get("/app/projects/p1")
+            evil = client.get("/login?next=//evil.test/x", follow_redirects=False)
+            assert evil.headers["location"] == "/"
+            page = client.get("/projects/p1")
             assert page.status_code == 200
             assert "<base href" in page.text
 
@@ -226,9 +240,9 @@ class TestSessionAuth:
         monkeypatch.setattr(main, "PlatformSettings", lambda: settings)
         monkeypatch.setattr("qym_platform.app.PlatformSettings", lambda: settings)
         client = TestClient(main.build_app())
-        res = client.get("/qym/app/trash", follow_redirects=False)
+        res = client.get("/qym/trash", follow_redirects=False)
         assert res.status_code == 303
-        assert res.headers["location"] == "/qym/app/login?next=/qym/app/trash"
+        assert res.headers["location"] == "/qym/login?next=/qym/trash"
 
 
 def test_render_spa_index_without_marker_injects_into_head():
@@ -236,7 +250,7 @@ def test_render_spa_index_without_marker_injects_into_head():
 
     settings = PlatformSettings(environment="test", auth_mode="none")
     html = spa.render_spa_index("<html><head><title>x</title></head><body></body></html>", settings, "/qym")
-    assert html.startswith('<html><head><base href="/qym/app/"><script>window.__QYM_APP__')
+    assert html.startswith('<html><head><base href="/qym/"><script>window.__QYM_APP__')
     assert json.loads(re.search(r"__QYM_APP__ = (\{.*?\});", html).group(1))["rootPath"] == "/qym"
 
 

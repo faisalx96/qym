@@ -47,7 +47,7 @@ test.describe('axe', () => {
     expect(v, describeViolations(v)).toEqual([]);
   });
 
-  test('login page (/app/login)', async ({ page }) => {
+  test('login page (/login)', async ({ page }) => {
     await gotoApp(page, '/login');
     await expect(page.locator('[data-login-page]')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Sign in to qym' })).toBeVisible();
@@ -57,7 +57,7 @@ test.describe('axe', () => {
     expect(v, describeViolations(v)).toEqual([]);
   });
 
-  test('UI gallery (/app/__ui)', async ({ page }) => {
+  test('UI gallery (/__ui)', async ({ page }) => {
     test.setTimeout(90_000);
     await gotoApp(page, '/__ui');
     await expect(page.locator('body')).not.toBeEmpty();

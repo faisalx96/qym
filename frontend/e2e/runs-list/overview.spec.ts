@@ -29,7 +29,7 @@ test.describe('overview (J8)', () => {
     await expect(approved.getByRole('link', { name: 'text2sql-claude-sonnet-4-006' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Pending reviews' })).toBeVisible();
     // View all hrefs
-    const base = `/app/projects/${s.project.slug}`;
+    const base = `/projects/${s.project.slug}`;
     const href = (name: string) =>
       page
         .getByRole('region', { name })

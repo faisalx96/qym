@@ -111,8 +111,8 @@ describe('helpers', () => {
   it('formats bodies and links', () => {
     expect(bodyText({ a: 1 })).toBe('{\n  "a": 1\n}');
     expect(bodyText(null)).toBe('');
-    expect(itemLink('/app/projects/p/runs/r', 'i 1', 2, 'http://h')).toBe(
-      'http://h/app/projects/p/runs/r?item=i+1&pass=2',
+    expect(itemLink('/projects/p/runs/r', 'i 1', 2, 'http://h')).toBe(
+      'http://h/projects/p/runs/r?item=i+1&pass=2',
     );
     expect(
       collectOutputValues({

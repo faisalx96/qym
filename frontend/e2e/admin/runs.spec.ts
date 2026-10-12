@@ -6,15 +6,15 @@ import { createApiKey, createProject, createRun, gotoApp, uniqueSlug } from '../
 test.describe('admin tabs', () => {
   test('/admin redirects to /admin/runs; tab clicks change the URL; back button restores', async ({ page }) => {
     await gotoApp(page, '/admin');
-    await expect(page).toHaveURL(/\/app\/admin\/runs$/);
+    await expect(page).toHaveURL(/\/admin\/runs$/);
     await expect(page.getByRole('tab', { name: /^Runs/ })).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('tab', { name: /^Users/ }).click();
-    await expect(page).toHaveURL(/\/app\/admin\/users$/);
+    await expect(page).toHaveURL(/\/admin\/users$/);
     await expect(page.getByRole('tab', { name: /^Users/ })).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('tab', { name: /^Projects/ }).click();
-    await expect(page).toHaveURL(/\/app\/admin\/projects$/);
+    await expect(page).toHaveURL(/\/admin\/projects$/);
     await page.goBack();
-    await expect(page).toHaveURL(/\/app\/admin\/users$/);
+    await expect(page).toHaveURL(/\/admin\/users$/);
     await expect(page.getByRole('tab', { name: /^Users/ })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('[data-create-user]')).toBeVisible();
   });
@@ -24,7 +24,7 @@ test.describe('admin tabs', () => {
     await expect(page.getByRole('tab', { name: /^Users/ })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('[data-create-user]')).toBeVisible();
     await gotoApp(page, '/admin/nope');
-    await expect(page).toHaveURL(/\/app\/admin\/runs$/);
+    await expect(page).toHaveURL(/\/admin\/runs$/);
   });
 
   test('member forbidden state is not reachable under auth none', async () => {

@@ -12,10 +12,10 @@ test('New project creates a row', async ({ page }) => {
   await dialog.getByLabel('Name').fill(name);
   await dialog.getByRole('button', { name: /^Create/ }).click();
   // Creating navigates to the new project.
-  await expect(page).toHaveURL(/\/app\/projects\/admin-new-/);
+  await expect(page).toHaveURL(/\/projects\/admin-new-/);
   // Back in-app (no reload): the cached admin list must already include the new project.
   await page.goBack();
-  await expect(page).toHaveURL(/\/app\/admin\/projects$/);
+  await expect(page).toHaveURL(/\/admin\/projects$/);
   await expect(page.getByRole('grid', { name: 'Projects' }).getByRole('row').filter({ hasText: name })).toBeVisible();
 });
 
@@ -34,7 +34,7 @@ test('archive previews in-progress runs, then the project is Archived and gone f
   await expect(dialog).toContainText(inflight.run_id);
   await dialog.getByRole('button', { name: 'Archive project' }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page).toHaveURL(/\/app\/admin\/projects$/);
+  await expect(page).toHaveURL(/\/admin\/projects$/);
   await expect(row).toContainText('Archived');
   await expect(row.locator(`[data-project-unarchive="${project.id}"]`)).toBeVisible();
 
@@ -63,7 +63,7 @@ test('unarchive previews active keys; "Revoke keys first" opens settings?tab=api
   const alt = dialog.getByRole('button', { name: 'Revoke keys first' });
   await expect(alt).toBeVisible();
   await alt.click();
-  await expect(page).toHaveURL(new RegExp(`/app/projects/${slug}/settings\\?tab=apikeys$`));
+  await expect(page).toHaveURL(new RegExp(`/projects/${slug}/settings\\?tab=apikeys$`));
   await expect(page.getByRole('tab', { name: 'API keys' })).toHaveAttribute('aria-selected', 'true');
   await unarchiveProject(request, project.id);
 });

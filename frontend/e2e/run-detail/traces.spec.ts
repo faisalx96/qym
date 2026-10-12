@@ -202,7 +202,7 @@ test.describe('latency and traces panel (J5)', () => {
   });
 
   test('#latency hash opens the Latency tab', async ({ page }) => {
-    await page.goto(`/app/projects/${s.slug}/runs/${classic}#latency`);
+    await page.goto(`/projects/${s.slug}/runs/${classic}#latency`);
     await expect(page.getByTestId('latency-panel')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Latency' })).toHaveAttribute('aria-selected', 'true');
   });

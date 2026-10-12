@@ -124,7 +124,7 @@ test.describe('experiments list', () => {
       environment_ids: [env.id],
       spec: experimentSpec(connectionId),
     });
-    const base = `/app${expPath(project.slug)}`;
+    const base = expPath(project.slug);
 
     await page.goto(`${base}?experiment=${x.id}`);
     await expect(page).toHaveURL(new RegExp(`/projects/${project.slug}/experiments/${x.id}$`));

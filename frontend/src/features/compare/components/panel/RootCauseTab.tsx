@@ -8,13 +8,13 @@ import { RunDot } from '../common';
 import { ScrollRegion } from '../ScrollRegion';
 import styles from './Panel.module.css';
 
-/** Auto-analysis still lives on the legacy page until the analyzer area ships (OPEN_QUESTIONS Q4). */
+/** Links to each run's auto-analysis workspace. */
 function AnalyzeLinks() {
   const { model, slug } = useCompare();
   return (
     <div className={styles.stack}>
       <Text variant="sm" tone="muted">
-        Analyze a run (legacy page):
+        Analyze a run:
       </Text>
       <ul className={styles.subList} aria-label="Analyze a run">
         {model.runs.map((run, i) => {

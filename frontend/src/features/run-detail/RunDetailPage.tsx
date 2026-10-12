@@ -1,7 +1,7 @@
 /** /projects/:slug/runs/* — the run page (brief 04). Loads the run, owns live updates and the error states. */
 import { Navigate, useLocation, useParams } from 'react-router-dom';
 import { runPath } from '@/app/routes';
-import { ComingSoon } from '@/features/dev/ComingSoon';
+import { NotFound } from '@/features/shell/NotFound';
 import { useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { useRunQuery } from '@/api/runs';
@@ -49,9 +49,8 @@ export function RunDetailPage() {
   const params = useParams();
   const { slug } = useProjectContext();
   const splat = params['*'] ?? '';
-  const analyzer = /\/analyzer$/.test(splat);
-  const runId = analyzer ? splat.replace(/\/analyzer$/, '') : splat;
-  if (analyzer) return <ComingSoon brief="05-compare-analyzer" title="Analyzer" />;
-  if (!runId) return <ComingSoon brief="03-overview-runs-list-charts" title="Runs" />;
+  // `runs/<id>/analyzer` is redirected to the analysis workspace before this page renders (router.tsx).
+  const runId = splat.replace(/\/analyzer$/, '');
+  if (!runId) return <NotFound />;
   return <RunLoader key={`${slug}/${runId}`} runId={runId} />;
 }

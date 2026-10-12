@@ -62,7 +62,7 @@ export async function seedLocked(s: Seeded): Promise<string> {
 }
 
 export function runUrl(slug: string, runId: string, query = ''): string {
-  return `/app/projects/${slug}/runs/${runId}${query ? (query.startsWith('?') ? query : `?${query}`) : ''}`;
+  return `/projects/${slug}/runs/${runId}${query ? (query.startsWith('?') ? query : `?${query}`) : ''}`;
 }
 
 /** Open the run page and wait until the items table has rendered. */

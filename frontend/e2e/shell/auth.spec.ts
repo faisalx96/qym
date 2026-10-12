@@ -15,7 +15,7 @@
  *
  * The Vite dev server serves index.html without the platform's
  * window.__QYM_APP__ bootstrap, so `sessionAuth` is false in the browser and
- * the 401 → /app/login redirect never fires. Tests that depend on it inject
+ * the 401 → /login redirect never fires. Tests that depend on it inject
  * the bootstrap with page.addInitScript (what spa.py does in production).
  */
 import { test, expect, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
@@ -29,12 +29,12 @@ const PASSWORD = 'E2e-Strong-Passw0rd!';
 test.describe('login page under QYM_AUTH_MODE=none', () => {
   test.skip(PROXY_MODE, 'auth mode none only');
   test('shows the no-methods panel and "Open qym" goes to the app', async ({ page }) => {
-    await gotoApp(page, '/login?next=%2Fapp%2Fprofile');
+    await gotoApp(page, '/login?next=%2Fprofile');
     await expect(page.locator('[data-login-page]')).toBeVisible();
     await expect(page.getByText('No login methods are configured')).toBeVisible();
     await expect(page.locator('[data-password-form]')).toHaveCount(0);
     await page.getByRole('button', { name: 'Open qym' }).click();
-    await expect(page).toHaveURL(/\/app\/profile$/);
+    await expect(page).toHaveURL(/\/profile$/);
     await expect(page.locator('[data-profile-page]')).toBeVisible();
   });
 });
@@ -101,7 +101,7 @@ test.describe('session auth (QYM_E2E_AUTH_MODE=proxy_headers)', () => {
     await expect(signup.getByRole('alert')).toHaveText('Use at least 8 characters.');
     await signup.getByLabel(/^Password/).fill(PASSWORD);
     await signup.getByRole('button', { name: 'Create account' }).click();
-    await expect(page).toHaveURL(/\/app\/?$/);
+    await expect(page).toHaveURL(/\/?$/);
     await expect(page.locator('[data-app-shell]')).toBeVisible();
     await expect(page.locator('[data-user-menu]')).toContainText(adminEmail);
 
@@ -139,7 +139,7 @@ test.describe('session auth (QYM_E2E_AUTH_MODE=proxy_headers)', () => {
     await expect(form.getByRole('alert')).toHaveText('Invalid email or password');
     await expect(form.getByLabel(/^Password/)).toHaveValue('');
     await expect(form.getByLabel(/^Password/)).toBeFocused();
-    await expect(page).toHaveURL(/\/app\/login/);
+    await expect(page).toHaveURL(/\/login/);
   });
 
   test('temporary password → change-password form → mismatch → success → redirected (§8.7 scenario 2)', async ({
@@ -153,7 +153,7 @@ test.describe('session auth (QYM_E2E_AUTH_MODE=proxy_headers)', () => {
     expect(reset.ok(), await reset.text()).toBeTruthy();
     const { temporary_password: temp } = (await reset.json()) as { temporary_password: string };
 
-    await gotoApp(page, '/login?next=%2Fapp%2Fprofile');
+    await gotoApp(page, '/login?next=%2Fprofile');
     await signIn(page, email, temp);
     const change = page.locator('[data-change-password-form]');
     await expect(change).toBeVisible();
@@ -166,13 +166,13 @@ test.describe('session auth (QYM_E2E_AUTH_MODE=proxy_headers)', () => {
     await expect(change.getByRole('alert')).toHaveText('The passwords do not match.');
     await change.getByLabel(/^Confirm new password/).fill(PASSWORD);
     await change.getByRole('button', { name: 'Change password and sign in' }).click();
-    await expect(page).toHaveURL(/\/app\/profile$/);
+    await expect(page).toHaveURL(/\/profile$/);
     await expect(page.locator('[data-profile-page]')).toBeVisible();
     await expect(page.locator('[data-profile-page]').getByLabel('Account')).toContainText(email);
     await expect(page.locator('[data-profile-page]').getByLabel('Account')).toContainText('local password');
   });
 
-  test('unauthenticated deep link → /app/login?next=…; after sign-in lands there with the tab active (§8.7 scenario 1)', async ({
+  test('unauthenticated deep link → /login?next=…; after sign-in lands there with the tab active (§8.7 scenario 1)', async ({
     browser,
     playwright,
     baseURL,
@@ -196,9 +196,9 @@ test.describe('session auth (QYM_E2E_AUTH_MODE=proxy_headers)', () => {
     const context = await browser.newContext();
     await withSessionBootstrap(context);
     const page = await context.newPage();
-    const target = `/app/projects/${project.slug}/settings?tab=members`;
+    const target = `/projects/${project.slug}/settings?tab=members`;
     await page.goto(target);
-    await expect(page).toHaveURL(`/app/login?next=${encodeURIComponent(target)}`);
+    await expect(page).toHaveURL(`/login?next=${encodeURIComponent(target)}`);
     await signIn(page, email, PASSWORD);
     await expect(page).toHaveURL(target);
     await expect(page.locator('[data-settings-page]')).toBeVisible();
@@ -214,25 +214,25 @@ test.describe('session auth (QYM_E2E_AUTH_MODE=proxy_headers)', () => {
       page.getByRole('menuitem', { name: 'Sign out' }).click(),
     ]);
     expect(logout.ok()).toBeTruthy();
-    // useLogout sends next=appUrl('/') which is "/app" (no trailing slash)
-    await expect(page).toHaveURL(/\/app\/login\?next=%2Fapp(%2F)?$/);
+    // useLogout sends next=appUrl('/') which is "/"
+    await expect(page).toHaveURL(/\/login\?next=%2F$/);
     await expect(page.locator('[data-password-form]')).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem('qym:me'))).toBeNull();
     expect((await page.request.get('/v1/me')).status()).toBe(401);
     // Back does not show the previous page: the shell bounces to login again
     await page.goBack();
-    await expect(page).toHaveURL(/\/app\/login\?next=/);
+    await expect(page).toHaveURL(/\/login\?next=/);
     await expect(page.locator('[data-app-shell]')).toHaveCount(0);
     await context.close();
   });
 
-  test('"already signed in" redirect: /app/login with a session goes straight to next', async ({ browser }) => {
+  test('"already signed in" redirect: /login with a session goes straight to next', async ({ browser }) => {
     const context = await browser.newContext();
     await withSessionBootstrap(context);
     const page = await context.newPage();
-    await gotoApp(page, '/login?next=%2Fapp%2Fprofile');
+    await gotoApp(page, '/login?next=%2Fprofile');
     await signIn(page, adminEmail, PASSWORD);
-    await expect(page).toHaveURL(/\/app\/profile$/);
+    await expect(page).toHaveURL(/\/profile$/);
     // a signed-in user opening the login page again is not asked to sign in twice (server 303 for /login,
     // the SPA route simply renders the form) — assert the session still works for the app
     await gotoApp(page, '/');

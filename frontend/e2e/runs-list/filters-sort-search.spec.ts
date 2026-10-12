@@ -359,7 +359,7 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await openRuns(page, s.project.slug, 'task=summarize&sort=task-asc');
     const link = dataRows(page).first().locator('td[data-col="run"] a');
     const href = (await link.getAttribute('href'))!;
-    expect(href).toMatch(new RegExp(`^/app/projects/${s.project.slug}/runs/[^?]+\\?list=`));
+    expect(href).toMatch(new RegExp(`^/projects/${s.project.slug}/runs/[^?]+\\?list=`));
     const list = new URL(href, 'http://x').searchParams.get('list')!;
     expect(list).toBe('task=summarize&sort=task-asc');
     expect(list).not.toContain('page');

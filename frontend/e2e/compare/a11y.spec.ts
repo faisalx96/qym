@@ -122,7 +122,7 @@ test('axe: no serious or critical violations with an expanded item', async ({ pa
 
 test('axe: no serious or critical violations in the Sweep view', async ({ page }) => {
   const { base, a, b, c } = seed.runs;
-  await page.goto(`/app/compare?cohortA=${b}&cohortA=${base}&cohortB=${a}&cohortB=${c}&tab=sweep`);
+  await page.goto(`/compare?cohortA=${b}&cohortA=${base}&cohortB=${a}&cohortB=${c}&tab=sweep`);
   await expect(page.getByTestId('sweep-view')).toBeVisible();
   expect(await axeScan(page)).toEqual([]);
 });

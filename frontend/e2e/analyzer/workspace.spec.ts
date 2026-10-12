@@ -29,11 +29,11 @@ test.describe('open the workspace (1)', () => {
   test('legacy URLs land on /analysis?run=<id> and keep pass / metric', async ({ page, request }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, `/run/${seed.runId}/analyzer`);
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${seed.slug}/analysis\\?run=${seed.runId}`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${seed.slug}/analysis\\?run=${seed.runId}`));
     await waitWorkspace(page);
 
     await gotoApp(page, `/projects/${seed.slug}/runs/${seed.runId}/analyzer`);
-    await expect(page).toHaveURL(new RegExp(`/app/projects/${seed.slug}/analysis\\?run=${seed.runId}`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${seed.slug}/analysis\\?run=${seed.runId}`));
     await waitWorkspace(page);
 
     await gotoApp(page, `/projects/${seed.slug}/runs/${seed.runId}/analyzer?pass=1&metric=execution_accuracy`);

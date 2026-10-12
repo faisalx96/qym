@@ -49,14 +49,14 @@ test.describe('analysis panel tabs', () => {
       ['root-cause', 'Root cause'],
       ['overview', 'Overview'],
     ] as const) {
-      await page.goto(`/app/projects/${s.slug}/runs/${classic}#${hash}`);
+      await page.goto(`/projects/${s.slug}/runs/${classic}#${hash}`);
       await expect(page.getByTestId('items-count')).toBeVisible();
       await expect(tab(page, name)).toHaveAttribute('aria-selected', 'true');
     }
   });
 
   test('#items scrolls to the table', async ({ page }) => {
-    await page.goto(`/app/projects/${s.slug}/runs/${classic}#items`);
+    await page.goto(`/projects/${s.slug}/runs/${classic}#items`);
     await expect(page.getByTestId('items-count')).toBeVisible();
     await expect(page.getByRole('table', { name: 'Items' })).toBeInViewport();
   });
@@ -178,14 +178,14 @@ test.describe('analysis metric and threshold', () => {
     await expect(page.getByTestId('filter-banner')).toContainText('hallucination');
   });
 
-  test('legacy deep link /app/run/<id>#errors keeps the anchor', async ({ page }) => {
-    await page.goto(`/app/run/${classic}#errors`);
+  test('legacy deep link /run/<id>#errors keeps the anchor', async ({ page }) => {
+    await page.goto(`/run/${classic}#errors`);
     await expect(page).toHaveURL(new RegExp(`/projects/[^/]+/runs/${classic}`));
     await expect(page.getByTestId('items-count')).toBeVisible();
     await expect(tab(page, /^Errors/)).toHaveAttribute('aria-selected', 'true');
   });
 
   test('the run URL helper stays in sync with the router', () => {
-    expect(runUrl('p', 'r', 'a=1')).toBe('/app/projects/p/runs/r?a=1');
+    expect(runUrl('p', 'r', 'a=1')).toBe('/projects/p/runs/r?a=1');
   });
 });

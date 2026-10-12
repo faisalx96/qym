@@ -130,9 +130,8 @@ test.describe('open an item (scenario 6, J6)', () => {
     // opening the copied link lands on the same item
     const url = new URL(link);
     expect(url.searchParams.get('item')).toBe('item-0002');
-    // the link must address the React app (served under /app), not the legacy page
-    expect.soft(url.pathname, 'copied link is missing the /app base path').toMatch(/^\/app\/projects\//);
-    await page.goto(`/app${url.pathname.replace(/^\/app/, '')}${url.search}`);
+    expect.soft(url.pathname, 'copied link is not a project run URL').toMatch(/^\/projects\//);
+    await page.goto(`${url.pathname}${url.search}`);
     await expect(card(page, 'item-0002')).toBeVisible();
   });
 

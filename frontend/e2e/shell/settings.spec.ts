@@ -294,7 +294,7 @@ test.describe('danger zone and archived state', () => {
     await expect(confirm).toBeVisible();
     await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await confirm.getByRole('button', { name: 'Archive project' }).click();
-    await expect(page).toHaveURL(/\/app\/?$/);
+    await expect(page).toHaveURL(/\/?$/);
     await expect(page.getByRole('status').filter({ hasText: `${p.name} archived` })).toBeVisible();
     // archived projects leave me.projects → no card on the landing
     await expect(page.locator('[data-projects-page]')).toBeVisible();
@@ -354,7 +354,7 @@ test.describe('danger zone and archived state', () => {
     await dialog.getByRole('textbox').fill(p.name);
     await expect(confirmBtn).toBeEnabled();
     await confirmBtn.click();
-    await expect(page).toHaveURL(/\/app\/?$/);
+    await expect(page).toHaveURL(/\/?$/);
     await expect(page.getByRole('status').filter({ hasText: `${p.name} deleted` })).toBeVisible();
     const res = await request.get(`/v1/projects/by-slug/${p.slug}`);
     expect(res.status()).toBe(404);

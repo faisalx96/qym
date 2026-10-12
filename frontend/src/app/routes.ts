@@ -1,6 +1,6 @@
 /**
  * Every current dashboard URL (brief 01 §8.1/§8.5) as an app route path
- * (relative to the /app basename). Area agents replace the placeholder
+ * (relative to the router basename = the platform root path). Area agents replace the placeholder
  * elements in router.tsx; the paths here are the contract.
  */
 export const ADMIN_TABS = ['runs', 'projects', 'users', 'maintenance'] as const;

@@ -17,7 +17,7 @@ interface Status {
 }
 
 /**
- * /app/login — shell-less. Reads GET /v1/auth/providers; password sign-in,
+ * /login — shell-less. Reads GET /v1/auth/providers; password sign-in,
  * temporary-password change, sign-up (only while allowed) and provider links.
  * Clears sessionStorage on load so the previous user's per-tab state is gone.
  */

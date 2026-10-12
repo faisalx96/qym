@@ -15,8 +15,9 @@ describe('runtime bootstrap', () => {
   });
   it('defaults to the dev proxy shape', () => {
     expect(bootstrap()).toEqual({ rootPath: '', authMode: 'none', sessionAuth: false, environment: 'dev' });
-    expect(appBase()).toBe('/app');
-    expect(appUrl('/projects/x')).toBe('/app/projects/x');
+    expect(appBase()).toBe('/');
+    expect(appUrl('/projects/x')).toBe('/projects/x');
+    expect(appUrl('/')).toBe('/');
     expect(platformUrl('/v1/me')).toBe('/v1/me');
   });
   it('reads the injected root path', () => {
@@ -27,9 +28,10 @@ describe('runtime bootstrap', () => {
       environment: 'production',
     };
     expect(bootstrap().rootPath).toBe('/qym');
-    expect(appBase()).toBe('/qym/app');
+    expect(appBase()).toBe('/qym');
     expect(platformUrl('v1/me')).toBe('/qym/v1/me');
-    expect(appUrl('/')).toBe('/qym/app');
+    expect(appUrl('/')).toBe('/qym/');
+    expect(appUrl('/projects/x')).toBe('/qym/projects/x');
   });
 });
 
@@ -53,7 +55,7 @@ describe('http errors', () => {
     expect(classifyError(new ApiError(404, 'Run not found')).detail).toBe('Run not found');
   });
   it('only follows same-site next targets', () => {
-    expect(sameOriginTarget('/app/profile', '/x')).toBe('/app/profile');
+    expect(sameOriginTarget('/profile', '/x')).toBe('/profile');
     expect(sameOriginTarget('//evil.test', '/x')).toBe('/x');
     expect(sameOriginTarget('https://evil.test', '/x')).toBe('/x');
     expect(sameOriginTarget('/\\evil', '/x')).toBe('/x');

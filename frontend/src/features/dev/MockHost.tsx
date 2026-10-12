@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { mockRoutes } from '@/app/mocks';
 import { EmptyState, Stack, Text } from '@/ui';
 
-/** /app/__mock/:area/:variant — renders a registered design variant (dev only). */
+/** /__mock/:area/:variant — renders a registered design variant (dev only). */
 export function MockHost() {
   const { area, variant } = useParams();
   const match = mockRoutes.find((m) => m.area === area && m.variant === variant);

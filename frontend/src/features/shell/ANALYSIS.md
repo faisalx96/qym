@@ -41,9 +41,9 @@ SQLite, two seeded projects, one archived) and by reading `shell.js`, `auth.js`,
   placeholders; the admin-docs area decides the final shape.
 - "Default Project is `projects[0]`" — confirmed; the profile page shows it as
   informational only.
-- The brief's suggestion to make `/login` an SPA route is adopted: `/app/login`
+- The brief's suggestion to make `/login` an SPA route is adopted: `/login`
   (SPA, reads `GET /v1/auth/providers`) while the vanilla `/login` stays for the
-  legacy pages (its browser test keeps passing). `/app/*` redirects to `/app/login`.
+  legacy pages (its browser test keeps passing). `/*` redirects to `/login`.
 
 ## Behaviours kept (implemented in the foundation)
 

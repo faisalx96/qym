@@ -23,7 +23,7 @@ export function useAuthProviders() {
   });
 }
 
-/** POST /v1/auth/logout → clear caches + local snapshot → full navigation to /app/login?next=/app/ */
+/** POST /v1/auth/logout → clear caches + local snapshot → full navigation to /login?next=/ */
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
