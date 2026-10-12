@@ -265,7 +265,7 @@ describe('status primitives', () => {
 describe('Button and LinkButton states', () => {
   it('a loading Button is disabled and announces Loading', () => {
     render(<Button loading>Save</Button>);
-    const btn = screen.getByRole('button', { name: 'Save' });
+    const btn = screen.getByRole('button', { name: /Save/ });
     expect(btn).toBeDisabled();
     expect(within(btn).getByText('Loading')).toHaveTextContent('Loading');
   });
