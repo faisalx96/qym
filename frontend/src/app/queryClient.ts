@@ -12,7 +12,9 @@ export function createQueryClient(): QueryClient {
           return count < 2;
         },
       },
-      mutations: { retry: false },
+      // 'always': a click made while offline must fail with a visible network error. With the default
+      // ('online') the mutation is paused with a spinner and silently fires whenever the network returns.
+      mutations: { retry: false, networkMode: 'always' },
     },
   });
 }
