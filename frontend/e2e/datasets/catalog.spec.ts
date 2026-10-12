@@ -52,7 +52,10 @@ test.describe('catalog', () => {
     await expect(page.locator(`[data-dataset-detail=${d.slug}]`)).toBeVisible();
   });
 
-  test('empty project: first dataset created blank, lands on the detail with no versions', async ({ page, request }) => {
+  test('empty project: first dataset created blank, lands on the detail with no versions', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Catalog Blank', uniqueSlug('catblank'));
     await gotoApp(page, `/projects/${p.slug}/datasets`);
     await expect(page.getByText('No datasets yet')).toBeVisible();

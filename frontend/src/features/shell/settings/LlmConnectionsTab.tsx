@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   useLlmConnectionAction,
   useLlmConnections,
@@ -7,7 +7,7 @@ import {
 } from '@/api/projectSettings';
 import type { LlmConnection } from '@/api/types';
 import { ApiError } from '@/lib/http';
-import { useDelayedPending } from '@/lib/pending';
+import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Button,
   Checkbox,
@@ -32,6 +32,7 @@ export function LlmConnectionsTab() {
   const list = useLlmConnections(project.id);
   const showSkeleton = useDelayedPending(list.isPending);
   const save = useSaveLlmConnection(project.id);
+  const lock = useSubmitLock();
   const action = useLlmConnectionAction(project.id);
   const toast = useToast();
   const [editing, setEditing] = useState<LlmConnection | null>(null);
@@ -39,6 +40,13 @@ export function LlmConnectionsTab() {
   const [deleting, setDeleting] = useState<LlmConnection | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const canEdit = canManage && !readOnly;
+  // The form replaces the Add button; keep keyboard focus on a live control when it closes.
+  const addRef = useRef<HTMLDivElement>(null);
+  const formWasOpen = useRef(false);
+  useEffect(() => {
+    if (formWasOpen.current && !showForm) addRef.current?.querySelector('button')?.focus();
+    formWasOpen.current = showForm;
+  }, [showForm]);
 
   async function test(c: LlmConnection) {
     setTesting(c.id);
@@ -98,6 +106,14 @@ export function LlmConnectionsTab() {
                     action
                       .mutateAsync({ id: c.id, action: 'set-default' })
                       .then(() => toast.show('Default connection updated', { tone: 'success' }))
+                      .catch((e) =>
+                        toast.show(
+                          e instanceof ApiError
+                            ? e.detail || 'Could not set the default'
+                            : 'Could not set the default',
+                          { tone: 'error' },
+                        ),
+                      )
                   }
                 >
                   Set default
@@ -146,7 +162,7 @@ export function LlmConnectionsTab() {
         />
       )}
       {canEdit && !showForm ? (
-        <div>
+        <div ref={addRef}>
           <Button
             variant="accent"
             onPress={() => {
@@ -160,20 +176,23 @@ export function LlmConnectionsTab() {
       ) : null}
       {canEdit && showForm ? (
         <ConnectionForm
+          key={editing?.id ?? 'new'}
           initial={editing}
           busy={save.isPending}
           onCancel={() => setShowForm(false)}
-          onSubmit={async (body) => {
-            try {
-              await save.mutateAsync({ id: editing?.id, body });
-              toast.show(editing ? 'Connection updated' : 'Connection added', { tone: 'success' });
-              setShowForm(false);
-            } catch (e) {
-              toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
-                tone: 'error',
-              });
-            }
-          }}
+          onSubmit={(body) =>
+            void lock(async () => {
+              try {
+                await save.mutateAsync({ id: editing?.id, body });
+                toast.show(editing ? 'Connection updated' : 'Connection added', { tone: 'success' });
+                setShowForm(false);
+              } catch (e) {
+                toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
+                  tone: 'error',
+                });
+              }
+            })
+          }
         />
       ) : null}
       {deleting ? (
@@ -234,7 +253,14 @@ function ConnectionForm({
       </div>
       <div className={styles.cardBody}>
         <div className={styles.formRow}>
-          <TextField label="Name" value={name} onChange={setName} isRequired placeholder="OpenAI prod" />
+          <TextField
+            label="Name"
+            value={name}
+            onChange={setName}
+            isRequired
+            placeholder="OpenAI prod"
+            autoFocus
+          />
           <TextField
             label="Base URL"
             value={baseUrl}
@@ -242,6 +268,7 @@ function ConnectionForm({
             isRequired
             mono
             placeholder="https://api.openai.com/v1"
+            help="An https:// URL is required to offer the connection for experiments."
           />
           <TextField label="Model" value={model} onChange={setModel} isRequired mono placeholder="gpt-4.1" />
           <TextField

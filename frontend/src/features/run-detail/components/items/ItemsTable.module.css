@@ -73,6 +73,8 @@
 
 .srOnly {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   overflow: hidden;
@@ -205,4 +207,17 @@
   padding: var(--space-lg);
   text-align: center;
   color: var(--text-muted);
+}
+
+/* Under ~560px the grid cannot fit its fixed columns: scroll sideways inside the card, never the page. */
+@container (max-width: 560px) {
+  .scroll {
+    overflow-x: auto;
+  }
+}
+
+/* The pager wraps on narrow cards instead of widening the page. */
+.wrap .pager {
+  flex-wrap: wrap;
+  max-width: 100%;
 }

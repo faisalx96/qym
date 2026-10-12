@@ -9,6 +9,8 @@
 .scroll {
   overflow-x: auto;
   max-width: 100%;
+  /* lets the caption size itself to the visible scroller instead of the (wider) table */
+  container-type: inline-size;
 }
 
 .table {
@@ -17,6 +19,10 @@
 }
 
 .caption {
+  /* stays inside the scroll viewport: a long caption wraps there instead of being clipped */
+  position: sticky;
+  inset-inline-start: 0;
+  width: 100cqw;
   padding-bottom: var(--space-sm);
   color: var(--text-muted);
   font-size: var(--font-sm);
@@ -267,6 +273,31 @@
 }
 
 .errorCount {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.table + .table {
+  margin-top: var(--space-lg);
+}
+
+/* The Analyze popover: padded, one run per line, no list bullets over the run dots. */
+.analyzeLinks {
+  padding: var(--space-md);
+  min-width: 16rem;
+}
+
+.analyzeList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analyzeList a {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);

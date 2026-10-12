@@ -71,7 +71,7 @@ export function useRemoveMember(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ userId, transferTo }: { userId: string; transferTo?: string }) =>
-      api.delete<{ ok: boolean }>(
+      api.delete<{ ok: boolean; transferred_runs?: number }>(
         `/v1/projects/${projectId}/members/${userId}${transferTo ? `?transfer_runs_to=${encodeURIComponent(transferTo)}` : ''}`,
       ),
     onSuccess: () => {

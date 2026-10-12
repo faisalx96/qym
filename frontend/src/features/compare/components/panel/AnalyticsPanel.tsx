@@ -1,5 +1,6 @@
 /** Right-hand analytics: recomputed over the filtered items; stacks under the list below 1100 px. */
 import { useState } from 'react';
+import { useQueryParam } from '@/lib/url-state';
 import { TabPanel, Tabs, Text } from '@/ui';
 import { useCompare } from '../../CompareContext';
 import { CategoriesTab } from './CategoriesTab';
@@ -14,8 +15,24 @@ type Tab = 'metrics' | 'overview' | 'categories' | 'errors' | 'root-cause' | 'st
 
 export function AnalyticsPanel() {
   const { items, model } = useCompare();
-  const [tab, setTab] = useState<Tab>('metrics');
+  // In the URL (`panel=errors`) so it survives a run being removed, which remounts the page body.
+  const [urlTab, setUrlTab] = useQueryParam('panel', 'metrics');
+  // Local state renders the tab at once; the URL copy is what a remount (or a shared link) restores.
+  const [picked, setPicked] = useState<string | null>(null);
+  const wanted = picked ?? urlTab;
+  const setWanted = (t: string) => {
+    setPicked(t);
+    setUrlTab(t);
+  };
   const traced = model.runs.some((r) => r.run.trace_stats?.has_spans);
+  const tab: Tab =
+    (['metrics', 'overview', 'categories', 'errors', 'root-cause', 'steps'] as Tab[]).includes(
+      wanted as Tab,
+    ) &&
+    (wanted !== 'steps' || traced)
+      ? (wanted as Tab)
+      : 'metrics';
+  const setTab = (t: Tab) => setWanted(t);
   return (
     <aside className={styles.panel} aria-label="Analytics for the filtered items">
       <Text variant="sm" tone="muted">

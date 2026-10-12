@@ -36,14 +36,24 @@ export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   }, [open, ensure, items]);
 
   const exportItems = useMemo<ExportItem[]>(
-    () => (ready ? items.map((i) => ({ itemId: i.itemId, rows: model.runs.map((run) => resolveRow(store, run, i.itemId).row) })) : []),
+    () =>
+      ready
+        ? items.map((i) => ({
+            itemId: i.itemId,
+            rows: model.runs.map((run) => resolveRow(store, run, i.itemId).row),
+          }))
+        : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ready, items, model.runs, store, version],
   );
-  const groups = useMemo(() => (ready ? discoverExportColumns(model, exportItems) : []), [ready, model, exportItems]);
+  const groups = useMemo(
+    () => (ready ? discoverExportColumns(model, exportItems) : []),
+    [ready, model, exportItems],
+  );
   const isOn = (c: ExportColumn) => checked[c.key] ?? c.checked;
   const selected = groups.flatMap((g) => g.columns).filter(isOn);
-  const setGroup = (cols: ExportColumn[], on: boolean) => setChecked((s) => ({ ...s, ...Object.fromEntries(cols.map((c) => [c.key, on])) }));
+  const setGroup = (cols: ExportColumn[], on: boolean) =>
+    setChecked((s) => ({ ...s, ...Object.fromEntries(cols.map((c) => [c.key, on])) }));
   return (
     <Dialog
       open={open}
@@ -76,10 +86,28 @@ export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
       ) : (
         <div className={styles.groups}>
           <div className={styles.top}>
-            <Button size="sm" variant="neutral" onPress={() => setGroup(groups.flatMap((g) => g.columns), true)}>
+            <Button
+              size="sm"
+              variant="neutral"
+              onPress={() =>
+                setGroup(
+                  groups.flatMap((g) => g.columns),
+                  true,
+                )
+              }
+            >
               Select all
             </Button>
-            <Button size="sm" variant="neutral" onPress={() => setGroup(groups.flatMap((g) => g.columns), false)}>
+            <Button
+              size="sm"
+              variant="neutral"
+              onPress={() =>
+                setGroup(
+                  groups.flatMap((g) => g.columns),
+                  false,
+                )
+              }
+            >
               Deselect all
             </Button>
           </div>
@@ -89,14 +117,25 @@ export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             return (
               <fieldset key={g.group} className={styles.group}>
                 <legend className={styles.legend}>
-                  <Checkbox isSelected={on === g.columns.length} isIndeterminate={on > 0 && on < g.columns.length} onChange={(v) => setGroup(g.columns, v)}>
+                  <Checkbox
+                    isSelected={on === g.columns.length}
+                    isIndeterminate={on > 0 && on < g.columns.length}
+                    onChange={(v) => setGroup(g.columns, v)}
+                  >
                     {g.group}
                   </Checkbox>
                   <button
                     type="button"
                     className={styles.toggle}
                     aria-expanded={!closed}
-                    onClick={() => setCollapsed((s) => { const n = new Set(s); if (closed) n.delete(g.group); else n.add(g.group); return n; })}
+                    onClick={() =>
+                      setCollapsed((s) => {
+                        const n = new Set(s);
+                        if (closed) n.delete(g.group);
+                        else n.add(g.group);
+                        return n;
+                      })
+                    }
                   >
                     {closed ? 'Show' : 'Hide'} {g.columns.length} columns
                   </button>
@@ -104,7 +143,11 @@ export function CsvDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                 {closed ? null : (
                   <div className={styles.cols}>
                     {g.columns.map((c) => (
-                      <Checkbox key={c.key} isSelected={isOn(c)} onChange={(v) => setChecked((s) => ({ ...s, [c.key]: v }))}>
+                      <Checkbox
+                        key={c.key}
+                        isSelected={isOn(c)}
+                        onChange={(v) => setChecked((s) => ({ ...s, [c.key]: v }))}
+                      >
                         {c.label}
                       </Checkbox>
                     ))}

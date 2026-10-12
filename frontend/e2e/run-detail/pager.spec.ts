@@ -58,15 +58,23 @@ test('the projection lists all four runs in one order', () => {
 });
 
 test.describe('pager (J9, scenario 11)', () => {
-  test('hero shows "N of M" and enabled arrows between neighbours; the ends are disabled', async ({ page }) => {
+  test('hero shows "N of M" and enabled arrows between neighbours; the ends are disabled', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, order[1]!);
     const nav = page.getByRole('navigation', { name: 'Previous and next run' });
     await expect(nav).toContainText('2 of 4');
-    await expect(nav.getByRole('link', { name: /Previous run/ })).toHaveAttribute('href', new RegExp(order[0]!));
+    await expect(nav.getByRole('link', { name: /Previous run/ })).toHaveAttribute(
+      'href',
+      new RegExp(order[0]!),
+    );
     await expect(nav.getByRole('link', { name: /Next run/ })).toHaveAttribute('href', new RegExp(order[2]!));
     await openRun(page, s.slug, order[0]!);
     await expect(page.getByRole('navigation', { name: 'Previous and next run' })).toContainText('1 of 4');
-    await expect(page.getByRole('link', { name: 'No previous run' })).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByRole('link', { name: 'No previous run' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     await openRun(page, s.slug, order[3]!);
     await expect(page.getByRole('navigation', { name: 'Previous and next run' })).toContainText('4 of 4');
     await expect(page.getByRole('link', { name: 'No next run' })).toHaveAttribute('aria-disabled', 'true');

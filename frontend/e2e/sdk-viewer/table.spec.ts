@@ -138,7 +138,17 @@ test.describe('export CSV', () => {
     const path = await download.path();
     const { readFileSync } = await import('node:fs');
     const table = parseCsv(readFileSync(path, 'utf8'));
-    expect(table[0]).toEqual(['index', 'status', 'input', 'output', 'expected', ...METRICS, 'latency_ms']);
+    expect(table[0]).toEqual([
+      'index',
+      'status',
+      'input',
+      'output',
+      'expected',
+      ...METRICS,
+      'latency_ms',
+      'trace_id',
+      'item_id',
+    ]);
     expect(table.length - 1).toBe(shown);
     // the exported rows are exactly the visible ones, in display order
     const visible = await rows(page).evaluateAll((trs) =>

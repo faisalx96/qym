@@ -16,7 +16,9 @@ import {
 import styles from './evaluation.module.css';
 
 const rowPointer = (key: string) =>
-  key.trim() ? METADATA_POINTER + '/' + key.trim().replace(/~/g, '~0').replace(/\//g, '~1') : METADATA_POINTER;
+  key.trim()
+    ? METADATA_POINTER + '/' + key.trim().replace(/~/g, '~0').replace(/\//g, '~1')
+    : METADATA_POINTER;
 
 /** Run metadata: free key/value rows sent with the run; `qym_*` keys belong to the platform. */
 export function RunMetadata() {
@@ -34,8 +36,8 @@ export function RunMetadata() {
     >
       <h4 className={styles.panelTitle}>Run metadata</h4>
       <p className={styles.hint}>
-        Key/value pairs stored on every run (for example a ticket or a branch). Values are read as JSON when they
-        parse, otherwise as text. Keys starting with {prefix} are reserved for the platform.
+        Key/value pairs stored on every run (for example a ticket or a branch). Values are read as JSON when
+        they parse, otherwise as text. Keys starting with {prefix} are reserved for the platform.
       </p>
       {reserved.map(([k, v]) => (
         <div key={k} className={styles.readonlyRow} data-reserved-key={k}>

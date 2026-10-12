@@ -106,6 +106,24 @@ test.describe('runs list: load (J1)', () => {
     await expect(err).toHaveCount(0);
   });
 
+  test('a failed filter change keeps the previous rows and says the change is not applied', async ({
+    page,
+    request,
+  }) => {
+    const s = await freshProject(request, 6);
+    await openRuns(page, s.project.slug);
+    const before = await dataRows(page).count();
+    await page.route('**/api/dashboard/runs', (route) =>
+      route.fulfill({ status: 500, json: { detail: 'down' } }),
+    );
+    await page.getByRole('button', { name: /^Date/ }).click();
+    const banner = page.getByRole('status').filter({ hasText: /Showing data from/ });
+    await expect(banner).toBeVisible({ timeout: 15_000 });
+    await expect(banner).toContainText('not applied');
+    await expect(dataRows(page)).toHaveCount(before);
+    await expect(page.getByRole('alert').filter({ hasText: 'Could not load runs' })).toHaveCount(0);
+  });
+
   test('a later refresh failure keeps the rows and shows the stale banner', async ({ page, request }) => {
     const s = await freshProject(request, 4);
     await openRuns(page, s.project.slug);
@@ -116,7 +134,7 @@ test.describe('runs list: load (J1)', () => {
     await broadcastRunStatus(page, [s.runs[0]!.id], 'COMPLETED');
     const banner = page.getByRole('status').filter({ hasText: /Showing data from/ });
     await expect(banner).toBeVisible({ timeout: 15_000 });
-    await expect(banner).toContainText('not applied');
+    await expect(banner).not.toContainText('not applied'); // same view: only the refresh failed
     await expect(dataRows(page)).toHaveCount(before);
     await expect(table(page).locator('table')).toHaveAttribute('data-dimmed', '');
     await expect(page.getByTestId('status-bar')).toContainText('refresh failed');

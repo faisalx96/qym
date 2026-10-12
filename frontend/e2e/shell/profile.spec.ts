@@ -11,10 +11,12 @@ test.describe('profile (J5)', () => {
     await gotoApp(page, '/profile');
     await expect(page.locator('[data-profile-page]')).toBeVisible();
     await expect(page).toHaveTitle(/Profile/);
-    await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).locator('[aria-current="page"]')).toHaveText(
-      'Profile',
-    );
-    await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' })).toBeVisible();
+    await expect(
+      page.getByRole('navigation', { name: 'Breadcrumb' }).locator('[aria-current="page"]'),
+    ).toHaveText('Profile');
+    await expect(
+      page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' }),
+    ).toBeVisible();
     const account = page.locator('[data-profile-page]').getByLabel('Account');
     await expect(account).toContainText('dev@local');
     await expect(account).toContainText('Dev User');
@@ -23,7 +25,10 @@ test.describe('profile (J5)', () => {
 
     const row = page.getByRole('row').filter({ hasText: p.slug });
     await expect(row).toBeVisible();
-    await expect(row.getByRole('link', { name: 'Open' })).toHaveAttribute('href', new RegExp(`/projects/${p.slug}$`));
+    await expect(row.getByRole('link', { name: 'Open' })).toHaveAttribute(
+      'href',
+      new RegExp(`/projects/${p.slug}$`),
+    );
     const loads = trackPageLoads(page);
     await row.getByRole('link', { name: 'Settings' }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${p.slug}/settings$`));
@@ -33,7 +38,10 @@ test.describe('profile (J5)', () => {
 
   test('breadcrumb "Projects" link goes home from the profile', async ({ page }) => {
     await gotoApp(page, '/profile');
-    await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Projects' }).click();
+    await page
+      .getByRole('navigation', { name: 'Breadcrumb' })
+      .getByRole('link', { name: 'Projects' })
+      .click();
     await expect(page).toHaveURL(/\/?$/);
     await expect(page.locator('[data-projects-page]')).toBeVisible();
   });

@@ -21,7 +21,8 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
       <div className={s.previewBar}>
         {focus ? (
           <Text variant="sm" tone="muted" as="span">
-            Item <span className={s.mono}>{focus.itemId}</span> · <span className={s.mono}>{focus.metric}</span>
+            Item <span className={s.mono}>{focus.itemId}</span> ·{' '}
+            <span className={s.mono}>{focus.metric}</span>
           </Text>
         ) : null}
         {preview.characters != null ? (
@@ -44,16 +45,32 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
         </Switch>
       </div>
       {!preview.hasTarget ? (
-        <EmptyState compact title="Nothing to preview" body="Select a target to see the exact messages the analyzer would send." />
+        <EmptyState
+          compact
+          title="Nothing to preview"
+          body="Select a target to see the exact messages the analyzer would send."
+        />
       ) : preview.error ? (
-        <ErrorState error={preview.error} title="Couldn’t build the prompt preview" onRetry={preview.retry} compact />
+        <ErrorState
+          error={preview.error}
+          title="Couldn’t build the prompt preview"
+          onRetry={preview.retry}
+          compact
+        />
       ) : preview.messages.length === 0 ? (
         <Skeleton kind="lines" rows={4} label="Building prompt preview" />
       ) : (
         <>
           {/* Scrollable region: focusable so keyboard users can scroll it. */}
-          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
-          <div ref={box} className={s.messages} data-expanded={expanded || !maxHeight ? '' : undefined} tabIndex={0} role="region" aria-label="Prompt messages">
+          <div
+            ref={box}
+            className={s.messages}
+            data-expanded={expanded || !maxHeight ? '' : undefined}
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+            tabIndex={0}
+            role="region"
+            aria-label="Prompt messages"
+          >
             {preview.messages.map((m, i) => (
               <article key={i} className={s.message}>
                 <header className={s.messageHead}>
@@ -81,7 +98,10 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
                 {expanded ? 'Collapse' : 'Expand'}
               </Button>
             ) : null}
-            <CopyButton text={() => preview.messages.map((m) => `[${m.role}]\n${m.content}`).join('\n\n')} label="Copy prompt" />
+            <CopyButton
+              text={() => preview.messages.map((m) => `[${m.role}]\n${m.content}`).join('\n\n')}
+              label="Copy prompt"
+            />
           </div>
         </>
       )}

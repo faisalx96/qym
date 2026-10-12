@@ -55,7 +55,8 @@ export interface ForceStopResult {
   can_force_stop: boolean;
 }
 
-export type JobStatus = 'queued' | 'running' | 'paused' | 'cancel_requested' | 'cancelled' | 'succeeded' | 'failed';
+export type JobStatus =
+  'queued' | 'running' | 'paused' | 'cancel_requested' | 'cancelled' | 'succeeded' | 'failed';
 
 export interface MaintenanceJob {
   id: string;
@@ -98,6 +99,7 @@ export interface MaintenanceOverview {
     summary_worker_alive: boolean | null;
     maintenance_worker_alive: boolean | null;
     maintenance_current_job?: string | null;
+    workers_service?: { alive: boolean; processes: { alive: boolean }[] } | null;
   };
   pool?: string | null;
   db_stats:
@@ -141,7 +143,8 @@ export interface CreateUserBody {
 export function useCreateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: CreateUserBody) => api.post<{ id: string; email: string; existing?: boolean }>('/v1/admin/users', body),
+    mutationFn: (body: CreateUserBody) =>
+      api.post<{ id: string; email: string; existing?: boolean }>('/v1/admin/users', body),
     onSuccess: () => void qc.invalidateQueries({ queryKey: adminKeys.users }),
   });
 }
@@ -173,7 +176,9 @@ export function useResetPassword() {
   return useMutation({
     gcTime: 0,
     mutationFn: (id: string) =>
-      api.post<{ ok: boolean; user_id: string; temporary_password: string }>(`/v1/admin/users/${id}/reset-password`),
+      api.post<{ ok: boolean; user_id: string; temporary_password: string }>(
+        `/v1/admin/users/${id}/reset-password`,
+      ),
   });
 }
 
@@ -221,7 +226,8 @@ export function useRecentRuns(page: number, pageSize = RECENT_PAGE_SIZE, enabled
 export function useForceStop() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (runId: string) => api.post<ForceStopResult>(`/api/runs/${encodeURIComponent(runId)}/force-stop`),
+    mutationFn: (runId: string) =>
+      api.post<ForceStopResult>(`/api/runs/${encodeURIComponent(runId)}/force-stop`),
     onMutate: async () => {
       await qc.cancelQueries({ queryKey: adminKeys.live });
       await qc.cancelQueries({ queryKey: adminKeys.recentAll });
@@ -256,7 +262,9 @@ export function useMaintenance(enabled = true) {
     enabled,
     refetchInterval: (q) => {
       const jobs = q.state.data?.jobs ?? [];
-      return enabled && interval && jobs.some((j) => ACTIVE_JOB_STATUSES.includes(j.status)) ? interval : false;
+      return enabled && interval && jobs.some((j) => ACTIVE_JOB_STATUSES.includes(j.status))
+        ? interval
+        : false;
     },
   });
 }

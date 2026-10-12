@@ -30,7 +30,13 @@ function stubVersioning(answers: Array<() => Response>) {
 }
 
 const ok = (details: Record<string, unknown>) => () =>
-  json(200, { environment_id: 'e1', status: 'ok', versioning_details: details, error: null, fetched_at: null });
+  json(200, {
+    environment_id: 'e1',
+    status: 'ok',
+    versioning_details: details,
+    error: null,
+    fetched_at: null,
+  });
 
 const client = newClient();
 const block = (

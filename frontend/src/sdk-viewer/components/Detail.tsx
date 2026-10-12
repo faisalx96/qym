@@ -5,6 +5,7 @@ import { formatLatency } from '../lib/stats';
 import { metricCell } from '../lib/metric-cell';
 import { wordDiff } from '../lib/diff';
 import { copyText, STATUS_LABEL } from './format';
+import { Badge } from '@/ui/Badge';
 import { StatusBadge } from './StatusBadge';
 import s from './Detail.module.css';
 
@@ -216,8 +217,12 @@ export const Detail = forwardRef<HTMLElement, DetailProps>(function Detail(
         <ul className={s.metrics}>
           {metricNames.map((name, k) => {
             const cell = metricCell(row.metric_values[k]);
-            const meta = Object.entries(row.metric_meta[name] ?? {}).filter(
-              ([, v]) => String(v).trim() !== '',
+            const allMeta = row.metric_meta[name] ?? {};
+            const edited = allMeta.modified === 'true';
+            const original = allMeta.original_score;
+            // modified / original_score are audit columns, shown as the Edited badge instead.
+            const meta = Object.entries(allMeta).filter(
+              ([key, v]) => String(v).trim() !== '' && key !== 'modified' && key !== 'original_score',
             );
             return (
               <li key={name}>
@@ -226,7 +231,9 @@ export const Detail = forwardRef<HTMLElement, DetailProps>(function Detail(
                   <span className={s.score} data-kind={cell.kind}>
                     {cell.text || '—'}
                   </span>
+                  {edited ? <Badge tone="info">Edited</Badge> : null}
                 </div>
+                {edited && original ? <p className={s.meta}>Original: {original}</p> : null}
                 {meta.map(([key, value]) => (
                   <p key={key} className={s.meta} {...textDirAttrs(value)}>
                     <span className={s.metaKey}>{key}</span> {value}
@@ -245,6 +252,12 @@ export const Detail = forwardRef<HTMLElement, DetailProps>(function Detail(
             );
           })}
         </ul>
+        {!canEdit && run.file_path && run.editable === false ? (
+          <p className={s.note}>
+            Scores in this file are read-only: only <code>.csv</code> files inside the viewer&apos;s results
+            folder can be edited.
+          </p>
+        ) : null}
         {canEdit ? (
           <p className={s.note}>
             Saving writes the score into <code>{run.file_path?.split(/[\\/]/).pop()}</code> and keeps the
@@ -263,9 +276,16 @@ export const Detail = forwardRef<HTMLElement, DetailProps>(function Detail(
             {row.trace_id ? (
               <>
                 {row.trace_id} <CopyBtn text={row.trace_id} label="trace id" />
+                {row.trace_url && /^https?:\/\//i.test(row.trace_url) ? (
+                  <a className={s.link} href={row.trace_url} target="_blank" rel="noreferrer noopener">
+                    Open trace
+                  </a>
+                ) : null}
               </>
-            ) : row.trace_url ? (
-              'Trace available'
+            ) : row.trace_url && /^https?:\/\//i.test(row.trace_url) ? (
+              <a className={s.link} href={row.trace_url} target="_blank" rel="noreferrer noopener">
+                Open trace
+              </a>
             ) : (
               '—'
             )}

@@ -362,8 +362,13 @@ test.describe('root-cause issues (scenario 9)', () => {
     expect(params(page).get('item')).toBe('sql-001');
     const c2 = card(page, 'sql-001');
     await expect(c2).toBeVisible();
-    // sql-001 failed in pass 2 (task error): its failing metric card offers an issue
-    const rc = c2.locator('[data-testid=metric-analysis-card]').first();
+    // sql-001 failed in pass 2 with a task error: the judges said nothing, so no root-cause cards
+    await expect(c2.locator('[role=listitem][data-metric]')).toHaveCount(0);
+    await expect(c2.getByTestId('metric-analysis-card')).toHaveCount(0);
+    // sql-005 fails every pass on its score: its failing metric card offers an issue
+    await openRun(page, s.slug, repeat, 'pass=2&item=sql-005');
+    const c3 = card(page, 'sql-005');
+    const rc = c3.locator('[data-testid=metric-analysis-card]').first();
     await expect(rc).toBeVisible();
     await rc.getByRole('button', { name: '+ Add issue' }).click();
     const dlg = page.getByTestId('issue-dialog');

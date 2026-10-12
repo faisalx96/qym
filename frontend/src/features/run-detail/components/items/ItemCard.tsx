@@ -1,6 +1,6 @@
 /** Expanded item: bodies (lazy), metadata, output, trace chips, metrics; repeat items show one column per pass. */
 import { useEffect, useState } from 'react';
-import { formatLatency, isItemTaskError } from '@/lib/metrics';
+import { isItemTaskError } from '@/lib/metrics';
 import { Button, CopyButton, Icon, LinkButton, Tag, TextBlock } from '@/ui';
 import { bodyText, formatCompact, formatStartedAt, itemLink } from '../../lib/itemText';
 import {
@@ -10,9 +10,9 @@ import {
   itemMetadataDisplayValue,
 } from '../../lib/rowMeta';
 import { buildLangfuseTraceUrl } from '../../lib/traceTree';
-import { rowStatus } from '../../lib/rowDisplay';
+import { latencyLabel, rowStatus } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
-import type { Row, RowTraceStats } from '../../types';
+import type { MetricAnalysis, Row, RowTraceStats } from '../../types';
 import { MetricAnalysisCards } from '../analysis/MetricAnalysisCards';
 import { useItemsUi } from './ItemsUi';
 import { MetricStrip } from './MetricStrip';
@@ -64,6 +64,21 @@ export function TraceChips({ stats, retries }: { stats: RowTraceStats | null | u
   );
 }
 
+/** Item-level and per-metric analysis warnings, deduplicated; failed analyses own their warnings. */
+export function analysisWarnings(row: Row): string[] {
+  const md = row.item_metadata ?? {};
+  const analyses = (md.metric_analyses ?? {}) as Record<string, MetricAnalysis | undefined>;
+  const out: string[] = [];
+  const add = (value: unknown) => {
+    const text = String(value ?? '').trim();
+    if (text && !out.some((w) => w.toLowerCase() === text.toLowerCase())) out.push(text);
+  };
+  const failed = !!md.analysis_error || Object.values(analyses).some((a) => a?.error);
+  if (!failed) add(md.analysis_warning);
+  for (const a of Object.values(analyses)) if (a && !a.error) add(a.warning);
+  return out;
+}
+
 export function ItemCard({ row }: { row: Row }) {
   const { payload, model, api, items } = useRunPage();
   const ui = useItemsUi();
@@ -103,9 +118,11 @@ export function ItemCard({ row }: { row: Row }) {
     ? `ERROR: ${row.error || row.__execution_error || 'The task failed'}`
     : bodyText(row.output_full ?? row.output);
   const md = row.item_metadata ?? {};
-  const badges = ITEM_METADATA_BADGE_KEYS.flatMap((k) =>
+  const badges = ITEM_METADATA_BADGE_KEYS.filter((k) => !ui.hiddenFields.has(k)).flatMap((k) =>
     itemMetadataBadgeValues(k, md[k]).map((v) => ({ k, v })),
   );
+  const noVerdict = isItemTaskError(row) || row.output_received === false;
+  const warnings = analysisWarnings(row);
   const tags = Object.entries(md).filter(
     ([k, v]) =>
       !HIDDEN_METADATA_KEYS.has(k) &&
@@ -154,6 +171,14 @@ export function ItemCard({ row }: { row: Row }) {
           ))}
         </div>
       ) : null}
+      {warnings.length ? (
+        <div className={styles.warning} role="status" data-testid="analysis-warning">
+          <span className={styles.warningLabel}>
+            {/taxonom/i.test(warnings.join('; ')) ? 'No taxonomy' : 'Analysis warning'}
+          </span>
+          <span>{warnings.join('; ')}</span>
+        </div>
+      ) : null}
       {repeatAggregate ? (
         <PassColumns row={row} />
       ) : (
@@ -171,7 +196,9 @@ export function ItemCard({ row }: { row: Row }) {
             >
               {status.label}
             </Tag>
-            {row.latency_ms ? <span className={styles.meta}>{formatLatency(row.latency_ms)}</span> : null}
+            {row.latency_ms != null ? (
+              <span className={styles.meta}>{latencyLabel(row.latency_ms)}</span>
+            ) : null}
             {row.task_started_at_ms ? (
               <span className={styles.meta}>{formatStartedAt(row.task_started_at_ms)}</span>
             ) : null}
@@ -212,7 +239,7 @@ export function ItemCard({ row }: { row: Row }) {
         </section>
       )}
       <TraceChips stats={row.trace_stats} retries={row.retry_count ?? 0} />
-      {repeatAggregate ? null : <MetricStrip row={row} />}
+      {repeatAggregate || noVerdict ? null : <MetricStrip row={row} />}
       <MetricAnalysisCards row={row} />
     </div>
   );

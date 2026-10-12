@@ -24,7 +24,12 @@ describe('run metadata in the hero', () => {
   const byKey = (key: string) => entries.find((e) => e.key === key)!;
 
   it('flags objects, arrays and JSON strings for the viewer; scalars and invalid JSON stay plain text', () => {
-    expect(entries.filter((e) => e.json).map((e) => e.key)).toEqual(['retrieval', 'tags', 'pipeline_json', 'empty_obj']);
+    expect(entries.filter((e) => e.json).map((e) => e.key)).toEqual([
+      'retrieval',
+      'tags',
+      'pipeline_json',
+      'empty_obj',
+    ]);
     expect(byKey('prompt_version').json).toBe(false);
     expect(byKey('prompt_version').value).toBe('v7');
     expect(byKey('not_json').json).toBe(false);
@@ -49,7 +54,9 @@ describe('run metadata in the hero', () => {
     // two levels open by default: filters is open, its list "lang" is collapsed and lazy
     const filters = within(tree).getByRole('button', { name: 'filters' }).closest('[role=treeitem]')!;
     expect(filters).toHaveAttribute('aria-expanded', 'true');
-    const lang = within(filters as HTMLElement).getByRole('button', { name: 'lang' }).closest('[role=treeitem]')!;
+    const lang = within(filters as HTMLElement)
+      .getByRole('button', { name: 'lang' })
+      .closest('[role=treeitem]')!;
     expect(lang).toHaveAttribute('aria-expanded', 'false');
     expect(within(lang as HTMLElement).queryByText('"ar"')).toBeNull();
     await user.click(within(lang as HTMLElement).getByRole('button', { name: 'lang' }));
@@ -58,7 +65,9 @@ describe('run metadata in the hero', () => {
     // collapse all keeps the root open but folds every child; expand all opens them
     await user.click(within(dialog).getByRole('button', { name: 'Collapse all' }));
     const folded = within(dialog).getByRole('tree', { name: 'Retrieval' });
-    expect(within(folded).getByRole('button', { name: 'filters' }).closest('[role=treeitem]')).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      within(folded).getByRole('button', { name: 'filters' }).closest('[role=treeitem]'),
+    ).toHaveAttribute('aria-expanded', 'false');
     await user.click(within(dialog).getByRole('button', { name: 'Expand all' }));
     expect(within(dialog).getByRole('tree', { name: 'Retrieval' })).toHaveTextContent('"en"');
   });

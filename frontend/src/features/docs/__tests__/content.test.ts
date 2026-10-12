@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { FIRST_PAGE, PAGES, findPage, legacyHashToPath, loadPage, loadSearchIndex, neighbours, searchDocs } from '../content';
+import {
+  FIRST_PAGE,
+  PAGES,
+  findPage,
+  legacyHashToPath,
+  loadPage,
+  loadSearchIndex,
+  neighbours,
+  searchDocs,
+} from '../content';
 
 describe('docs IA', () => {
   it('flattens 27 pages in reading order', () => {
@@ -10,7 +19,9 @@ describe('docs IA', () => {
   });
 
   it('maps legacy hashes to routes', () => {
-    expect(legacyHashToPath('#developer/endpoints/conventions')).toBe('/docs/developer/endpoints#conventions');
+    expect(legacyHashToPath('#developer/endpoints/conventions')).toBe(
+      '/docs/developer/endpoints#conventions',
+    );
     expect(legacyHashToPath('#/sdk-guide/judges')).toBe('/docs/sdk-guide/judges');
     expect(legacyHashToPath('#nope/none')).toBeNull();
     expect(findPage('developer', 'cli')?.title).toBe('CLI reference');

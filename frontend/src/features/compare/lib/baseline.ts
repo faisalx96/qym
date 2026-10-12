@@ -4,7 +4,12 @@
  * every column against the baseline (mean difference over the items both
  * scored, 95% Student-t band, p-value, verdict) and improved/regressed counts.
  */
-import { formatNumericValue, metricDeltaVerdict, type DeltaVerdict, type MetricDirection } from '@/lib/metrics';
+import {
+  formatNumericValue,
+  metricDeltaVerdict,
+  type DeltaVerdict,
+  type MetricDirection,
+} from '@/lib/metrics';
 import type { CompareModel } from './model';
 import { tCritical, tTwoSidedP } from './tdist';
 import { runOutcome, type MetricCtx } from './scoring';
@@ -30,14 +35,28 @@ export function metricColumns(model: CompareModel, mode: PassColumns): MetricCol
     if (run.pass && mode === 'run') {
       let col = byBase.get(run.base);
       if (!col) {
-        col = { key: run.base, base: run.base, runIdxs: [], pass: null, label: baseLabel(run.label), title: baseLabel(run.title) };
+        col = {
+          key: run.base,
+          base: run.base,
+          runIdxs: [],
+          pass: null,
+          label: baseLabel(run.label),
+          title: baseLabel(run.title),
+        };
         byBase.set(run.base, col);
         columns.push(col);
       }
       col.runIdxs.push(idx);
       return;
     }
-    columns.push({ key: run.ref, base: run.base, runIdxs: [idx], pass: run.pass, label: run.label, title: run.title });
+    columns.push({
+      key: run.ref,
+      base: run.base,
+      runIdxs: [idx],
+      pass: run.pass,
+      label: run.label,
+      title: run.title,
+    });
   });
   return columns;
 }
@@ -58,7 +77,11 @@ export function resolveBaseline(columns: MetricColumn[], key: string | null): Me
 }
 
 /** Mean score of each item in a column (a run-average column averages the item's passes). */
-export function columnItemScores(model: CompareModel, column: MetricColumn, ctx: MetricCtx): Map<string, number> {
+export function columnItemScores(
+  model: CompareModel,
+  column: MetricColumn,
+  ctx: MetricCtx,
+): Map<string, number> {
   const sums = new Map<string, { sum: number; count: number }>();
   for (const idx of column.runIdxs) {
     const run = model.runs[idx];
@@ -124,7 +147,8 @@ export function compareWithBaseline(
     halfWidth = tCritical(n - 1) * se;
     pValue = se > 0 ? tTwoSidedP(mean / se, n - 1) : mean === 0 ? 1 : 0;
   }
-  const verdict = mean !== null && halfWidth !== null ? metricDeltaVerdict(mean, halfWidth, ctx.direction) : null;
+  const verdict =
+    mean !== null && halfWidth !== null ? metricDeltaVerdict(mean, halfWidth, ctx.direction) : null;
   return { paired: n, counts, mean, halfWidth, pValue, verdict };
 }
 

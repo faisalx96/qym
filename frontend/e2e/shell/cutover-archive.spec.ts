@@ -37,7 +37,7 @@ test('the settings Archive dialog lists five in-progress runs and "2 more"; Canc
   await page.locator('[data-danger-zone]').getByRole('button', { name: 'Archive' }).click();
   await page
     .getByRole('alertdialog', { name: /^Archive / })
-    .getByRole('button', { name: 'Archive project' })
+    .getByRole('button', { name: /^Archive (project|anyway)$/ })
     .click();
   await expect.poll(() => isActive(request, project.slug)).toBe(false);
 });
@@ -63,7 +63,7 @@ test('a project that cannot be deleted offers "Archive instead", which shows the
     .click();
   await page
     .getByRole('alertdialog', { name: /^Archive / })
-    .getByRole('button', { name: 'Archive project' })
+    .getByRole('button', { name: /^Archive (project|anyway)$/ })
     .click();
   await expect.poll(() => isActive(request, project.slug)).toBe(false);
 });
@@ -73,7 +73,7 @@ test('the Archive dialog of a quiet project has no warning', async ({ page, requ
   await gotoApp(page, `/projects/${project.slug}/settings?tab=danger`);
   await page.locator('[data-danger-zone]').getByRole('button', { name: 'Archive' }).click();
   const dialog = page.getByRole('alertdialog', { name: /^Archive / });
-  await expect(dialog.getByRole('button', { name: 'Archive project' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /^Archive (project|anyway)$/ })).toBeVisible();
   await expect(dialog).not.toContainText('still running');
   await expect(dialog.getByRole('listitem')).toHaveCount(0);
 });

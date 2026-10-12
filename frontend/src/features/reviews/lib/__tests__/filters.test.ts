@@ -78,7 +78,11 @@ describe('priority and bulk fit', () => {
   });
   it('bulk selection keeps only fitting rows', () => {
     const rows = [row({ id: 1 }), row({ id: 2, status: 'approved' }), row({ id: 3 })];
-    expect(bulkSelection(rows, new Set([1, 2, 3]), 'approve')).toEqual({ ids: [1, 3], selected: 3, skipped: 1 });
+    expect(bulkSelection(rows, new Set([1, 2, 3]), 'approve')).toEqual({
+      ids: [1, 3],
+      selected: 3,
+      skipped: 1,
+    });
     expect(bulkSelection(rows, new Set([1, 2]), 'reset')).toEqual({ ids: [2], selected: 2, skipped: 1 });
   });
 });

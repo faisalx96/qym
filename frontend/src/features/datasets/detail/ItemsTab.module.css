@@ -68,3 +68,26 @@
   display: flex;
   gap: var(--space-sm);
 }
+
+/* 700 ms hover popover with the full cell value. */
+.hoverTip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  max-width: 480px;
+  max-height: 240px;
+  overflow: auto;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  unicode-bidi: plaintext;
+  text-align: start;
+}

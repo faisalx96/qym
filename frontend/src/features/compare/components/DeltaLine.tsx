@@ -17,7 +17,12 @@ function CohortVerdict() {
     return summarizeSweepItems(g.items, g.leftRunCount, g.rightRunCount, g.reportK, ctx.direction);
   }, [model, cohorts, ctx]);
   if (!cohorts) return null;
-  if (!summary) return <Text variant="sm" tone="muted">Sweep needs a pass/fail metric with a declared direction.</Text>;
+  if (!summary)
+    return (
+      <Text variant="sm" tone="muted">
+        Sweep needs a pass/fail metric with a declared direction.
+      </Text>
+    );
   const avg = summary.noise?.avgAtK ?? null;
   const n = avg ?? summary.noise?.passAtK ?? null;
   const label = avg ? `Avg@${cohorts.k}` : `Pass@${cohorts.k}`;
@@ -27,7 +32,8 @@ function CohortVerdict() {
   return (
     <span className={styles.verdict}>
       <Tag kind="data" tone={tone}>
-        {verdict === 'improved' ? '▲' : verdict === 'regressed' ? '▼' : '≈'} {cohorts.rightLabel} vs {cohorts.leftLabel}: {label}{' '}
+        {verdict === 'improved' ? '▲' : verdict === 'regressed' ? '▼' : '≈'} {cohorts.rightLabel} vs{' '}
+        {cohorts.leftLabel}: {label}{' '}
         {n ? `${n.delta >= 0 ? '+' : '−'}${Math.abs(n.delta * 100).toFixed(1)}` : '—'} pts, {word}
       </Tag>
       <Button size="sm" variant="neutral" onPress={() => c.setView({ tab: 'sweep' })}>
@@ -37,7 +43,15 @@ function CohortVerdict() {
   );
 }
 
-export function DeltaLine({ info, analyticsOpen, onToggleAnalytics }: { info: ColumnsInfo; analyticsOpen: boolean; onToggleAnalytics: () => void }) {
+export function DeltaLine({
+  info,
+  analyticsOpen,
+  onToggleAnalytics,
+}: {
+  info: ColumnsInfo;
+  analyticsOpen: boolean;
+  onToggleAnalytics: () => void;
+}) {
   const { model, ctx, metric, c, cohorts } = useCompare();
   const stats = useColumnStats(model, info, ctx);
   const type = model.types[metric] ?? 'score';
@@ -45,12 +59,17 @@ export function DeltaLine({ info, analyticsOpen, onToggleAnalytics }: { info: Co
   const ranked = useMemo(() => {
     const cands = info.columns.filter((col) => col.key !== info.baseline.key);
     const sign = ctx.direction === 'minimize' ? -1 : 1;
-    return [...cands].sort((a, b) => sign * ((stats.get(b.key)?.mean ?? -Infinity) - (stats.get(a.key)?.mean ?? -Infinity)));
+    return [...cands].sort(
+      (a, b) => sign * ((stats.get(b.key)?.mean ?? -Infinity) - (stats.get(a.key)?.mean ?? -Infinity)),
+    );
   }, [info, stats, ctx.direction]);
   const toggle = (colKey: string, kind: DeltaKind) => {
     const same = active && active.columnKey === colKey && active.kind === kind && active.metric === metric;
     c.setView({
-      filters: { ...c.view.filters, baseline: same ? null : { metric, columnKey: colKey, baselineKey: info.baseline.key, kind } },
+      filters: {
+        ...c.view.filters,
+        baseline: same ? null : { metric, columnKey: colKey, baselineKey: info.baseline.key, kind },
+      },
     });
   };
   return (
@@ -76,7 +95,11 @@ export function DeltaLine({ info, analyticsOpen, onToggleAnalytics }: { info: Co
                       stats={s}
                       direction={ctx.direction}
                       label={metric}
-                      active={active && active.columnKey === col.key && active.metric === metric ? (active.kind as DeltaKind) : null}
+                      active={
+                        active && active.columnKey === col.key && active.metric === metric
+                          ? (active.kind as DeltaKind)
+                          : null
+                      }
                       onToggle={(k) => toggle(col.key, k)}
                     />
                   </>
@@ -86,7 +109,13 @@ export function DeltaLine({ info, analyticsOpen, onToggleAnalytics }: { info: Co
           })}
         </ul>
       )}
-      <Button size="sm" variant="neutral" icon={<Icon name="sidebar" size={14} />} aria-expanded={analyticsOpen} onPress={onToggleAnalytics}>
+      <Button
+        size="sm"
+        variant="neutral"
+        icon={<Icon name="sidebar" size={14} />}
+        aria-expanded={analyticsOpen}
+        onPress={onToggleAnalytics}
+      >
         Analytics
       </Button>
     </div>

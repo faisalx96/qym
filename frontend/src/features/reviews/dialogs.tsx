@@ -19,7 +19,15 @@ export function CommentDialog(props: CommentDialogProps) {
   return props.open ? <CommentInner key="open" {...props} /> : null;
 }
 
-function CommentInner({ open, onOpenChange, title, description, confirmLabel, tone = 'primary', onConfirm }: CommentDialogProps) {
+function CommentInner({
+  open,
+  onOpenChange,
+  title,
+  description,
+  confirmLabel,
+  tone = 'primary',
+  onConfirm,
+}: CommentDialogProps) {
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   async function submit() {
@@ -43,7 +51,12 @@ function CommentInner({ open, onOpenChange, title, description, confirmLabel, to
           <Button variant="ghost" onPress={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant={tone === 'danger' ? 'danger' : 'primary'} onPress={() => void submit()} loading={busy} data-testid="comment-confirm">
+          <Button
+            variant={tone === 'danger' ? 'danger' : 'primary'}
+            onPress={() => void submit()}
+            loading={busy}
+            data-testid="comment-confirm"
+          >
             {confirmLabel}
           </Button>
         </>
@@ -70,7 +83,13 @@ function CommentInner({ open, onOpenChange, title, description, confirmLabel, to
   );
 }
 
-export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+export function ShortcutsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Keyboard shortcuts" size="sm">
       <dl className={styles.keys}>
@@ -109,7 +128,9 @@ export function ConflictDialog({ detail, onReload }: { detail: string | null; on
         </Button>
       }
     >
-      <p className={styles.conflictNote}>Another reviewer decided some of these corrections after you selected them. Nothing was changed.</p>
+      <p className={styles.conflictNote}>
+        Another reviewer decided some of these corrections after you selected them. Nothing was changed.
+      </p>
     </Dialog>
   );
 }

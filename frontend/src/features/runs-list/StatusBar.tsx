@@ -24,6 +24,7 @@ export function StatusBar({
   updatedAt,
   freshness,
   failed,
+  selecting,
   onHelp,
 }: {
   left: ReactNode;
@@ -33,11 +34,19 @@ export function StatusBar({
   updatedAt: Date | null;
   freshness: Freshness | undefined;
   failed?: boolean;
+  /** Selection actions are in the left cell: the bar stacks sooner so nothing overlaps. */
+  selecting?: boolean;
   onHelp: () => void;
 }) {
   const note = freshnessCopy(freshness);
   return (
-    <footer className={styles.bar} data-pinned="" aria-label="Runs status" data-testid="status-bar">
+    <footer
+      className={styles.bar}
+      data-pinned=""
+      data-selecting={selecting ? '' : undefined}
+      aria-label="Runs status"
+      data-testid="status-bar"
+    >
       <div className={styles.left}>{left}</div>
       <div className={styles.center}>
         <Pagination total={total} page={page} pageSize={PAGE_SIZE} noun="runs" onPageChange={onPage} />

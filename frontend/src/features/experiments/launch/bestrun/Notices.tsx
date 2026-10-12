@@ -32,8 +32,8 @@ export function BestRunNotices() {
     <>
       {drift?.status === 'changed' ? (
         <p className={styles.hint} data-best-run-drift="changed">
-          Launching reproduces the configuration, not the agent or knowledge base it ran against, so scores may
-          differ.
+          Launching reproduces the configuration, not the agent or knowledge base it ran against, so scores
+          may differ.
         </p>
       ) : null}
       {drift?.status === 'unknown' && base.versioning ? (
@@ -46,8 +46,8 @@ export function BestRunNotices() {
         <Callout tone="warning" title="Temporary models were left unbound">
           <div className={styles.notice} data-best-run-prompts>
             <p className={styles.hint}>
-              Their API keys are never stored. Pick a project model under Models, or use the temporary model again
-              and enter its key.
+              Their API keys are never stored. Pick a project model under Models, or use the temporary model
+              again and enter its key.
             </p>
             <ul>
               {prompts.map((p) => {

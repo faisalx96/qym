@@ -29,7 +29,7 @@ import {
 } from './cells';
 import type { ColumnDef } from './columns';
 import { PassesPanel } from './PassesPanel';
-import { passRefBase, PASS_REF_SEP } from './selection';
+import { passRef, passRefBase, PASS_REF_SEP } from './selection';
 import type { SortSpec } from './urlState';
 import styles from './RunsTable.module.css';
 
@@ -42,6 +42,8 @@ export interface RunsTableProps {
   selected: Set<string>;
   onToggleSelect: (ref: string) => void;
   onSelectPage: (refs: string[], on: boolean) => void;
+  onNotePassRevision?: (runId: string, revision: number) => void;
+  onPassesDeleted?: (runId: string) => void;
   expanded: Set<string>;
   onToggleExpand: (id: string) => void;
   focusedIndex: number;
@@ -49,7 +51,7 @@ export interface RunsTableProps {
   onOpen: (row: RunRow) => void;
   perm: RowPermissions;
   onAction: (id: string, row: RunRow) => void;
-  onSignalDetails: (row: RunRow) => void;
+  onSignalDetails: (row: RunRow, metric?: string) => void;
   loading?: boolean;
   dimmed?: boolean;
   emptyState?: ReactNode;
@@ -58,7 +60,8 @@ export interface RunsTableProps {
 }
 
 function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
-  if (col.id.startsWith('metric-')) return <MetricCell row={row} metric={col.id.slice(7)} />;
+  if (col.id.startsWith('metric-'))
+    return <MetricCell row={row} metric={col.id.slice(7)} onErrorDetails={p.onSignalDetails} />;
   if (col.id.startsWith('trace-')) {
     const v = row.trace_stats?.[col.id.slice(6)];
     if (typeof v !== 'number') return <span>—</span>;
@@ -80,7 +83,7 @@ function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
     case 'status':
       return <StatusCell row={row} />;
     case 'signals':
-      return <Signals row={row} onDetails={p.onSignalDetails} />;
+      return <Signals row={row} onDetails={(r) => p.onSignalDetails(r)} />;
     case 'task':
       return <span title={row.task_name}>{row.task_name || '—'}</span>;
     case 'model':
@@ -114,7 +117,18 @@ export function RunsTable(p: RunsTableProps) {
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
   const cols = p.columns;
   const ids = p.rows.map((r) => r.run_id);
-  const allOnPage = ids.length > 0 && ids.every((id) => p.selected.has(id));
+  // An expanded repeat run is checked through its passes: all ticked = checked, some = indeterminate.
+  const passRefsOf = (row: RunRow) =>
+    Array.from({ length: row.samples }, (_, i) => passRef(row.run_id, i + 1));
+  const viaPasses = (row: RunRow) => row.samples > 1 && p.expanded.has(row.run_id);
+  const rowChecked = (row: RunRow) =>
+    p.selected.has(row.run_id) || (viaPasses(row) && passRefsOf(row).every((ref) => p.selected.has(ref)));
+  const toggleRow = (row: RunRow) => {
+    if (!viaPasses(row)) return p.onToggleSelect(row.run_id);
+    p.onSelectPage(passRefsOf(row), !rowChecked(row));
+    if (p.selected.has(row.run_id)) p.onSelectPage([row.run_id], false);
+  };
+  const allOnPage = p.rows.length > 0 && p.rows.every(rowChecked);
   const someOnPage = ids.some((id) => p.selected.has(id) || hasPassSelected(p.selected, id));
 
   useEffect(() => {
@@ -207,7 +221,7 @@ export function RunsTable(p: RunsTableProps) {
         <tbody className={styles.tbody}>
           {p.rows.map((row, i) => {
             const isFocused = p.focusedIndex === i;
-            const isSelected = p.selected.has(row.run_id);
+            const isSelected = rowChecked(row);
             const partial = !isSelected && hasPassSelected(p.selected, row.run_id);
             const isExpanded = p.expanded.has(row.run_id);
             const name = row.external_run_id || row.run_name;
@@ -231,7 +245,7 @@ export function RunsTable(p: RunsTableProps) {
                 onClick={(e) => {
                   if ((e.target as HTMLElement).closest('a, button, input, label, [role="button"]')) return;
                   p.onFocusIndex(i);
-                  if (p.selectMode) p.onToggleSelect(row.run_id);
+                  if (p.selectMode) toggleRow(row);
                 }}
                 onDoubleClick={(e) => {
                   if ((e.target as HTMLElement).closest('a, button, input, label, [role="button"]')) return;
@@ -244,7 +258,7 @@ export function RunsTable(p: RunsTableProps) {
                       aria-label={`Select ${name}`}
                       isSelected={isSelected}
                       isIndeterminate={partial}
-                      onChange={() => p.onToggleSelect(row.run_id)}
+                      onChange={() => toggleRow(row)}
                     />
                   </td>
                 ) : null}
@@ -270,6 +284,8 @@ export function RunsTable(p: RunsTableProps) {
                       selectMode={p.selectMode}
                       selected={p.selected}
                       onToggle={p.onToggleSelect}
+                      onNotePassRevision={p.onNotePassRevision}
+                      onPassesDeleted={p.onPassesDeleted}
                       canDelete={
                         !p.perm.readOnly &&
                         (p.perm.isAdmin || p.perm.canManage || row.owner?.id === p.perm.meId)

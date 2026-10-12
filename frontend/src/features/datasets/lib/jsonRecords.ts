@@ -21,7 +21,8 @@ export const JSON_ITEM_KEYS = ['item_id', 'id', 'input', 'expected_output', 'exp
 export function jsonRecordProblem(obj: unknown): string {
   if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return 'must be a JSON object';
   const meta = (obj as { metadata?: unknown }).metadata;
-  if (meta != null && (typeof meta !== 'object' || Array.isArray(meta))) return 'metadata must be a JSON object';
+  if (meta != null && (typeof meta !== 'object' || Array.isArray(meta)))
+    return 'metadata must be a JSON object';
   return '';
 }
 
@@ -70,7 +71,11 @@ export function parseJSONRecords(text: string, fileName: string): JsonRecordsRes
 
 /** Mirrors `_labels` on the server: comma string or list. */
 export function importLabels(value: unknown): string[] {
-  if (typeof value === 'string') return value.split(',').map((p) => p.trim()).filter(Boolean);
+  if (typeof value === 'string')
+    return value
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
   if (Array.isArray(value)) return value.map((p) => String(p).trim()).filter(Boolean);
   return [];
 }

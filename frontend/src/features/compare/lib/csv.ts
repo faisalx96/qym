@@ -4,9 +4,14 @@
  * parsed JSON keys of input / expected / output, item metadata, and per-run
  * output, status, root cause, issues, scores, metric meta, latency, trace URL.
  */
+import { SKIPPED_METADATA } from './skipMetadata';
 import { isInternalMetaKey } from '@/lib/metrics';
 import type { Row } from '@/features/run-detail/types';
-import { getRowRootCauseAnalyses, rootCauseCategories, rootCauseIssues } from '@/features/run-detail/lib/rowMeta';
+import {
+  getRowRootCauseAnalyses,
+  rootCauseCategories,
+  rootCauseIssues,
+} from '@/features/run-detail/lib/rowMeta';
 import type { CompareModel } from './model';
 
 export interface ExportColumn {
@@ -48,10 +53,14 @@ export function tryParseObject(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'string') return null;
   const s = value.trim();
   if (!(s.startsWith('{') && s.endsWith('}'))) return null;
-  for (const text of [s, s.replace(/'/g, '"').replace(/True/g, 'true').replace(/False/g, 'false').replace(/None/g, 'null')]) {
+  for (const text of [
+    s,
+    s.replace(/'/g, '"').replace(/True/g, 'true').replace(/False/g, 'false').replace(/None/g, 'null'),
+  ]) {
     try {
       const parsed: unknown = JSON.parse(text);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+        return parsed as Record<string, unknown>;
     } catch {
       /* try the next form */
     }
@@ -71,14 +80,15 @@ export function discoverExportColumns(model: CompareModel, items: ExportItem[]):
   const metricMetaKeys = new Map<string, Set<string>>(model.metrics.map((m) => [m, new Set<string>()]));
   for (const { rows } of items) {
     const first = rows.find((r) => r);
-    for (const k of Object.keys(first?.item_metadata ?? {})) if (k !== 'task_started_at_ms') metaKeys.add(k);
+    for (const k of Object.keys(first?.item_metadata ?? {})) if (!SKIPPED_METADATA.has(k)) metaKeys.add(k);
     for (const row of rows) {
       if (!row) continue;
       Object.keys(tryParseObject(body(row, 'input')) ?? {}).forEach((k) => inputKeys.add(k));
       Object.keys(tryParseObject(body(row, 'expected')) ?? {}).forEach((k) => expectedKeys.add(k));
       Object.keys(tryParseObject(body(row, 'output')) ?? {}).forEach((k) => outputKeys.add(k));
       for (const m of model.metrics)
-        for (const k of Object.keys(row.metric_meta?.[m] ?? {})) if (!isInternalMetaKey(k)) metricMetaKeys.get(m)!.add(k);
+        for (const k of Object.keys(row.metric_meta?.[m] ?? {}))
+          if (!isInternalMetaKey(k)) metricMetaKeys.get(m)!.add(k);
     }
   }
   groups.push({
@@ -86,24 +96,51 @@ export function discoverExportColumns(model: CompareModel, items: ExportItem[]):
     columns: [
       { key: 'item_id', label: 'Aligned item ID', checked: true },
       { key: 'input', label: inputKeys.size ? 'Input (raw)' : 'Input', checked: inputKeys.size === 0 },
-      { key: 'expected', label: expectedKeys.size ? 'Expected output (raw)' : 'Expected output', checked: expectedKeys.size === 0 },
+      {
+        key: 'expected',
+        label: expectedKeys.size ? 'Expected output (raw)' : 'Expected output',
+        checked: expectedKeys.size === 0,
+      },
     ],
   });
   if (inputKeys.size)
-    groups.push({ group: 'Input fields', columns: Array.from(inputKeys).sort().map((k) => ({ key: `input.${k}`, label: k, checked: true })) });
+    groups.push({
+      group: 'Input fields',
+      columns: Array.from(inputKeys)
+        .sort()
+        .map((k) => ({ key: `input.${k}`, label: k, checked: true })),
+    });
   if (expectedKeys.size)
-    groups.push({ group: 'Expected output fields', columns: Array.from(expectedKeys).sort().map((k) => ({ key: `expected.${k}`, label: k, checked: true })) });
+    groups.push({
+      group: 'Expected output fields',
+      columns: Array.from(expectedKeys)
+        .sort()
+        .map((k) => ({ key: `expected.${k}`, label: k, checked: true })),
+    });
   if (metaKeys.size)
-    groups.push({ group: 'Item metadata', columns: Array.from(metaKeys).sort().map((k) => ({ key: `meta:${k}`, label: k, checked: true })) });
+    groups.push({
+      group: 'Item metadata',
+      columns: Array.from(metaKeys)
+        .sort()
+        .map((k) => ({ key: `meta:${k}`, label: k, checked: true })),
+    });
   model.runs.forEach((run, ri) => {
-    const cols: ExportColumn[] = [{ key: `run:${ri}:output`, label: outputKeys.size ? 'Output (raw)' : 'Output', checked: outputKeys.size === 0 }];
-    for (const k of Array.from(outputKeys).sort()) cols.push({ key: `run:${ri}:output.${k}`, label: `Output > ${k}`, checked: true });
+    const cols: ExportColumn[] = [
+      {
+        key: `run:${ri}:output`,
+        label: outputKeys.size ? 'Output (raw)' : 'Output',
+        checked: outputKeys.size === 0,
+      },
+    ];
+    for (const k of Array.from(outputKeys).sort())
+      cols.push({ key: `run:${ri}:output.${k}`, label: `Output > ${k}`, checked: true });
     cols.push({ key: `run:${ri}:status`, label: 'Status', checked: true });
     cols.push({ key: `run:${ri}:root_cause`, label: 'Root cause', checked: true });
     cols.push({ key: `run:${ri}:root_cause_issues`, label: 'Root cause issues (JSON)', checked: true });
     for (const m of model.metrics) {
       cols.push({ key: `run:${ri}:${m}_score`, label: `${m} score`, checked: true });
-      for (const k of Array.from(metricMetaKeys.get(m) ?? []).sort()) cols.push({ key: `run:${ri}:${m}:${k}`, label: `${m} > ${k}`, checked: true });
+      for (const k of Array.from(metricMetaKeys.get(m) ?? []).sort())
+        cols.push({ key: `run:${ri}:${m}:${k}`, label: `${m} > ${k}`, checked: true });
     }
     cols.push({ key: `run:${ri}:latency_ms`, label: 'Latency (ms)', checked: true });
     cols.push({ key: `run:${ri}:trace_url`, label: 'Trace URL', checked: true });
@@ -145,7 +182,12 @@ export function exportCell(model: CompareModel, item: ExportItem, key: string): 
     return idx !== undefined ? stringify((row.metric_values ?? [])[idx]) : '';
   }
   const colon = field.indexOf(':');
-  if (colon > 0) return stringify((row.metric_meta?.[field.slice(0, colon)] as Record<string, unknown> | undefined)?.[field.slice(colon + 1)]);
+  if (colon > 0)
+    return stringify(
+      (row.metric_meta?.[field.slice(0, colon)] as Record<string, unknown> | undefined)?.[
+        field.slice(colon + 1)
+      ],
+    );
   return '';
 }
 
@@ -155,6 +197,7 @@ export function buildCompareCsv(model: CompareModel, items: ExportItem[], column
     return csvEscape(m ? `${model.runs[parseInt(m[1] ?? '', 10)]?.label ?? ''} / ${c.label}` : c.label);
   });
   const lines = [header.join(',')];
-  for (const item of items) lines.push(columns.map((c) => csvEscape(neutralizeFormula(exportCell(model, item, c.key)))).join(','));
+  for (const item of items)
+    lines.push(columns.map((c) => csvEscape(neutralizeFormula(exportCell(model, item, c.key)))).join(','));
   return '﻿' + lines.join('\n');
 }

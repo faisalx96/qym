@@ -1,19 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import { buildCompareModel } from '../model';
 import {
-  activeFilterCount, applyFilters, decodeFiltersParam, emptyFilters, emptyView, encodeFiltersParam,
-  fieldDefsFor, readView, writeView, type CompareView, type FilterGroup,
+  activeFilterCount,
+  applyFilters,
+  decodeFiltersParam,
+  emptyFilters,
+  emptyView,
+  encodeFiltersParam,
+  fieldDefsFor,
+  readView,
+  writeView,
+  type CompareView,
+  type FilterGroup,
 } from '../filters';
 import { resolveCohorts } from '../cohort';
 import { makePayload } from './fixtures';
 
-const decodeCtx = { metrics: ['correct', 'quality'], metadataKeys: ['domain', 'complexity', 'topic'], runCount: 3, rows: [] };
+const decodeCtx = {
+  metrics: ['correct', 'quality'],
+  metadataKeys: ['domain', 'complexity', 'topic'],
+  runCount: 3,
+  rows: [],
+};
 
 describe('filters JSON round trip (byte-compatible with the legacy page)', () => {
   it('encodes only what is set and decodes it back', () => {
     const f = emptyFilters();
     expect(encodeFiltersParam(f)).toBeNull();
-    f.rules = { op: 'or', children: [{ field: 'pass_count', oper: 'gte', value: '2' }, { op: 'and', children: [{ field: 'cat:domain', oper: 'in', value: ['x'] }] }] };
+    f.rules = {
+      op: 'or',
+      children: [
+        { field: 'pass_count', oper: 'gte', value: '2' },
+        { op: 'and', children: [{ field: 'cat:domain', oper: 'in', value: ['x'] }] },
+      ],
+    };
     f.approval = 'approved';
     f.domain = ['a', 'b'];
     f.domainMode = 'exclude';
@@ -24,7 +44,12 @@ describe('filters JSON round trip (byte-compatible with the legacy page)', () =>
     f.categories = { topic: ['t1'] };
     f.errors = { metric: { kind: 'Metric error', label: 'quality: JudgeError' } };
     const raw = encodeFiltersParam(f)!;
-    expect(JSON.parse(raw)).toMatchObject({ approval: 'approved', domainMode: 'exclude', rootCauseMetric: 'quality', passRate: ['gte', 2] });
+    expect(JSON.parse(raw)).toMatchObject({
+      approval: 'approved',
+      domainMode: 'exclude',
+      rootCauseMetric: 'quality',
+      passRate: ['gte', 2],
+    });
     expect(decodeFiltersParam(raw, decodeCtx)).toEqual({ ...f, domainOnly: [] });
   });
 
@@ -52,9 +77,30 @@ describe('filters JSON round trip (byte-compatible with the legacy page)', () =>
       'metric=correct&filter=errors&winner=win_1&q=foo&sort=score_desc&page=3&tab=sweep&item=i9&baseline=r2&columns=passes&thr=quality:0.6&thr=bad',
     );
     const v = readView(params, decodeCtx);
-    expect(v).toMatchObject({ metric: 'correct', show: 'errors', winner: 'win_1', q: 'foo', sort: 'score_desc', page: 3, tab: 'sweep', item: 'i9', baseline: 'r2', columns: 'each', thresholds: { quality: 0.6 } });
+    expect(v).toMatchObject({
+      metric: 'correct',
+      show: 'errors',
+      winner: 'win_1',
+      q: 'foo',
+      sort: 'score_desc',
+      page: 3,
+      tab: 'sweep',
+      item: 'i9',
+      baseline: 'r2',
+      columns: 'each',
+      thresholds: { quality: 0.6 },
+    });
     const out = writeView(v, 'quality');
-    expect(out).toMatchObject({ metric: 'correct', filter: 'errors', winner: 'win_1', page: '3', tab: 'sweep', baseline: 'r2', columns: 'passes', thr: ['quality:0.6'] });
+    expect(out).toMatchObject({
+      metric: 'correct',
+      filter: 'errors',
+      winner: 'win_1',
+      page: '3',
+      tab: 'sweep',
+      baseline: 'r2',
+      columns: 'passes',
+      thr: ['quality:0.6'],
+    });
     const def = writeView(emptyView(), 'quality');
     expect(Object.values(def).every((x) => x === null || (Array.isArray(x) && !x.length))).toBe(true);
   });
@@ -62,13 +108,53 @@ describe('filters JSON round trip (byte-compatible with the legacy page)', () =>
 
 describe('applyFilters', () => {
   const payload = makePayload([
-    { id: 'A', model: 'm', scores: { i1: { correct: 1, quality: 0.9 }, i2: { correct: 0, quality: 0.3 }, i3: { correct: 1, quality: 0.8 }, i4: { correct: 0, quality: 0.1 } }, metaByItem: { i1: { domain: 'x', complexity: 'easy' }, i2: { domain: 'y', complexity: 'hard' }, i3: { domain: "['x', 'y']", complexity: 'easy' }, i4: { domain: 'y', complexity: 'hard' } }, taskErrors: ['i4'] },
-    { id: 'B', model: 'n', scores: { i1: { correct: 1, quality: 0.9 }, i2: { correct: 1, quality: 0.9 }, i3: { correct: 0, quality: 0.2 }, i4: { correct: 0, quality: 0.1 } } },
-    { id: 'C', model: 'n', scores: { i1: { correct: 0, quality: 0.2 }, i2: { correct: 1, quality: 0.7 }, i3: { correct: 0, quality: 0.1 }, i4: { correct: 0, quality: 0.0 } } },
+    {
+      id: 'A',
+      model: 'm',
+      scores: {
+        i1: { correct: 1, quality: 0.9 },
+        i2: { correct: 0, quality: 0.3 },
+        i3: { correct: 1, quality: 0.8 },
+        i4: { correct: 0, quality: 0.1 },
+      },
+      metaByItem: {
+        i1: { domain: 'x', complexity: 'easy' },
+        i2: { domain: 'y', complexity: 'hard' },
+        i3: { domain: "['x', 'y']", complexity: 'easy' },
+        i4: { domain: 'y', complexity: 'hard' },
+      },
+      taskErrors: ['i4'],
+    },
+    {
+      id: 'B',
+      model: 'n',
+      scores: {
+        i1: { correct: 1, quality: 0.9 },
+        i2: { correct: 1, quality: 0.9 },
+        i3: { correct: 0, quality: 0.2 },
+        i4: { correct: 0, quality: 0.1 },
+      },
+    },
+    {
+      id: 'C',
+      model: 'n',
+      scores: {
+        i1: { correct: 0, quality: 0.2 },
+        i2: { correct: 1, quality: 0.7 },
+        i3: { correct: 0, quality: 0.1 },
+        i4: { correct: 0, quality: 0.0 },
+      },
+    },
   ]);
   const model = buildCompareModel(payload, ['A', 'B', 'C']);
   const run = (patch: Partial<CompareView> = {}, filters = emptyFilters()) =>
-    applyFilters({ model, view: { ...emptyView(), ...patch, filters }, metric: 'quality', thresholds: {}, groups: null }).items.map((i) => i.itemId);
+    applyFilters({
+      model,
+      view: { ...emptyView(), ...patch, filters },
+      metric: 'quality',
+      thresholds: {},
+      groups: null,
+    }).items.map((i) => i.itemId);
 
   it('is stable without filters and respects the sort', () => {
     expect(run()).toEqual(['i1', 'i2', 'i3', 'i4']);
@@ -105,10 +191,22 @@ describe('applyFilters', () => {
     c.complexity = ['HARD'];
     expect(run({}, c)).toEqual(['i2', 'i4']);
     const r = emptyFilters();
-    r.rules = { op: 'and', children: [{ field: 'cat:complexity', oper: 'in', value: ['hard'] }, { field: 'error', oper: 'is', value: 'false' }] } as FilterGroup;
+    r.rules = {
+      op: 'and',
+      children: [
+        { field: 'cat:complexity', oper: 'in', value: ['hard'] },
+        { field: 'error', oper: 'is', value: 'false' },
+      ],
+    } as FilterGroup;
     expect(run({}, r)).toEqual(['i2']);
     const pc = emptyFilters();
-    pc.rules = { op: 'or', children: [{ field: 'pass_count', oper: 'gte', value: '3' }, { field: 'score:0', oper: 'lt', value: '0.2' }] };
+    pc.rules = {
+      op: 'or',
+      children: [
+        { field: 'pass_count', oper: 'gte', value: '3' },
+        { field: 'score:0', oper: 'lt', value: '0.2' },
+      ],
+    };
     expect(run({}, pc)).toEqual(['i4']);
   });
 
@@ -122,18 +220,53 @@ describe('applyFilters', () => {
   });
 
   it('text search uses the supplied matcher; field defs cover metadata, scores and state', () => {
-    const out = applyFilters({ model, view: { ...emptyView(), q: 'i3' }, metric: 'quality', thresholds: {}, groups: null });
+    const out = applyFilters({
+      model,
+      view: { ...emptyView(), q: 'i3' },
+      metric: 'quality',
+      thresholds: {},
+      groups: null,
+    });
     expect(out.items.map((i) => i.itemId)).toEqual(['i3']);
     const defs = fieldDefsFor(model, 'quality').map((d) => d.id);
-    expect(defs).toEqual(expect.arrayContaining(['outcome', 'winner', 'pass_count', 'score:0', 'score:2', 'cat:domain', 'cat:complexity', 'approval', 'error', 'edited', 'output', 'latency']));
+    expect(defs).toEqual(
+      expect.arrayContaining([
+        'outcome',
+        'winner',
+        'pass_count',
+        'score:0',
+        'score:2',
+        'cat:domain',
+        'cat:complexity',
+        'approval',
+        'error',
+        'edited',
+        'output',
+        'latency',
+      ]),
+    );
     const view = { ...emptyView(), show: 'errors', winner: 'win_0' };
     expect(activeFilterCount(view, fieldDefsFor(model, 'quality'))).toBe(2);
   });
 
   it('cohort bucket filter ("A sweeps B") needs groups, a direction and a non-numeric metric', () => {
     const groups = resolveCohorts(model, { left: ['A'], right: ['B'], leftLabel: 'A', rightLabel: 'B' });
-    const ids = applyFilters({ model, view: { ...emptyView(), show: 'grouped:b_sweeps_a' }, metric: 'quality', thresholds: {}, groups }).items.map((i) => i.itemId);
+    const ids = applyFilters({
+      model,
+      view: { ...emptyView(), show: 'grouped:b_sweeps_a' },
+      metric: 'quality',
+      thresholds: {},
+      groups,
+    }).items.map((i) => i.itemId);
     expect(ids).toEqual(['i2']);
-    expect(applyFilters({ model, view: { ...emptyView(), show: 'grouped:b_sweeps_a' }, metric: 'quality', thresholds: {}, groups: null }).items).toEqual([]);
+    expect(
+      applyFilters({
+        model,
+        view: { ...emptyView(), show: 'grouped:b_sweeps_a' },
+        metric: 'quality',
+        thresholds: {},
+        groups: null,
+      }).items,
+    ).toEqual([]);
   });
 });

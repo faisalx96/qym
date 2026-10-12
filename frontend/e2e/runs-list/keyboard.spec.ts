@@ -1,6 +1,6 @@
 /** Runs-table keyboard model (brief 03 "Keyboard", WCAG 2.1.4 opt-out, Tab order). */
 import { test, expect, type Page } from '@playwright/test';
-import { clickBox, dataRows, openRuns, sharedProject, urlParams } from './support';
+import { clickBox, dataRows, freshProject, openRuns, sharedProject, urlParams } from './support';
 
 const focusedRow = (page: Page) => page.locator('[data-testid="runs-table"] tbody tr[data-focused]');
 const focusedIndex = (page: Page) =>
@@ -63,6 +63,24 @@ test.describe('runs list: keyboard', () => {
     // the status-bar button opens it too
     await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
     await expect(dlg).toBeVisible();
+  });
+
+  test('c with Cohort A locked opens the cohort comparison, not a plain compare', async ({
+    page,
+    request,
+  }) => {
+    const s = await freshProject(request, 12, { running: false });
+    await openRuns(page, s.project.slug);
+    await page.getByRole('button', { name: 'Select', exact: true }).click();
+    const tick = (n: string) => clickBox(page.getByRole('checkbox', { name: `Select ${n}`, exact: true }));
+    await tick('text2sql-gpt-4o-000');
+    await tick('summarize-gpt-4o-001');
+    await page.getByTestId('selection-bar').getByRole('button', { name: 'Cohort', exact: true }).click();
+    await tick('rag-qa-claude-sonnet-4-002');
+    await tick('summarize-gpt-4o-004');
+    await blurToBody(page);
+    await page.keyboard.press('c');
+    await expect(page).toHaveURL(/\/compare\?cohortA=/);
   });
 
   test('1-4 set the time range', async ({ page, request }) => {

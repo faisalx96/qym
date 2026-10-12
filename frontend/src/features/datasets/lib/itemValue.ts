@@ -70,7 +70,8 @@ export function sniffJson(text: string): unknown {
 
 /** Deep structural equality for touched-field detection (\r\n normalised for strings). */
 export function sameValue(a: unknown, b: unknown): boolean {
-  if (typeof a === 'string' && typeof b === 'string') return a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n');
+  if (typeof a === 'string' && typeof b === 'string')
+    return a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n');
   if (a === b) return true;
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
   try {
@@ -112,7 +113,13 @@ export function formatDate(iso: string | null | undefined, opts: 'date' | 'datet
   if (Number.isNaN(d.getTime())) return String(iso);
   return opts === 'date'
     ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-    : d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    : d.toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
 }
 
 export function relativeTime(iso: string | null | undefined, now = Date.now()): string {

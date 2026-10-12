@@ -40,13 +40,25 @@ export function FieldDiff({ field, before, after, onlyAfter, onlyBefore }: Field
         {!onlyAfter ? (
           <Pane label="before" text={a} ops={ops ? diffSide(ops, 'before') : null} tone="before" />
         ) : null}
-        {!onlyBefore ? <Pane label="after" text={b} ops={ops ? diffSide(ops, 'after') : null} tone="after" /> : null}
+        {!onlyBefore ? (
+          <Pane label="after" text={b} ops={ops ? diffSide(ops, 'after') : null} tone="after" />
+        ) : null}
       </div>
     </div>
   );
 }
 
-function Pane({ label, text, ops, tone }: { label: string; text: string; ops: ReturnType<typeof diffSide> | null; tone: 'before' | 'after' }) {
+function Pane({
+  label,
+  text,
+  ops,
+  tone,
+}: {
+  label: string;
+  text: string;
+  ops: ReturnType<typeof diffSide> | null;
+  tone: 'before' | 'after';
+}) {
   const dir = textDirAttrs(text);
   return (
     <div className={styles.pane} data-tone={tone}>

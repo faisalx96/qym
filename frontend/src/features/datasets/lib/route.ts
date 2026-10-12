@@ -53,13 +53,17 @@ export function parseDatasetRoute(splat: string | undefined, params: URLSearchPa
     .join('/');
   const tabRaw = params.get('tab') ?? '';
   const legacyTab = tabRaw === 'versions';
-  const tab = (legacyTab ? 'lineage' : DETAIL_TABS.includes(tabRaw as DetailTab) ? tabRaw : 'items') as DetailTab;
+  const tab = (
+    legacyTab ? 'lineage' : DETAIL_TABS.includes(tabRaw as DetailTab) ? tabRaw : 'items'
+  ) as DetailTab;
   const itemTab = (ITEM_TABS.includes(tabRaw as ItemTab) ? tabRaw : 'details') as ItemTab;
   const page = Math.max(0, parseInt(params.get('page') ?? '0', 10) || 0);
   const sizeRaw = parseInt(params.get('size') ?? '', 10);
   const pageSize = ITEM_PAGE_SIZES.includes(sizeRaw) ? sizeRaw : DEFAULT_ITEM_PAGE_SIZE;
   const compareRaw = params.get('tab') ?? 'changed';
-  const compareTab = (['changed', 'added', 'removed', 'unchanged'].includes(compareRaw) ? compareRaw : 'changed') as DatasetRoute['compareTab'];
+  const compareTab = (
+    ['changed', 'added', 'removed', 'unchanged'].includes(compareRaw) ? compareRaw : 'changed'
+  ) as DatasetRoute['compareTab'];
   return {
     mode,
     ref,
@@ -85,23 +89,35 @@ export function encodeRef(ref: string): string {
   return ref.split('/').map(encodeURIComponent).join('/');
 }
 
-export function datasetPath(slug: string, ref: string, query?: Record<string, string | number | null | undefined>): string {
+export function datasetPath(
+  slug: string,
+  ref: string,
+  query?: Record<string, string | number | null | undefined>,
+): string {
   const base = `/projects/${encodeURIComponent(slug)}/datasets/${encodeRef(ref)}`;
   return base + queryString(query);
 }
 
-export function comparePath(slug: string, ref: string, query?: Record<string, string | number | null | undefined>): string {
+export function comparePath(
+  slug: string,
+  ref: string,
+  query?: Record<string, string | number | null | undefined>,
+): string {
   return `/projects/${encodeURIComponent(slug)}/datasets/${encodeRef(ref)}/compare${queryString(query)}`;
 }
 
-export function catalogPath(slug: string, query?: Record<string, string | number | null | undefined>): string {
+export function catalogPath(
+  slug: string,
+  query?: Record<string, string | number | null | undefined>,
+): string {
   return `/projects/${encodeURIComponent(slug)}/datasets${queryString(query)}`;
 }
 
 export function queryString(query?: Record<string, string | number | null | undefined>): string {
   if (!query) return '';
   const q = new URLSearchParams();
-  for (const [k, v] of Object.entries(query)) if (v !== null && v !== undefined && v !== '') q.set(k, String(v));
+  for (const [k, v] of Object.entries(query))
+    if (v !== null && v !== undefined && v !== '') q.set(k, String(v));
   const s = q.toString();
   return s ? `?${s}` : '';
 }

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useRunSummary } from '@/api/analysis';
 import { PageHeader, SegmentedControl } from '@/ui';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { useProjectContext } from '@/features/shell/ProjectContext';
@@ -11,13 +12,24 @@ import s from './analyzer.module.css';
 
 /** /projects/:slug/analysis[?run=&pass=&metric=&scope=] — the auto-analysis workspace. */
 export function AnalyzerPage() {
-  useDocumentTitle('Auto-analysis');
   const { slug, canManage, readOnly } = useProjectContext();
   const route = useAnalyzerRoute();
+  const runName = useRunSummary(route.runId || undefined).data?.run;
+  useDocumentTitle(runName ? `Auto-analysis · ${runName.run_name || runName.run_id}` : 'Auto-analysis');
   const manage = canManage && !readOnly;
   const scope = useMemo(() => ({ slug, runId: route.runId || undefined }), [slug, route.runId]);
 
-  if (route.runId) return <RunShell key={route.runId} slug={slug} runId={route.runId} canManage={manage} scope={scope} route={route} />;
+  if (route.runId)
+    return (
+      <RunShell
+        key={route.runId}
+        slug={slug}
+        runId={route.runId}
+        canManage={manage}
+        scope={scope}
+        route={route}
+      />
+    );
 
   const area = route.scope === 'run' ? 'run' : 'guidance';
   return (
@@ -41,7 +53,13 @@ export function AnalyzerPage() {
       {area === 'run' ? (
         <ProjectLanding slug={slug} onGuidance={() => route.setScope('categories')} />
       ) : (
-        <GuidanceArea scope={scope} slug={slug} canManage={manage} tab={route.scope as 'categories'} onTab={route.setScope} />
+        <GuidanceArea
+          scope={scope}
+          slug={slug}
+          canManage={manage}
+          tab={route.scope as 'categories'}
+          onTab={route.setScope}
+        />
       )}
     </div>
   );

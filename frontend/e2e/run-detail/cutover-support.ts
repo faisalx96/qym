@@ -38,7 +38,12 @@ export interface CustomRun {
   samples?: number;
 }
 
-export const PERCENT = { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.8, schema_version: 2 };
+export const PERCENT = {
+  score_type: 'percentage',
+  direction: 'maximize',
+  pass_threshold: 0.8,
+  schema_version: 2,
+};
 
 export async function seedCustomRun(s: Seeded, o: CustomRun): Promise<string> {
   const metrics = Object.keys(o.specs);
@@ -79,7 +84,13 @@ export async function seedCustomRun(s: Seeded, o: CustomRun): Promise<string> {
         item_metadata: item.metadata ?? {},
       });
       if (item.error) {
-        stream.push('item_failed', { item_id: item.id, index, ...tag, error: item.error, latency_ms: item.latency ?? 300 });
+        stream.push('item_failed', {
+          item_id: item.id,
+          index,
+          ...tag,
+          error: item.error,
+          latency_ms: item.latency ?? 300,
+        });
         return;
       }
       for (const [metric, sc] of Object.entries(item.scores ?? {})) {

@@ -316,6 +316,7 @@ export interface RunPass {
   metric_error_count: number;
   metric_error_counts: Record<string, number>;
   retry_count: number;
+  analysis_cause_count?: number;
   avg_latency_ms: number | null;
   median_latency_ms: number | null;
   p95_latency_ms: number | null;
@@ -328,6 +329,7 @@ export interface RunPass {
 export interface RunPasses {
   run_id: string;
   samples: number;
+  pass_revision?: number;
   metrics: string[];
   passes: RunPass[];
   latency?: { avg: number | null; median: number | null; p95: number | null };

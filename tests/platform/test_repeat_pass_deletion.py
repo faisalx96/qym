@@ -275,6 +275,30 @@ def test_delete_repeat_pass_reindexes_and_repairs_run_state():
     assert summary["duration_ms"] == pytest.approx(1000.0)
 
 
+def test_passes_payload_carries_the_revision_a_delete_must_echo():
+    app, SessionLocal = _make_env()
+    with SessionLocal() as session:
+        _seed(session)
+
+    with TestClient(app) as client:
+        before = client.get(f"/api/runs/{RUN_ID}/passes", headers=HEADERS).json()
+        assert before["pass_revision"] == 0
+        first = client.delete(
+            f"/api/runs/{RUN_ID}/passes/3?expected_pass_version=0", headers=HEADERS
+        )
+        assert first.status_code == 200
+        after = client.get(f"/api/runs/{RUN_ID}/passes", headers=HEADERS).json()
+        assert after["pass_revision"] == 1
+        stale = client.delete(
+            f"/api/runs/{RUN_ID}/passes/2?expected_pass_version=0", headers=HEADERS
+        )
+        assert stale.status_code == 409
+        fresh = client.delete(
+            f"/api/runs/{RUN_ID}/passes/2?expected_pass_version=1", headers=HEADERS
+        )
+        assert fresh.status_code == 200
+
+
 def test_delete_repeat_pass_refreshes_item_trace_stats():
     """Trace stats of items are rebuilt from the remaining aggregates."""
     from qym_platform.db.models import RunTraceAggregate

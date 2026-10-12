@@ -1,5 +1,5 @@
-import { Link, useLocation } from 'react-router-dom';
-import { Button, EmptyState, Icon } from '@/ui';
+import { useLocation } from 'react-router-dom';
+import { EmptyState, Icon, LinkButton } from '@/ui';
 import { constrained } from './layout';
 
 export function NotFound() {
@@ -11,9 +11,9 @@ export function NotFound() {
         title="Page not found"
         body={`Nothing lives at ${location.pathname}.`}
         action={
-          <Button variant="accent">
-            <Link to="/">Back to projects</Link>
-          </Button>
+          <LinkButton to="/" variant="accent">
+            Back to projects
+          </LinkButton>
         }
       />
     </div>

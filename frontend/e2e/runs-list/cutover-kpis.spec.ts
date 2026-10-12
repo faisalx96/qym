@@ -25,7 +25,7 @@ async function chips(page: Page) {
   });
 }
 
-for (const width of [1100, 900, 768]) {
+for (const width of [1100]) {
   test(`topbar KPIs never cover the breadcrumb at ${width}px (Runs and Overview)`, async ({
     page,
     request,
@@ -44,6 +44,23 @@ for (const width of [1100, 900, 768]) {
       expect(shown[0]!.text).toBe('All runs');
       shown.slice(1).forEach((chip, i) => expect(chip.text).toMatch(ORDER[i]!));
     }
+  });
+}
+
+for (const width of [900, 768]) {
+  test(`topbar KPI chips are hidden at ${width}px; the Overview cards still show the numbers`, async ({
+    page,
+    request,
+  }) => {
+    const s = await sharedProject(request, 12);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`${APP}/projects/${s.project.slug}`);
+    await expect(page.locator('[data-topbar-stats]')).toBeHidden();
+    await page.goto(`${APP}/projects/${s.project.slug}/overview`);
+    await expect(page.locator('[data-topbar-stats]')).toBeHidden();
+    const kpis = page.getByLabel('Project KPIs');
+    for (const label of ['Runs', 'Execution success', 'Models', 'Items'])
+      await expect(kpis).toContainText(label);
   });
 }
 

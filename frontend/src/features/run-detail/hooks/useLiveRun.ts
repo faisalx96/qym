@@ -28,7 +28,7 @@ export function reloadThrottleMs(rowsTimesPasses: number, lastReloadMs: number):
 export interface LiveRunState {
   live: boolean;
   status: LiveStatus | null;
-  /** Epoch ms of the last successful compact reload while live. */
+  /** Epoch ms of the last successful live probe or compact reload while live. */
   updatedAt: number | null;
   /** server_time − Date.now() in ms, for the ticking runtime. */
   serverOffsetMs: number;
@@ -108,6 +108,8 @@ export function useLiveRun(runId: string, payload: RunPayload | undefined): Live
       live: status.live,
       stopRequested: !!status.stop_requested,
       serverOffsetMs,
+      // Every successful probe is a fresh look at the run, so "updated Ns ago" restarts here.
+      updatedAt: Date.now(),
     }));
     qc.setQueryData<LiveStatus>(runKeys.live(runId), status);
     if (!status.live) {

@@ -142,7 +142,7 @@ export async function apiFetch<T = unknown>(path: string, init: ApiFetchInit = {
   if (!response.ok) {
     const obj = data && typeof data === 'object' ? (data as Record<string, unknown>) : null;
     let detail = obj ? (obj.detail ?? obj.error ?? '') : '';
-    if (detail && typeof detail !== 'string') detail = JSON.stringify(detail);
+    if (detail && typeof detail !== 'string') detail = formatDetail(detail);
     const code = obj && typeof obj.code === 'string' ? obj.code : undefined;
     const err = new ApiError(
       response.status,
@@ -157,6 +157,28 @@ export async function apiFetch<T = unknown>(path: string, init: ApiFetchInit = {
     throw err;
   }
   return data as T;
+}
+
+/** Render a FastAPI/Pydantic `detail` (string, array of `{loc,msg}`, or object) as readable text. */
+export function formatDetail(detail: unknown): string {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === 'object') {
+          const o = item as { loc?: unknown; msg?: unknown };
+          if (typeof o.msg === 'string') {
+            const loc = Array.isArray(o.loc)
+              ? o.loc.filter((p) => p !== 'body' && p !== 'query' && p !== 'path').join('.')
+              : '';
+            return loc ? `${loc}: ${o.msg}` : o.msg;
+          }
+        }
+        return typeof item === 'string' ? item : JSON.stringify(item);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(detail);
 }
 
 export const api = {

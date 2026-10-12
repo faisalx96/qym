@@ -6,7 +6,15 @@
  * never rebuilt when bodies arrive. Retained rows are capped like the legacy
  * page (200 per run) by releasing the oldest loaded ones.
  */
-import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import type { Row } from '@/features/run-detail/types';
 import { scopeRowToPass } from '@/features/run-detail/lib/passScope';
 import { fetchItemDetails } from '@/api/runs';
@@ -139,7 +147,11 @@ export class DetailsStore {
             if (row) {
               map.set(p.id, { ...row, __details_loaded: true });
               this.states.set(this.key(p.base, p.id), { status: 'loaded' });
-            } else this.states.set(this.key(p.base, p.id), { status: 'error', error: new Error('Item not found') });
+            } else
+              this.states.set(this.key(p.base, p.id), {
+                status: 'error',
+                error: new Error('Item not found'),
+              });
           });
           this.rows.set(first.base, map);
         })
@@ -184,13 +196,22 @@ export function useDetailsVersion(): number {
 }
 
 /** The row of one run on one item with bodies (a pass slice for a pass column), or the compact row. */
-export function resolveRow(store: DetailsStore, run: CompareRun, itemId: string): { row: Row | null; loaded: boolean } {
+export function resolveRow(
+  store: DetailsStore,
+  run: CompareRun,
+  itemId: string,
+): { row: Row | null; loaded: boolean } {
   const compact = run.byItem.get(itemId) ?? null;
   if (!compact) return { row: null, loaded: false };
   const full = store.full(run.base, compact.item_id);
   if (!full) return { row: compact, loaded: compact.__details_loaded === true };
   const names = run.snapshot.metric_names ?? run.run.metric_names ?? [];
-  const merged = { ...compact, ...full, compare_item_id: compact.compare_item_id, __details_loaded: true } as Row;
+  const merged = {
+    ...compact,
+    ...full,
+    compare_item_id: compact.compare_item_id,
+    __details_loaded: true,
+  } as Row;
   return { row: run.pass ? scopeRowToPass(merged, names, run.pass) : merged, loaded: true };
 }
 

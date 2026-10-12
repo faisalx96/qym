@@ -5,14 +5,13 @@
  */
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useScrollMargin, useShellScroller } from '../../hooks/useScrollMargin';
+import { useScrollMargin, useShellScroller, useStickyOffset } from '../../hooks/useScrollMargin';
 import { Icon, IconButton, Pagination, ScoreValue, Tag } from '@/ui';
-import { formatLatency } from '@/lib/metrics';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { textDirAttrs } from '@/lib/text';
 import { useItemReasons, rowReason } from '../../hooks/useItemReasons';
 import type { FilteredItem, FilterContext, SortBy } from '../../lib/filterRules';
-import { metricCell, rowFailureInput, rowStatus } from '../../lib/rowDisplay';
+import { latencyLabel, metricCell, rowFailureInput, rowStatus } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
 import type { Row } from '../../types';
 import { ItemCard } from './ItemCard';
@@ -188,7 +187,7 @@ const ItemRow = memo(function ItemRow({
           );
         })}
         <span role="cell" className={styles.cellLatency} data-cell="latency">
-          {row.latency_ms ? formatLatency(row.latency_ms) : '—'}
+          {latencyLabel(row.latency_ms)}
           {retries > 0 ? (
             <span className={styles.retry} title={`${retries} retr${retries === 1 ? 'y' : 'ies'}`}>
               ↻{retries}
@@ -265,6 +264,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
   }, [model.metricNames, fit, selectedMetric]);
   const template = `${FIXED.expand}px ${FIXED.index}px ${FIXED.status}px minmax(${FIXED.input}px, 1.3fr) ${showReason ? `minmax(${FIXED.reason}px, 1fr) ` : ''}repeat(${metrics.length}, ${FIXED.metric}px) ${FIXED.latency}px ${FIXED.trace}px`;
 
+  const stickyOffset = useStickyOffset();
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: pageItems.length,
@@ -272,6 +272,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
     estimateSize: () => 44,
     overscan: 8,
     scrollMargin,
+    scrollPaddingStart: stickyOffset,
     getItemKey: (i) => pageItems[i]?.row.item_id ?? i,
   });
 
@@ -407,6 +408,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
           onPage(1);
         }}
         scrollTarget={sectionRef}
+        className={styles.pager}
       />
     </div>
   );

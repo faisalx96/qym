@@ -68,7 +68,16 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
         </AriaButton>
         <Popover placement="bottom start" offset={6} className={styles.popover}>
           <Dialog aria-label="Switch project" className={styles.dialog}>
-            <div className={styles.search}>
+            <div
+              className={styles.search}
+              onKeyDownCapture={(e) => {
+                // One Escape closes the switcher; SearchField would otherwise clear the text first.
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  setOpen(false);
+                }
+              }}
+            >
               <SearchField
                 label="Search projects"
                 placeholder="Search projects"

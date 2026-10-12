@@ -5,13 +5,17 @@ import { ApiError } from '@/lib/http';
 import { FormDialog, useToast } from '@/ui';
 import { projectPath } from '@/app/routes';
 
+/** Mirrors the server's `_slugify`: ASCII letters/digits only, "project" when nothing is left (e.g. an Arabic name). */
 export function slugify(name: string): string {
-  return name
+  if (!name.trim()) return '';
+  const slug = name
     .toLowerCase()
     .normalize('NFKD')
-    .replace(/[^a-z0-9؀-ۿ]+/g, '-')
+    .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
+    .slice(0, 64)
+    .replace(/-+$/, '');
+  return slug || 'project';
 }
 
 export interface CreateProjectDialogProps {
@@ -40,7 +44,7 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
           label: 'Slug',
           mono: true,
           placeholder: 'customer-support-bot',
-          help: 'Lowercase letters, digits and dashes.',
+          help: 'Lowercase letters, digits and dashes. Names without Latin letters default to “project”; type a slug to choose your own.',
         },
       ]}
       onChange={(values, changed) => {

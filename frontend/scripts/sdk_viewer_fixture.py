@@ -227,6 +227,27 @@ def bare_ui() -> Dict[str, Any]:
     return {"url": srv.url}
 
 
+def idle_ui() -> Dict[str, Any]:
+    """`qym ui` without a file: a viewer that knows no evaluation will ever register."""
+    _reset_live()
+    srv = UIServer(port=LIVE_PORT, results_dir=TMP)
+    srv.expects_live = False
+    srv.start()
+    State.live_server = srv
+    return {"url": srv.url}
+
+
+def outside_file() -> Dict[str, Any]:
+    """A results file outside the file server's results dir: viewable, never editable."""
+    src = _saved_results_csv()
+    _ensure_file_server()
+    dst_dir = tempfile.mkdtemp(prefix="qym-sdk-viewer-outside-")
+    atexit.register(shutil.rmtree, dst_dir, ignore_errors=True)
+    dst = os.path.join(dst_dir, os.path.basename(src))
+    shutil.copyfile(src, dst)
+    return {"path": dst, "port": FILE_PORT}
+
+
 def tracker_ui() -> Dict[str, Any]:
     srv = State.live_server
     assert srv is not None, "call /ui/bare first"
@@ -277,6 +298,8 @@ def missing_file() -> Dict[str, Any]:
 ROUTES = {
     ("GET", "/health"): lambda: {"ok": True},
     ("POST", "/ui/bare"): bare_ui,
+    ("POST", "/ui/idle"): idle_ui,
+    ("POST", "/file/outside"): outside_file,
     ("POST", "/ui/tracker"): tracker_ui,
     ("POST", "/ui/complete"): complete_ui,
     ("POST", "/ui/kill"): kill_ui,

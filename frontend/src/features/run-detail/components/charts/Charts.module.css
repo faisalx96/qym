@@ -114,8 +114,9 @@ button.col,
   cursor: pointer;
 }
 
-.col[data-empty] {
-  opacity: 0.6;
+.count::before,
+.axis::before {
+  content: attr(data-text);
 }
 
 .count {

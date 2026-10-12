@@ -99,7 +99,7 @@ export function useOverview(
     sort?: string;
     collation?: string[] | null;
     enabled?: boolean;
-    refetchInterval?: number | false;
+    refetchInterval?: number | false | (() => number | false);
   } = {},
 ) {
   return useQuery({
@@ -364,10 +364,24 @@ export function useDeleteRuns(slug: string) {
 export function useDeletePasses(slug: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ runId, passes }: { runId: string; passes: number[] | 'all' }) => {
-      if (passes === 'all') return api.delete(`/api/runs/${encodeRunId(runId)}/passes`);
-      for (const n of passes) await api.delete(`/api/runs/${encodeRunId(runId)}/passes/${n}`);
-      return null;
+    // `expectedVersion` is the pass revision the reader saw; the server refuses (409) when the passes were
+    // renumbered since. Several passes go in one request so they keep their original numbers.
+    mutationFn: async ({
+      runId,
+      passes,
+      expectedVersion,
+    }: {
+      runId: string;
+      passes: number[] | 'all';
+      expectedVersion?: number;
+    }) => {
+      const base = `/api/runs/${encodeRunId(runId)}/passes`;
+      if (passes === 'all') return api.delete(base);
+      if (passes.length === 1) {
+        const q = expectedVersion === undefined ? '' : `?expected_pass_version=${expectedVersion}`;
+        return api.delete(`${base}/${passes[0]}${q}`);
+      }
+      return api.delete(base, { body: { pass_numbers: passes, expected_pass_version: expectedVersion } });
     },
     onSettled: (_r, _e, { runId }) => {
       void qc.invalidateQueries({ queryKey: ['run', runId] });

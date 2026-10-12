@@ -72,8 +72,6 @@ export function FilterBar({ display }: { display: DisplayState }) {
     : [...SHOW_OPTIONS, { value: view.show, label: view.show.replace(/_/g, ' ') }];
 
   const metricItems = model.metricNames.map((n) => ({ key: n, label: n }));
-  const hideFieldItems = model.allMetadataKeys.map((k) => ({ key: k, label: k }));
-  const hideMetricItems = model.allMetricMetaKeys.map((k) => ({ key: k, label: k }));
   const visibleFields = new Set<string | number>(
     model.allMetadataKeys.filter((k) => !view.hideFields.includes(k)),
   );
@@ -197,25 +195,27 @@ export function FilterBar({ display }: { display: DisplayState }) {
                 display.onTextMode(m);
               }}
             />
-            {hideFieldItems.length ? (
+            {model.allMetadataKeys.length ? (
               <MultiSelect
+                inline
                 label="Item fields"
-                items={hideFieldItems}
+                items={model.allMetadataKeys.map((k) => ({ key: k, label: k }))}
                 value={visibleFields}
-                searchable
-                selectAll
+                placeholder="None shown"
+                onlyAction={false}
                 onChange={(keys) =>
                   api.setView({ hideFields: model.allMetadataKeys.filter((k) => !keys.has(k)) })
                 }
               />
             ) : null}
-            {hideMetricItems.length ? (
+            {model.allMetricMetaKeys.length ? (
               <MultiSelect
+                inline
                 label="Metric fields"
-                items={hideMetricItems}
+                items={model.allMetricMetaKeys.map((k) => ({ key: k, label: k }))}
                 value={visibleMetricFields}
-                searchable
-                selectAll
+                placeholder="None shown"
+                onlyAction={false}
                 onChange={(keys) =>
                   api.setView({ hideMetricFields: model.allMetricMetaKeys.filter((k) => !keys.has(k)) })
                 }

@@ -12,9 +12,18 @@ import { CopyButton, Icon, useToast } from '@/ui';
 import { legacyHashToPath } from './content';
 import styles from './DocsArticle.module.css';
 
-type PreProps = ComponentProps<'pre'> & { 'data-lang'?: string; 'data-highlighted'?: string; 'data-wrap'?: string };
+type PreProps = ComponentProps<'pre'> & {
+  'data-lang'?: string;
+  'data-highlighted'?: string;
+  'data-wrap'?: string;
+};
 
-function CodeBlock({ 'data-lang': lang = 'code', 'data-highlighted': highlighted, 'data-wrap': wrap, children }: PreProps) {
+function CodeBlock({
+  'data-lang': lang = 'code',
+  'data-highlighted': highlighted,
+  'data-wrap': wrap,
+  children,
+}: PreProps) {
   const pre = useRef<HTMLPreElement>(null);
   const toast = useToast();
   return (
@@ -28,8 +37,15 @@ function CodeBlock({ 'data-lang': lang = 'code', 'data-highlighted': highlighted
         />
       </div>
       {/* scrollable code must be keyboard-focusable */}
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
-      <pre ref={pre} data-lang={lang} data-highlighted={highlighted} data-wrap={wrap} tabIndex={0} aria-label={`${lang} code`}>
+      <pre
+        ref={pre}
+        data-lang={lang}
+        data-highlighted={highlighted}
+        data-wrap={wrap}
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+        tabIndex={0}
+        aria-label={`${lang} code`}
+      >
         {children}
       </pre>
     </div>

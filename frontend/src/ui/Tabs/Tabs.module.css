@@ -92,12 +92,17 @@
 }
 
 .tab[data-tone='danger'] .count {
-  color: var(--error);
-  background: rgba(239, 68, 68, 0.14);
+  /* red text on the red tint was 3.95:1; the tint carries the tone, the numeral stays readable */
+  color: var(--text-primary);
+  background: rgba(239, 68, 68, 0.3);
 }
 
 .tab[data-selected] .count {
   color: var(--accent-primary);
+}
+
+.tab[data-tone='danger'][data-selected] .count {
+  color: var(--text-primary);
 }
 
 /* Dense dataset tabs: elevated strip, filled active surface. */

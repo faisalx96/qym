@@ -88,7 +88,9 @@ export function FieldsMapping({
               ...SOURCE_FIELDS.map((f) => ({ key: f, label: SOURCE_LABEL[f] })),
             ];
             const selectedLeaves = new Set(r.slot.selected);
-            const summary = r.slot.full ? 'Full value' : `${r.slot.selected.length} ${r.slot.selected.length === 1 ? 'field' : 'fields'}`;
+            const summary = r.slot.full
+              ? 'Full value'
+              : `${r.slot.selected.length} ${r.slot.selected.length === 1 ? 'field' : 'fields'}`;
             return (
               <div key={r.id} className={s.row} data-open={isOpen ? '' : undefined}>
                 <div className={s.line}>
@@ -101,7 +103,9 @@ export function FieldsMapping({
                     hideLabel
                     items={items}
                     value={r.slot.field}
-                    onChange={(k) => r.set({ field: (k ? String(k) : '') as SourceField | '', full: true, selected: [] })}
+                    onChange={(k) =>
+                      r.set({ field: (k ? String(k) : '') as SourceField | '', full: true, selected: [] })
+                    }
                     width={170}
                     searchable={false}
                   />
@@ -128,7 +132,9 @@ export function FieldsMapping({
                       <>
                         <Checkbox
                           isSelected={r.slot.full}
-                          onChange={(on) => r.set({ ...r.slot, full: on, selected: on ? [] : leafPaths(r.tree) })}
+                          onChange={(on) =>
+                            r.set({ ...r.slot, full: on, selected: on ? [] : leafPaths(r.tree) })
+                          }
                         >
                           Use full value
                         </Checkbox>

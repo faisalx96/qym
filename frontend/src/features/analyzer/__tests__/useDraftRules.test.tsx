@@ -29,9 +29,10 @@ describe('useDraftRules', () => {
   });
 
   it('autosaves once, 700 ms after the last edit', async () => {
-    const patch = vi
-      .spyOn(api, 'patch')
-      .mockResolvedValue({ analysis_rules: [{ id: 'r1', title: 'One!!', instruction: 'Do one' }], rule_version: version });
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({
+      analysis_rules: [{ id: 'r1', title: 'One!!', instruction: 'Do one' }],
+      rule_version: version,
+    });
     const { result } = renderHook(() => useDraftRules(scope, version, true), { wrapper });
     const key = result.current.rules[0]!.key;
     act(() => result.current.update(key, { title: 'One!' }));
@@ -45,7 +46,10 @@ describe('useDraftRules', () => {
       vi.advanceTimersByTime(AUTOSAVE_MS);
     });
     expect(patch).toHaveBeenCalledTimes(1);
-    const body = patch.mock.calls[0]![1] as { analysis_rules: Array<{ title: string }>; rule_version_id: string };
+    const body = patch.mock.calls[0]![1] as {
+      analysis_rules: Array<{ title: string }>;
+      rule_version_id: string;
+    };
     expect(body.analysis_rules[0]!.title).toBe('One!!');
     expect(body.rule_version_id).toBe('v-1');
     expect(result.current.state).toBe('saved');

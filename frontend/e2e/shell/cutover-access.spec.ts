@@ -23,14 +23,19 @@ async function actAs(page: Page, role: 'MEMBER' | 'MANAGER'): Promise<string[]> 
 }
 
 test.describe('project settings by role', () => {
-  test('a plain member sees no rename field, no add-member bar and never loads the user directory', async ({ page, request }) => {
+  test('a plain member sees no rename field, no add-member bar and never loads the user directory', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Access Member', uniqueSlug('acc-mem'));
     const seen = await actAs(page, 'MEMBER');
     await gotoApp(page, `/projects/${p.slug}/settings`);
     await expect(page.locator('[data-settings-page]')).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Project name' })).toHaveCount(0);
     await page.getByRole('tab', { name: /^Members/ }).click();
-    await expect(page.getByRole('grid', { name: 'Members' }).or(page.getByRole('table', { name: 'Members' }))).toBeVisible();
+    await expect(
+      page.getByRole('grid', { name: 'Members' }).or(page.getByRole('table', { name: 'Members' })),
+    ).toBeVisible();
     await expect(page.locator('[data-add-member]')).toHaveCount(0);
     expect(seen.filter((u) => u.startsWith('/v1/users') || u.includes('member-candidates'))).toEqual([]);
   });
@@ -48,7 +53,9 @@ test.describe('project settings by role', () => {
     const combo = page.locator('[data-add-member]').getByRole('combobox', { name: 'Add member' });
     await expect(combo).toBeVisible();
     await combo.fill('dev');
-    await expect.poll(() => seen.some((u) => u.includes(`/v1/projects/${p.id}/member-candidates`))).toBe(true);
+    await expect
+      .poll(() => seen.some((u) => u.includes(`/v1/projects/${p.id}/member-candidates`)))
+      .toBe(true);
     expect(seen.filter((u) => u.startsWith('/v1/users'))).toEqual([]);
   });
 });

@@ -42,30 +42,61 @@ async function mockTrash(page: Page, rows: unknown[], graceDays: number) {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      headers: { 'X-Qym-Total-Count': String(rows.length), 'X-Qym-Deleted-Run-Grace-Days': String(graceDays) },
+      headers: {
+        'X-Qym-Total-Count': String(rows.length),
+        'X-Qym-Deleted-Run-Grace-Days': String(graceDays),
+      },
       body: JSON.stringify(rows),
     }),
   );
   await page.route('**/api/runs/trash/projects*', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'p1', name: 'Project', slug: 'project', archived: false, deleted_runs: rows.length }]) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { id: 'p1', name: 'Project', slug: 'project', archived: false, deleted_runs: rows.length },
+      ]),
+    }),
   );
 }
 
-const dataRows = (page: Page) => page.getByRole('grid', { name: 'Deleted runs' }).locator('[role=row]:has([role=gridcell])');
+const dataRows = (page: Page) =>
+  page.getByRole('grid', { name: 'Deleted runs' }).locator('[role=row]:has([role=gridcell])');
 
 test.describe('trash purge countdown', () => {
   test('lists the soonest purge first and flags rows near purge', async ({ page }) => {
     // newest-deleted first, as the API returns them
-    await mockTrash(page, [row('run-new', 28), row('run-two-days', 1.5), row('run-hours', 0.5), row('run-overdue', -1)], 30);
+    await mockTrash(
+      page,
+      [row('run-new', 28), row('run-two-days', 1.5), row('run-hours', 0.5), row('run-overdue', -1)],
+      30,
+    );
     await gotoApp(page, '/trash');
     await expect(dataRows(page)).toHaveCount(4);
-    await expect(page.getByText('Deleted runs are permanently removed 30 days after deletion, not counting time their project spends archived. Restore a run before its purge date to keep it.')).toBeVisible();
+    await expect(
+      page.getByText(
+        'Deleted runs are permanently removed 30 days after deletion, not counting time their project spends archived. Restore a run before its purge date to keep it.',
+      ),
+    ).toBeVisible();
     await expect(page.getByText('Retention 30 days')).toBeVisible();
     const names = await dataRows(page).evaluateAll((rows) => rows.map((r) => r.textContent ?? ''));
-    expect(names.map((t) => ['run-overdue', 'run-hours', 'run-two-days', 'run-new'].findIndex((id) => t.startsWith(id)))).toEqual([0, 1, 2, 3]);
-    const purges = await dataRows(page).evaluateAll((rows) => rows.map((r) => r.querySelectorAll('[role=gridcell]')[2]?.textContent ?? ''));
-    expect(purges.map((t) => t.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}.*$/, '').trim())).toEqual(['Due now', 'in under 1 day', 'in 2 days', 'in 28 days']);
-    const soon = await dataRows(page).evaluateAll((rows) => rows.map((r) => r.querySelector('[data-soon]') !== null));
+    expect(
+      names.map((t) =>
+        ['run-overdue', 'run-hours', 'run-two-days', 'run-new'].findIndex((id) => t.startsWith(id)),
+      ),
+    ).toEqual([0, 1, 2, 3]);
+    const purges = await dataRows(page).evaluateAll((rows) =>
+      rows.map((r) => r.querySelectorAll('[role=gridcell]')[2]?.textContent ?? ''),
+    );
+    expect(purges.map((t) => t.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}.*$/, '').trim())).toEqual([
+      'Due now',
+      'in under 1 day',
+      'in 2 days',
+      'in 28 days',
+    ]);
+    const soon = await dataRows(page).evaluateAll((rows) =>
+      rows.map((r) => r.querySelector('[data-soon]') !== null),
+    );
     expect(soon).toEqual([true, true, true, false]);
   });
 
@@ -73,7 +104,9 @@ test.describe('trash purge countdown', () => {
     await mockTrash(page, [row('run-kept', null)], 0);
     await gotoApp(page, '/trash');
     await expect(dataRows(page)).toHaveCount(1);
-    await expect(page.getByText('Automatic purge is off: deleted runs are kept until removed by an operator.')).toBeVisible();
+    await expect(
+      page.getByText('Automatic purge is off: deleted runs are kept until removed by an operator.'),
+    ).toBeVisible();
     await expect(page.getByText('Retention Off')).toBeVisible();
     await expect(dataRows(page).first()).toContainText('Not scheduled');
     await expect(page.locator('[data-soon]')).toHaveCount(0);
@@ -85,7 +118,15 @@ test.describe('trash purge countdown', () => {
       ['chunk_512_overlap_64_hybrid_bm25', 'openai/gpt-4o'],
       ['qwen2.5-72b_insightor_arabic_subset', 'openai/gpt-4.1-mini'],
       ['hotfix_verify_tokenizer_whitespace_bug', 'anthropic/claude-sonnet-5'],
-    ].map(([name, model], i) => row(`showcase-0${i}`, 2 + i, { run_name: name, model, task: 'text2sql', dataset: 'text2sql-chart-showcase-v1', deleted_by_name: 'Faisal' }));
+    ].map(([name, model], i) =>
+      row(`showcase-0${i}`, 2 + i, {
+        run_name: name,
+        model,
+        task: 'text2sql',
+        dataset: 'text2sql-chart-showcase-v1',
+        deleted_by_name: 'Faisal',
+      }),
+    );
     await mockTrash(page, long, 30);
     await gotoApp(page, '/trash');
     await expect(dataRows(page)).toHaveCount(3);
@@ -95,12 +136,17 @@ test.describe('trash purge countdown', () => {
     const report = await page.evaluate(() => {
       const grid = document.querySelector('[role=grid]') as HTMLElement;
       let scroller: HTMLElement | null = grid;
-      while (scroller && !['auto', 'scroll'].includes(getComputedStyle(scroller).overflowX)) scroller = scroller.parentElement;
+      while (scroller && !['auto', 'scroll'].includes(getComputedStyle(scroller).overflowX))
+        scroller = scroller.parentElement;
       const box = (scroller ?? grid).getBoundingClientRect();
-      const buttons = Array.from(grid.querySelectorAll('button')).filter((b) => b.textContent?.trim() === 'Restore');
+      const buttons = Array.from(grid.querySelectorAll('button')).filter(
+        (b) => b.textContent?.trim() === 'Restore',
+      );
       return {
         buttons: buttons.length,
-        clipped: buttons.filter((b) => b.getBoundingClientRect().right > box.right + 1 || b.getBoundingClientRect().left < box.left).length,
+        clipped: buttons.filter(
+          (b) => b.getBoundingClientRect().right > box.right + 1 || b.getBoundingClientRect().left < box.left,
+        ).length,
         scrolls: scroller ? scroller.scrollWidth - scroller.clientWidth : 0,
       };
     });

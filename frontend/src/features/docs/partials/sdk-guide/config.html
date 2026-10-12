@@ -295,8 +295,9 @@ results = Evaluator.run_parallel(
     <tr><td><code>--platform-api-key</code></td><td><code>config.platform_api_key</code>.</td></tr>
     <tr><td><code>--resume-from</code> (alias <code>--run-file</code>)</td><td><code>config.resume_from</code>.</td></tr>
     <tr><td><code>--git-branch</code> / <code>--git-commit</code></td><td><code>config.git_branch</code> / <code>config.git_commit</code>.</td></tr>
-    <tr><td><code>--ui-port</code></td><td><code>config.ui_port</code>.</td></tr>
-    <tr><td><code>--no-ui</code></td><td>Disables the local web UI.</td></tr>
+    <tr><td><code>--local-ui</code></td><td>Serves the offline results viewer on localhost while the run executes (<code>config.local_ui</code>). The browser opens automatically unless <code>--no-open</code> or <code>--quiet</code> is set (<code>config.local_ui_open</code>).</td></tr>
+    <tr><td><code>--ui-port</code></td><td><code>config.ui_port</code>: port for <code>--local-ui</code> (<code>0</code> picks a free one). If the port is taken, a warning is printed and a free port is used.</td></tr>
+    <tr><td><code>--no-ui</code></td><td>Hides the live terminal table. It does not control the browser viewer (<code>--local-ui</code>).</td></tr>
     <tr><td><code>--no-progress</code></td><td>Disables the progress bar.</td></tr>
     <tr><td><code>--quiet</code> / <code>-q</code></td><td>Only show the final summary.</td></tr>
     <tr><td><code>--runs-config</code></td><td>Multi-run YAML/JSON loaded into run specs.</td></tr>
@@ -316,7 +317,7 @@ results = Evaluator.run_parallel(
   --model gpt-4o-mini,gpt-4.1-mini \
   --config '{"run_name":"ci-smoke","max_concurrency":4,"timeout":120,"max_retries":1}'</pre>
 
-<div class="docs-callout warn"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><p><span class="docs-callout-title">There is no <code>--concurrency</code> or <code>--no-tui</code> flag.</span> Set concurrency via <code>--config</code>, and use <code>--no-ui</code> / <code>--no-progress</code> to quiet output. The <code>--live-mode</code> flag exists but is hidden and deprecated.</p></div>
+<div class="docs-callout warn"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><p><span class="docs-callout-title">There is no <code>--concurrency</code> or <code>--no-tui</code> flag.</span> Set concurrency via <code>--config</code>, and use <code>--no-ui</code> (terminal table) / <code>--no-progress</code> to quiet output; the browser viewer is <code>--local-ui</code>. The <code>--live-mode</code> flag exists but is hidden and deprecated.</p></div>
 
 <h2>Common mistakes</h2>
 <table>

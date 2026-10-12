@@ -10,7 +10,12 @@ export function RunDot({ index }: { index: number }) {
 }
 
 const GLYPH = { improved: '▲', regressed: '▼', within_noise: '≈', changed: 'Δ' } as const;
-const WORD = { improved: 'improved', regressed: 'regressed', within_noise: 'within noise', changed: 'changed' } as const;
+const WORD = {
+  improved: 'improved',
+  regressed: 'regressed',
+  within_noise: 'within noise',
+  changed: 'changed',
+} as const;
 
 /** Signed delta with glyph and word (colour is never the only signal), plus the 95% band. */
 export function DeltaTag({ stats, type, metric }: { stats: BaselineStats; type: string; metric: string }) {
@@ -20,7 +25,9 @@ export function DeltaTag({ stats, type, metric }: { stats: BaselineStats; type: 
   const band = stats.halfWidth !== null ? formatBand(stats.halfWidth, type) : null;
   const title =
     `${metric}: ${formatDelta(stats.mean, type)} vs baseline over ${stats.paired} paired items` +
-    (band ? ` (95% noise band ${band}${stats.pValue !== null ? `, p=${stats.pValue.toFixed(3)}` : ''})` : ' (too few items for a noise band)');
+    (band
+      ? ` (95% noise band ${band}${stats.pValue !== null ? `, p=${stats.pValue.toFixed(3)}` : ''})`
+      : ' (too few items for a noise band)');
   return (
     <span className={styles.delta}>
       <Tag kind="data" tone={tone} title={title}>

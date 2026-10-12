@@ -56,7 +56,9 @@ export function useEvalEnvironments(projectId: string | undefined, opts: { activ
     enabled: Boolean(projectId),
     queryFn: async () => {
       const qs = opts.active === undefined ? '' : `?active=${opts.active}`;
-      const r = await api.get<{ environments: EvalEnvironment[] }>(`/v1/projects/${projectId}/eval-environments${qs}`);
+      const r = await api.get<{ environments: EvalEnvironment[] }>(
+        `/v1/projects/${projectId}/eval-environments${qs}`,
+      );
       return r.environments;
     },
   });
@@ -68,7 +70,8 @@ export function errorDetail(error: unknown): Record<string, unknown> | null {
   const body = error.body;
   if (body && typeof body === 'object') {
     const detail = (body as Record<string, unknown>).detail;
-    if (detail && typeof detail === 'object' && !Array.isArray(detail)) return detail as Record<string, unknown>;
+    if (detail && typeof detail === 'object' && !Array.isArray(detail))
+      return detail as Record<string, unknown>;
   }
   return null;
 }
@@ -88,7 +91,9 @@ export function errorMessage(error: unknown): string {
   const body = error.body as { detail?: unknown } | null;
   if (body && Array.isArray(body.detail)) {
     return body.detail
-      .map((d) => (d && typeof d === 'object' && 'msg' in d ? String((d as { msg: unknown }).msg) : String(d)))
+      .map((d) =>
+        d && typeof d === 'object' && 'msg' in d ? String((d as { msg: unknown }).msg) : String(d),
+      )
       .join('; ');
   }
   if (body && typeof body.detail === 'string') return body.detail;

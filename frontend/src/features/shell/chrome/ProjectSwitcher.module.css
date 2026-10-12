@@ -5,6 +5,7 @@
   gap: var(--space-sm);
   height: 30px;
   max-width: 280px;
+  min-width: 0; /* shrink inside its breadcrumb item instead of overlapping the next crumb */
   padding: 0 var(--space-sm);
   border: 1px solid transparent;
   border-radius: var(--control-radius);

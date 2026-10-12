@@ -18,11 +18,13 @@ import { useKpiTopbar } from './kpiTopbar';
 import { useRunsData } from './useRunsData';
 import { useRunsKeyboard, type RunsKeyboardHandlers } from './useRunsKeyboard';
 import { useRunsView } from './useRunsView';
+import { useTableScrollRestoration } from './useTableScrollRestoration';
 import {
   cohortRefsConflict,
   cohortUnitCount,
   handoffCohorts,
   handoffCompare,
+  isPassRef,
   passRefBase,
   readVisibleColumns,
   rememberRunFile,
@@ -58,6 +60,7 @@ export function RunsPage() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogState>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
   const pending = useRef<'first' | 'last' | null>(null);
 
   const pinnedIds = useMemo(
@@ -82,9 +85,9 @@ export function RunsPage() {
   const reconcile = selection.reconcile;
   const pinnedReady = d.pinnedReady;
   useEffect(() => {
-    if (!d.data || !pinnedReady || d.runsQ.isFetching) return;
+    if (!d.data || !pinnedReady || d.runsQ.isFetching || d.runsQ.isError) return;
     reconcile([...d.pinnedRows, ...rows], new Set([...d.pinnedRows, ...rows].map((r) => r.run_id)));
-  }, [d.data, pinnedReady, d.runsQ.isFetching, d.pinnedRows, rows, reconcile]);
+  }, [d.data, pinnedReady, d.runsQ.isFetching, d.runsQ.isError, d.pinnedRows, rows, reconcile]);
 
   // Focus resets on a sort/page change (declared first so a pending keyboard landing wins).
   useEffect(() => {
@@ -126,9 +129,10 @@ export function RunsPage() {
   const page = Math.min(view.page, totalPages);
   useEffect(() => {
     // The total shrank under the current page (filters, deletes): clamp.
-    if (d.data && view.page > totalPages) setPage(totalPages);
-  }, [d.data, view.page, totalPages, setPage]);
+    if (d.data && !d.runsQ.isError && view.page > totalPages) setPage(totalPages);
+  }, [d.data, d.runsQ.isError, view.page, totalPages, setPage]);
 
+  useTableScrollRestoration(pageRef, Boolean(d.data) && rows.length > 0);
   const sortSpec = parseSort(d.sort);
   const onSort = (field: string) =>
     setView((v) => {
@@ -157,7 +161,7 @@ export function RunsPage() {
     const qs = handoffCompare(refs, samplesOf);
     navigate(`${ROUTES.compare}?${qs}`);
   }, [refs, samplesOf, toast, navigate]);
-  const cohort = () => {
+  const cohort = useCallback(() => {
     if (!selection.cohortA.length) {
       if (!refs.length) return;
       selection.lockCohortA();
@@ -180,7 +184,7 @@ export function RunsPage() {
       });
     const qs = handoffCohorts(a, refs, samplesOf, nameOf);
     navigate(`${ROUTES.compare}?${qs}`);
-  };
+  }, [selection, refs, samplesOf, nameOf, toast, navigate]);
 
   const selectedRows = (): typeof rows =>
     [...new Set(refs.map(passRefBase))]
@@ -188,7 +192,12 @@ export function RunsPage() {
       .filter((r): r is NonNullable<typeof r> => Boolean(r));
   const onAction = (id: string, row: (typeof rows)[number]) => {
     if (id === 'delete')
-      setDialog({ kind: 'delete', refs: [row.run_id], names: [row.external_run_id || row.run_name] });
+      setDialog({
+        kind: 'delete',
+        refs: [row.run_id],
+        revisions: {},
+        names: [row.external_run_id || row.run_name],
+      });
     else if (id === 'submit') setDialog({ kind: 'submit', rows: [row] });
     else if (id === 'transfer') setDialog({ kind: 'transfer', row });
     else if (id === 'approve' || id === 'reject' || id === 'unapprove' || id === 'unreject')
@@ -226,11 +235,13 @@ export function RunsPage() {
       },
       toggleFocused: () => {
         const r = rows[focusedIndex];
-        if (!r) return;
+        // a page change is in flight: the focused row belongs to the page being left
+        if (!r || pending.current) return;
         setSelectMode(true);
         selection.toggle(r.run_id);
       },
-      compare: () => (selection.selected.size ? compare() : undefined),
+      compare: () =>
+        selection.cohortA.length ? cohort() : selection.selected.size >= 2 ? compare() : undefined,
       focusSearch: () => searchRef.current?.focus(),
       openHelp: () => setHelpOpen(true),
       setRange: (range) => setView({ range, from: '', to: '' }),
@@ -250,6 +261,7 @@ export function RunsPage() {
       selection.selected,
       selection.cohortA,
       compare,
+      cohort,
       openRun,
       setPage,
       setView,
@@ -263,7 +275,28 @@ export function RunsPage() {
     { total: d.projectTotal, filtered: d.total },
     { owner: (id) => owners[id] ?? id, dataset: datasetLabel },
   );
-  const canDeleteAny = isAdmin || canManage || selectedRows().every((r) => r.owner?.id === me.id);
+  const picked = selectedRows();
+  const mayManage = (r: (typeof rows)[number]) => isAdmin || canManage || r.owner?.id === me.id;
+  // Delete: every pick must be ours to delete; a pass only while its run is settled, and never all passes of a run.
+  const canDeleteAll =
+    picked.every(mayManage) &&
+    refs.every((ref) => {
+      if (!isPassRef(ref)) return true;
+      const r = known.get(passRefBase(ref));
+      return !r || !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(r.status);
+    }) &&
+    picked.every((r) => {
+      const n = refs.filter((x) => isPassRef(x) && passRefBase(x) === r.run_id).length;
+      return n === 0 || n < r.samples;
+    });
+  const canSubmitAll =
+    picked.length > 0 &&
+    picked.every(
+      (r) =>
+        (isAdmin || canManage || r.owner?.id === me.id) &&
+        ['COMPLETED', 'FAILED', 'REJECTED'].includes(r.status),
+    );
+  const cohortOverlap = refs.some((r) => selection.cohortA.some((l) => cohortRefsConflict(l, r)));
 
   let body;
   if (d.runsQ.isError && !d.data) {
@@ -329,6 +362,8 @@ export function RunsPage() {
         selected={selection.selected}
         onToggleSelect={selection.toggle}
         onSelectPage={selection.setMany}
+        onNotePassRevision={selection.notePassRevision}
+        onPassesDeleted={selection.dropPassPicks}
         expanded={expanded}
         onToggleExpand={(id) =>
           setExpanded((s) => {
@@ -343,7 +378,7 @@ export function RunsPage() {
         onOpen={openRun}
         perm={perm}
         onAction={onAction}
-        onSignalDetails={(row) => setDialog({ kind: 'errors', row })}
+        onSignalDetails={(row, metric) => setDialog({ kind: 'errors', row, metric })}
         dimmed={stale || d.runsQ.isPlaceholderData}
         emptyState={empty}
         className={styles.table}
@@ -353,7 +388,7 @@ export function RunsPage() {
 
   return (
     <RunsCtx.Provider value={ctx}>
-      <div className={styles.runs} data-testid="runs-page">
+      <div className={styles.runs} data-testid="runs-page" ref={pageRef}>
         <h1 className={styles.srOnly}>Runs</h1>
         <RunsToolbar
           mode="runs"
@@ -383,17 +418,25 @@ export function RunsPage() {
           }
         />
         {stale && d.updatedAt ? (
-          <StaleBanner since={d.updatedAt} filtersApplied={false} onRetry={() => d.runsQ.refetch()} />
+          <StaleBanner
+            since={d.updatedAt}
+            filtersApplied={!d.viewNotApplied}
+            onRetry={() => d.runsQ.refetch()}
+          />
         ) : null}
         {body}
         <StatusBar
+          selecting={selectMode}
           left={
             selectMode ? (
               <SelectionBar
                 count={cohortUnitCount(refs, samplesOf)}
                 cohortA={selection.cohortA}
+                cohortAUnits={cohortUnitCount(selection.cohortA, samplesOf)}
+                cohortOverlap={cohortOverlap}
                 readOnly={readOnly}
-                canDelete={canDeleteAny}
+                canSubmit={canSubmitAll}
+                canDelete={canDeleteAll}
                 onCompare={compare}
                 onCohort={cohort}
                 onSubmit={() => setDialog({ kind: 'submit', rows: selectedRows() })}
@@ -401,6 +444,7 @@ export function RunsPage() {
                   setDialog({
                     kind: 'delete',
                     refs,
+                    revisions: Object.fromEntries(picked.map((r) => [r.run_id, r.pass_revision ?? 0])),
                     names: refs.map(
                       (r) =>
                         nameOf(passRefBase(r)) +

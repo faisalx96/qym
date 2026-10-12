@@ -52,7 +52,9 @@ export function catalogFromConfig(config: AnalysisConfig, catalog?: CategoryCata
     });
     const known = new Set(saved.map((s) => s.toLocaleLowerCase()));
     for (const example of examples) {
-      const labels = (example.root_cause_issues ?? []).map((i) => i.subcategory ?? '').concat(example.detail ?? '');
+      const labels = (example.root_cause_issues ?? [])
+        .map((i) => i.subcategory ?? '')
+        .concat(example.detail ?? '');
       for (const label of labels.map((l) => l.trim()).filter(Boolean)) {
         if (known.has(label.toLocaleLowerCase())) continue;
         known.add(label.toLocaleLowerCase());
@@ -148,7 +150,9 @@ export function catalogSignature(draft: CatalogDraft): string {
 }
 
 /** Approval signature: category -> approved example count/ids, to detect new approvals. */
-export function approvalSignature(config: Pick<AnalysisConfig, 'category_examples' | 'category_example_counts'>): string {
+export function approvalSignature(
+  config: Pick<AnalysisConfig, 'category_examples' | 'category_example_counts'>,
+): string {
   const parts = Object.keys(config.category_example_counts ?? {})
     .sort()
     .map((cat) => {

@@ -28,14 +28,22 @@ export function GuidanceArea({
       selected={tab}
       onSelect={(id) => onTab(id as Exclude<AnalyzerScope, 'run'>)}
       items={[
-        { id: 'categories', label: 'Diagnosis categories', count: c ? (c.category_catalog?.categories ?? c.default_categories).length : undefined },
+        {
+          id: 'categories',
+          label: 'Diagnosis categories',
+          count: c ? (c.category_catalog?.categories ?? c.default_categories).length : undefined,
+        },
         { id: 'rules', label: 'Production rules' },
         { id: 'documents', label: 'Documents', count: c?.enabled_document_count },
       ]}
     >
       <TabPanel id="categories">
         <div className={s.pad}>
-          <DiagnosisPanel scope={scope} slug={slug} canManage={canManage && (c?.can_manage_category_catalog ?? true)} />
+          <DiagnosisPanel
+            scope={scope}
+            slug={slug}
+            canManage={canManage && (c?.can_manage_category_catalog ?? true)}
+          />
         </div>
       </TabPanel>
       <TabPanel id="rules">

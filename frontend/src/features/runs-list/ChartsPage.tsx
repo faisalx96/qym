@@ -5,10 +5,10 @@
  * Pass@K / Consistency / Reliability (batched models/stats), lazy per-card
  * history, remembered card height (brief 03 J7).
  */
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button as AriaButton, ToggleButton } from 'react-aria-components';
-import { useModelsStats, useOverview, usePoints } from '@/api/dashboard';
+import { useModelsStats, useOverview, usePoints, useRunsPage } from '@/api/dashboard';
 import type { Combo, GroupStats, MetricType, RunRow } from '@/api/dashboardTypes';
 import {
   Button,
@@ -23,13 +23,19 @@ import {
   Tooltip,
 } from '@/ui';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
-import { formatDateParts, formatLatency, formatNumericValue, formatPercentValue } from '@/lib/format';
+import {
+  formatClock,
+  formatDateParts,
+  formatLatency,
+  formatNumericValue,
+  formatPercentValue,
+} from '@/lib/format';
 import { runPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
 import { Mono, ModelMark } from './cells';
 import { ColumnsMenu } from './ColumnsMenu';
 import { RunsCtx, useRunsCtx as useRunsCtxLocal, type RunsCtxValue } from './context';
-import { buildColumns } from './columns';
+import { buildColumns, GROUP_DISPLAY_COLUMNS, type ColumnSet } from './columns';
 import {
   buildGroups,
   chartSortDirection,
@@ -37,6 +43,7 @@ import {
   effectiveGroupMode,
   firstColumnLabel,
   GROUP_STAT_COLUMNS,
+  GROUP_STAT_KEYS,
   groupMetricName,
   groupStatRule,
   modelLabel,
@@ -55,6 +62,7 @@ import { RunsToolbar } from './RunsToolbar';
 import { useKpiTopbar } from './kpiTopbar';
 import { readVisibleColumns, writeVisibleColumns } from './selection';
 import { contextForView, countActiveFilters, DEFAULT_VIEW, type RunsView } from './urlState';
+import { useRefetchOnVisible, useRunsCadence } from './polling';
 import { useRunsView } from './useRunsView';
 import { viewToFilters } from './urlState';
 import styles from './ChartsPage.module.css';
@@ -84,6 +92,28 @@ function readHeight(task: string, dataset: string): number {
     return Number(sessionStorage.getItem(heightKey(task, dataset))) || 0;
   } catch {
     return 0;
+  }
+}
+
+/** Per-card view choices (dataset tab, runs/grouped, group axis) survive a reload and Back from a run. */
+interface CardPrefs {
+  dataset?: string;
+  mode?: RowMode;
+  axis?: GroupAxis;
+}
+const prefsKey = (slug: string, task: string) => `qym:chart-card-prefs:${JSON.stringify([slug, task])}`;
+function readPrefs(slug: string, task: string): CardPrefs {
+  try {
+    return (JSON.parse(sessionStorage.getItem(prefsKey(slug, task)) ?? '{}') as CardPrefs) ?? {};
+  } catch {
+    return {};
+  }
+}
+function writePrefs(slug: string, task: string, prefs: CardPrefs): void {
+  try {
+    sessionStorage.setItem(prefsKey(slug, task), JSON.stringify(prefs));
+  } catch {
+    /* storage unavailable: the choice just does not persist */
   }
 }
 
@@ -143,7 +173,7 @@ export function ChartsPage() {
           onChange={setView}
           end={
             <ColumnsMenu
-              groups={['metrics', 'system', 'trace']}
+              groups={['metrics', 'system', 'trace', 'group']}
               all={d.columnSet.all}
               visible={d.columnSet.visible}
               onChange={(keys) => {
@@ -160,7 +190,8 @@ export function ChartsPage() {
             </Text>
             <Text variant="sm" tone="muted" as="p">
               {countActiveFilters(view) && overview ? `Filtered: ${overview.total_runs} runs · ` : ''}Average
-              metric scores across all items in matching runs. Bars are relative to the best run in the card.
+              metric scores across all items in matching runs. Score bars use a 0-100% scale; numeric metrics
+              and latency are relative to the best run in the card.
             </Text>
           </div>
           {models.length ? (
@@ -235,16 +266,57 @@ export function ChartsPage() {
             />
           ))
         )}
+        {d.overviewQ.dataUpdatedAt ? (
+          <Text variant="sm" tone="muted" as="p" aria-live="polite">
+            Last updated <Mono>{formatClock(new Date(d.overviewQ.dataUpdatedAt))}</Mono>
+          </Text>
+        ) : null}
       </div>
     </RunsCtx.Provider>
   );
 }
 
+/** Charts have no Duration column; the repeat-run group stats are toggleable instead. */
+function withGroupColumns(set: ColumnSet, visibleKeys: Set<string> | null): ColumnSet {
+  const all = [...set.all.filter((c) => c.id !== 'duration'), ...GROUP_DISPLAY_COLUMNS];
+  const visible = [
+    ...set.visible.filter((c) => c.id !== 'duration'),
+    ...GROUP_DISPLAY_COLUMNS.filter((c) => visibleKeys === null || visibleKeys.has(c.visKey!)),
+  ];
+  return { all, visible };
+}
+
 /** Overview-only slice of useRunsData (charts do not page the runs list). */
 function useRunsDataLite(slug: string, view: RunsView, visibleKeys: Set<string> | null) {
   const filters = useMemo(() => viewToFilters(view), [view]);
-  const overviewQ = useOverview(slug, filters, { refetchInterval: 60_000 });
+  // Same cadence as the runs list: 15 s while runs are live, 2 s while a stop settles, 60 s otherwise.
+  const cadence = useRef<number | false>(60_000);
+  const overviewQ = useOverview(slug, filters, { refetchInterval: () => cadence.current });
   const overview = overviewQ.data;
+  const refetchOverview = overviewQ.refetch;
+  // The overview does not say whether runs are live: ask the runs list for the live ones (RUNNING/PENDING).
+  const liveQ = useRunsPage(
+    {
+      project_slug: slug,
+      filters: { ...filters, statuses: ['RUNNING', 'PENDING'] },
+      sort: 'activity-desc',
+      limit: 8,
+      offset: 0,
+    },
+    { refetchInterval: () => cadence.current },
+  );
+  const onAnnounce = useCallback(() => {
+    void refetchOverview();
+    void liveQ.refetch();
+  }, [refetchOverview, liveQ]);
+  const interval = useRunsCadence(
+    { rows: liveQ.data?.rows ?? [], freshness: liveQ.data?.freshness },
+    onAnnounce,
+  );
+  useEffect(() => {
+    cadence.current = interval;
+  }, [interval]);
+  useRefetchOnVisible(onAnnounce);
   const trace = useMemo(
     () => new Set<string>(overview?.has_trace_stats ? TRACE_METRICS.map((t) => t.key) : []),
     [overview?.has_trace_stats],
@@ -253,7 +325,7 @@ function useRunsDataLite(slug: string, view: RunsView, visibleKeys: Set<string> 
     () => buildColumns(overview?.all_metrics ?? [], trace, visibleKeys),
     [overview?.all_metrics, trace, visibleKeys],
   );
-  return { overviewQ, overview, columnSet, filters };
+  return { overviewQ, overview, columnSet: withGroupColumns(columnSet, visibleKeys), filters };
 }
 
 function TaskCard({
@@ -274,11 +346,15 @@ function TaskCard({
   revisionKey: string;
 }) {
   const [ref, seen] = useInView();
-  const [dataset, setDataset] = useState(combos[0]?.dataset ?? '');
+  const [saved] = useState(() => readPrefs(slug, task));
+  const [dataset, setDataset] = useState(saved.dataset ?? combos[0]?.dataset ?? '');
   const active = combos.find((c) => c.dataset === dataset) ?? combos[0];
   const activeDataset = active?.dataset ?? '';
-  const [mode, setMode] = useState<RowMode>('runs');
-  const [axis, setAxis] = useState<GroupAxis>('model');
+  const [mode, setMode] = useState<RowMode>(saved.mode === 'grouped' ? 'grouped' : 'runs');
+  const [axis, setAxis] = useState<GroupAxis>(saved.axis ?? 'model');
+  useEffect(() => {
+    writePrefs(slug, task, { dataset: activeDataset, mode, axis });
+  }, [slug, task, activeDataset, mode, axis]);
   const [sort, setSort] = useState<{ key: string; dir: SortDir }>({ key: '', dir: 'desc' });
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const filters = useMemo(() => viewToFilters(view), [view]);
@@ -331,6 +407,9 @@ function TaskCard({
   const metricsForAgg = [...barMetrics, ...plainMetrics];
   const groupMode: GroupMode = mode === 'runs' ? 'run' : effectiveGroupMode(axis, comboHasVersionData(runs));
   const isGrouped = groupMode !== 'run';
+  const statKinds = (['passAtK', 'consistency', 'reliability'] as const).filter(
+    (k) => visibleKeys === null || visibleKeys.has(STAT_VIS_KEY[k]),
+  );
 
   const sortKey = sort.key || barMetrics[0] || plainMetrics[0] || 'latency';
   const sortDir: SortDir = sort.key ? sort.dir : 'desc';
@@ -494,7 +573,7 @@ function TaskCard({
             </td>
           );
         })}
-        {isGrouped ? <td className={styles.td} colSpan={3} /> : null}
+        {isGrouped && statKinds.length ? <td className={styles.td} colSpan={statKinds.length} /> : null}
       </tr>
     );
   };
@@ -579,9 +658,7 @@ function TaskCard({
               <Mono>{t.format(agg.traceAverages[t.key])}</Mono>
             </td>
           ))}
-          {statCell(stats?.passAtK, 'passAtK')}
-          {statCell(stats?.consistency, 'consistency')}
-          {statCell(stats?.reliability, 'reliability')}
+          {statKinds.map((kind) => statCell(stats?.[kind], kind))}
         </tr>
         {open
           ? g.children
@@ -606,7 +683,11 @@ function TaskCard({
       {showLatency ? header('latency', '⚡ Avg latency', { viz: true }) : null}
       {showMedian ? header('median-latency', '⚡ Median latency', { viz: true }) : null}
       {traces.map((t) => header(t.key, `⚡ ${t.label}`, { viz: true }))}
-      {isGrouped ? GROUP_STAT_COLUMNS.map((c) => header(c.key, c.label, { end: true })) : null}
+      {isGrouped
+        ? GROUP_STAT_COLUMNS.filter((c) => statKinds.includes(STAT_KIND[c.key]!)).map((c) =>
+            header(c.key, c.label, { end: true }),
+          )
+        : null}
     </tr>
   );
 
@@ -751,6 +832,17 @@ function TaskCard({
     </section>
   );
 }
+
+const STAT_VIS_KEY = {
+  passAtK: 'group_pass_at_k',
+  consistency: 'group_consistency',
+  reliability: 'group_reliability',
+} as const;
+const STAT_KIND: Record<string, 'passAtK' | 'consistency' | 'reliability'> = {
+  [GROUP_STAT_KEYS.passAtK]: 'passAtK',
+  [GROUP_STAT_KEYS.consistency]: 'consistency',
+  [GROUP_STAT_KEYS.reliability]: 'reliability',
+};
 
 function isMetricVisible(metric: string, visible: Set<string> | null): boolean {
   return visible === null || visible.has(metric);

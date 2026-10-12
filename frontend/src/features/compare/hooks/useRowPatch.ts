@@ -19,7 +19,15 @@ export function useRowPatch() {
           runs: prev.runs.map((r) =>
             (r.run.file_path || r.run.run_id) !== base
               ? r
-              : { ...r, snapshot: { ...r.snapshot, rows: r.snapshot.rows.map((x) => (x.item_id === row.item_id ? { ...x, ...row, compare_item_id: x.compare_item_id } : x)) } },
+              : {
+                  ...r,
+                  snapshot: {
+                    ...r.snapshot,
+                    rows: r.snapshot.rows.map((x) =>
+                      x.item_id === row.item_id ? { ...x, ...row, compare_item_id: x.compare_item_id } : x,
+                    ),
+                  },
+                },
           ),
         };
       });

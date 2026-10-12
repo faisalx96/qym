@@ -86,7 +86,9 @@ describe('metric analysis is shown only for failed or errored judges', () => {
   });
 
   it('a metric whose judge errored gets its card even with a stored 0', () => {
-    show(base({ metric_values: [1, 1, 0.9, 0.9, 0, 42, 0], metric_meta: { broken_judge: { status: 'error' } } }));
+    show(
+      base({ metric_values: [1, 1, 0.9, 0.9, 0, 42, 0], metric_meta: { broken_judge: { status: 'error' } } }),
+    );
     expect(cards()).toEqual(['broken_judge']);
   });
 
@@ -153,7 +155,9 @@ describe('what a card lists', () => {
     const analysis = Object.freeze({ error: 'Provider failure', error_code: 'timeout', source: 'ai' });
     const before = JSON.stringify(analysis);
     show(base({ item_metadata: { metric_analyses: { failing_score: analysis } } }));
-    const card = screen.getAllByTestId('metric-analysis-card').find((c) => c.getAttribute('data-metric') === 'failing_score')!;
+    const card = screen
+      .getAllByTestId('metric-analysis-card')
+      .find((c) => c.getAttribute('data-metric') === 'failing_score')!;
     expect(card).toHaveTextContent('analysis failed');
     expect(card.querySelectorAll('[data-testid=issue]')).toHaveLength(0);
     expect(JSON.stringify(analysis)).toBe(before);

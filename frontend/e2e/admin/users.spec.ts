@@ -72,7 +72,7 @@ test.describe('disable / enable', () => {
     await openUsers(page);
     const row = page.getByRole('grid', { name: 'Users' }).getByRole('row').filter({ hasText: 'dev@local' });
     await expect(row).toContainText('you');
-    await expect(row.locator('[data-user-self-disable]')).toBeDisabled();
+    await expect(row.locator('[data-user-self-disable]')).toHaveAttribute('aria-disabled', 'true');
   });
 });
 
@@ -88,7 +88,9 @@ test.describe('edit user', () => {
     await expect(dialog.getByRole('button', { name: /Role/ })).toBeDisabled();
     await expect(dialog.locator('[data-password-section]')).toHaveCount(0);
 
-    const reqPromise = page.waitForRequest((r) => r.method() === 'PUT' && r.url().includes('/v1/admin/users/'));
+    const reqPromise = page.waitForRequest(
+      (r) => r.method() === 'PUT' && r.url().includes('/v1/admin/users/'),
+    );
     await dialog.locator('[data-edit-user-save]').click();
     const body = (await reqPromise).postDataJSON() as Record<string, unknown>;
     expect(body).toHaveProperty('email', 'dev@local');
@@ -106,7 +108,9 @@ test.describe('edit user', () => {
     const dialog = page.getByRole('dialog', { name: /^Edit / });
     await dialog.getByRole('button', { name: /Role/ }).click();
     await page.getByRole('option', { name: 'Admin' }).click();
-    const reqPromise = page.waitForRequest((r) => r.method() === 'PUT' && r.url().includes(`/v1/admin/users/${u.id}`));
+    const reqPromise = page.waitForRequest(
+      (r) => r.method() === 'PUT' && r.url().includes(`/v1/admin/users/${u.id}`),
+    );
     await dialog.locator('[data-edit-user-save]').click();
     const body = (await reqPromise).postDataJSON() as Record<string, unknown>;
     expect(body.role).toBe('ADMIN');
@@ -120,7 +124,11 @@ test.describe('edit user', () => {
     await openUsers(page);
     await page.route(`**/v1/admin/users/${u.id}`, (route) =>
       route.request().method() === 'PUT'
-        ? route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ detail: 'Cannot remove the last admin' }) })
+        ? route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify({ detail: 'Cannot remove the last admin' }),
+          })
         : route.continue(),
     );
     const row = page.getByRole('grid', { name: 'Users' }).getByRole('row').filter({ hasText: u.email });
@@ -130,4 +138,14 @@ test.describe('edit user', () => {
     await expect(dialog.locator('[data-edit-user-error]')).toHaveText('Cannot remove the last admin');
     await expect(dialog).toBeVisible();
   });
+});
+
+test('own-row Disable tooltip shows on its focusable trigger', async ({ page }) => {
+  await gotoApp(page, '/admin/users');
+  const wrap = page.locator('[data-user-self-disable-wrap]');
+  await expect(wrap).toHaveAttribute('tabindex', '0');
+  await wrap.hover();
+  await page.mouse.move(5, 5);
+  await wrap.hover();
+  await expect(page.getByRole('tooltip')).toContainText('cannot disable your own account');
 });

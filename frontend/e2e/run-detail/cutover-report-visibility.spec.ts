@@ -12,16 +12,28 @@ import { itemsCount, openRun, seedProject, type Seeded } from './support';
 
 let s: Seeded;
 
-const issues = { accuracy: { root_cause_issues: [{ category: 'Reasoning Error', subcategory: 'Missed evidence' }] } };
+const issues = {
+  accuracy: { root_cause_issues: [{ category: 'Reasoning Error', subcategory: 'Missed evidence' }] },
+};
 const items = (extra: Partial<CustomItem> = {}): CustomItem[] => [
-  { id: 'item-0', input: 'reported question 0', error: 'Timeout: upstream unavailable', metadata: { domain: 'finance' } },
+  {
+    id: 'item-0',
+    input: 'reported question 0',
+    error: 'Timeout: upstream unavailable',
+    metadata: { domain: 'finance' },
+  },
   {
     id: 'item-1',
     input: 'reported question 1',
     scores: { accuracy: { score: 0.45 } },
     metadata: { domain: 'finance', metric_analyses: issues },
   },
-  { id: 'item-2', input: 'reported question 2', scores: { accuracy: { score: 0.65 } }, metadata: { domain: 'finance' } },
+  {
+    id: 'item-2',
+    input: 'reported question 2',
+    scores: { accuracy: { score: 0.65 } },
+    metadata: { domain: 'finance' },
+  },
   { id: 'item-3', input: 'clean question', scores: { accuracy: { score: 0.95 } } },
   ...(extra.id ? [extra as CustomItem] : []),
 ];
@@ -34,7 +46,9 @@ async function tab(page: Page, name: string) {
   await page.getByRole('tab', { name: new RegExp(`^${name}`) }).click();
 }
 
-test('run page: errors, root causes and categories vanish with the filtered data and return', async ({ page }) => {
+test('run page: errors, root causes and categories vanish with the filtered data and return', async ({
+  page,
+}) => {
   const runId = await seedCustomRun(s, { name: 'reports', specs: { accuracy: PERCENT }, items: items() });
   await openRun(page, s.slug, runId);
   const search = page.getByRole('searchbox', { name: 'Search inputs and outputs' });
@@ -75,7 +89,9 @@ test('run page: errors, root causes and categories vanish with the filtered data
   await expect(page.getByText('finance').first()).toBeVisible();
 });
 
-test('compare: the Errors and Root cause reports follow the filtered items and come back', async ({ page }) => {
+test('compare: the Errors and Root cause reports follow the filtered items and come back', async ({
+  page,
+}) => {
   const a = await seedCustomRun(s, { name: 'cmp-a', specs: { accuracy: PERCENT }, items: items() });
   const b = await seedCustomRun(s, { name: 'cmp-b', specs: { accuracy: PERCENT }, items: items() });
   await page.goto(compareUrl([a, b]));

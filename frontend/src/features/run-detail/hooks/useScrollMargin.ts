@@ -28,3 +28,23 @@ export function useScrollMargin(ref: RefObject<HTMLElement | null>, scroller: HT
   }, [ref, scroller]);
   return margin;
 }
+
+/** Height of what sticks above the table (section nav + filter bar), so scrolled-to rows land below it. */
+export function useStickyOffset(): number {
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const els = ['[data-run-nav]', '[data-run-filters]']
+      .map((q) => document.querySelector<HTMLElement>(q))
+      .filter((e): e is HTMLElement => !!e);
+    const measure = () => {
+      const sticky = (e: HTMLElement) => getComputedStyle(e).position === 'sticky';
+      setOffset(els.filter(sticky).reduce((n, e) => n + e.offsetHeight, 0));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    els.forEach((e) => ro.observe(e));
+    return () => ro.disconnect();
+  }, []);
+  return offset;
+}

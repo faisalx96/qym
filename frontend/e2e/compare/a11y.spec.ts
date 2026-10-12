@@ -15,7 +15,9 @@ const open4 = async (page: Page) => {
   await waitLoaded(page);
 };
 
-test('keyboard: Tab reaches the toolbar; Enter toggles Filters; Display popover and CSV dialog close with Escape and return focus', async ({ page }) => {
+test('keyboard: Tab reaches the toolbar; Enter toggles Filters; Display popover and CSV dialog close with Escape and return focus', async ({
+  page,
+}) => {
   await open4(page);
   const search = page.getByRole('searchbox', { name: 'Search items' });
   await search.focus();
@@ -57,11 +59,17 @@ test('item rows: visible keyboard focus ring; Enter and Space expand and collaps
   const rowBtn = page.getByRole('button', { name: /^Item 1:/ });
   // focus by keyboard so :focus-visible applies
   await page.getByRole('searchbox', { name: 'Search items' }).focus();
-  for (let i = 0; i < 40 && !(await rowBtn.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab');
+  for (let i = 0; i < 40 && !(await rowBtn.evaluate((el) => el === document.activeElement)); i++)
+    await page.keyboard.press('Tab');
   await expect(rowBtn).toBeFocused();
   const ring = await rowBtn.evaluate((el) => {
     const s = getComputedStyle(el);
-    return { matches: el.matches(':focus-visible'), style: s.outlineStyle, width: s.outlineWidth, shadow: s.boxShadow };
+    return {
+      matches: el.matches(':focus-visible'),
+      style: s.outlineStyle,
+      width: s.outlineWidth,
+      shadow: s.boxShadow,
+    };
   });
   expect(ring.matches).toBe(true);
   const hasOutline = ring.style !== 'none' && parseFloat(ring.width) > 0;
@@ -84,20 +92,34 @@ test('item rows: visible keyboard focus ring; Enter and Space expand and collaps
 test('every control has an accessible name; remove buttons say what they remove', async ({ page }) => {
   await open4(page);
   const chips = page.getByRole('group', { name: 'Runs in this comparison' });
-  const names = await chips.getByRole('button').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.textContent ?? ''));
+  const names = await chips
+    .getByRole('button')
+    .evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.textContent ?? ''));
   expect(names).toHaveLength(8);
   expect(names.filter((n) => /^Remove .+ from the comparison$/.test(n))).toHaveLength(4);
   const unnamed = await page.evaluate(() => {
     const bad: string[] = [];
-    for (const el of Array.from(document.querySelectorAll('[data-testid="compare-page"] button, [data-testid="compare-page"] input, [data-testid="compare-page"] [role="tab"]'))) {
-      const name = (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || (el as HTMLElement).innerText || (el as HTMLInputElement).labels?.[0]?.textContent || el.getAttribute('title') || '').trim();
+    for (const el of Array.from(
+      document.querySelectorAll(
+        '[data-testid="compare-page"] button, [data-testid="compare-page"] input, [data-testid="compare-page"] [role="tab"]',
+      ),
+    )) {
+      const name = (
+        el.getAttribute('aria-label') ||
+        el.getAttribute('aria-labelledby') ||
+        (el as HTMLElement).innerText ||
+        (el as HTMLInputElement).labels?.[0]?.textContent ||
+        el.getAttribute('title') ||
+        ''
+      ).trim();
       if (!name) bad.push(el.outerHTML.slice(0, 120));
     }
     return bad;
   });
   expect(unnamed).toEqual([]);
   // landmarks
-  await expect(page.getByRole('main', { name: 'Items' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Items' })).toBeVisible();
+  await expect(page.getByRole('main')).toHaveCount(1); // the shell's; the items list must not nest a second main
   await expect(page.getByRole('complementary', { name: 'Analytics for the filtered items' })).toBeVisible();
   await expect(page.getByRole('tablist', { name: 'Analytics' })).toBeVisible();
   await expect(page.getByRole('table', { name: /Average per run/ })).toBeVisible();
@@ -105,7 +127,9 @@ test('every control has an accessible name; remove buttons say what they remove'
 
 const axeScan = async (page: Page) => {
   const v = await axeSeriousViolations(page, '[data-testid="compare-page"]');
-  return v.map((x) => `${x.id} (${x.impact}): ${x.help} x${x.nodes.length} e.g. ${x.nodes[0]?.target.join(' ')}`);
+  return v.map(
+    (x) => `${x.id} (${x.impact}): ${x.help} x${x.nodes.length} e.g. ${x.nodes[0]?.target.join(' ')}`,
+  );
 };
 
 test('axe: no serious or critical violations on the loaded Compare page', async ({ page }) => {

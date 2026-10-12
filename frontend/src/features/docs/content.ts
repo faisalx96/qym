@@ -46,7 +46,13 @@ export const SECTIONS: DocsSection[] = ia.sections;
 
 /** Flattened reading order (prev/next, lookups). */
 export const PAGES: DocsPageRef[] = SECTIONS.flatMap((s) =>
-  s.pages.map((p) => ({ key: `${s.id}/${p.id}`, section: s.id, page: p.id, title: p.title, sectionTitle: s.title })),
+  s.pages.map((p) => ({
+    key: `${s.id}/${p.id}`,
+    section: s.id,
+    page: p.id,
+    title: p.title,
+    sectionTitle: s.title,
+  })),
 );
 
 export const FIRST_PAGE = PAGES[0]!;

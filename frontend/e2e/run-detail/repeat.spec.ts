@@ -45,9 +45,11 @@ test.describe('repeat analysis (J4)', () => {
 
   test('a distribution bar filters the items to "N of 3 passes passed"', async ({ page }) => {
     await openRun(page, s.slug, repeat, 'panel=repeat');
-    const bar = page.getByRole('group', { name: 'Items by number of passes that passed' }).getByRole('button', {
-      name: /^3 of 3 passes passed/,
-    });
+    const bar = page
+      .getByRole('group', { name: 'Items by number of passes that passed' })
+      .getByRole('button', {
+        name: /^3 of 3 passes passed/,
+      });
     await bar.click();
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(60);
     expect((await itemsCount(page))[0]).toBe(33);
@@ -81,7 +83,7 @@ test.describe('?pass=N (scenario 10)', () => {
     await expect(page.getByRole('row', { name: /^Open item #1 / })).not.toContainText('Error');
   });
 
-  test('an opened item in ?pass=2 shows that pass\' chips and its per-pass output', async ({ page }) => {
+  test("an opened item in ?pass=2 shows that pass' chips and its per-pass output", async ({ page }) => {
     await openRun(page, s.slug, repeat, 'pass=3&item=sql-006');
     const card = page.locator('[data-testid=item-card][data-item-id="sql-006"]');
     await expect(card).toBeVisible();

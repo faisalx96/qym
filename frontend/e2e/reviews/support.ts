@@ -34,7 +34,11 @@ export async function seedReviews(
   opts: { task?: string; model?: string; project?: SeededProject; categoryPrefix?: string } = {},
 ): Promise<ReviewSeed> {
   const project = opts.project ?? (await createProject(request, `Reviews ${prefix}`, uniqueSlug(prefix)));
-  const ds = await createDataset(request, project.slug, `${prefix} ds ${Math.random().toString(36).slice(2, 5)}`);
+  const ds = await createDataset(
+    request,
+    project.slug,
+    `${prefix} ds ${Math.random().toString(36).slice(2, 5)}`,
+  );
   const v = await createVersion(request, project.slug, ds.slug);
   const items = sampleItems(Math.max(n, 3));
   await bulkItems(request, project.slug, ds.slug, v.version, items);
@@ -69,6 +73,8 @@ export async function decideViaApi(
   id: number,
   action: 'approve' | 'reject' | 'reset',
 ): Promise<void> {
-  const res = await request.post(`/api/corrections/${id}/${action}`, { data: action === 'reset' ? {} : { comment: 'via api' } });
+  const res = await request.post(`/api/corrections/${id}/${action}`, {
+    data: action === 'reset' ? {} : { comment: 'via api' },
+  });
   expect(res.ok(), await res.text()).toBeTruthy();
 }

@@ -45,8 +45,8 @@ describe('legacyTextScore (mirrors _legacy_text_score)', () => {
     expect(detectCSVEncoding(utf8)).toBe('utf-8');
     // "سياسة الاسترجاع" in Windows-1256 bytes
     const cp1256 = Uint8Array.from([
-      0x71, 0x2c, 0x61, 0x0a, 0xd3, 0xed, 0xc7, 0xd3, 0xc9, 0x20, 0xc7, 0xe1, 0xc7, 0xd3, 0xca, 0xd1, 0xcc, 0xc7, 0xda, 0x2c,
-      0xe4, 0xda, 0xe3, 0x0a,
+      0x71, 0x2c, 0x61, 0x0a, 0xd3, 0xed, 0xc7, 0xd3, 0xc9, 0x20, 0xc7, 0xe1, 0xc7, 0xd3, 0xca, 0xd1, 0xcc,
+      0xc7, 0xda, 0x2c, 0xe4, 0xda, 0xe3, 0x0a,
     ]);
     expect(detectCSVEncoding(cp1256)).toBe('windows-1256');
     expect(detectCSVEncoding(Uint8Array.from([0xff, 0xfe, 0x61, 0x00]))).toBe('utf-16le');
@@ -113,8 +113,16 @@ describe('wordDiff', () => {
     const ops = wordDiff('Refunds within 30 days', 'Refunds within 45 days')!;
     expect(ops.filter((o) => o.kind === 'del').map((o) => o.text)).toEqual(['30']);
     expect(ops.filter((o) => o.kind === 'add').map((o) => o.text)).toEqual(['45']);
-    expect(diffSide(ops, 'before').map((o) => o.text).join('')).toBe('Refunds within 30 days');
-    expect(diffSide(ops, 'after').map((o) => o.text).join('')).toBe('Refunds within 45 days');
+    expect(
+      diffSide(ops, 'before')
+        .map((o) => o.text)
+        .join(''),
+    ).toBe('Refunds within 30 days');
+    expect(
+      diffSide(ops, 'after')
+        .map((o) => o.text)
+        .join(''),
+    ).toBe('Refunds within 45 days');
   });
   it('gives up past the token budget', () => {
     const a = Array.from({ length: DIFF_TOKEN_BUDGET }, (_, i) => `w${i}`).join(' ');
@@ -170,13 +178,13 @@ describe('versions', () => {
   it('state line', () => {
     const base = { production_version: null, latest_version: null } as unknown as Dataset;
     expect(catalogStateLine(base)).toBe('empty');
-    expect(catalogStateLine({ ...base, production_version: versions[2]!, latest_version: versions[0]! })).toBe(
-      'v1 prod · v3 draft',
-    );
+    expect(
+      catalogStateLine({ ...base, production_version: versions[2]!, latest_version: versions[0]! }),
+    ).toBe('v1 prod · v3 draft');
     expect(catalogStateLine({ ...base, latest_version: versions[0]! })).toBe('v3 draft · never published');
-    expect(catalogStateLine({ ...base, production_version: versions[2]!, latest_version: versions[2]! })).toBe(
-      'v1 prod · current',
-    );
+    expect(
+      catalogStateLine({ ...base, production_version: versions[2]!, latest_version: versions[2]! }),
+    ).toBe('v1 prod · current');
   });
 });
 

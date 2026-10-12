@@ -4,12 +4,17 @@ import { test, expect } from '@playwright/test';
 import { gotoApp } from '../helpers';
 import { analysisUrl, patchJson, seedAnalyzer, step, toggleBox, trackErrors, waitWorkspace } from './helpers';
 
-const guidanceUrl = (slug: string, tab: 'rules' | 'documents' | 'categories') => `/projects/${slug}/analysis?scope=${tab}`;
+const guidanceUrl = (slug: string, tab: 'rules' | 'documents' | 'categories') =>
+  `/projects/${slug}/analysis?scope=${tab}`;
 
-const isRuleSave = (r: { method(): string; url(): string }) => r.method() === 'PATCH' && /analysis-context$/.test(r.url());
+const isRuleSave = (r: { method(): string; url(): string }) =>
+  r.method() === 'PATCH' && /analysis-context$/.test(r.url());
 
 test.describe('Rules tab as manager (10)', () => {
-  test('draft -> autosave -> publish live -> new draft -> compare, merge, delete', async ({ page, request }) => {
+  test('draft -> autosave -> publish live -> new draft -> compare, merge, delete', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     const t = trackErrors(page);
     await gotoApp(page, guidanceUrl(seed.slug, 'rules'));
@@ -36,7 +41,11 @@ test.describe('Rules tab as manager (10)', () => {
     // publish with "Set as production"
     await page.getByRole('button', { name: 'Publish' }).click();
     const publish = page.getByRole('dialog', { name: 'Publish v1' });
-    await expect(publish.getByRole('switch', { name: 'Set as production' })).toBeChecked();
+    // Publishing is not a go-live by default (old behaviour): the switch starts off.
+    const prod = publish.getByRole('switch', { name: 'Set as production' });
+    await expect(prod).not.toBeChecked();
+    await toggleBox(prod);
+    await expect(prod).toBeChecked();
     await publish.getByRole('button', { name: 'Publish' }).click();
     await expect(page.getByText('v1 published and live').first()).toBeVisible();
     const list = page.getByRole('complementary', { name: 'Rule versions' });
@@ -49,7 +58,9 @@ test.describe('Rules tab as manager (10)', () => {
     await expect(page.getByRole('heading', { name: 'Rules in v2' })).toBeVisible();
     await page.getByRole('button', { name: 'Cite the context', exact: true }).click();
     const edit = page.waitForRequest(isRuleSave);
-    await page.getByRole('textbox', { name: 'Instruction' }).fill('Quote the supporting context lines verbatim.');
+    await page
+      .getByRole('textbox', { name: 'Instruction' })
+      .fill('Quote the supporting context lines verbatim.');
     await edit;
     await expect(page.getByText('Draft saved')).toBeVisible();
 
@@ -76,7 +87,9 @@ test.describe('Rules tab as manager (10)', () => {
     // delete the draft after a confirm
     await page.getByRole('button', { name: 'Actions for v2' }).click();
     await page.getByRole('menuitem', { name: 'Delete version' }).click();
-    const confirm = page.getByRole('alertdialog', { name: 'Delete version?' }).or(page.getByRole('dialog', { name: 'Delete version?' }));
+    const confirm = page
+      .getByRole('alertdialog', { name: 'Delete version?' })
+      .or(page.getByRole('dialog', { name: 'Delete version?' }));
     await expect(confirm).toContainText('v2 is removed from the history');
     await confirm.getByRole('button', { name: 'Delete version' }).click();
     await expect(page.getByText('v2 deleted').first()).toBeVisible();
@@ -84,11 +97,18 @@ test.describe('Rules tab as manager (10)', () => {
     expect(t.errors, t.errors.join('\n')).toEqual([]);
   });
 
-  test('Generate rules: no sources gives an inline reason; an uploaded document lets the stub write rules', async ({ page, request }) => {
+  test('Generate rules: no sources gives an inline reason; an uploaded document lets the stub write rules', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, guidanceUrl(seed.slug, 'rules'));
     await expect(page.getByRole('button', { name: 'Generate rules' })).toBeDisabled();
-    await expect(page.getByText(/Rules cannot be generated yet\. This project has neither an enabled project document nor an approved example/)).toBeVisible();
+    await expect(
+      page.getByText(
+        /Rules cannot be generated yet\. This project has neither an enabled project document nor an approved example/,
+      ),
+    ).toBeVisible();
 
     await page.getByRole('tab', { name: /^Documents/ }).click();
     await page.getByTestId('document-input').setInputFiles({
@@ -115,7 +135,11 @@ test.describe('Documents (11)', () => {
     await gotoApp(page, guidanceUrl(seed.slug, 'documents'));
     await expect(page.getByText('No project documents yet')).toBeVisible();
     const upload = page.waitForRequest((r) => r.method() === 'POST' && /analysis-documents$/.test(r.url()));
-    await page.getByTestId('document-input').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello analyzer, short notes') });
+    await page.getByTestId('document-input').setInputFiles({
+      name: 'notes.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('hello analyzer, short notes'),
+    });
     await upload;
     const library = page.getByRole('list', { name: 'Document library' });
     await expect(library).toContainText('notes.txt');
@@ -129,7 +153,9 @@ test.describe('Documents (11)', () => {
     await expect(page.getByText('0 of 1 enabled')).toBeVisible();
 
     await page.getByRole('button', { name: 'Delete notes.txt' }).click();
-    const confirm = page.getByRole('alertdialog', { name: 'Delete document?' }).or(page.getByRole('dialog', { name: 'Delete document?' }));
+    const confirm = page
+      .getByRole('alertdialog', { name: 'Delete document?' })
+      .or(page.getByRole('dialog', { name: 'Delete document?' }));
     const del = page.waitForRequest((r) => r.method() === 'DELETE' && /analysis-documents\//.test(r.url()));
     await confirm.getByRole('button', { name: 'Delete document' }).click();
     await del;
@@ -138,7 +164,10 @@ test.describe('Documents (11)', () => {
     expect(t.errors, t.errors.join('\n')).toEqual([]);
   });
 
-  test('a document above 40,000 characters asks first, then re-uploads with large_document_action=full', async ({ page, request }) => {
+  test('a document above 40,000 characters asks first, then re-uploads with large_document_action=full', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, guidanceUrl(seed.slug, 'documents'));
     // multipart (File) bodies are not exposed by Playwright: record the form field in the page instead
@@ -147,7 +176,8 @@ test.describe('Documents (11)', () => {
       w.__uploads = [];
       const original = window.fetch;
       window.fetch = (input, init) => {
-        if (init?.body instanceof FormData && init.method === 'POST') w.__uploads.push(String(init.body.get('large_document_action')));
+        if (init?.body instanceof FormData && init.method === 'POST')
+          w.__uploads.push(String(init.body.get('large_document_action')));
         return original(input, init);
       };
     });
@@ -157,9 +187,11 @@ test.describe('Documents (11)', () => {
     await page.getByTestId('document-input').setInputFiles({
       name: 'big.txt',
       mimeType: 'text/plain',
-      buffer: Buffer.from(('The analyzer reads every line of this long reference. ').repeat(900)),
+      buffer: Buffer.from('The analyzer reads every line of this long reference. '.repeat(900)),
     });
-    const dialog = page.getByRole('alertdialog', { name: 'Send the full document?' }).or(page.getByRole('dialog', { name: 'Send the full document?' }));
+    const dialog = page
+      .getByRole('alertdialog', { name: 'Send the full document?' })
+      .or(page.getByRole('dialog', { name: 'Send the full document?' }));
     await expect(dialog).toContainText('big.txt has');
     await expect(dialog).toContainText('characters');
     await dialog.getByRole('button', { name: 'Upload in full' }).click();
@@ -170,7 +202,7 @@ test.describe('Documents (11)', () => {
     await page.getByTestId('document-input').setInputFiles({
       name: 'big2.txt',
       mimeType: 'text/plain',
-      buffer: Buffer.from(('Another long reference document with plenty of words. ').repeat(900)),
+      buffer: Buffer.from('Another long reference document with plenty of words. '.repeat(900)),
     });
     await expect(dialog).toBeVisible();
     await page.keyboard.press('Escape');
@@ -182,7 +214,10 @@ test.describe('Documents (11)', () => {
 });
 
 test.describe('Diagnosis (12)', () => {
-  test('a category needs a taxonomy; saving sends base_revision; new categories are marked Needs examples', async ({ page, request }) => {
+  test('a category needs a taxonomy; saving sends base_revision; new categories are marked Needs examples', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, guidanceUrl(seed.slug, 'categories'));
     await expect(page.getByRole('tab', { name: /^Hallucination Needs examples/ })).toBeVisible();
@@ -193,7 +228,10 @@ test.describe('Diagnosis (12)', () => {
     await expect(page.getByTestId('catalog-save-state')).toHaveText('Unsaved changes');
 
     let puts = 0;
-    page.on('request', (r) => r.method() === 'PUT' && /analysis-category-catalog/.test(r.url()) && (puts += 1));
+    page.on(
+      'request',
+      (r) => r.method() === 'PUT' && /analysis-category-catalog/.test(r.url()) && (puts += 1),
+    );
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByTestId('catalog-save-state')).toHaveText('Taxonomy required');
     await expect(page.getByText('Add both Description and Use when for: Brand Voice.')).toBeVisible();
@@ -201,11 +239,16 @@ test.describe('Diagnosis (12)', () => {
     await expect(page.getByRole('tab', { name: /^Brand Voice.*Incomplete/ })).toBeVisible();
     expect(puts).toBe(0);
 
-    await page.getByRole('textbox', { name: /^Description/ }).fill('Tone and wording that break the brand style guide.');
+    await page
+      .getByRole('textbox', { name: /^Description/ })
+      .fill('Tone and wording that break the brand style guide.');
     await page.getByRole('textbox', { name: /^Use when/ }).fill('The answer is right but written off-brand.');
     const put = page.waitForRequest((r) => r.method() === 'PUT' && /analysis-category-catalog/.test(r.url()));
     await page.getByRole('button', { name: 'Save changes' }).click();
-    const body = (await put).postDataJSON() as { base_revision?: number; categories: Array<{ category?: string; name?: string }> };
+    const body = (await put).postDataJSON() as {
+      base_revision?: number;
+      categories: Array<{ category?: string; name?: string }>;
+    };
     expect('base_revision' in body).toBe(true);
     expect(JSON.stringify(body)).toContain('Brand Voice');
     await expect(page.getByText('Categories saved').first()).toBeVisible();
@@ -225,11 +268,18 @@ test.describe('Diagnosis (12)', () => {
       if (route.request().method() !== 'PUT') return route.continue();
       bodies.push(route.request().postDataJSON() as { base_revision?: number });
       call += 1;
-      if (call === 2) return route.fulfill({ json: { catalog: { version: 100, categories: [] }, created: true } });
+      if (call === 2)
+        return route.fulfill({ json: { catalog: { version: 100, categories: [] }, created: true } });
       if (call === 1 || call === 3)
         return route.fulfill({
           status: 409,
-          json: { detail: { code: 'catalog_version_conflict', message: 'The catalog changed.', current_catalog: { version: 99, categories: [] } } },
+          json: {
+            detail: {
+              code: 'catalog_version_conflict',
+              message: 'The catalog changed.',
+              current_catalog: { version: 99, categories: [] },
+            },
+          },
         });
       return route.continue();
     });
@@ -269,7 +319,10 @@ test.describe('Diagnosis (12)', () => {
 });
 
 test.describe('read-only view (13)', () => {
-  test('without manage rights: banners, no dropzone, readonly inputs, Save / Publish unavailable', async ({ page, request }) => {
+  test('without manage rights: banners, no dropzone, readonly inputs, Save / Publish unavailable', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     // The platform grants the flags per project role; simulate a MEMBER by answering the config without them.
     await patchJson(page, /\/analysis-config$/, (c) => ({
@@ -278,7 +331,11 @@ test.describe('read-only view (13)', () => {
       can_manage_category_catalog: false,
       can_operate_analyzer: false,
     }));
-    await patchJson(page, /analysis-rule-versions\?/, (v) => ({ ...v, can_activate: false, can_delete: false }));
+    await patchJson(page, /analysis-rule-versions\?/, (v) => ({
+      ...v,
+      can_activate: false,
+      can_delete: false,
+    }));
 
     await gotoApp(page, guidanceUrl(seed.slug, 'categories'));
     await expect(page.getByText('Project manager access is required to edit categories.')).toBeVisible();
@@ -302,13 +359,20 @@ test.describe('read-only view (13)', () => {
     // the run workspace explains that running needs member access and disables Test / Analyze
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await expect(page.getByText('You can read this workspace, but running analyses needs project member access.')).toBeVisible();
+    await expect(
+      page.getByText(
+        'You can view this analysis setup. Only project managers and the run’s owner can upload documents or run analysis, and only managers can change rules.',
+      ),
+    ).toBeVisible();
     await step(page, 'Run').click();
     await expect(page.getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeDisabled();
     await expect(page.getByRole('button', { name: /^Test Selected/ })).toBeDisabled();
   });
 
-  test('no LLM connection: banner and disabled Test / Analyze; Preview still works', async ({ page, request }) => {
+  test('no LLM connection: banner and disabled Test / Analyze; Preview still works', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request, { model: '' });
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
@@ -325,11 +389,17 @@ test.describe('project scope (15)', () => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, `/projects/${seed.slug}/analysis`);
     await expect(page.getByText('Select a run to analyze')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open Runs' })).toHaveAttribute('href', new RegExp(`/projects/${seed.slug}$`));
+    await expect(page.getByRole('link', { name: 'Open Runs' })).toHaveAttribute(
+      'href',
+      new RegExp(`/projects/${seed.slug}$`),
+    );
     await page.getByRole('button', { name: 'Open project guidance' }).click();
     await expect(page).toHaveURL(/scope=categories/);
     const tabs = page.getByRole('tablist', { name: 'Project guidance' });
-    await expect(tabs.getByRole('tab', { name: /^Diagnosis categories/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.getByRole('tab', { name: /^Diagnosis categories/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await tabs.getByRole('tab', { name: /^Production rules/ }).click();
     await expect(page).toHaveURL(/scope=rules/);
     await expect(page.getByRole('heading', { name: 'Rules in v1' })).toBeVisible();
@@ -340,12 +410,21 @@ test.describe('project scope (15)', () => {
     await expect(page.getByText('Select a run to analyze')).toBeVisible();
     // legacy scope aliases
     await gotoApp(page, `/projects/${seed.slug}/analysis?scope=diagnosis`);
-    await expect(page.getByRole('tab', { name: /^Diagnosis categories/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: /^Diagnosis categories/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await gotoApp(page, `/projects/${seed.slug}/analysis?scope=project`);
-    await expect(page.getByRole('tab', { name: /^Production rules/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: /^Production rules/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 
-  test('the guidance area is reachable from a run workspace and keeps the run in the URL', async ({ page, request }) => {
+  test('the guidance area is reachable from a run workspace and keeps the run in the URL', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
@@ -357,4 +436,3 @@ test.describe('project scope (15)', () => {
     await waitWorkspace(page);
   });
 });
-

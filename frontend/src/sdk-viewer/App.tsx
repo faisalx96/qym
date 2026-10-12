@@ -66,6 +66,7 @@ function Header({ data }: { data: ViewerData }) {
         {run.status === 'STOPPED' ? 'Stopped' : 'Completed'}
       </Badge>
     );
+  else if (data.noLiveRun) badge = <></>;
   else if (data.connection === 'reconnecting') badge = <Badge tone="warning">Reconnecting</Badge>;
   else if (data.connection === 'live')
     badge = (
@@ -86,6 +87,16 @@ function Header({ data }: { data: ViewerData }) {
       {run.run_name ? (
         <span className={s.chipPlain} title={run.run_name}>
           {run.run_name}
+        </span>
+      ) : null}
+      {run.config?.max_concurrency ? (
+        <span className={s.chipPlain} title="Max concurrency">
+          Concurrency {run.config.max_concurrency}
+        </span>
+      ) : null}
+      {run.config?.timeout ? (
+        <span className={s.chipPlain} title="Per-item timeout">
+          Timeout {run.config.timeout}s
         </span>
       ) : null}
       {run.model ? (
@@ -140,17 +151,24 @@ function FullError({ data }: { data: ViewerData }) {
   );
 }
 
-function Waiting({ loading, live }: { loading: boolean; live: boolean }) {
+function Waiting({ loading, live, noLiveRun }: { loading: boolean; live: boolean; noLiveRun: boolean }) {
   return (
     <div className={s.center} role="status" aria-busy={loading || undefined}>
       <h1 className={s.centerTitle}>
         {loading
           ? 'Connecting to the evaluation'
-          : live
-            ? 'Waiting for the first row'
-            : 'This results file has no rows'}
+          : noLiveRun
+            ? 'No evaluation is running here'
+            : live
+              ? 'Waiting for the first row'
+              : 'This results file has no rows'}
       </h1>
-      {live && !loading ? (
+      {noLiveRun ? (
+        <p className={s.centerBody}>
+          Open a results file with <code>qym ui FILE</code>, or start a run with{' '}
+          <code>qym run create --local-ui</code>.
+        </p>
+      ) : live && !loading ? (
         <p className={s.centerBody}>
           Rows appear here as the evaluation produces them. This page updates by itself.
         </p>
@@ -213,133 +231,142 @@ export function App() {
 
   const hasRows = rows.length > 0;
   const live = data.source.mode === 'live';
+  const loaded = !data.loading && hasRows && !!data.snapshot;
   return (
     <div className={s.page}>
-      <a
-        className={s.skip}
-        href="#rows"
-        onClick={(e) => {
-          e.preventDefault();
-          document.querySelector<HTMLElement>('tr[data-row][tabindex="0"]')?.focus();
-        }}
-      >
-        Skip to rows
-      </a>
+      {loaded ? (
+        <a
+          className={s.skip}
+          href="#rows"
+          onClick={(e) => {
+            e.preventDefault();
+            document.querySelector<HTMLElement>('tr[data-row][tabindex="0"]')?.focus();
+          }}
+        >
+          Skip to rows
+        </a>
+      ) : null}
       <Header data={data} />
-      {live && !data.finished && data.connection === 'reconnecting' ? (
-        <Notice tone="warning" action={{ label: 'Reload', run: data.reload }}>
-          Lost the connection to the evaluation. Retrying automatically; the run may have stopped.
-        </Notice>
-      ) : null}
-      {live && !data.finished && data.connection === 'closed' ? (
-        <Notice tone="error" action={{ label: 'Reload', run: data.reload }}>
-          The connection to the evaluation closed unexpectedly.
-        </Notice>
-      ) : null}
-      {data.error && data.snapshot ? (
-        <Notice tone="error" action={{ label: 'Retry', run: data.reload }}>
-          {data.error.message}
-        </Notice>
-      ) : null}
-      {data.loading || !hasRows || !data.snapshot ? (
-        <Waiting loading={data.loading} live={live} />
-      ) : (
-        <>
-          <Summary
-            snapshot={data.snapshot}
-            run={data.run}
-            finished={data.finished}
-            visible={visible}
-            selected={selectedIndex}
-            onOpen={open}
-          />
-          <div className={s.toolbar} role="search">
-            <input
-              className={s.control}
-              type="search"
-              aria-label="Search input, output and expected"
-              placeholder="Search rows"
-              value={view.q}
-              onChange={(e) => updateView({ q: e.target.value })}
+      <main className={s.main}>
+        {loaded ? (
+          <h1 className={s.srOnly}>{data.run.run_name || data.run.dataset_name || 'Evaluation results'}</h1>
+        ) : null}
+        {live && !data.noLiveRun && !data.finished && data.connection === 'reconnecting' ? (
+          <Notice tone="warning" action={{ label: 'Reload', run: data.reload }}>
+            Lost the connection to the evaluation. Retrying automatically; the run may have stopped.
+          </Notice>
+        ) : null}
+        {live && !data.noLiveRun && !data.finished && data.connection === 'closed' ? (
+          <Notice tone="error" action={{ label: 'Reload', run: data.reload }}>
+            The connection to the evaluation closed unexpectedly.
+          </Notice>
+        ) : null}
+        {data.error && data.snapshot ? (
+          <Notice tone="error" action={{ label: 'Retry', run: data.reload }}>
+            {data.error.message}
+          </Notice>
+        ) : null}
+        {data.loading || !hasRows || !data.snapshot ? (
+          <Waiting loading={data.loading} live={live} noLiveRun={data.noLiveRun} />
+        ) : (
+          <>
+            <Summary
+              snapshot={data.snapshot}
+              run={data.run}
+              finished={data.finished}
+              paused={live && data.connection === 'reconnecting'}
+              visible={visible}
+              selected={selectedIndex}
+              onOpen={open}
             />
-            <select
-              className={s.control}
-              aria-label="Filter by status"
-              value={view.status}
-              onChange={(e) => updateView({ status: e.target.value as StatusFilter })}
-            >
-              {STATUS_FILTERS.map((f) => (
-                <option key={f} value={f}>
-                  {f === 'all' ? 'All statuses' : STATUS_LABEL[f]}
-                </option>
-              ))}
-            </select>
-            <span className={s.count} role="status">
-              {shown.length} of {rows.length} rows
-            </span>
-            {view.q || view.status !== 'all' || view.sort !== 'index' || view.dir !== 'asc' ? (
-              <button type="button" className={s.btn} onClick={() => updateView(DEFAULT_VIEW)}>
-                Reset view
+            <div className={s.toolbar} role="search">
+              <input
+                className={s.control}
+                type="search"
+                aria-label="Search input, output and expected"
+                placeholder="Search rows"
+                value={view.q}
+                onChange={(e) => updateView({ q: e.target.value })}
+              />
+              <select
+                className={s.control}
+                aria-label="Filter by status"
+                value={view.status}
+                onChange={(e) => updateView({ status: e.target.value as StatusFilter })}
+              >
+                {STATUS_FILTERS.map((f) => (
+                  <option key={f} value={f}>
+                    {f === 'all' ? 'All statuses' : STATUS_LABEL[f]}
+                  </option>
+                ))}
+              </select>
+              <span className={s.count} role="status">
+                {shown.length} of {rows.length} rows
+              </span>
+              {view.q || view.status !== 'all' || view.sort !== 'index' || view.dir !== 'asc' ? (
+                <button type="button" className={s.btn} onClick={() => updateView(DEFAULT_VIEW)}>
+                  Reset view
+                </button>
+              ) : null}
+              <span className={s.grow} />
+              <button
+                type="button"
+                className={s.btn}
+                disabled={!shown.length}
+                onClick={() =>
+                  downloadText(
+                    `qym_${safeFilename(data.run.dataset_name ?? 'run')}_${safeFilename(data.run.run_name ?? '')}.csv`,
+                    rowsToCsv(shown, names),
+                  )
+                }
+              >
+                Export CSV
               </button>
-            ) : null}
-            <span className={s.grow} />
-            <button
-              type="button"
-              className={s.btn}
-              disabled={!shown.length}
-              onClick={() =>
-                downloadText(
-                  `qym_${safeFilename(data.run.dataset_name ?? 'run')}_${safeFilename(data.run.run_name ?? '')}.csv`,
-                  rowsToCsv(shown, names),
-                )
-              }
-            >
-              Export CSV
-            </button>
-          </div>
-          <div className={s.body} data-open={selected ? true : undefined}>
-            <div className={s.list}>
-              {shown.length ? (
-                <RowList
-                  rows={shown}
-                  metricNames={names}
-                  selected={selectedIndex}
-                  sort={view.sort}
-                  dir={view.dir}
-                  onSort={toggleSort}
-                  onOpen={open}
-                />
-              ) : (
-                <div className={s.center} role="status">
-                  <h2 className={s.centerTitle}>No rows match</h2>
-                  <button type="button" className={s.btn} onClick={() => updateView(DEFAULT_VIEW)}>
-                    Clear filters
-                  </button>
-                </div>
-              )}
             </div>
-            <aside className={s.right} aria-label="Row detail">
-              {selected ? (
-                <Detail
-                  ref={detailRef}
-                  row={selected}
-                  metricNames={names}
-                  run={data.run}
-                  canEdit={fileMode}
-                  onClose={close}
-                  onSaveScore={data.saveScore}
-                />
-              ) : (
-                <p className={s.hint}>
-                  {rows.some((r) => r.status === 'error')
-                    ? 'Select a row or a ribbon cell to read it in full. Red cells are failures.'
-                    : 'Select a row or a ribbon cell to read it in full.'}
-                </p>
-              )}
-            </aside>
-          </div>
-        </>
-      )}
+            <div className={s.body} data-open={selected ? true : undefined}>
+              <div className={s.list}>
+                {shown.length ? (
+                  <RowList
+                    rows={shown}
+                    metricNames={names}
+                    selected={selectedIndex}
+                    sort={view.sort}
+                    dir={view.dir}
+                    onSort={toggleSort}
+                    onOpen={open}
+                  />
+                ) : (
+                  <div className={s.center} role="status">
+                    <h2 className={s.centerTitle}>No rows match</h2>
+                    <button type="button" className={s.btn} onClick={() => updateView(DEFAULT_VIEW)}>
+                      Clear filters
+                    </button>
+                  </div>
+                )}
+              </div>
+              <aside className={s.right} aria-label="Row detail">
+                {selected ? (
+                  <Detail
+                    ref={detailRef}
+                    row={selected}
+                    metricNames={names}
+                    run={data.run}
+                    canEdit={fileMode && data.run.editable !== false}
+                    onClose={close}
+                    onSaveScore={data.saveScore}
+                  />
+                ) : (
+                  <p className={s.hint}>
+                    {rows.some((r) => r.status === 'error')
+                      ? 'Select a row or a ribbon cell to read it in full. Red cells are failures.'
+                      : 'Select a row or a ribbon cell to read it in full.'}
+                  </p>
+                )}
+              </aside>
+            </div>
+          </>
+        )}
+      </main>
     </div>
   );
 }

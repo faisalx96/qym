@@ -12,7 +12,8 @@ test.describe('open the workspace (1)', () => {
     await waitWorkspace(page);
     const steps = page.getByRole('list', { name: 'Analysis steps' }).getByRole('listitem');
     await expect(steps).toHaveCount(4);
-    for (const label of ['Configure', 'Preview', 'Run', 'Review'] as const) await expect(step(page, label)).toBeVisible();
+    for (const label of ['Configure', 'Preview', 'Run', 'Review'] as const)
+      await expect(step(page, label)).toBeVisible();
     await expect(step(page, 'Configure')).toHaveAttribute('aria-current', 'step');
     await expect(step(page, 'Configure')).toContainText('4 targets');
     // Run step carries the footer action
@@ -36,7 +37,10 @@ test.describe('open the workspace (1)', () => {
     await expect(page).toHaveURL(new RegExp(`/projects/${seed.slug}/analysis\\?run=${seed.runId}`));
     await waitWorkspace(page);
 
-    await gotoApp(page, `/projects/${seed.slug}/runs/${seed.runId}/analyzer?pass=1&metric=execution_accuracy`);
+    await gotoApp(
+      page,
+      `/projects/${seed.slug}/runs/${seed.runId}/analyzer?pass=1&metric=execution_accuracy`,
+    );
     await expect(page).toHaveURL(new RegExp(`/analysis\\?.*run=${seed.runId}`));
     await expect(page).toHaveURL(/pass=1/);
     await expect(page).toHaveURL(/metric=execution_accuracy/);
@@ -45,7 +49,10 @@ test.describe('open the workspace (1)', () => {
 });
 
 test.describe('sample picker (2)', () => {
-  test('repeat run without pass: pick a sample, URL gains pass, Analyze sends pass_number', async ({ page, request }) => {
+  test('repeat run without pass: pick a sample, URL gains pass, Analyze sends pass_number', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request, { withRepeat: true });
     await gotoApp(page, analysisUrl(seed.slug, seed.repeatId!));
     await expect(page.getByText('Choose a sample')).toBeVisible();
@@ -60,7 +67,10 @@ test.describe('sample picker (2)', () => {
     expect(body.pass_number).toBe(2);
   });
 
-  test('?pass= given: workspace loads straight away and the Sample select is present', async ({ page, request }) => {
+  test('?pass= given: workspace loads straight away and the Sample select is present', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request, { withRepeat: true });
     await gotoApp(page, analysisUrl(seed.slug, seed.repeatId!, '&pass=1'));
     await waitWorkspace(page);
@@ -69,7 +79,10 @@ test.describe('sample picker (2)', () => {
 });
 
 test.describe('metric chips (3)', () => {
-  test('toggle off updates the target count and note; Clear shows the empty reason; ?metric= preselects', async ({ page, request }) => {
+  test('toggle off updates the target count and note; Clear shows the empty reason; ?metric= preselects', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
@@ -77,7 +90,10 @@ test.describe('metric chips (3)', () => {
     await expect(step(page, 'Configure')).toContainText('4 targets');
     await expect(page.getByText('2 of 2 metrics selected')).toBeVisible();
     await metrics.getByRole('button', { name: 'exact_match' }).click();
-    await expect(metrics.getByRole('button', { name: 'exact_match' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(metrics.getByRole('button', { name: 'exact_match' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
     await expect(step(page, 'Configure')).toContainText('2 targets');
     await expect(page.getByText('1 of 2 metrics selected')).toBeVisible();
     await metrics.getByRole('button', { name: 'Clear' }).click();
@@ -89,7 +105,10 @@ test.describe('metric chips (3)', () => {
     await gotoApp(page, analysisUrl(seed.slug, seed.runId, '&metric=execution_accuracy'));
     await waitWorkspace(page);
     const m2 = page.getByRole('group', { name: 'Metrics to analyze' });
-    await expect(m2.getByRole('button', { name: 'execution_accuracy' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(m2.getByRole('button', { name: 'execution_accuracy' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await expect(m2.getByRole('button', { name: 'exact_match' })).toHaveAttribute('aria-pressed', 'false');
     await expect(step(page, 'Configure')).toContainText('2 targets');
   });
@@ -117,7 +136,9 @@ test.describe('prompt preview (4)', () => {
     await page.getByRole('option', { name: /item-3 · exact_match/ }).click();
     const req = await next;
     expect((req.postDataJSON() as { item_id: string }).item_id).toBe('item-3');
-    await expect(page.getByRole('region', { name: 'Prompt messages' })).toContainText('item-3'.replace('item-3', 'q 3'));
+    await expect(page.getByRole('region', { name: 'Prompt messages' })).toContainText(
+      'item-3'.replace('item-3', 'q 3'),
+    );
     await page.waitForTimeout(900); // debounce window + settle: nothing more may follow
     expect(hits.length).toBe(1);
 
@@ -134,7 +155,11 @@ test.describe('prompt preview (4)', () => {
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
     const chip = page.getByRole('button', { name: /exact_match 0.00, preview target of item-2/ });
-    const preview = page.waitForRequest((r) => r.url().includes('/analyze-preview') && (r.postDataJSON() as { item_id: string }).item_id === 'item-2');
+    const preview = page.waitForRequest(
+      (r) =>
+        r.url().includes('/analyze-preview') &&
+        (r.postDataJSON() as { item_id: string }).item_id === 'item-2',
+    );
     await chip.click();
     await expect(chip).toHaveAttribute('aria-pressed', 'true');
     await preview;
@@ -166,17 +191,25 @@ test.describe('variable mapping (5)', () => {
     await toggleBox(picker.getByRole('checkbox', { name: 'Use full value' }));
     const narrowed = page.waitForRequest((r) => {
       if (!r.url().includes('/analyze-preview')) return false;
-      const m = (r.postDataJSON() as { config: { custom_variable_mapping?: Record<string, unknown> } }).config.custom_variable_mapping;
+      const m = (r.postDataJSON() as { config: { custom_variable_mapping?: Record<string, unknown> } }).config
+        .custom_variable_mapping;
       return Array.isArray(m?.rubric);
     });
     await toggleBox(picker.getByRole('checkbox', { name: /^question$/ }));
-    const sent2 = (await narrowed).postDataJSON() as { config: { custom_variable_mapping: Record<string, string[]> } };
+    const sent2 = (await narrowed).postDataJSON() as {
+      config: { custom_variable_mapping: Record<string, string[]> };
+    };
     expect(sent2.config.custom_variable_mapping.rubric.join('|')).not.toContain('question');
     expect(sent2.config.custom_variable_mapping.rubric.length).toBeGreaterThan(0);
     await expect(page.getByRole('button', { name: /^\d+ fields?$/ })).toBeVisible();
 
     // changing a standard row (Input -> output) sends field_mapping
-    const std = page.waitForRequest((r) => r.url().includes('/analyze-preview') && (r.postDataJSON() as { config: { field_mapping?: Record<string, string> } }).config.field_mapping?.input !== undefined);
+    const std = page.waitForRequest(
+      (r) =>
+        r.url().includes('/analyze-preview') &&
+        (r.postDataJSON() as { config: { field_mapping?: Record<string, string> } }).config.field_mapping
+          ?.input !== undefined,
+    );
     await page.getByRole('button', { name: /Input source/ }).click();
     await page.getByRole('option', { name: 'output', exact: true }).click();
     const sent = (await std).postDataJSON() as { config: { field_mapping: Record<string, string> } };

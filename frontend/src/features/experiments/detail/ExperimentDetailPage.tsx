@@ -7,6 +7,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMe } from '@/api/me';
 import { hasLiveJobs, useExperiment, type ExperimentDetail, type ExperimentJob } from '@/api/experiments';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
+import { useCrumbLabel } from '@/lib/crumb-label';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
 import { Button, ErrorState, PageHeader, Skeleton, StatStrip, Text } from '@/ui';
@@ -27,6 +28,7 @@ export function ExperimentDetailPage({ experimentId }: { experimentId: string })
   const query = useExperiment(project.id, experimentId);
   const showSkeleton = useDelayedPending(query.isPending);
   useDocumentTitle(`${query.data?.name ?? 'Experiment'} · ${project.name}`);
+  useCrumbLabel(query.data?.name);
   const back = (
     <Link to={experimentsPath(slug)} className={styles.back}>
       ← All experiments
@@ -72,6 +74,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
 
   const creator = Boolean(me.data?.id && x.created_by_user_id === me.data.id);
   const canControl = !flows.denied && !readOnly && (isAdmin || canManage || creator);
+  const canSavePreset = !flows.denied && !readOnly;
   const canPromote = !flows.denied && !readOnly && (isAdmin || canManage);
 
   const toggle = useCallback((runId: string, on: boolean) => {
@@ -209,6 +212,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
           onShowAttempts={showAttempts}
           flows={flows}
           canControl={canControl}
+          canSavePreset={canSavePreset}
           canPromote={canPromote}
           onPromote={(job) =>
             navigate(defaultPresetEditPath(slug, job.environment_id, { promote: 'job', id: job.id }))

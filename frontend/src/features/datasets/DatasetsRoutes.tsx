@@ -5,8 +5,12 @@ import { parseDatasetRoute } from './lib/route';
 import { CatalogPage } from './catalog/CatalogPage';
 import { DeletedDatasetsPage } from './catalog/DeletedDatasetsPage';
 
-const DatasetDetailPage = lazy(() => import('./detail/DatasetDetailPage').then((m) => ({ default: m.DatasetDetailPage })));
-const DatasetComparePage = lazy(() => import('./compare/DatasetComparePage').then((m) => ({ default: m.DatasetComparePage })));
+const DatasetDetailPage = lazy(() =>
+  import('./detail/DatasetDetailPage').then((m) => ({ default: m.DatasetDetailPage })),
+);
+const DatasetComparePage = lazy(() =>
+  import('./compare/DatasetComparePage').then((m) => ({ default: m.DatasetComparePage })),
+);
 
 export function DatasetsRoutes() {
   const params = useParams();

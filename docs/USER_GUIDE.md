@@ -36,7 +36,9 @@ qym run create --task-file my_task.py --task-function my_task \
 - When the run ends the page keeps the final state. If you are at a terminal the viewer
   stays up until Ctrl+C; in scripts and with `--json` it stops when the run ends.
 - From Python: `EvaluatorConfig(local_ui=True, ui_port=0)` (or `config={"local_ui": True}`),
-  then read `evaluator.local_ui_url`.
+  then read `evaluator.local_ui_url`. The viewer lives in your process: keep the script
+  alive to keep serving it. A later run on the same port replaces the earlier viewer.
+- If `--ui-port` is already taken, a warning is printed to stderr and a free port is used.
 - `--no-ui` only hides the terminal table; it does not control the browser viewer.
   Platform streaming (`QYM_API_KEY`) works at the same time.
 

@@ -31,7 +31,9 @@ test('choosing HIGH as the max priority shows the preemption warning for this en
   const { project } = await seedProject(request, 'envhighwarn');
   const env = await createEnvironment(request, project.id, 'staging', { maxPriority: 'NORMAL' });
   await gotoApp(page, envPath(project.slug, env.id));
-  const warning = page.getByText('Launching at HIGH cancels every running LOW/NORMAL job on staging for all users.');
+  const warning = page.getByText(
+    'Launching at HIGH cancels every running LOW/NORMAL job on staging for all users.',
+  );
   await expect(warning).toHaveCount(0);
   await pickSelect(page, 'Max priority', 'HIGH');
   await expect(warning).toBeVisible();

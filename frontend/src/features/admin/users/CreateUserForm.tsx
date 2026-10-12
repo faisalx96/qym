@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useCreateUser } from '@/api/admin';
 import { ApiError } from '@/lib/http';
+import { useSubmitLock } from '@/lib/pending';
 import { Button, Select, TextField, useToast } from '@/ui';
 import { isValidEmail } from '../format';
 import styles from './users.module.css';
@@ -17,6 +18,7 @@ export function CreateUserForm({ onCreated }: CreateUserFormProps) {
   const [role, setRole] = useState<'ADMIN' | 'MEMBER'>('MEMBER');
   const [error, setError] = useState<string | null>(null);
   const create = useCreateUser();
+  const lock = useSubmitLock();
   const toast = useToast();
 
   async function submit() {
@@ -25,7 +27,11 @@ export function CreateUserForm({ onCreated }: CreateUserFormProps) {
     if (!isValidEmail(trimmed)) return setError('Enter a valid email address.');
     setError(null);
     try {
-      const result = await create.mutateAsync({ email: trimmed, display_name: name.trim() || undefined, role });
+      const result = await create.mutateAsync({
+        email: trimmed,
+        display_name: name.trim() || undefined,
+        role,
+      });
       if (result.existing) {
         toast.show(`${result.email} already exists`, { tone: 'info' });
       } else {
@@ -36,7 +42,9 @@ export function CreateUserForm({ onCreated }: CreateUserFormProps) {
       }
       onCreated?.(result.id, Boolean(result.existing));
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e));
+      setError(
+        e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e),
+      );
     }
   }
 
@@ -47,7 +55,7 @@ export function CreateUserForm({ onCreated }: CreateUserFormProps) {
       data-create-user
       onSubmit={(e) => {
         e.preventDefault();
-        void submit();
+        void lock(submit);
       }}
     >
       <TextField
@@ -66,7 +74,15 @@ export function CreateUserForm({ onCreated }: CreateUserFormProps) {
         isDisabled={create.isPending}
         name="email"
       />
-      <TextField label="Display name" value={name} onChange={setName} placeholder="Optional" width={180} isDisabled={create.isPending} name="display_name" />
+      <TextField
+        label="Display name"
+        value={name}
+        onChange={setName}
+        placeholder="Optional"
+        width={180}
+        isDisabled={create.isPending}
+        name="display_name"
+      />
       <Select
         label="Role"
         items={[
@@ -79,7 +95,12 @@ export function CreateUserForm({ onCreated }: CreateUserFormProps) {
         isDisabled={create.isPending}
         name="role"
       />
-      <Button type="submit" variant="primary" loading={create.isPending} isDisabled={!email.trim() || create.isPending}>
+      <Button
+        type="submit"
+        variant="primary"
+        loading={create.isPending}
+        isDisabled={!email.trim() || create.isPending}
+      >
         Create user
       </Button>
     </form>

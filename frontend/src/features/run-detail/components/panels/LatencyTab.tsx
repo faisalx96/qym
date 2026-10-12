@@ -71,8 +71,7 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
               aria-label={`${p.key} ${durText(p.ms)}, filter to items at or above`}
               title="Click to filter the page to items at or above"
             >
-              <em>{p.key}</em>
-              <b>{durText(p.ms)}</b>
+              <em>{p.key}</em> <b>{durText(p.ms)}</b>
             </button>
           ))}
         </div>

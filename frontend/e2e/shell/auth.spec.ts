@@ -89,7 +89,10 @@ test.describe('session auth (QYM_E2E_AUTH_MODE=proxy_headers)', () => {
     const toggle = page.locator('[data-signup-toggle]');
     await expect(toggle).toBeVisible();
     // the mode switch keeps the typed email (brief §7.9)
-    await page.locator('[data-password-form]').getByRole('textbox', { name: /^Email/ }).fill(adminEmail);
+    await page
+      .locator('[data-password-form]')
+      .getByRole('textbox', { name: /^Email/ })
+      .fill(adminEmail);
     await toggle.click();
     const signup = page.locator('[data-signup-form]');
     await expect(signup).toBeVisible();
@@ -178,13 +181,18 @@ test.describe('session auth (QYM_E2E_AUTH_MODE=proxy_headers)', () => {
     baseURL,
   }) => {
     const email = `${uniqueSlug('member')}@e2e.local`;
-    const created = await admin.post('/v1/admin/users', { data: { email, display_name: 'Deep Link Member' } });
+    const created = await admin.post('/v1/admin/users', {
+      data: { email, display_name: 'Deep Link Member' },
+    });
     const { id } = (await created.json()) as { id: string };
     const reset = await admin.post(`/v1/admin/users/${id}/reset-password`);
     const { temporary_password: temp } = (await reset.json()) as { temporary_password: string };
     // set a real password through the API so the UI flow here is a plain sign-in. A throwaway context:
     // the change signs that user in, and a session cookie would outrank the admin's proxy header.
-    const anon = await playwright.request.newContext({ baseURL, extraHTTPHeaders: { Origin: baseURL ?? '' } });
+    const anon = await playwright.request.newContext({
+      baseURL,
+      extraHTTPHeaders: { Origin: baseURL ?? '' },
+    });
     const changed = await anon.post('/v1/auth/password/change', {
       data: { email, current_password: temp, new_password: PASSWORD },
     });

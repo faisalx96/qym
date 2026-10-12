@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useIssueAction } from '@/api/runs';
+import { isItemTaskError } from '@/lib/metrics';
 import { Button, Tag, useToast } from '@/ui';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import { rootCauseCategories, rootCauseIssues } from '../../lib/rowMeta';
@@ -11,11 +12,37 @@ import { messageFor } from '../items/ScoreEditor';
 import { IssueDialog } from './IssueDialog';
 import styles from './MetricAnalysisCards.module.css';
 
-function statusTag(status: string | undefined) {
-  const s = String(status ?? 'pending').toLowerCase();
-  if (s === 'approved') return <Tag tone="success">Approved</Tag>;
-  if (s === 'rejected') return <Tag tone="danger">Rejected</Tag>;
+function statusTag(status: string) {
+  if (status === 'approved') return <Tag tone="success">Approved</Tag>;
+  if (status === 'rejected')
+    return (
+      <Tag tone="danger" title="Reset it to pending on Reviews to decide it again">
+        Rejected
+      </Tag>
+    );
   return <Tag>Pending review</Tag>;
+}
+
+/**
+ * The status an issue is judged by: the server's per-issue review status (row.review_issue_statuses,
+ * by issue_id or position) first, then the issue JSON, the analysis and the legacy correction.
+ */
+export function issueStatus(
+  row: Row,
+  metric: string,
+  issue: RootCauseIssue,
+  index: number,
+  analysis: MetricAnalysis | undefined,
+): string {
+  const list = row.review_issue_statuses?.[metric];
+  if (Array.isArray(list)) {
+    const entry = issue.issue_id ? list.find((c) => c && c.issue_id === issue.issue_id) : list[index];
+    if (entry && (issue.issue_id || !entry.issue_id) && entry.status)
+      return String(entry.status).toLowerCase();
+  }
+  return String(
+    issue.review_status || analysis?.review_status || row.review_corrections?.[metric]?.status || 'pending',
+  ).toLowerCase();
 }
 
 function Card({
@@ -78,7 +105,7 @@ function Card({
             <div className={styles.issueHead}>
               <Tag kind="accent">{issue.category || 'Uncategorized'}</Tag>
               {issue.subcategory ? <span className={styles.sub}>{issue.subcategory}</span> : null}
-              {statusTag(issue.review_status)}
+              {statusTag(issueStatus(row, metric, issue, i, analysis))}
               {issue.confidence != null ? (
                 <span className={styles.conf}>{Math.round(issue.confidence * 100)}% confidence</span>
               ) : null}
@@ -87,7 +114,7 @@ function Card({
                   <Button size="sm" variant="neutral" onPress={() => setDialog({ open: true, issue })}>
                     Edit
                   </Button>
-                  {String(issue.review_status ?? 'pending').toLowerCase() !== 'approved' ? (
+                  {issueStatus(row, metric, issue, i, analysis) === 'pending' ? (
                     <Button
                       size="sm"
                       variant="accent"
@@ -153,8 +180,16 @@ export function MetricAnalysisCards({ row }: { row: Row }) {
   }
   const passNumber = model.viewPass ?? (model.isRepeat ? 1 : null);
   const canEdit = !readOnly;
+  // A task error or a missing outcome means the judges said nothing: only saved diagnoses show.
+  const noVerdict = isItemTaskError(row) || row.output_received === false;
   const cards = model.metricNames
     .map((metric) => {
+      if (noVerdict) {
+        const saved = analyses[metric];
+        return saved && !saved.error && rootCauseIssues(saved, false).length
+          ? { metric, analysis: saved }
+          : null;
+      }
       const idx = model.metricNames.indexOf(metric);
       const outcome = rowScoreFor(api.ctx, row, idx, metric);
       const failing = outcome.isError || rowPassesFor(api.ctx, metric, outcome) === false;

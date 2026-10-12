@@ -100,6 +100,11 @@ function docsOf(a: Record<string, unknown>) {
   return docs;
 }
 
+/** The span as ingested: the tree builder's own `_` bookkeeping fields are not part of it. */
+export function rawSpan(node: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(node).filter(([k]) => !k.startsWith('_')));
+}
+
 export function SpanDetail({ node }: { node: SpanNode }) {
   const a = useMemo(() => node.attributes ?? {}, [node.attributes]);
   const kind = spanKind(node);
@@ -202,20 +207,7 @@ export function SpanDetail({ node }: { node: SpanNode }) {
         </div>
       );
     }
-    return (
-      <JsonTree
-        data={{
-          ...node,
-          _children: undefined,
-          _depth: undefined,
-          _i: undefined,
-          _orphan: undefined,
-          _groupParent: undefined,
-        }}
-        expandDepth={2}
-        label="Span JSON"
-      />
-    );
+    return <JsonTree data={rawSpan(node)} expandDepth={2} label="Span JSON" />;
   };
   return (
     <div className={styles.detail} data-testid="span-detail">

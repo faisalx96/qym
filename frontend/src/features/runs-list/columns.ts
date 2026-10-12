@@ -1,7 +1,7 @@
 /** Column catalogue of the runs table; visibility uses the legacy `qym_visible_metrics` keys. */
 import { baseColumnKey } from './selection';
 
-export type ColumnGroup = 'run' | 'metrics' | 'system' | 'trace';
+export type ColumnGroup = 'run' | 'metrics' | 'system' | 'trace' | 'group';
 
 export interface ColumnDef {
   id: string;
@@ -100,6 +100,34 @@ export const TRACE_COLUMNS: ColumnDef[] = [
     width: 116,
     align: 'end',
     visKey: 'tool_success_rate',
+  },
+];
+
+/** Charts only: the repeat-run group stats, toggled from the Columns menu. */
+export const GROUP_DISPLAY_COLUMNS: ColumnDef[] = [
+  {
+    id: 'group-pass-at-k',
+    label: 'Pass@K',
+    group: 'group',
+    width: 100,
+    align: 'end',
+    visKey: 'group_pass_at_k',
+  },
+  {
+    id: 'group-consistency',
+    label: 'Consistency',
+    group: 'group',
+    width: 100,
+    align: 'end',
+    visKey: 'group_consistency',
+  },
+  {
+    id: 'group-reliability',
+    label: 'Reliability',
+    group: 'group',
+    width: 100,
+    align: 'end',
+    visKey: 'group_reliability',
   },
 ];
 

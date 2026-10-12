@@ -6,11 +6,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBlocker } from 'react-router-dom';
-import { useDatasetItem, useDeleteItem, useItemNeighbors, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
+import {
+  useDatasetItem,
+  useDeleteItem,
+  useItemNeighbors,
+  type Dataset,
+  type DatasetItem,
+  type DatasetVersion,
+} from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { fullWidth } from '@/features/shell/layout';
-import { Button, ConfirmDialog, CopyButton, ErrorState, Icon, LinkButton, PageHeader, Skeleton, TabPanel, Tabs, Tag, useToast } from '@/ui';
+import {
+  Button,
+  ConfirmDialog,
+  CopyButton,
+  ErrorState,
+  Icon,
+  LinkButton,
+  PageHeader,
+  Skeleton,
+  TabPanel,
+  Tabs,
+  Tag,
+  useToast,
+} from '@/ui';
 import { CreateDraftDialog } from '../components/dialogs';
 import { FieldEditor } from '../components/FieldEditor';
 import { useItemEditor } from './useItemEditor';
@@ -36,7 +56,14 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
   const toast = useToast();
   const visible = dataset.items_visible;
   const itemQuery = useDatasetItem(slug, dataset.slug, version.version, itemId, visible);
-  const neighbors = useItemNeighbors(slug, dataset.slug, version.version, itemId, { search: route.search || undefined, sort: route.sort || undefined, label: route.label || undefined }, visible);
+  const neighbors = useItemNeighbors(
+    slug,
+    dataset.slug,
+    version.version,
+    itemId,
+    { search: route.search || undefined, sort: route.sort || undefined, label: route.label || undefined },
+    visible,
+  );
   const del = useDeleteItem(slug, dataset.slug, version.version);
   const showSkeleton = useDelayedPending(itemQuery.isPending && visible);
   const [draftOpen, setDraftOpen] = useState(false);
@@ -102,15 +129,29 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
   if (!visible) {
     return (
       <div className={fullWidth}>
-        <ErrorState error={{ status: 403 }} title="Private test set" message="Item contents are hidden from non-admins." />
+        <ErrorState
+          error={{ status: 403 }}
+          title="Private test set"
+          message="Item contents are hidden from non-admins."
+        />
       </div>
     );
   }
-  if (showSkeleton && !item) return <div className={fullWidth}><Skeleton kind="lines" rows={6} label="Loading item" /></div>;
+  if (showSkeleton && !item)
+    return (
+      <div className={fullWidth}>
+        <Skeleton kind="lines" rows={6} label="Loading item" />
+      </div>
+    );
   if (itemQuery.isError) {
     return (
       <div className={fullWidth}>
-        <ErrorState error={itemQuery.error} title="Couldn’t load this item" notFoundMessage={`No item “${itemId}” in ${version.version}.`} onRetry={() => void itemQuery.refetch()} />
+        <ErrorState
+          error={itemQuery.error}
+          title="Couldn’t load this item"
+          notFoundMessage={`No item “${itemId}” in ${version.version}.`}
+          onRetry={() => void itemQuery.refetch()}
+        />
         <LinkButton to={linkTo({ item: null, tab: 'items' })} variant="ghost">
           ← Back to items
         </LinkButton>
@@ -142,7 +183,9 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
           <Tag key="v" kind="version">
             {version.version} {version.status}
           </Tag>,
-          ...(neighbors.data ? [`${neighbors.data.index + 1} of ${neighbors.data.total.toLocaleString()} in this view`] : []),
+          ...(neighbors.data
+            ? [`${neighbors.data.index + 1} of ${neighbors.data.total.toLocaleString()} in this view`]
+            : []),
         ]}
         actions={
           <div className={styles.actions}>
@@ -156,29 +199,76 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
                 Delete
               </Button>
             ) : null}
-            <LinkButton to={prev ? linkTo({ item: prev.item_id }) : ''} variant="neutral" aria-disabled={!prev || undefined} data-testid="item-prev" icon={<Icon name="prev" size={12} />} onClick={(e) => !prev && e.preventDefault()}>
+            <LinkButton
+              to={prev ? linkTo({ item: prev.item_id }) : ''}
+              variant="neutral"
+              aria-disabled={!prev || undefined}
+              data-testid="item-prev"
+              icon={<Icon name="prev" size={12} />}
+              onClick={(e) => !prev && e.preventDefault()}
+            >
               Previous
             </LinkButton>
-            <LinkButton to={next ? linkTo({ item: next.item_id }) : ''} variant="neutral" aria-disabled={!next || undefined} data-testid="item-next" onClick={(e) => !next && e.preventDefault()}>
+            <LinkButton
+              to={next ? linkTo({ item: next.item_id }) : ''}
+              variant="neutral"
+              aria-disabled={!next || undefined}
+              data-testid="item-next"
+              onClick={(e) => !next && e.preventDefault()}
+            >
               Next <Icon name="next" size={12} />
             </LinkButton>
             {editable ? (
-              <Button variant="primary" onPress={() => void save()} isDisabled={!dirty || !valid} loading={editor.saving} data-testid="save-item">
+              <Button
+                variant="primary"
+                onPress={() => void save()}
+                isDisabled={!dirty || !valid}
+                loading={editor.saving}
+                data-testid="save-item"
+              >
                 Save changes
               </Button>
             ) : null}
           </div>
         }
       />
-      <Tabs label="Item sections" items={[{ id: 'details', label: 'Details' }, { id: 'runs', label: 'Runs', count: item.run_count }, { id: 'history', label: 'History' }]} selected={tab} onSelect={(id) => navigate(linkTo({ tab: id === 'details' ? null : id }))}>
+      <Tabs
+        label="Item sections"
+        items={[
+          { id: 'details', label: 'Details' },
+          { id: 'runs', label: 'Runs', count: item.run_count },
+          { id: 'history', label: 'History' },
+        ]}
+        selected={tab}
+        onSelect={(id) => navigate(linkTo({ tab: id === 'details' ? null : id }))}
+      >
         <TabPanel id="details">
           <div className={styles.panels}>
             <div className={styles.mainCol}>
-              <FieldEditor label="Input" value={item.input} editable={editable} state={state.input} onChange={(s) => editor.set('input', s)} />
-              <FieldEditor label="Expected output" value={item.expected_output} editable={editable} state={state.expected} onChange={(s) => editor.set('expected', s)} />
+              <FieldEditor
+                label="Input"
+                value={item.input}
+                editable={editable}
+                state={state.input}
+                onChange={(s) => editor.set('input', s)}
+              />
+              <FieldEditor
+                label="Expected output"
+                value={item.expected_output}
+                editable={editable}
+                state={state.expected}
+                onChange={(s) => editor.set('expected', s)}
+              />
             </div>
             <div className={styles.sideCol}>
-              <FieldEditor label="Metadata" value={item.metadata} editable={editable} jsonOnly state={state.metadata} onChange={(s) => editor.set('metadata', s)} />
+              <FieldEditor
+                label="Metadata"
+                value={item.metadata}
+                editable={editable}
+                jsonOnly
+                state={state.metadata}
+                onChange={(s) => editor.set('metadata', s)}
+              />
               {item.labels?.length ? (
                 <div className={styles.labels}>
                   {item.labels.map((l) => (
@@ -221,7 +311,13 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
             toast.show(`Item ${item.item_id} deleted`, { tone: 'success' });
             leaving.current = true;
             setEdit(null);
-            navigate(next ? linkTo({ item: next.item_id }) : prev ? linkTo({ item: prev.item_id }) : linkTo({ item: null, tab: 'items' }));
+            navigate(
+              next
+                ? linkTo({ item: next.item_id })
+                : prev
+                  ? linkTo({ item: prev.item_id })
+                  : linkTo({ item: null, tab: 'items' }),
+            );
           } catch (e) {
             toast.show(e instanceof ApiError ? e.detail || e.message : 'Delete failed', { tone: 'error' });
             throw e;

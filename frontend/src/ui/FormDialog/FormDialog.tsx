@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import type { Key } from 'react-aria-components';
 import { Button } from '../Button';
 import { Checkbox } from '../Checkbox';
@@ -70,6 +70,7 @@ function FormDialogInner({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const inflight = useRef(false);
 
   function set(name: string, value: FormValue) {
     setValues((prev) => {
@@ -81,15 +82,18 @@ function FormDialogInner({
   }
 
   async function submit() {
+    if (inflight.current) return;
     const nextErrors: Record<string, string> = {};
     for (const f of fields) {
       const v = values[f.name] ?? '';
-      if (f.required && (v === '' || v === false)) nextErrors[f.name] = `${f.label} is required.`;
+      if (f.required && (typeof v === 'string' ? v.trim() === '' : v === false))
+        nextErrors[f.name] = `${f.label} is required.`;
       const custom = f.validate?.(v, values);
       if (custom) nextErrors[f.name] = custom;
     }
     setErrors(nextErrors);
     if (Object.values(nextErrors).some(Boolean)) return;
+    inflight.current = true;
     setBusy(true);
     setFormError(null);
     try {
@@ -102,6 +106,7 @@ function FormDialogInner({
     } catch (e) {
       setFormError(e instanceof Error ? e.message : String(e));
     } finally {
+      inflight.current = false;
       setBusy(false);
     }
   }

@@ -26,11 +26,35 @@ import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { useDocumentTitle } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { Button, Checkbox, ConfirmDialog, EmptyState, ErrorState, IconButton, PageHeader, SearchField, Select, Skeleton, TabPanel, Tabs, Text, useToast } from '@/ui';
+import {
+  Button,
+  Checkbox,
+  ConfirmDialog,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  PageHeader,
+  SearchField,
+  Select,
+  Skeleton,
+  TabPanel,
+  Tabs,
+  Text,
+  useToast,
+} from '@/ui';
 import { ConflictDialog, CommentDialog, ShortcutsDialog } from './dialogs';
 import { DetailPane } from './DetailPane';
 import { FilterChips, FiltersPanel, FiltersToggle } from './FiltersPopover';
-import { applyFilterParams, bulkSelection, BULK_FITS, clearedFilters, describeView, filtersFromParams, fitsStatusTab, hasActiveFilters } from './lib/filters';
+import {
+  applyFilterParams,
+  bulkSelection,
+  BULK_FITS,
+  clearedFilters,
+  describeView,
+  filtersFromParams,
+  fitsStatusTab,
+  hasActiveFilters,
+} from './lib/filters';
 import { useQueueKeys } from './lib/useQueueKeys';
 import { ReviewRow } from './ReviewRow';
 import styles from './ReviewsPage.module.css';
@@ -56,7 +80,9 @@ export function ReviewsPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const setFilters = useCallback(
     (patch: Partial<ReviewFilters>) => {
-      setParams((prev) => applyFilterParams(prev, { ...filtersFromParams(prev, projectSlug), ...patch }), { replace: true });
+      setParams((prev) => applyFilterParams(prev, { ...filtersFromParams(prev, projectSlug), ...patch }), {
+        replace: true,
+      });
       setSelected(new Set());
     },
     [setParams, projectSlug],
@@ -95,19 +121,30 @@ export function ReviewsPage() {
 
   const loaded = useMemo(() => list.data?.pages.flatMap((p) => p.corrections) ?? [], [list.data]);
   const rows = useMemo(() => {
-    if (linked && fitsStatusTab(linked, filters.status) && !loaded.some((r) => r.id === linked.id)) return [linked, ...loaded];
+    if (linked && fitsStatusTab(linked, filters.status) && !loaded.some((r) => r.id === linked.id))
+      return [linked, ...loaded];
     return loaded;
   }, [loaded, linked, filters.status]);
 
   const [pickedId, setCurrentId] = useState<number | null>(null);
-  const currentId = rows.some((r) => r.id === pickedId) ? pickedId : linkedId && rows.some((r) => r.id === linkedId) ? linkedId : (rows[0]?.id ?? null);
+  const currentId = rows.some((r) => r.id === pickedId)
+    ? pickedId
+    : linkedId && rows.some((r) => r.id === linkedId)
+      ? linkedId
+      : (rows[0]?.id ?? null);
   const current = rows.find((r) => r.id === currentId) ?? null;
 
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState<Set<number>>(new Set());
   const inflight = useRef(new Set<number>());
-  const [dialog, setDialog] = useState<null | { kind: 'reject'; row: CorrectionRow } | { kind: 'bulk'; action: 'approve' | 'reject' } | { kind: 'delete'; row: CorrectionRow } | { kind: 'bulk-delete' }>(null);
+  const [dialog, setDialog] = useState<
+    | null
+    | { kind: 'reject'; row: CorrectionRow }
+    | { kind: 'bulk'; action: 'approve' | 'reject' }
+    | { kind: 'delete'; row: CorrectionRow }
+    | { kind: 'bulk-delete' }
+  >(null);
   const [help, setHelp] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
@@ -136,11 +173,17 @@ export function ReviewsPage() {
               ...pg,
               stats,
               total: has && leaves ? Math.max(0, pg.total - 1) : pg.total,
-              corrections: has ? (leaves ? pg.corrections.filter((r) => r.id !== old.id) : pg.corrections.map((r) => (r.id === old.id ? updated : r))) : pg.corrections,
+              corrections: has
+                ? leaves
+                  ? pg.corrections.filter((r) => r.id !== old.id)
+                  : pg.corrections.map((r) => (r.id === old.id ? updated : r))
+                : pg.corrections,
             };
           }),
         };
       });
+      void qc.invalidateQueries({ queryKey: reviewKeys.detail(old.id) });
+      if (updated.id !== old.id) void qc.invalidateQueries({ queryKey: reviewKeys.detail(updated.id) });
       setLinked((l) => (l && l.id === old.id ? (leaves ? null : updated) : l));
       setSelected((s) => {
         if (!s.has(old.id)) return s;
@@ -190,11 +233,19 @@ export function ReviewsPage() {
       inflight.current.add(row.id);
       setBusy(new Set(inflight.current));
       const next = neighborOf(row.id);
+      // On the All tab a decided row stays listed, so advance to the next pending row instead.
+      const nextPending =
+        rows.slice(rows.findIndex((r) => r.id === row.id) + 1).find((r) => r.status === 'pending')?.id ??
+        null;
       try {
         const updated = await decideMut.mutateAsync({ id: row.id, action, comment });
         applyUpdate(row, updated);
         if (!fitsStatusTab(updated, filters.status) && currentId === row.id) moveTo(next);
-        toast.show(`${action === 'approve' ? 'Approved' : action === 'reject' ? 'Rejected' : 'Reset'} #${row.id}`, { tone: 'success' });
+        else if (filters.status === 'all' && action !== 'reset' && currentId === row.id) moveTo(nextPending);
+        toast.show(
+          `${action === 'approve' ? 'Approved' : action === 'reject' ? 'Rejected' : 'Reset'} #${row.id}`,
+          { tone: 'success' },
+        );
       } catch (e) {
         toast.show(e instanceof ApiError ? e.detail || e.message : 'Action failed', { tone: 'error' });
         if (e instanceof ApiError && e.status === 409) invalidateCorrections(qc);
@@ -203,7 +254,7 @@ export function ReviewsPage() {
         setBusy(new Set(inflight.current));
       }
     },
-    [toast, neighborOf, decideMut, applyUpdate, filters.status, currentId, moveTo, qc],
+    [toast, neighborOf, rows, decideMut, applyUpdate, filters.status, currentId, moveTo, qc],
   );
 
   async function saveEdit(issues: CorrectionRow['human_root_cause_issues']) {
@@ -242,15 +293,30 @@ export function ReviewsPage() {
   }
 
   // ---- bulk -------------------------------------------------------------
+  function openBulk(action: 'approve' | 'reject') {
+    if (!bulkSelection(rows, selected, action).ids.length) {
+      toast.show(BULK_FITS[action].rule, { tone: 'error' });
+      return;
+    }
+    setDialog({ kind: 'bulk', action });
+  }
+
   async function runBulk(action: BulkAction, comment = '') {
     const ids = action === 'delete' ? [...selected] : bulkSelection(rows, selected, action).ids;
     if (!ids.length) {
       toast.show(action === 'delete' ? 'Nothing selected.' : BULK_FITS[action].rule, { tone: 'error' });
       return;
     }
-    const expectedStatus: CorrectionStatus | undefined = filters.status !== 'all' ? filters.status : undefined;
+    const expectedStatus: CorrectionStatus | undefined =
+      filters.status !== 'all' ? filters.status : undefined;
     try {
-      const r = await bulkMut.mutateAsync({ ids, action, comment: comment || undefined, expected_count: ids.length, expected_status: expectedStatus });
+      const r = await bulkMut.mutateAsync({
+        ids,
+        action,
+        comment: comment || undefined,
+        expected_count: ids.length,
+        expected_status: expectedStatus,
+      });
       if (r.corrections?.length) {
         const byId = new Map(rows.map((x) => [x.id, x] as const));
         for (const updated of r.corrections) {
@@ -259,7 +325,10 @@ export function ReviewsPage() {
         }
       } else invalidateCorrections(qc);
       setSelected(new Set());
-      toast.show(`${r.affected ?? ids.length} correction${(r.affected ?? ids.length) === 1 ? '' : 's'} ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'reset' ? 'reset' : 'deleted'}`, { tone: 'success' });
+      toast.show(
+        `${r.affected ?? ids.length} correction${(r.affected ?? ids.length) === 1 ? '' : 's'} ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'reset' ? 'reset' : 'deleted'}`,
+        { tone: 'success' },
+      );
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setConflict(e.detail || 'The selected corrections changed.');
@@ -304,7 +373,7 @@ export function ReviewsPage() {
     },
     bulkApprove: () => {
       if (!selected.size) toast.show('Select corrections with x first.', { tone: 'info' });
-      else setDialog({ kind: 'bulk', action: 'approve' });
+      else openBulk('approve');
     },
     focusSearch: () => searchRef.current?.focus(),
     help: () => setHelp(true),
@@ -321,7 +390,10 @@ export function ReviewsPage() {
   useEffect(() => {
     const el = sentinel.current;
     if (!el || !hasNextPage) return;
-    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && !isFetchingNextPage && void fetchNextPage(), { rootMargin: '600px' });
+    const io = new IntersectionObserver(
+      (entries) => entries.some((e) => e.isIntersecting) && !isFetchingNextPage && void fetchNextPage(),
+      { rootMargin: '600px' },
+    );
     io.observe(el);
     return () => io.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, rows.length]);
@@ -354,22 +426,66 @@ export function ReviewsPage() {
           </span>,
           <span key="p" className={styles.progress}>
             {reviewed} of {stats.total} reviewed
-            <span className={styles.bar} role="progressbar" aria-label="Reviewed" aria-valuemin={0} aria-valuemax={stats.total} aria-valuenow={reviewed}>
-              <span className={styles.fill} style={{ width: `${stats.total ? Math.round((reviewed / stats.total) * 100) : 0}%` }} />
+            <span
+              className={styles.bar}
+              role="progressbar"
+              aria-label="Reviewed"
+              aria-valuemin={0}
+              aria-valuemax={stats.total}
+              aria-valuenow={reviewed}
+            >
+              <span
+                className={styles.fill}
+                style={{ width: `${stats.total ? Math.round((reviewed / stats.total) * 100) : 0}%` }}
+              />
             </span>
           </span>,
         ]}
       />
-      <Tabs label="Review status" items={statusItems} selected={filters.status} onSelect={(id) => setFilters({ status: id as ReviewFilters['status'] })}>
+      <Tabs
+        label="Review status"
+        items={statusItems}
+        selected={filters.status}
+        onSelect={(id) => setFilters({ status: id as ReviewFilters['status'] })}
+      >
         <TabPanel id={filters.status}>
           <div className={styles.toolbar}>
-            <Checkbox isSelected={allSelected} isIndeterminate={!allSelected && selected.size > 0} onChange={(v) => setSelected(v ? new Set(rows.map((r) => r.id)) : new Set())} aria-label="Select all visible corrections" hideLabel />
-            <SearchField ref={searchRef} label="Search corrections" placeholder="Search task, item, root cause…" value={search} onChange={setSearch} width={260} />
-            <Select label="Sort" hideLabel items={SORTS} value={filters.sort} onChange={(k) => k && setFilters({ sort: String(k) as ReviewSort })} searchable={false} width={170} />
+            <Checkbox
+              isSelected={allSelected}
+              isIndeterminate={!allSelected && selected.size > 0}
+              onChange={(v) => setSelected(v ? new Set(rows.map((r) => r.id)) : new Set())}
+              aria-label="Select all visible corrections"
+              hideLabel
+            />
+            <SearchField
+              ref={searchRef}
+              label="Search corrections"
+              placeholder="Search task, item, root cause…"
+              value={search}
+              onChange={setSearch}
+              width={260}
+            />
+            <Select
+              label="Sort"
+              hideLabel
+              items={SORTS}
+              value={filters.sort}
+              onChange={(k) => k && setFilters({ sort: String(k) as ReviewSort })}
+              searchable={false}
+              width={170}
+            />
             <FiltersToggle filters={filters} open={filtersOpen} onToggle={() => setFiltersOpen((v) => !v)} />
             <FilterChips filters={filters} onChange={setFilters} />
             {filtered || filters.status !== 'pending' ? (
-              <Button variant="ghost" size="sm" onPress={() => { setSearch(''); setFilters(clearedFilters(filters)); }} data-testid="clear-filters">
+              <Button
+                variant="ghost"
+                size="sm"
+                onPress={() => {
+                  setSearch('');
+                  setFilters(clearedFilters(filters));
+                }}
+                data-testid="clear-filters"
+              >
                 Clear filters
               </Button>
             ) : null}
@@ -380,22 +496,50 @@ export function ReviewsPage() {
             <IconButton label="Keyboard shortcuts" icon="info" onPress={() => setHelp(true)} />
           </div>
           {filtersOpen ? <FiltersPanel filters={filters} facets={first} onChange={setFilters} /> : null}
-          <div className={styles.bulk} role="region" aria-label="Bulk actions" data-active={selected.size ? '' : undefined}>
+          <div
+            className={styles.bulk}
+            role="region"
+            aria-label="Bulk actions"
+            data-active={selected.size ? '' : undefined}
+          >
             {selected.size ? (
               <>
                 <Text as="span" variant="md" weight={600}>
                   {selected.size} selected
                 </Text>
-                <Button variant="accent" size="sm" onPress={() => setDialog({ kind: 'bulk', action: 'approve' })} isDisabled={!approveFit.ids.length} data-testid="bulk-approve">
+                <Button
+                  variant="accent"
+                  size="sm"
+                  onPress={() => openBulk('approve')}
+                  isDisabled={!approveFit.ids.length}
+                  data-testid="bulk-approve"
+                >
                   Approve{approveFit.skipped ? ` (${approveFit.ids.length} of ${approveFit.selected})` : ''}
                 </Button>
-                <Button variant="danger" size="sm" onPress={() => setDialog({ kind: 'bulk', action: 'reject' })} isDisabled={!approveFit.ids.length} data-testid="bulk-reject">
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onPress={() => openBulk('reject')}
+                  isDisabled={!approveFit.ids.length}
+                  data-testid="bulk-reject"
+                >
                   Reject{approveFit.skipped ? ` (${approveFit.ids.length} of ${approveFit.selected})` : ''}
                 </Button>
-                <Button variant="neutral" size="sm" onPress={() => void runBulk('reset')} isDisabled={!resetFit.ids.length} data-testid="bulk-reset">
+                <Button
+                  variant="neutral"
+                  size="sm"
+                  onPress={() => void runBulk('reset')}
+                  isDisabled={!resetFit.ids.length}
+                  data-testid="bulk-reset"
+                >
                   Reset{resetFit.skipped ? ` (${resetFit.ids.length} of ${resetFit.selected})` : ''}
                 </Button>
-                <Button variant="ghost" size="sm" onPress={() => setDialog({ kind: 'bulk-delete' })} data-testid="bulk-delete">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setDialog({ kind: 'bulk-delete' })}
+                  data-testid="bulk-delete"
+                >
                   Delete
                 </Button>
                 <Button variant="ghost" size="sm" onPress={() => setSelected(new Set())}>
@@ -412,12 +556,34 @@ export function ReviewsPage() {
           {showSkeleton ? (
             <Skeleton kind="table" rows={7} label="Loading corrections" />
           ) : list.isError ? (
-            <ErrorState error={list.error} title="Couldn’t load the review queue" onRetry={() => void list.refetch()} />
+            <ErrorState
+              error={list.error}
+              title="Couldn’t load the review queue"
+              onRetry={() => void list.refetch()}
+            />
           ) : first && rows.length === 0 ? (
             <EmptyState
-              title={filtered || filters.search ? 'No corrections match these filters' : filters.status === 'pending' ? 'Queue is empty' : 'Nothing here yet'}
+              title={
+                filtered || filters.search
+                  ? 'No corrections match these filters'
+                  : filters.status === 'pending'
+                    ? 'Queue is empty'
+                    : 'Nothing here yet'
+              }
               body={filtered ? undefined : 'Corrections appear when reviewers change an AI diagnosis.'}
-              action={filtered ? <Button variant="neutral" onPress={() => { setSearch(''); setFilters(clearedFilters(filters)); }}>Clear filters</Button> : undefined}
+              action={
+                filtered ? (
+                  <Button
+                    variant="neutral"
+                    onPress={() => {
+                      setSearch('');
+                      setFilters(clearedFilters(filters));
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                ) : undefined
+              }
             />
           ) : first ? (
             <div className={styles.layout} data-has-pane={current ? '' : undefined}>
@@ -432,15 +598,32 @@ export function ReviewsPage() {
                     busy={busy.has(r.id)}
                     showProject={!projectSlug}
                     onSelectRow={() => moveTo(r.id)}
-                    onToggleSelected={(v) => setSelected((s) => { const n = new Set(s); if (v) n.add(r.id); else n.delete(r.id); return n; })}
+                    onToggleSelected={(v) =>
+                      setSelected((s) => {
+                        const n = new Set(s);
+                        if (v) n.add(r.id);
+                        else n.delete(r.id);
+                        return n;
+                      })
+                    }
                     onApprove={() => void decide(r, 'approve')}
-                    onReject={() => (r.review_block ? toast.show(r.review_block, { tone: 'error' }) : setDialog({ kind: 'reject', row: r }))}
+                    onReject={() =>
+                      r.review_block
+                        ? toast.show(r.review_block, { tone: 'error' })
+                        : setDialog({ kind: 'reject', row: r })
+                    }
                     onReset={() => void decide(r, 'reset')}
                   />
                 ))}
                 {hasNextPage ? (
                   <li ref={sentinel} className={styles.more}>
-                    <Button variant="neutral" size="sm" onPress={() => void fetchNextPage()} loading={isFetchingNextPage} data-testid="load-more">
+                    <Button
+                      variant="neutral"
+                      size="sm"
+                      onPress={() => void fetchNextPage()}
+                      loading={isFetchingNextPage}
+                      data-testid="load-more"
+                    >
                       Load more
                     </Button>
                   </li>
@@ -456,7 +639,11 @@ export function ReviewsPage() {
                   busy={busy.has(current.id)}
                   saving={editMut.isPending}
                   onApprove={() => void decide(current, 'approve')}
-                  onReject={() => (current.review_block ? toast.show(current.review_block, { tone: 'error' }) : setDialog({ kind: 'reject', row: current }))}
+                  onReject={() =>
+                    current.review_block
+                      ? toast.show(current.review_block, { tone: 'error' })
+                      : setDialog({ kind: 'reject', row: current })
+                  }
                   onReset={() => void decide(current, 'reset')}
                   onDelete={() => setDialog({ kind: 'delete', row: current })}
                   onEdit={() => setEditing(true)}
@@ -480,7 +667,11 @@ export function ReviewsPage() {
           }
         }}
         title="Reject correction"
-        description={dialog?.kind === 'reject' ? `Reject #${dialog.row.id} (${dialog.row.item_id}). A comment helps the author.` : ''}
+        description={
+          dialog?.kind === 'reject'
+            ? `Reject #${dialog.row.id} (${dialog.row.item_id}). A comment helps the author.`
+            : ''
+        }
         confirmLabel="Reject"
         tone="danger"
         onConfirm={async (comment) => {
@@ -490,7 +681,11 @@ export function ReviewsPage() {
       <CommentDialog
         open={dialog?.kind === 'bulk'}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={dialog?.kind === 'bulk' ? `${dialog.action === 'approve' ? 'Approve' : 'Reject'} ${bulkSelection(rows, selected, dialog.action).ids.length} corrections` : ''}
+        title={
+          dialog?.kind === 'bulk'
+            ? `${dialog.action === 'approve' ? 'Approve' : 'Reject'} ${bulkSelection(rows, selected, dialog.action).ids.length} corrections`
+            : ''
+        }
         description={`Applies to the selected corrections in ${describeView(filters)}.`}
         confirmLabel={dialog?.kind === 'bulk' && dialog.action === 'reject' ? 'Reject' : 'Approve'}
         tone={dialog?.kind === 'bulk' && dialog.action === 'reject' ? 'danger' : 'primary'}

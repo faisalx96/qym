@@ -12,7 +12,7 @@ describe('student t', () => {
   });
   it('two-sided p-values match scipy', () => {
     expect(tTwoSidedP(0, 5)).toBeCloseTo(1, 10);
-    expect(tTwoSidedP(2.0, 10)).toBeCloseTo(0.0733880, 6);
+    expect(tTwoSidedP(2.0, 10)).toBeCloseTo(0.073388, 6);
     expect(tTwoSidedP(-1.5, 3)).toBeCloseTo(0.2306, 3);
   });
 });

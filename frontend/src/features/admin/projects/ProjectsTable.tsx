@@ -38,7 +38,8 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
         id: 'status',
         label: 'Status',
         width: 110,
-        cell: (p) => (p.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="warning">Archived</Badge>),
+        cell: (p) =>
+          p.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="warning">Archived</Badge>,
       },
       { id: 'members', label: 'Members', width: 90, align: 'end', mono: true, cell: (p) => p.member_count },
       { id: 'runs', label: 'Runs', width: 80, align: 'end', mono: true, cell: (p) => p.run_count },
@@ -53,11 +54,21 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
           <span className={styles.rowActions}>
             <Link to={projectPath(p.slug, 'settings')}>Settings</Link>
             {p.is_active ? (
-              <Button variant="ghost" onPress={() => setArchiving(p)} aria-label={`Archive ${p.name}`} data-project-archive={p.id}>
+              <Button
+                variant="ghost"
+                onPress={() => setArchiving(p)}
+                aria-label={`Archive ${p.name}`}
+                data-project-archive={p.id}
+              >
                 Archive
               </Button>
             ) : (
-              <Button variant="neutral" onPress={() => setUnarchiving(p)} aria-label={`Unarchive ${p.name}`} data-project-unarchive={p.id}>
+              <Button
+                variant="neutral"
+                onPress={() => setUnarchiving(p)}
+                aria-label={`Unarchive ${p.name}`}
+                data-project-unarchive={p.id}
+              >
                 Unarchive
               </Button>
             )}
@@ -70,7 +81,14 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
 
   return (
     <>
-      <DataTable aria-label="Projects" columns={columns} rows={projects} rowKey={(p) => p.id} storageKey="admin-projects" emptyState="No projects yet." />
+      <DataTable
+        aria-label="Projects"
+        columns={columns}
+        rows={projects}
+        rowKey={(p) => p.id}
+        storageKey="admin-projects"
+        emptyState="No projects yet."
+      />
       {archiving ? (
         <ArchiveProjectDialog
           project={archiving}

@@ -43,7 +43,9 @@ export function useDraftRules(scope: AnalysisScope, version: RuleVersion, editab
           onSuccess: (data) => {
             // Adopt server ids for newly created rules without disturbing text being typed.
             const saved = data.analysis_rules;
-            rulesRef.current = rulesRef.current.map((r, i) => (r.id ? r : { ...r, id: saved[i]?.id ?? r.id }));
+            rulesRef.current = rulesRef.current.map((r, i) =>
+              r.id ? r : { ...r, id: saved[i]?.id ?? r.id },
+            );
             setRules(rulesRef.current);
             setState('saved');
             setError(null);
@@ -66,17 +68,32 @@ export function useDraftRules(scope: AnalysisScope, version: RuleVersion, editab
       setRules(next);
       setState(next.some((r) => !ruleIsComplete(r)) ? 'invalid' : 'dirty');
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => flush(rulesRef.current), AUTOSAVE_MS);
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        flush(rulesRef.current);
+      }, AUTOSAVE_MS);
     },
     [editable, flush],
   );
 
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
+  // A pending autosave is flushed (not dropped) when the editor unmounts or the page unloads.
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  });
+  useEffect(() => {
+    const flushPending = () => {
+      if (!timer.current) return;
+      clearTimeout(timer.current);
+      timer.current = null;
+      if (rulesRef.current.every(ruleIsComplete)) flushRef.current(rulesRef.current);
+    };
+    window.addEventListener('beforeunload', flushPending);
+    return () => {
+      window.removeEventListener('beforeunload', flushPending);
+      flushPending();
+    };
+  }, []);
 
   const actions = useMemo(
     () => ({

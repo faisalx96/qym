@@ -20,8 +20,8 @@ export function Instructions({ ws, bodiesLoading }: { ws: RunWorkspace; bodiesLo
         placeholder="e.g. Pay special attention to the {rubric} criteria."
         help={
           <>
-            Reference item data with <code className={s.code}>{'{variable_name}'}</code>; each variable gets a mapping
-            row. <code className={s.code}>{'{categories}'}</code> is reserved.
+            Reference item data with <code className={s.code}>{'{variable_name}'}</code>; each variable gets a
+            mapping row. <code className={s.code}>{'{categories}'}</code> is reserved.
           </>
         }
       />

@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom';
-import { Button, EmptyState, ErrorState, Icon, LinkButton } from '@/ui';
+import { EmptyState, ErrorState, Icon, LinkButton } from '@/ui';
 import { constrained } from './layout';
 
 export interface ProjectNotFoundProps {
@@ -44,9 +43,9 @@ export function ProjectNotFound({ slug, kind, archived, error, onRetry }: Projec
               Open the project’s runs
             </LinkButton>
           ) : (
-            <Button variant="accent">
-              <Link to="/">All projects</Link>
-            </Button>
+            <LinkButton to="/" variant="accent">
+              All projects
+            </LinkButton>
           )
         }
       />

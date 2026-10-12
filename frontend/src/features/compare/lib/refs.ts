@@ -68,10 +68,7 @@ function readSession<T>(storage: Pick<Storage, 'getItem'> | null, key: string): 
  * Precedence of the vanilla page (compare.html loadComparisonData):
  * cohortA/cohortB > runs (>= 2) > sessionStorage.compareCohorts > sessionStorage.compareRuns.
  */
-export function readSelection(
-  params: URLSearchParams,
-  storage: Pick<Storage, 'getItem'> | null,
-): Selection {
+export function readSelection(params: URLSearchParams, storage: Pick<Storage, 'getItem'> | null): Selection {
   const fromUrl = normalizeCohorts({
     left: params.getAll('cohortA'),
     right: params.getAll('cohortB'),

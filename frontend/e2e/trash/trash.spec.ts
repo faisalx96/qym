@@ -8,11 +8,15 @@ import { pickSelect, query } from '../datasets/ui';
 import { seedTrash } from './support';
 
 const row = (page: Page, text: string) => page.getByRole('row').filter({ hasText: text });
-const dataRows = (page: Page) => page.getByRole('grid', { name: 'Deleted runs' }).locator('[role=row]:has([role=gridcell])');
+const dataRows = (page: Page) =>
+  page.getByRole('grid', { name: 'Deleted runs' }).locator('[role=row]:has([role=gridcell])');
 const tag = () => `tr${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 
 test.describe('trash', () => {
-  test('lists deleted runs with retention info; search by run id and name is mirrored to ?q=', async ({ page, request }) => {
+  test('lists deleted runs with retention info; search by run id and name is mirrored to ?q=', async ({
+    page,
+    request,
+  }) => {
     const prefix = tag();
     const s = await seedTrash(request, prefix, 3);
     await gotoApp(page, '/trash');
@@ -62,7 +66,10 @@ test.describe('trash', () => {
     await expect.poll(() => query(page).get('project')).toBeNull();
   });
 
-  test('?page= paging over 50 rows: page 2 in the URL, reload-safe, and [BUG minor] an out-of-range page steps back to the last page with rows', async ({ page, request }) => {
+  test('?page= paging over 50 rows: page 2 in the URL, reload-safe, and [BUG minor] an out-of-range page steps back to the last page with rows', async ({
+    page,
+    request,
+  }) => {
     test.setTimeout(180_000);
     const s = await seedTrash(request, tag(), 52);
     await gotoApp(page, `/trash?project=${s.project.id}`);
@@ -84,7 +91,10 @@ test.describe('trash', () => {
     await expect.poll(() => query(page).get('page')).toBe('2');
   });
 
-  test('Restore selected: rows go away, a toast reports it, the trash no longer lists them', async ({ page, request }) => {
+  test('Restore selected: rows go away, a toast reports it, the trash no longer lists them', async ({
+    page,
+    request,
+  }) => {
     const s = await seedTrash(request, tag(), 3);
     await gotoApp(page, `/trash?q=${s.prefix}`);
     await expect(dataRows(page)).toHaveCount(3);
@@ -102,7 +112,10 @@ test.describe('trash', () => {
     expect(((await res.json()) as unknown[]).length).toBe(1);
   });
 
-  test('select all (Ctrl+A) skips runs of archived projects, which stay unrestorable', async ({ page, request }) => {
+  test('select all (Ctrl+A) skips runs of archived projects, which stay unrestorable', async ({
+    page,
+    request,
+  }) => {
     const prefix = tag();
     const live = await seedTrash(request, `${prefix}a`, 3);
     const archivedProject = await createProject(request, `Trash Arch ${prefix}`, uniqueSlug('trasharch'));
@@ -113,7 +126,10 @@ test.describe('trash', () => {
     const archivedRow = row(page, `${arch.prefix}-0`);
     await expect(archivedRow).toContainText('Project archived');
     await expect(archivedRow).toContainText('Paused');
-    await expect(archivedRow.getByRole('button', { name: 'Restore' })).toHaveAttribute('aria-disabled', 'true');
+    await expect(archivedRow.getByRole('button', { name: 'Restore' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
 
     await row(page, `${live.prefix}-0`).focus();
     await page.keyboard.press('Control+a');
@@ -133,7 +149,10 @@ test.describe('trash', () => {
     await expect(page.getByTestId('restore-selected')).toBeDisabled();
   });
 
-  test('[BUG] the table has a select-all header checkbox and per-row checkboxes', async ({ page, request }) => {
+  test('[BUG] the table has a select-all header checkbox and per-row checkboxes', async ({
+    page,
+    request,
+  }) => {
     const s = await seedTrash(request, tag(), 2);
     await gotoApp(page, `/trash?q=${s.prefix}`);
     await expect(dataRows(page)).toHaveCount(2);
@@ -158,7 +177,11 @@ test.describe('trash', () => {
 
   test('non-admin (403 from the API) sees "Admin access required"', async ({ page }) => {
     await page.route(/\/api\/runs\/trash/, (route) =>
-      route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Admin access required' }) }),
+      route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Admin access required' }),
+      }),
     );
     await gotoApp(page, '/trash');
     await expect(page.getByText('Admin access required').first()).toBeVisible();

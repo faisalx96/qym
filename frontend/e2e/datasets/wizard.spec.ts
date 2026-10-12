@@ -9,7 +9,22 @@ import { pickSelect, tmpFile } from './ui';
 
 // Windows-1256 code points for the Arabic letters used below.
 const CP1256: Record<string, number> = {
-  ا: 0xc7, ب: 0xc8, ت: 0xca, ج: 0xcc, ح: 0xcd, ر: 0xd1, ك: 0xdf, ل: 0xe1, م: 0xe3, ي: 0xed, ن: 0xe4, ع: 0xda, س: 0xd3, ة: 0xc9, ف: 0xdd, ي_: 0xed,
+  ا: 0xc7,
+  ب: 0xc8,
+  ت: 0xca,
+  ج: 0xcc,
+  ح: 0xcd,
+  ر: 0xd1,
+  ك: 0xdf,
+  ل: 0xe1,
+  م: 0xe3,
+  ي: 0xed,
+  ن: 0xe4,
+  ع: 0xda,
+  س: 0xd3,
+  ة: 0xc9,
+  ف: 0xdd,
+  ي_: 0xed,
 };
 function cp1256(text: string): Buffer {
   return Buffer.from([...text].map((ch) => (ch in CP1256 ? (CP1256[ch] as number) : ch.charCodeAt(0))));
@@ -25,10 +40,16 @@ async function openNewWizard(page: Page, slug: string) {
 }
 
 test.describe('upload wizard', () => {
-  test('UTF-8 CSV: auto-mapped columns, preview, publish immediately creates the dataset', async ({ page, request }) => {
+  test('UTF-8 CSV: auto-mapped columns, preview, publish immediately creates the dataset', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Wizard Csv', uniqueSlug('wzcsv'));
     await createDataset(request, p.slug, 'Seed One'); // makes the toolbar menu available
-    const csv = tmpFile('qa.csv', 'question,answer,topic\nWhat is 2+2?,4,math\nCapital of France?,Paris,geo\nمن أنت؟,مساعد,arabic\n');
+    const csv = tmpFile(
+      'qa.csv',
+      'question,answer,topic\nWhat is 2+2?,4,math\nCapital of France?,Paris,geo\nمن أنت؟,مساعد,arabic\n',
+    );
     const dialog = await openNewWizard(page, p.slug);
     await expect(dialog.getByRole('textbox', { name: /^Name/ })).toBeFocused();
     await dialog.locator('#wizard-file').setInputFiles(csv);
@@ -40,9 +61,13 @@ test.describe('upload wizard', () => {
 
     // step 2: mapping auto-detected from the header names
     await expect(dialog.getByText('Column mapping')).toBeVisible();
-    await expect(dialog.getByText('Input: question · Expected: answer · Item ID: generated · 1 metadata column')).toBeVisible();
+    await expect(
+      dialog.getByText('Input: question · Expected: answer · Item ID: generated · 1 metadata column'),
+    ).toBeVisible();
     await expect(dialog.getByRole('button', { name: /Role for column question/ })).toContainText('Input');
-    await expect(dialog.getByRole('button', { name: /Role for column answer/ })).toContainText('Expected output');
+    await expect(dialog.getByRole('button', { name: /Role for column answer/ })).toContainText(
+      'Expected output',
+    );
     await expect(dialog.getByRole('button', { name: /Role for column topic/ })).toContainText('Metadata');
     // changing a role updates the summary
     await pickSelect(dialog, /Role for column topic/, 'Ignore (not imported)');
@@ -57,10 +82,14 @@ test.describe('upload wizard', () => {
     await dialog.getByTestId('wizard-next').click(); // Create dataset
     await expect(dialog).toBeHidden({ timeout: 15_000 });
     await expect(page.getByText(/Dataset "Wizard Imported" created · 3 items/)).toBeVisible();
-    await expect(page.locator('[data-dataset-card=wizard-imported]')).toContainText('3');
+    await expect(page).toHaveURL(/\/datasets\/wizard-imported/);
+    await expect(page.getByRole('heading', { name: 'Wizard Imported' })).toBeVisible();
   });
 
-  test('a 6,000-row CSV is parsed off the main thread: UI stays responsive and the import lands', async ({ page, request }) => {
+  test('a 6,000-row CSV is parsed off the main thread: UI stays responsive and the import lands', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Wizard Big', uniqueSlug('wzbig'));
     await createDataset(request, p.slug, 'Seed Big');
     const rows = ['question,answer'];
@@ -78,7 +107,10 @@ test.describe('upload wizard', () => {
     await expect(page.getByText(/Dataset "Big Import" created · 6,000 items/)).toBeVisible();
   });
 
-  test('required Input column: clearing it blocks Continue on the mapping step', async ({ page, request }) => {
+  test('required Input column: clearing it blocks Continue on the mapping step', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Wizard Map', uniqueSlug('wzmap'));
     await createDataset(request, p.slug, 'Seed Two');
     const csv = tmpFile('m.csv', 'question,answer\nq1,a1\nq2,a2\n');
@@ -92,10 +124,15 @@ test.describe('upload wizard', () => {
     await expect(dialog.getByText('Column mapping')).toBeVisible();
   });
 
-  test('Windows-1256 CSV: encoding detected, shown as detected, switchable and restorable', async ({ page, request }) => {
+  test('Windows-1256 CSV: encoding detected, shown as detected, switchable and restorable', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Wizard Enc', uniqueSlug('wzenc'));
     await createDataset(request, p.slug, 'Seed Three');
-    const body = cp1256('input,output\nمرحبا بكم,كتاب جميل\nمرحبا بكم,كتاب جميل\nمرحبا بكم,كتاب جميل\nمرحبا بكم,كتاب جميل\n');
+    const body = cp1256(
+      'input,output\nمرحبا بكم,كتاب جميل\nمرحبا بكم,كتاب جميل\nمرحبا بكم,كتاب جميل\nمرحبا بكم,كتاب جميل\n',
+    );
     const file = tmpFile('arabic.csv', body);
     const dialog = await openNewWizard(page, p.slug);
     await dialog.locator('#wizard-file').setInputFiles(file);
@@ -121,7 +158,10 @@ test.describe('upload wizard', () => {
     await expect(dialog.locator('td').filter({ hasText: 'مرحبا بكم' }).first()).toBeVisible();
   });
 
-  test('JSONL with an invalid line shows "Line 3 is not valid JSON" and blocks Continue', async ({ page, request }) => {
+  test('JSONL with an invalid line shows "Line 3 is not valid JSON" and blocks Continue', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Wizard Jsonl', uniqueSlug('wzjl'));
     await createDataset(request, p.slug, 'Seed Four');
     const file = tmpFile('bad.jsonl', '{"input":"a","expected_output":"b"}\n{"input":"c"}\n{not json}\n');
@@ -148,10 +188,14 @@ test.describe('upload wizard', () => {
     await expect(dialog.getByText('Not imported: extra')).toBeVisible();
     await dialog.getByTestId('wizard-next').click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
-    await expect(page.locator('[data-dataset-card=good-lines]')).toContainText('2');
+    await expect(page).toHaveURL(/\/datasets\/good-lines/);
+    await expect(page.getByRole('heading', { name: 'Good Lines' })).toBeVisible();
   });
 
-  test('name clash offers "Upload as a new version" and creates v2 of the existing dataset', async ({ page, request }) => {
+  test('name clash offers "Upload as a new version" and creates v2 of the existing dataset', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Wizard Clash', uniqueSlug('wzclash'));
     const existing = await createDataset(request, p.slug, 'Clash Target');
     const v1 = await createVersion(request, p.slug, existing.slug);
@@ -176,7 +220,10 @@ test.describe('upload wizard', () => {
     expect(((await versions.json()) as { versions: unknown[] }).versions).toHaveLength(2);
   });
 
-  test('Cancel with a chosen file asks to discard; Keep editing keeps it, Discard closes', async ({ page, request }) => {
+  test('Cancel with a chosen file asks to discard; Keep editing keeps it, Discard closes', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Wizard Discard', uniqueSlug('wzdis'));
     await createDataset(request, p.slug, 'Seed Six');
     const file = tmpFile('d.jsonl', '{"input":"x"}\n');
@@ -189,7 +236,9 @@ test.describe('upload wizard', () => {
     await page.getByRole('menuitem', { name: /Import CSV/ }).click();
     await dialog.locator('#wizard-file').setInputFiles(file);
     await dialog.getByRole('button', { name: 'Cancel' }).click();
-    const confirm = page.getByRole('alertdialog').or(page.getByRole('dialog', { name: 'Discard this upload?' }));
+    const confirm = page
+      .getByRole('alertdialog')
+      .or(page.getByRole('dialog', { name: 'Discard this upload?' }));
     await expect(confirm.first()).toBeVisible();
     await confirm.first().getByRole('button', { name: 'Keep editing' }).click();
     await expect(dialog).toBeVisible();

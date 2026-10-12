@@ -50,7 +50,10 @@ describe('pass diagnosis scoping', () => {
     } as unknown as Row;
     const analyses = getRowRootCauseAnalyses(row, 'accuracy', true);
     expect(analyses.map((a) => a.pass_number)).toEqual([1, 2]);
-    expect(analyses.flatMap((a) => rootCauseIssues(a).map((i) => i.solution))).toEqual(['Pass 1 fix', 'Pass 2 fix']);
+    expect(analyses.flatMap((a) => rootCauseIssues(a).map((i) => i.solution))).toEqual([
+      'Pass 1 fix',
+      'Pass 2 fix',
+    ]);
     expect(getRowRootCauseAnalyses(row, 'all', true)).toHaveLength(3);
   });
 
@@ -72,8 +75,14 @@ describe('pass diagnosis scoping', () => {
       pass_metric_analyses: { accuracy: [one, two] },
     } as unknown as Row;
     const before = JSON.stringify(row);
-    expect(scopeRowToPass(row, ['accuracy'], 1).item_metadata).toEqual({ custom: { keep: true }, metric_analyses: { accuracy: one } });
-    expect(scopeRowToPass(row, ['accuracy'], 2).item_metadata).toEqual({ custom: { keep: true }, metric_analyses: { accuracy: two } });
+    expect(scopeRowToPass(row, ['accuracy'], 1).item_metadata).toEqual({
+      custom: { keep: true },
+      metric_analyses: { accuracy: one },
+    });
+    expect(scopeRowToPass(row, ['accuracy'], 2).item_metadata).toEqual({
+      custom: { keep: true },
+      metric_analyses: { accuracy: two },
+    });
     expect(scopeRowToPass(row, ['accuracy'], 3).item_metadata).toEqual({ custom: { keep: true } });
     expect(JSON.stringify(row)).toBe(before);
   });
@@ -92,6 +101,12 @@ describe('pass diagnosis scoping', () => {
     expect(solutions(1)).toEqual(['First']);
     expect(solutions(2)).toEqual(['Second']);
     expect(solutions(3)).toEqual([]);
-    expect((row.item_metadata as { metric_analyses: { accuracy: { root_cause_issues: Array<{ solution: string }> } } }).metric_analyses.accuracy.root_cause_issues[0]!.solution).toBe('Parent');
+    expect(
+      (
+        row.item_metadata as {
+          metric_analyses: { accuracy: { root_cause_issues: Array<{ solution: string }> } };
+        }
+      ).metric_analyses.accuracy.root_cause_issues[0]!.solution,
+    ).toBe('Parent');
   });
 });

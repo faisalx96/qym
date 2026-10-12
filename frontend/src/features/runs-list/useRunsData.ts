@@ -1,7 +1,7 @@
 /** Runs data for one view: filters → overview (facets, metrics, KPIs) + page + pinned rows, live cadence, revision sync. */
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOverview, useRunsPage, type RunsBody } from '@/api/dashboard';
-import type { RunRow } from '@/api/dashboardTypes';
+import type { RunRow, RunsPage } from '@/api/dashboardTypes';
 import { collatedColumn, collation, DEFAULT_SORT } from '@/lib/runs-order';
 import { buildColumns, sortColumnVisible } from './columns';
 import { useRefetchOnVisible, useRunsCadence } from './polling';
@@ -33,13 +33,16 @@ export function useRunsData(
     () => buildColumns(overview?.all_metrics ?? [], traceWithData, visibleKeys),
     [overview?.all_metrics, traceWithData, visibleKeys],
   );
-  const sort = sortColumnVisible(view.sort, columnSet.visible) ? view.sort : DEFAULT_SORT;
+  // A metric/trace sort waits for the overview (the column set is empty until it lands): no flash of time-desc.
+  const needsColumns = /^(metric-|trace-)/.test(view.sort);
+  const columnsKnown = !needsColumns || Boolean(overview);
+  const sort = !columnsKnown || sortColumnVisible(view.sort, columnSet.visible) ? view.sort : DEFAULT_SORT;
 
   const column = collatedColumn(sort);
   const order = column
     ? collation(sort, overview?.sort_values?.[column as keyof NonNullable<typeof overview>['sort_values']])
     : null;
-  const ready = !column || Boolean(overview);
+  const ready = (!column || Boolean(overview)) && columnsKnown;
 
   const body: RunsBody = {
     project_slug: slug,
@@ -53,7 +56,16 @@ export function useRunsData(
   };
   const cadence = useRef<number | false>(60_000);
   const runsQ = useRunsPage(body, { enabled: ready, refetchInterval: () => cadence.current });
-  const data = runsQ.data;
+  // A failed page request keeps the last rows that did load (dimmed, under the stale banner)
+  // instead of replacing the table with an error.
+  const bodyKey = JSON.stringify(body);
+  const [good, setGood] = useState<{ key: string; data: RunsPage; at: number } | null>(null);
+  if (runsQ.data && !runsQ.isPlaceholderData && good?.data !== runsQ.data)
+    setGood({ key: bodyKey, data: runsQ.data, at: runsQ.dataUpdatedAt });
+  const failed = runsQ.isError;
+  const data = runsQ.data ?? (failed ? good?.data : undefined);
+  /** The request that failed asked for a different view than the rows on screen. */
+  const viewNotApplied = failed && Boolean(good) && good!.key !== bodyKey;
   const refetch = runsQ.refetch;
   const onAnnounce = useCallback(() => void refetch(), [refetch]);
   const interval = useRunsCadence(
@@ -108,6 +120,11 @@ export function useRunsData(
     pinnedReady: offPage.length === 0 || pinnedQ.isSuccess,
     offPageCount: offPage.length,
     refetch,
-    updatedAt: runsQ.dataUpdatedAt ? new Date(runsQ.dataUpdatedAt) : null,
+    viewNotApplied,
+    updatedAt: runsQ.dataUpdatedAt
+      ? new Date(runsQ.dataUpdatedAt)
+      : failed && good
+        ? new Date(good.at)
+        : null,
   };
 }

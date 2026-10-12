@@ -38,10 +38,20 @@ export async function waitLoaded(page: Page): Promise<void> {
 
 /** Number shown in the "N of M items" status. */
 export async function shownCount(page: Page): Promise<number> {
-  const t = (await page.getByRole('status').filter({ hasText: /of \d+ items/ }).first().textContent()) ?? '';
+  const t =
+    (await page
+      .getByRole('status')
+      .filter({ hasText: /of \d+ items/ })
+      .first()
+      .textContent()) ?? '';
   return Number(/(\d+) of \d+ items/.exec(t)?.[1] ?? NaN);
 }
 
 export async function expectShown(page: Page, n: number): Promise<void> {
-  await expect(page.getByRole('status').filter({ hasText: /of \d+ items/ }).first()).toContainText(`${n} of `);
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: /of \d+ items/ })
+      .first(),
+  ).toContainText(`${n} of `);
 }

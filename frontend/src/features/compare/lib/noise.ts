@@ -165,7 +165,13 @@ export function computeSweepNoise(
     const sd = Math.sqrt(variances[name] ?? 0) / nItems;
     const halfWidth = Z_95 * sd;
     const pValue = sd > 0 ? 2 * (1 - normalCdf(Math.abs(delta) / sd)) : delta === 0 ? 1 : 0;
-    return { delta, halfWidth, pValue, verdict: metricDeltaVerdict(delta, halfWidth, verdictDirection), items: nItems };
+    return {
+      delta,
+      halfWidth,
+      pValue,
+      verdict: metricDeltaVerdict(delta, halfWidth, verdictDirection),
+      items: nItems,
+    };
   };
   return {
     passAtK: stat('passAtK', 'maximize'),

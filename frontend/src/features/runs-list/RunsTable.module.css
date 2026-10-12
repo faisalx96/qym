@@ -27,6 +27,7 @@
 }
 
 .thead th {
+  position: relative; /* anchors the sort button's full-cell hit area */
   font-size: var(--font-sm);
   color: var(--text-muted);
   background: var(--bg-elevated);
@@ -68,6 +69,12 @@
   text-transform: inherit;
   cursor: pointer;
   border-radius: 2px;
+}
+
+.sortButton::after {
+  content: '';
+  position: absolute;
+  inset: 0; /* the whole header cell sorts, not just the label */
 }
 
 .th[data-align='end'] .sortButton {

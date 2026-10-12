@@ -14,7 +14,8 @@ import {
   ingestRun,
   launchExperiment,
   linkRunToJob,
-  resetFakes, test,
+  resetFakes,
+  test,
   seedProject,
   waitForSubmitted,
 } from './support';

@@ -58,9 +58,9 @@ describe('EvaluationSection', () => {
     await user.type(screen.getByRole('textbox', { name: 'Metadata key 1' }), 'qym_secret');
     await user.type(screen.getByRole('textbox', { name: 'Metadata value 1' }), 'x');
     expect(await screen.findByRole('alert')).toHaveTextContent(/Keys starting with qym_ are reserved/);
-    expect(
-      live.current?.review.items.some((i) => i.message.includes('reserved for the platform')),
-    ).toBe(true);
+    expect(live.current?.review.items.some((i) => i.message.includes('reserved for the platform'))).toBe(
+      true,
+    );
 
     await user.clear(screen.getByRole('textbox', { name: 'Metadata key 1' }));
     await user.type(screen.getByRole('textbox', { name: 'Metadata key 1' }), 'ticket');
@@ -103,7 +103,10 @@ describe('EvaluationSection', () => {
 
   it('has no accessibility violations', async () => {
     const user = userEvent.setup();
-    const { container } = setup({ report_k: 3, config: { run_metadata: { qym_launch: 'abc' }, custom_flag: 1 } });
+    const { container } = setup({
+      report_k: 3,
+      config: { run_metadata: { qym_launch: 'abc' }, custom_flag: 1 },
+    });
     await open(user);
     await user.click(screen.getByRole('button', { name: 'Add key' }));
     expect(await axe(container)).toHaveNoViolations();

@@ -23,7 +23,13 @@ describe('analyzer scope aliases', () => {
   });
 
   it('reads a pass only when it is a whole number from 1', () => {
-    expect([parsePass('2'), parsePass('0'), parsePass('1.5'), parsePass(null), parsePass('x')]).toEqual([2, null, null, null, null]);
+    expect([parsePass('2'), parsePass('0'), parsePass('1.5'), parsePass(null), parsePass('x')]).toEqual([
+      2,
+      null,
+      null,
+      null,
+      null,
+    ]);
   });
 });
 

@@ -22,15 +22,40 @@ describe('failed verdicts stay available for analysis', () => {
           item_metadata: {},
         }) as unknown as CompactRow,
     );
-    rows.push({ index: 5, item_id: 'metric-error', metric_values: [0], metric_meta: { accuracy: { status: 'error' } }, item_metadata: {} } as unknown as CompactRow);
-    rows.push({ index: 6, item_id: 'task-error', metric_values: [0], error: 'Task failed', metric_meta: {}, item_metadata: {} } as unknown as CompactRow);
+    rows.push({
+      index: 5,
+      item_id: 'metric-error',
+      metric_values: [0],
+      metric_meta: { accuracy: { status: 'error' } },
+      item_metadata: {},
+    } as unknown as CompactRow);
+    rows.push({
+      index: 6,
+      item_id: 'task-error',
+      metric_values: [0],
+      error: 'Task failed',
+      metric_meta: {},
+      item_metadata: {},
+    } as unknown as CompactRow);
     const built = buildAnalyzerRows({
       rows,
       metricNames: ['accuracy'],
-      metricSpecs: { accuracy: { direction: 'maximize', pass_threshold: 0.8, schema_version: 2, score_type: 'percentage' } as never },
+      metricSpecs: {
+        accuracy: {
+          direction: 'maximize',
+          pass_threshold: 0.8,
+          schema_version: 2,
+          score_type: 'percentage',
+        } as never,
+      },
       passNumber: null,
     });
-    const matched = matchTargets(built, { selectedMetrics: ['accuracy'], maxScore: 0.8, skipAnalyzed: true, allowHumanOverwrite: false });
+    const matched = matchTargets(built, {
+      selectedMetrics: ['accuracy'],
+      maxScore: 0.8,
+      skipAnalyzed: true,
+      allowHumanOverwrite: false,
+    });
     expect(matched.map((m) => m.row.item_id)).toEqual(['0', '1', '2', '3', '4']);
     expect(matched.every((m) => m.metrics.join() === 'accuracy')).toBe(true);
   });
@@ -38,7 +63,11 @@ describe('failed verdicts stay available for analysis', () => {
 
 describe('a finished analysis job reports errors instead of success', () => {
   const job = (result: Record<string, unknown>, progress: Record<string, unknown> = {}) =>
-    ({ status: 'completed', progress: { phase: 'completed', completed: 1, total: 1, errors: 0, retries: 0, ...progress }, result }) as unknown as AnalysisJob;
+    ({
+      status: 'completed',
+      progress: { phase: 'completed', completed: 1, total: 1, errors: 0, retries: 0, ...progress },
+      result,
+    }) as unknown as AnalysisJob;
 
   it('all failed: nothing succeeded, one error group by code with its count', () => {
     const sum = summarize(
@@ -48,7 +77,14 @@ describe('a finished analysis job reports errors instead of success', () => {
           total_attempted: 1,
           total_persisted: 0,
           total_analysis_failed: 1,
-          results: [{ item_id: 'item-1', metric_name: 'accuracy_score', error_code: 'context_limit_exceeded', error: 'Prompt is too large <unsafe>' }],
+          results: [
+            {
+              item_id: 'item-1',
+              metric_name: 'accuracy_score',
+              error_code: 'context_limit_exceeded',
+              error: 'Prompt is too large <unsafe>',
+            },
+          ],
         },
         { errors: 1 },
       ),
@@ -58,12 +94,28 @@ describe('a finished analysis job reports errors instead of success', () => {
   });
 
   it('partial: some succeeded and some failed', () => {
-    const sum = summarize(job({ total_attempted: 3, total_analyzed: 2, total_analysis_failed: 1, results: [{ error: 'Timed out' }] }, { errors: 1 }));
+    const sum = summarize(
+      job(
+        {
+          total_attempted: 3,
+          total_analyzed: 2,
+          total_analysis_failed: 1,
+          results: [{ error: 'Timed out' }],
+        },
+        { errors: 1 },
+      ),
+    );
     expect(sum).toMatchObject({ attempted: 3, analyzed: 2, failed: 1 });
   });
 
   it('human-protected skips are not errors', () => {
-    const sum = summarize(job({ total_attempted: 1, total_skipped_human: 1, results: [{ persistence_status: 'skipped_human_protection' }] }));
+    const sum = summarize(
+      job({
+        total_attempted: 1,
+        total_skipped_human: 1,
+        results: [{ persistence_status: 'skipped_human_protection' }],
+      }),
+    );
     expect(sum).toMatchObject({ attempted: 1, analyzed: 1, failed: 0 });
     expect(sum.groups).toEqual([]);
   });
@@ -117,7 +169,10 @@ describe('the approval signature', () => {
     expect(approvalSignature(first)).toBe(approvalSignature(reordered));
     const changed = {
       category_example_counts: { Hallucination: 2, 'Incomplete Answer': 1 },
-      category_examples: { ...first.category_examples, 'Incomplete Answer': [example(3, 'c', 'Omitted constraint')] },
+      category_examples: {
+        ...first.category_examples,
+        'Incomplete Answer': [example(3, 'c', 'Omitted constraint')],
+      },
     } as unknown as AnalysisConfig;
     expect(approvalSignature(first)).not.toBe(approvalSignature(changed));
   });

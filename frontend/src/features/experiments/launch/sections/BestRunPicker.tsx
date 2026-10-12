@@ -81,8 +81,14 @@ function Picker({ envId }: { envId: string }) {
               label="Rank by"
               width="14rem"
               items={[
-                { key: DEFAULT_METRIC, label: data?.metric && !metric ? `Default · ${data.metric}` : 'Default metric' },
-                ...(data?.metrics ?? []).map((m) => ({ key: m.name, label: `${m.name} · ${runCount(m.run_count)}` })),
+                {
+                  key: DEFAULT_METRIC,
+                  label: data?.metric && !metric ? `Default · ${data.metric}` : 'Default metric',
+                },
+                ...(data?.metrics ?? []).map((m) => ({
+                  key: m.name,
+                  label: `${m.name} · ${runCount(m.run_count)}`,
+                })),
                 ...(metric && !(data?.metrics ?? []).some((m) => m.name === metric)
                   ? [{ key: metric, label: metric }]
                   : []),
@@ -95,15 +101,18 @@ function Picker({ envId }: { envId: string }) {
             </Checkbox>
             <span className={styles.spacer} />
             {data?.scope ? (
-              <Tag kind={data.scope.global ? undefined : 'version'} tone={data.scope.global ? 'info' : undefined}>
+              <Tag
+                kind={data.scope.global ? undefined : 'version'}
+                tone={data.scope.global ? 'info' : undefined}
+              >
                 {scopeSummary(data)}
               </Tag>
             ) : null}
           </div>
           {data?.scope && !data.scope.dataset_version ? (
             <p className={styles.hint}>
-              These runs may span datasets or versions, whose scores are not strictly comparable. Pick a version to
-              compare like with like.
+              These runs may span datasets or versions, whose scores are not strictly comparable. Pick a
+              version to compare like with like.
             </p>
           ) : null}
           {runs.isError ? (
@@ -146,8 +155,8 @@ function Picker({ envId }: { envId: string }) {
               />
               {data.excluded_errored_count ? (
                 <p className={styles.hint}>
-                  {data.excluded_errored_count} run{data.excluded_errored_count === 1 ? ' is' : 's are'} hidden for
-                  erroring on over 20% of items.
+                  {data.excluded_errored_count} run{data.excluded_errored_count === 1 ? ' is' : 's are'}{' '}
+                  hidden for erroring on over 20% of items.
                 </p>
               ) : null}
             </>

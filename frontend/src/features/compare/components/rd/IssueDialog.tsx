@@ -17,6 +17,8 @@ export interface IssueDialogProps {
   onOpenChange: (open: boolean) => void;
   row: Row;
   metric: string;
+  /** Metrics a NEW issue can target (a picker shows when there are 2 or more). */
+  metrics?: string[];
   /** null = a new issue. */
   issue: RootCauseIssue | null;
   passNumber: number | null;
@@ -38,7 +40,21 @@ function uuid(): string {
       });
 }
 
-export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber, runId, slug, passRevision, onSaved }: IssueDialogProps) {
+export function IssueDialog({
+  open,
+  onOpenChange,
+  row,
+  metric: initialMetric,
+  metrics,
+  issue,
+  passNumber,
+  runId,
+  slug,
+  passRevision,
+  onSaved,
+}: IssueDialogProps) {
+  const [pickedMetric, setPickedMetric] = useState(initialMetric);
+  const metric = issue ? initialMetric : pickedMetric;
   const catalog = useCategoryCatalogQuery(slug, open);
   const mutation = useIssueAction(runId);
   const [category, setCategory] = useState(issue?.category ?? '');
@@ -65,6 +81,7 @@ export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber
   useEffect(() => {
     if (!open) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPickedMetric(initialMetric);
     setCategory(issue?.category ?? '');
     setSubcategory(issue?.subcategory ?? '');
     setFinding(issue?.finding ?? '');
@@ -73,6 +90,7 @@ export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber
     setSolutionNote(issue?.solution_note ?? '');
     setMessage('');
     clientId.current = uuid();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, issue]);
 
   const known = catalog.data?.categories ?? [];
@@ -161,6 +179,14 @@ export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber
       }
     >
       <div className={styles.form}>
+        {!issue && metrics && metrics.length > 1 ? (
+          <Select
+            label="Metric"
+            items={metrics.map((m) => ({ key: m, label: m }))}
+            value={metric}
+            onChange={(k) => k && setPickedMetric(String(k))}
+          />
+        ) : null}
         <Select
           label="Category"
           items={items}
@@ -180,7 +206,6 @@ export function IssueDialog({ open, onOpenChange, row, metric, issue, passNumber
         ) : null}
         <TextField label="Subcategory" value={subcategory} onChange={setSubcategory} />
         <Textarea label="Finding" value={finding} onChange={setFinding} rows={3} />
-        <Textarea label="Why this category" value={reason} onChange={setReason} rows={2} />
         <TextField label="Solution" value={solution} onChange={setSolution} />
         <Textarea label="Solution notes" value={solutionNote} onChange={setSolutionNote} rows={2} />
         {message ? (

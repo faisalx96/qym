@@ -25,9 +25,7 @@ export function StaleBanner({ since, filtersApplied, onRetry, now }: StaleBanner
       <Icon name="warning" size={14} />
       <span>
         Showing data from {relativeAge(since, now)}.{' '}
-        {filtersApplied
-          ? 'Your latest filter change is applied.'
-          : 'Your latest filter change is not applied yet.'}
+        {filtersApplied ? '' : 'Your latest filter change is not applied yet.'}
       </span>
       {onRetry ? (
         <Button variant="ghost" onPress={onRetry} icon={<Icon name="retry" size={12} />}>

@@ -109,7 +109,8 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--error);
+  /* --error alone is 4.15:1 on the elevated bar; lift it to clear AA at this size */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
   font: inherit;
   font-size: var(--font-sm);
   text-align: start;

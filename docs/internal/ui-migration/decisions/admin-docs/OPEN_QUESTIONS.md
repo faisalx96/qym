@@ -28,7 +28,8 @@ Dated lines; each is a decision the admin-docs agent made without a human.
 - 2026-10-11 — **Docs search is full-text** (brief 09 §9.8): titles and section titles
   rank first, then h2/h3 headings, then body text (first 24 KB per page). The index is
   a lazily imported chunk (~400 KB raw / ~110 KB gzip) loaded on the first keystroke;
-  the nav filter still works instantly on titles.
+  the nav list is not filtered while typing; the search popover lists title and heading
+  matches instantly (corrected after QA B11).
 - 2026-10-11 — **Prose scale via tokens** (`--docs-font-*`, `--docs-body`, `--docs-*`
   widths) added to `tokens.css`; DESIGN_LANGUAGE §5 updated; the frontend
   design-language test only allows `--docs-font-*` under `features/docs/`.

@@ -15,7 +15,9 @@ export function PlatformOwned() {
   return (
     <section className={styles.panel} aria-label="Set by the platform">
       <h4 className={styles.panelTitle}>Set by the platform</h4>
-      <p className={styles.hint}>These are filled in at launch and ignored if they appear in the inputs above.</p>
+      <p className={styles.hint}>
+        These are filled in at launch and ignored if they appear in the inputs above.
+      </p>
       <dl className={styles.platform}>
         {groups.map(([title, keys]) => (
           <div key={title} style={{ display: 'contents' }}>

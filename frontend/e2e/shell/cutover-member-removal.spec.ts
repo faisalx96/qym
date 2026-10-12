@@ -28,7 +28,7 @@ async function openRemoval(page: Page, slug: string, email: string) {
   const dialog = page.getByRole('alertdialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
-  await expect(dialog.getByText('They own 1 run here.')).toBeVisible();
+  await expect(dialog.getByText(/owns 1 run in this project\./)).toBeVisible();
   return { dialog, row };
 }
 
@@ -43,7 +43,7 @@ test.describe('member removal with a run transfer', () => {
     await expect(options.filter({ hasText: `Dana ${tag}` })).toHaveCount(0);
     await options.filter({ hasText: `Sam ${tag}` }).click();
     const removal = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().includes('/members/'));
-    await dialog.getByRole('button', { name: 'Remove member' }).click();
+    await dialog.getByRole('button', { name: 'Transfer 1 run and remove' }).click();
     expect((await removal).url()).toContain(`/members/${dana.id}?transfer_runs_to=${sam.id}`);
     await expect(dialog).toBeHidden();
     await expect(row).toHaveCount(0);

@@ -8,6 +8,16 @@ function alive(v: boolean | null | undefined, label: string) {
   return <Badge tone={v ? 'success' : 'danger'} dot={v}>{`${label}: ${v ? 'running' : 'stopped'}`}</Badge>;
 }
 
+function workersService(ws: NonNullable<MaintenanceOverview['workers']['workers_service']>) {
+  const up = ws.processes.filter((x) => x.alive).length;
+  return (
+    <Badge tone={ws.alive ? 'success' : 'danger'} dot={ws.alive} data-workers-service>
+      {ws.alive ? 'workers service running' : 'workers service NOT RESPONDING'} ({up}/{ws.processes.length}{' '}
+      processes)
+    </Badge>
+  );
+}
+
 /** The old one-sentence header as a scannable key/value grid. */
 export function MaintenanceSummary({ data }: { data: MaintenanceOverview }) {
   const s = data.settings;
@@ -20,8 +30,18 @@ export function MaintenanceSummary({ data }: { data: MaintenanceOverview }) {
         columns={3}
         dense
         items={[
-          { key: 'db', label: 'Database size', value: typeof size === 'number' ? formatBytes(size) : '—', mono: true },
-          { key: 'role', label: 'Role / service', value: [s.role, s.service].filter(Boolean).join(' · ') || '—', mono: true },
+          {
+            key: 'db',
+            label: 'Database size',
+            value: typeof size === 'number' ? formatBytes(size) : '—',
+            mono: true,
+          },
+          {
+            key: 'role',
+            label: 'Role / service',
+            value: [s.role, s.service].filter(Boolean).join(' · ') || '—',
+            mono: true,
+          },
           {
             key: 'maint',
             label: 'Maintenance mode',
@@ -30,9 +50,22 @@ export function MaintenanceSummary({ data }: { data: MaintenanceOverview }) {
           { key: 'events', label: 'Event log', value: s.event_log_mode, mono: true },
           { key: 'spans', label: 'Span retention', value: `${s.span_retention_days} d`, mono: true },
           { key: 'grace', label: 'Deleted-run grace', value: `${s.deleted_run_grace_days} d`, mono: true },
-          { key: 'partitions', label: 'Span partitions ahead', value: `${s.span_partition_days_ahead} d`, mono: true },
-          { key: 'workers', label: `Workers (${w.loops})`, value: <span className={styles.workers}>{alive(w.summary_worker_alive, 'summary')} {alive(w.maintenance_worker_alive, 'maintenance')}</span> },
-          
+          {
+            key: 'partitions',
+            label: 'Span partitions ahead',
+            value: `${s.span_partition_days_ahead} d`,
+            mono: true,
+          },
+          {
+            key: 'workers',
+            label: `Workers (${w.loops})`,
+            value: (
+              <span className={styles.workers}>
+                {alive(w.summary_worker_alive, 'summary')} {alive(w.maintenance_worker_alive, 'maintenance')}
+                {w.workers_service ? <> {workersService(w.workers_service)}</> : null}
+              </span>
+            ),
+          },
         ]}
       />
     </div>

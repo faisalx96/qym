@@ -19,8 +19,13 @@ test('four runs: summary, delta line against the baseline and the Metrics table'
   await expect(page.getByText('4 columns')).toBeVisible();
   await expect(page.getByText('cmp-qa-v1')).toBeVisible();
   await expect(page.getByText('40 aligned items')).toBeVisible();
-  await expect(chips(page).getByRole('button', { name: /^[A-D] .*(baseline|set as baseline)$/ })).toHaveCount(4);
-  await expect(chips(page).getByRole('button', { name: /^A .*, baseline$/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(chips(page).getByRole('button', { name: /^[A-D] .*(baseline|set as baseline)$/ })).toHaveCount(
+    4,
+  );
+  await expect(chips(page).getByRole('button', { name: /^A .*, baseline$/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   // one delta entry per candidate (not the baseline), with sign, verdict word and noise band
   await expect(deltaLine(page).locator('li[data-column]')).toHaveCount(3);
   await expect(deltaLine(page)).toContainText('+15.3 pts');
@@ -30,7 +35,8 @@ test('four runs: summary, delta line against the baseline and the Metrics table'
   await expect(deltaLine(page)).toContainText('±8.8');
   // analytics Metrics table
   const table = page.getByRole('table', { name: /Average per run over 40 filtered items/ });
-  for (const h of ['Run', 'correct', 'quality', 'Latency', 'Errors']) await expect(table.getByRole('columnheader', { name: h })).toBeVisible();
+  for (const h of ['Run', 'correct', 'quality', 'Latency', 'Errors'])
+    await expect(table.getByRole('columnheader', { name: h })).toBeVisible();
   await expect(table.getByRole('rowheader')).toHaveCount(4);
   await expect(table.getByRole('row', { name: /^A .*Base/ })).toContainText('baseline');
   await expect(table.getByRole('row', { name: /^A / })).toContainText('2 task · 1 scorer');
@@ -41,9 +47,14 @@ test('changing the baseline updates ?baseline= and re-signs the deltas', async (
   await page.goto(compareUrl([base, a, b, c]));
   await waitLoaded(page);
   await expect(deltaLine(page)).toContainText('+15.3 pts');
-  await chips(page).getByRole('button', { name: /^B .*set as baseline$/ }).click();
+  await chips(page)
+    .getByRole('button', { name: /^B .*set as baseline$/ })
+    .click();
   await expect.poll(() => urlParams(page).get('baseline')).toBe(a);
-  await expect(chips(page).getByRole('button', { name: /^B .*, baseline$/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(chips(page).getByRole('button', { name: /^B .*, baseline$/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   // A is now a candidate and is 15.3 pts worse than B
   await expect(deltaLine(page)).toContainText('−15.3 pts');
   await expect(deltaLine(page)).not.toContainText('+15.3 pts');
@@ -70,7 +81,9 @@ test('removing a run updates the URL; the remove control disappears at two runs'
   await expect(deltaLine(page).locator('li[data-column]')).toHaveCount(1);
 });
 
-test('two runs of two different models open as a cohort comparison (legacy auto-cohort)', async ({ page }) => {
+test('two runs of two different models open as a cohort comparison (legacy auto-cohort)', async ({
+  page,
+}) => {
   const { base, a } = seed.runs;
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
@@ -101,7 +114,8 @@ test('pass refs and a whole repeat run expand into pass columns (columns=passes)
   await expect(table.getByRole('rowheader')).toHaveCount(4);
   await expect(table.getByRole('rowheader').nth(0)).toContainText('pass 1');
   await page.getByTestId('item-row').first().click();
-  for (const p of [1, 2, 3]) await expect(page.locator(`[data-testid="output-card"][data-run="${repeat3}::pass${p}"]`)).toBeVisible();
+  for (const p of [1, 2, 3])
+    await expect(page.locator(`[data-testid="output-card"][data-run="${repeat3}::pass${p}"]`)).toBeVisible();
   await toggle.getByText('Run average').click();
   await expect.poll(() => urlParams(page).get('columns')).toBeNull();
   await expect(page.getByText('2 columns')).toBeVisible();
@@ -109,9 +123,12 @@ test('pass refs and a whole repeat run expand into pass columns (columns=passes)
 
 test('sessionStorage.compareRuns hand-off loads and moves into the URL', async ({ page }) => {
   const { base, a, b } = seed.runs;
-  await page.addInitScript((ids) => {
-    window.sessionStorage.setItem('compareRuns', JSON.stringify(ids));
-  }, [base, a, b]);
+  await page.addInitScript(
+    (ids) => {
+      window.sessionStorage.setItem('compareRuns', JSON.stringify(ids));
+    },
+    [base, a, b],
+  );
   await page.goto('/compare');
   await waitLoaded(page);
   await expect.poll(() => urlParams(page).getAll('runs')).toEqual([base, a, b]);
@@ -158,8 +175,12 @@ test('more than 20 runs shows the too-many error without calling the API', async
 });
 
 test('unknown run ids show the not-found state', async ({ page }) => {
-  await page.goto(compareUrl(['00000000-0000-4000-8000-0000000000aa', '00000000-0000-4000-8000-0000000000bb']));
-  await expect(page.getByText(/Runs in this comparison were not found|A run in this comparison was not found/)).toBeVisible();
+  await page.goto(
+    compareUrl(['00000000-0000-4000-8000-0000000000aa', '00000000-0000-4000-8000-0000000000bb']),
+  );
+  await expect(
+    page.getByText(/Runs in this comparison were not found|A run in this comparison was not found/),
+  ).toBeVisible();
   await expect(page.getByTestId('item-list')).toHaveCount(0);
 });
 
@@ -170,7 +191,11 @@ for (const status of [422, 500]) {
     await page.route('**/api/compare?*', (route) => {
       if (!failed) {
         failed = true;
-        return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ detail: `forced ${status}` }) });
+        return route.fulfill({
+          status,
+          contentType: 'application/json',
+          body: JSON.stringify({ detail: `forced ${status}` }),
+        });
       }
       return route.continue();
     });

@@ -110,6 +110,9 @@ class UIServer:
         self.run_state = RunState()
         self.discovery = RunDiscovery(results_dir)
         self._stop = threading.Event()
+        # False for `qym ui` without a file: no evaluation will ever register, so /api/run
+        # answers {"live": false} instead of {} and the viewer stops waiting.
+        self.expects_live = True
         self.static_dir = self._resolve_static_dir()
 
     @property
@@ -169,7 +172,10 @@ class UIServer:
             def do_GET(self) -> None:  # noqa: N802
                 path = urlparse(self.path).path
                 if path == "/api/run":
-                    return self._json(HTTPStatus.OK, server.run_state.get_run_info())
+                    info = server.run_state.get_run_info()
+                    if not info and not server.expects_live:
+                        info = {"live": False}
+                    return self._json(HTTPStatus.OK, info)
                 if path == "/api/snapshot":
                     return self._json(HTTPStatus.OK, server.run_state.get_snapshot())
                 if path == "/api/rows/stream":
@@ -195,6 +201,9 @@ class UIServer:
                 if data.get("error"):
                     status = HTTPStatus.NOT_FOUND if str(data["error"]).startswith("File not found") else HTTPStatus.BAD_REQUEST
                     return self._json(status, {"error": data["error"]})
+                run = data.get("run")
+                if isinstance(run, dict):
+                    run["editable"] = server.discovery.is_editable(file_path)
                 self._json(HTTPStatus.OK, data)
 
             def _stream(self) -> None:

@@ -3,10 +3,20 @@ import { binomPmf, computeSweepNoise, normalCdf, passAtK, passHatK, type NoiseIt
 
 // Golden values come from qym.core.reducers.noise_report (threshold 0.7).
 const LEFT: Record<string, number[]> = {
-  a: [1, 1, 0], b: [0, 0, 0], c: [1, 0, 1], d: [1, 1, 1], e: [0, 1, 0], f: [0.2, 0.9, 0.8],
+  a: [1, 1, 0],
+  b: [0, 0, 0],
+  c: [1, 0, 1],
+  d: [1, 1, 1],
+  e: [0, 1, 0],
+  f: [0.2, 0.9, 0.8],
 };
 const RIGHT: Record<string, number[]> = {
-  a: [1, 1, 1], b: [1, 0, 0], c: [1, 1, 1], d: [0, 1, 1], e: [1, 1, 0], f: [0.9, 0.95, 0.9],
+  a: [1, 1, 1],
+  b: [1, 0, 0],
+  c: [1, 1, 1],
+  d: [0, 1, 1],
+  e: [1, 1, 0],
+  f: [0.9, 0.95, 0.9],
 };
 const items = (): NoiseItem[] =>
   Object.keys(LEFT).map((id) => ({
@@ -49,7 +59,10 @@ describe('noise model (mirrors noise_report)', () => {
 
   it('flags a change beyond the band as improved / regressed by direction', () => {
     const many: NoiseItem[] = Array.from({ length: 40 }, () => ({
-      leftPasses: [false, false], rightPasses: [true, true], leftScores: [0.1, 0.2], rightScores: [0.9, 0.95],
+      leftPasses: [false, false],
+      rightPasses: [true, true],
+      leftScores: [0.1, 0.2],
+      rightScores: [0.9, 0.95],
     }));
     expect(computeSweepNoise(many, null, 'maximize').avgAtK!.verdict).toBe('improved');
     expect(computeSweepNoise(many, null, 'minimize').avgAtK!.verdict).toBe('regressed');

@@ -162,9 +162,12 @@ describe('golden run-page payloads', () => {
     if (expected.run_counts)
       it('counts items, completed, errors and not received', () => {
         const c = runCounts(rows, ctx.repeatAggregate);
-        expect({ total: c.total, completed: c.completed, errors: c.errors, notReceived: c.notReceived }).toEqual(
-          expected.run_counts,
-        );
+        expect({
+          total: c.total,
+          completed: c.completed,
+          errors: c.errors,
+          notReceived: c.notReceived,
+        }).toEqual(expected.run_counts);
       });
 
     if (expected.statuses)
@@ -199,20 +202,44 @@ describe('golden run-page payloads', () => {
       it('Compare shows the list mean for the run column and the server pass means pass by pass', () => {
         const want = expected.compare_means!;
         const payload = {
-          run: { run_id: 'rr', file_path: 'rr', run_name: 'rr', model_name: 'rr', samples: golden.samples, metric_names: golden.snapshot.metric_names, metric_specs: golden.snapshot.metric_specs, status: 'COMPLETED', config: {}, metadata: {} },
-          snapshot: { ...golden.snapshot, rows: golden.snapshot.rows.map((r) => ({ ...r, compare_item_id: r.item_id })) },
+          run: {
+            run_id: 'rr',
+            file_path: 'rr',
+            run_name: 'rr',
+            model_name: 'rr',
+            samples: golden.samples,
+            metric_names: golden.snapshot.metric_names,
+            metric_specs: golden.snapshot.metric_specs,
+            status: 'COMPLETED',
+            config: {},
+            metadata: {},
+          },
+          snapshot: {
+            ...golden.snapshot,
+            rows: golden.snapshot.rows.map((r) => ({ ...r, compare_item_id: r.item_id })),
+          },
         } as unknown as ComparePayload['runs'][number];
         const mean = (map: Map<string, number>) => [...map.values()].reduce((a, b) => a + b, 0) / map.size;
         const whole = buildCompareModel({ runs: [payload] } as ComparePayload, ['rr']);
         const [column] = metricColumns(whole, 'run');
         for (const [metric, value] of Object.entries(want.run))
-          expect(mean(columnItemScores(whole, column!, metricCtx(whole, metric))), `run ${metric}`).toBeCloseTo(value, 9);
-        const each = buildCompareModel({ runs: [payload] } as ComparePayload, ['rr::pass1', 'rr::pass2', 'rr::pass3']);
+          expect(
+            mean(columnItemScores(whole, column!, metricCtx(whole, metric))),
+            `run ${metric}`,
+          ).toBeCloseTo(value, 9);
+        const each = buildCompareModel({ runs: [payload] } as ComparePayload, [
+          'rr::pass1',
+          'rr::pass2',
+          'rr::pass3',
+        ]);
         const perPass = metricColumns(each, 'each');
         expect(perPass).toHaveLength(Object.keys(want.passes).length);
         perPass.forEach((col, i) => {
           for (const [metric, value] of Object.entries(want.passes[String(i + 1)]!))
-            expect(mean(columnItemScores(each, col, metricCtx(each, metric))), `pass ${i + 1} ${metric}`).toBeCloseTo(value, 9);
+            expect(
+              mean(columnItemScores(each, col, metricCtx(each, metric))),
+              `pass ${i + 1} ${metric}`,
+            ).toBeCloseTo(value, 9);
         });
       });
 
@@ -261,7 +288,8 @@ describe('golden run-page payloads', () => {
         for (const [metric, want] of Object.entries(expected.label_verdicts!)) {
           const idx = model.metricNames.indexOf(metric);
           const verdicts = rows.map(
-            (row) => isTaskErrorPass(row, metric, 0) || isMetricErrorMeta(row.pass_metric_meta?.[metric]?.[0]),
+            (row) =>
+              isTaskErrorPass(row, metric, 0) || isMetricErrorMeta(row.pass_metric_meta?.[metric]?.[0]),
           );
           expect(verdicts, metric).toEqual(want);
           expect(

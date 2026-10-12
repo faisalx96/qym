@@ -97,8 +97,6 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
         rate,
       )} on ${withMean[withMean.length - 1]!.label}. ${totalRuns} finished runs in ${data.length} days.`
     : `${totalRuns} finished runs in ${data.length} days, none with a ${metric} score.`;
-  const tickEvery = Math.max(1, Math.round(data.length / 6));
-  const ticks = data.filter((_, i) => i % tickEvery === 0).map((d) => d.date);
   return (
     <figure
       className={styles.figure}
@@ -113,18 +111,18 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
           <ComposedChart
             data={data}
             syncId="trend"
-            margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+            margin={{ top: 8, right: 24, left: 0, bottom: 0 }}
             accessibilityLayer
           >
             <CartesianGrid vertical={false} stroke="var(--border-subtle)" />
             <XAxis
               dataKey="date"
-              ticks={ticks}
               tickFormatter={short}
               axisLine={{ stroke: 'var(--border-default)' }}
               tickLine={false}
               tick={{ fill: 'var(--text-muted)' }}
-              interval={0}
+              interval="preserveStartEnd"
+              minTickGap={28}
             />
             <YAxis
               domain={[low, high]}
@@ -161,7 +159,7 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
           <BarChart
             data={data}
             syncId="trend"
-            margin={{ top: 2, right: 12, left: 0, bottom: 0 }}
+            margin={{ top: 2, right: 24, left: 0, bottom: 0 }}
             barCategoryGap={2}
             accessibilityLayer
           >

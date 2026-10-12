@@ -1,9 +1,8 @@
 /** Repeat items in the all-passes view: one output column per pass with its own verdict, trace and score chips (brief 04 J4). */
 import { useMemo, useState } from 'react';
-import { formatLatency } from '@/lib/metrics';
-import { Chip, CopyButton, Icon, IconButton, ScoreValue, Tag, TextBlock } from '@/ui';
+import { Chip, CopyButton, Icon, IconButton, ScoreValue, Select, Tag, TextBlock } from '@/ui';
 import { bodyText } from '../../lib/itemText';
-import { metricCell, rowStatus } from '../../lib/rowDisplay';
+import { latencyLabel, metricCell, rowStatus } from '../../lib/rowDisplay';
 import { scopeRowToPass } from '../../lib/passScope';
 import { useRunPage } from '../../RunContext';
 import type { Row } from '../../types';
@@ -81,6 +80,45 @@ function PassMetrics({ row, pass, scoped }: { row: Row; pass: number; scoped: Ro
   );
 }
 
+/** One metric lined up across the passes (the old per-metric comparison panel). */
+function PassMetricCompare({ scoped }: { scoped: Row[] }) {
+  const { model, api } = useRunPage();
+  const [metric, setMetric] = useState<string | null>(null);
+  const current =
+    metric && model.metricNames.includes(metric) ? metric : (api.selectedMetric ?? model.metricNames[0]);
+  if (!current || model.metricNames.length === 0) return null;
+  return (
+    <div className={styles.compare} data-testid="pass-metric-compare">
+      <Select
+        label="Compare metric across passes"
+        items={model.metricNames.map((n) => ({ key: n, label: n }))}
+        value={current}
+        onChange={(k) => k && setMetric(String(k))}
+        width="16ch"
+      />
+      <dl className={styles.compareList} aria-label={`${current} by pass`}>
+        {scoped.map((s, i) => {
+          const cell = metricCell(api.ctx, s, current);
+          return (
+            <div key={i} className={styles.compareItem} data-pass={i + 1}>
+              <dt>Pass {i + 1}</dt>
+              <dd>
+                <ScoreValue
+                  value={cell.value}
+                  type={cell.type}
+                  direction={cell.direction}
+                  error={cell.error}
+                  text={cell.text}
+                />
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
+}
+
 export function PassColumns({ row }: { row: Row }) {
   const { model, api } = useRunPage();
   const ui = useItemsUi();
@@ -115,6 +153,7 @@ export function PassColumns({ row }: { row: Row }) {
         ))}
         <Tag kind="count">{unique} unique</Tag>
       </header>
+      <PassMetricCompare scoped={scoped} />
       <div className={styles.cols}>
         {passes
           .filter((p) => !hidden.has(p))
@@ -139,7 +178,9 @@ export function PassColumns({ row }: { row: Row }) {
                   >
                     {status.label}
                   </Tag>
-                  {s.latency_ms ? <span className={styles.meta}>{formatLatency(s.latency_ms)}</span> : null}
+                  {s.latency_ms != null ? (
+                    <span className={styles.meta}>{latencyLabel(s.latency_ms)}</span>
+                  ) : null}
                   <span className={styles.actions}>
                     {s.trace_id ? (
                       <IconButton

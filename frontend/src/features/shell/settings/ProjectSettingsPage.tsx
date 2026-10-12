@@ -2,8 +2,9 @@ import { useEffect, useMemo } from 'react';
 import { useProjectContext } from '../ProjectContext';
 import { useDocumentTitle } from '../hooks';
 import { constrained } from '../layout';
+import { plural } from '../plural';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Badge, Identicon, PageHeader, TabPanel, Tabs, Tag } from '@/ui';
+import { Badge, Identicon, PageHeader, TabPanel, Tabs, Tag, Text } from '@/ui';
 import { GeneralTab } from './GeneralTab';
 import { MembersTab } from './MembersTab';
 import { ApiKeysTab } from './ApiKeysTab';
@@ -61,7 +62,7 @@ export function ProjectSettingsPage() {
           <Tag key="role" kind="role">
             {isAdmin ? 'admin' : project.role || 'member'}
           </Tag>,
-          `${project.member_count} member${project.member_count === 1 ? '' : 's'}`,
+          plural(project.member_count, 'member'),
           readOnly ? (
             <Badge key="status" tone="warning">
               archived
@@ -73,6 +74,15 @@ export function ProjectSettingsPage() {
           ),
         ]}
       />
+      {readOnly ? (
+        <Text variant="sm" as="p" data-archived-settings-note>
+          Settings are read-only while the project is archived.
+          {canManage
+            ? ' You can still revoke API keys and remove members'
+            : ' You can still revoke your own API keys'}
+          {isAdmin ? ', and unarchive or delete the project from the Danger zone.' : '.'}
+        </Text>
+      ) : null}
       <Tabs
         label="Settings sections"
         items={items}

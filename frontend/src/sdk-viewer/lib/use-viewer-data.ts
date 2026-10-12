@@ -23,6 +23,8 @@ export interface ViewerData {
   connection: Connection;
   /** the run reached a terminal state (live: done event or status != RUNNING; file: always) */
   finished: boolean;
+  /** live URL, but the server says no evaluation is running here (`qym ui` without a file) */
+  noLiveRun: boolean;
   reload: () => void;
   /** file mode: save a corrected metric score, replacing the row in memory */
   saveScore: (rowIndex: number, metric: string, score: string) => Promise<void>;
@@ -57,6 +59,7 @@ export function useViewerData(pathname: string = window.location.pathname): View
     snapshot: Snapshot | null;
     connection: Connection;
     finished: boolean;
+    noLiveRun: boolean;
   }>({
     loading: true,
     error: null,
@@ -64,6 +67,7 @@ export function useViewerData(pathname: string = window.location.pathname): View
     snapshot: null,
     connection: 'connecting',
     finished: false,
+    noLiveRun: false,
   });
   const [attempt, setAttempt] = useState(0);
 
@@ -106,6 +110,10 @@ export function useViewerData(pathname: string = window.location.pathname): View
         const [run, snap] = await Promise.all([fetchRun(abort.signal), fetchSnapshot(abort.signal)]);
         if (cancelled) return;
         const snapshot = normalise(snap);
+        if (run.live === false) {
+          patch({ loading: false, run: EMPTY_RUN, noLiveRun: true, connection: 'closed' });
+          return;
+        }
         runLoaded = !!run.dataset_name;
         patch({ loading: false, run, snapshot, finished: !!run.status && run.status !== 'RUNNING' });
       } catch (err) {

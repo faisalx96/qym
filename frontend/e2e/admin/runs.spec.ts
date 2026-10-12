@@ -4,7 +4,9 @@ import { test, expect } from '@playwright/test';
 import { createApiKey, createProject, createRun, gotoApp, uniqueSlug } from '../helpers';
 
 test.describe('admin tabs', () => {
-  test('/admin redirects to /admin/runs; tab clicks change the URL; back button restores', async ({ page }) => {
+  test('/admin redirects to /admin/runs; tab clicks change the URL; back button restores', async ({
+    page,
+  }) => {
     await gotoApp(page, '/admin');
     await expect(page).toHaveURL(/\/admin\/runs$/);
     await expect(page.getByRole('tab', { name: /^Runs/ })).toHaveAttribute('aria-selected', 'true');
@@ -28,12 +30,18 @@ test.describe('admin tabs', () => {
   });
 
   test('member forbidden state is not reachable under auth none', async () => {
-    test.skip(true, 'QYM_AUTH_MODE=none makes every request ADMIN; see admin/proxy.spec.ts for the member case');
+    test.skip(
+      true,
+      'QYM_AUTH_MODE=none makes every request ADMIN; see admin/proxy.spec.ts for the member case',
+    );
   });
 });
 
 test.describe('force stop', () => {
-  test('confirm dialog, exactly one POST, row leaves Live and appears as STOPPED in Recent', async ({ page, request }) => {
+  test('confirm dialog, exactly one POST, row leaves Live and appears as STOPPED in Recent', async ({
+    page,
+    request,
+  }) => {
     const project = await createProject(request, 'Force Stop', uniqueSlug('fstop'));
     const token = await createApiKey(request, project.id);
     const run = await createRun(request, token, { name: uniqueSlug('live'), finish: false });
@@ -86,4 +94,13 @@ test.describe('force stop', () => {
     // still gone after the refetches settle
     await expect(live).not.toContainText(name);
   });
+});
+
+test('page beyond the last is clamped; live count hidden on error', async ({ page }) => {
+  await gotoApp(page, '/admin/runs?page=99');
+  await expect(page).not.toHaveURL(/page=99/);
+  await page.route(/\/api\/runs\/live/, (route) => route.fulfill({ status: 500, json: { detail: 'boom' } }));
+  await gotoApp(page, '/admin/runs');
+  await expect(page.getByText('Failed to load live runs')).toBeVisible();
+  await expect(page.getByText(/running across all projects/)).toHaveCount(0);
 });

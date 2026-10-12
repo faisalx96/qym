@@ -46,3 +46,43 @@
 .num {
   color: var(--text-primary);
 }
+
+/* Hover / focus card for the neighbouring run. */
+.stepWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.peekCard {
+  position: absolute;
+  top: calc(100% + var(--space-xs));
+  inset-inline-end: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  max-width: 280px;
+  padding: var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dropdown-radius);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+}
+
+.peek {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.peekName {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.peekScore {
+  font-family: var(--font-mono);
+}

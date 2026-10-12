@@ -192,6 +192,39 @@ test.describe('charts (J7)', () => {
     await expect(table.getByRole('button', { name: /^Expand / }).first()).toBeVisible();
   });
 
+  test('the Columns menu toggles the group stats and offers no Duration', async ({ page, request }) => {
+    const s = await chartsProject(request);
+    await page.goto(chartsUrl(s.project.slug));
+    const c = card(page, 'text2sql');
+    await expect(loadedTable(page, 'text2sql')).toBeVisible();
+    await c.getByRole('radiogroup', { name: 'text2sql rows' }).getByText('Grouped', { exact: true }).click();
+    const table = loadedTable(page, 'text2sql');
+    await expect(table.locator('thead th', { hasText: 'Consistency' })).toBeVisible();
+    await page.getByRole('button', { name: 'Columns' }).click();
+    const menu = page.getByRole('dialog', { name: 'Columns' });
+    await expect(menu.getByRole('checkbox', { name: 'Duration', exact: true })).toHaveCount(0);
+    await menu.getByRole('checkbox', { name: 'Consistency', exact: true }).click({ force: true });
+    await expect(table.locator('thead th', { hasText: 'Consistency' })).toHaveCount(0);
+    await expect(table.locator('thead th', { hasText: 'Pass@K' })).toBeVisible();
+  });
+
+  test('with live runs the Charts overview refetches on the 15 s live cadence, not the 60 s idle one', async ({
+    page,
+    request,
+  }) => {
+    const s = await freshProject(request, 12, { running: true });
+    await page.clock.install();
+    const overview = capture(page, 'overview');
+    await page.goto(chartsUrl(s.project.slug));
+    await expect(card(page, 'text2sql')).toBeVisible();
+    await expect.poll(() => overview.count()).toBeGreaterThanOrEqual(1);
+    await page.clock.runFor(1_000); // let the live-runs read land and set the cadence
+    await page.waitForTimeout(500);
+    overview.clear();
+    await page.clock.runFor(20_000);
+    await expect.poll(() => overview.count()).toBeGreaterThanOrEqual(1);
+  });
+
   test('filters apply to the charts (task filter leaves one card) and Clear filters restores', async ({
     page,
     request,

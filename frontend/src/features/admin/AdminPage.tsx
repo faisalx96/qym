@@ -29,7 +29,9 @@ export function AdminPage() {
   if (!selected) return <Navigate to="/admin/runs" replace />;
   const archived = projects.data?.filter((p) => !p.is_active) ?? [];
   const runs = projects.data?.reduce((n, p) => n + p.run_count, 0);
-  const activeJobs = maint.data?.jobs.filter((j) => ['queued', 'running', 'cancel_requested'].includes(j.status)).length;
+  const activeJobs = maint.data?.jobs.filter((j) =>
+    ['queued', 'running', 'cancel_requested'].includes(j.status),
+  ).length;
   return (
     <div className={constrained} data-admin-page>
       <PageHeader title="Admin" description="Platform-wide runs, projects, users and maintenance." />
@@ -40,12 +42,22 @@ export function AdminPage() {
         <StatStrip
           aria-label="Platform totals"
           items={[
-            { label: 'Users', value: users.data?.length ?? '—', sub: users.data ? `${users.data.filter((u) => !u.is_active).length} disabled` : undefined },
-            { label: 'Projects', value: projects.data?.length ?? '—', sub: projects.data ? `${archived.length} archived` : undefined },
+            {
+              label: 'Users',
+              value: users.data?.length ?? '—',
+              sub: users.data ? `${users.data.filter((u) => !u.is_active).length} disabled` : undefined,
+            },
+            {
+              label: 'Projects',
+              value: projects.data?.length ?? '—',
+              sub: projects.data ? `${archived.length} archived` : undefined,
+            },
             {
               label: 'Runs, all projects',
               value: runs ?? '—',
-              sub: archived.length ? `incl. ${archived.reduce((n, p) => n + p.run_count, 0)} in archived projects` : undefined,
+              sub: archived.length
+                ? `incl. ${archived.reduce((n, p) => n + p.run_count, 0)} in archived projects`
+                : undefined,
               help: 'Sum of every project’s run count, including archived projects. Deleted runs are excluded. The lists below only show active projects.',
             },
           ]}

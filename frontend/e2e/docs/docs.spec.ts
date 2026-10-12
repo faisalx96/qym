@@ -14,14 +14,19 @@ const ia = JSON.parse(readFileSync(path.resolve(here, '../../src/features/docs/i
 const PAGES = ia.sections.flatMap((s) => s.pages.map((p) => ({ section: s.id, page: p.id, title: p.title })));
 const FIRST = '/docs/get-started/what-is-qym';
 
-const scroller = (page: Page) => page.evaluate(() => document.getElementById('shell-content')?.scrollTop ?? -1);
+const scroller = (page: Page) =>
+  page.evaluate(() => document.getElementById('shell-content')?.scrollTop ?? -1);
 
 test.describe('routing', () => {
-  test('legacy /docs-guide#developer/endpoints/conventions lands on the heading with the TOC entry current', async ({ page }) => {
+  test('legacy /docs-guide#developer/endpoints/conventions lands on the heading with the TOC entry current', async ({
+    page,
+  }) => {
     await gotoApp(page, '/docs-guide#developer/endpoints/conventions');
     await expect(page).toHaveURL(/\/docs\/developer\/endpoints#conventions$/);
     await expect(page.locator('#conventions')).toBeInViewport();
-    await expect(page.locator('[data-docs-toc]:visible').getByRole('link', { name: 'Conventions' })).toHaveAttribute('aria-current', 'location');
+    await expect(
+      page.locator('[data-docs-toc]:visible').getByRole('link', { name: 'Conventions' }),
+    ).toHaveAttribute('aria-current', 'location');
   });
 
   for (const p of ['/docs-guide', '/docs']) {
@@ -41,7 +46,9 @@ test.describe('routing', () => {
   test('deep link /docs/developer/endpoints#datasets scrolls to the heading', async ({ page }) => {
     await gotoApp(page, '/docs/developer/endpoints#datasets');
     await expect(page.locator('#datasets')).toBeInViewport();
-    await expect(page.locator('[data-docs-toc]:visible').getByRole('link', { name: 'Datasets', exact: true })).toHaveAttribute('aria-current', 'location');
+    await expect(
+      page.locator('[data-docs-toc]:visible').getByRole('link', { name: 'Datasets', exact: true }),
+    ).toHaveAttribute('aria-current', 'location');
   });
 });
 
@@ -90,7 +97,11 @@ test.describe('every page renders', () => {
     await gotoApp(page, '/docs/developer/api-overview');
     const loads = trackPageLoads(page);
     await expect(page.locator('[data-docs-article] h1')).toBeVisible();
-    const link = page.locator('[data-docs-article] a[href="/docs/sdk-guide/observers"], [data-docs-article] a[href$="/docs/sdk-guide/observers"]').first();
+    const link = page
+      .locator(
+        '[data-docs-article] a[href="/docs/sdk-guide/observers"], [data-docs-article] a[href$="/docs/sdk-guide/observers"]',
+      )
+      .first();
     await expect(link).toBeVisible();
     await link.scrollIntoViewIfNeeded();
     await link.click();
@@ -101,7 +112,9 @@ test.describe('every page renders', () => {
 });
 
 test.describe('search', () => {
-  test('"/" focuses search; a body-only term lists results with crumbs; ArrowDown+Enter opens; Escape clears', async ({ page }) => {
+  test('"/" focuses search; a body-only term lists results with crumbs; ArrowDown+Enter opens; Escape clears', async ({
+    page,
+  }) => {
     await gotoApp(page, '/docs/get-started/what-is-qym');
     await expect(page.locator('[data-docs-article] h1')).toBeVisible();
     const input = page.getByRole('combobox');
@@ -139,7 +152,9 @@ test.describe('search', () => {
     const input = page.getByRole('combobox');
     await input.click();
     await input.fill('zzqqxxnotaterm');
-    await expect(page.getByRole('listbox', { name: 'Search results' })).toContainText('No results for “zzqqxxnotaterm”');
+    await expect(page.getByRole('listbox', { name: 'Search results' })).toContainText(
+      'No results for “zzqqxxnotaterm”',
+    );
     await input.fill('a/b');
     await expect(input).toHaveValue('a/b');
   });
@@ -188,4 +203,13 @@ test('axe: /docs/developer/endpoints has zero serious/critical violations', asyn
   await expect(page.locator('[data-docs-article] h1')).toBeVisible();
   const v = await axeSeriousViolations(page);
   expect(v, describeViolations(v)).toEqual([]);
+});
+
+test('pager does not overflow horizontally on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await gotoApp(page, '/docs/sdk-guide/config');
+  const over = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(over).toBeLessThanOrEqual(0);
 });

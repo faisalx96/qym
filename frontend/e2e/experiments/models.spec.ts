@@ -200,15 +200,115 @@ test.describe('models page', () => {
     await seedRuns(request, project, [{ model: 'model-a', scores: [1, 1], n: 2 }]);
     await gotoApp(page, modelsPath(project.slug));
     await expect(page.locator('[data-model^="model-a|"]')).toBeVisible();
-    await page.getByRole('radiogroup', { name: 'Origin' }).getByText('Official', { exact: true }).click();
+    await page.getByTestId('filters-trigger').click();
+    const panel = page.getByTestId('filters-panel');
+    await panel.getByRole('radiogroup', { name: 'Origin' }).getByText('Official', { exact: true }).click();
     await expect.poll(() => query(page).get('origin')).toBe('official');
     // runs created by the SDK are local, so nothing is official
+    await page.keyboard.press('Escape');
     await expect(page.getByText('No runs in this period')).toBeVisible();
     await page.reload();
+    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText('official');
+    await page.getByTestId('filters-trigger').click();
     await expect(page.getByRole('radio', { name: 'Official' })).toBeChecked();
     await page.getByRole('radiogroup', { name: 'Origin' }).getByText('All', { exact: true }).click();
     await page.getByRole('radiogroup', { name: 'Time range' }).getByText('7d', { exact: true }).click();
-    await expect.poll(() => query(page).get('range')).toBe('7d');
+    await expect.poll(() => query(page).get('range')).toBe('week');
+    await page.keyboard.press('Escape');
     await expect(page.locator('[data-model^="model-a|"]')).toBeVisible();
+  });
+
+  test('model and status facets, a custom range, Clear and the shared runs filter', async ({
+    page,
+    request,
+  }) => {
+    const { project } = await seedProject(request, 'models-facets');
+    await seedRuns(request, project, [
+      { model: 'model-a', scores: [1, 1], n: 2 },
+      { model: 'model-b', scores: [0, 0], n: 2 },
+    ]);
+    await gotoApp(page, modelsPath(project.slug));
+    await expect(page.locator('[data-model^="model-a|"]')).toBeVisible();
+    await expect(page.locator('[data-model^="model-b|"]')).toBeVisible();
+    await expect(page.getByTestId('models-summary')).toHaveText('4 runs');
+
+    await page.getByTestId('filters-trigger').click();
+    const panel = page.getByTestId('filters-panel');
+    await panel.getByRole('button', { name: /^Models/ }).click();
+    await panel.getByRole('button', { name: 'Only model-a' }).click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-model^="model-b|"]')).toHaveCount(0);
+    await expect(page.locator('[data-model^="model-a|"]')).toBeVisible();
+    await expect(page.getByTestId('models-summary')).toContainText('2 of 4 runs — model: model-a');
+    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText('model-a');
+
+    // a custom range that excludes today leaves nothing
+    await page.getByTestId('filters-trigger').click();
+    await page.getByRole('radiogroup', { name: 'Time range' }).getByText('Range…', { exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Custom date range' });
+    await dialog.getByLabel('From').fill('2001-01-01');
+    await dialog.getByLabel('To').fill('2001-01-31');
+    await dialog.getByRole('button', { name: 'Apply' }).click();
+    await expect.poll(() => query(page).get('range')).toBe('custom');
+    await expect(page.getByText('No runs in this period')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: /^Clear \d/ }).click();
+    await expect(page.locator('[data-model^="model-b|"]')).toBeVisible();
+    await expect.poll(() => query(page).get('model')).toBeNull();
+
+    // filters set on the Runs page carry over when the Models page is opened without any
+    await gotoApp(page, `/projects/${project.slug}?model=model-b`);
+    await expect(page.getByRole('link', { name: 'Models', exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Models', exact: true }).click();
+    await expect.poll(() => query(page).get('model')).toBe('model-b');
+    await expect(page.locator('[data-model^="model-a|"]')).toHaveCount(0);
+    await expect(page.locator('[data-model^="model-b|"]')).toBeVisible();
+  });
+
+  test('score tiles keep one decimal, the top three are medalled and trace tiles show averages', async ({
+    page,
+    request,
+  }) => {
+    const { project } = await seedProject(request, 'models-trace');
+    await seedRuns(request, project, [
+      {
+        model: 'model-a',
+        scores: [1, 1, 1],
+        n: 1,
+      },
+      { model: 'model-b', scores: [1, 0, 0], n: 1 },
+    ]);
+    // the SDK ingest cannot produce spans here: give model-a's runs trace statistics in the response
+    await page.route('**/api/dashboard/models', async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as {
+        models?: { model_key: string; rows: Record<string, unknown>[] }[];
+      };
+      for (const m of body.models ?? [])
+        if (m.model_key.startsWith('model-a'))
+          for (const row of m.rows)
+            row.trace_stats = {
+              has_spans: true,
+              avg_tokens: 1500,
+              avg_llm_calls: 1,
+              avg_tool_calls: 4,
+              tool_success_rate: 0.75,
+            };
+      await route.fulfill({ response, json: body });
+    });
+    await gotoApp(page, modelsPath(project.slug));
+    const a = page.locator('[data-model^="model-a|"]');
+    await expect(a).toContainText('Avg tokens');
+    await expect(a).toContainText('1.5K');
+    await expect(a).toContainText('Avg LLM calls');
+    await expect(a).toContainText('1.0');
+    await expect(a).toContainText('Tool success rate');
+    await expect(a).toContainText('75.0%');
+    const b = page.locator('[data-model^="model-b|"]');
+    await expect(b).toContainText('33.3%');
+    const ranking = page.locator('#models-ranking').locator('..');
+    await expect(ranking.getByRole('img', { name: 'Rank 1' })).toHaveText('\u{1F947}');
+    await expect(ranking.getByRole('img', { name: 'Rank 2' })).toHaveText('\u{1F948}');
   });
 });

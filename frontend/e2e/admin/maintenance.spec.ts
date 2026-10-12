@@ -10,7 +10,10 @@ async function pickJob(page: Page, kind: string) {
   await form.getByRole('button', { name: /Job/ }).click();
   const search = page.getByRole('searchbox').first();
   if (await search.isVisible().catch(() => false)) await search.fill(kind);
-  await page.getByRole('option', { name: new RegExp(kind) }).first().click();
+  await page
+    .getByRole('option', { name: new RegExp(kind) })
+    .first()
+    .click();
   await expect(form.getByRole('button', { name: /Job/ })).toContainText(kind);
 }
 
@@ -23,12 +26,16 @@ test('tab loads with summary and the db_stats error state on SQLite', async ({ p
 });
 
 test('server rejects an irreversible job without confirm (direct API 400)', async ({ request }) => {
-  const bad = await request.post('/api/admin/maintenance/jobs', { data: { kind: 'drop_legacy_spans', params: {} } });
+  const bad = await request.post('/api/admin/maintenance/jobs', {
+    data: { kind: 'drop_legacy_spans', params: {} },
+  });
   expect(bad.status()).toBe(400);
   expect(await bad.text()).toContain('confirm');
 });
 
-test('queue a reversible job, open its log, and polling runs every ~3 s while it is active', async ({ page }) => {
+test('queue a reversible job, open its log, and polling runs every ~3 s while it is active', async ({
+  page,
+}) => {
   test.setTimeout(60_000);
   await gotoApp(page, '/admin/maintenance');
   await expect(page.locator('[data-enqueue-form]')).toBeVisible();
@@ -70,7 +77,9 @@ test('queue a reversible job, open its log, and polling runs every ~3 s while it
   await row.getByRole('button', { name: 'Cancel' }).click();
 });
 
-test('irreversible job needs the typed name; the button stays disabled until it matches', async ({ page }) => {
+test('irreversible job needs the typed name; the button stays disabled until it matches', async ({
+  page,
+}) => {
   await gotoApp(page, '/admin/maintenance');
   await expect(page.locator('[data-enqueue-form]')).toBeVisible();
   await pickJob(page, 'drop_legacy_spans');
@@ -85,12 +94,18 @@ test('irreversible job needs the typed name; the button stays disabled until it 
   await field.fill('drop_legacy_spans');
   await expect(submit).toBeEnabled();
 
-  const reqP = page.waitForRequest((r) => r.method() === 'POST' && r.url().includes('/api/admin/maintenance/jobs'));
+  const reqP = page.waitForRequest(
+    (r) => r.method() === 'POST' && r.url().includes('/api/admin/maintenance/jobs'),
+  );
   await submit.click();
   const body = (await reqP).postDataJSON() as Record<string, unknown>;
   expect(body).toMatchObject({ kind: 'drop_legacy_spans', confirm: 'drop_legacy_spans' });
   await expect(page.getByText('Queued drop_legacy_spans')).toBeVisible();
-  const row = page.getByRole('grid', { name: 'Maintenance jobs' }).getByRole('row').filter({ hasText: 'drop_legacy_spans' }).first();
+  const row = page
+    .getByRole('grid', { name: 'Maintenance jobs' })
+    .getByRole('row')
+    .filter({ hasText: 'drop_legacy_spans' })
+    .first();
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Cancel' }).click();
 });
@@ -112,4 +127,19 @@ test('invalid params JSON shows its inline error message', async ({ page }) => {
   const form = page.locator('[data-enqueue-form]');
   await form.getByLabel('Params (JSON)').fill('{oops');
   await expect(form.getByText('Params must be valid JSON.')).toBeVisible();
+});
+
+test('workers service liveness shows in the header (mocked separate workers)', async ({ page }) => {
+  await page.route(/\/api\/admin\/maintenance(\?|$)/, async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    body.workers = {
+      ...body.workers,
+      loops: 'separate',
+      workers_service: { alive: false, processes: [{ alive: false }, { alive: false }] },
+    };
+    await route.fulfill({ response: res, json: body });
+  });
+  await gotoApp(page, '/admin/maintenance');
+  await expect(page.locator('[data-workers-service]')).toContainText('NOT RESPONDING (0/2 processes)');
 });

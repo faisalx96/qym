@@ -46,7 +46,8 @@ test('Retry failed over several jobs confirms once, asks for the HIGH acknowledg
 
   const bodies: Record<string, unknown>[] = [];
   page.on('request', (r: Request) => {
-    if (r.method() === 'POST' && r.url().includes('/retry')) bodies.push((r.postDataJSON() ?? {}) as Record<string, unknown>);
+    if (r.method() === 'POST' && r.url().includes('/retry'))
+      bodies.push((r.postDataJSON() ?? {}) as Record<string, unknown>);
   });
   await gotoApp(page, expPath(project.slug, `/${x.id}`));
   await page.getByRole('button', { name: 'Retry failed (2)' }).click();
@@ -85,7 +86,9 @@ test('a matrix cell hands its job to the default preset editor, which opens on t
   const job = x.jobs[0]!;
   await page.locator(`[data-exp-promote="${job.id}"]`).click();
   await expect(page).toHaveURL(
-    new RegExp(`/projects/${project.slug}/environments/${env.id}/default-preset/edit\\?.*promote=job.*id=${job.id}`),
+    new RegExp(
+      `/projects/${project.slug}/environments/${env.id}/default-preset/edit\\?.*promote=job.*id=${job.id}`,
+    ),
   );
   await expect(page.getByRole('complementary', { name: 'Review and publish' })).toBeVisible();
 });

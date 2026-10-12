@@ -19,7 +19,9 @@ const decision = {
 
 describe('runs list stopping state (test_run_stop_reflection.py)', () => {
   it('shows STOPPING while a stop is under way, with the reason in the tooltip', () => {
-    const { container } = render(<StatusCell row={{ ...row('RUNNING', null), stop_requested: true } as RunRow} />);
+    const { container } = render(
+      <StatusCell row={{ ...row('RUNNING', null), stop_requested: true } as RunRow} />,
+    );
     expect(container).toHaveTextContent('Stopping…');
     expect(container.querySelector('[title]')).toHaveAttribute(
       'title',
@@ -28,7 +30,9 @@ describe('runs list stopping state (test_run_stop_reflection.py)', () => {
   });
 
   it('a stop request on a finished run changes nothing', () => {
-    const { container } = render(<StatusCell row={{ ...row('COMPLETED', null), stop_requested: true } as RunRow} />);
+    const { container } = render(
+      <StatusCell row={{ ...row('COMPLETED', null), stop_requested: true } as RunRow} />,
+    );
     expect(container).not.toHaveTextContent('Stopping…');
   });
 });

@@ -10,14 +10,22 @@ import { api } from '@/lib/http';
 import { encodeRunId } from '@/api/runs';
 import type { ItemSearchPayload } from '@/features/run-detail/types';
 import type { CompareModel } from '../lib/model';
-import { isFilterGroup, localMatcher, rowText, type FilterNode, type ItemContext, type TextMatcher } from '../lib/filters';
+import {
+  isFilterGroup,
+  localMatcher,
+  rowText,
+  type FilterNode,
+  type ItemContext,
+  type TextMatcher,
+} from '../lib/filters';
 
 export const MAX_SEARCH_CONDITIONS = 32;
 const MAX_QUERY = 10_000;
 
 export function collectOutputValues(node: FilterNode, out: string[] = []): string[] {
   if (isFilterGroup(node)) node.children.forEach((c) => collectOutputValues(c, out));
-  else if (node.field === 'output' && typeof node.value === 'string' && node.value.trim()) out.push(node.value);
+  else if (node.field === 'output' && typeof node.value === 'string' && node.value.trim())
+    out.push(node.value);
   return out;
 }
 
@@ -38,7 +46,10 @@ export interface CompareSearch {
 export function useCompareSearch(model: CompareModel | null, q: string, rules: FilterNode): CompareSearch {
   const query = q.trim();
   const outputs = useDebounced(
-    useMemo(() => Array.from(new Set(collectOutputValues(rules))).slice(0, MAX_SEARCH_CONDITIONS - 1), [rules]),
+    useMemo(
+      () => Array.from(new Set(collectOutputValues(rules))).slice(0, MAX_SEARCH_CONDITIONS - 1),
+      [rules],
+    ),
     150,
   );
   const lazy = !!model && model.runs.some((r) => r.snapshot.detail_mode === 'lazy');
@@ -66,7 +77,11 @@ export function useCompareSearch(model: CompareModel | null, q: string, rules: F
       queryFn: () =>
         api.post<ItemSearchPayload>(`/api/runs/${encodeRunId(base)}/items/search`, {
           conditions,
-          ...(passes.length === 1 ? { pass_number: passes[0] } : passes.length > 1 ? { pass_numbers: passes } : {}),
+          ...(passes.length === 1
+            ? { pass_number: passes[0] }
+            : passes.length > 1
+              ? { pass_numbers: passes }
+              : {}),
         }),
       enabled,
       staleTime: 60_000,
@@ -89,7 +104,9 @@ export function useCompareSearch(model: CompareModel | null, q: string, rules: F
         byId.set(id, s);
       };
       Object.entries(data.matches ?? {}).forEach(([id, ids]) => add(id, ids));
-      Object.values(data.matches_by_pass ?? {}).forEach((m) => Object.entries(m).forEach(([id, ids]) => add(id, ids)));
+      Object.values(data.matches_by_pass ?? {}).forEach((m) =>
+        Object.entries(m).forEach(([id, ids]) => add(id, ids)),
+      );
       sets.set(base, byId);
     });
     const serverHit = (condId: string, c: ItemContext) =>

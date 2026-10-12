@@ -1,6 +1,7 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { Project } from '@/api/types';
 import { projectPath } from '@/app/routes';
+import { useCurrentCrumbLabel } from '@/lib/crumb-label';
 import { Icon } from '@/ui';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import type { RouteContext } from './nav';
@@ -16,6 +17,8 @@ export interface BreadcrumbsProps {
  * the current item carries aria-current="page".
  */
 export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
+  const { pathname } = useLocation();
+  const pageLabel = useCurrentCrumbLabel();
   const crumbs: { label: string; to?: string; mono?: boolean }[] = [];
   if (project) {
     if (route.page === 'run-detail' && route.runId) {
@@ -27,6 +30,28 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
       );
     } else if (route.page === 'experiments-queue') {
       crumbs.push({ label: 'Experiments', to: projectPath(project.slug, 'experiments') }, { label: 'Queue' });
+    } else if (route.page === 'experiments' && /\/experiments\/[^/]+$/.test(pathname)) {
+      const isNew = /\/experiments\/new$/.test(pathname);
+      crumbs.push(
+        { label: 'Experiments', to: projectPath(project.slug, 'experiments') },
+        { label: isNew ? 'New experiment' : pageLabel || 'Experiment' },
+      );
+    } else if (route.page === 'environments' && /\/environments\/[^/]+/.test(pathname)) {
+      const envPath = /\/environments\/([^/]+)/.exec(pathname)![1]!;
+      const nested = /\/environments\/[^/]+\/./.test(pathname);
+      crumbs.push(
+        { label: 'Experiments', to: projectPath(project.slug, 'experiments') },
+        { label: 'Environments', to: projectPath(project.slug, 'environments') },
+        nested
+          ? { label: pageLabel || 'Environment', to: projectPath(project.slug, `environments/${envPath}`) }
+          : { label: pageLabel || 'Environment' },
+      );
+      if (nested) crumbs.push({ label: 'Default preset' });
+    } else if (route.page === 'datasets' && /\/datasets\/[^/]+/.test(pathname)) {
+      crumbs.push(
+        { label: 'Datasets', to: projectPath(project.slug, 'datasets') },
+        { label: pageLabel || 'Dataset' },
+      );
     } else {
       crumbs.push({ label: route.label });
     }

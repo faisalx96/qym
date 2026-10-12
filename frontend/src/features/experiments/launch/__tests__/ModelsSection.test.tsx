@@ -113,7 +113,13 @@ describe('ModelsSection', () => {
     const doc = createDocument({
       environmentIds: [PRODUCTION],
       bindings: {
-        'endpoint:primary': { kind: 'temporary', model: 'gpt-x', secretRef: null, save: false, needsKey: true },
+        'endpoint:primary': {
+          kind: 'temporary',
+          model: 'gpt-x',
+          secretRef: null,
+          save: false,
+          needsKey: true,
+        },
       },
     });
     renderSection(<ModelsSection />, { doc });

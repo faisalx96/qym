@@ -22,6 +22,7 @@ import {
   type SpanTree,
   type TraceBounds,
 } from '../../lib/traceTree';
+import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard';
 import { KIND_GLYPH, KIND_LABEL, KIND_TONE } from './spanKinds';
 import { SpanDetail } from './SpanDetail';
 import styles from './TraceDrawer.module.css';
@@ -160,6 +161,21 @@ function Row({
   );
 }
 
+/** Attempts are numbered per pass, so a repeat run's item has several "attempt 1": the pass keeps them apart. */
+function attemptId(a: { attempt_number: number; pass_number?: number | null }): string {
+  return `${a.pass_number ?? 0}:${a.attempt_number}`;
+}
+
+function attemptLabel(
+  a: { attempt_number: number; pass_number?: number | null },
+  all: { pass_number?: number | null }[],
+): string {
+  const multiPass = new Set(all.map((x) => x.pass_number ?? 0)).size > 1;
+  return multiPass
+    ? `Pass ${a.pass_number ?? '–'} · attempt ${a.attempt_number}`
+    : `Attempt ${a.attempt_number}`;
+}
+
 export function TraceDrawer({
   itemId,
   pass,
@@ -172,7 +188,7 @@ export function TraceDrawer({
   const { runId, payload } = useRunPage();
   const query = useItemTraceQuery(runId, itemId, pass);
   const norm = useMemo(() => (query.data ? normalizeTrace(query.data) : null), [query.data]);
-  const [attempt, setAttempt] = useState<'combined' | number>('combined');
+  const [attempt, setAttempt] = useState<'combined' | string>('combined');
   const [search, setSearch] = useState('');
   const [expandedBy, setExpandedBy] = useState<Record<string, Set<string>>>({});
   const [selectedBy, setSelectedBy] = useState<Record<string, string>>({});
@@ -188,10 +204,10 @@ export function TraceDrawer({
         bounds: norm.combined.bounds,
         summary: norm.combined.summary as TraceSummaryLite,
       };
-    const a = typeof attempt === 'number' ? norm.attempts.find((x) => x.attempt_number === attempt) : null;
+    const a = attempt !== 'combined' ? norm.attempts.find((x) => attemptId(x) === attempt) : null;
     const pick = a ?? norm.lastAttempt;
     return {
-      key: `a${pick.attempt_number}`,
+      key: `a${attemptId(pick)}`,
       tree: pick.tree,
       bounds: computeBounds(pick.summary, pick.spans),
       summary: (pick.summary ?? {}) as TraceSummaryLite,
@@ -277,6 +293,7 @@ export function TraceDrawer({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!singleKeyShortcutsEnabled()) return; // WCAG 2.1.4 opt-out (Runs list > Shortcuts)
       const t = e.target as HTMLElement | null;
       if (t?.closest('input, textarea, select, [contenteditable="true"]')) return;
       e.preventDefault();
@@ -364,11 +381,11 @@ export function TraceDrawer({
                 </Chip>
                 {norm.attempts.map((a) => (
                   <Chip
-                    key={a.attempt_number}
-                    isSelected={attempt === a.attempt_number}
-                    onChange={() => setAttempt(a.attempt_number)}
+                    key={attemptId(a)}
+                    isSelected={attempt === attemptId(a)}
+                    onChange={() => setAttempt(attemptId(a))}
                   >
-                    Attempt {a.attempt_number}
+                    {attemptLabel(a, norm.attempts)}
                     {['failed', 'error', 'timeout'].includes(String(a.status).toLowerCase())
                       ? ' · failed'
                       : ''}
@@ -376,99 +393,106 @@ export function TraceDrawer({
                 ))}
               </div>
             ) : null}
-            <div className={styles.split}>
-              <section className={styles.treePane} aria-label="Spans">
-                <div className={styles.treeTools}>
-                  <label className={styles.search}>
-                    <span className={styles.srOnly}>Filter spans</span>
-                    <input
-                      ref={searchRef}
-                      type="search"
-                      className={styles.searchInput}
-                      placeholder="Filter spans… (/)"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape' && search) {
-                          e.stopPropagation();
-                          setSearch('');
-                        } else if (e.key === 'ArrowDown') {
-                          e.preventDefault();
-                          scroller?.focus();
-                        }
-                      }}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className={styles.tool}
-                    onClick={() =>
-                      setExpandedBy((s) => ({
-                        ...s,
-                        [key]: new Set(
-                          flattenTree(active.tree.roots)
-                            .filter((n) => n._children.length)
-                            .map((n) => n.span_id),
-                        ),
-                      }))
-                    }
-                  >
-                    Expand all
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.tool}
-                    onClick={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}
-                  >
-                    Collapse all
-                  </button>
-                </div>
-                <div
-                  ref={setScroller}
-                  className={styles.tree}
-                  role="tree"
-                  aria-label="Span tree"
-                  tabIndex={0}
-                  aria-activedescendant={selectedId ? `span-${selectedId}` : undefined}
-                  onKeyDown={onTreeKey}
-                >
-                  <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-                    {virtualizer.getVirtualItems().map((v) => {
-                      const row = rows[v.index]!;
-                      return (
-                        <div
-                          key={v.key}
-                          className={styles.vrow}
-                          style={{ height: ROW, transform: `translateY(${v.start}px)` }}
-                        >
-                          <Row
-                            row={row}
-                            bounds={active.bounds}
-                            selected={row.node.span_id === selectedId}
-                            onSelect={() => select(row.node.span_id)}
-                            onToggle={() => setOpen(row.node.span_id, !row.open)}
-                          />
-                        </div>
-                      );
-                    })}
+            {active.tree.nodes.length === 0 ? (
+              <p className={styles.empty} role="status" data-testid="trace-empty">
+                Spans were not captured for this item. The run recorded a trace id, but no spans reached the
+                platform{langfuse ? '; open it in Langfuse for the full trace' : ''}.
+              </p>
+            ) : (
+              <div className={styles.split}>
+                <section className={styles.treePane} aria-label="Spans">
+                  <div className={styles.treeTools}>
+                    <label className={styles.search}>
+                      <span className={styles.srOnly}>Filter spans</span>
+                      <input
+                        ref={searchRef}
+                        type="search"
+                        className={styles.searchInput}
+                        placeholder="Filter spans… (/)"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape' && search) {
+                            e.stopPropagation();
+                            setSearch('');
+                          } else if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            scroller?.focus();
+                          }
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className={styles.tool}
+                      onClick={() =>
+                        setExpandedBy((s) => ({
+                          ...s,
+                          [key]: new Set(
+                            flattenTree(active.tree.roots)
+                              .filter((n) => n._children.length)
+                              .map((n) => n.span_id),
+                          ),
+                        }))
+                      }
+                    >
+                      Expand all
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.tool}
+                      onClick={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}
+                    >
+                      Collapse all
+                    </button>
                   </div>
-                  {rows.length === 0 ? (
+                  <div
+                    ref={setScroller}
+                    className={styles.tree}
+                    role="tree"
+                    aria-label="Span tree"
+                    tabIndex={0}
+                    aria-activedescendant={selectedId ? `span-${selectedId}` : undefined}
+                    onKeyDown={onTreeKey}
+                  >
+                    <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+                      {virtualizer.getVirtualItems().map((v) => {
+                        const row = rows[v.index]!;
+                        return (
+                          <div
+                            key={v.key}
+                            className={styles.vrow}
+                            style={{ height: ROW, transform: `translateY(${v.start}px)` }}
+                          >
+                            <Row
+                              row={row}
+                              bounds={active.bounds}
+                              selected={row.node.span_id === selectedId}
+                              onSelect={() => select(row.node.span_id)}
+                              onToggle={() => setOpen(row.node.span_id, !row.open)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {rows.length === 0 ? (
+                      <Text variant="sm" tone="muted">
+                        No spans match.
+                      </Text>
+                    ) : null}
+                  </div>
+                </section>
+                <section className={styles.detailPane} aria-label="Span details">
+                  {selectedNode ? (
+                    <SpanDetail key={selectedNode.span_id} node={selectedNode} />
+                  ) : (
                     <Text variant="sm" tone="muted">
-                      No spans match.
+                      Select a span.
                     </Text>
-                  ) : null}
-                </div>
-              </section>
-              <section className={styles.detailPane} aria-label="Span details">
-                {selectedNode ? (
-                  <SpanDetail key={selectedNode.span_id} node={selectedNode} />
-                ) : (
-                  <Text variant="sm" tone="muted">
-                    Select a span.
-                  </Text>
-                )}
-              </section>
-            </div>
+                  )}
+                </section>
+              </div>
+            )}
           </>
         ) : null}
       </div>

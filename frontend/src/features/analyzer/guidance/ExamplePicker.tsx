@@ -1,6 +1,20 @@
 import { useMemo, useState } from 'react';
 import { useExamples, type AnalysisScope, type ExampleQuery } from '@/api/analysis';
-import { Badge, Button, Checkbox, Dialog, EmptyState, ErrorState, MultiSelect, NumberField, Pagination, SearchField, SegmentedControl, Skeleton, Text } from '@/ui';
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Dialog,
+  EmptyState,
+  ErrorState,
+  MultiSelect,
+  NumberField,
+  Pagination,
+  SearchField,
+  SegmentedControl,
+  Skeleton,
+  Text,
+} from '@/ui';
 import { useDebounced } from '../useDebounced';
 import s from './examples.module.css';
 
@@ -17,7 +31,8 @@ export const EXAMPLE_FIELDS = [
 ] as const;
 
 export type ExampleFields = Record<string, boolean>;
-export const allExampleFields = (): ExampleFields => Object.fromEntries(EXAMPLE_FIELDS.map((f) => [f.key, true]));
+export const allExampleFields = (): ExampleFields =>
+  Object.fromEntries(EXAMPLE_FIELDS.map((f) => [f.key, true]));
 
 type Source = 'all' | 'ai_only' | 'human_only' | 'corrected';
 const PAGE_SIZE = 25;
@@ -44,7 +59,13 @@ export function ExamplePicker({
 }) {
   // Remount on every open so the draft selection starts from the committed one.
   return open ? (
-    <PickerBody scope={scope} onOpenChange={onOpenChange} value={value} characterLimit={characterLimit} onUse={onUse} />
+    <PickerBody
+      scope={scope}
+      onOpenChange={onOpenChange}
+      value={value}
+      characterLimit={characterLimit}
+      onUse={onUse}
+    />
   ) : null;
 }
 
@@ -99,17 +120,21 @@ function PickerBody({
   const data = examples.data;
   const facets = data?.facets;
 
-  const reset = <T,>(set: (v: T) => void) => (v: T) => {
-    set(v);
-    setPage(1);
-  };
+  const reset =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      set(v);
+      setPage(1);
+    };
   const toItems = (list: string[] | undefined) => (list ?? []).map((v) => ({ key: v, label: v }));
   const asStrings = (keys: Set<unknown>) => new Set([...keys].map(String));
 
   const budgetUsed = data?.selected_characters ?? 0;
   const over = characterLimit != null && budgetUsed > characterLimit;
   const pct = characterLimit ? Math.min(100, Math.round((budgetUsed / characterLimit) * 100)) : 0;
-  const allFilteredSelected = Boolean(data && data.matching_ids.length && data.matching_ids.every((id) => selected.has(id)));
+  const allFilteredSelected = Boolean(
+    data && data.matching_ids.length && data.matching_ids.every((id) => selected.has(id)),
+  );
 
   return (
     <Dialog
@@ -139,11 +164,38 @@ function PickerBody({
       }
     >
       <div className={s.filters}>
-        <SearchField label="Search examples" placeholder="Search examples" value={search} onChange={reset(setSearch)} onClear={() => setSearch('')} width={220} />
-        <MultiSelect label="Task" items={toItems(facets?.tasks)} value={task} onChange={(k) => reset(setTask)(asStrings(k))} />
-        <MultiSelect label="Dataset" items={toItems(facets?.datasets)} value={dataset} onChange={(k) => reset(setDataset)(asStrings(k))} />
-        <MultiSelect label="Model" items={toItems(facets?.models)} value={model} onChange={(k) => reset(setModel)(asStrings(k))} />
-        <MultiSelect label="Run" items={toItems(facets?.run_names)} value={run} onChange={(k) => reset(setRun)(asStrings(k))} />
+        <SearchField
+          label="Search examples"
+          placeholder="Search examples"
+          value={search}
+          onChange={reset(setSearch)}
+          onClear={() => setSearch('')}
+          width={220}
+        />
+        <MultiSelect
+          label="Task"
+          items={toItems(facets?.tasks)}
+          value={task}
+          onChange={(k) => reset(setTask)(asStrings(k))}
+        />
+        <MultiSelect
+          label="Dataset"
+          items={toItems(facets?.datasets)}
+          value={dataset}
+          onChange={(k) => reset(setDataset)(asStrings(k))}
+        />
+        <MultiSelect
+          label="Model"
+          items={toItems(facets?.models)}
+          value={model}
+          onChange={(k) => reset(setModel)(asStrings(k))}
+        />
+        <MultiSelect
+          label="Run"
+          items={toItems(facets?.run_names)}
+          value={run}
+          onChange={(k) => reset(setRun)(asStrings(k))}
+        />
         <MultiSelect
           label="Reviewer"
           items={(facets?.users ?? []).map((u) => ({ key: u.id, label: u.display_name || u.email || u.id }))}
@@ -163,8 +215,24 @@ function PickerBody({
             { value: 'corrected', label: 'Corrected' },
           ]}
         />
-        <NumberField label="Min confidence %" minValue={0} maxValue={100} value={confMin ?? NaN} onChange={(v) => reset(setConfMin)(Number.isFinite(v) ? v : undefined)} width={110} steppers={false} />
-        <NumberField label="Max confidence %" minValue={0} maxValue={100} value={confMax ?? NaN} onChange={(v) => reset(setConfMax)(Number.isFinite(v) ? v : undefined)} width={110} steppers={false} />
+        <NumberField
+          label="Min confidence %"
+          minValue={0}
+          maxValue={100}
+          value={confMin ?? NaN}
+          onChange={(v) => reset(setConfMin)(Number.isFinite(v) ? v : undefined)}
+          width={110}
+          steppers={false}
+        />
+        <NumberField
+          label="Max confidence %"
+          minValue={0}
+          maxValue={100}
+          value={confMax ?? NaN}
+          onChange={(v) => reset(setConfMax)(Number.isFinite(v) ? v : undefined)}
+          width={110}
+          steppers={false}
+        />
         <Button size="sm" onPress={() => setShowFields((v) => !v)} aria-expanded={showFields}>
           Choose prompt fields
         </Button>
@@ -172,7 +240,11 @@ function PickerBody({
       {showFields ? (
         <div className={s.fields} role="group" aria-label="Prompt fields">
           {EXAMPLE_FIELDS.map((f) => (
-            <Checkbox key={f.key} isSelected={fields[f.key] ?? false} onChange={(v) => setFields((cur) => ({ ...cur, [f.key]: v }))}>
+            <Checkbox
+              key={f.key}
+              isSelected={fields[f.key] ?? false}
+              onChange={(v) => setFields((cur) => ({ ...cur, [f.key]: v }))}
+            >
               {f.label}
             </Checkbox>
           ))}
@@ -204,18 +276,34 @@ function PickerBody({
           </Checkbox>
         </div>
         {characterLimit ? (
-          <div className={s.bar} role="progressbar" aria-label="Character budget" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+          <div
+            className={s.bar}
+            role="progressbar"
+            aria-label="Character budget"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={pct}
+          >
             <div className={s.barFill} data-over={over ? '' : undefined} style={{ width: `${pct}%` }} />
           </div>
         ) : null}
       </div>
 
       {examples.isError ? (
-        <ErrorState error={examples.error} title="Couldn’t load examples" onRetry={() => examples.refetch()} compact />
+        <ErrorState
+          error={examples.error}
+          title="Couldn’t load examples"
+          onRetry={() => examples.refetch()}
+          compact
+        />
       ) : !data ? (
         <Skeleton kind="lines" rows={6} label="Loading examples" />
       ) : data.examples.length === 0 ? (
-        <EmptyState compact title="No examples match" body="Approve diagnoses in Reviews, or relax the filters." />
+        <EmptyState
+          compact
+          title="No examples match"
+          body="Approve diagnoses in Reviews, or relax the filters."
+        />
       ) : (
         <>
           <div className={s.tableWrap} data-fetching={examples.isFetching ? '' : undefined}>
@@ -251,16 +339,28 @@ function PickerBody({
                       />
                     </td>
                     <td className={s.mono}>{e.item_id}</td>
-                    <td dir="auto">{(e.root_causes ?? []).join(', ')}{e.detail ? ` · ${e.detail}` : ''}</td>
+                    <td dir="auto">
+                      {(e.root_causes ?? []).join(', ')}
+                      {e.detail ? ` · ${e.detail}` : ''}
+                    </td>
                     <td>{[e.task, e.model].filter(Boolean).join(' · ')}</td>
                     <td>{e.source ?? '—'}</td>
-                    <td className={s.mono}>{e.confidence != null ? `${Math.round(e.confidence * 100)}%` : '—'}</td>
+                    <td className={s.mono}>
+                      {e.confidence != null ? `${Math.round(e.confidence * 100)}%` : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <Pagination total={data.total} page={data.page} pageSize={data.page_size} pageCount={data.page_count} noun="examples" onPageChange={setPage} />
+          <Pagination
+            total={data.total}
+            page={data.page}
+            pageSize={data.page_size}
+            pageCount={data.page_count}
+            noun="examples"
+            onPageChange={setPage}
+          />
         </>
       )}
     </Dialog>

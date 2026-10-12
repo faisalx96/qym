@@ -20,7 +20,13 @@ export interface RunExperimentPanelData {
   environment_name?: string | null;
   combo_index?: number | null;
   attempt?: number | null;
-  base_source?: { kind?: string; preset_version_id?: string; preset_id?: string; run_id?: string; experiment_id?: string } | null;
+  base_source?: {
+    kind?: string;
+    preset_version_id?: string;
+    preset_id?: string;
+    run_id?: string;
+    experiment_id?: string;
+  } | null;
   remote_job_id?: string | null;
   job_id?: string | null;
   job_available?: boolean;
@@ -52,15 +58,18 @@ const BASE_LABELS: Record<string, string> = {
 };
 const PROMOTABLE = ['COMPLETED', 'SUBMITTED', 'APPROVED'];
 
-const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
 /** Short human text of a binding / versioning value. */
 export function displayValue(value: unknown): string {
   if (value == null) return '—';
   if (isObject(value)) {
-    if (value.name) return value.model ? `${String(value.name)} (${String(value.model)})` : String(value.name);
+    if (value.name)
+      return value.model ? `${String(value.name)} (${String(value.model)})` : String(value.name);
     const t = value.temporary;
-    if (isObject(t)) return `${String(t.label || 'Temporary model')}${t.model ? ` (${String(t.model)})` : ''}`;
+    if (isObject(t))
+      return `${String(t.label || 'Temporary model')}${t.model ? ` (${String(t.model)})` : ''}`;
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) return JSON.stringify(value);
@@ -106,12 +115,20 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
           panel.experiment_name || (panel.experiment_id ? String(panel.experiment_id).slice(0, 8) : '—')
         ),
     },
-    { key: 'env', label: 'Environment', value: panel.environment_name || (panel.environment_id ? String(panel.environment_id).slice(0, 8) : '—') },
+    {
+      key: 'env',
+      label: 'Environment',
+      value:
+        panel.environment_name || (panel.environment_id ? String(panel.environment_id).slice(0, 8) : '—'),
+    },
     {
       key: 'combo',
       label: 'Combination',
       mono: true,
-      value: panel.combo_index != null ? `#${Number(panel.combo_index) + 1}${Number(panel.attempt) > 0 ? ` · retry ${Number(panel.attempt)}` : ''}` : '—',
+      value:
+        panel.combo_index != null
+          ? `#${Number(panel.combo_index) + 1}${Number(panel.attempt) > 0 ? ` · retry ${Number(panel.attempt)}` : ''}`
+          : '—',
     },
     {
       key: 'base',
@@ -119,29 +136,52 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
       value: base?.kind ? (
         <>
           {BASE_LABELS[base.kind] ?? base.kind}
-          {baseRef ? <span className={styles.mono} title={baseRef}> {baseRef.slice(0, 8)}</span> : null}
+          {baseRef ? (
+            <span className={styles.mono} title={baseRef}>
+              {' '}
+              {baseRef.slice(0, 8)}
+            </span>
+          ) : null}
         </>
       ) : (
         '—'
       ),
     },
     { key: 'remote', label: 'Remote job id', mono: true, value: panel.remote_job_id || '—' },
-    { key: 'status', label: 'Job status', value: panel.job_status ? <JobStatusBadge status={panel.job_status} /> : '—' },
-    { key: 'schema', label: 'Schema hash', mono: true, value: panel.schema_hash ? panel.schema_hash.slice(0, 12) : '—' },
+    {
+      key: 'status',
+      label: 'Job status',
+      value: panel.job_status ? <JobStatusBadge status={panel.job_status} /> : '—',
+    },
+    {
+      key: 'schema',
+      label: 'Schema hash',
+      mono: true,
+      value: panel.schema_hash ? panel.schema_hash.slice(0, 12) : '—',
+    },
     {
       key: 'versioning',
       label: 'Versioning',
       value: (
         <TagList
           kind="version"
-          entries={isObject(panel.remote_versioning) ? Object.entries(panel.remote_versioning).map(([k, v]) => [k, displayValue(v), k]) : []}
+          entries={
+            isObject(panel.remote_versioning)
+              ? Object.entries(panel.remote_versioning).map(([k, v]) => [k, displayValue(v), k])
+              : []
+          }
         />
       ),
     },
     {
       key: 'sweep',
       label: 'Swept params',
-      value: <TagList kind="data" entries={Object.entries(panel.sweep ?? {}).map(([p, v]) => [pointerLabel(p), displayValue(v), p])} />,
+      value: (
+        <TagList
+          kind="data"
+          entries={Object.entries(panel.sweep ?? {}).map(([p, v]) => [pointerLabel(p), displayValue(v), p])}
+        />
+      ),
     },
     {
       key: 'models',
@@ -156,7 +196,12 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
       ),
     },
   ];
-  if (panel.error) items.push({ key: 'error', label: 'Job error', value: <span className={styles.error}>{panel.error}</span> });
+  if (panel.error)
+    items.push({
+      key: 'error',
+      label: 'Job error',
+      value: <span className={styles.error}>{panel.error}</span>,
+    });
 
   return (
     <section className={styles.panel} aria-labelledby="run-experiment-title" data-run-experiment-panel>
@@ -180,7 +225,11 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
               </LinkButton>
             ) : null}
             {openable ? (
-              <LinkButton to={launchPath(slug, rerunQuery)} variant="accent" title="Open the launch form prefilled with this run’s configuration">
+              <LinkButton
+                to={launchPath(slug, rerunQuery)}
+                variant="accent"
+                title="Open the launch form prefilled with this run’s configuration"
+              >
                 Rerun with this config
               </LinkButton>
             ) : (
@@ -198,7 +247,11 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
                   Promote to default preset
                 </LinkButton>
               ) : (
-                <span className={styles.disabled} title="Only completed runs can be promoted" aria-disabled="true">
+                <span
+                  className={styles.disabled}
+                  title="Only completed runs can be promoted"
+                  aria-disabled="true"
+                >
                   Promote to default preset
                 </span>
               )
@@ -206,7 +259,11 @@ export function RunExperimentPanel({ panel, slug, runId, runStatus, isExport }: 
           </div>
         ) : null}
       </div>
-      {!panel.job_available ? <p className={styles.note}>The launch job is no longer available; showing the configuration stored on the run.</p> : null}
+      {!panel.job_available ? (
+        <p className={styles.note}>
+          The launch job is no longer available; showing the configuration stored on the run.
+        </p>
+      ) : null}
       <KeyValueGrid items={items} columns={2} aria-label="Experiment details" />
       {panel.remote_result != null ? (
         <details className={styles.result}>

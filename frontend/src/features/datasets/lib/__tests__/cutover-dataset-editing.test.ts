@@ -29,9 +29,17 @@ describe('slugifyDatasetName matches the server', () => {
 
 // [label, bytes (hex) encoded in the legacy code page, label the server reports]
 const ENCODING_CASES: [string, string, string][] = [
-  ['arabic header and body', 'c7e1d3c4c7e12cc7e1c5ccc7c8c90ae3c720e5ed20dac7d5e3c920c7e1e3e3e1dfc920c7e1dad1c8edc920c7e1d3dae6cfedc9bf2cc7e1d1edc7d60adfe320dacfcf20c3edc7e320c7e1c3d3c8e6dabf2cd3c8dac90a', 'windows-1256'],
+  [
+    'arabic header and body',
+    'c7e1d3c4c7e12cc7e1c5ccc7c8c90ae3c720e5ed20dac7d5e3c920c7e1e3e3e1dfc920c7e1dad1c8edc920c7e1d3dae6cfedc9bf2cc7e1d1edc7d60adfe320dacfcf20c3edc7e320c7e1c3d3c8e6dabf2cd3c8dac90a',
+    'windows-1256',
+  ],
   ['persian', '712c610a81d1d3d4208dedd3cabf2c90d2c7d1d4208ed1dd0a', 'windows-1256'],
-  ['french semicolon', '7175657374696f6e3b616e737765720a436166e93f3b4372e86d65206272fb6ce9650ac7612076613f3b5472e873206269656e0a', 'windows-1252'],
+  [
+    'french semicolon',
+    '7175657374696f6e3b616e737765720a436166e93f3b4372e86d65206272fb6ce9650ac7612076613f3b5472e873206269656e0a',
+    'windows-1252',
+  ],
   ['german', '712c610a4772fcdf6520617573206465722053747261df652c536368f66e0a', 'windows-1252'],
   ['spanish', '712c610a5365f16f722c20bf63f36d6f20657374e13f2c4d7579206269656e0a', 'windows-1252'],
   ['a-grave', '712c610a496c2068616269746520e0204c6f6e647265732e2c4f75690a', 'windows-1252'],
@@ -63,7 +71,10 @@ describe('draft JSON / JSONL import', () => {
   });
 
   it('imports a JSON array with the server aliases and lists the keys it will not read', () => {
-    const r = parseJSONRecords('[{"id": 1, "input": "q1", "expected": "a1", "extra": true}, {"item_id": "b", "input": {"q": 2}}]', 'rows.json');
+    const r = parseJSONRecords(
+      '[{"id": 1, "input": "q1", "expected": "a1", "extra": true}, {"item_id": "b", "input": {"q": 2}}]',
+      'rows.json',
+    );
     expect(r.format).toBe('json');
     expect(unknownJsonKeys(r.rows)).toEqual(['extra']);
     expect(jsonUpserts(r.rows)).toEqual([
@@ -95,7 +106,9 @@ describe('column mapping', () => {
     m = setColumnRole(m, 'gold', 'id');
     expect(m.id).toBe('gold');
     expect(m.metadata).toEqual(['ref']);
-    expect(csvUpserts(headers, [['q', 'g1', 'r1']], m)).toEqual([{ item_id: 'g1', input: 'q', metadata: { ref: 'r1' } }]);
+    expect(csvUpserts(headers, [['q', 'g1', 'r1']], m)).toEqual([
+      { item_id: 'g1', input: 'q', metadata: { ref: 'r1' } },
+    ]);
   });
 });
 
@@ -119,7 +132,11 @@ describe('word diff on long fields', () => {
     expect(ops).not.toBeNull();
     expect(ops!.filter((o) => o.kind === 'del').map((o) => o.text)).toEqual(['w4000']);
     expect(ops!.filter((o) => o.kind === 'add').map((o) => o.text)).toEqual(['CHANGED']);
-    expect(diffSide(ops!, 'after').map((o) => o.text).join('')).toContain('CHANGED');
+    expect(
+      diffSide(ops!, 'after')
+        .map((o) => o.text)
+        .join(''),
+    ).toContain('CHANGED');
   });
   it('gives up (no highlights) when a huge field changes everywhere', () => {
     const a = Array.from({ length: DIFF_TOKEN_BUDGET }, (_, i) => `a${i}`).join(' ');
@@ -128,6 +145,11 @@ describe('word diff on long fields', () => {
   });
   it('small diffs are word-level', () => {
     const ops = wordDiff('the cat sat', 'the dog sat')!;
-    expect(ops.filter((o) => o.text.trim()).map((o) => `${o.kind}:${o.text.trim()}`)).toEqual(['same:the', 'del:cat', 'add:dog', 'same:sat']);
+    expect(ops.filter((o) => o.text.trim()).map((o) => `${o.kind}:${o.text.trim()}`)).toEqual([
+      'same:the',
+      'del:cat',
+      'add:dog',
+      'same:sat',
+    ]);
   });
 });

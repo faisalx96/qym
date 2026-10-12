@@ -21,7 +21,9 @@ describe('runs order context', () => {
     );
   });
   it('keeps only the list view when read back from a URL', () => {
-    expect(normalizeContext('page=4&sort=run-asc&item=x&task=a&task=b&evil=1')).toBe('task=a&task=b&sort=run-asc');
+    expect(normalizeContext('page=4&sort=run-asc&item=x&task=a&task=b&evil=1')).toBe(
+      'task=a&task=b&sort=run-asc',
+    );
     expect(normalizeContext(null)).toBe('');
     expect(normalizeContext('sort=time-desc')).toBe('');
     expect(runHref('/projects/pa/runs/r1', 'page=2')).toBe('/projects/pa/runs/r1');
@@ -76,7 +78,12 @@ describe('runs order context', () => {
   });
   it('collates text sorts like the list', () => {
     expect(
-      collation('model-asc', ['qwen/zeta|||plain', 'alpha|||reasoning', 'openai/alpha|||plain', 'Beta|||plain']),
+      collation('model-asc', [
+        'qwen/zeta|||plain',
+        'alpha|||reasoning',
+        'openai/alpha|||plain',
+        'Beta|||plain',
+      ]),
     ).toEqual(['openai/alpha|||plain', 'alpha|||reasoning', 'Beta|||plain', 'qwen/zeta|||plain']);
     expect(collation('dataset-desc', ['b', 'A', 'a', 'c'])).toEqual(['a', 'A', 'b', 'c']);
     expect(collation('owner-asc', ['Zed', 'amy'])).toEqual(['amy', 'Zed']);

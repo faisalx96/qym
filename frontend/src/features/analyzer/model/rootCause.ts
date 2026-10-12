@@ -9,7 +9,9 @@ export function rootCauseCategories(value: unknown): string[] {
   let raw: unknown = value;
   if (isObj(value)) {
     if (Array.isArray(value.root_cause_issues)) {
-      raw = value.root_cause_issues.map((issue) => (isObj(issue) ? (issue.category ?? issue.root_cause) : ''));
+      raw = value.root_cause_issues.map((issue) =>
+        isObj(issue) ? (issue.category ?? issue.root_cause) : '',
+      );
     } else if ('root_causes' in value) raw = value.root_causes;
     else if ('root_cause_categories' in value) raw = value.root_cause_categories;
     else raw = value.root_cause;

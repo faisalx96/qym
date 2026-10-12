@@ -36,7 +36,12 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
   const [active, setActive] = useState(0);
   const [creating, setCreating] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
-  const close = () => onOpenChange(false);
+  // Picking an entry closes through here (not the overlay), so reset the search too.
+  const close = () => {
+    setQuery('');
+    setActive(0);
+    onOpenChange(false);
+  };
 
   const entries = useMemo<Entry[]>(() => {
     const go = (to: string) => () => {

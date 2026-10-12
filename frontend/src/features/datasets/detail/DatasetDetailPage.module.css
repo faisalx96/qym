@@ -46,6 +46,7 @@
 .inlineLink {
   font-family: var(--font-mono);
   color: var(--accent-secondary);
+  text-decoration: underline; /* a link inside running text must not rely on colour alone */
 }
 
 .noVersions {

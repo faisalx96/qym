@@ -23,9 +23,14 @@ async function twoVersions(request: Parameters<typeof createProject>[0], prefix:
   await bulkItems(request, p.slug, d.slug, v1.version, items);
   await publishVersion(request, p.slug, d.slug, v1.version, true);
   const v2 = await createVersion(request, p.slug, d.slug, { from_version: 'v1', name: 'edited' });
-  await patchItem(request, p.slug, d.slug, v2.version, 'q-001', { input: 'What is the refund policy, edited?' });
+  await patchItem(request, p.slug, d.slug, v2.version, 'q-001', {
+    input: 'What is the refund policy, edited?',
+  });
   await request.post(`/v1/datasets/${d.slug}/versions/v2/items:bulk?project_slug=${p.slug}`, {
-    data: { deletes: ['q-002'], upserts: [{ item_id: 'brand-new', input: 'a new question', expected_output: 'new' }] },
+    data: {
+      deletes: ['q-002'],
+      upserts: [{ item_id: 'brand-new', input: 'a new question', expected_output: 'new' }],
+    },
   });
   await publishVersion(request, p.slug, d.slug, v2.version, false);
   return { p, d, v1, v2, items };
@@ -63,7 +68,10 @@ test.describe('compare', () => {
     await page.getByTestId('compare-swap').click();
     await expect.poll(() => query(page).get('base')).toBe('v1');
 
-    const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-diff').click()]);
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('download-diff').click(),
+    ]);
     expect(download.suggestedFilename()).toBe(`${d.slug}_v1_vs_v2.diff.json`);
   });
 
@@ -74,7 +82,9 @@ test.describe('compare', () => {
     await bulkItems(request, p.slug, d.slug, v1.version, sampleItems(60));
     await publishVersion(request, p.slug, d.slug, v1.version, true);
     const v2 = await createVersion(request, p.slug, d.slug); // empty draft + one new item (an empty version cannot be published)
-    await bulkItems(request, p.slug, d.slug, v2.version, [{ item_id: 'only', input: 'only item', expected_output: 'x' }]);
+    await bulkItems(request, p.slug, d.slug, v2.version, [
+      { item_id: 'only', input: 'only item', expected_output: 'x' },
+    ]);
     await publishVersion(request, p.slug, d.slug, v2.version, false);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}/compare?base=v1&head=v2&tab=removed`);
     await expect(page.locator('[data-compare-row]')).toHaveCount(50);
@@ -84,7 +94,10 @@ test.describe('compare', () => {
     await expect(page.getByTestId('compare-more')).toHaveCount(0);
   });
 
-  test('defaults fill base/head into the URL; hero menu Compare… opens it; single-version dataset has nothing to compare', async ({ page, request }) => {
+  test('defaults fill base/head into the URL; hero menu Compare… opens it; single-version dataset has nothing to compare', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await twoVersions(request, 'cmpdef');
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}/compare`);
     await expect.poll(() => query(page).get('head')).toBe('v1'); // production is the default head
@@ -113,7 +126,14 @@ test.describe('runs and lineage tabs', () => {
     await bulkItems(request, p.slug, d.slug, v.version, items);
     await publishVersion(request, p.slug, d.slug, v.version, true);
     const apiKey = await createApiKey(request, p.id, 'e2e-runs').then((k) => k.token);
-    const run = await ingestRun(request, { apiKey, task: 'qa', runName: `run-${Date.now().toString(36)}`, dataset: d, version: { ...v, status: 'published' }, items });
+    const run = await ingestRun(request, {
+      apiKey,
+      task: 'qa',
+      runName: `run-${Date.now().toString(36)}`,
+      dataset: d,
+      version: { ...v, status: 'published' },
+      items,
+    });
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?tab=runs`);
     await expect(page.getByRole('tab', { name: /Runs/ })).toHaveAttribute('aria-selected', 'true');
     const grid = page.locator('[data-dataset-runs]');
@@ -133,20 +153,38 @@ test.describe('runs and lineage tabs', () => {
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?tab=runs`);
     await expect(page.locator('[data-dataset-runs]')).toHaveCount(0);
     const apiKey = await createApiKey(request, p.id, 'e2e-runs2').then((k) => k.token);
-    const run = await ingestRun(request, { apiKey, task: 'qa', runName: `run2-${Date.now().toString(36)}`, dataset: d, version: { ...v, status: 'published' }, items });
+    const run = await ingestRun(request, {
+      apiKey,
+      task: 'qa',
+      runName: `run2-${Date.now().toString(36)}`,
+      dataset: d,
+      version: { ...v, status: 'published' },
+      items,
+    });
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?v=v1&item=q-000&tab=runs`);
     await expect(page.getByRole('tab', { name: /Runs/ })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByText(run.run_name).first()).toBeVisible();
   });
 
-  test('Lineage tab shows the version tree with fork nesting, compare link and the change log', async ({ page, request }) => {
+  test('Lineage tab shows the version tree with fork nesting, compare link and the change log', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await twoVersions(request, 'lin');
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?tab=lineage`);
     await expect(page.locator('[data-version-node=v1]')).toBeVisible();
     await expect(page.locator('[data-version-node=v2]')).toBeVisible();
-    await expect(page.locator('[data-version-node=v1] ~ ul [data-version-node=v2], li:has([data-version-node=v1]) ul [data-version-node=v2]')).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-version-node=v1] ~ ul [data-version-node=v2], li:has([data-version-node=v1]) ul [data-version-node=v2]',
+      ),
+    ).toHaveCount(1);
     await expect(page.getByText('Change log')).toBeVisible();
-    await page.locator('[data-version-node=v2]').getByRole('link', { name: /Compare/ }).first().click();
+    await page
+      .locator('[data-version-node=v2]')
+      .getByRole('link', { name: /Compare/ })
+      .first()
+      .click();
     await expect(page).toHaveURL(/compare\?base=v1&head=v2/);
     await page.goBack();
     await page.locator('[data-version-node=v2]').getByRole('link', { name: 'v2' }).first().click();
@@ -176,7 +214,10 @@ test.describe('settings', () => {
     await expect(page.getByRole('list', { name: 'Tags' })).toContainText('alpha');
   });
 
-  test('delete needs the typed name, then the dataset lives under ?view=deleted and Restore brings it back', async ({ page, request }) => {
+  test('delete needs the typed name, then the dataset lives under ?view=deleted and Restore brings it back', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Set Delete', uniqueSlug('setdel'));
     const d = await createDataset(request, p.slug, 'Doomed Set');
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}?tab=settings`);
@@ -212,7 +253,10 @@ test.describe('settings', () => {
     await expect(page.getByTestId('new-dataset')).toBeVisible();
   });
 
-  test('private test set: toggle with confirm; non-admin locked state requests no items', async ({ page, request }) => {
+  test('private test set: toggle with confirm; non-admin locked state requests no items', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Set Private', uniqueSlug('setpriv'));
     const d = await createDataset(request, p.slug, 'Secret Set');
     const v = await createVersion(request, p.slug, d.slug);
@@ -223,7 +267,9 @@ test.describe('settings', () => {
     const toggle = page.getByTestId('private-toggle');
     await expect(toggle).not.toBeChecked();
     await toggle.click();
-    const dlg = page.getByRole('dialog', { name: 'Hide items from the team?' }).or(page.getByRole('alertdialog', { name: 'Hide items from the team?' }));
+    const dlg = page
+      .getByRole('dialog', { name: 'Hide items from the team?' })
+      .or(page.getByRole('alertdialog', { name: 'Hide items from the team?' }));
     await expect(dlg).toBeVisible();
     await dlg.getByRole('button', { name: 'Hide items' }).click();
     await expect(page.getByText('Items are now hidden from non-admins')).toBeVisible();
@@ -234,7 +280,8 @@ test.describe('settings', () => {
     // by rewriting the dataset payload (items_visible=false) and fail any /items request.
     const itemCalls: string[] = [];
     page.on('request', (r) => {
-      if (/\/items(\?|$|\/|:)/.test(new URL(r.url()).pathname + new URL(r.url()).search)) itemCalls.push(r.url());
+      if (/\/items(\?|$|\/|:)/.test(new URL(r.url()).pathname + new URL(r.url()).search))
+        itemCalls.push(r.url());
     });
     await page.route(new RegExp(`/v1/datasets/${d.slug}\\?`), async (route) => {
       const res = await route.fetch();

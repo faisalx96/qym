@@ -7,14 +7,24 @@ import { letterOf, useCompare } from '../../CompareContext';
 import { RunDot } from '../common';
 import styles from './Panel.module.css';
 
-const SLOT: Record<string, ErrorSlot> = { 'Task error': 'task', 'Metric error': 'metric', 'Trace error': 'trace', 'Analysis error': 'analysis' };
+const SLOT: Record<string, ErrorSlot> = {
+  'Task error': 'task',
+  'Metric error': 'metric',
+  'Trace error': 'trace',
+  'Analysis error': 'analysis',
+};
 
 export function ErrorsTab() {
   const { model, columns, baseline, items, c } = useCompare();
   const entries = useMemo(() => errorDistribution(model, columns, items), [model, columns, items]);
   const baseIdx = columns.indexOf(baseline);
   const f = c.view.filters;
-  if (!entries.length) return <Text variant="sm" tone="muted">No errors among the {items.length} filtered items.</Text>;
+  if (!entries.length)
+    return (
+      <Text variant="sm" tone="muted">
+        No errors among the {items.length} filtered items.
+      </Text>
+    );
   const toggle = (kind: string, label: string) => {
     const slot = SLOT[kind] ?? 'trace';
     const cur = f.errors[slot];
@@ -23,7 +33,10 @@ export function ErrorsTab() {
     if (same) delete errors[slot];
     else errors[slot] = { kind, label };
     // A metric-error card also selects that metric so a non-default metric error cannot hide behind a healthy default score.
-    const patch = !same && kind === 'Metric error' && model.metrics.includes(label.split(':')[0] ?? '') ? { metric: label.split(':')[0] } : {};
+    const patch =
+      !same && kind === 'Metric error' && model.metrics.includes(label.split(':')[0] ?? '')
+        ? { metric: label.split(':')[0] }
+        : {};
     c.setView({ ...patch, filters: { ...f, errors } });
   };
   const kinds = ['Task error', 'Metric error', 'Trace error', 'Analysis error'];
@@ -45,7 +58,13 @@ export function ErrorsTab() {
                 const parts = splitErrorLabel(e.label);
                 return (
                   <li key={`${kind}|${e.label}`}>
-                    <button type="button" className={styles.errorCard} aria-pressed={on} onClick={() => toggle(kind, e.label)} title={e.label}>
+                    <button
+                      type="button"
+                      className={styles.errorCard}
+                      aria-pressed={on}
+                      onClick={() => toggle(kind, e.label)}
+                      title={e.label}
+                    >
                       <span className={styles.errorTitle}>{parts.title}</span>
                       {parts.detail ? <span className={styles.errorDetail}>{parts.detail}</span> : null}
                       <span className={styles.errorCounts}>

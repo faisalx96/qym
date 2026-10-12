@@ -44,7 +44,9 @@ export async function createVersion(
   body: { name?: string; from_version?: string } = {},
 ): Promise<SeededVersion> {
   const r = await ok<{ version: SeededVersion }>(
-    request.post(`/v1/datasets/${encodeURIComponent(ref)}/versions?project_slug=${projectSlug}`, { data: body }),
+    request.post(`/v1/datasets/${encodeURIComponent(ref)}/versions?project_slug=${projectSlug}`, {
+      data: body,
+    }),
   );
   return r.version;
 }
@@ -98,13 +100,20 @@ export async function publishVersion(
   setProduction = false,
 ): Promise<void> {
   await ok(
-    request.post(`/v1/datasets/${encodeURIComponent(ref)}/versions/${version}:publish?project_slug=${projectSlug}`, {
-      data: setProduction ? { set_alias: 'production' } : {},
-    }),
+    request.post(
+      `/v1/datasets/${encodeURIComponent(ref)}/versions/${version}:publish?project_slug=${projectSlug}`,
+      {
+        data: setProduction ? { set_alias: 'production' } : {},
+      },
+    ),
   );
 }
 
-export async function deleteDataset(request: APIRequestContext, projectSlug: string, ref: string): Promise<void> {
+export async function deleteDataset(
+  request: APIRequestContext,
+  projectSlug: string,
+  ref: string,
+): Promise<void> {
   await ok(request.delete(`/v1/datasets/${encodeURIComponent(ref)}?project_slug=${projectSlug}`));
 }
 
@@ -115,7 +124,9 @@ export function sampleItems(n: number, prefix = 'q'): SeedItem[] {
     return {
       item_id: `${prefix}-${String(i).padStart(3, '0')}`,
       input: arabic ? `ما هي سياسة الاسترجاع للطلب رقم ${i}؟` : `What is the refund policy for order #${i}?`,
-      expected_output: arabic ? 'يمكنك إرجاع المنتج خلال 30 يوماً' : `Refunds within 30 days for order #${i}.`,
+      expected_output: arabic
+        ? 'يمكنك إرجاع المنتج خلال 30 يوماً'
+        : `Refunds within 30 days for order #${i}.`,
       metadata: { topic: ['refunds', 'shipping', 'billing'][i % 3], difficulty: i % 3 },
       labels: arabic ? ['arabic'] : [],
     };
@@ -200,17 +211,35 @@ export async function ingestRun(
   opts.items.forEach((item, index) => {
     const itemId = item.item_id ?? `item-${index + 1}`;
     lines.push(
-      event('item_started', { item_id: itemId, index, input: item.input, expected: item.expected_output, item_metadata: item.metadata ?? {} }),
+      event('item_started', {
+        item_id: itemId,
+        index,
+        input: item.input,
+        expected: item.expected_output,
+        item_metadata: item.metadata ?? {},
+      }),
     );
     for (const metric of metrics) {
       const score = opts.score ? opts.score(itemId, index, metric) : index % 3 === 0 ? 0 : 1;
-      lines.push(event('metric_scored', { item_id: itemId, metric_name: metric, score_numeric: score, score_value: score, score_raw: score }));
+      lines.push(
+        event('metric_scored', {
+          item_id: itemId,
+          metric_name: metric,
+          score_numeric: score,
+          score_value: score,
+          score_raw: score,
+        }),
+      );
     }
     lines.push(
       event('item_completed', {
         item_id: itemId,
         index,
-        output: opts.output ? opts.output(item, index) : index % 3 === 0 ? 'I do not know' : item.expected_output,
+        output: opts.output
+          ? opts.output(item, index)
+          : index % 3 === 0
+            ? 'I do not know'
+            : item.expected_output,
         latency_ms: 120 + index,
       }),
     );

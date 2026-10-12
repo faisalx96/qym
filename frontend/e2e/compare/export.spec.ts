@@ -42,7 +42,9 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-test('CSV export with a filter active: column dialog, group toggle, header and row count match', async ({ page }) => {
+test('CSV export with a filter active: column dialog, group toggle, header and row count match', async ({
+  page,
+}) => {
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c], { filters: JSON.stringify({ complexity: ['easy'] }) }));
   await waitLoaded(page);
@@ -62,7 +64,9 @@ test('CSV export with a filter active: column dialog, group toggle, header and r
   const groups = dialog.locator('fieldset');
   expect(await groups.count()).toBeGreaterThan(1);
   const last = groups.last();
-  const size = Number(/(\d+) columns/.exec(await last.getByRole('button', { name: /columns$/ }).innerText())![1]);
+  const size = Number(
+    /(\d+) columns/.exec(await last.getByRole('button', { name: /columns$/ }).innerText())![1],
+  );
   await last.locator('legend label').first().click(); // the checkbox input itself is visually hidden
   await expect(last.getByRole('checkbox').first()).not.toBeChecked();
   await expect.poll(countOf).toBe(all - size);

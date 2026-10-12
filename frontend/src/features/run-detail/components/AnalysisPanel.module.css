@@ -1,11 +1,12 @@
 /* Sticky analysis column (UX_DECISION variant C). */
 .panel {
   position: sticky;
-  top: var(--space-md);
+  top: calc(var(--run-nav-h, 0px) + var(--space-md));
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  max-height: calc(100vh - 2 * var(--space-md));
+  /* The scroller is the viewport minus the topbar; the sticky nav takes its own height. */
+  max-height: calc(100vh - var(--topbar-h) - var(--run-nav-h, 0px) - 2 * var(--space-md));
   overflow-y: auto;
   padding: var(--space-md);
   background: var(--bg-surface);

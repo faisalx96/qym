@@ -20,10 +20,18 @@ function build() {
           return [`item-${i}`, { correct: q > 0.6 ? 1 : 0, quality: q }];
         }),
       ),
-      metaByItem: Object.fromEntries(Array.from({ length: ITEMS }, (_, i) => [`item-${i}`, { domain: `d${i % 5}`, complexity: ['easy', 'medium', 'hard'][i % 3] }])),
+      metaByItem: Object.fromEntries(
+        Array.from({ length: ITEMS }, (_, i) => [
+          `item-${i}`,
+          { domain: `d${i % 5}`, complexity: ['easy', 'medium', 'hard'][i % 3] },
+        ]),
+      ),
     })),
   );
-  return buildCompareModel(payload, payload.runs.map((r) => r.run.run_id));
+  return buildCompareModel(
+    payload,
+    payload.runs.map((r) => r.run.run_id),
+  );
 }
 
 describe('20 runs x 2000 items stays interactive on the main thread', () => {
@@ -42,11 +50,14 @@ describe('20 runs x 2000 items stays interactive on the main thread', () => {
       const base = columnItemScores(model, cols[0]!, ctx);
       cols.slice(1).forEach((c) => compareWithBaseline(columnItemScores(model, c, ctx), base, ctx));
     });
-    const run = () => applyFilters({ model, view: emptyView(), metric: 'quality', thresholds: {}, groups: null });
+    const run = () =>
+      applyFilters({ model, view: emptyView(), metric: 'quality', thresholds: {}, groups: null });
     const firstFilter = time(run);
     const filter = time(run);
     void firstFilter;
-    console.log(`perf ms: cold(matrix build+stats)=${cold.toFixed(0)} stats=${stats.toFixed(0)} deltas=${deltas.toFixed(0)} filter=${filter.toFixed(0)}`);
+    console.log(
+      `perf ms: cold(matrix build+stats)=${cold.toFixed(0)} stats=${stats.toFixed(0)} deltas=${deltas.toFixed(0)} filter=${filter.toFixed(0)}`,
+    );
     expect(stats).toBeLessThan(2000);
     expect(deltas).toBeLessThan(2000);
     expect(filter).toBeLessThan(4000);

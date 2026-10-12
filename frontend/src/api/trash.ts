@@ -58,7 +58,9 @@ async function fetchTrash(p: TrashParams): Promise<TrashPage> {
   const q = new URLSearchParams({ limit: String(TRASH_PAGE), offset: String((p.page - 1) * TRASH_PAGE) });
   if (p.projectId) q.set('project_id', p.projectId);
   if (p.q) q.set('q', p.q);
-  const response = await fetch(platformUrl(`/api/runs/trash?${q.toString()}`), { credentials: 'same-origin' });
+  const response = await fetch(platformUrl(`/api/runs/trash?${q.toString()}`), {
+    credentials: 'same-origin',
+  });
   const text = await response.text();
   if (!response.ok) {
     let detail = '';

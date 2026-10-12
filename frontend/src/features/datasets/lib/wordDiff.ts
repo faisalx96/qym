@@ -31,10 +31,7 @@ function myersDiff(a: string[], b: string[], maxD: number): DiffOp[] | null {
     for (let k = -d; k <= d; k += 2) {
       let x: number;
       if (d === 0) x = 0;
-      else if (
-        vPrev &&
-        (k === -d || (k !== d && (vPrev[k - 1 + d - 1] ?? 0) < (vPrev[k + 1 + d - 1] ?? 0)))
-      )
+      else if (vPrev && (k === -d || (k !== d && (vPrev[k - 1 + d - 1] ?? 0) < (vPrev[k + 1 + d - 1] ?? 0))))
         x = vPrev[k + 1 + d - 1] ?? 0;
       else x = (vPrev?.[k - 1 + d - 1] ?? 0) + 1;
       let y = x - k;

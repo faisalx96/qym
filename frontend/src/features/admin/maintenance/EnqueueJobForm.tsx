@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useEnqueueJob, type MaintenanceOverview } from '@/api/admin';
 import { ApiError } from '@/lib/http';
+import { useSubmitLock } from '@/lib/pending';
 import { Badge, Button, Select, Text, TextField, Textarea, useToast } from '@/ui';
 import styles from './maintenance.module.css';
 
@@ -27,6 +28,7 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const enqueue = useEnqueueJob();
+  const lock = useSubmitLock();
   const toast = useToast();
   const meta = kinds[kind];
   const irreversible = Boolean(meta?.irreversible);
@@ -54,7 +56,9 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
       setConfirm('');
       onQueued?.(job.id);
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e));
+      setError(
+        e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e),
+      );
     }
   }
 
@@ -65,7 +69,7 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
       data-enqueue-form
       onSubmit={(e) => {
         e.preventDefault();
-        void submit();
+        void lock(submit);
       }}
     >
       <div className={styles.jobFields}>
@@ -105,7 +109,13 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
             data-confirm-field
           />
         ) : null}
-        <Button type="submit" variant={irreversible ? 'danger' : 'primary'} size="md" isDisabled={!canSubmit} loading={enqueue.isPending}>
+        <Button
+          type="submit"
+          variant={irreversible ? 'danger' : 'primary'}
+          size="md"
+          isDisabled={!canSubmit}
+          loading={enqueue.isPending}
+        >
           {irreversible ? 'Queue irreversible job' : 'Queue job'}
         </Button>
       </div>

@@ -89,7 +89,9 @@ export function remoteSections(items: RemoteItem[], ids: string[]): SplitSection
 }
 
 export function titleCase(value: string): string {
-  const v = String(value || '').replace(/_/g, ' ').toLowerCase();
+  const v = String(value || '')
+    .replace(/_/g, ' ')
+    .toLowerCase();
   return v.charAt(0).toUpperCase() + v.slice(1);
 }
 
@@ -116,7 +118,10 @@ export function paramsSummary(params: Record<string, unknown> | null | undefined
   const source = sweep && typeof sweep === 'object' && Object.keys(sweep).length ? sweep : null;
   if (!source) return '';
   return Object.entries(source)
-    .map(([k, v]) => `${k.split('/').filter(Boolean).slice(-1)[0] ?? k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+    .map(
+      ([k, v]) =>
+        `${k.split('/').filter(Boolean).slice(-1)[0] ?? k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`,
+    )
     .join(', ');
 }
 

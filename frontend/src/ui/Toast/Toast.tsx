@@ -12,7 +12,7 @@ import { Button } from '../Button';
 import { IconButton } from '../IconButton';
 import styles from './Toast.module.css';
 
-export type ToastTone = 'success' | 'error' | 'info';
+export type ToastTone = 'success' | 'error' | 'info' | 'warning';
 
 export interface ToastOptions {
   tone?: ToastTone;

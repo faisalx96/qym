@@ -14,7 +14,8 @@ import {
   fakeJobs,
   launchExperiment,
   pauseEnvironment,
-  resetFakes, test,
+  resetFakes,
+  test,
   seedProject,
   waitForExperiment,
   waitForSubmitted,
@@ -120,6 +121,14 @@ test.describe('queue page', () => {
     await page.getByRole('button', { name: 'Clear filters' }).click();
     await expect.poll(() => page.url().includes('?')).toBe(false);
     await expect(jobsGrid(page).getByRole('row')).toHaveCount(5);
+  });
+
+  test('the jobs table has a Priority column, with LOW and NORMAL visible', async ({ page, request }) => {
+    const { project } = await seedQueue(request);
+    await gotoApp(page, queuePath(project.slug));
+    const grid = jobsGrid(page);
+    await expect(grid.getByRole('columnheader', { name: 'Priority' })).toBeVisible();
+    await expect(grid.getByRole('row').nth(1)).toContainText('Normal');
   });
 
   test('select two queued jobs, cancel: split dialog lists them, the reason is sent', async ({
@@ -273,10 +282,18 @@ test.describe('queue page', () => {
     await expect(remote.getByText('Orphan', { exact: true })).toBeVisible();
     await expect(remote.getByRole('link', { name: 'in flight' })).toBeVisible();
 
+    // only the orphan can be selected: the row that matches a job of ours has a disabled checkbox
+    await expect(remote.getByRole('checkbox', { name: 'Select row', disabled: true })).toHaveCount(1);
+    await expect(remote.getByRole('checkbox', { name: 'Select row', disabled: false })).toHaveCount(1);
+    await expect(
+      remote.getByRole('row').filter({ hasText: 'in flight' }).getByRole('checkbox', { disabled: true }),
+    ).toHaveCount(1);
+
     const orphanRow = remote.getByRole('row').filter({ hasText: 'orphan-run' });
     await orphanRow.locator('label').first().click();
     await section.getByRole('button', { name: 'Cancel selected orphans (1)' }).click();
     const dialog = page.getByTestId('cancel-split-dialog');
+    await expect(dialog).toContainText('Cancel 1 orphan job on staging?');
     await expect(dialog.locator('[data-split="orphans"]')).toContainText('Orphans on the service');
     await dialog.getByLabel('Reason (optional)').fill('left over');
     await dialog.getByTestId('cancel-split-confirm').click();

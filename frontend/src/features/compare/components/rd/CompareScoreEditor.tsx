@@ -4,12 +4,12 @@
  * messageFor is imported from the verbatim copy instead of redefined.
  */
 /** Inline score edit / reset with the pass-version lock (brief 04 J8 / §3l). */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useUpdateMetric } from '@/api/runs';
 import { parseMetricScoreInput, type MetricSpec } from '@/lib/metrics';
 import { Button, TextField } from '@/ui';
 import type { Row } from '@/features/run-detail/types';
-import { messageFor } from '@/features/run-detail/components/items/ScoreEditor';
+import { messageFor, useRestoreFocus } from '@/features/run-detail/components/items/ScoreEditor';
 import styles from '@/features/run-detail/components/items/MetricStrip.module.css';
 
 export interface ScoreEditorProps {
@@ -44,6 +44,9 @@ export function CompareScoreEditor({
   const [value, setValue] = useState(initial);
   const [message, setMessage] = useState('');
   const mutation = useUpdateMetric(runId);
+  useRestoreFocus();
+  // `isPending` only flips after the next render; two clicks in one frame would both pass it.
+  const inFlight = useRef(false);
   const base = {
     file_path: filePath,
     row_index: row.index,
@@ -51,22 +54,39 @@ export function CompareScoreEditor({
     ...(passNumber ? { pass_number: passNumber, expected_pass_version: passVersion } : {}),
   };
   const save = () => {
+    if (inFlight.current) return; // a double click / double Enter must not post twice
+    // Saving the number that is already there would only mark the score as edited.
+    if (value.trim() === initial.trim() && value.trim() !== '') {
+      onDone();
+      return;
+    }
     const parsed = parseMetricScoreInput(value, spec, { reduced });
     if (!parsed.ok) {
       setMessage(parsed.message);
       return;
     }
     setMessage('');
+    inFlight.current = true;
     mutation.mutate(
       { ...base, new_score: parsed.value },
-      { onSuccess: (res) => onDone(res?.row), onError: (e) => setMessage(messageFor(e)) },
+      {
+        onSuccess: (res) => onDone(res?.row),
+        onError: (e) => setMessage(messageFor(e)),
+        onSettled: () => (inFlight.current = false),
+      },
     );
   };
   const reset = () => {
+    if (inFlight.current) return;
     setMessage('');
+    inFlight.current = true;
     mutation.mutate(
       { ...base, reset: true },
-      { onSuccess: (res) => onDone(res?.row), onError: (e) => setMessage(messageFor(e)) },
+      {
+        onSuccess: (res) => onDone(res?.row),
+        onError: (e) => setMessage(messageFor(e)),
+        onSettled: () => (inFlight.current = false),
+      },
     );
   };
   return (

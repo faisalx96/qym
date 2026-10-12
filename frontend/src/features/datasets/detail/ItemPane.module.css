@@ -4,7 +4,7 @@
   flex-direction: column;
   position: sticky;
   top: var(--space-md);
-  max-height: calc(100vh - 160px);
+  max-height: calc(100vh - 200px);
   min-width: 0;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);

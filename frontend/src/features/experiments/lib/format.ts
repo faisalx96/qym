@@ -113,3 +113,20 @@ export function tallyJobCounts(counts: Experiment['job_counts'] | null | undefin
   }
   return tally;
 }
+
+/** "kb_version" -> "KB version": words of two letters or fewer read as acronyms. */
+export function versioningWords(key: string): string {
+  const words = String(key)
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => (w.length <= 2 ? w.toUpperCase() : w.toLowerCase()));
+  return words.length ? words.join(' ') : String(key);
+}
+
+/** The label of a versioning filter: "KB version". */
+export function versioningLabel(key: string): string {
+  const words = versioningWords(key);
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}

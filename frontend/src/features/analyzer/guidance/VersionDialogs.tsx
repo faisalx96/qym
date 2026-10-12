@@ -10,7 +10,19 @@ import {
   type RuleVersion,
 } from '@/api/analysis';
 import { ApiError } from '@/lib/http';
-import { Badge, Button, Dialog, ErrorState, Select, Skeleton, Switch, Text, Textarea, TextField, useToast } from '@/ui';
+import {
+  Badge,
+  Button,
+  Dialog,
+  ErrorState,
+  Select,
+  Skeleton,
+  Switch,
+  Text,
+  Textarea,
+  TextField,
+  useToast,
+} from '@/ui';
 import s from './rules.module.css';
 
 const versionItems = (versions: RuleVersion[], except?: number) =>
@@ -33,7 +45,7 @@ export function PublishDialog({
 }) {
   const publish = usePublishVersion(scope);
   const toast = useToast();
-  const [production, setProduction] = useState(true);
+  const [production, setProduction] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
@@ -138,7 +150,12 @@ export function CompareDialog({
         onChange={(k) => setBase(k == null ? null : Number(k))}
       />
       {compare.isError ? (
-        <ErrorState error={compare.error} title="Couldn’t compare versions" onRetry={() => compare.refetch()} compact />
+        <ErrorState
+          error={compare.error}
+          title="Couldn’t compare versions"
+          onRetry={() => compare.refetch()}
+          compact
+        />
       ) : compare.isFetching && !data ? (
         <Skeleton kind="lines" rows={4} label="Comparing" />
       ) : data ? (
@@ -215,7 +232,9 @@ export function MergeDialog({
     setError(null);
     try {
       const res = await merge.mutateAsync({ target: target.version, source: sourceVersion, apply: false });
-      setPreview(res.preview ?? { summary: { changed: 0, added: 0, removed: 0, conflicts: 0 }, conflicts: [] });
+      setPreview(
+        res.preview ?? { summary: { changed: 0, added: 0, removed: 0, conflicts: 0 }, conflicts: [] },
+      );
       setChoices({});
     } catch (e) {
       setPreview(null);
@@ -224,7 +243,9 @@ export function MergeDialog({
   }
 
   const conflicts = preview?.conflicts ?? [];
-  const unresolved = conflicts.some((c) => !choices[c.key] || (choices[c.key] === 'custom' && !custom[c.key]?.title.trim()));
+  const unresolved = conflicts.some(
+    (c) => !choices[c.key] || (choices[c.key] === 'custom' && !custom[c.key]?.title.trim()),
+  );
 
   async function apply() {
     if (sourceVersion == null) return;
@@ -235,7 +256,12 @@ export function MergeDialog({
       else if (choice) resolutions[c.key] = choice;
     }
     try {
-      const res = await merge.mutateAsync({ target: target.version, source: sourceVersion, apply: true, resolutions });
+      const res = await merge.mutateAsync({
+        target: target.version,
+        source: sourceVersion,
+        apply: true,
+        resolutions,
+      });
       toast.show('Versions merged', { tone: 'success' });
       onMerged(res.version);
       onOpenChange(false);
@@ -259,7 +285,13 @@ export function MergeDialog({
           <Button size="md" onPress={() => void runPreview()} loading={merge.isPending && !preview}>
             Preview merge
           </Button>
-          <Button size="md" variant="primary" isDisabled={!preview || unresolved} loading={merge.isPending && Boolean(preview)} onPress={() => void apply()}>
+          <Button
+            size="md"
+            variant="primary"
+            isDisabled={!preview || unresolved}
+            loading={merge.isPending && Boolean(preview)}
+            onPress={() => void apply()}
+          >
             Apply merge
           </Button>
         </>
@@ -317,13 +349,23 @@ export function MergeDialog({
                   <TextField
                     label="Title"
                     value={custom[c.key]?.title ?? ''}
-                    onChange={(v) => setCustom((cur) => ({ ...cur, [c.key]: { instruction: cur[c.key]?.instruction ?? '', title: v } }))}
+                    onChange={(v) =>
+                      setCustom((cur) => ({
+                        ...cur,
+                        [c.key]: { instruction: cur[c.key]?.instruction ?? '', title: v },
+                      }))
+                    }
                   />
                   <Textarea
                     label="Instruction"
                     rows={3}
                     value={custom[c.key]?.instruction ?? ''}
-                    onChange={(v) => setCustom((cur) => ({ ...cur, [c.key]: { title: cur[c.key]?.title ?? '', instruction: v } }))}
+                    onChange={(v) =>
+                      setCustom((cur) => ({
+                        ...cur,
+                        [c.key]: { title: cur[c.key]?.title ?? '', instruction: v },
+                      }))
+                    }
                   />
                 </>
               ) : null}

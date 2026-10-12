@@ -17,6 +17,13 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/* The run chips plus the delta rows stack to about a quarter of a phone screen: let them scroll away. */
+@media (max-width: 640px) {
+  .sticky {
+    position: static;
+  }
+}
+
 .body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

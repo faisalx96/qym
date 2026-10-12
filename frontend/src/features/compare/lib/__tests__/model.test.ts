@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { buildCompareModel } from '../model';
-import { expandRefs, normalizeCohorts, passRefBase, passRefNumber, readSelection, makePassRef, selectionParams } from '../refs';
+import {
+  expandRefs,
+  normalizeCohorts,
+  passRefBase,
+  passRefNumber,
+  readSelection,
+  makePassRef,
+  selectionParams,
+} from '../refs';
 import { computeRunLabels, stripSharedPrefix } from '../labels';
 import { makePayload } from './fixtures';
 
@@ -18,10 +26,20 @@ describe('refs', () => {
     const store = new Map<string, string>();
     const storage = { getItem: (k: string) => store.get(k) ?? null };
     store.set('compareRuns', JSON.stringify(['s1', 's2']));
-    expect(readSelection(new URLSearchParams(''), storage)).toMatchObject({ refs: ['s1', 's2'], source: 'session' });
-    store.set('compareCohorts', JSON.stringify({ left: ['l1'], right: ['r1'], leftLabel: 'L', rightLabel: 'R' }));
+    expect(readSelection(new URLSearchParams(''), storage)).toMatchObject({
+      refs: ['s1', 's2'],
+      source: 'session',
+    });
+    store.set(
+      'compareCohorts',
+      JSON.stringify({ left: ['l1'], right: ['r1'], leftLabel: 'L', rightLabel: 'R' }),
+    );
     expect(readSelection(new URLSearchParams(''), storage).cohorts?.leftLabel).toBe('L');
-    expect(readSelection(new URLSearchParams('runs=a&runs=b&runs=a'), storage)).toMatchObject({ refs: ['a', 'b'], cohorts: null, source: 'url' });
+    expect(readSelection(new URLSearchParams('runs=a&runs=b&runs=a'), storage)).toMatchObject({
+      refs: ['a', 'b'],
+      cohorts: null,
+      source: 'url',
+    });
     const q = new URLSearchParams('cohortA=a&cohortA=b&cohortB=c&cohortB=d&cohortALabel=X');
     const sel = readSelection(q, storage);
     expect(sel.refs).toEqual(['a', 'b', 'c', 'd']);
@@ -30,11 +48,21 @@ describe('refs', () => {
   });
   it('cohorts must be paired', () => {
     expect(normalizeCohorts({ left: ['a'], right: ['b', 'c'] })).toBeNull();
-    expect(selectionParams([], normalizeCohorts({ left: ['a'], right: ['b'] })).getAll('cohortA')).toEqual(['a']);
+    expect(selectionParams([], normalizeCohorts({ left: ['a'], right: ['b'] })).getAll('cohortA')).toEqual([
+      'a',
+    ]);
   });
   it('expands a whole repeat run into passes and drops unknown runs', () => {
-    const loaded = [{ run_id: 'r', samples: 3 }, { run_id: 's', samples: 1 }];
-    expect(expandRefs(['r', 's::pass1', 'zzz', 'r::pass2'], loaded)).toEqual(['r::pass1', 'r::pass2', 'r::pass3', 's::pass1']);
+    const loaded = [
+      { run_id: 'r', samples: 3 },
+      { run_id: 's', samples: 1 },
+    ];
+    expect(expandRefs(['r', 's::pass1', 'zzz', 'r::pass2'], loaded)).toEqual([
+      'r::pass1',
+      'r::pass2',
+      'r::pass3',
+      's::pass1',
+    ]);
   });
 });
 
@@ -60,8 +88,22 @@ describe('labels', () => {
 
 describe('buildCompareModel', () => {
   const payload = makePayload([
-    { id: 'r1', name: 'base', model: 'm1', scores: { i1: S({ correct: 1, quality: 0.9 }), i2: S({ correct: 0, quality: 0.2 }) } },
-    { id: 'rep', name: 'rep', model: 'm1', samples: 3, scores: { i1: S({ correct: [1, 0, 1], quality: [0.9, 0.4, 0.8] }), i2: S({ correct: [0, 0, 0], quality: [0.1, 0.2, 0.3] }) } },
+    {
+      id: 'r1',
+      name: 'base',
+      model: 'm1',
+      scores: { i1: S({ correct: 1, quality: 0.9 }), i2: S({ correct: 0, quality: 0.2 }) },
+    },
+    {
+      id: 'rep',
+      name: 'rep',
+      model: 'm1',
+      samples: 3,
+      scores: {
+        i1: S({ correct: [1, 0, 1], quality: [0.9, 0.4, 0.8] }),
+        i2: S({ correct: [0, 0, 0], quality: [0.1, 0.2, 0.3] }),
+      },
+    },
   ]);
   it('slices a repeat run into one pseudo-run per pass', () => {
     const m = buildCompareModel(payload, ['r1', 'rep']);

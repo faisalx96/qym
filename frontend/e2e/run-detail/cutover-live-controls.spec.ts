@@ -24,7 +24,13 @@ test.describe('live follow', () => {
     await page.route(/\/api\/runs\/[^/]+\/live-status/, async (route) => {
       probes.push(Date.now());
       await route.fulfill({
-        json: { run_id: runId, status: 'RUNNING', live: true, server_time: new Date().toISOString(), ...answer(probes.length) },
+        json: {
+          run_id: runId,
+          status: 'RUNNING',
+          live: true,
+          server_time: new Date().toISOString(),
+          ...answer(probes.length),
+        },
       });
     });
     return { runId, probes };
@@ -33,7 +39,9 @@ test.describe('live follow', () => {
   test('a stop request shows STOPPING and probes every 1.5 s instead of 3 s', async ({ page }) => {
     const { runId, probes } = await liveRun(page, () => ({ stop_requested: true, revision: 'r1' }));
     await openRun(page, s.slug, runId);
-    await expect(page.getByRole('region', { name: 'Run summary' })).toContainText('STOPPING…', { timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Run summary' })).toContainText('STOPPING…', {
+      timeout: 15_000,
+    });
     await expect.poll(() => probes.length, { timeout: 25_000, intervals: [250] }).toBeGreaterThanOrEqual(5);
     const gaps = probes.slice(1).map((t, i) => t - probes[i]!);
     // the first answer says "stop requested": the probes after the next one follow 1.5 s apart (3 s otherwise)
@@ -46,7 +54,10 @@ test.describe('live follow', () => {
     await expect.poll(() => probes.length, { timeout: 15_000 }).toBeGreaterThanOrEqual(1);
     const hide = (hidden: boolean) =>
       page.evaluate((value) => {
-        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (value ? 'hidden' : 'visible') });
+        Object.defineProperty(document, 'visibilityState', {
+          configurable: true,
+          get: () => (value ? 'hidden' : 'visible'),
+        });
         document.dispatchEvent(new Event('visibilitychange'));
       }, hidden);
     await hide(true);
@@ -58,16 +69,26 @@ test.describe('live follow', () => {
     await expect.poll(() => probes.length, { timeout: 10_000 }).toBeGreaterThan(frozen);
   });
 
-  test('the first probe at the served revision reloads nothing; a new revision reloads once', async ({ page }) => {
+  test('the first probe at the served revision reloads nothing; a new revision reloads once', async ({
+    page,
+  }) => {
     const seeded = await seedRunningRun(client, s.token, 12);
-    const first = await fetch(`${client.baseUrl}/api/runs/${seeded.runId}?view=compact`).then((r) => r.json());
+    const first = await fetch(`${client.baseUrl}/api/runs/${seeded.runId}?view=compact`).then((r) =>
+      r.json(),
+    );
     const served = (first as { run: { live_revision?: string } }).run.live_revision ?? 'r1';
     let revision = served;
     const probes: number[] = [];
     await page.route(/\/api\/runs\/[^/]+\/live-status/, async (route) => {
       probes.push(Date.now());
       await route.fulfill({
-        json: { run_id: seeded.runId, status: 'RUNNING', live: true, revision, server_time: new Date().toISOString() },
+        json: {
+          run_id: seeded.runId,
+          status: 'RUNNING',
+          live: true,
+          revision,
+          server_time: new Date().toISOString(),
+        },
       });
     });
     const reloads: string[] = [];

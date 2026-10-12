@@ -17,7 +17,10 @@ export function slugifyDatasetName(value: string): string {
     else if (/\p{M}/u.test(ch) && chars.length && last !== '-') chars.push(ch);
     else if (chars.length && last !== '-') chars.push('-');
   }
-  return chars.slice(0, MAX_SLUG_LENGTH).join('').replace(/^-+|-+$/g, '');
+  return chars
+    .slice(0, MAX_SLUG_LENGTH)
+    .join('')
+    .replace(/^-+|-+$/g, '');
 }
 
 export function nextVersionAfter(version: string | null | undefined): string | null {

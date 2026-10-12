@@ -1,10 +1,26 @@
 /** Composable rule builder (AND / OR groups) over aligned items; fields are evaluated across every compared run. */
 import { Button, IconButton, MultiSelect, SegmentedControl, Select, Text, TextField } from '@/ui';
 import { useCompare } from '../../CompareContext';
-import { conditionHasValue, emptyGroup, filterRuleCountRaw, isFilterGroup, type FieldDef, type FilterCondition, type FilterGroup, type FilterNode } from '../../lib/filters';
+import {
+  conditionHasValue,
+  emptyGroup,
+  filterRuleCountRaw,
+  isFilterGroup,
+  type FieldDef,
+  type FilterCondition,
+  type FilterGroup,
+  type FilterNode,
+} from '../../lib/filters';
 import styles from './FilterBuilder.module.css';
 
-const NUMBER_OPS: Array<[string, string]> = [['gte', '≥'], ['gt', '>'], ['lte', '≤'], ['lt', '<'], ['eq', '='], ['neq', '≠']];
+const NUMBER_OPS: Array<[string, string]> = [
+  ['gte', '≥'],
+  ['gt', '>'],
+  ['lte', '≤'],
+  ['lt', '<'],
+  ['eq', '='],
+  ['neq', '≠'],
+];
 
 function defaultCondition(f: FieldDef | null): FilterCondition {
   if (!f) return { field: '', oper: '', value: '' };
@@ -14,7 +30,11 @@ function defaultCondition(f: FieldDef | null): FilterCondition {
   return { field: f.id, oper: 'contains', value: '' };
 }
 
-function replaceAt(root: FilterGroup, path: number[], fn: (node: FilterNode) => FilterNode | null): FilterGroup {
+function replaceAt(
+  root: FilterGroup,
+  path: number[],
+  fn: (node: FilterNode) => FilterNode | null,
+): FilterGroup {
   if (!path.length) return (fn(root) as FilterGroup) ?? root;
   const [head, ...rest] = path;
   return {
@@ -30,11 +50,25 @@ function replaceAt(root: FilterGroup, path: number[], fn: (node: FilterNode) => 
   };
 }
 
-function Condition({ node, path, defs, onChange }: { node: FilterCondition; path: number[]; defs: Map<string, FieldDef>; onChange: (path: number[], fn: (n: FilterNode) => FilterNode | null) => void }) {
+function Condition({
+  node,
+  path,
+  defs,
+  onChange,
+}: {
+  node: FilterCondition;
+  path: number[];
+  defs: Map<string, FieldDef>;
+  onChange: (path: number[], fn: (n: FilterNode) => FilterNode | null) => void;
+}) {
   const field = defs.get(node.field) ?? null;
   const list = Array.from(defs.values());
-  const set = (patch: Partial<FilterCondition>) => onChange(path, (n) => ({ ...(n as FilterCondition), ...patch }));
-  const shown = field?.percent && node.value !== '' && !Number.isNaN(Number(node.value)) ? String(Number((Number(node.value) * 100).toFixed(4))) : String(Array.isArray(node.value) ? '' : (node.value ?? ''));
+  const set = (patch: Partial<FilterCondition>) =>
+    onChange(path, (n) => ({ ...(n as FilterCondition), ...patch }));
+  const shown =
+    field?.percent && node.value !== '' && !Number.isNaN(Number(node.value))
+      ? String(Number((Number(node.value) * 100).toFixed(4)))
+      : String(Array.isArray(node.value) ? '' : (node.value ?? ''));
   return (
     <div className={styles.cond} data-testid="filter-condition">
       <Select
@@ -51,21 +85,43 @@ function Condition({ node, path, defs, onChange }: { node: FilterCondition; path
         <>
           {field.kind === 'number' ? (
             <>
-              <Select label="Operator" hideLabel value={node.oper} onChange={(k) => k && set({ oper: String(k) })} items={NUMBER_OPS.map(([key, label]) => ({ key, label }))} width={72} />
+              <Select
+                label="Operator"
+                hideLabel
+                value={node.oper}
+                onChange={(k) => k && set({ oper: String(k) })}
+                items={NUMBER_OPS.map(([key, label]) => ({ key, label }))}
+                width={72}
+              />
               <TextField
                 label={`${field.label} value`}
                 hideLabel
                 inputMode="decimal"
                 value={shown}
                 width="9ch"
-                onChange={(v) => set({ value: field.percent && v !== '' && !Number.isNaN(Number(v)) ? String(Number(v) / 100) : v })}
+                onChange={(v) =>
+                  set({
+                    value:
+                      field.percent && v !== '' && !Number.isNaN(Number(v)) ? String(Number(v) / 100) : v,
+                  })
+                }
               />
               {field.percent ? <span className={styles.unit}>%</span> : null}
             </>
           ) : null}
           {field.kind === 'enum' ? (
             <>
-              <Select label="Operator" hideLabel value={node.oper} onChange={(k) => k && set({ oper: String(k) })} items={[{ key: 'in', label: 'is any of' }, { key: 'notin', label: 'is none of' }]} width={120} />
+              <Select
+                label="Operator"
+                hideLabel
+                value={node.oper}
+                onChange={(k) => k && set({ oper: String(k) })}
+                items={[
+                  { key: 'in', label: 'is any of' },
+                  { key: 'notin', label: 'is none of' },
+                ]}
+                width={120}
+              />
               <MultiSelect
                 label="Values"
                 items={(field.choices ?? []).map((ch) => ({ key: ch.value, label: ch.label }))}
@@ -78,35 +134,93 @@ function Condition({ node, path, defs, onChange }: { node: FilterCondition; path
             </>
           ) : null}
           {field.kind === 'bool' ? (
-            <Select label="State" hideLabel value={String(node.value) || null} placeholder="Choose state…" onChange={(k) => k && set({ value: String(k) })} items={[{ key: 'true', label: 'true' }, { key: 'false', label: 'false' }]} width={120} />
+            <Select
+              label="State"
+              hideLabel
+              value={String(node.value) || null}
+              placeholder="Choose state…"
+              onChange={(k) => k && set({ value: String(k) })}
+              items={[
+                { key: 'true', label: 'true' },
+                { key: 'false', label: 'false' },
+              ]}
+              width={120}
+            />
           ) : null}
           {field.kind === 'text' ? (
             <>
-              <Select label="Operator" hideLabel value={node.oper} onChange={(k) => k && set({ oper: String(k) })} items={[{ key: 'contains', label: 'contains' }, { key: 'notcontains', label: 'does not contain' }]} width={160} />
-              <TextField label={`${field.label} text`} hideLabel value={String(node.value ?? '')} onChange={(v) => set({ value: v })} placeholder="text…" width="20ch" />
+              <Select
+                label="Operator"
+                hideLabel
+                value={node.oper}
+                onChange={(k) => k && set({ oper: String(k) })}
+                items={[
+                  { key: 'contains', label: 'contains' },
+                  { key: 'notcontains', label: 'does not contain' },
+                ]}
+                width={160}
+              />
+              <TextField
+                label={`${field.label} text`}
+                hideLabel
+                value={String(node.value ?? '')}
+                onChange={(v) => set({ value: v })}
+                placeholder="text…"
+                width="20ch"
+              />
             </>
           ) : null}
         </>
       ) : null}
-      <IconButton label="Delete condition" icon="trash" tone="danger" onPress={() => onChange(path, () => null)} />
+      <IconButton
+        label="Delete condition"
+        icon="trash"
+        tone="danger"
+        onPress={() => onChange(path, () => null)}
+      />
     </div>
   );
 }
 
-function Group({ node, path, defs, onChange }: { node: FilterGroup; path: number[]; defs: Map<string, FieldDef>; onChange: (path: number[], fn: (n: FilterNode) => FilterNode | null) => void }) {
+function Group({
+  node,
+  path,
+  defs,
+  onChange,
+}: {
+  node: FilterGroup;
+  path: number[];
+  defs: Map<string, FieldDef>;
+  onChange: (path: number[], fn: (n: FilterNode) => FilterNode | null) => void;
+}) {
   return (
-    <div className={styles.group} data-root={path.length === 0 || undefined} role="group" aria-label={path.length ? 'Rule group' : 'Rules'}>
+    <div
+      className={styles.group}
+      data-root={path.length === 0 || undefined}
+      role="group"
+      aria-label={path.length ? 'Rule group' : 'Rules'}
+    >
       <div className={styles.groupHead}>
         <SegmentedControl<'and' | 'or'>
           label="Match mode"
           value={node.op}
           onChange={(op) => onChange(path, (n) => ({ ...(n as FilterGroup), op }))}
-          options={[{ value: 'and', label: 'AND' }, { value: 'or', label: 'OR' }]}
+          options={[
+            { value: 'and', label: 'AND' },
+            { value: 'or', label: 'OR' },
+          ]}
         />
         <Text variant="sm" tone="muted">
           {node.op === 'and' ? 'every rule below must match' : 'any rule below may match'}
         </Text>
-        {path.length ? <IconButton label="Delete group" icon="trash" tone="danger" onPress={() => onChange(path, () => null)} /> : null}
+        {path.length ? (
+          <IconButton
+            label="Delete group"
+            icon="trash"
+            tone="danger"
+            onPress={() => onChange(path, () => null)}
+          />
+        ) : null}
       </div>
       {node.children.map((child, i) =>
         isFilterGroup(child) ? (
@@ -116,10 +230,28 @@ function Group({ node, path, defs, onChange }: { node: FilterGroup; path: number
         ),
       )}
       <div className={styles.add}>
-        <Button size="sm" variant="neutral" onPress={() => onChange(path, (n) => ({ ...(n as FilterGroup), children: [...(n as FilterGroup).children, defaultCondition(null)] }))}>
+        <Button
+          size="sm"
+          variant="neutral"
+          onPress={() =>
+            onChange(path, (n) => ({
+              ...(n as FilterGroup),
+              children: [...(n as FilterGroup).children, defaultCondition(null)],
+            }))
+          }
+        >
           + Condition
         </Button>
-        <Button size="sm" variant="ghost" onPress={() => onChange(path, (n) => ({ ...(n as FilterGroup), children: [...(n as FilterGroup).children, emptyGroup()] }))}>
+        <Button
+          size="sm"
+          variant="ghost"
+          onPress={() =>
+            onChange(path, (n) => ({
+              ...(n as FilterGroup),
+              children: [...(n as FilterGroup).children, emptyGroup()],
+            }))
+          }
+        >
           + Group
         </Button>
       </div>
@@ -137,7 +269,8 @@ export function FilterBuilder() {
   return (
     <section className={styles.builder} aria-label="Filter rules" data-testid="filter-builder">
       <Text variant="sm" tone="muted">
-        {count ? `${count} rule${count === 1 ? '' : 's'} applied` : 'No rules yet'} {'·'} a rule matches an item when any compared run matches it.
+        {count ? `${count} rule${count === 1 ? '' : 's'} applied` : 'No rules yet'} {'·'} a rule matches an
+        item when any compared run matches it.
       </Text>
       <Group node={rules} path={[]} defs={map} onChange={onChange} />
     </section>

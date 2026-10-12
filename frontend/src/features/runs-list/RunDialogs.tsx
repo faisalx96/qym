@@ -8,17 +8,19 @@ import {
   useTransferOwner,
 } from '@/api/dashboard';
 import type { RunRow } from '@/api/dashboardTypes';
+import { useAuth } from '@/features/shell';
 import { announceRunStatus } from '@/lib/run-status';
 import { ApiError } from '@/lib/http';
+import { errorsLeftOut, metricDirection } from '@/lib/metrics';
 import { ConfirmDialog, Dialog, FormDialog, KeyValueGrid, Text, Button, useToast } from '@/ui';
 import { passNumber, passRefBase } from './selection';
 
 export type DialogState =
   | { kind: 'workflow'; action: 'approve' | 'reject' | 'unapprove' | 'unreject'; row: RunRow }
   | { kind: 'submit'; rows: RunRow[] }
-  | { kind: 'delete'; refs: string[]; names: string[] }
+  | { kind: 'delete'; refs: string[]; names: string[]; revisions: Record<string, number> }
   | { kind: 'transfer'; row: RunRow }
-  | { kind: 'errors'; row: RunRow }
+  | { kind: 'errors'; row: RunRow; metric?: string }
   | null;
 
 const WORKFLOW_COPY = {
@@ -73,6 +75,7 @@ export function RunDialogs({
   onSubmitted: () => void;
 }) {
   const toast = useToast();
+  const { me } = useAuth();
   const workflow = useRunWorkflow(slug);
   const submit = useSubmitRuns(slug);
   const del = useDeleteRuns(slug);
@@ -132,7 +135,17 @@ export function RunDialogs({
             ? `Submit ${name(sub.rows[0]!)} for review`
             : `Submit ${sub?.rows.length ?? 0} runs for review`
         }
-        description="Reviewers are asked to approve or reject. Runs stay read-only while submitted."
+        description={[
+          'Reviewers are asked to approve or reject. Runs stay read-only while submitted.',
+          sub?.rows.some((r) => r.owner && r.owner.id !== me.id)
+            ? 'Runs owned by someone else are submitted on their behalf.'
+            : '',
+          sub?.rows.some((r) => r.status === 'REJECTED')
+            ? 'A rejected run is being resubmitted for another review.'
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         confirmLabel="Submit"
         fields={[
           {
@@ -192,7 +205,7 @@ export function RunDialogs({
             byRun.set(passRefBase(ref), [...(byRun.get(passRefBase(ref)) ?? []), passNumber(ref)!]);
           for (const [runId, passes] of byRun) {
             try {
-              await delPasses.mutateAsync({ runId, passes });
+              await delPasses.mutateAsync({ runId, passes, expectedVersion: rm.revisions[runId] ?? 0 });
             } catch {
               failed += passes.length;
             }
@@ -232,7 +245,7 @@ export function RunDialogs({
       <Dialog
         open={Boolean(er)}
         onOpenChange={close}
-        title={er ? `Errors in ${name(er.row)}` : 'Errors'}
+        title={er ? (er.metric ? `${er.metric} errors` : `Errors in ${name(er.row)}`) : 'Errors'}
         size="sm"
         footer={
           <Button variant="neutral" onPress={onClose}>
@@ -240,15 +253,48 @@ export function RunDialogs({
           </Button>
         }
       >
-        {er ? <ErrorDetails row={er.row} /> : null}
+        {er ? <ErrorDetails row={er.row} metric={er.metric} /> : null}
       </Dialog>
     </>
   );
 }
 
-function ErrorDetails({ row }: { row: RunRow }) {
+function ErrorDetails({ row, metric }: { row: RunRow; metric?: string }) {
   const scope = row.samples > 1 ? 'across all passes' : 'across all items';
   const perMetric = Object.entries(row.metric_error_counts ?? {}).filter(([, n]) => n > 0);
+  if (metric && errorsLeftOut(metricDirection(row.metric_specs?.[metric]))) {
+    return (
+      <>
+        <Text variant="sm" as="p">
+          Errors {scope} are not counted in the {metric} mean.
+        </Text>
+        <KeyValueGrid
+          columns={1}
+          dense
+          aria-label="Error counts"
+          items={[
+            {
+              key: 'scorer',
+              label: 'Scorer errors',
+              value: String(row.metric_error_counts?.[metric] ?? 0),
+              mono: true,
+            },
+            {
+              key: 'task',
+              label: 'Task errors in the run',
+              value: String(row.task_error_count ?? 0),
+              mono: true,
+            },
+          ]}
+        />
+        <Text variant="sm" tone="muted" as="p">
+          Lower is better for this metric, so an error counted as 0 would read as its best score. Errors are
+          left out of its mean and count as fails in pass rates. Each is counted once per item and pass; a
+          failed task that a reviewer scored counts at that score.
+        </Text>
+      </>
+    );
+  }
   return (
     <>
       <KeyValueGrid
@@ -273,7 +319,9 @@ function ErrorDetails({ row }: { row: RunRow }) {
         ]}
       />
       <Text variant="sm" tone="muted" as="p">
-        Open the run to see each failing item with its message.
+        Task outputs are available. Each failed metric check is counted once per item and pass and counts as
+        0% in the run mean. Metrics skipped after a task failure are not metric errors. Open the run to see
+        each failing item with its message.
       </Text>
     </>
   );

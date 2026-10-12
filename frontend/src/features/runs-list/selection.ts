@@ -83,7 +83,13 @@ export function expandComparisonRefs(refs: string[], samplesOf: (runId: string) 
     if (samples <= 1) out.push(ref);
     else for (let p = 1; p <= samples; p++) out.push(passRef(ref, p));
   }
-  return out;
+  return [...new Set(out)];
+}
+
+/** A whole run and one of its passes are exclusive in a selection (two different passes are not). */
+export function refsExclusive(a: string, b: string): boolean {
+  if (a === b || passRefBase(a) !== passRefBase(b)) return false;
+  return isPassRef(a) !== isPassRef(b);
 }
 
 export function cohortRefsConflict(a: string, b: string): boolean {
@@ -159,14 +165,27 @@ export function useRunsSelection(slug: string) {
       toggle: (ref: string) =>
         update((p) => ({
           ...p,
-          selected: p.selected.includes(ref) ? p.selected.filter((r) => r !== ref) : [...p.selected, ref],
+          selected: p.selected.includes(ref)
+            ? p.selected.filter((r) => r !== ref)
+            : [...p.selected.filter((r) => !refsExclusive(r, ref)), ref],
         })),
       setMany: (refs: string[], on: boolean) =>
         update((p) => ({
           ...p,
           selected: on
-            ? [...p.selected, ...refs.filter((r) => !p.selected.includes(r))]
-            : p.selected.filter((r) => !refs.includes(r)),
+            ? [
+                ...p.selected.filter((r) => !refs.some((n) => refsExclusive(r, n))),
+                ...refs.filter((r) => !p.selected.includes(r)),
+              ]
+            : p.selected.filter((r) => !refs.includes(r) && !(isPassRef(r) && refs.includes(passRefBase(r)))),
+        })),
+      /** After a pass delete: drop that run's pass picks (they are renumbered) and remember the new revision. */
+      dropPassPicks: (runId: string, revision?: number) =>
+        update((p) => ({
+          ...p,
+          selected: p.selected.filter((r) => !(isPassRef(r) && passRefBase(r) === runId)),
+          cohortA: p.cohortA.filter((r) => !(isPassRef(r) && passRefBase(r) === runId)),
+          passRevisions: revision === undefined ? p.passRevisions : { ...p.passRevisions, [runId]: revision },
         })),
       clear: () => update(() => ({ selected: [], cohortA: [], passRevisions: {} })),
       clearSelected: () => update((p) => ({ ...p, selected: [] })),

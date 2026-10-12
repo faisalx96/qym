@@ -32,7 +32,12 @@ export function ForceStopDialog({ run, open, onOpenChange, onStopped, onFailed }
           const result = await stop.mutateAsync(run.run_id);
           onStopped(run, result.stopped);
         } catch (e) {
-          const message = e instanceof ApiError ? e.detail || `HTTP ${e.status}` : e instanceof Error ? e.message : String(e);
+          const message =
+            e instanceof ApiError
+              ? e.detail || `HTTP ${e.status}`
+              : e instanceof Error
+                ? e.message
+                : String(e);
           onFailed(run, message);
           throw new Error(message);
         }

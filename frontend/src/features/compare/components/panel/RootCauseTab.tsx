@@ -1,4 +1,4 @@
-/** Root-cause categories over the filtered items, per run (brief 05 J5); the Sankey was dropped (OPEN_QUESTIONS Q5). */
+/** Root-cause categories over the filtered items, per run (brief 05 J5); solutions sit under each category (the Sankey's right-hand side). */
 import { useMemo } from 'react';
 import { Select, Tag, Text } from '@/ui';
 import { platformUrl } from '@/lib/runtime';
@@ -9,14 +9,14 @@ import { ScrollRegion } from '../ScrollRegion';
 import styles from './Panel.module.css';
 
 /** Links to each run's auto-analysis workspace. */
-function AnalyzeLinks() {
+export function AnalyzeLinks() {
   const { model, slug } = useCompare();
   return (
-    <div className={styles.stack}>
+    <div className={`${styles.stack} ${styles.analyzeLinks}`}>
       <Text variant="sm" tone="muted">
         Analyze a run:
       </Text>
-      <ul className={styles.subList} aria-label="Analyze a run">
+      <ul className={styles.analyzeList} aria-label="Analyze a run">
         {model.runs.map((run, i) => {
           const project = slug ?? run.run.project?.slug;
           const id = encodeURIComponent(run.base);
@@ -74,7 +74,9 @@ export function RootCauseTab() {
       ) : (
         <ScrollRegion className={styles.scroll} label="Root cause table">
           <table className={styles.table}>
-            <caption className={styles.caption}>Issues per root-cause category; pressing a category filters the items.</caption>
+            <caption className={styles.caption}>
+              Issues per root-cause category; pressing a category filters the items.
+            </caption>
             <thead>
               <tr>
                 <th scope="col">Category</th>
@@ -87,9 +89,17 @@ export function RootCauseTab() {
             </thead>
             <tbody>
               {cats.map((cat) => (
-                <tr key={cat.category} data-active={(f.rootCause?.includes(cat.category) ?? false) || undefined}>
+                <tr
+                  key={cat.category}
+                  data-active={(f.rootCause?.includes(cat.category) ?? false) || undefined}
+                >
                   <th scope="row">
-                    <button type="button" className={styles.rowButton} aria-pressed={!!f.rootCause?.includes(cat.category)} onClick={() => toggle(cat.category)}>
+                    <button
+                      type="button"
+                      className={styles.rowButton}
+                      aria-pressed={!!f.rootCause?.includes(cat.category)}
+                      onClick={() => toggle(cat.category)}
+                    >
                       {cat.category} <span className={styles.count}>{cat.count}</span>
                     </button>
                     {cat.subcauses.length ? (
@@ -97,6 +107,15 @@ export function RootCauseTab() {
                         {cat.subcauses.map(([name, n]) => (
                           <Tag key={name} kind="data" title={name}>
                             {name} {n}
+                          </Tag>
+                        ))}
+                      </span>
+                    ) : null}
+                    {cat.solutions.length ? (
+                      <span className={styles.subList} aria-label={`Solutions for ${cat.category}`}>
+                        {cat.solutions.map(([name, n]) => (
+                          <Tag key={name} kind="data" tone="info" title={`Solution: ${name}`}>
+                            {'→'} {name} {n}
                           </Tag>
                         ))}
                       </span>

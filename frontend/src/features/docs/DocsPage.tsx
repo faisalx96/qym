@@ -9,7 +9,12 @@ import { useDocsPage } from './useDocsPage';
 import { useScrollSpy } from './useScrollSpy';
 import styles from './DocsPage.module.css';
 
-const SECTION_ICON: Record<string, IconName> = { rocket: 'sparkles', grid: 'grid', code: 'review', terminal: 'flask' };
+const SECTION_ICON: Record<string, IconName> = {
+  rocket: 'sparkles',
+  grid: 'grid',
+  code: 'review',
+  terminal: 'flask',
+};
 
 function Toc({ headings, active }: { headings: DocsHeading[]; active: string | null }) {
   const { pathname } = useLocation();
@@ -28,7 +33,11 @@ function Toc({ headings, active }: { headings: DocsHeading[]; active: string | n
               onClick={(e) => {
                 if (scrollToHeading(h.id, true)) {
                   e.preventDefault();
-                  history.replaceState(history.state, '', `${window.location.pathname}${window.location.search}#${h.id}`);
+                  history.replaceState(
+                    history.state,
+                    '',
+                    `${window.location.pathname}${window.location.search}#${h.id}`,
+                  );
                 }
               }}
             >
@@ -70,10 +79,22 @@ export function DocsPage() {
   return (
     <div className={styles.page} data-docs-page>
       <aside className={styles.nav}>
-        <button type="button" className={styles.navToggle} aria-expanded={navOpen} aria-controls="docs-nav" onClick={() => setNavOpen((o) => !o)}>
+        <button
+          type="button"
+          className={styles.navToggle}
+          aria-expanded={navOpen}
+          aria-controls="docs-nav"
+          onClick={() => setNavOpen((o) => !o)}
+        >
           <Icon name="menu" size={14} /> Browse docs
         </button>
-        <nav id="docs-nav" ref={navRef} aria-label="Documentation" className={styles.navBody} data-open={navOpen || undefined}>
+        <nav
+          id="docs-nav"
+          ref={navRef}
+          aria-label="Documentation"
+          className={styles.navBody}
+          data-open={navOpen || undefined}
+        >
           <DocsSearch />
           {SECTIONS.map((s) => (
             <section key={s.id} className={styles.section}>
@@ -100,13 +121,24 @@ export function DocsPage() {
       <div className={styles.main} aria-busy={payload === undefined || undefined}>
         <div ref={h1} tabIndex={-1} className={styles.focusTarget}>
           {payload === undefined ? (
-            skeleton ? <Skeleton kind="lines" rows={8} label={`Loading ${ref.title}`} /> : null
+            skeleton ? (
+              <Skeleton kind="lines" rows={8} label={`Loading ${ref.title}`} />
+            ) : null
           ) : payload === null && state.error ? (
-            <ErrorState error={state.error} title={`Couldn’t load ${ref.title}`} onRetry={() => window.location.reload()} compact />
+            <ErrorState
+              error={state.error}
+              title={`Couldn’t load ${ref.title}`}
+              onRetry={() => window.location.reload()}
+              compact
+            />
           ) : payload === null ? (
             <article>
               <p className={styles.notWrittenEyebrow}>{ref.sectionTitle}</p>
-              <EmptyState icon={<Icon name="warning" />} title={ref.title} body="This page hasn’t been written yet." />
+              <EmptyState
+                icon={<Icon name="warning" />}
+                title={ref.title}
+                body="This page hasn’t been written yet."
+              />
             </article>
           ) : (
             <>

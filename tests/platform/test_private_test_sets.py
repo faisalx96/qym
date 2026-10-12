@@ -480,8 +480,8 @@ def test_compare_export_html_bundles_each_run_and_respects_private_test_sets(wor
     assert member.status_code == 200, member.text
     assert member.headers["content-type"].startswith("text/html")
     assert 'filename="qym-compare.html"' in member.headers["content-disposition"]
-    # One tab and one offline run report per run, summary table on top.
-    assert member.text.count('role="tab"') == 2
+    # A Comparison tab, then one tab and one offline run report per run.
+    assert member.text.count('role="tab"') == 3
     assert member.text.count("<iframe") == 2
     assert "run-secret" in member.text and "run-open" in member.text
     assert "window.__QYM_EXPORT__ = true" in member.text

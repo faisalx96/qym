@@ -1,7 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useDocumentTitle } from '@/features/shell/hooks';
-import { FIRST_PAGE, docsPath, findPage, loadPage, neighbours, type DocsPagePayload, type DocsPageRef } from './content';
+import {
+  FIRST_PAGE,
+  docsPath,
+  findPage,
+  loadPage,
+  neighbours,
+  type DocsPagePayload,
+  type DocsPageRef,
+} from './content';
 import { scrollToHeading } from './DocsArticle';
 
 export interface DocsPageState {
@@ -29,7 +37,11 @@ export function useDocsPage(): DocsPageState {
     if (!ref) navigate(docsPath(FIRST_PAGE), { replace: true });
   }, [ref, navigate]);
   const current = ref ?? FIRST_PAGE;
-  const [state, setState] = useState<{ key: string; payload: DocsPagePayload | null | undefined; error: unknown }>({
+  const [state, setState] = useState<{
+    key: string;
+    payload: DocsPagePayload | null | undefined;
+    error: unknown;
+  }>({
     key: current.key,
     payload: undefined,
     error: null,

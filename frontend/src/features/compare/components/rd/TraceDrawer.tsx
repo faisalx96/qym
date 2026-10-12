@@ -26,6 +26,7 @@ import {
   type SpanTree,
   type TraceBounds,
 } from '@/features/run-detail/lib/traceTree';
+import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard';
 import { KIND_GLYPH, KIND_LABEL, KIND_TONE } from '@/features/run-detail/components/traces/spanKinds';
 import { SpanDetail } from '@/features/run-detail/components/traces/SpanDetail';
 import styles from '@/features/run-detail/components/traces/TraceDrawer.module.css';
@@ -164,6 +165,21 @@ function Row({
   );
 }
 
+/** Attempts are numbered per pass, so a repeat run's item has several "attempt 1": the pass keeps them apart. */
+function attemptId(a: { attempt_number: number; pass_number?: number | null }): string {
+  return `${a.pass_number ?? 0}:${a.attempt_number}`;
+}
+
+function attemptLabel(
+  a: { attempt_number: number; pass_number?: number | null },
+  all: { pass_number?: number | null }[],
+): string {
+  const multiPass = new Set(all.map((x) => x.pass_number ?? 0)).size > 1;
+  return multiPass
+    ? `Pass ${a.pass_number ?? '–'} · attempt ${a.attempt_number}`
+    : `Attempt ${a.attempt_number}`;
+}
+
 export function TraceDrawer({
   runId,
   itemId,
@@ -182,7 +198,7 @@ export function TraceDrawer({
 }) {
   const query = useItemTraceQuery(runId, itemId, pass);
   const norm = useMemo(() => (query.data ? normalizeTrace(query.data) : null), [query.data]);
-  const [attempt, setAttempt] = useState<'combined' | number>('combined');
+  const [attempt, setAttempt] = useState<'combined' | string>('combined');
   const [search, setSearch] = useState('');
   const [expandedBy, setExpandedBy] = useState<Record<string, Set<string>>>({});
   const [selectedBy, setSelectedBy] = useState<Record<string, string>>({});
@@ -198,10 +214,10 @@ export function TraceDrawer({
         bounds: norm.combined.bounds,
         summary: norm.combined.summary as TraceSummaryLite,
       };
-    const a = typeof attempt === 'number' ? norm.attempts.find((x) => x.attempt_number === attempt) : null;
+    const a = attempt !== 'combined' ? norm.attempts.find((x) => attemptId(x) === attempt) : null;
     const pick = a ?? norm.lastAttempt;
     return {
-      key: `a${pick.attempt_number}`,
+      key: `a${attemptId(pick)}`,
       tree: pick.tree,
       bounds: computeBounds(pick.summary, pick.spans),
       summary: (pick.summary ?? {}) as TraceSummaryLite,
@@ -287,6 +303,7 @@ export function TraceDrawer({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!singleKeyShortcutsEnabled()) return; // WCAG 2.1.4 opt-out (Runs list > Shortcuts)
       const t = e.target as HTMLElement | null;
       if (t?.closest('input, textarea, select, [contenteditable="true"]')) return;
       e.preventDefault();
@@ -372,11 +389,11 @@ export function TraceDrawer({
                 </Chip>
                 {norm.attempts.map((a) => (
                   <Chip
-                    key={a.attempt_number}
-                    isSelected={attempt === a.attempt_number}
-                    onChange={() => setAttempt(a.attempt_number)}
+                    key={attemptId(a)}
+                    isSelected={attempt === attemptId(a)}
+                    onChange={() => setAttempt(attemptId(a))}
                   >
-                    Attempt {a.attempt_number}
+                    {attemptLabel(a, norm.attempts)}
                     {['failed', 'error', 'timeout'].includes(String(a.status).toLowerCase())
                       ? ' · failed'
                       : ''}

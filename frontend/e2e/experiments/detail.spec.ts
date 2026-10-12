@@ -18,7 +18,8 @@ import {
   launchExperiment,
   linkRunToJob,
   pauseEnvironment,
-  resetFakes, test,
+  resetFakes,
+  test,
   seedProject,
   stopExperiment,
   waitForExperiment,
@@ -73,6 +74,10 @@ test.describe('experiment detail', () => {
 
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
     await expect(page).toHaveTitle(/timeout sweep/);
+    // the trail names the experiment: project / Experiments / <name>
+    const trail = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(trail.getByRole('link', { name: 'Experiments' })).toBeVisible();
+    await expect(trail.getByText('timeout sweep')).toHaveAttribute('aria-current', 'page');
     const root = detail(page, x.id);
     await expect(root.getByRole('heading', { name: /timeout sweep/ })).toBeVisible();
     await expect(root.getByText('Timeout 10/30/60')).toBeVisible();

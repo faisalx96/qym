@@ -25,7 +25,11 @@ async function delaySearch(page: Page, slow: string, status: number, delayMs = 1
     const real = status === 200 ? await route.fetch() : null;
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     if (real) return route.fulfill({ response: real });
-    return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ detail: 'overloaded' }) });
+    return route.fulfill({
+      status,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'overloaded' }),
+    });
   });
 }
 
@@ -34,7 +38,10 @@ test.describe('dataset items: loading and stale responses', () => {
     test(`items load once on entry (${withItem ? 'one item' : 'empty draft'})`, async ({ page, request }) => {
       const { p, d } = await seed(request, withItem ? 'entry1' : 'entry0');
       const v = await createVersion(request, p.slug, d.slug);
-      if (withItem) await bulkItems(request, p.slug, d.slug, v.version, [{ item_id: 'first-item', input: 'السعودية', expected_output: 'الرياض' }]);
+      if (withItem)
+        await bulkItems(request, p.slug, d.slug, v.version, [
+          { item_id: 'first-item', input: 'السعودية', expected_output: 'الرياض' },
+        ]);
       let itemRequests = 0;
       page.on('request', (r) => {
         if (ITEMS_URL.test(r.url()) && r.method() === 'GET') itemRequests += 1;
@@ -49,7 +56,10 @@ test.describe('dataset items: loading and stale responses', () => {
   }
 
   for (const oldStatus of [200, 503]) {
-    test(`the latest search wins over a late ${oldStatus === 200 ? 'success' : 'failure'}`, async ({ page, request }) => {
+    test(`the latest search wins over a late ${oldStatus === 200 ? 'success' : 'failure'}`, async ({
+      page,
+      request,
+    }) => {
       const { p, d } = await seed(request, `late${oldStatus}`);
       const v = await createVersion(request, p.slug, d.slug);
       await bulkItems(request, p.slug, d.slug, v.version, [
@@ -96,15 +106,20 @@ test.describe('dataset items: loading and stale responses', () => {
   test('an old version response cannot replace the new version', async ({ page, request }) => {
     const { p, d } = await seed(request, 'ver');
     const v1 = await createVersion(request, p.slug, d.slug);
-    await bulkItems(request, p.slug, d.slug, v1.version, [{ item_id: 'old-version', input: 'alpha text', expected_output: 'a' }]);
+    await bulkItems(request, p.slug, d.slug, v1.version, [
+      { item_id: 'old-version', input: 'alpha text', expected_output: 'a' },
+    ]);
     await publishVersion(request, p.slug, d.slug, v1.version, true);
     const v2 = await createVersion(request, p.slug, d.slug);
-    await bulkItems(request, p.slug, d.slug, v2.version, [{ item_id: 'new-version', input: 'alpha text', expected_output: 'b' }]);
+    await bulkItems(request, p.slug, d.slug, v2.version, [
+      { item_id: 'new-version', input: 'alpha text', expected_output: 'b' },
+    ]);
     await publishVersion(request, p.slug, d.slug, v2.version, false);
     // v1's search answers late
     await page.route(ITEMS_URL, async (route) => {
       const url = new URL(route.request().url());
-      if (!/\/versions\/v1\/items/.test(url.pathname) || url.searchParams.get('search') !== 'alpha') return route.continue();
+      if (!/\/versions\/v1\/items/.test(url.pathname) || url.searchParams.get('search') !== 'alpha')
+        return route.continue();
       const real = await route.fetch();
       await new Promise((resolve) => setTimeout(resolve, 1500));
       return route.fulfill({ response: real });
@@ -122,10 +137,15 @@ test.describe('dataset items: loading and stale responses', () => {
     await expect(link(page, 'old-version')).toHaveCount(0);
   });
 
-  test('zero search matches never claim the version is empty, and clearing restores the rows', async ({ page, request }) => {
+  test('zero search matches never claim the version is empty, and clearing restores the rows', async ({
+    page,
+    request,
+  }) => {
     const { p, d } = await seed(request, 'zero');
     const v = await createVersion(request, p.slug, d.slug);
-    await bulkItems(request, p.slug, d.slug, v.version, [{ item_id: 'restored', input: 'السعودية', expected_output: 'الرياض' }]);
+    await bulkItems(request, p.slug, d.slug, v.version, [
+      { item_id: 'restored', input: 'السعودية', expected_output: 'الرياض' },
+    ]);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
     await expect(link(page, 'restored')).toBeVisible();
     await searchBox(page).fill('مفقود');

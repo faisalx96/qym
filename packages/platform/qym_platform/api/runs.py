@@ -174,6 +174,7 @@ from qym_platform.services.repeat_passes import (
     delete_repeat_pass,
     has_repeat_pass_context,
     lock_repeat_run,
+    pass_revision,
     pass_revision_matches,
 )
 from qym_platform.services.root_cause_changes import (
@@ -4304,7 +4305,13 @@ def run_passes(
                 "trace_stats": trace_stats_by_pass.get(p),
             }
         )
-    return {"run_id": run.id, "samples": samples, "metrics": metrics, "passes": passes}
+    return {
+        "run_id": run.id,
+        "samples": samples,
+        "pass_revision": pass_revision(run),
+        "metrics": metrics,
+        "passes": passes,
+    }
 
 
 # Deleting passes changes every number of the run, so it follows the run

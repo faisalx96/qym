@@ -28,7 +28,9 @@ export function RunsTable({
       width: 180,
       flex: true,
       cell: (r) =>
-        r.dataset ? r.dataset.name + (r.dataset_version ? ` ${r.dataset_version.version}` : '') : 'Custom dataset',
+        r.dataset
+          ? r.dataset.name + (r.dataset_version ? ` ${r.dataset_version.version}` : '')
+          : 'Custom dataset',
     },
     {
       id: 'score',
@@ -73,7 +75,11 @@ export function RunsTable({
         r.run_id === selectedRunId ? (
           <Tag tone="success">Current base</Tag>
         ) : (
-          <Button variant="neutral" aria-label={`Start from run ${shortId(r.run_id)}`} onPress={() => onUse(r)}>
+          <Button
+            variant="neutral"
+            aria-label={`Start from run ${shortId(r.run_id)}`}
+            onPress={() => onUse(r)}
+          >
             Use
           </Button>
         ),

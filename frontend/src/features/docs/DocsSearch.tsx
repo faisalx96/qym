@@ -15,6 +15,7 @@ export function DocsSearch() {
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const blurTimer = useRef<ReturnType<typeof setTimeout>>();
   const navigate = useNavigate();
   const listId = useId();
 
@@ -22,7 +23,11 @@ export function DocsSearch() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
       const t = document.activeElement as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (
+        t &&
+        (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+      )
+        return;
       e.preventDefault();
       input.current?.focus();
     };
@@ -57,13 +62,19 @@ export function DocsSearch() {
         hint="/"
         value={query}
         onChange={(v) => {
+          clearTimeout(blurTimer.current);
           setQuery(v);
           setActive(0);
           setOpen(true);
         }}
         onClear={() => setQuery('')}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onFocus={() => {
+          clearTimeout(blurTimer.current);
+          setOpen(true);
+        }}
+        onBlur={() => {
+          blurTimer.current = setTimeout(() => setOpen(false), 150);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') {
             e.preventDefault();

@@ -39,7 +39,9 @@ test.describe('settings tabs', () => {
     await expect(page).toHaveURL(/\/settings$/);
     // admin-only tabs are present for dev@local (ADMIN); the page header shows slug + role + status
     await expect(tab(page, 'AI prompts')).toBeVisible();
-    await expect(page.locator('[data-settings-page]').getByText(p.slug, { exact: true }).first()).toBeVisible();
+    await expect(
+      page.locator('[data-settings-page]').getByText(p.slug, { exact: true }).first(),
+    ).toBeVisible();
     await expect(page.locator('[data-settings-page]').getByText('active', { exact: true })).toBeVisible();
     await expect(page).toHaveTitle(new RegExp(`${p.name} · Settings`));
   });
@@ -54,7 +56,9 @@ test.describe('settings tabs', () => {
     await field.press('Enter');
     await expect(page.getByRole('status').filter({ hasText: 'Renamed to Renamed Project' })).toBeVisible();
     await expect(page.locator('[data-project-switcher]')).toContainText('Renamed Project');
-    await expect(page.locator('[data-settings-page]').getByRole('heading', { name: 'Renamed Project' })).toBeVisible();
+    await expect(
+      page.locator('[data-settings-page]').getByRole('heading', { name: 'Renamed Project' }),
+    ).toBeVisible();
     expect(loads.count()).toBe(0);
   });
 });
@@ -69,7 +73,9 @@ test.describe('members (§8.7 scenario 8)', () => {
     const user = await createUser(request, `${tag}@e2e.local`, `Member ${tag}`);
     await gotoApp(page, `/projects/${p.slug}/settings?tab=members`);
     const loads = trackPageLoads(page);
-    const table = page.getByRole('grid', { name: 'Members' }).or(page.getByRole('table', { name: 'Members' }));
+    const table = page
+      .getByRole('grid', { name: 'Members' })
+      .or(page.getByRole('table', { name: 'Members' }));
     await expect(table).toBeVisible();
     await expect(table.getByRole('gridcell', { name: 'dev@local', exact: true })).toBeVisible();
 
@@ -107,15 +113,17 @@ test.describe('members (§8.7 scenario 8)', () => {
     const dialog = page.getByRole('alertdialog', { name: `Remove Member ${tag}?` });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
-    await expect(dialog.getByText('They own no runs in this project.')).toBeVisible();
+    await expect(dialog.getByText(/owns no runs in this project\./)).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Transfer their runs to' })).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Remove member' }).click();
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole('status').filter({ hasText: 'Member removed' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /Member .* was removed/ })).toBeVisible();
     await expect(row).toHaveCount(0);
     await expect.soft(tab(page, /^Members/), 'Members tab count after remove').toContainText('1');
     // the current user cannot remove themselves
-    await expect(table.getByRole('row').filter({ hasText: 'dev@local' }).getByRole('button', { name: 'Remove' })).toHaveCount(0);
+    await expect(
+      table.getByRole('row').filter({ hasText: 'dev@local' }).getByRole('button', { name: 'Remove' }),
+    ).toHaveCount(0);
     expect(loads.count()).toBe(0);
   });
 });
@@ -293,7 +301,7 @@ test.describe('danger zone and archived state', () => {
     const confirm = page.getByRole('alertdialog', { name: `Archive “${p.name}”?` });
     await expect(confirm).toBeVisible();
     await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
-    await confirm.getByRole('button', { name: 'Archive project' }).click();
+    await confirm.getByRole('button', { name: /^Archive (project|anyway)$/ }).click();
     await expect(page).toHaveURL(/\/?$/);
     await expect(page.getByRole('status').filter({ hasText: `${p.name} archived` })).toBeVisible();
     // archived projects leave me.projects → no card on the landing
@@ -313,10 +321,10 @@ test.describe('danger zone and archived state', () => {
     // the banner's "Unarchive it" link opens the danger tab
     await page.locator('[data-archived-banner]').getByRole('link', { name: 'Unarchive it' }).click();
     await expect(page).toHaveURL(/\?tab=danger$/);
-    await zone.getByRole('button', { name: 'Unarchive' }).click();
+    await zone.getByRole('button', { name: /^Unarchive( anyway)?$/ }).click();
     const unarchive = page.getByRole('dialog', { name: `Unarchive “${p.name}”?` });
     await expect(unarchive).toBeVisible();
-    await unarchive.getByRole('button', { name: 'Unarchive' }).click();
+    await unarchive.getByRole('button', { name: /^Unarchive( anyway)?$/ }).click();
     await expect(page.getByRole('status').filter({ hasText: `${p.name} is active again` })).toBeVisible();
     await expect(page.locator('[data-archived-banner]')).toHaveCount(0);
     await expect(page.locator('[data-topbar]').getByText('Read-only')).toHaveCount(0);
@@ -325,19 +333,27 @@ test.describe('danger zone and archived state', () => {
     expect(((await res.json()) as { is_active: boolean }).is_active).toBe(true);
   });
 
-  test('unarchive preview lists active API keys and offers "Revoke keys first"', async ({ page, request }) => {
+  test('unarchive preview lists active API keys and offers "Revoke keys first"', async ({
+    page,
+    request,
+  }) => {
     const p = await createProject(request, 'Keys Archived', uniqueSlug('keysarch'));
     const key = await request.post(`/v1/projects/${p.id}/api-keys`, { data: { name: 'Still active' } });
     expect(key.ok()).toBeTruthy();
     await archiveProject(request, p.id);
     await gotoApp(page, `/projects/${p.slug}/settings?tab=danger`);
-    await page.locator('[data-danger-zone]').getByRole('button', { name: 'Unarchive' }).click();
-    const dialog = page.getByRole('dialog', { name: `Unarchive “${p.name}”?` });
+    await page
+      .locator('[data-danger-zone]')
+      .getByRole('button', { name: /^Unarchive( anyway)?$/ })
+      .click();
+    const dialog = page.getByRole('alertdialog', { name: `Unarchive “${p.name}”?` });
     await expect(dialog.getByText('1 API key will work again')).toBeVisible();
     await expect(dialog.getByText('Still active')).toBeVisible();
     await dialog.getByRole('button', { name: 'Revoke keys first' }).click();
     await expect(page).toHaveURL(/\?tab=apikeys$/);
-    await expect(page.locator('[data-api-keys]').getByRole('row').filter({ hasText: 'Still active' })).toBeVisible();
+    await expect(
+      page.locator('[data-api-keys]').getByRole('row').filter({ hasText: 'Still active' }),
+    ).toBeVisible();
   });
 
   test('delete is blocked only by runs: an empty project deletes after the typed confirmation', async ({

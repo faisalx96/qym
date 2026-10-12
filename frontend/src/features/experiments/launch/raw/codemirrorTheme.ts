@@ -25,7 +25,11 @@ export function qymTheme(dark: boolean): Extension {
       },
       '&.cm-focused': { outline: 'none' },
       '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.5', minHeight: '20rem' },
-      '.cm-content': { caretColor: 'var(--text-primary)', padding: 'var(--space-sm) 0', unicodeBidi: 'plaintext' },
+      '.cm-content': {
+        caretColor: 'var(--text-primary)',
+        padding: 'var(--space-sm) 0',
+        unicodeBidi: 'plaintext',
+      },
       '.cm-line': { padding: '0 var(--space-md)', unicodeBidi: 'plaintext' },
       '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--text-primary)' },
       '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':

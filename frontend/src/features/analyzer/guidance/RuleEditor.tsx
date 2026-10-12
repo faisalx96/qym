@@ -1,6 +1,18 @@
 import { useMemo, useState } from 'react';
 import { estimateTokens, type SaveState, type useDraftRules } from '../useDraftRules';
-import { Button, Checkbox, EmptyState, Icon, Pagination, SearchField, Tag, Text, Textarea, TextField } from '@/ui';
+import {
+  Button,
+  Checkbox,
+  ConfirmDialog,
+  EmptyState,
+  Icon,
+  Pagination,
+  SearchField,
+  Tag,
+  Text,
+  Textarea,
+  TextField,
+} from '@/ui';
 import s from './rules.module.css';
 
 const PAGE = 10;
@@ -14,12 +26,20 @@ const SAVE_TEXT: Record<SaveState, string> = {
   invalid: 'Every rule needs a title and an instruction before it saves',
 };
 
-export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDraftRules>; editable: boolean }) {
+export function RuleEditor({
+  draft,
+  editable,
+}: {
+  draft: ReturnType<typeof useDraftRules>;
+  editable: boolean;
+}) {
   const { rules, state, error, update, add, remove } = draft;
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  /** Rule keys waiting for delete confirmation. */
+  const [deleting, setDeleting] = useState<string[] | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase();
@@ -60,10 +80,7 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
               size="sm"
               variant="danger"
               isDisabled={checked.size === 0}
-              onPress={() => {
-                remove([...checked]);
-                setChecked(new Set());
-              }}
+              onPress={() => setDeleting([...checked])}
             >
               {`Delete selected${checked.size ? ` (${checked.size})` : ''}`}
             </Button>
@@ -120,14 +137,18 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
                     <Icon name={isOpen ? 'collapse' : 'expand'} size={12} />
                     <span dir="auto">{r.title || 'Untitled rule'}</span>
                   </button>
-                  {invalid ? <Tag kind="data" tone="warning">incomplete</Tag> : null}
+                  {invalid ? (
+                    <Tag kind="data" tone="warning">
+                      incomplete
+                    </Tag>
+                  ) : null}
                   {r.inferred_from ? <Tag kind="data">{r.inferred_from}</Tag> : null}
                   {editable ? (
                     <Button
                       size="sm"
                       variant="ghost"
                       aria-label={`Delete rule ${r.title || 'untitled'}`}
-                      onPress={() => remove([r.key])}
+                      onPress={() => setDeleting([r.key])}
                     >
                       <Icon name="trash" size={12} />
                     </Button>
@@ -150,7 +171,9 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
                       value={r.instruction}
                       isReadOnly={!editable}
                       onChange={(v) => update(r.key, { instruction: v })}
-                      errorMessage={editable && !r.instruction.trim() ? 'Instruction is required.' : undefined}
+                      errorMessage={
+                        editable && !r.instruction.trim() ? 'Instruction is required.' : undefined
+                      }
                       isInvalid={editable && !r.instruction.trim()}
                     />
                     {r.explanation ? (
@@ -175,8 +198,28 @@ export function RuleEditor({ draft, editable }: { draft: ReturnType<typeof useDr
           }
         />
       )}
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={deleting && deleting.length > 1 ? `Delete ${deleting.length} rules?` : 'Delete this rule?'}
+        description="The rules are removed from this draft and the draft is saved."
+        cancelLabel="Keep"
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => {
+          if (deleting) remove(deleting);
+          setChecked(new Set());
+          setDeleting(null);
+        }}
+      />
       {filtered.length > PAGE ? (
-        <Pagination total={filtered.length} page={current} pageSize={PAGE} noun="rules" onPageChange={setPage} />
+        <Pagination
+          total={filtered.length}
+          page={current}
+          pageSize={PAGE}
+          noun="rules"
+          onPageChange={setPage}
+        />
       ) : null}
     </div>
   );

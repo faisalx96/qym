@@ -14,15 +14,28 @@ const inViewport = async (page: Page, sel: string) =>
     return r.top >= 0 && r.top < window.innerHeight && r.bottom > 0;
   });
 
-test('a full deep link restores metric, filters, search, sort, page and the open item; reload keeps it', async ({ page }) => {
+test('a full deep link restores metric, filters, search, sort, page and the open item; reload keeps it', async ({
+  page,
+}) => {
   const { base, a, b, c } = seed.runs;
   const filters = JSON.stringify({ complexity: ['easy', 'medium'] });
-  await page.goto(compareUrl([base, a, b, c], { metric: 'correct', sort: 'score_desc', page: '2', item: 'cmp-040', filters, q: 'policy' }));
+  await page.goto(
+    compareUrl([base, a, b, c], {
+      metric: 'correct',
+      sort: 'score_desc',
+      page: '2',
+      item: 'cmp-040',
+      filters,
+      q: 'policy',
+    }),
+  );
   await waitLoaded(page);
   // search + filters + metric
   await expect(page.getByRole('searchbox', { name: 'Search items' })).toHaveValue('policy');
   await expectShown(page, 27);
-  await expect(page.getByRole('group', { name: 'Filters set on the page' })).toContainText('Complexity: easy, medium');
+  await expect(page.getByRole('group', { name: 'Filters set on the page' })).toContainText(
+    'Complexity: easy, medium',
+  );
   await expect(page.getByRole('button', { name: /^Filters/ })).toContainText('1');
   await expect(page.getByRole('button', { name: /^correct Metric$/ })).toBeVisible();
   await expect(page.locator('[aria-label="Change against the baseline"]')).toContainText('+17.5 pts');
@@ -44,17 +57,21 @@ test('a full deep link restores metric, filters, search, sort, page and the open
   await page.reload();
   await waitLoaded(page);
   await expectShown(page, 27);
-  await expect(page.locator('[data-testid="item-row"][data-item-id="cmp-040"]').getByTestId('item-detail')).toBeVisible();
+  await expect(
+    page.locator('[data-testid="item-row"][data-item-id="cmp-040"]').getByTestId('item-detail'),
+  ).toBeVisible();
   await expect(page.getByRole('searchbox', { name: 'Search items' })).toHaveValue('policy');
   expect(urlParams(page).get('item')).toBe('cmp-040');
 });
 
-test('?item= lands on the item\'s page, expands it and scrolls it into view once', async ({ page }) => {
+test("?item= lands on the item's page, expands it and scrolls it into view once", async ({ page }) => {
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c], { page: '2', item: 'cmp-040' }));
   await waitLoaded(page);
   expect(urlParams(page).get('page')).toBe('2');
-  await expect(page.locator('[data-testid="item-row"][data-item-id="cmp-040"]').getByTestId('item-detail')).toBeVisible();
+  await expect(
+    page.locator('[data-testid="item-row"][data-item-id="cmp-040"]').getByTestId('item-detail'),
+  ).toBeVisible();
   // The late layout-shift correction must not re-scroll a reader who moved away.
   await expect.poll(() => inViewport(page, '#item-cmp-040'), { timeout: 4000 }).toBe(true);
   // once: scrolling away is not undone
@@ -68,15 +85,29 @@ test('?filter=errors restores the errors preset as a chip', async ({ page }) => 
   await page.goto(compareUrl([base, a, b, c], { filter: 'errors' }));
   await waitLoaded(page);
   await expect(page.getByRole('group', { name: 'Filters set on the page' })).toContainText('With errors');
-  await expect.poll(async () => {
-    const t = (await page.getByRole('status').filter({ hasText: /of 40 items/ }).textContent()) ?? '';
-    return Number(/(\d+) of 40/.exec(t)?.[1] ?? 40);
-  }).toBeLessThan(40);
+  await expect
+    .poll(async () => {
+      const t =
+        (await page
+          .getByRole('status')
+          .filter({ hasText: /of 40 items/ })
+          .textContent()) ?? '';
+      return Number(/(\d+) of 40/.exec(t)?.[1] ?? 40);
+    })
+    .toBeLessThan(40);
 });
 
 test('a stale or invalid filters JSON is ignored silently', async ({ page }) => {
   const { base, a, b, c } = seed.runs;
-  for (const bad of ['{not json', JSON.stringify({ rules: { op: 'xor', children: 3 }, baseline: { metric: 'gone', columnKey: 'x', baselineKey: 'y', kind: 'improved' }, categories: { nope: ['a'] } }), '[1,2]']) {
+  for (const bad of [
+    '{not json',
+    JSON.stringify({
+      rules: { op: 'xor', children: 3 },
+      baseline: { metric: 'gone', columnKey: 'x', baselineKey: 'y', kind: 'improved' },
+      categories: { nope: ['a'] },
+    }),
+    '[1,2]',
+  ]) {
     await page.goto(compareUrl([base, a, b, c], { filters: bad }));
     await waitLoaded(page);
     await expectShown(page, 40);

@@ -18,12 +18,20 @@ interface RowIn {
   value: Cell;
   meta?: Record<string, unknown>;
   task?: boolean;
-  passes?: { scores: Cell[]; meta: Array<Record<string, unknown> | null>; attempts: Array<{ status: string }> };
+  passes?: {
+    scores: Cell[];
+    meta: Array<Record<string, unknown> | null>;
+    attempts: Array<{ status: string }>;
+  };
 }
 
 const SPEC_MIN = { score_type: 'percentage', direction: 'minimize', pass_threshold: 0.2, schema_version: 2 };
 
-function run(id: string, rows: RowIn[], opts: { metric?: string; spec?: Record<string, unknown> | null; samples?: number; model?: string } = {}) {
+function run(
+  id: string,
+  rows: RowIn[],
+  opts: { metric?: string; spec?: Record<string, unknown> | null; samples?: number; model?: string } = {},
+) {
   const metric = opts.metric ?? 'h';
   const specs = opts.spec === null ? {} : { [metric]: opts.spec ?? SPEC_MIN };
   const samples = opts.samples ?? 1;
@@ -116,7 +124,12 @@ describe('Sweep: errors fail and carry no score when lower is better (C015 amend
     expect(summary.counts.improved).toBe(2);
 
     // A repeat item: the scorer-error and task-error passes fail, unscored.
-    const repeatModel = buildCompareModel(payloadOf(repeat, right), ['P::pass1', 'P::pass2', 'P::pass3', 'R']);
+    const repeatModel = buildCompareModel(payloadOf(repeat, right), [
+      'P::pass1',
+      'P::pass2',
+      'P::pass3',
+      'R',
+    ]);
     const repeatGroups = cohortOf(repeatModel, ['P::pass1', 'P::pass2', 'P::pass3'], ['R']);
     const perPass = computeGroupedComparison(repeatModel, repeatGroups, metricCtx(repeatModel, 'h'));
     expect(perPass.items[0]!.leftPasses).toEqual([false, true, false]);
@@ -131,9 +144,21 @@ describe('Sweep: errors fail and carry no score when lower is better (C015 amend
     const M = run('M', [{ value: 0.6 }, { value: 0.1 }]);
     const Z = run('Z', [{ value: 0 }, { value: 0 }]);
     const side = (l: string, r: string, spec: Record<string, unknown> = SPEC_MIN) => {
-      const e = { ...E, snapshot: { ...E.snapshot, metric_specs: { h: spec } }, run: { ...E.run, metric_specs: { h: spec } } };
-      const m = { ...M, snapshot: { ...M.snapshot, metric_specs: { h: spec } }, run: { ...M.run, metric_specs: { h: spec } } };
-      const z = { ...Z, snapshot: { ...Z.snapshot, metric_specs: { h: spec } }, run: { ...Z.run, metric_specs: { h: spec } } };
+      const e = {
+        ...E,
+        snapshot: { ...E.snapshot, metric_specs: { h: spec } },
+        run: { ...E.run, metric_specs: { h: spec } },
+      };
+      const m = {
+        ...M,
+        snapshot: { ...M.snapshot, metric_specs: { h: spec } },
+        run: { ...M.run, metric_specs: { h: spec } },
+      };
+      const z = {
+        ...Z,
+        snapshot: { ...Z.snapshot, metric_specs: { h: spec } },
+        run: { ...Z.run, metric_specs: { h: spec } },
+      };
       const model = buildCompareModel(payloadOf(e, m, z), [l, r]);
       const grouped = computeGroupedComparison(model, cohortOf(model, [l], [r]), metricCtx(model, 'h'));
       const s = summarizeSweepItems(grouped.items, 1, 1, null, spec.direction as 'minimize' | 'maximize');
@@ -222,7 +247,9 @@ describe('Compare winners, Pass@K and Max@K follow the declared direction', () =
 
   it('lower wins when lower is better; a neutral metric has no winners', () => {
     const mk = (direction: 'minimize' | null) => {
-      const s = direction ? { score_type: 'percentage', direction, pass_threshold: 0.2, schema_version: 2 } : { score_type: 'percentage', schema_version: 2 };
+      const s = direction
+        ? { score_type: 'percentage', direction, pass_threshold: 0.2, schema_version: 2 }
+        : { score_type: 'percentage', schema_version: 2 };
       const model = buildCompareModel(
         payloadOf(
           run('A', [{ value: 0.3 }, { value: 0.1 }], { metric: 'empty', spec: s }),
@@ -296,7 +323,10 @@ describe('Compare with a lower-is-better metric that has errors (test_minimize_e
     accuracy: { score_type: 'boolean', direction: 'minimize', schema_version: 2 },
     count: { score_type: 'number', direction: 'maximize' },
   };
-  const wide = (id: string, rows: Array<{ value: number | ''; meta?: Record<string, unknown>; task?: boolean }>) => {
+  const wide = (
+    id: string,
+    rows: Array<{ value: number | ''; meta?: Record<string, unknown>; task?: boolean }>,
+  ) => {
     const built = rows.map(
       (r, i) =>
         ({
@@ -312,7 +342,18 @@ describe('Compare with a lower-is-better metric that has errors (test_minimize_e
         }) as unknown as Row,
     );
     return {
-      run: { run_id: id, file_path: id, run_name: id, model_name: id, metric_names: ['accuracy', 'count'], metric_specs: SPECS, status: 'COMPLETED', samples: 1, config: {}, metadata: {} },
+      run: {
+        run_id: id,
+        file_path: id,
+        run_name: id,
+        model_name: id,
+        metric_names: ['accuracy', 'count'],
+        metric_specs: SPECS,
+        status: 'COMPLETED',
+        samples: 1,
+        config: {},
+        metadata: {},
+      },
       snapshot: { rows: built, metric_names: ['accuracy', 'count'], metric_specs: SPECS },
     } as unknown as ComparePayload['runs'][number];
   };
@@ -321,9 +362,16 @@ describe('Compare with a lower-is-better metric that has errors (test_minimize_e
     // run-1: items 1, 2 scorer errors stored as False (0), item 4 a task error; run-2 has none
     const plain = Array.from({ length: 10 }, (_, i) => ({ value: (i % 2) as number | '' }));
     const first = plain.map((r, i) =>
-      i === 1 || i === 2 ? { value: 0 as number | '', meta: { status: 'error', error: 'judge 429' } } : i === 4 ? { value: '' as number | '', task: true } : r,
+      i === 1 || i === 2
+        ? { value: 0 as number | '', meta: { status: 'error', error: 'judge 429' } }
+        : i === 4
+          ? { value: '' as number | '', task: true }
+          : r,
     );
-    const model = buildCompareModel(payloadOf(wide('run-1', first), wide('run-2', plain)), ['run-1', 'run-2']);
+    const model = buildCompareModel(payloadOf(wide('run-1', first), wide('run-2', plain)), [
+      'run-1',
+      'run-2',
+    ]);
     const ctx = metricCtx(model, 'accuracy');
     const [one, two] = metricColumns(model, 'run');
     const mean = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0) / m.size;
@@ -331,7 +379,16 @@ describe('Compare with a lower-is-better metric that has errors (test_minimize_e
     expect(mean(columnItemScores(model, one!, ctx))).toBeCloseTo(4 / 7, 9);
     expect(mean(columnItemScores(model, two!, ctx))).toBeCloseTo(0.5, 9);
     // items 2 and 4 pass (False) only on run-2: run-1's errors fail
-    const ids = (show: string) => applyFilters({ model, view: { ...emptyView(), show }, metric: 'accuracy', thresholds: {}, groups: null }).items.map((i) => Number(i.itemId.slice(5))).sort((a, b) => a - b);
+    const ids = (show: string) =>
+      applyFilters({
+        model,
+        view: { ...emptyView(), show },
+        metric: 'accuracy',
+        thresholds: {},
+        groups: null,
+      })
+        .items.map((i) => Number(i.itemId.slice(5)))
+        .sort((a, b) => a - b);
     expect(ids('all_correct')).toEqual([0, 6, 8]);
     expect(ids('unique_solve')).toEqual([2, 4]);
     expect(computeComparisonStats(model, ctx).correctDistribution).toEqual([5, 2, 3]);
@@ -352,7 +409,10 @@ describe('Compare with a lower-is-better metric that has errors (test_minimize_e
         (r.snapshot as { metric_specs: unknown }).metric_specs = specs;
         return r;
       };
-      const model = buildCompareModel(payloadOf(mk('run-1', measured[0]), mk('run-2', measured[1])), ['run-1', 'run-2']);
+      const model = buildCompareModel(payloadOf(mk('run-1', measured[0]), mk('run-2', measured[1])), [
+        'run-1',
+        'run-2',
+      ]);
       const ctx = metricCtx(model, 'accuracy');
       const stats = computeComparisonStats(model, ctx);
       const rates = statRates(stats);

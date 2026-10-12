@@ -13,7 +13,10 @@ const row = (page: Page, id: number) => page.locator(`[data-correction-row="${id
 const tabCount = (page: Page, name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) });
 
 test.describe('reviews: filters in the URL', () => {
-  test('status tabs, search, sort and clear filters are mirrored to the URL and reload-safe', async ({ page, request }) => {
+  test('status tabs, search, sort and clear filters are mirrored to the URL and reload-safe', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revurl', 4);
     await decideViaApi(request, s.corrections[0]!.id, 'approve');
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
@@ -52,7 +55,10 @@ test.describe('reviews: filters in the URL', () => {
     await expect(rows(page).first()).toHaveAttribute('data-correction-row', String(s.corrections[3]!.id));
   });
 
-  test('deep link with every filter hydrates chips, controls and the result; __none__ means none selected', async ({ page, request }) => {
+  test('deep link with every filter hydrates chips, controls and the result; __none__ means none selected', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revchips', 3);
     const url = `/projects/${s.project.slug}/reviews?status=all&task=qa&model=${encodeURIComponent('openai/gpt-4o')}&dataset=${encodeURIComponent(s.dataset)}&run=${encodeURIComponent(s.runName)}`;
     await gotoApp(page, url);
@@ -105,10 +111,12 @@ test.describe('reviews: filters in the URL', () => {
     await pop.getByRole('radiogroup', { name: 'Source' }).getByText('All', { exact: true }).click();
     await expect.poll(() => query(page).get('source')).toBeNull();
     await expect(rows(page)).toHaveCount(3);
-
   });
 
-  test('[BUG] facet multiselect inside the Filters panel stays open and writes to the URL', async ({ page, request }) => {
+  test('[BUG] facet multiselect inside the Filters panel stays open and writes to the URL', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revfacet', 3);
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
     await page.getByTestId('filters-trigger').click();
@@ -122,7 +130,10 @@ test.describe('reviews: filters in the URL', () => {
     await expect.poll(() => query(page).getAll('task')).toEqual([]);
   });
 
-  test('source=corrected: URL contract and chip (the SQLite backend cannot list it)', async ({ page, request }) => {
+  test('source=corrected: URL contract and chip (the SQLite backend cannot list it)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revcorr', 2);
     await gotoApp(page, `/projects/${s.project.slug}/reviews?source=corrected`);
     await expect(page.locator('[data-filter-chip=source]')).toContainText('AI+Human corrected');
@@ -131,7 +142,10 @@ test.describe('reviews: filters in the URL', () => {
     await expect(page.locator('[data-filter-chip=source]')).toContainText('AI+Human corrected');
   });
 
-  test('all-projects /reviews shows the project name in rows and lists corrections of every project', async ({ page, request }) => {
+  test('all-projects /reviews shows the project name in rows and lists corrections of every project', async ({
+    page,
+    request,
+  }) => {
     const a = await seedReviews(request, 'revall', 1);
     await gotoApp(page, `/reviews?q=${encodeURIComponent('Cat-0')}`);
     await expect(row(page, a.corrections[0]!.id)).toContainText(a.project.name);
@@ -139,7 +153,10 @@ test.describe('reviews: filters in the URL', () => {
 });
 
 test.describe('reviews: keyboard triage', () => {
-  test('j moves the current row, a approves it: the card leaves the queue and the counts update', async ({ page, request }) => {
+  test('j moves the current row, a approves it: the card leaves the queue and the counts update', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revkeys', 4);
     const [c0, c1, c2] = s.corrections;
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
@@ -163,7 +180,10 @@ test.describe('reviews: keyboard triage', () => {
     await expect(row(page, c0!.id)).toHaveAttribute('data-current', '');
   });
 
-  test('x selects two rows, Shift+A opens the comment dialog and approves both', async ({ page, request }) => {
+  test('x selects two rows, Shift+A opens the comment dialog and approves both', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revbulkkey', 4);
     const [c0, c1] = s.corrections;
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
@@ -187,7 +207,10 @@ test.describe('reviews: keyboard triage', () => {
     expect(approved.map((c) => c.id).sort()).toEqual([c0!.id, c1!.id]);
   });
 
-  test('Shift+A with nothing selected hints instead of opening a dialog; ? opens shortcuts; / focuses search', async ({ page, request }) => {
+  test('Shift+A with nothing selected hints instead of opening a dialog; ? opens shortcuts; / focuses search', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revhelp', 2);
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
     await row(page, s.corrections[0]!.id).locator('[data-review-card]').focus();
@@ -201,7 +224,10 @@ test.describe('reviews: keyboard triage', () => {
     await expect(page.getByRole('searchbox', { name: 'Search corrections' })).toBeFocused();
   });
 
-  test('r opens the Reject dialog; Esc closes it and focus returns to the row; Reject with a comment decides', async ({ page, request }) => {
+  test('r opens the Reject dialog; Esc closes it and focus returns to the row; Reject with a comment decides', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revreject', 3);
     const c0 = s.corrections[0]!;
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
@@ -224,7 +250,10 @@ test.describe('reviews: keyboard triage', () => {
     expect((await listCorrections(request, s.project.slug, 'rejected')).map((c) => c.id)).toEqual([c0.id]);
   });
 
-  test('row buttons approve/reject and a decided row can be reset from the Approved tab', async ({ page, request }) => {
+  test('row buttons approve/reject and a decided row can be reset from the Approved tab', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revbtn', 2);
     const [c0, c1] = s.corrections;
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
@@ -253,7 +282,10 @@ test.describe('reviews: keyboard triage', () => {
 });
 
 test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
-  test('?id= deep link switches to the right status tab and marks the row Linked', async ({ page, request }) => {
+  test('?id= deep link switches to the right status tab and marks the row Linked', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revlink', 3);
     const target = s.corrections[1]!;
     await decideViaApi(request, target.id, 'approve');
@@ -286,7 +318,10 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
     await expect(page.locator('[data-detail-pane]')).not.toContainText('Nope');
   });
 
-  test('review_block: require-different-reviewer disables decisions and explains why', async ({ page, request }) => {
+  test('review_block: require-different-reviewer disables decisions and explains why', async ({
+    page,
+    request,
+  }) => {
     const project = await createProject(request, 'Reviews Block', uniqueSlug('revblock'));
     await setReviewRules(request, project.id, { correction_require_different_reviewer: true });
     const s = await seedReviews(request, 'revblock', 2, { project });
@@ -296,7 +331,8 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
     await page.route(/\/api\/corrections\?/, async (route) => {
       const res = await route.fetch();
       const body = (await res.json()) as { corrections: Record<string, unknown>[] };
-      for (const c of body.corrections) c.review_block = 'You wrote this correction; a different reviewer must decide it.';
+      for (const c of body.corrections)
+        c.review_block = 'You wrote this correction; a different reviewer must decide it.';
       await route.fulfill({ response: res, json: body });
     });
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
@@ -312,7 +348,10 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
     expect(await listCorrections(request, s.project.slug, 'approved')).toHaveLength(0);
   });
 
-  test('bulk 409: "The list changed" alertdialog, Reload and select again clears the selection', async ({ page, request }) => {
+  test('bulk 409: "The list changed" alertdialog, Reload and select again clears the selection', async ({
+    page,
+    request,
+  }) => {
     const s = await seedReviews(request, 'revconflict', 4);
     const [c0, c1, c2] = s.corrections;
     await gotoApp(page, `/projects/${s.project.slug}/reviews`);
@@ -354,9 +393,12 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
     await decideViaApi(request, c0!.id, 'approve');
     await decideViaApi(request, c1!.id, 'approve');
     await gotoApp(page, `/projects/${s.project.slug}/reviews?status=approved`);
-    await page.getByRole('checkbox', { name: 'Select all visible corrections' }).check({ force: true }).catch(async () => {
-      await page.getByRole('checkbox', { name: /Select all/ }).check({ force: true });
-    });
+    await page
+      .getByRole('checkbox', { name: 'Select all visible corrections' })
+      .check({ force: true })
+      .catch(async () => {
+        await page.getByRole('checkbox', { name: /Select all/ }).check({ force: true });
+      });
     await expect(page.getByRole('region', { name: 'Bulk actions' })).toContainText('2 selected');
     await page.getByTestId('bulk-reset').click();
     await expect(page.getByText('2 corrections reset')).toBeVisible();
@@ -366,7 +408,10 @@ test.describe('reviews: deep link, edit, blocks, conflicts, paging', () => {
     await expect(rows(page)).toHaveCount(3);
     await page.getByRole('checkbox', { name: `Select correction ${c2!.id}` }).check({ force: true });
     await page.getByTestId('bulk-delete').click();
-    await page.getByRole('alertdialog', { name: 'Delete 1 correction?' }).getByRole('button', { name: 'Delete' }).click();
+    await page
+      .getByRole('alertdialog', { name: 'Delete 1 correction?' })
+      .getByRole('button', { name: 'Delete' })
+      .click();
     await expect(row(page, c2!.id)).toHaveCount(0);
   });
 });

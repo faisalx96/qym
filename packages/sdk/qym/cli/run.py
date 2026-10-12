@@ -64,7 +64,7 @@ def _hold_local_viewer(ui_server: Any) -> None:
     if is_json_mode() or not sys.stdin.isatty():
         ui_server.stop()
         return
-    err_console.print(f"[blue]Viewer still running:[/blue] {ui_server.url}  (Ctrl+C to exit)")
+    err_console.print(f"[blue]Viewer still running:[/blue] {ui_server.url}  (Ctrl+C to exit)", soft_wrap=True)
     try:
         ui_server._stop.wait()
     except KeyboardInterrupt:
@@ -95,7 +95,7 @@ def run_create(
     samples: int = typer.Option(1, "--samples", min=1, help="Evaluate every item k times (k sequential passes) as one run; reports Pass@k, Pass^k, etc."),
     task_name: Optional[str] = typer.Option(None, "--task-name", help="Override auto-derived task name"),
     config_json: Optional[str] = typer.Option(None, "--config", help="JSON configuration string"),
-    no_ui: bool = typer.Option(False, "--no-ui", help="Hide the live terminal table"),
+    no_ui: bool = typer.Option(False, "--no-ui", help="Hide the live terminal table (the browser viewer is --local-ui)"),
     local_ui: bool = typer.Option(False, "--local-ui", help="Serve the offline results viewer on localhost while the run executes"),
     ui_port: int = typer.Option(0, "--ui-port", help="Port for --local-ui (0 for auto)"),
     no_open: bool = typer.Option(False, "--no-open", help="Do not open the browser automatically"),

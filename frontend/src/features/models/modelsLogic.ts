@@ -1,5 +1,12 @@
 /** Pure logic of the Models page (dashboard.js models view, summary path). */
-import type { ModelCandidate, ModelRun, ModelStats, StatGroup } from '@/api/dashboardModels';
+import type {
+  ModelCandidate,
+  ModelRun,
+  ModelStats,
+  StatGroup,
+  TraceAverages,
+  TraceKey,
+} from '@/api/dashboardModels';
 import { metricDirection, type MetricDirection, type MetricSpec } from '@/lib/metrics';
 
 export type TimeRange = 'today' | '7d' | '30d' | 'all';
@@ -138,6 +145,38 @@ export function statTiles(
   direction: MetricDirection,
   thresholdPct: number,
   isBoolean: boolean,
+  hasTrace = false,
+): StatTileDef[] {
+  const tiles = baseTiles(kind, k, direction, thresholdPct, isBoolean);
+  return hasTrace ? [...tiles, ...TRACE_TILES] : tiles;
+}
+
+/** Trace tiles come from the runs' trace statistics (auto-derived from OTEL spans). */
+export const TRACE_TILES: StatTileDef[] = [
+  { key: 'trace:avg_tokens', label: 'Avg tokens', tip: "Average tokens per item, from the runs' traces." },
+  {
+    key: 'trace:avg_llm_calls',
+    label: 'Avg LLM calls',
+    tip: 'Average model calls per item, from the traces.',
+  },
+  {
+    key: 'trace:avg_tool_calls',
+    label: 'Avg tool calls',
+    tip: 'Average tool calls per item, from the traces.',
+  },
+  {
+    key: 'trace:tool_success_rate',
+    label: 'Tool success rate',
+    tip: 'Share of tool calls that succeeded, from the traces.',
+  },
+];
+
+function baseTiles(
+  kind: MetricKind,
+  k: number,
+  direction: MetricDirection,
+  thresholdPct: number,
+  isBoolean: boolean,
 ): StatTileDef[] {
   const rule = direction === 'minimize' ? '≤' : '≥';
   const best = direction === 'minimize' ? 'Min' : 'Max';
@@ -214,17 +253,30 @@ export function formatLatency(ms: number | null | undefined): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
 }
 
+function formatTraceNumber(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+  return String(Math.round(v));
+}
+
 export function formatStat(
   key: string,
-  stats: ModelStats & { totalRetries?: number },
+  stats: ModelStats & { totalRetries?: number; traceAverages?: TraceAverages },
   kind: MetricKind,
 ): string {
+  if (key.startsWith('trace:')) {
+    const name = key.slice(6) as TraceKey;
+    const t = stats.traceAverages?.[name];
+    if (t === undefined || !Number.isFinite(t)) return '—';
+    if (name === 'tool_success_rate') return `${(t * 100).toFixed(1)}%`;
+    return name === 'avg_tokens' ? formatTraceNumber(t) : t.toFixed(1);
+  }
   const v = (stats as unknown as Record<string, number | null | undefined>)[key];
   if (key === 'failedCount' || key === 'totalRetries') return String(v ?? 0);
   if (key === 'avgLatency' || key === 'medianLatency') return formatLatency(v);
   if (v === null || v === undefined || !Number.isFinite(v))
     return key === 'consistency' || key === 'reliability' ? 'NA' : '—';
-  if (kind === 'score') return `${(v * 100).toFixed(0)}%`;
+  if (kind === 'score') return `${(v * 100).toFixed(1)}%`;
   return Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2);
 }
 
@@ -246,4 +298,30 @@ export function distributionSegments(dist: number[], k: number, totalItems: numb
     out.push({ runs: i, count, share: count / total, tone: i === 0 ? 'none' : i === k ? 'all' : 'some' });
   }
   return out;
+}
+
+/**
+ * The options a filter leaves for a task or dataset select. A NONE selection or a single value (which is
+ * just the select's own current pick, mirrored into the URL) leaves everything, so the select can switch;
+ * two or more values (chosen in the Filters popover) narrow the options to those.
+ */
+export function scopedOptions(selected: string[], available: string[], none = '__none__'): string[] {
+  if (selected.length < 2 || selected.includes(none)) return available;
+  return available.filter((a) => selected.includes(a));
+}
+
+/** The single task or dataset in play: the one filtered to, else the only option, else none. */
+export function chosenOption(selected: string[], options: string[]): string {
+  if (selected.length === 1 && options.includes(selected[0]!)) return selected[0]!;
+  return options.length === 1 ? options[0]! : '';
+}
+
+/** The filters of the Models page minus the task and dataset (those two come from the selects). */
+export function withoutTaskAndDataset<T extends { tasks?: unknown; datasets?: unknown }>(
+  filters: T,
+): Omit<T, 'tasks' | 'datasets'> {
+  const { tasks: _tasks, datasets: _datasets, ...rest } = filters;
+  void _tasks;
+  void _datasets;
+  return rest;
 }

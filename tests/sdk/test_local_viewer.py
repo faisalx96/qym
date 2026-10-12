@@ -156,6 +156,18 @@ class TestSavedFileApi:
         assert data["snapshot"]["stats"]["total"] == 2
         assert [r["input"] for r in data["snapshot"]["rows"]] == ["input 0", "input 1"]
 
+    def test_run_is_editable_only_inside_results_dir(self, server, tmp_path):
+        inside = _results_csv(tmp_path)
+        assert _json(server, f"/api/runs/{quote(str(inside), safe='')}")[1]["run"]["editable"] is True
+        outside = tmp_path / "elsewhere.csv"
+        outside.write_text(inside.read_text(encoding="utf-8"), encoding="utf-8")
+        assert _json(server, f"/api/runs/{quote(str(outside), safe='')}")[1]["run"]["editable"] is False
+
+    def test_run_endpoint_says_when_no_live_run_is_expected(self, server):
+        assert _json(server, "/api/run")[1] == {}
+        server.expects_live = False
+        assert _json(server, "/api/run")[1] == {"live": False}
+
     def test_missing_file_is_404_with_message(self, server):
         status, data = _json(server, "/api/runs/nope.csv")
         assert status == 404 and "File not found" in data["error"]
@@ -274,6 +286,54 @@ class TestEvaluatorLocalUi:
         finally:
             srv.stop()
 
+    def test_busy_fixed_port_warns_and_falls_back(self, static_dir, tmp_path, capsys):
+        import socket
+
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen(1)
+        busy = blocker.getsockname()[1]
+        ds = tmp_path / "ds.csv"
+        ds.write_text("input,expected_output\nhello,HELLO\n", encoding="utf-8")
+        evaluator = Evaluator(
+            task=lambda input: input,
+            dataset=CsvDataset(str(ds)),
+            metrics=["exact_match"],
+            config={"local_ui": True, "ui_port": busy, "output_dir": str(tmp_path / "out")},
+        )
+        try:
+            evaluator.run(show_tui=False, auto_save=False)
+            err = capsys.readouterr().err
+            assert f"Port {busy} is in use" in err
+            assert evaluator._ui_server is not None and evaluator._ui_server.port != busy
+        finally:
+            blocker.close()
+            if evaluator._ui_server:
+                evaluator._ui_server.stop()
+
+    def test_a_second_run_replaces_the_previous_viewer(self, static_dir, tmp_path):
+        ds = tmp_path / "ds.csv"
+        ds.write_text("input,expected_output\nhello,HELLO\n", encoding="utf-8")
+        probe = UIServer(port=0)
+        probe.start()
+        port = probe.port
+        probe.stop()
+        servers = []
+        for _ in range(2):
+            ev = Evaluator(
+                task=lambda input: input,
+                dataset=CsvDataset(str(ds)),
+                metrics=["exact_match"],
+                config={"local_ui": True, "ui_port": port, "output_dir": str(tmp_path / "out")},
+            )
+            ev.run(show_tui=False, auto_save=False)
+            servers.append(ev._ui_server)
+        try:
+            assert servers[1] is not None and servers[1].port == port
+            assert _json(servers[1], "/api/run")[1]["status"] == "COMPLETED"
+        finally:
+            servers[1].stop()
+
     def test_default_run_starts_no_server(self, tmp_path):
         ds = tmp_path / "ds.csv"
         ds.write_text("input,expected_output\nhello,HELLO\n", encoding="utf-8")
@@ -342,9 +402,49 @@ class TestCliWiring:
         )
         assert "local_ui" not in seen
 
+    def test_busy_port_warning_reaches_stderr_in_json_mode(self, static_dir, tmp_path, monkeypatch):
+        import socket
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "t.py").write_text("def f(input):\n    return input\n", encoding="utf-8")
+        (tmp_path / "d.csv").write_text("input,expected_output\na,A\n", encoding="utf-8")
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen(1)
+        busy = blocker.getsockname()[1]
+        try:
+            result = CliRunner().invoke(
+                app,
+                [
+                    "--json", "run", "create", "--task-file", "t.py", "--task-function", "f",
+                    "--dataset-file", "d.csv", "--metrics", "exact_match",
+                    "--local-ui", "--ui-port", str(busy), "--no-open",
+                ],
+            )
+        finally:
+            blocker.close()
+        assert f"Port {busy} is in use" in result.output
+        assert f"Port {busy} is in use" not in result.stdout.split("{", 1)[-1]
+
     def test_ui_command_reports_missing_file(self, tmp_path):
         result = CliRunner().invoke(app, ["ui", str(tmp_path / "nope.csv"), "--no-open"])
         assert result.exit_code == 3
+
+    def test_ui_command_reports_a_busy_port_without_a_traceback(self, static_dir, tmp_path):
+        import socket
+
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen(1)
+        try:
+            result = CliRunner().invoke(
+                app, ["ui", "--no-open", "--port", str(blocker.getsockname()[1])]
+            )
+        finally:
+            blocker.close()
+        assert result.exit_code == 1
+        assert "Could not start the viewer" in result.output
+        assert "Traceback" not in result.output
 
     def test_ui_command_rejects_unsupported_file_types(self, tmp_path):
         path = tmp_path / "results.json"

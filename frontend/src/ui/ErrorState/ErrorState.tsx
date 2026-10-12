@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { classifyError, loginUrl } from '@/lib/http';
 import { Button } from '../Button';
 import { LinkButton } from '../LinkButton';
@@ -11,6 +12,8 @@ export interface ErrorStateProps {
   notFoundMessage?: string;
   onRetry?: () => void;
   compact?: boolean;
+  /** Extra action beside Retry / Sign in, e.g. a Back link. */
+  action?: ReactNode;
 }
 
 /** A failed load is never an empty state (DESIGN_LANGUAGE §3 "Failed requests"). */
@@ -21,6 +24,7 @@ export function ErrorState({
   notFoundMessage,
   onRetry,
   compact,
+  action,
 }: ErrorStateProps) {
   const info = classifyError(error);
   const body = message ?? (info.kind === 'not_found' && notFoundMessage) ?? info.message;
@@ -63,6 +67,7 @@ export function ErrorState({
             Retry
           </Button>
         ) : null}
+        {action}
       </div>
     </div>
   );

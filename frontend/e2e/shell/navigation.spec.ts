@@ -281,7 +281,7 @@ test.describe('archived project (§8.7 scenario 7)', () => {
     await expect(
       page.locator('[data-archived-banner]').getByRole('link', { name: 'Unarchive it' }),
     ).toBeVisible();
-    await expect(page.locator('[data-topbar]').getByText('Read-only')).toBeVisible();
+    await expect(page.locator('[data-topbar]').getByText('Read-only')).toHaveCount(0);
     await expect(
       page.locator('[data-project-switcher]').getByText('archived', { exact: true }),
     ).toBeVisible();
@@ -339,7 +339,26 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     const p = await createProject(request, 'Deep Links', uniqueSlug('deep'));
     const runId = 'eval/2026-01-01/abc';
     const encodedRun = runId.split('/').map(encodeURIComponent).join('/');
-    const urls: { path: string; expect: 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' | 'runs' | 'overview' | 'charts' | 'run' | 'page' | 'admin' | 'docs' | 'compare' | 'analysis' | 'analyzer-redirect' }[] = [
+    const urls: {
+      path: string;
+      expect:
+        | 'settings'
+        | 'projects'
+        | 'profile'
+        | 'trash'
+        | 'reviews'
+        | 'datasets'
+        | 'runs'
+        | 'overview'
+        | 'charts'
+        | 'run'
+        | 'page'
+        | 'admin'
+        | 'docs'
+        | 'compare'
+        | 'analysis'
+        | 'analyzer-redirect';
+    }[] = [
       { path: '/', expect: 'projects' },
       { path: '/profile', expect: 'profile' },
       { path: '/admin', expect: 'admin' },
@@ -393,7 +412,12 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
         await expect(page.locator('[data-reviews-page]'), u.path).toBeVisible();
       } else if (u.expect === 'datasets') {
         // catalog, or the dataset detail / not-found state for an unknown ref
-        await expect(page.locator('[data-datasets-catalog], [data-dataset-detail], [role="alert"], [data-error-state]').first(), u.path).toBeVisible();
+        await expect(
+          page
+            .locator('[data-datasets-catalog], [data-dataset-detail], [role="alert"], [data-error-state]')
+            .first(),
+          u.path,
+        ).toBeVisible();
       } else if (u.expect === 'analysis') {
         await expect(page.getByRole('heading', { name: 'Auto-analysis' }), u.path).toBeVisible();
       } else if (u.expect === 'analyzer-redirect') {

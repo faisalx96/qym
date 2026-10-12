@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { formatCount, formatKpiPercent, kpiEntries, kpiScope } from '@/lib/kpis';
-import { formatDurationMs, formatLatency, formatMetricValueSmart, formatNumericValue, formatRelative } from '@/lib/format';
+import {
+  formatDurationMs,
+  formatLatency,
+  formatMetricValueSmart,
+  formatNumericValue,
+  formatRelative,
+} from '@/lib/format';
 
 describe('kpis', () => {
   it('formats counts and floors percentages', () => {
@@ -13,9 +19,22 @@ describe('kpis', () => {
     expect(formatKpiPercent(0)).toBe('0%');
   });
   it('has exactly five entries with the legacy labels', () => {
-    const kpis = { scope: 'filtered' as const, runs: 1, models: 2, items: 3, execution_success: 0.5, runs_with_errors: 0 };
+    const kpis = {
+      scope: 'filtered' as const,
+      runs: 1,
+      models: 2,
+      items: 3,
+      execution_success: 0.5,
+      runs_with_errors: 0,
+    };
     const entries = kpiEntries(kpis);
-    expect(entries.map((e) => e.name)).toEqual(['Runs', 'Execution success', 'Runs with errors', 'Models', 'Items']);
+    expect(entries.map((e) => e.name)).toEqual([
+      'Runs',
+      'Execution success',
+      'Runs with errors',
+      'Models',
+      'Items',
+    ]);
     expect(entries[0]!.label).toBe('run');
     expect(entries[2]!.color).toBe('muted');
     expect(kpiScope(kpis).label).toBe('Filtered runs');

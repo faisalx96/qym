@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useBlocker } from 'react-router-dom';
 import { useAnalysisPrompts, useSavePrompt } from '@/api/projectSettings';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
@@ -83,6 +84,20 @@ export function PromptsTab() {
   const [showDiff, setShowDiff] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  // Drafts live in this component: leaving the tab, the page or the window would drop them silently.
+  const anyDirty =
+    !readOnly && Object.entries(drafts).some(([k, v]) => v !== (prompts.data?.prompts[k] ?? ''));
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      anyDirty &&
+      (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search),
+  );
+  useEffect(() => {
+    if (!anyDirty) return;
+    const onUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [anyDirty]);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(t);
@@ -211,6 +226,18 @@ export function PromptsTab() {
             )}
           </div>
         </Dialog>
+        <ConfirmDialog
+          open={blocker.state === 'blocked'}
+          onOpenChange={(o) => !o && blocker.state === 'blocked' && blocker.reset()}
+          title="Discard unsaved changes?"
+          description="A prompt has edits that are not saved."
+          cancelLabel="Keep editing"
+          confirmLabel="Discard changes"
+          tone="danger"
+          onConfirm={() => {
+            if (blocker.state === 'blocked') blocker.proceed();
+          }}
+        />
         <ConfirmDialog
           open={confirmRestore}
           onOpenChange={setConfirmRestore}

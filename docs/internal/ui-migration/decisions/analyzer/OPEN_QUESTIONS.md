@@ -16,3 +16,7 @@
 - 2026-10-12 Step is kept in the URL (`?step=`) next to `run/pass/metric/scope`; harmless extra param.
 - 2026-10-12 Foundation primitives touched: Tabs.module.css (vertical selectors now child combinators so nested horizontal Tabs are unaffected), Checkbox.module.css (position: relative on the label). Not fixed: SegmentedControl pill under dir=rtl (physical offset).
 - 2026-10-12 Dropped as agreed: compare-page modal, root-cause dashboard, regex "Fields:" badges, restore/permanent delete of rule versions.
+- 2026-10-12 `?qym_analysis_run_picker=1` (runs list turns run-name links into analyzer links): not restored. Its only entry point was the old landing link, which is gone; the runs list already has a per-row "Analyze" chip and the landing offers "Open Runs". The param is ignored. Honouring it would need a change inside the runs-list area for no remaining entry point.
+- 2026-10-12 Rule version lineage graph: still not built (about 2 days: DAG layout, merge parents, RTL). Version meta (created / updated / by) is shown under "Rules in vN".
+- 2026-10-12 Publish dialog: "Set as production" defaults to off again (old behaviour); going live is an explicit choice.
+- 2026-10-12 `expected_pass_version` is still sent only when the run reports a `pass_revision` (the server check protects those runs; sending 0 for the rest adds nothing).

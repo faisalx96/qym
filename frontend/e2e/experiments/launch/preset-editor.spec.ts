@@ -2,13 +2,7 @@
 /** Brief 06 §2.6 (journey 6): the default preset editor (the launch form in editor mode). */
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { resetFakes, test } from '../support';
-import {
-  dialog,
-  listPresets,
-  maxAttempts,
-  seedLaunch,
-  type LaunchFixture,
-} from './launchSupport';
+import { dialog, listPresets, maxAttempts, seedLaunch, type LaunchFixture } from './launchSupport';
 
 test.setTimeout(90_000);
 test.use({ actionTimeout: 10_000 });
@@ -19,11 +13,18 @@ test.beforeEach(async ({ request }) => {
   f = await seedLaunch(request);
 });
 
-const editorUrl = (envId: string, q = '') => `/projects/${f.project.slug}/environments/${envId}/default-preset/edit${q}`;
+const editorUrl = (envId: string, q = '') =>
+  `/projects/${f.project.slug}/environments/${envId}/default-preset/edit${q}`;
 
-async function versionsOf(request: APIRequestContext, envId: string, kind: 'official' | 'saved'): Promise<any[]> {
+async function versionsOf(
+  request: APIRequestContext,
+  envId: string,
+  kind: 'official' | 'saved',
+): Promise<any[]> {
   const preset = (await listPresets(request, f.project.id, envId)).find((p) => p.kind === kind)!;
-  const res = await request.get(`/v1/projects/${f.project.id}/eval-environments/${envId}/presets/${preset.id}/versions`);
+  const res = await request.get(
+    `/v1/projects/${f.project.id}/eval-environments/${envId}/presets/${preset.id}/versions`,
+  );
   expect(res.ok(), await res.text()).toBeTruthy();
   return ((await res.json()) as { versions: any[] }).versions;
 }
@@ -37,7 +38,10 @@ async function openEditor(page: Page, envId: string, q = '') {
   await expect(pane(page)).toBeVisible();
 }
 
-test('edit from v1: Publish v2 needs a change and notes, confirms, and creates version 2', async ({ page, request }) => {
+test('edit from v1: Publish v2 needs a change and notes, confirms, and creates version 2', async ({
+  page,
+  request,
+}) => {
   await openEditor(page, f.env.id);
   await expect(publishBtn(page, 2)).toBeDisabled();
   const field = await maxAttempts(page);
@@ -66,7 +70,10 @@ test('edit from v1: Publish v2 needs a change and notes, confirms, and creates v
 test('an environment without a default preset publishes v1', async ({ page, request }) => {
   await openEditor(page, f.bare.id);
   await expect(publishBtn(page, 1)).toBeDisabled();
-  await page.getByRole('button', { name: /Dataset$/ }).first().click();
+  await page
+    .getByRole('button', { name: /Dataset$/ })
+    .first()
+    .click();
   await page.getByRole('option', { name: 'golden' }).click();
   await notesBox(page).fill('First default');
   await publishBtn(page, 1).click();
@@ -80,7 +87,11 @@ test('promote a saved preset to the default preset', async ({ page, request }) =
   // From the environment page, as a manager would.
   await page.goto(`/projects/${f.project.slug}/environments/${f.env.id}`);
   await page.getByRole('button', { name: /^Promote Slow timeout to default preset/ }).click();
-  await expect(page).toHaveURL(new RegExp(`default-preset/edit\\?.*promote=saved.*id=${saved.id}|default-preset/edit\\?.*id=${saved.id}.*promote=saved`));
+  await expect(page).toHaveURL(
+    new RegExp(
+      `default-preset/edit\\?.*promote=saved.*id=${saved.id}|default-preset/edit\\?.*id=${saved.id}.*promote=saved`,
+    ),
+  );
   await expect(pane(page)).toContainText('Compared with');
   await expect(publishBtn(page, 2)).toBeDisabled(); // notes missing
   await notesBox(page).fill('Promote the slow timeout');
@@ -92,7 +103,11 @@ test('promote a saved preset to the default preset', async ({ page, request }) =
   expect(JSON.stringify(v2.config)).toContain('"timeout":120');
 });
 
-test('409: publishing from a stale tab shows the conflict and reopening drafts v3', async ({ page, context, request }) => {
+test('409: publishing from a stale tab shows the conflict and reopening drafts v3', async ({
+  page,
+  context,
+  request,
+}) => {
   await openEditor(page, f.env.id);
   const field = await maxAttempts(page);
   await field.fill('2');

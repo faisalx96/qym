@@ -182,9 +182,29 @@
   gap: var(--space-xs);
 }
 
-.metricGlyph[data-tone='error'] {
-  color: var(--error);
+.metricError {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
   font-size: var(--font-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.metricError[data-tone='error'] {
+  color: var(--error);
+}
+
+.metricError[data-tone='metric'] {
+  color: var(--metric-error);
+}
+
+.metricError:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
 }
 
 .numeric {

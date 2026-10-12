@@ -44,7 +44,12 @@ describe('metric semantics helpers (C008)', () => {
     expect(defaultMetricName(['a', 'b'], {})).toBe('a');
     expect(defaultMetricName(['a', 'b'], { b: { primary: true } })).toBe('b');
     expect(defaultMetricName(['a', 'b'], { b: { primary: false } })).toBe('a');
-    expect(mergeMetricNames([['b', 'a'], ['a', 'c']])).toEqual(['b', 'a', 'c']);
+    expect(
+      mergeMetricNames([
+        ['b', 'a'],
+        ['a', 'c'],
+      ]),
+    ).toEqual(['b', 'a', 'c']);
   });
 
   it('best and compare follow the direction; none without one', () => {
@@ -84,22 +89,34 @@ describe('metric semantics helpers (C008)', () => {
 
 describe('manual score edits are validated like the server (C009)', () => {
   const run = (raw: unknown, type: string | null, reduced = false) =>
-    parseMetricScoreInput(raw as string, type ? { score_type: type } : null, reduced ? { reduced: true } : {});
+    parseMetricScoreInput(
+      raw as string,
+      type ? { score_type: type } : null,
+      reduced ? { reduced: true } : {},
+    );
 
-  it.each(scoreEdits.cases as Array<{ raw: unknown; score_type: string | null; expected: { value?: number; error?: string } }>)(
-    '$raw as $score_type',
-    ({ raw, score_type, expected }) => {
-      const outcome = run(raw, score_type);
-      if (expected.error !== undefined) expect(outcome).toEqual({ ok: false, message: expected.error });
-      else {
-        expect(outcome.ok).toBe(true);
-        expect((outcome as { value: number }).value).toBeCloseTo(expected.value!, 9);
-      }
-    },
-  );
+  it.each(
+    scoreEdits.cases as Array<{
+      raw: unknown;
+      score_type: string | null;
+      expected: { value?: number; error?: string };
+    }>,
+  )('$raw as $score_type', ({ raw, score_type, expected }) => {
+    const outcome = run(raw, score_type);
+    if (expected.error !== undefined) expect(outcome).toEqual({ ok: false, message: expected.error });
+    else {
+      expect(outcome.ok).toBe(true);
+      expect((outcome as { value: number }).value).toBeCloseTo(expected.value!, 9);
+    }
+  });
 
   it('a repeat item value is a rate: 0.5 is a valid boolean value only when reduced', () => {
-    for (const c of scoreEdits.reduced as Array<{ raw: string; score_type: string; reduced: boolean; expected: { value?: number; error?: string } }>) {
+    for (const c of scoreEdits.reduced as Array<{
+      raw: string;
+      score_type: string;
+      reduced: boolean;
+      expected: { value?: number; error?: string };
+    }>) {
       const outcome = run(c.raw, c.score_type, c.reduced);
       if (c.expected.error !== undefined) expect(outcome).toEqual({ ok: false, message: c.expected.error });
       else expect(outcome).toEqual({ ok: true, value: c.expected.value });
@@ -132,7 +149,10 @@ describe('errors under the declared direction (C015 amended)', () => {
       pass_scores: { h: [0.2, 0] },
       pass_metric_meta: { h: [{}, { status: 'error' }] },
     } as unknown as MetricRow;
-    expect(getRowScore(edited, 0, 'h', 'minimize')).toEqual({ score: expect.closeTo(0.9, 9), isError: false });
+    expect(getRowScore(edited, 0, 'h', 'minimize')).toEqual({
+      score: expect.closeTo(0.9, 9),
+      isError: false,
+    });
   });
 
   it('a scorer label "error" with its own metadata is a judged pass; a reviewed task failure keeps the score', () => {
@@ -175,7 +195,11 @@ describe('errors under the declared direction (C015 amended)', () => {
 
 describe('judge verdicts and execution failures stay distinct', () => {
   it.each(['failed', 'error', 'timeout', 'FAILED'])('a label "%s" is a verdict, not an error', (label) => {
-    const row = { status: 'completed', metric_values: [0, 1], metric_meta: { quality: { label } } } as unknown as MetricRow;
+    const row = {
+      status: 'completed',
+      metric_values: [0, 1],
+      metric_meta: { quality: { label } },
+    } as unknown as MetricRow;
     expect(isMetricErrorMeta(row.metric_meta!.quality)).toBe(false);
     expect(hasMetricError(row, 'quality')).toBe(false);
     expect(isErrorRow(row)).toBe(false);
@@ -191,7 +215,11 @@ describe('judge verdicts and execution failures stay distinct', () => {
       { reason: 'Empty output' },
       { status: 'success', error: 'ignored' },
     ]) {
-      const row = { status: 'completed', metric_values: [0, 1], metric_meta: { valid_sql: meta } } as unknown as MetricRow;
+      const row = {
+        status: 'completed',
+        metric_values: [0, 1],
+        metric_meta: { valid_sql: meta },
+      } as unknown as MetricRow;
       expect(isMetricErrorMeta(meta)).toBe(false);
       expect(hasMetricError(row, 'valid_sql')).toBe(false);
       expect(isErrorRow(row)).toBe(false);
@@ -212,7 +240,11 @@ describe('judge verdicts and execution failures stay distinct', () => {
     { status: ' Timeout ' },
     { status: ' Error ', error: 'BusinessRuleError' },
   ])('a scorer exception %j marks its own metric only', (meta) => {
-    const row = { status: 'completed', metric_values: [0, 1], metric_meta: { broken: meta, healthy: {} } } as unknown as MetricRow;
+    const row = {
+      status: 'completed',
+      metric_values: [0, 1],
+      metric_meta: { broken: meta, healthy: {} },
+    } as unknown as MetricRow;
     expect(isTaskErrorRow(row)).toBe(false);
     expect(isErrorRow(row)).toBe(true);
     expect(getRowScore(row, 0, 'broken')).toEqual({ score: 0, isError: true });
@@ -228,7 +260,9 @@ describe('judge verdicts and execution failures stay distinct', () => {
   });
 
   it('a task error is an error for every metric', () => {
-    expect(getRowScore({ status: 'error', metric_values: [1] } as unknown as MetricRow, 0, 'quality')).toEqual({ score: 0, isError: true });
+    expect(
+      getRowScore({ status: 'error', metric_values: [1] } as unknown as MetricRow, 0, 'quality'),
+    ).toEqual({ score: 0, isError: true });
     for (const status of ['error', 'FAILED']) {
       const row = { status, metric_values: [1], metric_meta: {} } as unknown as MetricRow;
       expect(isTaskErrorRow(row)).toBe(true);
