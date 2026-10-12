@@ -1,1 +1,0 @@
-{"root":["./vite.config.ts","./vitest.config.ts","./playwright.config.ts","./e2e/helpers.ts","./e2e/shell/a11y.spec.ts","./e2e/shell/auth.spec.ts","./e2e/shell/navigation.spec.ts","./e2e/shell/profile.spec.ts","./e2e/shell/projects.spec.ts","./e2e/shell/settings.spec.ts","./e2e/shell/support.ts","./plugins/docs-content.ts"],"version":"5.9.3"}
