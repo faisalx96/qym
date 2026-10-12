@@ -264,6 +264,8 @@ export const Detail = forwardRef<HTMLElement, DetailProps>(function Detail(
               <>
                 {row.trace_id} <CopyBtn text={row.trace_id} label="trace id" />
               </>
+            ) : row.trace_url ? (
+              'Trace available'
             ) : (
               '—'
             )}

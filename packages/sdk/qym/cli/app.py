@@ -83,10 +83,14 @@ def ui(
     """Open a saved results file in the offline local viewer (no platform needed)."""
     from urllib.parse import quote
     from ..server import UIServer
+    from ..server.app import RESULT_FILE_SUFFIXES
 
     if file and not Path(file).is_file():
         output_error("not_found", f"File not found: {file}")
         raise typer.Exit(code=ExitCode.NOT_FOUND)
+    if file and not file.lower().endswith(RESULT_FILE_SUFFIXES):
+        output_error("usage", f"The viewer opens .csv and .xlsx results files, not {Path(file).suffix or 'this file'}: {file}")
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
     server = UIServer(port=port, results_dir=results_dir)
     if not server.has_viewer():
         output_error(

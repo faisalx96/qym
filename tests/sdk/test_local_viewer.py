@@ -346,6 +346,12 @@ class TestCliWiring:
         result = CliRunner().invoke(app, ["ui", str(tmp_path / "nope.csv"), "--no-open"])
         assert result.exit_code == 3
 
+    def test_ui_command_rejects_unsupported_file_types(self, tmp_path):
+        path = tmp_path / "results.json"
+        path.write_text("{}")
+        result = CliRunner().invoke(app, ["ui", str(path), "--no-open"])
+        assert result.exit_code == 2
+
     def test_ui_command_serves_the_file_url(self, static_dir, tmp_path, monkeypatch):
         path = _results_csv(tmp_path)
         started = {}
