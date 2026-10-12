@@ -176,6 +176,9 @@ except Exception:  # pragma: no cover
 
 
 console = Console()
+_err_console = Console(stderr=True)
+# Viewer servers started by this process, keyed by port, so a later run can replace its own predecessor.
+_LIVE_VIEWERS: Dict[int, Any] = {}
 
 
 @dataclass
@@ -1201,9 +1204,33 @@ class Evaluator:
         if getattr(self.config, "local_ui", False):
             from ..server import LiveTracker, UIServer
 
+            # A previous run's viewer (this evaluator, or any in this process on the
+            # requested port) is released first, so repeated runs do not leak servers.
+            requested_port = int(getattr(self.config, "ui_port", 0) or 0)
+            previous = getattr(self, "_ui_server", None)
+            for stale in (previous, _LIVE_VIEWERS.get(requested_port) if requested_port else None):
+                if stale is not None:
+                    try:
+                        stale.stop()
+                    except Exception:
+                        logger.exception("Could not stop the previous local viewer")
+                    _LIVE_VIEWERS.pop(getattr(stale, "port", None), None)
+            self._ui_server = None
+            self.local_ui_url = None
             try:
-                ui_server = UIServer(port=int(getattr(self.config, "ui_port", 0) or 0))
-                ui_server.start()
+                ui_server = UIServer(port=requested_port)
+                try:
+                    ui_server.start()
+                except OSError as exc:
+                    if not requested_port:
+                        raise
+                    _err_console.print(
+                        f"[yellow]Port {requested_port} is in use ({exc}); using a free port for the local viewer.[/yellow]",
+                        soft_wrap=True,
+                    )
+                    ui_server = UIServer(port=0)
+                    ui_server.start()
+                _LIVE_VIEWERS[ui_server.port] = ui_server
                 run_info["status"] = "RUNNING"
                 # result.start_time is naive local time; the viewer parses UTC (ended_at is UTC)
                 run_info["started_at"] = _utc_now_str()
@@ -1211,15 +1238,15 @@ class Evaluator:
                 tracker = LiveTracker(items, metric_names, ui_server)
                 self._ui_server = ui_server
                 self.local_ui_url = ui_server.url
-                console.print(f"[blue]Local viewer:[/blue] {ui_server.url}")
+                _err_console.print(f"[blue]Local viewer:[/blue] {ui_server.url}", soft_wrap=True)
                 if getattr(self.config, "local_ui_open", False):
                     import webbrowser
 
                     webbrowser.open(ui_server.url)
             except OSError as exc:
-                self._notify_observer(
-                    "on_warning", message=f"Local viewer disabled: {exc}"
-                )
+                message = f"Local viewer disabled: {exc}"
+                _err_console.print(f"[yellow]{message}[/yellow]", soft_wrap=True)
+                self._notify_observer("on_warning", message=message)
                 tracker = ProgressTracker(items, metric_names)
         else:
             tracker = ProgressTracker(items, metric_names)

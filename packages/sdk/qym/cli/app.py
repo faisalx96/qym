@@ -77,7 +77,7 @@ def dashboard(
 def ui(
     file: Optional[str] = typer.Argument(None, help="Saved results file (.csv or .xlsx) to open; omit to serve an empty viewer"),
     port: int = typer.Option(0, "--port", help="Port to listen on (0 for auto)"),
-    results_dir: str = typer.Option("qym_results", "--results-dir", help="Directory holding saved results"),
+    results_dir: Optional[str] = typer.Option(None, "--results-dir", help="Directory holding saved results (default: qym_results, or FILE's folder when FILE lies outside it)"),
     no_open: bool = typer.Option(False, "--no-open", help="Do not open the browser"),
 ) -> None:
     """Open a saved results file in the offline local viewer (no platform needed)."""
@@ -91,7 +91,16 @@ def ui(
     if file and not file.lower().endswith(RESULT_FILE_SUFFIXES):
         output_error("usage", f"The viewer opens .csv and .xlsx results files, not {Path(file).suffix or 'this file'}: {file}")
         raise typer.Exit(code=ExitCode.USAGE_ERROR)
+    if results_dir is None:
+        results_dir = "qym_results"
+        if file:
+            resolved = Path(file).resolve()
+            default_abs = Path(results_dir).resolve()
+            if default_abs != resolved.parent and default_abs not in resolved.parents:
+                # Outside the default folder: allow editing it by serving its own folder.
+                results_dir = str(resolved.parent)
     server = UIServer(port=port, results_dir=results_dir)
+    server.expects_live = bool(file)
     if not server.has_viewer():
         output_error(
             "failure",
@@ -99,12 +108,21 @@ def ui(
             suggestion="From a checkout run: cd frontend && npm ci && npm run build:sdk",
         )
         raise typer.Exit(code=ExitCode.FAILURE)
-    server.start()
+    try:
+        server.start()
+    except OSError as exc:
+        where = f"port {port}" if port else "a free port"
+        output_error(
+            "failure",
+            f"Could not start the viewer on {where}: {exc}",
+            suggestion="Pick another port with --port, or omit it to use a free one.",
+        )
+        raise typer.Exit(code=ExitCode.FAILURE)
     url = server.url + (f"run/{quote(str(Path(file).resolve()), safe='')}" if file else "")
     if is_json_mode():
         output({"viewer_url": url})
     else:
-        err_console.print(f"[bold]qym viewer:[/bold] {url}  (Ctrl+C to exit)")
+        err_console.print(f"[bold]qym viewer:[/bold] {url}  (Ctrl+C to exit)", soft_wrap=True)
     if not no_open and not is_json_mode():
         webbrowser.open(url)
     try:
