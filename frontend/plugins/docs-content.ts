@@ -3,7 +3,7 @@
  * docs/internal/ui-migration/decisions/admin-docs/OPEN_QUESTIONS.md).
  *
  * The 27 hand-written HTML partials under
- * packages/platform/qym_platform/_static/dashboard/docs/<section>/<page>.html
+ * frontend/src/features/docs/partials/<section>/<page>.html
  * stay the single content source. This plugin compiles each one at build
  * time into a hast tree (JSON) that the React side renders through
  * hast-util-to-jsx-runtime — no runtime innerHTML, no runtime highlighter:
@@ -31,7 +31,7 @@ import type { Element, Root, RootContent } from 'hast';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FRONTEND = resolve(here, '..');
-export const DOCS_CONTENT_DIR = resolve(FRONTEND, '../packages/platform/qym_platform/_static/dashboard/docs');
+export const DOCS_CONTENT_DIR = resolve(FRONTEND, 'src/features/docs/partials');
 export const DOCS_IA_FILE = resolve(FRONTEND, 'src/features/docs/ia.json');
 
 const PREFIX = 'virtual:qym-docs/';
