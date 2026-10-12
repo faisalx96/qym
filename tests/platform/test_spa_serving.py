@@ -261,3 +261,45 @@ def test_render_spa_index_escapes_hostile_root_path():
     html = spa.render_spa_index("<html><head></head></html>", settings, '/x"></script><script>alert(1)')
     assert "</script><script>alert" not in html
     assert '<base href="/x&quot;&gt;&lt;/script&gt;' in html
+
+
+class TestServiceSplit:
+    """Only the main/all service serves the UI; ingestion and workers never answer a page URL."""
+
+    def test_ingestion_and_workers_apps_do_not_serve_the_ui(self, built_spa):
+        from qym_platform.app import create_ingestion_app, create_workers_app
+        from qym_platform.settings import PlatformSettings
+
+        settings = PlatformSettings(environment="test", auth_mode="proxy_headers", database_url="sqlite:///:memory:")
+        ingestion = TestClient(create_ingestion_app(settings))
+        workers = TestClient(create_workers_app(settings, runtime_factory=lambda: _NoRuntime()))
+        for client in (ingestion, workers):
+            for path in ("/", "/login", "/projects/p1", "/app/projects/p1", "/assets/index-abc123.js"):
+                res = client.get(path)
+                assert res.status_code == 404, path
+                assert "<base href" not in res.text, path
+
+    def test_main_service_serves_the_ui_and_keeps_its_prefixed_apis(self, built_spa, monkeypatch, no_auth_env):
+        from qym_platform.settings import PlatformSettings
+
+        settings = PlatformSettings(environment="test", auth_mode="none", service="main")
+        monkeypatch.setattr("qym_platform.app.PlatformSettings", lambda: settings, raising=False)
+        with _client(_session_factory()) as client:
+            assert client.get("/projects/p1").status_code == 200
+            # the ingestion/workers prefixes are APIs of the main app too: never the page
+            assert client.get("/ingestion/nope").status_code == 404
+            assert "<base href" not in client.get("/workers/nope").text
+
+
+class _NoRuntime:
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def supervise_once(self):
+        pass
+
+    def status(self):
+        return {"loops": {}, "job_executor": {"alive": True}}

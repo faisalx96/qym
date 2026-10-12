@@ -470,3 +470,37 @@ def test_dataset_read_token_is_scoped_to_its_project(world):
     )
     assert response.status_code == 403
     assert not _leaks(response)
+
+
+def test_compare_export_html_bundles_each_run_and_respects_private_test_sets(world):
+    client, _ = world
+    params = {"files": ["run-secret", "run-open"]}
+
+    member = client.get("/api/compare/export-html", params=params, headers=MEMBER)
+    assert member.status_code == 200, member.text
+    assert member.headers["content-type"].startswith("text/html")
+    assert 'filename="qym-compare.html"' in member.headers["content-disposition"]
+    # One tab and one offline run report per run, summary table on top.
+    assert member.text.count('role="tab"') == 2
+    assert member.text.count("<iframe") == 2
+    assert "run-secret" in member.text and "run-open" in member.text
+    assert "window.__QYM_EXPORT__ = true" in member.text
+    # run-open is a public run of a public set (its content shows); the private set's content must not.
+    assert PRIVATE_TEST_SET_PLACEHOLDER in member.text or "content_restricted" in member.text
+    only_secret = client.get("/api/compare/export-html", params={"files": ["run-secret", "run-secret"]}, headers=MEMBER)
+    assert only_secret.status_code == 422  # duplicates collapse: at least two distinct runs
+
+    admin = client.get("/api/compare/export-html", params=params, headers=ADMIN)
+    assert admin.status_code == 200
+    assert SECRET_INPUT in admin.text
+
+
+def test_compare_export_html_validates_the_selection(world):
+    client, _ = world
+    assert client.get("/api/compare/export-html", headers=MEMBER).status_code == 422
+    one = client.get("/api/compare/export-html", params={"files": ["run-open"]}, headers=MEMBER)
+    assert one.status_code == 422
+    missing = client.get("/api/compare/export-html", params={"files": ["run-open", "nope"]}, headers=MEMBER)
+    assert missing.status_code == 404
+    many = client.get("/api/compare/export-html", params={"files": [f"r{i}" for i in range(9)]}, headers=MEMBER)
+    assert many.status_code == 422
