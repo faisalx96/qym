@@ -1,7 +1,7 @@
-import { runPath } from '@/app/routes';
-import type { RunPasses, RunSummary } from '@/api/analysis';
-import { LinkButton, Select, Tag, Text } from '@/ui';
-import s from './blocks.module.css';
+import { viewRunTo } from "./JobStatus";
+import type { RunPasses, RunSummary } from "@/api/analysis";
+import { LinkButton, Select, Tag, Text } from "@/ui";
+import s from "./blocks.module.css";
 
 /** Run name, task / model / dataset, sample select for repeat runs, View run. */
 export function RunHeader({
@@ -62,7 +62,7 @@ export function RunHeader({
             searchable={false}
           />
         ) : null}
-        <LinkButton to={runPath(slug, runId)}>View run</LinkButton>
+        <LinkButton to={viewRunTo(slug, runId, pass)}>View run</LinkButton>
       </div>
     </div>
   );

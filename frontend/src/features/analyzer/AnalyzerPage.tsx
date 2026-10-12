@@ -1,19 +1,21 @@
-import { useMemo } from 'react';
-import { PageHeader, SegmentedControl } from '@/ui';
-import { useDocumentTitle } from '@/features/shell/hooks';
-import { useProjectContext } from '@/features/shell/ProjectContext';
-import { fullWidth } from '@/features/shell/layout';
-import { GuidanceArea } from './GuidanceArea';
-import { ProjectLanding } from './ProjectLanding';
-import { RunShell } from './RunShell';
-import { useAnalyzerRoute } from './useAnalyzerRoute';
-import s from './analyzer.module.css';
+import { useMemo } from "react";
+import { useRunSummary } from "@/api/analysis";
+import { PageHeader, SegmentedControl } from "@/ui";
+import { useDocumentTitle } from "@/features/shell/hooks";
+import { useProjectContext } from "@/features/shell/ProjectContext";
+import { fullWidth } from "@/features/shell/layout";
+import { GuidanceArea } from "./GuidanceArea";
+import { ProjectLanding } from "./ProjectLanding";
+import { RunShell } from "./RunShell";
+import { useAnalyzerRoute } from "./useAnalyzerRoute";
+import s from "./analyzer.module.css";
 
 /** /projects/:slug/analysis[?run=&pass=&metric=&scope=] — the auto-analysis workspace. */
 export function AnalyzerPage() {
-  useDocumentTitle('Auto-analysis');
   const { slug, canManage, readOnly } = useProjectContext();
   const route = useAnalyzerRoute();
+  const runName = useRunSummary(route.runId || undefined).data?.run;
+  useDocumentTitle(runName ? `Auto-analysis · ${runName.run_name || runName.run_id}` : "Auto-analysis");
   const manage = canManage && !readOnly;
   const scope = useMemo(() => ({ slug, runId: route.runId || undefined }), [slug, route.runId]);
 
