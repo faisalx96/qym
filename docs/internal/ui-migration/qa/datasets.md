@@ -231,3 +231,37 @@ Ordered by user impact.
 - Neighbors `index` (P003): not a server bug. `index` is the 0-based position in the filtered/sorted view and the UI adds 1; the QA dataset had a deleted first item, so the 20th id was legitimately the 19th row. Contract pinned by `test_item_neighbors_index_is_the_zero_based_position_in_the_view`.
 - Backend: `/api/corrections?source=` used `btrim` (Postgres only); now `func.trim` everywhere in analysis.py, covered by `test_source_filter_runs_on_every_backend` (ecc1c1f8).
 
+
+## Re-review
+
+Re-checked 2026-10-12 against a clean detached worktree of ui/qa at c49992eb (built with `npm run build`, served on 8836 from a copy of the seeded DB). Every FIXED row was exercised again.
+
+| Row | Result | Evidence |
+|---|---|---|
+| D002 state colours | FIXED holds | `v1 prod` span renders `rgb(16,185,129)`, draft/neutral parts keep the muted colour. |
+| D003 "1 runs" | FIXED holds | Cards read `1 run`, `2 runs`, `3 runs`. |
+| D011 empty project | FIXED holds | `/projects/emptyq/datasets` shows header with "Deleted datasets" and "New dataset" next to the empty state. |
+| D016 breadcrumb | FIXED holds | Topbar reads `QA Project / Datasets / big-set`. |
+| I011 hover popover | FIXED holds | Hovering the Expected cell shows a popover with the full text. |
+| I023 pane footer | FIXED, residual minor | After the page scrolls the Save button is pinned (bottom 755 of 900). At scroll top on a 1440x900 viewport it is 16 px under the fold (bottom 916) until the page is scrolled. |
+| I024 type-change confirm | FIXED holds | Saving `42` in JSON mode opens "Change the stored type? These fields will be saved as a different type: input." with Cancel / Save with new type. |
+| I025 metadata message | FIXED holds | `[1]` shows only "Metadata must be a JSON object." |
+| C006 compare unknown version | FIXED holds | "Version not found: Dataset version or alias not found: v9." with a "Compare the default versions" action. |
+| W003 encoding note | FIXED holds | "This file is not UTF-8, so it was read as Windows-1256 (Arabic). Pick another encoding if the text looks wrong." |
+| W010 wizard navigation | FIXED holds | New import lands on `/projects/qa/datasets/rr-wiz?tab=items&v=v1`; the name-clash path lands on `small-set?tab=items&v=v3`; a 60,000-row import lands on `rr-big` with 60,000 items. |
+| Q005 source filter | now verifiable | `/api/corrections?source=ai_only|human_only|corrected` returns 200 on SQLite; the UI shows the matching chip and counts (human_only 60, ai_only 0, corrected 0 on this data). |
+| Q014b reasoning badge (reviews) | FIXED holds | With a mocked `has_reasoning: true` response the Model chip reads "gpt-4o (reasoning)". Text badge instead of the old icon; acceptable. |
+| Q022 All-tab advance | FIXED holds | Starting on pending #60, three presses of `a` give cursor 60 -> 59 -> 58 -> 57, one approval each. |
+| Q031 "Approve 0" | FIXED holds | Shift+A with one decided row selected shows no dialog and toasts "Approve works on pending corrections only." |
+| Q032 stale history | FIXED holds | After Approve on an expanded #56 the cursor advances; moving back with `k` shows #56 history as APPROVED without reload. |
+| T007 trash at 1440 px | FIXED holds | All ten headers end at x <= 1419 of 1440 (Dataset right edge 1403, Restore 1419); no horizontal scroll needed. |
+| T010 trash reasoning badge | FIXED holds | With mocked `trace_stats.has_reasoning` the Model cell reads "openai/gpt-4o reasoning". |
+| P003 neighbors index | RETRACTED | Not a defect. After the fix pass the API returns 0-based `index` (q-00020 in v1: 20; in v3 where q-00010 is deleted: 19, the 20th row) and the UI adds 1. My earlier "19 of 5,199" came from my own UI deletion of another item before the check. |
+
+Backend: `/api/corrections?source=` no longer returns 500 on SQLite (ecc1c1f8), confirmed for all three values.
+
+Spot-checked OK rows (all PASS after the fix pass): D006/D007/D008 catalog search (English and Arabic) and sort, I002 sorts (ID desc, Latency asc), I003/I004/I005 search, label and `?page=3&size=25` deep link, I019 `j` in the docked pane, I021 unsaved guard on `j`, P009 item runs, P011/P012 Revert button, C001 swap and Download diff, C002 summary, Lineage/Runs/Settings tabs, W013 60k-row CSV parse (0.8 s) and import, T003 trash search, T005 paging (50 rows), T012 bulk restore, T013 single restore, Q018 infinite scroll, Q019 `?` shortcuts dialog.
+
+Still open (Deferred in the implementation notes): fix list 14 (D031/D032 version switcher links and always-visible search), 15 (P011 History order and the null -> string line), and the cosmetic I009, R002, D014. They remain CHANGED/BUGGY as originally classified; none blocks.
+
+Counts after re-review: 170 rows; BUGGY 0 open (8 FIXED), MISSING 0 open (6 FIXED where listed: D016, I011, I024, W003, Q014b, T010), CHANGED 25 unchanged plus the Deferred items above.
