@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import type { ModelStats } from '@/api/dashboardModels';
+import type { ModelStats, TraceAverages } from '@/api/dashboardModels';
 import { ROUTES } from '@/app/routes';
 import { metricBand, type MetricDirection } from '@/lib/metrics';
 import { Button, HelpMarker, Tag } from '@/ui';
@@ -10,7 +10,8 @@ import styles from './Models.module.css';
 export interface ModelCardProps {
   modelKey: string;
   colorIndex: number;
-  stats: ModelStats & { totalRetries?: number };
+  stats: ModelStats & { totalRetries?: number; traceAverages?: TraceAverages };
+  hasTrace?: boolean;
   selectedCount: number;
   availableCount: number;
   k: number;
@@ -29,9 +30,14 @@ const COLORS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5']
 export function ModelCard(p: ModelCardProps) {
   const navigate = useNavigate();
   const { label, reasoning } = parseModelKey(p.modelKey);
-  const tiles = statTiles(p.kind, p.stats.K || p.k, p.direction, p.thresholdPct, p.isBoolean).filter((t) =>
-    p.shown.has(t.key),
-  );
+  const tiles = statTiles(
+    p.kind,
+    p.stats.K || p.k,
+    p.direction,
+    p.thresholdPct,
+    p.isBoolean,
+    p.hasTrace,
+  ).filter((t) => p.shown.has(t.key));
   const fewer = p.selectedCount < p.k;
   const showDist = p.kind === 'score' && p.shown.has('correctDistribution');
   const canCompare = p.runIds.length >= 2;
@@ -77,15 +83,19 @@ export function ModelCard(p: ModelCardProps) {
       {tiles.length ? (
         <dl className={styles.tiles}>
           {tiles.map((t) => {
-            const raw = (p.stats as unknown as Record<string, number | null | undefined>)[t.key];
+            const raw = t.key.startsWith('trace:')
+              ? p.stats.traceAverages?.[t.key.slice(6) as keyof TraceAverages]
+              : (p.stats as unknown as Record<string, number | null | undefined>)[t.key];
             const band =
-              p.kind === 'score' && typeof raw === 'number' && BAND_KEYS.includes(t.key)
-                ? metricBand(
-                    raw,
-                    'score',
-                    t.key === 'maxAtK' || t.key === 'avgScore' ? p.direction : 'maximize',
-                  )
-                : null;
+              typeof raw === 'number' && t.key === 'trace:tool_success_rate'
+                ? metricBand(raw, 'score', 'maximize')
+                : p.kind === 'score' && typeof raw === 'number' && BAND_KEYS.includes(t.key)
+                  ? metricBand(
+                      raw,
+                      'score',
+                      t.key === 'maxAtK' || t.key === 'avgScore' ? p.direction : 'maximize',
+                    )
+                  : null;
             return (
               <div key={t.key} className={styles.tile}>
                 <dt className={styles.tileLabel}>

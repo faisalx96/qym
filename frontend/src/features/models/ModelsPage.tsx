@@ -4,25 +4,40 @@
  */
 import { useMemo, useState } from 'react';
 import type { Key } from 'react-aria-components';
+import { useOverview } from '@/api/dashboard';
 import {
+  traceAverages,
   useModelCandidates,
   useModelStats,
   type DashboardFilters,
   type ModelRun,
 } from '@/api/dashboardModels';
+import {
+  activeChips,
+  datasetLabel,
+  DEFAULT_VIEW,
+  filterKey,
+  filterSummary,
+  FiltersPopover,
+  useKpiTopbar,
+  useRunsView,
+  viewToFilters,
+  type RunsView,
+} from '@/features/runs-list';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { constrained } from '@/features/shell/layout';
 import { formatPercent, metricDirection, type MetricDirection } from '@/lib/metrics';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
 import {
+  Button,
+  Chip,
   EmptyState,
   ErrorState,
   Icon,
   MultiSelect,
   NumberField,
   PageHeader,
-  SegmentedControl,
   Select,
   Skeleton,
   Slider,
@@ -38,68 +53,66 @@ import {
   metricKind,
   orderMetrics,
   parseModelKey,
-  rangeSince,
   rankModels,
+  scopedOptions,
   selectedRunIds,
+  chosenOption,
+  withoutTaskAndDataset,
   showsThreshold,
   statTiles,
-  type OriginFilter,
-  type TimeRange,
 } from './modelsLogic';
 import { RunSelectionDialog } from './RunSelectionDialog';
 
-const RANGES: { value: TimeRange; label: string }[] = [
-  { value: 'today', label: 'Today' },
-  { value: '7d', label: '7d' },
-  { value: '30d', label: '30d' },
-  { value: 'all', label: 'All' },
-];
-const ORIGINS: { value: OriginFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'official', label: 'Official' },
-  { value: 'local', label: 'Local' },
-];
-
-const oneOf = <T extends string>(value: string | null, allowed: { value: T }[], fallback: T): T =>
-  allowed.some((a) => a.value === value) ? (value as T) : fallback;
+const MEDALS = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
 
 export function ModelsPage() {
   const { project, slug } = useProjectContext();
   useDocumentTitle(`${project.name} · Models`);
   const { params, replaceUrlQuery } = useSearchParamsState();
-  const range = oneOf(params.get('range'), RANGES, 'all');
-  const origin = oneOf(params.get('origin'), ORIGINS, 'all');
+  const { view, setView } = useRunsView({ adopt: true });
   const k = clampK(params.get('k') ?? DEFAULT_K);
-  const since = useMemo(() => rangeSince(range), [range]);
+  const viewKey = filterKey(view);
+  // Everything the filters allow except the task and dataset, which the two selects pick.
   const base: DashboardFilters = useMemo(
-    () => ({ ...(origin !== 'all' ? { origins: [origin] } : {}), ...(since ? { since } : {}) }),
-    [origin, since],
+    () => withoutTaskAndDataset(viewToFilters({ ...DEFAULT_VIEW, ...JSON.parse(viewKey) } as RunsView)),
+    [viewKey],
   );
 
   // Scope: which tasks exist, then which datasets exist for the chosen task.
   const scope = useModelCandidates(
     useMemo(() => ({ project_slug: slug, filters: base, k: 1, selected: {} }), [slug, base]),
   );
-  const tasks = scope.data?.scope.tasks ?? [];
-  const task =
-    params.get('task') && tasks.includes(params.get('task')!)
-      ? params.get('task')!
-      : tasks.length === 1
-        ? tasks[0]!
-        : '';
+  const tasks = scopedOptions(view.tasks, scope.data?.scope.tasks ?? []);
+  // Template strings: plain strings the React Compiler can tell apart from the option arrays.
+  const task = `${chosenOption(view.tasks, tasks)}`;
   const datasetScope = useModelCandidates(
     useMemo(
       () => (task ? { project_slug: slug, filters: { ...base, tasks: [task] }, k: 1, selected: {} } : null),
       [slug, base, task],
     ),
   );
-  const datasets = datasetScope.data?.scope.datasets ?? [];
-  const dataset =
-    params.get('dataset') && datasets.includes(params.get('dataset')!)
-      ? params.get('dataset')!
-      : datasets.length === 1
-        ? datasets[0]!
-        : '';
+  const datasets = scopedOptions(view.datasets, datasetScope.data?.scope.datasets ?? []);
+  const dataset = `${chosenOption(view.datasets, datasets)}`;
+
+  // The facet lists, owner names and topbar KPIs follow the same filters as the Runs page.
+  const overview = useOverview(
+    slug,
+    useMemo(() => viewToFilters({ ...DEFAULT_VIEW, ...JSON.parse(viewKey) } as RunsView), [viewKey]),
+  );
+  useKpiTopbar(overview.data?.kpis);
+  const owners = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(overview.data?.owners ?? {}).map(([id, o]) => [id, o.display_name || o.email]),
+      ),
+    [overview.data?.owners],
+  );
+  const chips = activeChips(view, (id) => owners[id] ?? id);
+  const summary = filterSummary(
+    view,
+    { total: overview.data?.total_count ?? 0, filtered: overview.data?.total_runs ?? 0 },
+    { owner: (id) => owners[id] ?? id, dataset: datasetLabel },
+  );
 
   const [custom, setCustom] = useState<Record<string, string[]>>({});
   const [editing, setEditing] = useState<string | null>(null);
@@ -124,9 +137,9 @@ export function ModelsPage() {
       ? params.get('metric')!
       : defaultMetric(allRuns, metrics);
 
-  const summary = main.data?.metric_summary[metric];
-  const isBoolean = Boolean(summary?.is_boolean);
-  const isNumeric = Boolean(summary?.is_numeric);
+  const metricInfo = main.data?.metric_summary[metric];
+  const isBoolean = Boolean(metricInfo?.is_boolean);
+  const isNumeric = Boolean(metricInfo?.is_numeric);
   const spec = allRuns.map((r) => r.metric_specs?.[metric]).find((s) => s && typeof s === 'object');
   const direction: MetricDirection = metricDirection(spec);
   const kind = metricKind(isNumeric, direction);
@@ -140,7 +153,8 @@ export function ModelsPage() {
     Boolean(task && dataset) && (main.isPending || (stats.isPending && models.length > 0)),
   );
 
-  const tileDefs = statTiles(kind, k, direction, Math.round(threshold * 100), isBoolean);
+  const hasTrace = allRuns.some((r) => Object.keys(traceAverages([r])).length > 0);
+  const tileDefs = statTiles(kind, k, direction, Math.round(threshold * 100), isBoolean, hasTrace);
   const statOptions = [
     ...tileDefs.map((t) => ({ key: t.key, label: t.label })),
     ...(kind === 'score' ? [{ key: 'correctDistribution', label: 'Correct distribution' }] : []),
@@ -174,17 +188,11 @@ export function ModelsPage() {
       />
       <div className={styles.page}>
         <div className={styles.bar}>
-          <SegmentedControl
-            label="Time range"
-            options={RANGES}
-            value={range}
-            onChange={(v) => setParam('range', v === 'all' ? null : v)}
-          />
-          <SegmentedControl
-            label="Origin"
-            options={ORIGINS}
-            value={origin}
-            onChange={(v) => setParam('origin', v === 'all' ? null : v)}
+          <FiltersPopover
+            view={view}
+            facets={overview.data?.facets}
+            owners={owners}
+            onChange={(patch) => setView(patch)}
           />
           <Select
             label="Task"
@@ -192,18 +200,47 @@ export function ModelsPage() {
             items={tasks.map((t) => ({ key: t, label: t }))}
             value={task || null}
             placeholder="Select a task"
-            onChange={(key) => replaceUrlQuery({ task: selectKey(key), dataset: null, metric: null })}
+            onChange={(key) => {
+              const next = selectKey(key);
+              setView({ tasks: next ? [next] : [], datasets: [] });
+            }}
           />
           <Select
             label="Dataset"
             width="14em"
-            items={datasets.map((d) => ({ key: d, label: d }))}
+            items={datasets.map((d) => ({ key: d, label: datasetLabel(d) }))}
             value={dataset || null}
             isDisabled={!task}
             placeholder={task ? 'Select a dataset' : 'Pick a task first'}
-            onChange={(key) => replaceUrlQuery({ dataset: selectKey(key), metric: null })}
+            onChange={(key) => {
+              const next = selectKey(key);
+              setView({ datasets: next ? [next] : [] });
+            }}
           />
+          {chips.length ? (
+            <div className={styles.chips} role="group" aria-label="Active filters">
+              {chips.map((c) => (
+                <Chip
+                  key={c.id}
+                  isSelected
+                  onRemove={() => setView(c.remove)}
+                  removeLabel={`Remove ${c.label}`}
+                >
+                  {c.label}
+                </Chip>
+              ))}
+              <Button
+                variant="ghost"
+                onPress={() => setView({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort })}
+              >
+                Clear {chips.length}
+              </Button>
+            </div>
+          ) : null}
         </div>
+        <p className={styles.muted} data-testid="models-summary">
+          {summary}
+        </p>
 
         {scope.isError ? (
           <ErrorState
@@ -307,7 +344,12 @@ export function ModelsPage() {
                         key={key}
                         modelKey={key}
                         colorIndex={colorIndex.get(key) ?? 0}
-                        stats={{ ...s, totalRetries: retries }}
+                        stats={{
+                          ...s,
+                          totalRetries: retries,
+                          traceAverages: traceAverages(m.rows.filter((r) => ids.includes(r.run_id))),
+                        }}
+                        hasTrace={hasTrace}
                         selectedCount={ids.length}
                         availableCount={m.total_runs}
                         k={k}
@@ -334,7 +376,17 @@ export function ModelsPage() {
                       return (
                         <li key={item.key} className={styles.rankItem}>
                           <span className={styles.rank}>
-                            {direction && item.avg !== null ? `#${i + 1}` : ''}
+                            {direction && item.avg !== null ? (
+                              i < MEDALS.length ? (
+                                <span role="img" aria-label={`Rank ${i + 1}`}>
+                                  {MEDALS[i]}
+                                </span>
+                              ) : (
+                                `#${i + 1}`
+                              )
+                            ) : (
+                              ''
+                            )}
                           </span>
                           <span>{label}</span>
                           <span>

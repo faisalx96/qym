@@ -342,3 +342,10 @@
   gap: var(--space-sm);
   margin-top: var(--space-md);
 }
+
+.chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}

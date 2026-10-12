@@ -6,18 +6,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/http';
 import type { MetricSpec } from '@/lib/metrics';
+import type { DashboardFilters, TraceStats } from './dashboardTypes';
+
+export type { DashboardFilters };
 
 export const MAX_STAT_GROUPS = 100;
 export const MAX_STAT_RUNS = 2000;
-
-export interface DashboardFilters {
-  tasks?: string[];
-  datasets?: string[];
-  models?: string[];
-  origins?: string[];
-  since?: string;
-  until?: string;
-}
 
 /** The run row fields the Models page reads (the server sends many more). */
 export interface ModelRun {
@@ -35,6 +29,7 @@ export interface ModelRun {
   status?: string;
   total_items?: number;
   total_retries?: number;
+  trace_stats?: TraceStats | null;
 }
 
 export interface ModelCandidate {
@@ -104,6 +99,23 @@ export interface ModelStats {
   K: number;
   correctDistribution: number[];
   runNames: string[];
+}
+
+/** Trace tile keys, averaged over the selected runs (the server sends them per run, not per group). */
+export const TRACE_KEYS = ['avg_tokens', 'avg_llm_calls', 'avg_tool_calls', 'tool_success_rate'] as const;
+export type TraceKey = (typeof TRACE_KEYS)[number];
+export type TraceAverages = Partial<Record<TraceKey, number>>;
+
+/** Mean of each trace statistic over the runs that report it. */
+export function traceAverages(runs: ModelRun[]): TraceAverages {
+  const out: TraceAverages = {};
+  for (const key of TRACE_KEYS) {
+    const values = runs
+      .map((r) => r.trace_stats?.[key])
+      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    if (values.length) out[key] = values.reduce((a, b) => a + b, 0) / values.length;
+  }
+  return out;
 }
 
 export interface StatsResponse {

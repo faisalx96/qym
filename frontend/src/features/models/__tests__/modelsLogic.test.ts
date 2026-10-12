@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { ModelCandidate } from '@/api/dashboardModels';
+import { traceAverages, type ModelCandidate } from '@/api/dashboardModels';
 import {
   buildStatGroups,
   clampK,
   defaultMetric,
   defaultPassThreshold,
   distributionSegments,
+  formatStat,
   parseModelKey,
   rangeSince,
   rankModels,
@@ -117,5 +118,34 @@ describe('tiles and distribution', () => {
     ]);
     expect(segs[2]!.share).toBeCloseTo(0.7);
     expect(distributionSegments([], 0, 0)).toEqual([]);
+  });
+});
+
+describe('trace tiles and precision', () => {
+  it('adds the four trace tiles only when asked', () => {
+    expect(statTiles('score', 5, 'maximize', 80, false).some((t) => t.key.startsWith('trace:'))).toBe(false);
+    expect(
+      statTiles('score', 5, 'maximize', 80, false, true)
+        .filter((t) => t.key.startsWith('trace:'))
+        .map((t) => t.key),
+    ).toEqual(['trace:avg_tokens', 'trace:avg_llm_calls', 'trace:avg_tool_calls', 'trace:tool_success_rate']);
+  });
+
+  it('averages trace statistics over the runs that report them', () => {
+    const run = (trace_stats: Record<string, number> | null) => ({ run_id: 'r', trace_stats }) as never;
+    expect(traceAverages([run({ avg_tokens: 1000 }), run({ avg_tokens: 2000 }), run(null)])).toEqual({
+      avg_tokens: 1500,
+    });
+  });
+
+  it('formats trace values and keeps one decimal on percentages', () => {
+    const stats = {
+      traceAverages: { avg_tokens: 1500, avg_llm_calls: 2, tool_success_rate: 0.875 },
+    } as never;
+    expect(formatStat('trace:avg_tokens', stats, 'score')).toBe('1.5K');
+    expect(formatStat('trace:avg_llm_calls', stats, 'score')).toBe('2.0');
+    expect(formatStat('trace:tool_success_rate', stats, 'score')).toBe('87.5%');
+    expect(formatStat('trace:avg_tool_calls', stats, 'score')).toBe('—');
+    expect(formatStat('avgScore', { avgScore: 0.6364 } as never, 'score')).toBe('63.6%');
   });
 });
