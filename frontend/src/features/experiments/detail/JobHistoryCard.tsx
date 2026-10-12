@@ -175,6 +175,7 @@ export function JobHistoryCard({
       </div>
       <DataTable
         aria-label="Jobs"
+        storageKey="experiments.jobs.v1"
         columns={columns}
         rows={rows}
         rowKey={(j) => j.id}

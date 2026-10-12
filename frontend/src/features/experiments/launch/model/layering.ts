@@ -493,7 +493,9 @@ export function describeBaseChange(
 
 function dropMessages(remap: PresetRemap | undefined): { dropped: RemapDropped[]; errors: string[] } {
   const dropped = remap?.dropped ?? [];
-  const errors = (remap?.errors ?? []).map((e) => (typeof e === 'string' ? e : e.message));
+  const errors = (remap?.errors ?? []).map((e) =>
+    typeof e === 'string' ? e : e.message || e.reason || e.pointer || 'Invalid value',
+  );
   return { dropped, errors };
 }
 

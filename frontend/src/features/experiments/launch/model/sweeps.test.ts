@@ -136,6 +136,29 @@ describe('axes, links and the run estimate', () => {
     slot_bindings: { 'endpoint:primary': { sweep: [{ connection_id: 'a' }, { connection_id: 'b' }] } },
   };
 
+  it('matches the service for a two-parameter sweep (parse_sweeps output pinned)', () => {
+    // Same spec fed to qym_platform.services.eval_sweeps.parse_sweeps: axes
+    // [samples], [A], [B] (order evaluator, env_overrides) and, linked, [samples, A] + [B].
+    const two = {
+      env_overrides: { A: { sweep: [1, 2] }, B: { sweep: [0.1, 0.2, 0.3] } },
+      evaluator: { config: { samples: { sweep: [5, 10] } } },
+    };
+    const grid = axesOf(two);
+    expect(grid.axes.map((a) => a.pointers)).toEqual([
+      ['/evaluator/config/samples'],
+      ['/env_overrides/A'],
+      ['/env_overrides/B'],
+    ]);
+    expect(comboCount(grid.axes)).toBe(12);
+    expect(jobEstimate(two, 2)).toBe(24);
+    const linked = axesOf({ ...two, links: [['/env_overrides/A', '/evaluator/config/samples']] });
+    expect(linked.axes.map((a) => a.pointers)).toEqual([
+      ['/evaluator/config/samples', '/env_overrides/A'],
+      ['/env_overrides/B'],
+    ]);
+    expect(comboCount(linked.axes)).toBe(6);
+  });
+
   it('finds sweeps in all three sections in axis order', () => {
     expect(findSweeps(spec).map((s) => s.pointer)).toEqual([
       '/slot_bindings/endpoint:primary',

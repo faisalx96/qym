@@ -435,6 +435,7 @@ export function QueuePage() {
               ) : null}
             </div>
             <DataTable
+              storageKey="eval-queue.jobs.v1"
               columns={columns}
               rows={jobs}
               rowKey={(j) => j.id}

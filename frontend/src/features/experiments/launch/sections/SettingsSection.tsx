@@ -92,7 +92,7 @@ export function SettingsSection() {
     return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.join('\n')]));
   }, [review.items]);
   const errorsKey = JSON.stringify(errors);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `errors` is a new object each render; errorsKey is its stable serialization
   const stableErrors = useMemo(() => errors, [errorsKey]);
 
   const endpointsMap: Record<string, string[]> = {};
@@ -101,7 +101,7 @@ export function SettingsSection() {
       endpointsMap[entry.ref_collection] = endpointRefOptions(doc, ctx, entry);
   }
   const endpointsKey = JSON.stringify(endpointsMap);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `endpointsMap` is rebuilt each render; endpointsKey is its stable serialization
   const endpoints = useMemo(() => endpointsMap, [endpointsKey]);
 
   const sweeps = mode === 'launch';

@@ -87,7 +87,7 @@ export function promoteWarningLines(promoted: PromotePrefillResponse): string[] 
   const from = promoted.source?.label || 'The source';
   const out: string[] = [];
   for (const d of promoted.remap?.dropped ?? [])
-    out.push(`${from}: ${d.label || d.pointer} was dropped (${d.message || 'no longer supported'}).`);
+    out.push(`${from}: ${d.label || d.pointer} was dropped (${d.message || d.reason || 'no longer supported'}).`);
   for (const e of promoted.remap?.errors ?? [])
     out.push(`${from}: ${typeof e === 'string' ? e : e.message || e.pointer || 'Invalid value'}`);
   for (const w of promoted.warnings ?? []) if (w?.message) out.push(w.message);

@@ -178,7 +178,9 @@ export interface EnvData {
 export interface RemapDropped {
   pointer: string;
   label?: string;
-  message: string;
+  message?: string;
+  /** Older responses name the cause `reason`. */
+  reason?: string;
 }
 
 export interface PresetRemap {

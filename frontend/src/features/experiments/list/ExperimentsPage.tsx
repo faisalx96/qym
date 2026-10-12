@@ -179,6 +179,7 @@ export function ExperimentsPage() {
       <RouterProvider navigate={navigate} useHref={useHref}>
         <DataTable
           aria-label="Experiments"
+          storageKey="experiments.list.v1"
           columns={columns}
           rows={experiments}
           rowKey={(x) => x.id}

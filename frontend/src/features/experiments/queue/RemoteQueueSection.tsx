@@ -161,6 +161,7 @@ function RemoteEnv({
         ) : null}
       </div>
       <DataTable
+        storageKey="eval-queue.remote.v1"
         columns={columns}
         rows={env.items}
         rowKey={(i) => i.remote_job_id}
