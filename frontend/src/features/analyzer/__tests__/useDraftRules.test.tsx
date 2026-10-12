@@ -29,12 +29,10 @@ describe('useDraftRules', () => {
   });
 
   it('autosaves once, 700 ms after the last edit', async () => {
-    const patch = vi
-      .spyOn(api, 'patch')
-      .mockResolvedValue({
-        analysis_rules: [{ id: 'r1', title: 'One!!', instruction: 'Do one' }],
-        rule_version: version,
-      });
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({
+      analysis_rules: [{ id: 'r1', title: 'One!!', instruction: 'Do one' }],
+      rule_version: version,
+    });
     const { result } = renderHook(() => useDraftRules(scope, version, true), { wrapper });
     const key = result.current.rules[0]!.key;
     act(() => result.current.update(key, { title: 'One!' }));
