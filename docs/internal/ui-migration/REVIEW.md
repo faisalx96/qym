@@ -1,8 +1,48 @@
 # UI migration: review guide
 
-State as of 2026-10-12. The nine area branches are integrated into one tree
-(`ui/integration`) and merged into `UI-redesign` with a plain merge commit.
-Nothing was pushed. The `ui/*` branches and their worktrees are kept for reference.
+State as of 2026-10-12 (end of day). The nine area branches were integrated into one tree
+(`ui/integration`) and merged into `UI-redesign`; the React app then became the official UI
+(`ui/cutover`, see `CUTOVER.md`); a per-component QA cycle and a UX review followed on `ui/qa`
+(see `qa/`). Nothing was pushed. The `ui/*` branches and their worktrees are kept for reference.
+
+## QA cycle and UX review (`ui/qa`)
+
+Each component got a QA agent (inventory of the vanilla behaviour, mapping to the React code,
+rows classified OK / CHANGED / BUGGY / MISSING), an implementation agent for the fix list, and a
+re-review. Files: `qa/<area>.md`, each with "## Fix list", "## Deferred" and "## Re-review".
+
+| Area | Rows | BUGGY | MISSING | Deferred (estimate) |
+|---|---|---|---|---|
+| shell | 153 | 15 | 7 | 6 small items, mostly copy and prefetch (about 2 days total) |
+| runs-list | 168 | 11 | 14 | Run-name column toggle, Charts load cap, best-pass chips (about 5 h) |
+| run-detail | 161 | 11 | 17 | offline export 4-5 d, categories compare 2-3 d, Sankey 2 d, deep tabs 5-6 d, catalog editing 1.5 d, legacy editors 2 d |
+| compare | 116 | 12 | 6 | Auto-Analyze overlay 2 d, Sankey 1.5 d (both replaced by lighter equivalents) |
+| analyzer | 165 | all closed | | lineage graph 2 d, cosmetics 1 d |
+| experiments | 132 | 4 | 5 | All/Filtered switch on Models (0.5 d) |
+| datasets | 170 | 8 | 6 | version links, item history order, cosmetics (about 4 h) |
+| admin-docs | 133 | 10 (incl. MISSING) | | none |
+| sdk-viewer | 118 | 15 | 8 | column controls 1 d, error-class counters 1 d |
+
+Every BUGGY or MISSING row is either FIXED (commit hash in the file) and re-verified, or in the
+Deferred list with an estimate. Backend fixes made on the way: `func.trim` instead of `btrim`
+in `/api/corrections`, `pass_revision` on `/api/runs/{id}/passes`, the "Empty / Missing" facet 500
+in `run_versioning.py`, the dev-user `IntegrityError` race in `auth.py`, SDK viewer busy-port handling.
+
+The UX review (`qa/UX_REVIEW.md`) ran four reviewers over every page by mouse, keyboard, viewport,
+theme, hostile input and injected errors: 0 blockers, 19 majors (all fixed), 26 minors (18 fixed),
+17 nits (1 fixed); about 40 regression specs (`e2e/**/ux-*.spec.ts`). Open items that need a
+product call: runs table at 390 px has no scroll cue, item/trace/filter changes replace history,
+issue dialog text lost on backdrop click, `--score-1` contrast on elevated surfaces, keyboard-delete
+focus return on the runs list, project-name max length differs between create and rename.
+
+Final test counts at the `ui/qa` tip (`e282d65a`):
+
+| Suite | Result |
+|---|---|
+| `npm run check` | clean; Vitest 1091 tests (117 files), design-language 34, prettier clean |
+| Full Playwright `--workers 2` (platform 8812, Vite 5812) | 874 passed, 11 skipped (proxy_headers specs), 0 failed, 16 min |
+| `npm run e2e:sdk` | 42 passed |
+| `pytest -q -n 4 tests/platform tests/sdk tests/test_restructure.py` | 3336 passed, 744 skipped, 0 failed |
 
 ## Integration state
 
