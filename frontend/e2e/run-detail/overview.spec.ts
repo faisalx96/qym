@@ -46,7 +46,9 @@ test.describe('open a run (J1, scenario 1)', () => {
     expect(rows).toBeLessThanOrEqual(20);
   });
 
-  test('run details toggle shows the meta grid, execution context and versioning details', async ({ page }) => {
+  test('run details toggle shows the meta grid, execution context and versioning details', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic);
     const toggle = page.getByRole('button', { name: 'Show run details' });
     await expect(page.getByTestId('versioning-details')).toBeHidden();
@@ -95,6 +97,22 @@ test.describe('open a run (J1, scenario 1)', () => {
     await expect(page.getByTestId('items-count')).toBeVisible();
   });
 
+  test('legacy /app/run/<id> lands under the run\u2019s own project, not the last visited one', async ({
+    page,
+  }) => {
+    const other = await seedProject('rd-other');
+    await page.goto(`/app/projects/${other.slug}`);
+    await page.goto(`/app/run/${classic}?item=item-0003`);
+    await expect(page).toHaveURL(new RegExp(`/app/projects/${s.slug}/runs/${classic}\\?item=item-0003`));
+  });
+
+  test('a run link carrying the wrong project is corrected to the run\u2019s project', async ({ page }) => {
+    const other = await seedProject('rd-wrong');
+    await page.goto(`/app/projects/${other.slug}/runs/${classic}?show=failed`);
+    await expect(page).toHaveURL(new RegExp(`/app/projects/${s.slug}/runs/${classic}\\?show=failed`));
+    await expect(page.getByTestId('items-count')).toBeVisible();
+  });
+
   test('document title follows the pass view', async ({ page }) => {
     await openRun(page, s.slug, repeat, 'pass=2');
     await expect(page).toHaveTitle(/Pass 2/);
@@ -107,7 +125,8 @@ test.describe('not received items (scenario 12)', () => {
     const strip = page.getByLabel('Run counts');
     await expect(strip).toContainText('Not received');
     const text = (await strip.innerText()).replace(/\s+/g, '');
-    const val = (label: string) => Number(new RegExp(`${label}(\\d[\\d,]*)`).exec(text)?.[1]?.replace(/,/g, ''));
+    const val = (label: string) =>
+      Number(new RegExp(`${label}(\\d[\\d,]*)`).exec(text)?.[1]?.replace(/,/g, ''));
     expect(val('Items')).toBe(240);
     expect(val('Notreceived')).toBe(3);
     // Completed leaves out the three items whose outcome never arrived
@@ -182,7 +201,9 @@ test.describe('virtualization', () => {
 });
 
 test.describe('keyboard reachability', () => {
-  test('filter bar controls and item rows are reachable by Tab and rows open with Enter', async ({ page }) => {
+  test('filter bar controls and item rows are reachable by Tab and rows open with Enter', async ({
+    page,
+  }) => {
     await openRun(page, s.slug, classic);
     const search = page.getByRole('searchbox', { name: 'Search inputs and outputs' });
     await search.focus();

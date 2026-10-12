@@ -1,5 +1,6 @@
 /** /projects/:slug/runs/* — the run page (brief 04). Loads the run, owns live updates and the error states. */
-import { useParams } from 'react-router-dom';
+import { Navigate, useLocation, useParams } from 'react-router-dom';
+import { runPath } from '@/app/routes';
 import { ComingSoon } from '@/features/dev/ComingSoon';
 import { useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
@@ -20,6 +21,8 @@ function RunSkeleton() {
 
 function RunLoader({ runId }: { runId: string }) {
   const query = useRunQuery(runId);
+  const { slug } = useProjectContext();
+  const location = useLocation();
   const showSkeleton = useDelayedPending(query.isPending);
   if (query.isPending) return showSkeleton ? <RunSkeleton /> : null;
   if (query.isError || !query.data) {
@@ -33,6 +36,11 @@ function RunLoader({ runId }: { runId: string }) {
         />
       </div>
     );
+  }
+  // A link carrying the wrong project (old bookmark, hand-edited URL) lands under the run's own project.
+  const ownSlug = query.data.run.project?.slug;
+  if (ownSlug && ownSlug !== slug) {
+    return <Navigate to={runPath(ownSlug, runId) + location.search + location.hash} replace />;
   }
   return <RunBody runId={runId} payload={query.data} />;
 }

@@ -8,10 +8,9 @@ import { ErrorState, Skeleton } from '@/ui';
 import { useAuth } from './AuthContext';
 import { constrained } from './layout';
 
+/** `?view=compact` answers `{ run, snapshot }`; the project hangs off `run`. */
 interface CompactRun {
-  run_id?: string;
-  project?: { slug?: string } | null;
-  project_slug?: string | null;
+  run?: { run_id?: string; project?: { slug?: string } | null; project_slug?: string | null } | null;
 }
 
 /**
@@ -35,7 +34,10 @@ export function LegacyRunRedirect() {
       .then((run) => {
         if (cancelled) return;
         const slug =
-          run.project?.slug ?? run.project_slug ?? readLocal(KEYS.lastProjectSlug) ?? me.projects[0]?.slug;
+          run.run?.project?.slug ??
+          run.run?.project_slug ??
+          readLocal(KEYS.lastProjectSlug) ??
+          me.projects[0]?.slug;
         if (slug) setState({ slug });
         else setState({ error: new Error('No project context for this run') });
       })
