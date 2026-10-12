@@ -143,10 +143,14 @@ function BootstrapAdminPanel({ onGranted }: { onGranted: () => void }) {
           hideLabel
           placeholder="Bootstrap token"
           value={token}
-          onChange={setToken}
+          onChange={(v) => {
+            setToken(v);
+            if (error) setError(null);
+          }}
+          type="password"
+          autoComplete="one-time-code"
           mono
           width={320}
-          errorMessage={error ?? undefined}
         />
         <Button type="submit" variant="primary" isDisabled={!token.trim()} loading={grant.isPending}>
           Grant admin
