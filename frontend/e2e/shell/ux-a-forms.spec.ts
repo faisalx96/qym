@@ -56,7 +56,7 @@ test('command palette: choosing an entry clears the search for the next open', a
   const palette = page.locator('[data-command-palette]');
   const input = palette.getByRole('combobox');
   await expect(input).toBeFocused();
-  await input.fill('settings');
+  await input.fill('Project settings');
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/settings/);
   await page.keyboard.press('Control+k');

@@ -43,7 +43,7 @@ export function ProjectsTab() {
               width={320}
             />
           ) : null}
-          {shown && shown.length === 0 ? (
+          {q && shown && shown.length === 0 ? (
             <Text variant="sm" role="status">
               No projects match “{query.trim()}”.
             </Text>

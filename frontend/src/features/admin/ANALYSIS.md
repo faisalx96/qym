@@ -10,7 +10,7 @@ this analysis lives here too (`features/docs/ANALYSIS.md` is a pointer).
 
 - **A — live runs**: `GET /api/runs/live?all_projects=true&limit=100` every 10 s
   after first load, sequence-guarded; `GET /api/runs/recent?all_projects=true&
-  include_projects=false&global_limit=6&global_offset=N`; the two sets are
+include_projects=false&global_limit=6&global_offset=N`; the two sets are
   disjoint (archiving a project stopped its live run, which then showed in
   Recent). Force stop: confirm (danger, copy mentions "Coder"), one POST, run
   leaves Live, Recent row merges the response, `#run-message` announces, both
