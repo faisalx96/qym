@@ -12,10 +12,23 @@ import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
 import { RouteError } from '@/features/shell/RouteError';
 import { ComingSoon } from '@/features/dev/ComingSoon';
-import { ExperimentsIndexRoute, ExperimentsSplatRoute } from '@/features/experiments/ExperimentsRoutes';
-import { QueuePage } from '@/features/experiments/queue/QueuePage';
-import { EnvironmentsRoute } from '@/features/environments/EnvironmentsRoutes';
-import { ModelsPage } from '@/features/models/ModelsPage';
+import { lazyPage } from './lazyPage';
+
+// The experiments area is the heaviest (launch form, editors): fetched on first visit.
+const ExperimentsIndexRoute = lazyPage(
+  () => import('@/features/experiments/ExperimentsRoutes'),
+  'ExperimentsIndexRoute',
+);
+const ExperimentsSplatRoute = lazyPage(
+  () => import('@/features/experiments/ExperimentsRoutes'),
+  'ExperimentsSplatRoute',
+);
+const QueuePage = lazyPage(() => import('@/features/experiments/queue/QueuePage'), 'QueuePage');
+const EnvironmentsRoute = lazyPage(
+  () => import('@/features/environments/EnvironmentsRoutes'),
+  'EnvironmentsRoute',
+);
+const ModelsPage = lazyPage(() => import('@/features/models/ModelsPage'), 'ModelsPage');
 
 const C = ROUTES.projectChildren;
 

@@ -79,8 +79,3 @@
   gap: var(--space-sm);
   flex-wrap: wrap;
 }
-
-.readonly {
-  max-height: 24rem;
-  overflow: auto;
-}

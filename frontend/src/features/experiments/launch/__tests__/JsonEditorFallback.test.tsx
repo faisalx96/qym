@@ -2,7 +2,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JsonConfigEditor } from '../raw/JsonConfigEditor';
-import { ReadOnlyJson } from '../raw/ReadOnlyJson';
 
 // The editor fails (a failed chunk surfaces to the same error boundary): the plain textarea must keep working.
 vi.mock('../raw/CodeMirrorEditor', () => ({
@@ -26,13 +25,5 @@ describe('JSON editor fallback', () => {
     await waitFor(() => expect(box.tagName).toBe('TEXTAREA'));
     await user.type(await screen.findByLabelText('Raw JSON'), 'x');
     expect(onChange).toHaveBeenCalled();
-  });
-
-  it('renders a read-only document for the preset view', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    render(<ReadOnlyJson value={{ a: 1 }} />);
-    const box = (await screen.findByLabelText('Config document')) as HTMLTextAreaElement;
-    expect(box).toHaveAttribute('readonly');
-    expect(box.value).toBe(JSON.stringify({ a: 1 }, null, 2));
   });
 });
