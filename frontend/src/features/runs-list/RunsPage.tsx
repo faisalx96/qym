@@ -240,7 +240,7 @@ export function RunsPage() {
         else setFocusedIndex(-1);
       },
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selection.toggle is stable; the selection sets are listed explicitly
     [
       rows,
       focusedIndex,
