@@ -9,7 +9,7 @@ File refs are `frontend/src/features/runs-list/<file>:<line>` unless a path is g
 
 ## Summary
 
-Total 168 rows: OK 96, CHANGED 47, BUGGY 11, MISSING 14.
+Total 169 rows: OK 94, CHANGED 28, BUGGY 3, MISSING 6, FIXED 38 (after the implementation pass and re-review below).
 
 Headline defects (details in the Fix list): pass delete 409s after the first delete (no `expected_pass_version`); `c` with Cohort A locked opens a plain compare; pass and whole-run picks are not exclusive and duplicate refs reach /compare; the parent checkbox of an expanded repeat run selects the run, not its passes; the passes panel lost most of its per-pass detail; Overview lists changed meaning (Items) and lost columns; Back does not restore table scroll.
 
@@ -228,7 +228,7 @@ Headline defects (details in the Fix list): pass delete 409s after the first del
 | K10 | Grouped Pass@K / Consistency / Reliability via batched `models/stats`, always visible | `ChartsPage.tsx:340-372,520-545` | charts | CHANGED | OQ: stay visible while expanded (old hid them: pain point); headers are sortable. Request body verified. |
 | K11 | Group stat columns toggleable from Columns (`GROUP_DISPLAY_COLUMNS`) | `ColumnsMenu.tsx`, `ChartsPage.tsx:111-120` | - | FIXED (df03c94d) | Charts Columns menu lists metrics/system/trace only (and also lists "Duration", which has no chart column). Minor. |
 | K12 | First-column drag resize 280-720 px | - | - | MISSING | OQ 2026-10-12 (NICE, about 2 h). |
-| K13 | Charts refresh on the runs-list cadence (15 s with live runs, 2 s stopping) | `ChartsPage.tsx:246` | - | FIXED (df03c94d) | OQ 2026-10-12: overview refetch is a fixed 60 s. A live run's chart lags up to a minute. |
+| K13 | Charts refresh on the runs-list cadence (15 s with live runs, 2 s stopping) | `ChartsPage.tsx:246` | - | BUGGY (fix did not work) | OQ 2026-10-12: overview refetch is a fixed 60 s. A live run's chart lags up to a minute. |
 | K14 | Chart state (sort/group/tab) in memory only; tab per task | `ChartsPage.tsx:287-295` | charts | OK | |
 | K15 | "No metrics recorded" card state; empty page copy | `ChartsPage.tsx:185-200` | charts | CHANGED | Empty project: "No data available for charts / Run some evaluations first." (old: "No evaluation runs found ..."). Combo with zero metrics renders an empty table. Trivial. |
 | K16 | Run link in a chart row opens the run | `ChartsPage.tsx:433-440` | charts | OK | Plain run link (old also had no `?list=` on Charts). |
@@ -242,6 +242,7 @@ Headline defects (details in the Fix list): pass delete 409s after the first del
 | L2 | Sort header buttons keyboard-reachable, `aria-sort` | `RunsTable.tsx:166-190` | a11y | OK | Fixes old chart headers without `aria-sort`. |
 | L3 | Status badge tooltip hover-only | `cells.tsx:98` | a11y | CHANGED | Still a `title`; signals are focusable. |
 | L4 | Count formats (`1.2M`), percent floor | `lib/kpis.ts` | cutover-kpis | OK | |
+| N1 | (new) Filters popover: after `Clear all` the button disables, focus falls to body and Esc no longer closes the popover | `FiltersPopover.tsx:254-260` (`isDisabled={!count}`) | - | BUGGY | Found in re-review. Repro: open Filters, pick a value, press Clear all, press Esc: popover stays open and blocks clicks (`body intercepts pointer events`); only Done closes it. Pre-existing, minor. Hint: keep the button enabled or move focus to the popover/Done before disabling. |
 
 ## Fix list
 
@@ -262,6 +263,34 @@ Ordered by user impact.
 13. **MINOR. Stale banner copy and failed filter change** (A7/A8). Only claim "filter change is not applied" when the key changed; keep the previous rows with the banner when a filter/sort/page request fails (`RunsPage.tsx:386`, query `placeholderData`).
 14. **MINOR. Stale pass picks after a pass delete** (E11). Call `notePassRevision` when the panel loads and clear/renumber that run's pass refs after a delete (`selection.ts:175`).
 15. **TRIVIAL.** Submit-on-behalf and rejected-run copy (D16/F2), "Updating live runs..." (J4), pending-reviews badge and archived hide (J8), Last Updated on Charts (K17), Reject comment required (F5, confirm intended), 8 vs 12 model hues (C18, update the OQ), chart concurrency cap (K4), `x` race after a page-crossing `j` (H4), subtitle copy "Bars are relative to the best run" (K6).
+
+## Re-review
+
+Rebuilt `frontend` from the current `ui/qa` tree (HEAD 40d268db at start, including c7ddb821), fresh seed (62 runs, plus `live*` projects with RUNNING rows), NEW UI on 8831. Every FIXED row was exercised in the browser except where noted.
+
+Result: 39 rows were marked FIXED. **38 verified fixed, 1 still broken (K13), 0 regressions found** in ~30 spot-checked OK rows (URL round trip, sort, collation, time range, facets, clear, page clamp, j/k/g/G/1-4, `/`, search and Esc, selection, Compare handoff, Back restoring the selection, cross-page delete names, help dialog and opt-out, column persistence, `?list=` context, workflow immediate status, topbar KPIs, charts legend/tabs/sort/grouped, overview 90d, live 15 s cadence on the runs list, hidden-tab polling).
+
+Verified by exercising (steps in parentheses):
+- A7, A8: failing `/runs` on a visibility refetch gives "Showing data from 3s ago. Retry" with 50 rows kept and no filter claim; failing after pressing `3` keeps the rows and says "Your latest filter change is not applied yet".
+- A21: scroll the table to 600, open a run, Back: scrollTop 600 (also kept with filters in the URL).
+- C6: deep link `?sort=metric-faithfulness-desc` requests only that sort, no `time-desc`.
+- C13, C14, C15: signal dialog has the notes; per-metric `⚠` is a button; a `latency_s` cell on a run with a task error opens "latency_s errors" with the lower-is-better explanation (only rows with task errors have the button).
+- C28, K11: Columns menu has Search columns, All, None, Reset; search "lat" filters; None leaves Run, Signals, Actions; Charts menu has a Group stats section (Pass@K, Consistency, Reliability) and no Duration; fresh grouped cards show all three.
+- D8, D10, D11, D12: all three passes ticked gives parent checked; parent ticked while expanded ticks all pass boxes; pass after parent keeps only pass refs; Compare URL has no duplicate refs; cohort A locked shows "Cohort B 0/2 executions", "Open Cohort" disabled until balanced and disjoint, guidance "Select 1 more" / "cannot include runs already in Cohort A" / "Balanced: 2 vs 2", `c` opens `/compare?cohortA=...&cohortB=...`, "Cancel Cohort" clears.
+- D14, D15: Submit appears only when every selected run is submittable (hidden for STOPPED/APPROVED/SUBMITTED); selecting all 3 passes of a run disables Delete.
+- D20, E10, E11: two consecutive pass deletes on one run both return 200 (`expected_pass_version` sent); a picked pass of that run is cleared after the delete.
+- E3, E4, E6, E7, E8: panel shows Avg@3, Avg latency, "Pass if ≥ 80%", per-pass date, Analyze link and retry chip, pass rows are links (`?pass=N`) and row click opens the pass; a live repeat run shows "Passes 2–3 2 waiting to start / QUEUED" and a RUNNING pass with "50% · 4/8". E6 stays FIXED with best-pass chips and trace-stat columns deferred (listed in Deferred).
+- F3: RUNNING rows now have the Delete icon.
+- H4, H5: `G` then `x` in the same tick selects nothing until the new page lands; `c` with cohort A opens the cohort compare.
+- J3, J4, J5, J6, J9: live row shows the task under the run name, an Items column "pass 1/3 · 4/8", "Updating live runs…" while updating; Recent/Approved have a USER column and progress Items (stopped run 4/9); trend defaults to 7d (`range` absent), 30d writes `?range=30d`.
+- K6, K17: subtitle now "Score bars use a 0-100% scale; numeric metrics and latency are relative to the best run in the card."; Charts shows "Last updated hh:mm:ss".
+
+Read from code only (cannot be reproduced with one ADMIN user and the seed): D16 and F2 "on behalf of" copy (`cells.tsx:444`, `RunDialogs.tsx:141`), C17 high-noise marker (seed runs have no `report_k`), C18 (documentation-only change), the "Pending" badge in J8 (no corrections to list; the archived-project hide was exercised and works).
+
+Still broken:
+- **K13 (BUGGY, minor/major): Charts does not poll faster while runs are live.** Repro: seed a project with RUNNING runs, open `/projects/<slug>/charts`, watch `POST /api/dashboard/overview`: only the initial request in 40 s (and none by 60 s); the runs list on the same project polls every 15 s. Cause: `useRunsDataLite` (`ChartsPage.tsx:270-280`) feeds `useRunsCadence` with `rows: []` and `overview.has_active_runs`, but the backend never returns `has_active_runs` (grep of `qym_platform` finds no such field; `/api/dashboard/overview` and `/runs?include_overview` both return nothing for it), so the cadence stays at 60 s. Fix: derive "live" from the data the charts already hold (e.g. a RUNNING/PENDING row in the loaded history, or add `has_active_runs` to the overview payload), then keep the 2 s stopping path.
+
+New finding (N1): Filters popover `Clear all` traps Escape (see table). Also noted, unchanged by the fix pass: with the topbar KPI chips hidden below 1000 px (decision) nothing clips at 900 px, so I2 is now clean in this area (blank-on-reload not re-checked).
 
 ## Deferred
 
