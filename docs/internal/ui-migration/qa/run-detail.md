@@ -175,7 +175,7 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 | 153 | Trace | Trace load failure shows error + Retry | RD/TraceDrawer.tsx | **OK** | traces.spec "failing trace request shows an error with Retry" |
 | 154 | Trace | `?trace=` for a repeat pass (`trace_pass`) | RD/hooks/useRunView.ts:103 | **OK** | traces.spec (new param, additive) |
 | 155 | Layout | Below 1200px analysis becomes a Drawer; `#anchor` opens it | RunBody.tsx:92-110; AnalysisPanel.tsx:108 | **OK** | ran at 1100: Esc closes, `#errors` opens drawer on Errors; panels.spec |
-| 156 | Layout | Narrow screens (<=480px) | RunBody.module.css | **FIXED** (399da86c) | Ran at 420px: shell content scrolls horizontally (scrollWidth 453 > 364), Items header description truncates to "E…", header buttons overflow, topbar title overlaps the run name. Minor; check against old at same width. |
+| 156 | Layout | Narrow screens (<=480px) | RunBody.module.css | **BUGGY** (re-review: 399da86c did not close it) | Ran at 420px: shell content scrolls horizontally (scrollWidth 453 > 364), Items header description truncates to "E…", header buttons overflow, topbar title overlaps the run name. Minor; check against old at same width. |
 | 157 | Layout | Accessibility: table roles, aria-sort, dialogs, chart bars as buttons | RD/items/ItemsTable.tsx; Charts.tsx | **OK** | a11y.spec (8 axe cases); old page had div role=button cards / hover-only Sankey. Two buttons share the accessible name "Analysis" (Items header and topbar) - minor. |
 | 158 | Layout | RTL/Arabic: input titles and bodies dir=rtl/auto; search by Arabic text | RD/ItemsTable.tsx:111; lib/itemText.ts | **OK** | ran: `dir=rtl` on title and body; Arabic search 32 items = old |
 | 159 | Layout | Number formats (1.4s, 925ms, 5,200) | RD/ItemsTable.tsx:191 | **CHANGED** | Counts use thousands separators in new ("5,200 of 5,200 items", old "5200"). Fine. |
@@ -240,7 +240,7 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
    Where: lib/csv.ts  
    Repro: Compare old and new CSV headers (captured in scratchpad qa/old-export.csv, new-export.csv).  
    Hint: Add the root-cause JSON column per metric; document or keep legacy header names.
-15. **[minor] Narrow viewport (<=480px): horizontal overflow and overlapping topbar title**    **FIXED (399da86c).**
+15. **[minor] Narrow viewport (<=480px): horizontal overflow and overlapping topbar title**    **BUGGY (re-review: see ## Re-review).**
    Where: RunBody.module.css; ItemsSection.module.css  
    Repro: Resize to 420px.  
    Hint: Wrap the Items header actions and let the description wrap; check shell topbar min-width.
@@ -287,6 +287,38 @@ Performance: the seeded 5,200-item run renders its first table row in about 0.93
 
 ## Not verified
 
-- Aggregate results (needs an LLM), STOPPING state, hidden-tab polling, private test set banner, trace score pills/orphan warning, `qym:single-key-shortcuts` opt-out, Shift-click range on the latency histogram, rejected-issue Approve (no rejected issue seeded), lower-is-better repeat metric copy, running repeat run "pass k/N" badge: read in code or covered by specs only.
+- Aggregate results (needs an LLM), STOPPING state, hidden-tab polling, private test set banner, trace score pills/orphan warning, `qym:single-key-shortcuts` opt-out, Shift-click range on the latency histogram, (rejected-issue Approve was verified in the re-review with a real rejected correction), lower-is-better repeat metric copy, running repeat run "pass k/N" badge: read in code or covered by specs only.
 - Narrow-width comparison against the old page was not run; the 420px finding is new-UI only.
 - CUTOVER items outside this area (Runs-list Back scroll, models global filter, Sweep delta tint, Langfuse CTAs on Compare) are not covered here.
+
+## Re-review
+
+Build: clean detached worktree of `ui/qa` at ca10fa57, `npm run build`, served by the platform on 8832 (fresh SQLite with `?timeout=60`, reseeded: classic 240 items, repeat x3, locked, running, 5,200-item run, a 5-of-10 run with a rejected event and a 0 ms item). A real rejected correction was created with `POST /api/corrections/1/reject`. Every FIXED row was exercised in the running app.
+
+**Result: 19 of 20 fix-list items confirmed FIXED; 1 BUGGY (item 15 / row 156, narrow viewport).**
+
+| Fix | Verified by |
+|---|---|
+| Display Item/Metric fields (1f18620d) | Mouse: Item fields expands inline, clicking "complexity" sets `hide_field=complexity` and the badge disappears, popover stays open; Metric fields likewise (`hide_metric_field=reason`). Keyboard: Enter on the button expands (`aria-expanded=true`), Tab reaches Select all / None / checkboxes, Space on a checkbox sets `hide_field=domain`; Esc collapses the submenu first. |
+| Sticky nav + scroll-spy + `#run-section-*` (399da86c) | `nav[aria-label="Run sections"]` stuck at y=50 after scrolling, shows run name + status, links with counts (Items 240, Errors 20); scroll-spy flips Summary/Items; filter bar stays under the nav. `#run-section-errors/latency/deep/categories/overview` select the tab, `#run-section-items` scrolls to the table, legacy `#errors`, `#items` still work. Back-to-top button from the old nav is still absent (cosmetic). |
+| hide_field badges (6cef9920) | complexity badge hidden, domain badge stays when only complexity is hidden. |
+| Approve gating | Rejected issue shows "Rejected", no Approve button; a pending issue shows "Pending review" + Approve. |
+| Raw trace JSON | Raw tab text contains no `_i/_children/_depth/_try/_retry/_failed/_orphan/_groupParent`. |
+| No chips on task-error rows | item-0008 and item-0240: 0 metric chips, 0 root-cause cards. |
+| 0 ms | Table cell `0ms`, card output header `0ms`. |
+| Edited tooltip + reset | Tooltip "Edited by a reviewer on Oct 12, 2026, 07:53 PM / 0.844 -> 0.5 / Original score: 0.844"; reset-to-original control restores 84.4% with a toast. |
+| Empty spans note | `?trace=item-0002`: "Spans were not captured for this item. The run recorded a trace id, but no spans reached the platform." |
+| Repeat tab | Statistic switch (Compare, Pass@k, Pass^k, Average) changes the copy; median latency column present; queued row "Pass N of M queued" rendered (stubbed `/passes`); with `quality` stubbed as minimize the intro says "Lower is better" and tile tooltips use "<=70%". |
+| Pass compare panel | "Compare metric across passes" present on a repeat item card. |
+| CSV | Headers back to `#`, `meta:<key>`, `<metric>_score`, `<metric>:<field>`, plus `<metric>:root_cause_issues` (filled with the issue JSON). 138 filtered rows and all 5,200 rows exported (1.5 s). Small leftover: `meta:metric_analyses` leaks as a column when analyses exist. |
+| 403 copy | "No access to this run / HTTP 403" with "Back to Dashboard" (also for 200 `{error:"Access denied"}`). |
+| Updated-ago | 0s -> 2s -> 1s on a live run (resets with each probe). |
+| Runtime on live runs | Runtime ticks beside the status (2s -> 8s -> 13s) while the meta grid is collapsed. |
+| Peek card | Hover on Next shows run id, model, start and primary metric; hides on leave; focus on Previous shows it; Esc hides. |
+| Heatmap pass | Cell click opens `item=sql-001&pass=2`. |
+
+**BUGGY (re-review): narrow viewport (<=480px).** The shell content width now fits (364 = 364) and the Items header wraps, but the page still scrolls horizontally: `documentElement.scrollWidth` is 574 at 420px and 360px, and `window.scrollTo(300,0)` moves the page 154px, shifting the table off the left edge (screenshot confirmed). Cause: the sticky `SectionNav` link row (`SectionNav.module.css`, `.links` has `overflow: visible`) is wider than the viewport. Repro: open a run at 420px, scroll the shell, drag/scroll horizontally. Hint: make `.links` `overflow-x: auto` (`min-width: 0`, `flex: 1`) or wrap/collapse the tab links into a menu below ~600px.
+
+**Performance:** first render of the 5,200-item run (`items-count` visible after `goto`) 0.83 s (first old-UI baseline 1.25 s, new before fixes 1.5 s). Still at or under 1.5 s. CSV of all 5,200 items 1.5 s.
+
+**Spot-check of OK rows (all still OK):** 12 URL combinations give the same counts as before (`q`, `show=failed|passed|errors|retries`, `metric=hallucination&show=failed`, threshold 90, `filters` score range / rule latency>=3000 / error card), Arabic `?q=` returns 32 items (a first run showing 0 was my script double-encoding the percent signs); repeat-run counts (60, 27, 60, 4); `?item=item-3000` lands on page 150 at 198px; search survives reload; rule builder opens and adds a condition; boolean segment banner + Clear filter; Copy link; invalid score message and Esc; score edit + reset; trace drawer (open from row icon, j/k, tabs, `/` and Esc layers, focus returns to the trigger, retried attempts); `j`/`k` pager; `#errors` anchor; latency bar filter (17 items); categories click (69 items); Export HTML endpoint (200, 2.2 MB); locked run notice, no pencils, Reviews tab; live item count 30 -> 34 and indicator removal.
