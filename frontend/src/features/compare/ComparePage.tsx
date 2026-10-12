@@ -5,7 +5,7 @@
  * `/projects/:slug/compare` share this page; the URL is the whole state.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { useDocumentTitle, useOptionalProject } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
@@ -51,8 +51,19 @@ export function ComparePage() {
   useDocumentTitle('Compare runs');
   const pending = useDelayedPending(c.query.isPending && c.selectionState === 'ok' && !c.tooMany);
 
+  const [searchParams] = useSearchParams();
+  const sideA = searchParams.getAll('cohortA').length;
+  const sideB = searchParams.getAll('cohortB').length;
   let body;
-  if (c.selectionState === 'none')
+  if (c.selectionState === 'none' && sideA !== sideB && sideA + sideB > 0)
+    body = (
+      <EmptyState
+        title="The two sides do not match"
+        body={`Both sides need the same number of runs; this link has ${sideA} on side A and ${sideB} on side B.`}
+        action={<BackLink slug={slug} />}
+      />
+    );
+  else if (c.selectionState === 'none')
     body = (
       <EmptyState
         title="No runs to compare"
@@ -239,9 +250,9 @@ function CompareLoaded({
           <SweepView />
         ) : (
           <div className={styles.body} data-panel={panel ? '' : undefined}>
-            <main className={styles.main} aria-label="Items">
+            <section className={styles.main} aria-label="Items">
               <ItemsSection />
-            </main>
+            </section>
             {panel ? <AnalyticsPanel /> : null}
           </div>
         )}

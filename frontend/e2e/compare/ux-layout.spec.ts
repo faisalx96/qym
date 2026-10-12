@@ -74,3 +74,10 @@ test('the Analyze popover lists one run per line inside its own surface', async 
   expect(tops.size).toBe(3);
   expect(await popover.getByRole('list').evaluate((e) => getComputedStyle(e).listStyleType)).toBe('none');
 });
+
+test('cohorts of different sizes explain themselves instead of asking for a selection', async ({ page }) => {
+  const { base, a, b } = seed.runs;
+  await page.goto(`/compare?cohortA=${base}&cohortA=${a}&cohortB=${b}`);
+  await expect(page.getByText('The two sides do not match')).toBeVisible();
+  await expect(page.getByText(/2 on side A and 1 on side B/)).toBeVisible();
+});

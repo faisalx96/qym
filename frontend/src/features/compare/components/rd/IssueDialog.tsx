@@ -67,6 +67,16 @@ export function IssueDialog({
   const [message, setMessage] = useState('');
   const clientId = useRef(uuid());
 
+  // Typed-in work: an accidental click on the backdrop must not throw it away (Escape and Cancel still close).
+  const dirty =
+    category !== (issue?.category ?? '') ||
+    customCategory !== '' ||
+    subcategory !== (issue?.subcategory ?? '') ||
+    finding !== (issue?.finding ?? '') ||
+    reason !== (issue?.category_reason ?? '') ||
+    solution !== (issue?.solution ?? '') ||
+    solutionNote !== (issue?.solution_note ?? '');
+
   const reset = () => {
     setCategory('');
     setCustomCategory('');
@@ -149,6 +159,7 @@ export function IssueDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
+      dismissOnBackdrop={!dirty}
       size="lg"
       title={issue ? `Edit issue · ${metric}` : `Add issue · ${metric}`}
       data-testid="issue-dialog"
