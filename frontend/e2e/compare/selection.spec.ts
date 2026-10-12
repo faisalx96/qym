@@ -27,7 +27,7 @@ test('four runs: summary, delta line against the baseline and the Metrics table'
   await expect(deltaLine(page)).toContainText('(improved)');
   await expect(deltaLine(page)).toContainText('−10.8 pts');
   await expect(deltaLine(page)).toContainText('(regressed)');
-  await expect(deltaLine(page)).toContainText('±8.5');
+  await expect(deltaLine(page)).toContainText('±8.8');
   // analytics Metrics table
   const table = page.getByRole('table', { name: /Average per run over 40 filtered items/ });
   for (const h of ['Run', 'correct', 'quality', 'Latency', 'Errors']) await expect(table.getByRole('columnheader', { name: h })).toBeVisible();

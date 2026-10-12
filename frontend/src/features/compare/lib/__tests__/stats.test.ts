@@ -102,7 +102,10 @@ describe('baseline paired stats', () => {
     // variance of [0.1,-0.1,0.2,0] around 0.05, n-1
     const diffs = [0.1, -0.1, 0.2, 0];
     const v = diffs.reduce((s, d) => s + (d - 0.05) ** 2, 0) / 3;
-    expect(r.halfWidth).toBeCloseTo(1.959964 * Math.sqrt(v / 4), 9);
+    // Student t (df=3, 3.182446), scipy: t.ppf(.975, 3) * se = 0.2054260
+    expect(r.halfWidth).toBeCloseTo(3.182446 * Math.sqrt(v / 4), 5);
+    expect(r.halfWidth).toBeCloseTo(0.205426, 5);
+    expect(r.pValue).toBeCloseTo(0.495025, 5); // scipy ttest_1samp
     expect(r.verdict).toBe('within_noise');
     expect(compareWithBaseline(cand, base, { direction: 'maximize' }, new Set(['x', 'z'])).paired).toBe(2);
   });

@@ -2,11 +2,11 @@
  * Per-Run Averages with a baseline (compare.html 10499-10760, brief 05 J3):
  * columns (a run, or each pass of a repeat run), the paired comparison of
  * every column against the baseline (mean difference over the items both
- * scored, 95% normal band, p-value, verdict) and improved/regressed counts.
+ * scored, 95% Student-t band, p-value, verdict) and improved/regressed counts.
  */
 import { formatNumericValue, metricDeltaVerdict, type DeltaVerdict, type MetricDirection } from '@/lib/metrics';
 import type { CompareModel } from './model';
-import { normalCdf, Z_95 } from './noise';
+import { tCritical, tTwoSidedP } from './tdist';
 import { runOutcome, type MetricCtx } from './scoring';
 import { passRefBase } from './refs';
 
@@ -95,7 +95,10 @@ export interface BaselineStats {
   verdict: DeltaVerdict | null;
 }
 
-/** Paired comparison on the items both columns scored, optionally limited to some items. */
+/**
+ * Paired comparison on the items both columns scored, optionally limited to
+ * some items. Band and p-value use Student's t with n-1 degrees of freedom.
+ */
 export function compareWithBaseline(
   scores: Map<string, number>,
   base: Map<string, number>,
@@ -118,8 +121,8 @@ export function compareWithBaseline(
   if (n >= 2 && mean !== null) {
     const variance = diffs.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1);
     const se = Math.sqrt(variance / n);
-    halfWidth = Z_95 * se;
-    pValue = se > 0 ? 2 * (1 - normalCdf(Math.abs(mean) / se)) : mean === 0 ? 1 : 0;
+    halfWidth = tCritical(n - 1) * se;
+    pValue = se > 0 ? tTwoSidedP(mean / se, n - 1) : mean === 0 ? 1 : 0;
   }
   const verdict = mean !== null && halfWidth !== null ? metricDeltaVerdict(mean, halfWidth, ctx.direction) : null;
   return { paired: n, counts, mean, halfWidth, pValue, verdict };
