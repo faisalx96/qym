@@ -108,7 +108,7 @@ function Workspace({
 
   return (
     <div className={s.flow}>
-      {!config.llm_configured ? (
+      {config.can_operate_analyzer && !config.llm_configured ? (
         <div className={s.banner} role="status">
           <Icon name="info" size={14} />
           <Text variant="base" tone="secondary" as="span">

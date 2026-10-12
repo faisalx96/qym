@@ -73,7 +73,7 @@ export function JobStatus({
   if (!job) return null;
   const live = job.status === 'queued' || job.status === 'running' || job.status === 'cancelling';
   const sum = summarize(job);
-  const note = retryNote(job);
+  const note = runner.reconnecting ? 'Reconnecting to the background analysis…' : retryNote(job);
   const statusText = job.status === 'cancelling' ? 'Cancelling' : job.status === 'cancelled' ? 'Cancelled' : job.status === 'failed' ? 'Failed' : (PHASE[job.progress.phase] ?? 'Running');
   const tone = job.status === 'completed' ? (sum.failed ? 'warning' : 'success') : job.status === 'failed' ? 'danger' : job.status === 'cancelled' ? 'neutral' : job.progress.phase === 'retrying' ? 'warning' : 'info';
   const done = job.progress.completed;

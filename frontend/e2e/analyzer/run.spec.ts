@@ -168,6 +168,33 @@ test.describe('Analyze job (7)', () => {
     await expect(groups).toContainText('llm_timeout');
     await expect(groups).toContainText('1 target');
   });
+
+  test('mocked job: a dropped status poll shows Reconnecting, then the failure text from the backend', async ({ page, request }) => {
+    const seed = await seedAnalyzer(request);
+    let polls = 0;
+    const now = new Date().toISOString();
+    const base = { job_id: 'analysis_mock2', run_id: seed.runId, pass_number: null, cancel_requested: false, created_at: now, updated_at: now, completed_at: null };
+    await page.route(/\/api\/runs\/[^/]+\/analysis-jobs$/, async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      await route.fulfill({
+        status: 202,
+        json: { ...base, error: null, status: 'queued', progress: { phase: 'queued', completed: 0, total: 3, errors: 0, retries: 0 }, result: null },
+      });
+    });
+    await page.route(/\/api\/runs\/[^/]+\/analysis-jobs\/analysis_mock2$/, async (route) => {
+      polls += 1;
+      if (polls === 1)
+        return route.fulfill({ json: { ...base, error: null, status: 'running', progress: { phase: 'analyzing', completed: 1, total: 3, errors: 0, retries: 0 }, result: null } });
+      if (polls < 6) return route.fulfill({ status: 503, json: { detail: 'unavailable' } });
+      await route.fulfill({
+        json: { ...base, status: 'failed', error: 'LLM provider rejected the API key', completed_at: now, progress: { phase: 'failed', completed: 1, total: 3, errors: 1, retries: 0 }, result: null },
+      });
+    });
+    await openRun(page, seed.slug, seed.runId);
+    await page.getByRole('button', { name: 'Analyze 4 items' }).click();
+    await expect(jobRegion(page)).toContainText('Reconnecting to the background analysis');
+    await expect(jobRegion(page)).toContainText('LLM provider rejected the API key');
+  });
 });
 
 test.describe('cancel, resume and the sample guard (8)', () => {

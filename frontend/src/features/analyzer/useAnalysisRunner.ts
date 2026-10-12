@@ -22,6 +22,8 @@ export interface RunnerState {
   busy: boolean;
   starting: boolean;
   cancelling: boolean;
+  /** The last status poll failed; the job is probably still running and polling continues. */
+  reconnecting: boolean;
   startError: string | null;
   start: (body: AnalyzeRequest) => Promise<AnalysisJob | null>;
   cancel: () => void;
@@ -105,6 +107,7 @@ export function useAnalysisRunner(
     busy: Boolean(job && !isJobTerminal(job.status)) || startMutation.isPending,
     starting: startMutation.isPending,
     cancelling: cancelMutation.isPending || job?.status === 'cancelling',
+    reconnecting: Boolean(jobId && polled.isError && !isJobTerminal(job?.status)),
     startError: error?.key === key ? error.value : null,
     start,
     cancel,
