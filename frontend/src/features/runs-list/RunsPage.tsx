@@ -85,7 +85,7 @@ export function RunsPage() {
   const reconcile = selection.reconcile;
   const pinnedReady = d.pinnedReady;
   useEffect(() => {
-    if (!d.data || !pinnedReady || d.runsQ.isFetching) return;
+    if (!d.data || !pinnedReady || d.runsQ.isFetching || d.runsQ.isError) return;
     reconcile([...d.pinnedRows, ...rows], new Set([...d.pinnedRows, ...rows].map((r) => r.run_id)));
   }, [d.data, pinnedReady, d.runsQ.isFetching, d.pinnedRows, rows, reconcile]);
 
@@ -129,7 +129,7 @@ export function RunsPage() {
   const page = Math.min(view.page, totalPages);
   useEffect(() => {
     // The total shrank under the current page (filters, deletes): clamp.
-    if (d.data && view.page > totalPages) setPage(totalPages);
+    if (d.data && !d.runsQ.isError && view.page > totalPages) setPage(totalPages);
   }, [d.data, view.page, totalPages, setPage]);
 
   useTableScrollRestoration(pageRef, Boolean(d.data) && rows.length > 0);
@@ -417,7 +417,11 @@ export function RunsPage() {
           }
         />
         {stale && d.updatedAt ? (
-          <StaleBanner since={d.updatedAt} filtersApplied={false} onRetry={() => d.runsQ.refetch()} />
+          <StaleBanner
+            since={d.updatedAt}
+            filtersApplied={!d.viewNotApplied}
+            onRetry={() => d.runsQ.refetch()}
+          />
         ) : null}
         {body}
         <StatusBar
