@@ -15,6 +15,7 @@ export function DocsSearch() {
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const blurTimer = useRef<ReturnType<typeof setTimeout>>();
   const navigate = useNavigate();
   const listId = useId();
 
@@ -57,13 +58,19 @@ export function DocsSearch() {
         hint="/"
         value={query}
         onChange={(v) => {
+          clearTimeout(blurTimer.current);
           setQuery(v);
           setActive(0);
           setOpen(true);
         }}
         onClear={() => setQuery('')}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onFocus={() => {
+          clearTimeout(blurTimer.current);
+          setOpen(true);
+        }}
+        onBlur={() => {
+          blurTimer.current = setTimeout(() => setOpen(false), 150);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') {
             e.preventDefault();

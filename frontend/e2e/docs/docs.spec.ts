@@ -189,3 +189,10 @@ test('axe: /docs/developer/endpoints has zero serious/critical violations', asyn
   const v = await axeSeriousViolations(page);
   expect(v, describeViolations(v)).toEqual([]);
 });
+
+test('pager does not overflow horizontally on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await gotoApp(page, '/docs/sdk-guide/config');
+  const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(over).toBeLessThanOrEqual(0);
+});

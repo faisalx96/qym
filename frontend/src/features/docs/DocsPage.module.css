@@ -185,7 +185,19 @@
   align-items: flex-start;
   gap: 2px;
   height: auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
   padding: var(--space-sm) var(--space-md);
+}
+
+@media (max-width: 480px) {
+  .pager {
+    flex-direction: column;
+  }
+  .pager a {
+    flex: 1 1 auto;
+  }
 }
 
 .pager .next {
