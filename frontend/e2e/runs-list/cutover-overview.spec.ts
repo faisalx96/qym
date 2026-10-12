@@ -66,3 +66,19 @@ test('a failed trend read is an error with Retry, then the chart returns', async
   await expect(card.getByTestId('trend-chart')).toBeVisible({ timeout: 20_000 });
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
+
+test('Recent and Approved lists carry the owner and item progress; Live shows the task under the run', async ({
+  page,
+  request,
+}) => {
+  const s = await freshProject(request, 12);
+  await page.goto(overviewUrl(s.project.slug));
+  const recent = page.getByRole('region', { name: 'Recent runs' });
+  await expect(recent.getByRole('columnheader', { name: 'User' })).toBeVisible();
+  await expect(recent.getByRole('columnheader', { name: 'Items' })).toBeVisible();
+  const approved = page.getByRole('region', { name: 'Approved runs' });
+  await expect(approved.getByRole('columnheader', { name: 'User' })).toBeVisible();
+  await expect(approved.getByRole('columnheader', { name: 'Status' })).toHaveCount(0);
+  const live = page.getByRole('region', { name: 'Live runs' });
+  await expect(live.getByRole('row').nth(1)).toContainText(/summarize|text2sql|rag-qa/);
+});

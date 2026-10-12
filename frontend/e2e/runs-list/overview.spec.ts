@@ -50,24 +50,24 @@ test.describe('overview (J8)', () => {
     );
   });
 
-  test('trend range writes ?range= (30d is the default and writes none)', async ({ page, request }) => {
+  test('trend range writes ?range= (7d is the default and writes none)', async ({ page, request }) => {
     const s = await freshProject(request, 12);
     const trend = capture(page, 'trend');
     await page.goto(overviewUrl(s.project.slug));
     const range = page.getByRole('radiogroup', { name: 'Trend range' });
     await expect(range).toBeVisible();
-    await expect(range.getByRole('radio', { name: '30d' })).toBeChecked();
-    await expect.poll(() => trend.all().at(-1)?.body.days).toBe(30);
+    await expect(range.getByRole('radio', { name: '7d' })).toBeChecked();
+    await expect.poll(() => trend.all().at(-1)?.body.days).toBe(7);
     await range.getByText('90d', { exact: true }).click();
     await expect.poll(() => urlParams(page).get('range')).toBe('90d');
     await expect.poll(() => trend.all().at(-1)?.body.days).toBe(90);
-    await range.getByText('7d', { exact: true }).click();
-    await expect.poll(() => urlParams(page).get('range')).toBe('7d');
-    await expect.poll(() => trend.all().at(-1)?.body.days).toBe(7);
     await range.getByText('30d', { exact: true }).click();
+    await expect.poll(() => urlParams(page).get('range')).toBe('30d');
+    await expect.poll(() => trend.all().at(-1)?.body.days).toBe(30);
+    await range.getByText('7d', { exact: true }).click();
     await expect.poll(() => urlParams(page).has('range')).toBe(false);
-    // 30 days is served from the query cache: assert the control, not a request
-    await expect(range.getByRole('radio', { name: '30d' })).toBeChecked();
+    // 7 days is served from the query cache: assert the control, not a request
+    await expect(range.getByRole('radio', { name: '7d' })).toBeChecked();
     // a deep link restores the choice
     await page.goto(overviewUrl(s.project.slug, '?range=90d'));
     await expect(range.getByRole('radio', { name: '90d' })).toBeChecked();
@@ -115,7 +115,7 @@ test.describe('overview (J8)', () => {
     });
     await page.goto(overviewUrl(p.slug));
     const card = page.getByRole('region', { name: 'Trend' });
-    await expect(card.getByText('No finished runs in the last 30 days')).toBeVisible({ timeout: 20_000 });
+    await expect(card.getByText('No finished runs in the last 7 days')).toBeVisible({ timeout: 20_000 });
     await expect(card.getByText(/The latest finished run is from/)).toBeVisible();
     await expect(card.getByTestId('trend-chart')).toHaveCount(0);
   });

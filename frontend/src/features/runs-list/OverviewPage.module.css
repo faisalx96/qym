@@ -120,3 +120,17 @@
   padding: 0;
   list-style: none;
 }
+
+.runCell {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.runLine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}

@@ -13,6 +13,7 @@ import {
   Select,
   Skeleton,
   StatStrip,
+  Tag,
   Text,
 } from '@/ui';
 import { constrained, useDocumentTitle, useProjectContext } from '@/features/shell';
@@ -22,6 +23,7 @@ import { formatPercentValue, formatRelative } from '@/lib/format';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
 import { Mono, OwnerCell, StatusCell } from './cells';
+import { isActiveRun } from './polling';
 import { RunsCtx, type RunsCtxValue } from './context';
 import { useKpiTopbar } from './kpiTopbar';
 import { trendFormat, trendFormatDelta, trendIsRate } from './trendModel';
@@ -35,14 +37,14 @@ type Origin = 'all' | 'official' | 'local';
 type Days = '7' | '30' | '90';
 
 export function OverviewPage() {
-  const { slug, project } = useProjectContext();
+  const { slug, project, readOnly } = useProjectContext();
   useDocumentTitle(project.name);
   const { params, replaceUrlQuery } = useSearchParamsState();
   const origin = (
     ['official', 'local'].includes(params.get('origin') ?? '') ? params.get('origin') : 'all'
   ) as Origin;
   const rangeParam = params.get('range');
-  const days = (rangeParam === '7d' ? '7' : rangeParam === '90d' ? '90' : '30') as Days;
+  const days = (rangeParam === '30d' ? '30' : rangeParam === '90d' ? '90' : '7') as Days;
   const task = params.get('task');
   const dataset = params.get('dataset');
   const filters = useMemo<DashboardFilters>(() => (origin === 'all' ? {} : { origins: [origin] }), [origin]);
@@ -179,10 +181,17 @@ export function OverviewPage() {
                     label: 'Run',
                     flex: true,
                     mono: true,
-                    cell: (r) => <RunLink slug={slug} row={r} />,
+                    cell: (r) => <RunLink slug={slug} row={r} withTask />,
                   },
                   { id: 'owner', label: 'Owner', width: 150, cell: (r) => <OwnerCell row={r} /> },
                   { id: 'status', label: 'Status', width: 230, cell: (r) => <StatusCell row={r} /> },
+                  {
+                    id: 'progress',
+                    label: 'Items',
+                    width: 90,
+                    align: 'end',
+                    cell: (r) => (r.samples > 1 ? <Mono>{itemProgress(r)}</Mono> : null),
+                  },
                   {
                     id: 'updated',
                     label: 'Updated',
@@ -193,7 +202,7 @@ export function OverviewPage() {
                 ]}
               />
             ) : (
-              <EmptyState compact title="No live runs" />
+              <EmptyState compact title={updating ? 'Updating live runs…' : 'No live runs'} />
             )}
           </Card>
           <div className={styles.twoUp}>
@@ -201,48 +210,51 @@ export function OverviewPage() {
               <MiniRuns slug={slug} rows={recent.data?.rows ?? []} />
             </Card>
             <Card title="Approved runs" to={`${projectPath(slug)}?status=APPROVED`} query={approved}>
-              <MiniRuns slug={slug} rows={approved.data?.rows ?? []} />
+              <MiniRuns slug={slug} rows={approved.data?.rows ?? []} hideStatus />
             </Card>
           </div>
           <div className={styles.twoUp}>
-            <Card
-              title="Pending reviews"
-              description="Corrections waiting for a reviewer"
-              to={projectPath(slug, 'reviews')}
-              query={pending}
-            >
-              {pendingItems.length ? (
-                <ul className={styles.reviews}>
-                  {pendingItems.map((c) => (
-                    <li key={c.id}>
-                      <Link
-                        to={`${projectPath(slug, 'reviews')}?status=pending&id=${encodeURIComponent(String(c.id))}`}
-                        className={styles.runLink}
-                        title={`Open review #${c.id}`}
-                      >
-                        #{String(c.id)}
-                      </Link>{' '}
-                      <Text variant="sm" tone="muted" as="span">
-                        {String(c.ai_root_cause ?? c.human_root_cause ?? '—').slice(0, 90)}
-                      </Text>
-                    </li>
-                  ))}
-                  {pendingTotal > pendingItems.length ? (
-                    <li>
-                      <Text variant="sm" tone="muted" as="span">
-                        + {pendingTotal - pendingItems.length} more pending
-                      </Text>
-                    </li>
-                  ) : null}
-                </ul>
-              ) : (
-                <EmptyState
-                  compact
-                  title="No pending reviews"
-                  body="Proposed corrections appear here until a reviewer decides."
-                />
-              )}
-            </Card>
+            {readOnly ? null : (
+              <Card
+                title="Pending reviews"
+                description="Corrections waiting for a reviewer"
+                to={projectPath(slug, 'reviews')}
+                query={pending}
+              >
+                {pendingItems.length ? (
+                  <ul className={styles.reviews}>
+                    {pendingItems.map((c) => (
+                      <li key={c.id}>
+                        <Link
+                          to={`${projectPath(slug, 'reviews')}?status=pending&id=${encodeURIComponent(String(c.id))}`}
+                          className={styles.runLink}
+                          title={`Open review #${c.id}`}
+                        >
+                          #{String(c.id)}
+                        </Link>{' '}
+                        <Tag kind="data">Pending</Tag>{' '}
+                        <Text variant="sm" tone="muted" as="span">
+                          {String(c.ai_root_cause ?? c.human_root_cause ?? '—').slice(0, 90)}
+                        </Text>
+                      </li>
+                    ))}
+                    {pendingTotal > pendingItems.length ? (
+                      <li>
+                        <Text variant="sm" tone="muted" as="span">
+                          + {pendingTotal - pendingItems.length} more pending
+                        </Text>
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : (
+                  <EmptyState
+                    compact
+                    title="No pending reviews"
+                    body="Proposed corrections appear here until a reviewer decides."
+                  />
+                )}
+              </Card>
+            )}
             <Card
               title="Trend"
               description={
@@ -276,7 +288,7 @@ export function OverviewPage() {
                   <SegmentedControl<Days>
                     label="Trend range"
                     value={days}
-                    onChange={(v) => replaceUrlQuery({ range: v === '30' ? null : `${v}d` })}
+                    onChange={(v) => replaceUrlQuery({ range: v === '7' ? null : `${v}d` })}
                     options={[
                       { value: '7', label: '7d' },
                       { value: '30', label: '30d' },
@@ -343,15 +355,41 @@ export function OverviewPage() {
   );
 }
 
-function RunLink({ slug, row }: { slug: string; row: RunRow }) {
-  return (
+function RunLink({ slug, row, withTask }: { slug: string; row: RunRow; withTask?: boolean }) {
+  const link = (
     <Link to={runPath(slug, row.run_id)} className={styles.runLink}>
       {row.external_run_id || row.run_name}
     </Link>
   );
+  if (!withTask && row.origin !== 'official') return link;
+  return (
+    <span className={styles.runCell}>
+      <span className={styles.runLine}>
+        {link}
+        {row.origin === 'official' ? (
+          <Tag kind="accent" title="Run launched by an official experiment">
+            Official
+          </Tag>
+        ) : null}
+      </span>
+      {withTask && row.task_name ? (
+        <Text variant="sm" tone="muted" as="span">
+          {row.task_name}
+        </Text>
+      ) : null}
+    </span>
+  );
 }
 
-function MiniRuns({ slug, rows }: { slug: string; rows: RunRow[] }) {
+/** Items done out of total (a repeat run prefixes the pass); this is progress, not successes. */
+function itemProgress(r: RunRow): string {
+  const done = `${r.progress_completed}/${r.progress_total ?? r.total_items}`;
+  if (r.samples <= 1) return done;
+  const pass = Math.min((r.last_completed_pass ?? 0) + (isActiveRun(r) ? 1 : 0), r.samples);
+  return `pass ${pass}/${r.samples} · ${done}`;
+}
+
+function MiniRuns({ slug, rows, hideStatus }: { slug: string; rows: RunRow[]; hideStatus?: boolean }) {
   if (!rows.length) return <EmptyState compact title="Nothing yet" />;
   return (
     <DataTable<RunRow>
@@ -361,25 +399,31 @@ function MiniRuns({ slug, rows }: { slug: string; rows: RunRow[] }) {
       stickyHeader={false}
       columns={[
         { id: 'run', label: 'Run', flex: true, mono: true, cell: (r) => <RunLink slug={slug} row={r} /> },
-        { id: 'status', label: 'Status', width: 110, cell: (r) => <RunStatusBadge status={r.status} /> },
+        { id: 'owner', label: 'User', width: 130, cell: (r) => <OwnerCell row={r} /> },
+        ...(hideStatus
+          ? []
+          : [
+              {
+                id: 'status',
+                label: 'Status',
+                width: 110,
+                cell: (r: RunRow) => <RunStatusBadge status={r.status} />,
+              },
+            ]),
         {
           id: 'items',
           label: 'Items',
-          width: 80,
-          align: 'end',
-          cell: (r) => (
-            <Mono>
-              {r.success_count}/{r.total_items}
-            </Mono>
-          ),
+          width: 130,
+          align: 'end' as const,
+          cell: (r: RunRow) => <Mono>{itemProgress(r)}</Mono>,
         },
         {
           id: 'date',
           label: 'Date',
           width: 90,
-          align: 'end',
+          align: 'end' as const,
           mono: true,
-          cell: (r) => formatRelative(r.timestamp),
+          cell: (r: RunRow) => formatRelative(r.timestamp),
         },
       ]}
     />
