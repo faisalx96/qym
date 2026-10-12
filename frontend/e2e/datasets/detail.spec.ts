@@ -272,6 +272,39 @@ test.describe('detail: items table', () => {
     await expect(page.locator('[data-item-pane]')).toHaveCount(0);
   });
 
+  test('pane: j / k step through rows; leaving the tab with unsaved edits asks first; deleting the open row closes the pane', async ({ page, request }) => {
+    const { p, d } = await seed(request, 'pane-nav');
+    const v = await createVersion(request, p.slug, d.slug);
+    await bulkItems(request, p.slug, d.slug, v.version, [
+      { item_id: 'n-1', input: 'one', expected_output: 'a' },
+      { item_id: 'n-2', input: 'two', expected_output: 'b' },
+      { item_id: 'n-3', input: 'three', expected_output: 'c' },
+    ]);
+    await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
+    await rowOf(page, 'n-1').click();
+    await expect(page.locator('[data-item-pane=n-1]')).toBeVisible();
+    await page.keyboard.press('j');
+    await expect(page.locator('[data-item-pane=n-2]')).toBeVisible();
+    await page.keyboard.press('k');
+    await expect(page.locator('[data-item-pane=n-1]')).toBeVisible();
+
+    // typing j in a field must not move the pane
+    const box = page.locator('[data-item-pane=n-1]').getByRole('textbox', { name: 'Input' });
+    await box.fill('one jj');
+    await expect(page.locator('[data-item-pane=n-1]')).toBeVisible();
+
+    // switching to the Runs tab with unsaved edits is guarded
+    await page.getByRole('tab', { name: /^Runs/ }).click();
+    const leave = page.getByRole('alertdialog', { name: 'Discard unsaved changes?' }).or(page.getByRole('dialog', { name: 'Discard unsaved changes?' }));
+    await expect(leave).toBeVisible();
+    await leave.getByRole('button', { name: 'Keep editing' }).click();
+    await expect(page.locator('[data-item-pane=n-1]')).toBeVisible();
+    await expect(box).toHaveValue('one jj');
+    await page.getByRole('tab', { name: /^Runs/ }).click();
+    await leave.getByRole('button', { name: 'Discard changes' }).click();
+    await expect(page.getByRole('tab', { name: /^Runs/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
   test('bulk delete selected items on a draft', async ({ page, request }) => {
     const { p, d } = await seed(request, 'bulk');
     await draftWithItems(request, p.slug, d, 6);

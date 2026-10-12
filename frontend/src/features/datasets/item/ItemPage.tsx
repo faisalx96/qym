@@ -3,7 +3,7 @@
  * edits on drafts with the Text/JSON contract and sends only touched fields;
  * Prev/Next follow the list order (search/sort/label) via /neighbors.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBlocker } from 'react-router-dom';
 import { useDatasetItem, useDeleteItem, useItemNeighbors, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
@@ -64,7 +64,9 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
   };
 
   // Unsaved-changes guard: in-app navigation and tab close.
-  const blocker = useBlocker(editable && dirty);
+  // `leaving` lets a confirmed delete navigate away without a second "discard" prompt.
+  const leaving = useRef(false);
+  const blocker = useBlocker(() => editable && dirty && !leaving.current);
   useEffect(() => {
     if (!editable || !dirty) return;
     const onUnload = (e: BeforeUnloadEvent) => {
@@ -217,6 +219,7 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
           try {
             await del.mutateAsync(item.item_id);
             toast.show(`Item ${item.item_id} deleted`, { tone: 'success' });
+            leaving.current = true;
             setEdit(null);
             navigate(next ? linkTo({ item: next.item_id }) : prev ? linkTo({ item: prev.item_id }) : linkTo({ item: null, tab: 'items' }));
           } catch (e) {

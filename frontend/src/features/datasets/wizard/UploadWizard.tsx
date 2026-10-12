@@ -85,6 +85,7 @@ function WizardInner({
   const [progress, setProgress] = useState<{ label: string; fraction: number | null } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const parseTicket = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null!);
 
   const effectiveTarget = mode === 'new' ? null : (clashTarget ?? target);
@@ -97,9 +98,20 @@ function WizardInner({
 
   const loadFile = useCallback(
     async (f: File, enc?: string) => {
+      const ticket = ++parseTicket.current;
       setParsing(true);
       setErrors({});
-      const result = await parseFile(f, enc);
+      let result: Awaited<ReturnType<typeof parseFile>>;
+      try {
+        result = await parseFile(f, enc);
+      } catch {
+        if (ticket !== parseTicket.current) return;
+        setParsed(null);
+        setErrors({ file: 'Could not read the file.' });
+        setParsing(false);
+        return;
+      }
+      if (ticket !== parseTicket.current) return; // a newer file / encoding superseded this read
       setParsed(result);
       if (result.kind === 'csv') {
         setEncoding(result.encoding);
@@ -111,7 +123,9 @@ function WizardInner({
   );
 
   function chooseFile(f: File | null) {
+    if (!f) parseTicket.current++;
     setFile(f);
+    setParsing(false);
     setParsed(null);
     setEncoding(null);
     if (f) {
@@ -196,13 +210,24 @@ function WizardInner({
           parsed.kind === 'csv' ? csvUpserts(parsed.headers, parsed.rows, mapping) : jsonUpserts(parsed.rows);
         const batches = Math.max(1, Math.ceil(upserts.length / BULK_CHUNK));
         let added = 0;
-        for (let i = 0; i < batches; i++) {
-          if (controller.signal.aborted) throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
-          setProgress({ label: `Importing batch ${i + 1} of ${batches}…`, fraction: i / batches });
-          const resp = await bulkItems(slug, effectiveTarget.slug, draft.version, {
-            upserts: upserts.slice(i * BULK_CHUNK, (i + 1) * BULK_CHUNK),
-          });
-          added += resp.summary.created + resp.summary.updated;
+        try {
+          for (let i = 0; i < batches; i++) {
+            if (controller.signal.aborted) throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+            setProgress({ label: `Importing batch ${i + 1} of ${batches}…`, fraction: i / batches });
+            const resp = await bulkItems(slug, effectiveTarget.slug, draft.version, {
+              upserts: upserts.slice(i * BULK_CHUNK, (i + 1) * BULK_CHUNK),
+            });
+            added += resp.summary.created + resp.summary.updated;
+          }
+        } catch (e) {
+          // Earlier batches are already saved: say so and refresh the list.
+          if (added > 0) {
+            invalidateItems(qc, slug, effectiveTarget.slug);
+            const why = e instanceof ApiError ? e.detail || e.message : (e as Error).message || 'Import failed';
+            if ((e as Error).name === 'AbortError') throw e;
+            throw new Error(`${why} ${pluralize(added, 'item')} were already added before the failure.`);
+          }
+          throw e;
         }
         invalidateItems(qc, slug, effectiveTarget.slug);
         toast.show(`${pluralize(added, 'item')} added`, { tone: 'success' });

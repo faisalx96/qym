@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Key } from 'react-aria-components';
-import { useSearchParams } from 'react-router-dom';
+import { useBlocker, useSearchParams } from 'react-router-dom';
 import { bulkItems, invalidateItems, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/http';
@@ -45,17 +45,58 @@ export function ItemsWorkspace({ slug, dataset, version, readOnly, onAddItem, on
   itemQuery.delete('tab');
   itemQuery.delete('page');
 
-  // Esc closes the pane (through the discard guard) unless a dialog/popup owns it.
+  // Esc closes the pane (through the discard guard) unless a dialog/popup owns it; j / k step through rows
+  // (the vanilla drawer's shortcuts) when no field has focus.
+  const rowsRef = useRef(rows);
+  useEffect(() => {
+    rowsRef.current = rows;
+  });
   useEffect(() => {
     if (!paneId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"], [role="listbox"], [role="menu"]')) return;
-      attempt(() => setPaneId(null));
+      if (e.defaultPrevented) return;
+      if (e.key === 'Escape') {
+        if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"], [role="listbox"], [role="menu"]')) return;
+        attempt(() => setPaneId(null));
+        return;
+      }
+      if ((e.key === 'j' || e.key === 'k') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        const t = e.target as HTMLElement | null;
+        if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable || t.closest('[role="dialog"], [role="menu"], [role="listbox"]'))) return;
+        const list = rowsRef.current;
+        const at = list.findIndex((r) => r.item_id === paneId);
+        const nextRow = list[at + (e.key === 'j' ? 1 : -1)];
+        if (nextRow) {
+          e.preventDefault();
+          attempt(() => setPaneId(nextRow.item_id));
+        }
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [paneId, attempt]);
+
+  // Leaving the Items tab / version / dataset with unsaved edits asks first; sorting, paging and
+  // searching keep the pane (and its edits) mounted, so they pass.
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (!dirty.current.dirty) return false;
+    if (currentLocation.pathname !== nextLocation.pathname) return true;
+    const a = new URLSearchParams(currentLocation.search);
+    const b = new URLSearchParams(nextLocation.search);
+    return ['tab', 'v', 'item'].some((k) => (a.get(k) ?? '') !== (b.get(k) ?? ''));
+  });
+  useEffect(() => {
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (dirty.current.dirty) e.preventDefault();
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, []);
+
+  // No pane, no edits: a pane closed by a bulk delete must not leave a stale dirty flag behind.
+  useEffect(() => {
+    if (!paneId) dirty.current = { dirty: false, save: async () => true, reset: () => undefined };
+  }, [paneId]);
 
   const index = paneId ? rows.findIndex((r) => r.item_id === paneId) : -1;
   const open = (item: DatasetItem) => {
@@ -107,6 +148,14 @@ export function ItemsWorkspace({ slug, dataset, version, readOnly, onAddItem, on
           onRows={setRows}
           selection={editable ? { selected, onChange: setSelected } : undefined}
           onOpenItem={open}
+          onDeleted={(id) => {
+            if (id === paneId) setPaneId(null);
+            setSelected((s) => {
+              const n = new Set(s);
+              n.delete(id);
+              return n;
+            });
+          }}
         />
       </div>
       {paneId ? (
@@ -133,6 +182,19 @@ export function ItemsWorkspace({ slug, dataset, version, readOnly, onAddItem, on
         confirmLabel={`Delete ${selected.size}`}
         tone="danger"
         onConfirm={bulkDelete}
+      />
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(o) => !o && blocker.state === 'blocked' && blocker.reset()}
+        title="Discard unsaved changes?"
+        description="This item has edits that are not saved."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        tone="danger"
+        onConfirm={() => {
+          dirty.current.dirty = false;
+          if (blocker.state === 'blocked') blocker.proceed();
+        }}
       />
       <ConfirmDialog
         open={guard !== null}

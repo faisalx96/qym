@@ -30,9 +30,11 @@ export interface ItemsTabProps {
   onOpenItem?: (item: DatasetItem) => void;
   /** Rows currently shown (for pane prev/next). */
   onRows?: (rows: DatasetItem[]) => void;
+  /** Called after a single-row delete succeeds (the workspace closes a pane showing that item). */
+  onDeleted?: (itemId: string) => void;
 }
 
-export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport, selection, onOpenItem, onRows }: ItemsTabProps) {
+export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport, selection, onOpenItem, onRows, onDeleted }: ItemsTabProps) {
   const [params, setParams] = useSearchParams();
   const route = parseDatasetRoute(dataset.slug, params);
   const navigate = useNavigate();
@@ -292,6 +294,7 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
           try {
             await del.mutateAsync(deleting.item_id);
             toast.show(`Item ${deleting.item_id} deleted`, { tone: 'success' });
+            onDeleted?.(deleting.item_id);
             setDeleting(null);
           } catch (e) {
             toast.show(e instanceof ApiError ? e.detail || e.message : 'Delete failed', { tone: 'error' });
