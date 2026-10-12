@@ -73,6 +73,48 @@ def dashboard(
             err_console.print(f"[yellow]Could not open browser: {e}[/yellow]")
 
 
+@app.command("ui")
+def ui(
+    file: Optional[str] = typer.Argument(None, help="Saved results file (.csv or .xlsx) to open; omit to serve an empty viewer"),
+    port: int = typer.Option(0, "--port", help="Port to listen on (0 for auto)"),
+    results_dir: str = typer.Option("qym_results", "--results-dir", help="Directory holding saved results"),
+    no_open: bool = typer.Option(False, "--no-open", help="Do not open the browser"),
+) -> None:
+    """Open a saved results file in the offline local viewer (no platform needed)."""
+    from urllib.parse import quote
+    from ..server import UIServer
+    from ..server.app import RESULT_FILE_SUFFIXES
+
+    if file and not Path(file).is_file():
+        output_error("not_found", f"File not found: {file}")
+        raise typer.Exit(code=ExitCode.NOT_FOUND)
+    if file and not file.lower().endswith(RESULT_FILE_SUFFIXES):
+        output_error("usage", f"The viewer opens .csv and .xlsx results files, not {Path(file).suffix or 'this file'}: {file}")
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
+    server = UIServer(port=port, results_dir=results_dir)
+    if not server.has_viewer():
+        output_error(
+            "failure",
+            "The local viewer is not built in this install.",
+            suggestion="From a checkout run: cd frontend && npm ci && npm run build:sdk",
+        )
+        raise typer.Exit(code=ExitCode.FAILURE)
+    server.start()
+    url = server.url + (f"run/{quote(str(Path(file).resolve()), safe='')}" if file else "")
+    if is_json_mode():
+        output({"viewer_url": url})
+    else:
+        err_console.print(f"[bold]qym viewer:[/bold] {url}  (Ctrl+C to exit)")
+    if not no_open and not is_json_mode():
+        webbrowser.open(url)
+    try:
+        server._stop.wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.stop()
+
+
 @app.command("submit")
 def submit(
     file: str = typer.Option(..., "--file", help="Path to results file (.csv or .json)"),

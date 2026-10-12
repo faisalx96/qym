@@ -118,6 +118,7 @@ scripts/median_triplet_bootstrap.cpp
 
 # Vite build output and local frontend test output (never committed; see frontend/README.md)
 packages/platform/qym_platform/_static/app/
+packages/sdk/qym/_static/ui/
 frontend/dist/
 frontend/test-results/
 frontend/playwright-report*/

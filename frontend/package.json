@@ -8,7 +8,9 @@
   },
   "scripts": {
     "dev": "vite --port 5800 --strictPort",
+    "dev:sdk": "vite --config vite.sdk.config.ts",
     "build": "tsc -b && vite build",
+    "build:sdk": "tsc -b && vite build --config vite.sdk.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint src e2e --max-warnings 0",
@@ -20,6 +22,7 @@
     "test:design": "vitest run src/__tests__/design-language.test.ts",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
+    "e2e:sdk": "playwright test -c playwright.sdk.config.ts",
     "check": "npm run typecheck && npm run lint && npm run stylelint && npm run test && npm run test:design"
   },
   "dependencies": {

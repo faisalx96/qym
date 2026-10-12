@@ -1273,18 +1273,12 @@ def _dashboard_html_response(idx: Path, request: Request) -> HTMLResponse:
     if root:
         html = html.replace('="/static/', f'="{root}/static/')
         html = html.replace("='/static/", f"='{root}/static/")
-        html = html.replace('="/ui/', f'="{root}/ui/')
-        html = html.replace("='/ui/", f"='{root}/ui/")
     injection = f"<script>window.__QYM_ROOT_PATH__ = {json.dumps(root)};</script>"
     if "<head>" in html:
         html = html.replace("<head>", "<head>\n  " + injection, 1)
     else:
         html = injection + html
     return HTMLResponse(html, media_type="text/html; charset=utf-8")
-
-
-def _platform_static_ui_index() -> Path:
-    return _platform_static_dir() / "ui" / "index.html"
 
 
 def _platform_static_dashboard_index() -> Path:

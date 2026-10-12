@@ -84,7 +84,8 @@ class TestDirectoryStructure:
     def test_sdk_server(self):
         srv = SDK_ROOT / "qym" / "server"
         assert (srv / "app.py").exists()
-        assert (srv / "dashboard_server.py").exists()
+        assert (srv / "live.py").exists()
+        assert not (srv / "dashboard_server.py").exists()
 
     def test_sdk_utils(self):
         utils = SDK_ROOT / "qym" / "utils"
@@ -633,18 +634,30 @@ class TestStaticAssets:
         """The dashboard static bundle lives only in the platform package."""
         assert not (SDK_ROOT / "qym" / "_static" / "dashboard").exists()
 
-    def test_sdk_ui_has_index(self):
-        assert (SDK_ROOT / "qym" / "_static" / "ui" / "index.html").exists()
+    def test_sdk_ui_is_a_build_output(self):
+        """The viewer is built from frontend/ (npm run build:sdk) into the gitignored
+        _static/ui; the sources and the flat-output config are what is tracked."""
+        assert (REPO / "frontend" / "vite.sdk.config.ts").exists()
+        built = SDK_ROOT / "qym" / "_static" / "ui"
+        if built.exists():
+            assert (built / "index.html").exists()
+            assert {p.name for p in built.iterdir() if p.is_dir()} == set()
 
     def test_platform_dashboard_has_index(self):
         assert (
             PLATFORM_ROOT / "qym_platform" / "_static" / "dashboard" / "index.html"
         ).exists()
 
-    def test_platform_ui_has_index(self):
-        assert (
-            PLATFORM_ROOT / "qym_platform" / "_static" / "ui" / "index.html"
-        ).exists()
+    def test_platform_has_no_ui_copy(self):
+        """The dead platform /ui viewer is gone; the SDK owns the local viewer."""
+        assert not (PLATFORM_ROOT / "qym_platform" / "_static" / "ui").exists()
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
+        toml = tomllib.loads((PLATFORM_ROOT / "pyproject.toml").read_text())
+        data = toml["tool"]["setuptools"]["package-data"]["qym_platform"]
+        assert "_static/ui/*" not in data
 
 
 # ═══════════════════════════════════════════════════════════════════════

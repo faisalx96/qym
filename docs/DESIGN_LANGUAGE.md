@@ -5,8 +5,8 @@ editing, or generating anything under `packages/platform/qym_platform/_static/`,
 follow this document. It is enforced by `tests/platform/test_design_language.py` —
 violations fail CI, so read this before writing CSS, not after.
 
-Scope: the platform dashboard (`_static/dashboard/`). Two sanctioned exceptions
-are listed at the end (docs prose scale, the separate `/ui` app).
+Scope: the platform dashboard (`_static/dashboard/`). One sanctioned exception
+is listed at the end (docs prose scale). The SDK-local viewer is built from `frontend/` with the same tokens.
 
 ---
 
@@ -78,8 +78,7 @@ updating the test's allowlist deliberately.
 - The mono stack is system faces only: `ui-monospace, SFMono-Regular, 'SF Mono',
   Menlo, …, Consolas, 'Liberation Mono', monospace`. **Menlo must stay**: it is
   the only mono face Chrome on macOS can see by name; without it the generic
-  `monospace` resolves to Courier. Any hardcoded mono stack (e.g. the SDK-local
-  `_static/ui`) names Menlo too; CI checks both.
+  `monospace` resolves to Courier. Any hardcoded mono stack names Menlo too; CI checks both.
 - **Text direction.** Every block that shows user or model text takes
   `QymSafe.textDirAttrs(text)` (or `QymSafe.applyTextDir(el, text)` for DOM
   nodes): mostly-Arabic text gets `dir="rtl" lang="ar"`, anything else

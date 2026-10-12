@@ -221,7 +221,7 @@ class ProgressTracker(ProgressObserver):
             'input': str(s['input']),
             'input_full': str(s['input']),
             'output': oval,
-            'output_full': str(s.get('output', '')),
+            'output_full': self._strip_tags(s.get('output', '')),
             'expected': str(s['expected']),
             'expected_full': str(s['expected']),
             'metric_values': mvals,

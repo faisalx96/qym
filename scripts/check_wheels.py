@@ -20,6 +20,10 @@ for filename in sys.argv[1:]:
         assert actual == set(expected), (filename, actual - set(expected), set(expected) - actual)
         for relative, path in expected.items():
             assert archive.read(package + "/" + relative) == path.read_bytes(), relative
+        if not platform:
+            viewer = {n for n in names if n.startswith("qym/_static/ui/")}
+            for required in ["index.html", "app.js", "app.css"]:
+                assert "qym/_static/ui/" + required in viewer, "SDK wheel lacks the built viewer (run npm run build:sdk): " + required
         if platform:
             for asset in ["run_details.js", "dashboard.js", "run.html", "compare.html", "overview.html", "metrics.js"]:
                 relative = "_static/dashboard/" + asset

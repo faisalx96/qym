@@ -127,6 +127,15 @@ TARBALL="${OUTPUT_DIR}/${BUNDLE_NAME}.tar.gz"
 rm -rf "$BUNDLE_DIR" "$TARBALL"
 mkdir -p "$BUNDLE_DIR"
 
+# The offline results viewer (qym ui) is a Vite build that the wheel ships as qym/_static/ui.
+if command -v npm >/dev/null 2>&1; then
+    echo -e "\n${GREEN}[0/4] Building the results viewer...${NC}"
+    ( cd "${REPO_ROOT}/frontend" && npm ci --no-audit --no-fund && npm run build:sdk )
+else
+    echo -e "${RED}npm (Node 24) is required to build the SDK results viewer.${NC}" >&2
+    exit 1
+fi
+
 # Ensure build tooling
 echo -e "\n${GREEN}[1/4] Ensuring build tooling...${NC}"
 "$PY" -m pip install --quiet --upgrade build

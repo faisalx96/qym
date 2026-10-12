@@ -126,6 +126,15 @@ class TestFallback:
             assert client.get("/api-docs").status_code == 200
             assert "openapi" in client.get("/openapi.json").text
 
+    def test_removed_ui_viewer_is_not_mounted(self, built_spa, no_auth_env):
+        """The old standalone /ui viewer is gone: no mount, no static caching rule for it."""
+        from qym_platform.middleware.cache_control import STATIC_PREFIXES
+
+        assert "/ui/" not in STATIC_PREFIXES
+        with _client(_session_factory()) as client:
+            for path in ("/ui/index.html", "/ui/app.js"):
+                assert client.get(path).status_code == 404, path
+
     def test_missing_build_is_a_clear_404(self, tmp_path, monkeypatch, no_auth_env):
         empty = tmp_path / "nope"
         monkeypatch.setattr(spa, "spa_dir", lambda: empty)
