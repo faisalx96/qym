@@ -5,7 +5,12 @@
 import { useMemo } from 'react';
 import { useHref, useNavigate, useSearchParams } from 'react-router-dom';
 import { RouterProvider } from 'react-aria-components';
-import { useExperiments, type Experiment, EXPERIMENT_STATUSES } from '@/api/experiments';
+import {
+  useExperiments,
+  type Experiment,
+  EXPERIMENT_STATUSES,
+  LIVE_EXPERIMENT_STATUSES,
+} from '@/api/experiments';
 import { useEvalEnvironments, type EvalEnvironment } from '@/api/evalCommon';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
@@ -27,7 +32,15 @@ import {
 } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
-import { absTime, baseSourceLabel, plural, relTime, tallyJobCounts } from '../lib/format';
+import {
+  absTime,
+  baseSourceLabel,
+  plural,
+  relTime,
+  tallyJobCounts,
+  versioningLabel,
+  versioningWords,
+} from '../lib/format';
 import { experimentPath, launchPath } from '../paths';
 import styles from './ExperimentsPage.module.css';
 
@@ -68,7 +81,12 @@ export function ExperimentsPage() {
   const envById = useMemo(() => new Map((envs.data ?? []).map((e) => [e.id, e])), [envs.data]);
   const experiments = query.data?.experiments ?? [];
   const total = query.data?.total ?? 0;
+  const live = experiments.some((x) => LIVE_EXPERIMENT_STATUSES.includes(x.status));
   const facets = query.data?.versioning_facets ?? {};
+  // A key already in the URL keeps its select even when no experiment reports it any more.
+  const versioningKeys = [...new Set([...Object.keys(facets), ...Object.keys(versioning)])].sort((a, b) =>
+    a.localeCompare(b),
+  );
   const filtered = Boolean(status || mine || Object.keys(versioning).length);
 
   function update(mutate: (next: URLSearchParams) => void) {
@@ -216,16 +234,26 @@ export function ExperimentsPage() {
           searchable={false}
           width={150}
         />
-        {Object.entries(facets).map(([key, values]) => (
-          <Select
-            key={key}
-            label={key}
-            items={[{ key: ALL, label: `Any ${key}` }, ...values.map((v) => ({ key: v, label: v }))]}
-            value={versioning[key] ?? ALL}
-            onChange={(k) => setVersioning(key, !k || k === ALL ? null : String(k))}
-            width={170}
-          />
-        ))}
+        {versioningKeys.map((key) => {
+          const selected = versioning[key];
+          const values = facets[key] ?? [];
+          const options =
+            selected !== undefined && !values.includes(selected) ? [selected, ...values] : values;
+          return (
+            <span key={key} title={`Evaluation Service versioning: ${key}`} data-exp-versioning={key}>
+              <Select
+                label={versioningLabel(key)}
+                items={[
+                  { key: ALL, label: `All ${versioningWords(key)}s` },
+                  ...options.map((v) => ({ key: v, label: v })),
+                ]}
+                value={selected ?? ALL}
+                onChange={(k) => setVersioning(key, !k || k === ALL ? null : String(k))}
+                width={170}
+              />
+            </span>
+          );
+        })}
         <Checkbox
           isSelected={mine}
           onChange={(on) =>
@@ -238,9 +266,11 @@ export function ExperimentsPage() {
         >
           Created by me
         </Checkbox>
-        <Text variant="sm" tone="muted" className={styles.note}>
-          Refreshes automatically while experiments run
-        </Text>
+        {live ? (
+          <Text variant="sm" tone="muted" className={styles.note}>
+            Refreshes automatically while experiments run
+          </Text>
+        ) : null}
       </div>
       {body}
       {query.data && total > PAGE_SIZE ? (

@@ -67,6 +67,8 @@ test.describe('experiments list', () => {
     await expect.poll(() => query(page).get('status')).toBe('FAILED');
     await expect(table.getByText('still going')).toHaveCount(0);
     await expect(table.getByText('finished one')).toBeVisible();
+    // nothing queued or running is listed any more: no auto-refresh promise
+    await expect(page.getByText('Refreshes automatically while experiments run')).toHaveCount(0);
 
     // created by me (dev@local is the creator of both)
     await page.getByText('Created by me').click();
@@ -109,6 +111,10 @@ test.describe('experiments list', () => {
     // while a ?versioning= param in the URL still filters (and survives reload).
     await gotoApp(page, `${expPath(project.slug)}?versioning=agent_version%3Dnope`);
     await expect(page.getByText('No matching experiments')).toBeVisible();
+    // the key in the URL keeps its select: humanised label, value, and the key in the tooltip
+    const facet = page.locator('[data-exp-versioning="agent_version"]');
+    await expect(facet).toHaveAttribute('title', 'Evaluation Service versioning: agent_version');
+    await expect(facet.getByRole('button', { name: /Agent version/ })).toContainText('nope');
     await page.reload();
     await expect(page.getByText('No matching experiments')).toBeVisible();
     expect(query(page).getAll('versioning')).toEqual(['agent_version=nope']);

@@ -127,6 +127,9 @@ test.describe('add environment', () => {
       'step',
     );
     await expect(dialog.getByText('“added env” is saved.')).toBeVisible();
+    // the read-only preview opens its first group
+    await expect(dialog.locator('details').first()).toHaveAttribute('open', '');
+    await expect(dialog.locator('details[open]')).toHaveCount(1);
     // the typed key is not kept anywhere in the page
     expect(await page.content()).not.toContain('typed-secret-key-1');
     const created = await (await request.get(`/v1/projects/${project.id}/eval-environments`)).json();
@@ -175,6 +178,11 @@ test.describe('environment page', () => {
     const env = await createEnvironment(request, project.id, 'staging');
     await gotoApp(page, envsPath(project.slug, `/${env.id}`));
     await expect(page.getByRole('heading', { name: 'staging', level: 1 })).toBeVisible();
+    // Experiments / Environments / <name>
+    const trail = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(trail.getByRole('link', { name: 'Experiments' })).toBeVisible();
+    await expect(trail.getByRole('link', { name: 'Environments' })).toBeVisible();
+    await expect(trail.getByText('staging')).toHaveAttribute('aria-current', 'page');
     for (const title of [
       'Status',
       'Schema',
