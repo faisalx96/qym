@@ -56,11 +56,16 @@ export function useContentScrollRestoration(ref: React.RefObject<HTMLElement | n
   const navigationType = useNavigationType();
   const offsets = useRef(new Map<string, number>());
   const lastKey = useRef(location.key);
+  const lastPath = useRef(location.pathname);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     offsets.current.set(lastKey.current, el.scrollTop);
     lastKey.current = location.key;
+    const samePath = lastPath.current === location.pathname;
+    lastPath.current = location.pathname;
+    // A replace that only rewrites the query string (filters, tabs, ?item=) is in-page state: keep the scroll.
+    if (navigationType === 'REPLACE' && samePath) return;
     if (navigationType === 'POP') {
       const saved = offsets.current.get(location.key) ?? 0;
       // Content may still be loading; retry for up to ~6 s until the offset holds.
@@ -73,7 +78,7 @@ export function useContentScrollRestoration(ref: React.RefObject<HTMLElement | n
     } else {
       el.scrollTop = 0;
     }
-  }, [location.key, navigationType, ref]);
+  }, [location.key, location.pathname, navigationType, ref]);
 }
 
 /** Last visited active project (used by /reviews, /compare, /run/*). */
