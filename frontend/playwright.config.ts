@@ -17,10 +17,14 @@ const AUTH_MODE = process.env.QYM_E2E_AUTH_MODE ?? 'none';
 // Defaults the specs and the platform both read (override from the shell when needed).
 process.env.QYM_ADMIN_BOOTSTRAP_TOKEN ??= 'e2e-bootstrap';
 process.env.QYM_LLM_CONFIG_ENCRYPTION_KEY ??= 'nhrVWj9_tg4JBetyZrLyHLQTy9-5DTMysJYeRSS5flY=';
-const dbFile = path.join(here, '.qym-e2e.db');
+// QYM_E2E_DB lets two runs in one checkout (different ports) keep separate SQLite files.
+const dbFile = process.env.QYM_E2E_DB ?? path.join(here, '.qym-e2e.db');
 // Worktrees have no .venv of their own: honour QYM_PYTHON, else the repo venv, else the active python.
 const repoVenv = path.join(repo, '.venv', 'bin', 'python');
 const venvPython = process.env.QYM_PYTHON ?? (fs.existsSync(repoVenv) ? repoVenv : 'python');
+// Stand-in Evaluation Services for the experiments area (frontend/scripts/fake_eval_service.py).
+export const EVAL_PORT_A = Number(PLATFORM_PORT) + 100;
+export const EVAL_PORT_B = Number(PLATFORM_PORT) + 101;
 
 export const STUB_LLM_PORT = Number(PLATFORM_PORT) + 1000;
 export const BASE_URL = `http://127.0.0.1:${VITE_PORT}`;
@@ -45,6 +49,12 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
+    ...[EVAL_PORT_A, EVAL_PORT_B].map((port) => ({
+      command: `${venvPython} ${path.join(here, 'scripts', 'fake_eval_service.py')} ${port}`,
+      url: `http://127.0.0.1:${port}/__control/jobs`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+    })),
     {
       // OpenAI-compatible stub for the analyzer e2e (no real LLM key needed); see scripts/stub_llm.py.
       command: `${venvPython} scripts/stub_llm.py --port ${STUB_LLM_PORT} --delay 0.2`,
@@ -67,6 +77,9 @@ export default defineConfig({
         `QYM_BASE_URL=${BASE_URL}`,
         // analyzer e2e points a project LLM connection at a local stub server (http://127.0.0.1)
         `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true`,
+        // specs launch far more than the default 30 experiments per hour
+        `QYM_EVAL_EXPERIMENT_CREATE_RATE_LIMIT=0`,
+        `QYM_ROLE=all`,
         `${venvPython} -m uvicorn qym_platform.main:app --port ${PLATFORM_PORT} --log-level warning`,
       ].join(' '),
       url: `http://127.0.0.1:${PLATFORM_PORT}/healthz`,

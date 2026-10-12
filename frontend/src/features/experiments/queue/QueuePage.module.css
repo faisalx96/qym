@@ -1,0 +1,117 @@
+/* Queue page layout (.exq-*): filters, environment cards, bulk bar, jobs table. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: end;
+  margin-block: var(--space-md);
+}
+
+.note {
+  margin-inline-start: auto;
+}
+
+.envCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-md);
+  margin: 0 0 var(--space-lg);
+  padding: 0;
+  list-style: none;
+}
+
+.envCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  height: 100%;
+  padding: var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.envHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.note2 {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.high {
+  margin: 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--warning);
+  border-radius: var(--control-radius);
+  color: var(--warning);
+  font-size: var(--font-sm);
+}
+
+.jobs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.jobTitle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.link {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.envCell {
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.progressText {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}

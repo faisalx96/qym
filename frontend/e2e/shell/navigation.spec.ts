@@ -332,32 +332,32 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     await expect(page.locator('[data-not-found]')).toContainText('/this/does/not/exist');
   });
 
-  test('every brief 01 §8 URL renders a page or the ComingSoon placeholder, never the 404 panel', async ({
+  test('every brief 01 §8 URL renders its page, never the 404 panel or a placeholder', async ({
     page,
     request,
   }) => {
     const p = await createProject(request, 'Deep Links', uniqueSlug('deep'));
     const runId = 'eval/2026-01-01/abc';
     const encodedRun = runId.split('/').map(encodeURIComponent).join('/');
-    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' | 'runs' | 'overview' | 'charts' | 'run' | 'compare' | 'analysis' | 'analyzer-redirect' }[] = [
+    const urls: { path: string; expect: 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' | 'runs' | 'overview' | 'charts' | 'run' | 'page' | 'admin' | 'docs' | 'compare' | 'analysis' | 'analyzer-redirect' }[] = [
       { path: '/', expect: 'projects' },
       { path: '/profile', expect: 'profile' },
-      { path: '/admin', expect: 'coming-soon' },
-      { path: '/admin/users', expect: 'coming-soon' },
+      { path: '/admin', expect: 'admin' },
+      { path: '/admin/users', expect: 'admin' },
       { path: '/trash', expect: 'trash' },
       { path: '/compare', expect: 'compare' },
       { path: `/projects/${p.slug}/compare`, expect: 'compare' },
       { path: '/reviews', expect: 'reviews' },
-      { path: '/docs-guide', expect: 'coming-soon' },
-      { path: '/docs/sdk', expect: 'coming-soon' },
+      { path: '/docs-guide', expect: 'docs' },
+      { path: '/docs/sdk', expect: 'docs' },
       { path: `/projects/${p.slug}`, expect: 'runs' },
       { path: `/projects/${p.slug}/overview`, expect: 'overview' },
       { path: `/projects/${p.slug}/charts`, expect: 'charts' },
-      { path: `/projects/${p.slug}/models`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/experiments`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/experiments/queue`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/experiments/exp-1`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/environments/env-1`, expect: 'coming-soon' },
+      { path: `/projects/${p.slug}/models`, expect: 'page' },
+      { path: `/projects/${p.slug}/experiments`, expect: 'page' },
+      { path: `/projects/${p.slug}/experiments/queue`, expect: 'page' },
+      { path: `/projects/${p.slug}/experiments/exp-1`, expect: 'page' },
+      { path: `/projects/${p.slug}/environments/env-1`, expect: 'page' },
       { path: `/projects/${p.slug}/datasets`, expect: 'datasets' },
       { path: `/projects/${p.slug}/datasets/ds-1`, expect: 'datasets' },
       { path: `/projects/${p.slug}/analysis`, expect: 'analysis' },
@@ -366,20 +366,25 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       { path: `/projects/${p.slug}/runs/${encodedRun}/analyzer`, expect: 'analyzer-redirect' },
       { path: `/projects/${p.slug}/settings`, expect: 'settings' },
       { path: `/projects/${p.slug}/settings?tab=apikeys`, expect: 'settings' },
-      { path: `/projects/${p.slug}/settings?tab=environments&env=e1&promote=saved&id=x`, expect: 'settings' },
+      { path: `/projects/${p.slug}/settings?tab=environments&env=e1&promote=saved&id=x`, expect: 'page' },
     ];
     for (const u of urls) {
       await gotoApp(page, u.path);
       await expect(page.locator('[data-app-shell]'), u.path).toBeVisible();
       await expect(page.locator('[data-not-found]'), u.path).toHaveCount(0);
       await expect(page.locator('[data-project-not-found]'), u.path).toHaveCount(0);
-      if (u.expect === 'coming-soon') {
-        await expect(page.getByRole('heading', { name: /coming soon/ }), u.path).toBeVisible();
-      } else if (u.expect === 'runs' || u.expect === 'overview' || u.expect === 'charts') {
+      if (u.expect === 'runs' || u.expect === 'overview' || u.expect === 'charts') {
         await expect(page.getByTestId(`${u.expect}-page`), u.path).toBeVisible();
       } else if (u.expect === 'run') {
         // the run page (run-detail area) renders its own loaded or error state inside the shell
         await expect(page.getByRole('main'), u.path).toBeVisible();
+      } else if (u.expect === 'page') {
+        // a real page (it may show its own empty or error state): the shell stays and nothing is a 404
+        await expect(page.getByRole('heading', { name: /coming soon/ }), u.path).toHaveCount(0);
+      } else if (u.expect === 'admin') {
+        await expect(page.locator('[data-admin-page]'), u.path).toBeVisible();
+      } else if (u.expect === 'docs') {
+        await expect(page.locator('[data-docs-page]'), u.path).toBeVisible();
       } else if (u.expect === 'settings') {
         await expect(page.locator('[data-settings-page]'), u.path).toBeVisible();
       } else if (u.expect === 'trash') {

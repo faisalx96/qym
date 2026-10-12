@@ -1,0 +1,74 @@
+/* Collapsible remote-queue card (.exq-remote). */
+.card {
+  margin-bottom: var(--space-xl);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-md);
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: start;
+  cursor: pointer;
+}
+
+.title {
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+
+.sub {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.tags {
+  display: inline-flex;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding: 0 var(--space-md) var(--space-md);
+}
+
+.env {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.envHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: center;
+}
+
+.meta {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.err {
+  color: var(--error);
+  font-size: var(--font-sm);
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}

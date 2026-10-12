@@ -1,0 +1,4 @@
+/* The panel is empty (the page is its content), so it must not add spacing under the tab strip. */
+.panel {
+  padding: 0;
+}

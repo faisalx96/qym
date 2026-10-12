@@ -1,4 +1,3 @@
-import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, Outlet, type RouteObject } from 'react-router-dom';
 import { appBase, isDev } from '@/lib/runtime';
 import { ROUTES } from './routes';
@@ -12,49 +11,51 @@ import { ProjectSettingsPage } from '@/features/shell/settings/ProjectSettingsPa
 import { LegacyRunRedirect } from '@/features/shell/LegacyRunRedirect';
 import { NotFound } from '@/features/shell/NotFound';
 import { RouteError } from '@/features/shell/RouteError';
-import { ComingSoon } from '@/features/dev/ComingSoon';
 import { AdminGuard } from '@/features/admin/AdminGuard';
-import { AdminPage } from '@/features/admin/AdminPage';
-import { DocsPage } from '@/features/docs/DocsPage';
 import { DocsRedirect } from '@/features/docs/DocsRedirect';
-
-import { RunsPage, OverviewPage, ChartsPage } from '@/features/runs-list';
-
-const ReviewsPageLazy = lazy(() => import('@/features/reviews/ReviewsPage').then((m) => ({ default: m.ReviewsPage })));
-const TrashPageLazy = lazy(() => import('@/features/trash/TrashPage').then((m) => ({ default: m.TrashPage })));
-const DatasetsRoutesLazy = lazy(() => import('@/features/datasets/DatasetsRoutes').then((m) => ({ default: m.DatasetsRoutes })));
-const ReviewsPage = () => (
-  <Suspense fallback={null}>
-    <ReviewsPageLazy />
-  </Suspense>
-);
-const TrashPage = () => (
-  <Suspense fallback={null}>
-    <TrashPageLazy />
-  </Suspense>
-);
-const DatasetsRoutes = () => (
-  <Suspense fallback={null}>
-    <DatasetsRoutesLazy />
-  </Suspense>
-);
-import { RunDetailPage } from '@/features/run-detail/RunDetailPage';
-import { ComparePage } from '@/features/compare/ComparePage';
-import { AnalyzerPage } from '@/features/analyzer';
+import { RunsPage } from '@/features/runs-list';
 import { RunAnalyzerRedirect } from '@/features/analyzer/RunAnalyzerRedirect';
+import { lazyPage } from './lazyPage';
+
+// Heavy pages are fetched on first visit so the entry chunk stays small (see frontend/README.md).
+const OverviewPage = lazyPage(() => import('@/features/runs-list/OverviewPage'), 'OverviewPage');
+const ChartsPage = lazyPage(() => import('@/features/runs-list/ChartsPage'), 'ChartsPage');
+const RunDetailPage = lazyPage(() => import('@/features/run-detail/RunDetailPage'), 'RunDetailPage');
+const ComparePage = lazyPage(() => import('@/features/compare/ComparePage'), 'ComparePage');
+const AnalyzerPage = lazyPage(() => import('@/features/analyzer/AnalyzerPage'), 'AnalyzerPage');
+const DatasetsRoutes = lazyPage(() => import('@/features/datasets/DatasetsRoutes'), 'DatasetsRoutes');
+const ReviewsPage = lazyPage(() => import('@/features/reviews/ReviewsPage'), 'ReviewsPage');
+const TrashPage = lazyPage(() => import('@/features/trash/TrashPage'), 'TrashPage');
+const AdminPage = lazyPage(() => import('@/features/admin/AdminPage'), 'AdminPage');
+const DocsPage = lazyPage(() => import('@/features/docs/DocsPage'), 'DocsPage');
+// The experiments area is the heaviest (launch form, editors).
+const ExperimentsIndexRoute = lazyPage(
+  () => import('@/features/experiments/ExperimentsRoutes'),
+  'ExperimentsIndexRoute',
+);
+const ExperimentsSplatRoute = lazyPage(
+  () => import('@/features/experiments/ExperimentsRoutes'),
+  'ExperimentsSplatRoute',
+);
+const QueuePage = lazyPage(() => import('@/features/experiments/queue/QueuePage'), 'QueuePage');
+const EnvironmentsRoute = lazyPage(
+  () => import('@/features/environments/EnvironmentsRoutes'),
+  'EnvironmentsRoute',
+);
+const ModelsPage = lazyPage(() => import('@/features/models/ModelsPage'), 'ModelsPage');
 
 const C = ROUTES.projectChildren;
 
-/** Placeholder routes for every current URL (brief 01 §8). Area agents replace the elements. */
+/** Project-scoped routes (brief 01 §8). */
 const projectChildren: RouteObject[] = [
   { index: true, element: <RunsPage /> },
   { path: C.overview, element: <OverviewPage /> },
   { path: C.charts, element: <ChartsPage /> },
-  { path: C.models, element: <ComingSoon brief="06-experiments-eval-queue" title="Models" /> },
-  { path: C.experimentsQueue, element: <ComingSoon brief="06-experiments-eval-queue" title="Eval queue" /> },
-  { path: C.experiments, element: <ComingSoon brief="06-experiments-eval-queue" title="Experiments" /> },
-  { path: C.experimentsSplat, element: <ComingSoon brief="06-experiments-eval-queue" title="Experiment" /> },
-  { path: C.environments, element: <ComingSoon brief="06-experiments-eval-queue" title="Environments" /> },
+  { path: C.models, element: <ModelsPage /> },
+  { path: C.experimentsQueue, element: <QueuePage /> },
+  { path: C.experiments, element: <ExperimentsIndexRoute /> },
+  { path: C.experimentsSplat, element: <ExperimentsSplatRoute /> },
+  { path: C.environments, element: <EnvironmentsRoute /> },
   { path: C.datasets, element: <DatasetsRoutes /> },
   { path: C.datasetsSplat, element: <DatasetsRoutes /> },
   { path: C.analysis, element: <AnalyzerPage /> },
