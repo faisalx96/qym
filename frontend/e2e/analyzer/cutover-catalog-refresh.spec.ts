@@ -26,6 +26,8 @@ test('new approvals while editing keep the edits and the starting revision', asy
   await gotoApp(page, `/projects/${seed.slug}/analysis?scope=categories`);
   const category = (current as unknown as { default_categories: string[] } | null)?.default_categories;
   await expect(page.getByRole('tab').first()).toBeVisible();
+  // the tabs can render before the first config response is captured
+  await expect.poll(() => current !== null).toBe(true);
   const startRevision = Number(
     (current as unknown as { category_catalog_version: number }).category_catalog_version,
   );
