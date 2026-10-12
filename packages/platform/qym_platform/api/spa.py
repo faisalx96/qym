@@ -16,6 +16,7 @@ path with a file extension under ``/app`` is a 404, never ``index.html``.
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 from pathlib import Path
 from typing import Any
@@ -63,10 +64,14 @@ def spa_bootstrap(settings: PlatformSettings, root: str) -> dict[str, Any]:
 
 def render_spa_index(html: str, settings: PlatformSettings, root: str) -> str:
     """Inject ``<base href>`` and the bootstrap script into the built index.html."""
-    base = f'<base href="{root}{SPA_PREFIX}/">'
+    base = f'<base href="{html_lib.escape(root + SPA_PREFIX + "/", quote=True)}">'
+    # "<" is escaped so no configured value can close the inline script early.
+    def _js(value: Any) -> str:
+        return json.dumps(value).replace("<", "\\u003c")
+
     script = (
-        f"<script>window.__QYM_APP__ = {json.dumps(spa_bootstrap(settings, root))};"
-        f"window.__QYM_ROOT_PATH__ = {json.dumps(root)};</script>"
+        f"<script>window.__QYM_APP__ = {_js(spa_bootstrap(settings, root))};"
+        f"window.__QYM_ROOT_PATH__ = {_js(root)};</script>"
     )
     injection = base + script
     if BOOTSTRAP_MARKER in html:

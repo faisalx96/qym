@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { describe, expect, it, vi } from 'vitest';
@@ -18,6 +18,7 @@ import {
   useToast,
   Dialog,
   HelpMarker,
+  LinkButton,
   ScoreValue,
 } from '@/ui';
 import { ApiError } from '@/lib/http';
@@ -257,5 +258,60 @@ describe('status primitives', () => {
     expect(container.querySelector('[data-band="5"]')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Task error' })).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe('Button and LinkButton states', () => {
+  it('a loading Button is disabled', () => {
+    render(<Button loading>Save</Button>);
+    const btn = screen.getByRole('button', { name: 'Save' });
+    expect(btn).toBeDisabled();
+  });
+
+  it('a disabled LinkButton is aria-disabled and is inert', async () => {
+    const onClick = vi.fn();
+    render(
+      <MemoryRouter>
+        <LinkButton to="/x" isDisabled onClick={onClick}>
+          Open
+        </LinkButton>
+      </MemoryRouter>,
+    );
+    const link = screen.getByRole('link', { name: 'Open' });
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(link).not.toHaveAttribute('href');
+  });
+});
+
+describe('Toast', () => {
+  it('stays while hovered and is dismissed after leaving', async () => {
+    vi.useFakeTimers();
+    try {
+      function Fire() {
+        const toast = useToast();
+        return <button onClick={() => toast.show('Saved', { timeout: 1000 })}>fire</button>;
+      }
+      render(
+        <ToastProvider>
+          <Fire />
+        </ToastProvider>,
+      );
+      await act(async () => {
+        screen.getByText('fire').click();
+      });
+      const toast = screen.getByText('Saved').closest('[role=status]') as HTMLElement;
+      await act(async () => {
+        fireEvent.mouseEnter(toast);
+        vi.advanceTimersByTime(10_000);
+      });
+      expect(screen.getByText('Saved')).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.mouseLeave(toast);
+        vi.advanceTimersByTime(2_500);
+      });
+      expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

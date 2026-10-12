@@ -30,6 +30,8 @@ export interface ToastItem extends ToastOptions {
 interface ToastApi {
   show: (message: string, options?: ToastOptions) => number;
   dismiss: (id: number) => void;
+  pause: (id: number) => void;
+  resume: (id: number) => void;
   toasts: ToastItem[];
 }
 
@@ -45,6 +47,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     timers.current.delete(id);
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+  // Hovering or focusing inside a toast pauses its timer (WCAG 2.2.1): the action
+  // button must stay reachable for keyboard and slow pointer users.
+  const pause = useCallback((id: number) => {
+    clearTimeout(timers.current.get(id));
+    timers.current.delete(id);
+  }, []);
+  const resume = useCallback(
+    (id: number) => {
+      if (timers.current.has(id)) return;
+      timers.current.set(
+        id,
+        setTimeout(() => dismiss(id), 2000),
+      );
+    },
+    [dismiss],
+  );
   const show = useCallback(
     (message: string, options: ToastOptions = {}) => {
       const id = ++counter;
@@ -63,7 +81,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const map = timers.current;
     return () => map.forEach((t) => clearTimeout(t));
   }, []);
-  const api = useMemo(() => ({ show, dismiss, toasts }), [show, dismiss, toasts]);
+  const api = useMemo(
+    () => ({ show, dismiss, toasts, pause, resume }),
+    [show, dismiss, toasts, pause, resume],
+  );
   return (
     <ToastContext.Provider value={api}>
       {children}
@@ -89,6 +110,12 @@ function Toaster() {
           className={styles.toast}
           data-tone={t.tone}
           role={t.tone === 'error' ? 'alert' : 'status'}
+          onMouseEnter={() => ctx.pause(t.id)}
+          onMouseLeave={() => ctx.resume(t.id)}
+          onFocus={() => ctx.pause(t.id)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) ctx.resume(t.id);
+          }}
         >
           <span className={styles.message}>{t.message}</span>
           {t.action ? (

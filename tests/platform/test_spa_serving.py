@@ -229,3 +229,12 @@ def test_render_spa_index_without_marker_injects_into_head():
     html = spa.render_spa_index("<html><head><title>x</title></head><body></body></html>", settings, "/qym")
     assert html.startswith('<html><head><base href="/qym/app/"><script>window.__QYM_APP__')
     assert json.loads(re.search(r"__QYM_APP__ = (\{.*?\});", html).group(1))["rootPath"] == "/qym"
+
+
+def test_render_spa_index_escapes_hostile_root_path():
+    from qym_platform.settings import PlatformSettings
+
+    settings = PlatformSettings(environment="test", auth_mode="none")
+    html = spa.render_spa_index("<html><head></head></html>", settings, '/x"></script><script>alert(1)')
+    assert "</script><script>alert" not in html
+    assert '<base href="/x&quot;&gt;&lt;/script&gt;' in html
