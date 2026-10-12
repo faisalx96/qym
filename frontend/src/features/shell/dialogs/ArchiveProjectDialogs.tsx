@@ -19,13 +19,15 @@ function errorText(e: unknown): string {
 
 /** Archive: previews running runs, then POST …/archive, toast, navigate home. */
 type ProjectDialogProps = { project: Project; open: boolean; onOpenChange: (o: boolean) => void };
+/** Admin lists pass `onArchived` to stay on the page instead of navigating home. */
+type ArchiveDialogProps = ProjectDialogProps & { onArchived?: () => void };
 
-export function ArchiveProjectDialog(props: ProjectDialogProps) {
+export function ArchiveProjectDialog(props: ArchiveDialogProps) {
   // Mounted only while open so preview state resets without effects.
   return props.open ? <ArchiveProjectDialogInner {...props} /> : null;
 }
 
-function ArchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDialogProps) {
+function ArchiveProjectDialogInner({ project, open, onOpenChange, onArchived }: ArchiveDialogProps) {
   const [preview, setPreview] = useState<ArchivePreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const archive = useArchiveProject();
@@ -67,7 +69,8 @@ function ArchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDialo
         try {
           await archive.mutateAsync(project);
           toast.show(`${project.name} archived`, { tone: 'info' });
-          navigate('/');
+          if (onArchived) onArchived();
+          else navigate('/');
         } catch (e) {
           throw new Error(errorText(e));
         }

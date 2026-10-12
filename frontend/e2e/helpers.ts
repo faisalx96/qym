@@ -54,3 +54,85 @@ export function trackPageLoads(page: Page): { count: () => number } {
   page.on('load', () => loads++);
   return { count: () => loads };
 }
+
+// ── Admin / docs area helpers (area 09) ───────────────────────────────────
+
+export async function createApiKey(request: APIRequestContext, projectId: string): Promise<string> {
+  const res = await request.post(`/v1/projects/${projectId}/api-keys`, { data: { name: 'e2e' } });
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return ((await res.json()) as { token: string }).token;
+}
+
+export interface SeededUser {
+  id: string;
+  email: string;
+  existing?: boolean;
+}
+
+export async function createUser(
+  request: APIRequestContext,
+  email: string,
+  displayName = '',
+  role: 'ADMIN' | 'MEMBER' = 'MEMBER',
+): Promise<SeededUser> {
+  const res = await request.post('/v1/admin/users', { data: { email, display_name: displayName, role } });
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return (await res.json()) as SeededUser;
+}
+
+function runEvent(runId: string, type: string, payload: Record<string, unknown>, sequence: number): string {
+  return JSON.stringify({
+    schema_version: 1,
+    event_id: crypto.randomUUID(),
+    sequence,
+    sent_at: new Date().toISOString(),
+    type,
+    run_id: runId,
+    payload,
+  });
+}
+
+export interface SeededRun {
+  run_id: string;
+  name: string;
+}
+
+/**
+ * Create a run through the ingest API as the SDK would. `finish: false` leaves it
+ * RUNNING (shows under Live Runs with Force stop); otherwise COMPLETED/FAILED.
+ */
+export async function createRun(
+  request: APIRequestContext,
+  token: string,
+  opts: { name: string; task?: string; dataset?: string; model?: string; items?: number; finish?: boolean; fail?: boolean },
+): Promise<SeededRun> {
+  const { name, task = 'qa', dataset = 'golden', model = 'model-a', items = 4, finish = true, fail = false } = opts;
+  const headers = { Authorization: `Bearer ${token}` };
+  const created = await request.post('/v1/runs', {
+    headers,
+    data: { external_run_id: name, task, dataset, model, metrics: ['exact_match'] },
+  });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  const body = (await created.json()) as { run_id?: string; id?: string };
+  const runId = body.run_id ?? body.id!;
+  const events: string[] = [
+    runEvent(runId, 'run_started', { task, dataset, metrics: ['exact_match'], started_at: new Date().toISOString(), total_items: items }, 1),
+  ];
+  let seq = 2;
+  const done = finish ? items : Math.max(1, Math.floor(items / 2));
+  for (let i = 0; i < done; i++) {
+    const itemId = `item-${i}`;
+    events.push(runEvent(runId, 'item_started', { item_id: itemId, index: i, input: { q: `q${i}` } }, seq++));
+    events.push(runEvent(runId, 'metric_scored', { item_id: itemId, metric_name: 'exact_match', score_numeric: i % 2 }, seq++));
+    events.push(runEvent(runId, 'item_completed', { item_id: itemId, output: `a${i}`, latency_ms: 10 }, seq++));
+  }
+  if (finish) {
+    events.push(runEvent(runId, 'run_completed', { ended_at: new Date().toISOString(), final_status: fail ? 'FAILED' : 'COMPLETED' }, seq++));
+  }
+  const posted = await request.post(`/v1/runs/${runId}/events`, {
+    headers: { ...headers, 'Content-Type': 'application/x-ndjson' },
+    data: events.join('\n'),
+  });
+  expect(posted.ok(), await posted.text()).toBeTruthy();
+  return { run_id: runId, name };
+}

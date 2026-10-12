@@ -124,3 +124,6 @@ frontend/playwright-report*/
 frontend/blob-report/
 frontend/.qym-e2e.db*
 .qym-dev.db*
+
+# React sources (root lib/ rule above is for Python build output)
+!frontend/src/lib/

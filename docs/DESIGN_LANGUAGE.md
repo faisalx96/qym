@@ -410,10 +410,13 @@ values inside must be tokens. Prefix page-local classes (`.dsx-`, `.pg-`, `.tv-`
 
 ## 5. Sanctioned exceptions
 
-- **Docs pages** (`docs.css`, `docs/**/*.html`): prose reading pages keep a
-  larger independent heading/body scale (28/20/16/13.5→13px) and a brighter
+- **Docs pages** (`docs.css`, `docs/**/*.html`; in the React app
+  `frontend/src/features/docs/`): prose reading pages keep a larger
+  independent heading/body scale (28/20/16/13.5→13px) and a brighter
   `--docs-body`. They still use the shared color ramp for labels and the
-  tokenized `--code-*` syntax palette.
+  tokenized `--code-*` syntax palette. In `frontend/` the scale is carried by
+  the `--docs-font-*` tokens in `src/styles/tokens.css` (never px literals)
+  and only `features/docs` may reference them.
 - **`_static/ui/` (SDK-local run UI)**: a separate mini-app with its own theme
   (`app.css`), including a light mode. Do not import dashboard tokens there or
   vice versa.

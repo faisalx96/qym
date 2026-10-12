@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/http';
+import { adminKeys } from './admin';
 import { meKey } from './me';
 import type { ArchivePreview, DeletionPreview, Me, Project, UnarchivePreview } from './types';
 
@@ -55,6 +56,7 @@ export function useCreateProject() {
     onSuccess: (project) => {
       upsertProjectInCache(qc, project);
       void qc.invalidateQueries({ queryKey: meKey });
+      void qc.invalidateQueries({ queryKey: adminKeys.projects });
     },
   });
 }
@@ -64,7 +66,10 @@ export function useRenameProject(projectId: string) {
   return useMutation({
     mutationFn: (body: { name?: string; slug?: string }) =>
       api.patch<Project>(`/v1/admin/projects/${projectId}`, body),
-    onSuccess: (project) => upsertProjectInCache(qc, project),
+    onSuccess: (project) => {
+      upsertProjectInCache(qc, project);
+      void qc.invalidateQueries({ queryKey: adminKeys.projects });
+    },
   });
 }
 
@@ -99,6 +104,7 @@ export function useArchiveProject() {
       removeProjectFromCache(qc, project.id);
       qc.setQueryData(projectKey(project.slug), { ...project, is_active: false });
       void qc.invalidateQueries({ queryKey: meKey });
+      void qc.invalidateQueries({ queryKey: adminKeys.projects });
     },
   });
 }
@@ -110,6 +116,7 @@ export function useUnarchiveProject() {
     onSuccess: (updated) => {
       upsertProjectInCache(qc, updated);
       void qc.invalidateQueries({ queryKey: meKey });
+      void qc.invalidateQueries({ queryKey: adminKeys.projects });
     },
   });
 }
@@ -123,6 +130,7 @@ export function useDeleteProject() {
       removeProjectFromCache(qc, project.id);
       qc.removeQueries({ queryKey: projectKey(project.slug) });
       void qc.invalidateQueries({ queryKey: meKey });
+      void qc.invalidateQueries({ queryKey: adminKeys.projects });
     },
   });
 }

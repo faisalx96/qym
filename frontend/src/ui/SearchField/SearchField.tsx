@@ -20,11 +20,13 @@ export interface SearchFieldProps extends Omit<AriaSearchFieldProps, 'className'
   width?: string | number;
   /** Shown at the end as a keyboard hint, e.g. "/" */
   hint?: string;
+  /** Extra attributes for the <input> (combobox role/aria-*). */
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
 }
 
 /** .qym-search: control with a leading glyph and a clear action. */
 export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(function SearchField(
-  { label, hideLabel = true, placeholder = 'Search', onClear, className, width, hint, ...rest },
+  { label, hideLabel = true, placeholder = 'Search', onClear, className, width, hint, inputProps, ...rest },
   ref,
 ) {
   return (
@@ -40,7 +42,7 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
         <span className={tfStyles.prefix}>
           <Icon name="search" size={12} />
         </span>
-        <Input ref={ref} className={tfStyles.control} placeholder={placeholder} />
+        <Input ref={ref} className={tfStyles.control} placeholder={placeholder} {...inputProps} />
         <span className={tfStyles.suffix}>
           {hint ? <kbd className={styles.hint}>{hint}</kbd> : null}
           <AriaButton className={styles.clear} aria-label="Clear search">
