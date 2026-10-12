@@ -1,94 +1,79 @@
 # UI migration: review guide
 
-State as of 2026-10-12. Every branch below is committed and unmerged, per the
-decision to leave them for human review. Nothing was pushed.
+State as of 2026-10-12. The nine area branches are integrated into one tree
+(`ui/integration`) and merged into `UI-redesign` with a plain merge commit.
+Nothing was pushed. The `ui/*` branches and their worktrees are kept for reference.
 
-## Branches
+## Integration state
 
-| Branch | Base | Commits | Worktree | Area brief |
-|---|---|---|---|---|
-| `ui/foundation` | `UI-redesign` | 11 | `../qym-wt-foundation` | 01, 02 |
-| `ui/overview-runs-list` | `ui/foundation` | 6 | `../qym-wt-runs-list` | 03 |
-| `ui/run-detail` | `ui/foundation` | 15 | `../qym-wt-run-detail` | 04 |
-| `ui/compare` | `ui/foundation` | 7 | `../qym-wt-compare` | 05 (compare half) |
-| `ui/analyzer` | `ui/foundation` | 8 | `../qym-wt-analyzer` | 05 (analyzer half), 08 |
-| `ui/experiments-eval-queue` | `ui/foundation` | 30 | `../qym-wt-experiments` | 06 |
-| `ui/datasets-reviews-trash` | `ui/foundation` | 7 | `../qym-wt-datasets` | 07 |
-| `ui/admin-docs` | `ui/foundation` | 5 | `../qym-wt-admin-docs` | 09 |
-| `ui/standalone-uis` | `ui/foundation` | 5 | `../qym-wt-standalone` | 10 |
+| Item | Value |
+|---|---|
+| Merge into `UI-redesign` | `89025c2` (`merge: integrate the React frontend (ui/integration)`) |
+| `ui/integration` tip | `16289eb` |
+| Base | `ui/foundation` (`a3b3446`), then eight `--no-ff` merges |
+| Merge order | admin-docs, datasets-reviews-trash, standalone-uis, overview-runs-list, run-detail, compare, analyzer, experiments-eval-queue |
 
-Each area branch carries `frontend/src/features/<area>/ANALYSIS.md` and
-`docs/internal/ui-migration/decisions/<area>/{DESIGN_NOTES,UX_DECISION,OPEN_QUESTIONS}.md`.
-Read `OPEN_QUESTIONS.md` first: it lists every decision the agent made alone
-and everything it left unfinished.
+Hand-merged files (the places where two branches changed the same behaviour):
 
-## Test evidence (final runs reported by each agent)
+- `frontend/src/features/shell/hooks.ts` `useContentScrollRestoration`: foundation's scroll-listener
+  recording plus run-detail's "same-path REPLACE keeps the scroll". A same-path REPLACE carries the
+  entry's offset to its new key and does not cancel an in-flight Back restore.
+- `frontend/src/features/shell/LegacyRunRedirect.tsx`: foundation slug lookup, run-detail's
+  `run.project_slug`, analyzer's `/run/:id/analyzer` to `/analysis?run=`.
+- `frontend/src/app/router.tsx`: every real route, no `ComingSoon` left in the route table.
+  Overview, Charts, run detail, compare, analyzer, datasets, reviews, trash, admin, docs and the
+  experiments area go through `app/lazyPage.tsx`. `runs/*/analyzer` is wrapped by `RunAnalyzerRedirect`.
+- `frontend/playwright.config.ts`: union (`QYM_PYTHON` fallback, `globalSetup`, `QYM_E2E_DB`, fake
+  Evaluation Services, stub LLM, `QYM_ALLOW_PRIVATE_LLM_BASE_URLS`, `QYM_ROLE=all`).
+- `packages/platform/qym_platform/auth.py`: one dev-user `IntegrityError` fix.
+- `.gitignore`: one `!frontend/src/**/lib/` rule; `frontend/tsconfig.node.tsbuildinfo` untracked
+  (ignored by `frontend/.gitignore`).
+- `frontend/src/lib/{metrics,url-state}.ts` and `__tests__/lib.test.ts`: run-detail's versions.
+- `frontend/e2e/shell/navigation.spec.ts`: deep-link table is the union of all areas.
 
-| Branch | Playwright | Vitest | Design lint | pytest |
-|---|---|---|---|---|
-| foundation | 43 passed, 6 skipped (+6 passed under proxy_headers) | 61 | 35 | 3737 passed, 1 pre-existing failure (`test_spa_navigation_leaves_no_listeners_or_stale_handlers`, fails on `UI-redesign` too) |
-| overview-runs-list | 121 passed (whole suite) | 92 | 35 | not run, no backend change |
-| run-detail | 150 passed, 6 skipped (`--workers 2`) | 82 | 35 | not run, no backend change |
-| compare | 54 passed, 2 axe contrast (fixed on foundation, see below) | 99 | 35 | not run |
-| analyzer | 35 + 43 shell passed | 82 | 35 | not run |
-| experiments-eval-queue | 54 + 37 passed | 500 | 35 | not run |
-| datasets-reviews-trash | 75 passed | 97 | 35 | not run |
-| admin-docs | 35 passed, 3 skipped (+2 under proxy_headers) | 65 | 35 | `test_platform_docs.py` 10 passed |
-| standalone-uis | 33 passed (SDK server) | 90 | 35 | 576 passed on sdk + restructure + spa suites |
+Two spec fixes the merge exposed (not product changes): the admin maintenance polling spec now pins the
+job to `running` in the list response (the e2e platform runs its workers, which finish a queued job in
+seconds), and the experiments a11y spec seeds its world under the fake-services lock.
 
-## Suggested merge order into `ui/foundation` (or into `UI-redesign` after it)
+## Test evidence (on `ui/integration` 16289eb)
 
-1. `ui/foundation` (contains three fixes made after the areas forked: tracked
-   `frontend/src/lib`, danger Tag contrast, legacy-redirect slug lookup).
-2. `ui/admin-docs`, `ui/datasets-reviews-trash`, `ui/standalone-uis` (few shared-file edits).
-3. `ui/overview-runs-list`, then `ui/run-detail`.
-4. `ui/compare` (copies ~20 files verbatim from `ui/run-detail@771663e`; manifest in
-   `decisions/compare/COPIED_FROM_RUN_DETAIL.md`; identical content should merge as add/add).
-5. `ui/analyzer`, then `ui/experiments-eval-queue`.
-
-## Expected conflicts and dedupe list
-
-- `frontend/src/app/router.tsx` and `routes.ts`: every branch replaces its own
-  `ComingSoon` entries. Keep all.
-- `frontend/e2e/shell/navigation.spec.ts` deep-link expectations: each branch
-  updated the rows for its own routes. Keep all.
-- `frontend/playwright.config.ts`: runs-list and analyzer removed `QYM_ROLE=api`
-  and added a `QYM_PYTHON` fallback; experiments added fake services and
-  `QYM_E2E_DB`; standalone added `e2e:sdk`. Union them.
-- `.gitignore`: several branches added `!frontend/**/lib/` or `!frontend/src/lib/`;
-  foundation now has `!frontend/src/**/lib/`. Keep one.
-- `frontend/src/lib/metrics.ts`: run-detail and compare replaced it with the full
-  `metrics.js` port (foundation test updated). Take theirs.
-- Foundation primitives patched on more than one branch, same intent:
-  DataTable selection column (datasets, experiments), Textarea `errorMessage`
-  (admin-docs, datasets), Tabs `forceMount` and ScoreValue `text` (run-detail,
-  compare), Tag/Button/Select contrast (experiments; Tag also on foundation).
-- `frontend/src/features/shell/LegacyRunRedirect.tsx`: analyzer adds the
-  `/analyzer` → `/analysis?run=` branch; foundation has the slug fix only.
-- `package.json` / lock: new pinned deps are recharts (runs-list),
-  @tanstack/react-virtual (run-detail, compare), react-hook-form + zod +
-  @hookform/resolvers + CodeMirror packages (experiments), shiki + hast
-  packages (admin-docs).
+| Suite | Result |
+|---|---|
+| `npm run check` (tsc, eslint, stylelint, vitest, design-language) | clean; Vitest 702 passed (68 files), design-language 35 |
+| `npm run build` | entry chunk `index-*.js` 302 kB (97.7 kB gzip), largest lazy chunks 432 kB (CodeMirror), 407 kB (docs search), 386 kB (TrendChart); no chunk over 500 kB |
+| `npm run build:sdk` | `app.js` 171 kB (56 kB gzip) |
+| Playwright `--workers 2` (platform 8809, Vite 5809) | 531 passed, 9 skipped (proxy_headers specs), 0 failed |
+| `npm run e2e:sdk` | 33 passed (single worker; it shares one fixture server) |
+| `pytest -q -n 4 tests/platform tests/sdk tests/test_restructure.py` | 4229 passed, 742 skipped, 2 failed: `test_spa_navigation_leaves_no_listeners_or_stale_handlers` (pre-existing, fails on `UI-redesign`) and `test_source_api_preserves_repeated_offpage_details_search_edit_and_csv[run]` (timing flake under `-n 4`, passes alone) |
 
 ## Known gaps to decide on
 
-- Bundle: the main chunk grew past Vite's 500 kB warning on the experiments
-  branch (172 kB gzip); analyzer and run-detail are eagerly imported. Lazy-load
-  the heavy pages at integration time.
-- Not rebuilt: self-contained HTML export (run page, compare), Sankey, categories
-  compare view, item x metric matrix, rule-version lineage graph, root-cause
-  dashboard (kill-switched), compare-page analyzer modal.
-- Backend untouched except SPA serving and the `/ui` removal; follow-ups logged:
-  facet counts, trend origin filter, pass-aware `/api/compare`, server-side CSV,
-  proper 404/403 instead of `200 {error}`, Postgres-only `btrim` in
-  `/api/corrections?source=`, preset publish without expected-version.
-- Experiments: settings widgets use native inputs instead of the shared
-  wrappers for performance; environments forms are not on RHF; `ReadOnlyJson`
-  built but not wired.
+Collected from every area's `decisions/<area>/OPEN_QUESTIONS.md`; read those for the full lists.
+
+- Not rebuilt: self-contained HTML export (run page, compare), Sankey, categories "Compare" view,
+  item x metric matrix, quality-latency frontier, by-pass trend, stability map, rule-version lineage
+  graph, root-cause dashboard (kill-switched), legacy item-level diagnosis editors,
+  category-catalog editing in the issue dialog, Charts first-column resize and scroll mirror,
+  admin provider configuration UI.
+- Backend follow-ups: facet counts, trend origin filter, pass-aware `/api/compare` and
+  `pass_number` scoping, server-side CSV / `export-html` for compare, proper 404/403 instead of
+  `200 {error}`, Postgres-only `btrim` in `/api/corrections?source=corrected` (500 on SQLite),
+  preset publish without expected-version.
+- Experiments: environment forms are not on react-hook-form; array and free-object leaves edit as
+  JSON text; not verified against a live Evaluation Service with every type.
+- Docs: the full-text search index chunk is ~400 kB raw (cap per page or move server side);
+  `tests/platform/test_design_language.py` still freezes `docs.css` sizes until the vanilla page goes.
+- Runs list: Charts refreshes every 60 s (vanilla was 15 s with live runs); the run-detail page
+  still carries two unreachable `ComingSoon` fallbacks in `RunDetailPage.tsx`.
+- Compare: Auto-Analyze modal dropped (links to the analyzer workspace instead); domain filter
+  "is any of" semantics differ from the old AND.
+- Standalone SDK viewer: rows windowed 200 at a time; CI (`.github/workflows/tests.yml`) builds the
+  wheel without `npm run build:sdk` and pins Node 22 while `frontend/` needs 24, so a CI-built wheel
+  has no viewer; `--no-ui` semantics changed.
+- Under `QYM_AUTH_MODE=proxy_headers` the SPA 401 panel can only say "identity missing".
 - RTL: SegmentedControl pill offset and Pagination glyphs do not mirror.
-- SDK wheel: CI must run `npm run build:sdk` (Node 24) before `pip wheel`, or
-  the wheel ships no viewer.
-- Cutover (not started): the vanilla `_static/dashboard` pages still serve at
-  their old URLs; the React app lives under `/app/*`.
-- Some commits after a usage-limit resume carry a "Claude Sonnet 5.5"
-  attribution trailer instead of "Claude Fable 5.1".
+- SDK wheel: CI must run `npm run build:sdk` (Node 24) before `pip wheel`.
+- Cutover (not started): the vanilla `_static/dashboard` pages still serve at their old URLs; the
+  React app lives under `/app/*`.
+- Some commits after a usage-limit resume carry a "Claude Sonnet 5.5" attribution trailer instead
+  of "Claude Fable 5.1".
