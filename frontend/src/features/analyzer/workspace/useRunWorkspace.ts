@@ -128,7 +128,9 @@ export function useRunWorkspace({ runId, data, config, preselectMetric }: Worksp
 
   /* job */
   const busy = runner.busy || testing;
-  const llmReady = config.llm_configured && Boolean(connectionId) && config.can_operate_analyzer;
+  const connection = config.llm_connections.find((c) => c.id === connectionId);
+  const llmReady =
+    config.llm_configured && Boolean(connectionId) && connection?.llm_api_key_set !== false && config.can_operate_analyzer;
 
   const doAnalyze = useCallback(async () => {
     setHumanConfirm(null);

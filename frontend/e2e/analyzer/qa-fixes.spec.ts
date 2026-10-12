@@ -2,7 +2,7 @@
 /** QA fix list (docs/internal/ui-migration/qa/analyzer.md): job outcome, drafts, redirects, defaults, confirmations. */
 import { test, expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { analysisUrl, seedAnalyzer, step, toggleBox, waitWorkspace } from './helpers';
+import { analysisUrl, patchJson, seedAnalyzer, step, toggleBox, waitWorkspace } from './helpers';
 
 const jobRegion = (page: Page) => page.getByRole('region', { name: 'Analysis job' });
 const isRuleSave = (r: { method(): string; url(): string }) =>
@@ -163,5 +163,26 @@ test.describe('guidance (2, 3, 9)', () => {
     await search.fill('zzzqq');
     await expect(page.getByText('No matching categories')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Remove category' })).toHaveCount(0);
+  });
+});
+
+test.describe('connection without a key (11)', () => {
+  test('is labelled, not selectable, and Test / Analyze stay off for it', async ({ page, request }) => {
+    const seed = await seedAnalyzer(request);
+    await patchJson(page, /analysis-config/, (json) => {
+      const list = json.llm_connections as Array<Record<string, unknown>>;
+      return {
+        ...json,
+        llm_connections: [...list, { ...list[0], id: 'no-key', name: 'nokey', llm_api_key_set: false }],
+      };
+    });
+    await openRun(page, seed.slug, seed.runId);
+    await page.getByRole('button', { name: /LLM connection/ }).click();
+    const option = page.getByRole('option', { name: /key missing/ });
+    await expect(option).toHaveAttribute('aria-disabled', 'true');
+    await option.click({ force: true });
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Test Selected (1)' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /LLM connection/ })).not.toContainText('nokey');
   });
 });

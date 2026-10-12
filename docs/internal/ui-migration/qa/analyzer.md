@@ -8,7 +8,7 @@ Status key: **OK** same behaviour verified; **CHANGED** different, judged in Not
 
 ## Summary
 
-Total 165 rows: OK 101, CHANGED 44, BUGGY 9, MISSING 11.
+Total 165 rows (original audit: OK 101, CHANGED 44, BUGGY 9, MISSING 11). Current state: every BUGGY row is closed (FIXED marks in the Fix list; rows A17, A21, B2, J1 also marked in the table), of the 11 MISSING rows the run-picker mode is a logged decision and the lineage graph, placeholder highlighting and per-target root-cause detail are Deferred; the rest were closed by the fix pass.
 
 Headline defects (details in the Fix list): a job in which every analysis failed is reported as "6 of 6 succeeded" (bar, Review card and toast); a rule typed and then left within 700 ms is silently lost; Diagnosis search leaves the editor on a different category than the list; empty/0 Timeout becomes 1 second; "View run" drops the selected sample; a run opened under another project's slug is not redirected; Publish defaults to "Set as production". The core journey (open, pick sample, metrics, instructions with `{var}` mapping, targets, preview, Test, Analyze, cancel, resume, reload, project guidance CRUD, 409, documents, rule versions) works and matches the old behaviour or improves on it.
 
@@ -171,7 +171,7 @@ Of the CUTOVER.md gaps only "Analyzer under a wrong project slug is not redirect
 
 | # | Old behaviour (source) | New code | Spec | Status | Notes / evidence |
 |---|---|---|---|---|---|
-| J1 | Connection select "name · model"; connections without a key are disabled and labelled "key missing" | blocks/RunBar.tsx:15-24 | - | **BUGGY** | Re-review: the label now appends "· key missing" but the option is still selectable and Test/Analyze stay enabled after picking it (see Re-review). |
+| J1 | Connection select "name · model"; connections without a key are disabled and labelled "key missing" | blocks/RunBar.tsx:15-24 | - | **FIXED** (1f7c7cad) | Select passes `disabledKeys` to the react-aria Select; `llmReady` is false for a key-less connection. |
 | J2 | Default connection = `default_connection_id` | workspace/useRunWorkspace.ts:67 | run.spec | **OK** | Verified default selected, switching sent `connection_id`. |
 | J3 | No connection: banner + Test/Analyze disabled, Preview still works | RunAnalyze.tsx:111-117 | guidance.spec (no LLM) | **CHANGED** | Banner text kept in spirit; select is shown disabled (placeholder "No connection", from code) instead of hidden; banner and disabled buttons verified. |
 | J4 | Read-only banner ("Only project managers and the run's owner can…") | RunAnalyze.tsx:118-124 | guidance.spec (read-only) | **BUGGY** | New copy says running needs "project member access"; the real rule (`can_operate_analyzer`) is manager or run owner, so ordinary members are told the wrong thing. Buttons are correctly disabled. |

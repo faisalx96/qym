@@ -73,7 +73,6 @@ export function Select<T extends SelectItem>({
     <ListBox
       className={styles.list}
       items={items}
-      disabledKeys={disabledKeys}
       renderEmptyState={() => <div className={styles.empty}>No matches</div>}
     >
       {(item) => (
@@ -95,6 +94,7 @@ export function Select<T extends SelectItem>({
     <AriaSelect
       className={[fieldStyles.field, className].filter(Boolean).join(' ')}
       selectedKey={value}
+      disabledKeys={disabledKeys}
       onSelectionChange={(k) => onChange(k)}
       isDisabled={isDisabled}
       isRequired={isRequired}
