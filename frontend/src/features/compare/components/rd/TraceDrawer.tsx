@@ -26,6 +26,7 @@ import {
   type SpanTree,
   type TraceBounds,
 } from '@/features/run-detail/lib/traceTree';
+import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard';
 import { KIND_GLYPH, KIND_LABEL, KIND_TONE } from '@/features/run-detail/components/traces/spanKinds';
 import { SpanDetail } from '@/features/run-detail/components/traces/SpanDetail';
 import styles from '@/features/run-detail/components/traces/TraceDrawer.module.css';
@@ -287,6 +288,7 @@ export function TraceDrawer({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!singleKeyShortcutsEnabled()) return; // WCAG 2.1.4 opt-out (Runs list > Shortcuts)
       const t = e.target as HTMLElement | null;
       if (t?.closest('input, textarea, select, [contenteditable="true"]')) return;
       e.preventDefault();

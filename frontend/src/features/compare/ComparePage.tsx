@@ -12,16 +12,7 @@ import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
 import { platformUrl } from '@/lib/runtime';
 import { KEYS, readLocal } from '@/lib/storage';
-import {
-  EmptyState,
-  ErrorState,
-  LinkButton,
-  PageHeader,
-  SegmentedControl,
-  Skeleton,
-  Stack,
-  useToast,
-} from '@/ui';
+import { EmptyState, ErrorState, LinkButton, PageHeader, SegmentedControl, Skeleton, useToast } from '@/ui';
 import { CompareCtx, type CompareValue } from './CompareContext';
 import { DeltaLine } from './components/DeltaLine';
 import { ItemsSection } from './components/items/ItemsSection';
@@ -235,9 +226,7 @@ function CompareLoaded({
           </>
         }
       />
-      <Stack gap="sm">
-        <Notices />
-      </Stack>
+      <Notices />
       <div className={styles.sticky}>
         <SelectionBar />
         {sweep ? null : (

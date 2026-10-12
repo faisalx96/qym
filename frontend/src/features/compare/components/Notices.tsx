@@ -1,6 +1,6 @@
 /** Read-only, different-data and alignment notices (brief 05 §3 "Page load / selection"). */
 import { useMemo } from 'react';
-import { Text } from '@/ui';
+import { Stack, Text } from '@/ui';
 import { useCompare } from '../CompareContext';
 import styles from './Notices.module.css';
 
@@ -37,8 +37,10 @@ export function Notices() {
       datasets.size > 1 || (versioned.length > 1 && new Set(versioned.map((e) => e.version)).size > 1);
     return mismatch ? { entries, multipleDatasets: datasets.size > 1 } : null;
   }, [model]);
+  // Nothing to say: render nothing, so the page's flex gap does not reserve an empty slot.
+  if (!readOnlyRuns.length && !data && model.alignment.status === 'aligned') return null;
   return (
-    <>
+    <Stack gap="sm">
       {readOnlyRuns.length ? (
         <div className={styles.note} role="note" data-notice="read-only">
           <strong>Read-only.</strong>{' '}
@@ -81,6 +83,6 @@ export function Notices() {
           </ul>
         </div>
       ) : null}
-    </>
+    </Stack>
   );
 }

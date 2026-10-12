@@ -12,11 +12,11 @@ import styles from './Panel.module.css';
 export function AnalyzeLinks() {
   const { model, slug } = useCompare();
   return (
-    <div className={styles.stack}>
+    <div className={`${styles.stack} ${styles.analyzeLinks}`}>
       <Text variant="sm" tone="muted">
         Analyze a run:
       </Text>
-      <ul className={styles.subList} aria-label="Analyze a run">
+      <ul className={styles.analyzeList} aria-label="Analyze a run">
         {model.runs.map((run, i) => {
           const project = slug ?? run.run.project?.slug;
           const id = encodeURIComponent(run.base);
