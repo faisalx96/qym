@@ -95,6 +95,28 @@ function readHeight(task: string, dataset: string): number {
   }
 }
 
+/** Per-card view choices (dataset tab, runs/grouped, group axis) survive a reload and Back from a run. */
+interface CardPrefs {
+  dataset?: string;
+  mode?: RowMode;
+  axis?: GroupAxis;
+}
+const prefsKey = (slug: string, task: string) => `qym:chart-card-prefs:${JSON.stringify([slug, task])}`;
+function readPrefs(slug: string, task: string): CardPrefs {
+  try {
+    return (JSON.parse(sessionStorage.getItem(prefsKey(slug, task)) ?? '{}') as CardPrefs) ?? {};
+  } catch {
+    return {};
+  }
+}
+function writePrefs(slug: string, task: string, prefs: CardPrefs): void {
+  try {
+    sessionStorage.setItem(prefsKey(slug, task), JSON.stringify(prefs));
+  } catch {
+    /* storage unavailable: the choice just does not persist */
+  }
+}
+
 export function ChartsPage() {
   const { slug } = useProjectContext();
   useDocumentTitle('Charts');
@@ -324,11 +346,15 @@ function TaskCard({
   revisionKey: string;
 }) {
   const [ref, seen] = useInView();
-  const [dataset, setDataset] = useState(combos[0]?.dataset ?? '');
+  const [saved] = useState(() => readPrefs(slug, task));
+  const [dataset, setDataset] = useState(saved.dataset ?? combos[0]?.dataset ?? '');
   const active = combos.find((c) => c.dataset === dataset) ?? combos[0];
   const activeDataset = active?.dataset ?? '';
-  const [mode, setMode] = useState<RowMode>('runs');
-  const [axis, setAxis] = useState<GroupAxis>('model');
+  const [mode, setMode] = useState<RowMode>(saved.mode === 'grouped' ? 'grouped' : 'runs');
+  const [axis, setAxis] = useState<GroupAxis>(saved.axis ?? 'model');
+  useEffect(() => {
+    writePrefs(slug, task, { dataset: activeDataset, mode, axis });
+  }, [slug, task, activeDataset, mode, axis]);
   const [sort, setSort] = useState<{ key: string; dir: SortDir }>({ key: '', dir: 'desc' });
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const filters = useMemo(() => viewToFilters(view), [view]);

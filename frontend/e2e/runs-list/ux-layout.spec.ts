@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 /** UX review (group B) regressions: status-bar overlap, dashboard card clipping, header hit area. */
 import { test, expect, type Page } from '@playwright/test';
-import { clickBox, dataRows, freshProject, openRuns, sharedProject, urlParams } from './support';
+import { clickBox, dataRows, freshProject, openFilters, openRuns, sharedProject, urlParams } from './support';
 
 /** True when the centre of the element is the element itself (nothing overlaps it). */
 const reachable = (page: Page, testid: string, name: string) =>
@@ -78,5 +78,23 @@ test.describe('runs list: UX layout regressions', () => {
     await page.mouse.click(box.x + box.width * 0.8, box.y + box.height / 2);
     await expect.poll(() => urlParams(page).get('sort')).toBe('task-asc');
     await expect(dataRows(page).first()).toBeVisible();
+  });
+
+  test('the custom date range dialog is not covered by the Filters popover', async ({ page, request }) => {
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    await openFilters(page);
+    await page.getByTestId('filters-panel').getByText('Range…').click();
+    const dlg = page.getByRole('dialog', { name: 'Custom date range' });
+    await expect(dlg).toBeVisible();
+    await expect(page.getByTestId('filters-panel')).toHaveCount(0);
+    const covered = await dlg.getByRole('heading', { name: 'Custom date range' }).evaluate((h) => {
+      const r = h.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + 4, r.top + r.height / 2);
+      return !hit || !h.contains(hit);
+    });
+    expect(covered).toBe(false);
+    await dlg.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dlg).toHaveCount(0);
   });
 });

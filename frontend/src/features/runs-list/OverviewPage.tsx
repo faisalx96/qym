@@ -180,6 +180,7 @@ export function OverviewPage() {
                     id: 'run',
                     label: 'Run',
                     flex: true,
+                    minWidth: 160,
                     mono: true,
                     cell: (r) => <RunLink slug={slug} row={r} withTask />,
                   },

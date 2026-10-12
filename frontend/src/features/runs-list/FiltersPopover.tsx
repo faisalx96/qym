@@ -144,7 +144,10 @@ export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopove
                 label="Time range"
                 value={view.range}
                 onChange={(range) =>
-                  range === 'custom' ? setRangeOpen(true) : onChange({ range, from: '', to: '' })
+                  range === 'custom'
+                    ? // a react-aria popover always paints above modals, so it must not stay open behind the dialog
+                      (close(), setRangeOpen(true))
+                    : onChange({ range, from: '', to: '' })
                 }
                 options={[
                   { value: 'all', label: 'All', title: 'Shortcut 1' },
