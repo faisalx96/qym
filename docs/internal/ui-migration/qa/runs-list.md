@@ -228,7 +228,7 @@ Headline defects (details in the Fix list): pass delete 409s after the first del
 | K10 | Grouped Pass@K / Consistency / Reliability via batched `models/stats`, always visible | `ChartsPage.tsx:340-372,520-545` | charts | CHANGED | OQ: stay visible while expanded (old hid them: pain point); headers are sortable. Request body verified. |
 | K11 | Group stat columns toggleable from Columns (`GROUP_DISPLAY_COLUMNS`) | `ColumnsMenu.tsx`, `ChartsPage.tsx:111-120` | - | FIXED (df03c94d) | Charts Columns menu lists metrics/system/trace only (and also lists "Duration", which has no chart column). Minor. |
 | K12 | First-column drag resize 280-720 px | - | - | MISSING | OQ 2026-10-12 (NICE, about 2 h). |
-| K13 | Charts refresh on the runs-list cadence (15 s with live runs, 2 s stopping) | `ChartsPage.tsx:246` | - | BUGGY (fix did not work) | OQ 2026-10-12: overview refetch is a fixed 60 s. A live run's chart lags up to a minute. |
+| K13 | Charts refresh on the runs-list cadence (15 s with live runs, 2 s stopping) | `ChartsPage.tsx:246` | - | FIXED (02ab8157) | OQ 2026-10-12: overview refetch is a fixed 60 s. A live run's chart lags up to a minute. |
 | K14 | Chart state (sort/group/tab) in memory only; tab per task | `ChartsPage.tsx:287-295` | charts | OK | |
 | K15 | "No metrics recorded" card state; empty page copy | `ChartsPage.tsx:185-200` | charts | CHANGED | Empty project: "No data available for charts / Run some evaluations first." (old: "No evaluation runs found ..."). Combo with zero metrics renders an empty table. Trivial. |
 | K16 | Run link in a chart row opens the run | `ChartsPage.tsx:433-440` | charts | OK | Plain run link (old also had no `?list=` on Charts). |
@@ -242,7 +242,7 @@ Headline defects (details in the Fix list): pass delete 409s after the first del
 | L2 | Sort header buttons keyboard-reachable, `aria-sort` | `RunsTable.tsx:166-190` | a11y | OK | Fixes old chart headers without `aria-sort`. |
 | L3 | Status badge tooltip hover-only | `cells.tsx:98` | a11y | CHANGED | Still a `title`; signals are focusable. |
 | L4 | Count formats (`1.2M`), percent floor | `lib/kpis.ts` | cutover-kpis | OK | |
-| N1 | (new) Filters popover: after `Clear all` the button disables, focus falls to body and Esc no longer closes the popover | `FiltersPopover.tsx:254-260` (`isDisabled={!count}`) | - | BUGGY | Found in re-review. Repro: open Filters, pick a value, press Clear all, press Esc: popover stays open and blocks clicks (`body intercepts pointer events`); only Done closes it. Pre-existing, minor. Hint: keep the button enabled or move focus to the popover/Done before disabling. |
+| N1 | (new) Filters popover: after `Clear all` the button disables, focus falls to body and Esc no longer closes the popover | `FiltersPopover.tsx:254-260` (`isDisabled={!count}`) | - | FIXED (02ab8157) | Found in re-review. Repro: open Filters, pick a value, press Clear all, press Esc: popover stays open and blocks clicks (`body intercepts pointer events`); only Done closes it. Pre-existing, minor. Hint: keep the button enabled or move focus to the popover/Done before disabling. |
 
 ## Fix list
 
