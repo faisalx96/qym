@@ -27,13 +27,14 @@ export function ArchiveProjectDialog(props: ProjectDialogProps) {
 
 function ArchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDialogProps) {
   const [preview, setPreview] = useState<ArchivePreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const archive = useArchiveProject();
   const toast = useToast();
   const navigate = useNavigate();
   useEffect(() => {
     fetchArchivePreview(project.id)
       .then(setPreview)
-      .catch(() => setPreview({ running_count: 0, running_runs: [] }));
+      .catch((e) => setPreviewError(errorText(e)));
   }, [project.id]);
   const warning: ConfirmWarning | undefined = preview?.running_count
     ? {
@@ -44,7 +45,12 @@ function ArchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDialo
           .map((r) => ({ title: r.run_name || r.run_id, meta: r.started_at })),
         more: Math.max(0, preview.running_count - 5),
       }
-    : undefined;
+    : previewError
+      ? {
+          lead: 'Could not check for running runs',
+          text: `${previewError}. Runs that are still in progress will be stopped if you continue.`,
+        }
+      : undefined;
   return (
     <ConfirmDialog
       open={open}
@@ -77,15 +83,17 @@ export function UnarchiveProjectDialog(props: ProjectDialogProps) {
 
 function UnarchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDialogProps) {
   const [preview, setPreview] = useState<UnarchivePreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const unarchive = useUnarchiveProject();
   const toast = useToast();
   const navigate = useNavigate();
   useEffect(() => {
     fetchUnarchivePreview(project.id)
       .then(setPreview)
-      .catch(() => setPreview({ active_api_key_count: 0, active_api_keys: [] }));
+      .catch((e) => setPreviewError(errorText(e)));
   }, [project.id]);
   const keys = preview?.active_api_key_count ?? 0;
+  const reviewKeys = keys > 0 || previewError !== null;
   return (
     <ConfirmDialog
       open={open}
@@ -106,12 +114,17 @@ function UnarchiveProjectDialogInner({ project, open, onOpenChange }: ProjectDia
               })),
               more: Math.max(0, keys - 5),
             }
-          : undefined
+          : previewError
+            ? {
+                lead: 'Could not check for active API keys',
+                text: `${previewError}. Keys that were active before archiving will work again if you continue; review them under API keys first.`,
+              }
+            : undefined
       }
       confirmLabel="Unarchive"
-      altLabel={keys ? 'Revoke keys first' : undefined}
+      altLabel={reviewKeys ? 'Revoke keys first' : undefined}
       onAlternative={
-        keys ? () => navigate(`${projectPath(project.slug, 'settings')}?tab=apikeys`) : undefined
+        reviewKeys ? () => navigate(`${projectPath(project.slug, 'settings')}?tab=apikeys`) : undefined
       }
       onConfirm={async () => {
         try {
