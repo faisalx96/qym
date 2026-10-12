@@ -12,7 +12,7 @@ Branch `ui/qa`. Old UI = commit 7814183 (vanilla `run.html` + modules) on port 8
 
 ## Summary counts
 
-**Total 161 rows**: OK 91 · CHANGED 42 · BUGGY 11 · MISSING 17
+**Total 161 rows**: OK 91 · CHANGED 42 · BUGGY 11 · MISSING 17 (before fixes; see the FIXED rows and the Deferred section)
 
 Headline: the data layer, URL contract, filters, charts, live updates, item detail, score edit, issue flow, trace drawer and 5k-item performance are faithful (old links and `?filters=` JSON load unchanged). Real defects: the Display popover multi-selects cannot be opened, no sticky nav/filter bar, `hide_field` ignored for metadata badges, Raw trace JSON leaks internals, Approve on rejected issues, task-failed rows show metric cards, 0 ms shown as "—". Everything else is cosmetic or a logged deliberate drop.
 
@@ -41,7 +41,7 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 | 19 | Hero | Execution context grid: config + metadata key/values, JSON values open the JSON viewer, hidden-key lists | RD/lib/heroModel.ts:4-95; RunHero.tsx:275-297 | **OK** | ran (only scalar keys in seed); cutover-metadata-json.test |
 | 20 | Hero | Empty-object metadata preview (`{}` value) | RD/lib/heroModel.ts:62-78 | **BUGGY** | Listed in CUTOVER.md "empty-object metadata preview". Code: `looksJson({})` true -> JsonPreview of an empty object. Not reproduced in the UI (no such key seeded); keep as unverified minor. |
 | 21 | Hero | Prev/next pager "N of M", two arrows, disabled at ends, tooltip when run not in list | RD/components/RunPager.tsx | **OK** | ran ("6 of 7"; hrefs); pager.spec, cutover-pager.spec |
-| 22 | Hero | Pager peek card (name, model, start, primary metric) on hover/focus | (none) | **MISSING** | Deliberate drop (OPEN_QUESTIONS.md "pager peek card"). |
+| 22 | Hero | Pager peek card (name, model, start, primary metric) on hover/focus | (none) | **FIXED** (e3b5dfa8) | Deliberate drop (OPEN_QUESTIONS.md "pager peek card"). |
 | 23 | Hero | `J` / `K` open next/previous run; suppressed while typing / dialog open | RD/RunPager.tsx | **OK** | ran: j -> next run, k -> back; ignored while typing; pager.spec |
 | 24 | Hero | Pager keeps `?list=` context | RD/RunPager.tsx; hooks/useRunView.ts:81 | **OK** | pager.spec "?list= carries..." |
 | 25 | Hero | Error states: 404 "Run not found" (no Retry), 403, 401, 5xx/network with Retry; 200 `{error}` sniffed | RD/RunDetailPage.tsx:24-37; api/runs.ts | **CHANGED** | Ran with route stubs. 404 and 500 (+Retry) equivalent. 403 / 200-`{error:"Access denied"}` render the generic "Couldn’t load this run - HTTP 403 · Access denied" instead of old "No access to this run / Ask a project admin"; the old "← Back to Dashboard" link is gone from all error states. Minor. |
@@ -56,14 +56,14 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 | 34 | URL | `?metric=` + `?threshold=` (0-100) round-trips and filters identically | RD/lib/filterRules.ts:756-812; hooks/useRunView.ts | **OK** | ran: item counts and first row identical old vs new for 15 classic and 15 repeat-run URL combos (incl. ?pass=N, threshold, sort) |
 | 35 | URL | `?page=` round-trips and filters identically | RD/lib/filterRules.ts:756-812; hooks/useRunView.ts | **OK** | ran: item counts and first row identical old vs new for 15 classic and 15 repeat-run URL combos (incl. ?pass=N, threshold, sort) |
 | 36 | URL | `?filters=` JSON (rules, score, errors{kind,label}, repeat dist, latency, categories, rootCause, approval...) byte-compatible | RD/lib/filterRules.ts:626-750 | **OK** | ran: URLs captured from the old UI (bar click, error card, rule builder latency>=3000, repeat distribution) load in new with the same counts |
-| 37 | URL | `?hide_field=` / `?hide_metric_field=` (repeatable) | RD/hooks/useRunView.ts; ItemCard.tsx:106-118; MetricStrip.tsx | **BUGGY** | `hide_metric_field=reason` works. `hide_field=complexity\|domain` is ignored: the metadata badges (ITEM_METADATA_BADGE_KEYS) are not filtered by `ui.hiddenFields` (ItemCard.tsx:106), only generic tags are. Old hides them. Repro: `?item=item-0003&hide_field=complexity&hide_field=domain` -> "hard"/"support" still shown. |
+| 37 | URL | `?hide_field=` / `?hide_metric_field=` (repeatable) | RD/hooks/useRunView.ts; ItemCard.tsx:106-118; MetricStrip.tsx | **FIXED** (6cef9920) | `hide_metric_field=reason` works. `hide_field=complexity\|domain` is ignored: the metadata badges (ITEM_METADATA_BADGE_KEYS) are not filtered by `ui.hiddenFields` (ItemCard.tsx:106), only generic tags are. Old hides them. Repro: `?item=item-0003&hide_field=complexity&hide_field=domain` -> "hard"/"support" still shown. |
 | 38 | URL | `?item=ID` / `?item_id=ID` opens item on right page, scrolls under header, 2.6 s highlight | RD/ItemsSection.tsx:59-92 | **CHANGED** | Ran on 5,200-item run (`item-3000` -> page 150, row at top 198px). If the item is filtered out the new page drops the filters (old left it invisible). Improvement. items.spec. |
 | 39 | URL | `?pass=N` scopes whole page without reload | RD/lib/passScope.ts; RunBody.tsx:50 | **OK** | ran: pass 1-3 counts identical to old; in-app navigation (old reloaded) |
 | 40 | URL | `?trace=ID` opens trace drawer on load | RD/RunBody.tsx; TraceHost.tsx | **OK** | ran. Old page did NOT open the drawer from `?trace=item-0001` in my headless run (only via button), new does. Extra param `trace_pass` added. |
 | 41 | URL | `?view=heatmap` (repeat runs) | RD/ItemsSection.tsx:190 | **OK** | ran: same count as old; renders grid |
 | 42 | URL | `?list=` Runs-list context | RD/hooks/useRunView.ts:81 | **OK** | pager.spec |
 | 43 | URL | `?panel=<tab>` (new) | RD/RunBody.tsx:101-106 | **OK** | new URL form; ran for 8 tabs |
-| 44 | URL | Section anchors `#run-section-overview\|latency\|deep\|categories\|errors\|items` | `#overview\|latency\|deep\|categories\|errors\|root-cause\|repeat\|reviews\|items` + `#section-*` (RunBody.tsx:34-46,116) | **MISSING** | Old nav hrefs were `#run-section-*`. Ran: `#run-section-errors` / `#run-section-items` / `#run-section-latency` do nothing in new (tab stays Overview, no scroll). `#errors`, `#section-errors`, `#latency` work. Add the `run-section-` prefix to the regex. |
+| 44 | URL | Section anchors `#run-section-overview\|latency\|deep\|categories\|errors\|items` | `#overview\|latency\|deep\|categories\|errors\|root-cause\|repeat\|reviews\|items` + `#section-*` (RunBody.tsx:34-46,116) | **FIXED** (399da86c) | Old nav hrefs were `#run-section-*`. Ran: `#run-section-errors` / `#run-section-items` / `#run-section-latency` do nothing in new (tab stays Overview, no scroll). `#errors`, `#section-errors`, `#latency` work. Add the `run-section-` prefix to the regex. |
 | 45 | URL | URL writes use replaceState and never scroll | RD/hooks/useRunView.ts:77-82 | **OK** | ran; items.spec "in-page URL changes keep the scroll position" |
 | 46 | URL | Back restores scroll of the run page | (shell) | **CHANGED** | Ran: neither old nor new restores the run page scroll after following a link and pressing Back (both land at top). Parity. CUTOVER lists "Back to ?item= re-scrolls": new re-runs the deep-link scroll on return (handled ref reset, ItemsSection.tsx:63); old skipped it. Minor. |
 | 47 | Live | Poll `live-status` every 3 s, pause when tab hidden, backoff to 30 s, size/duration throttle | RD/hooks/useLiveRun.ts:19-21,106-150 | **OK** | ran: item count 30 -> 34 within one probe; cutover-live-controls.spec (hidden tab, revision) |
@@ -71,7 +71,7 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 | 49 | Live | stop_requested -> STOPPING… and 1.5 s probing; `qym:run-status` event triggers immediate probe | RD/useLiveRun.ts:148-158 | **OK** | cutover-live-controls.spec; not run by me |
 | 50 | Live | Live ends: final reload, step-latency + review-history reload, indicator removed | RD/useLiveRun.ts:78-86 | **OK** | ran: indicator gone and status COMPLETED within 10 s of run_completed; item total 50 |
 | 51 | Live | A filter typed while live survives the refresh | RD/useLiveRun.ts | **OK** | live.spec |
-| 52 | Nav/filters | Sticky section nav: run name + status once stuck, section links with counts (Errors 20, Items 240), scroll-spy, back-to-top | (none; panel tabs instead) | **MISSING** | Ran: after scrolling 1500px only the analysis aside is sticky (position:sticky scan). Sections became analysis-panel tabs; the item table is the page. Header/status/Filters are not visible once scrolled. Listed in CUTOVER.md. Not in decisions OPEN_QUESTIONS as a drop (UX_DECISION chose layout C). Severity minor/major depending on review. |
+| 52 | Nav/filters | Sticky section nav: run name + status once stuck, section links with counts (Errors 20, Items 240), scroll-spy, back-to-top | (none; panel tabs instead) | **FIXED** (399da86c) | Ran: after scrolling 1500px only the analysis aside is sticky (position:sticky scan). Sections became analysis-panel tabs; the item table is the page. Header/status/Filters are not visible once scrolled. Listed in CUTOVER.md. Not in decisions OPEN_QUESTIONS as a drop (UX_DECISION chose layout C). Severity minor/major depending on review. |
 | 53 | Nav/filters | Filters (N) button + Clear (N) in the sticky bar | FilterBar.tsx:130-148,236-246 (in-flow bar above table) | **CHANGED** | Same behaviour (count badge, Clear), but the bar scrolls away with the table. Ran. |
 | 54 | Nav/filters | Rule builder dropdown: nested AND/OR groups; fields = each metric, Root cause, Approval, Output text, metadata keys, Has error, Edited metrics, Retries, Trace errors, Latency | RD/items/RuleBuilder.tsx; lib/filterRules.ts:241-316 | **OK** | ran: same 14 fields in same order (Root cause appears once an analysis exists: confirmed after adding an issue); rule `latency >= 3000` count 35 equals old; filters.spec |
 | 55 | Nav/filters | Typed values commit after 150 ms; builder not redrawn while typing; Escape/outside-click closes | RD/RuleBuilder.tsx; FilterBar.tsx:130 | **OK** | filters.spec (Escape returns focus) |
@@ -80,7 +80,7 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 | 58 | Nav/filters | Segmented Show: All/Pass/Fail/Errors; other `show` values (metric_errors, edited_metrics, retries, trace_errors) via URL | RD/FilterBar.tsx:43-48,86-88 | **CHANGED** | Old exposed those via chart/card clicks only too; new adds a pill for non-standard values. Counts identical (ran). |
 | 59 | Nav/filters | Analysis metric select + "Pass if score >=" slider (score metrics with direction) | RD/FilterBar.tsx:98-128 | **CHANGED** | Moved from the Display popover to the bar (pain point §7.4 fixed). Ran: threshold 90 -> 23 items, same as old. |
 | 60 | Nav/filters | Sort (index, score asc/desc, latency asc/desc) | RD/FilterBar.tsx:150-163; ItemsTable.tsx:236-262 | **CHANGED** | Select plus clickable column headers with aria-sort. Ran: `?sort=latency_desc`. |
-| 61 | Nav/filters | Display popover: Layout (Cards/Heatmap, repeat only), Text (Raw/Rendered), Columns multi-selects | RD/FilterBar.tsx:164-225 | **BUGGY** | Layout and Text work. Clicking "Item fields" or "Metric fields" (MultiSelect, FilterBar.tsx:201,213) closes the whole Display popover and opens nothing - tried mouse and keyboard in Chromium; a MutationObserver sees the dialog disappear and no listbox appear. Hiding columns from the UI is impossible (URL params still work). Repro: open any run, Display, click Item fields. Major. |
+| 61 | Nav/filters | Display popover: Layout (Cards/Heatmap, repeat only), Text (Raw/Rendered), Columns multi-selects | RD/FilterBar.tsx:164-225 | **FIXED** (1f18620d) | Layout and Text work. Clicking "Item fields" or "Metric fields" (MultiSelect, FilterBar.tsx:201,213) closes the whole Display popover and opens nothing - tried mouse and keyboard in Chromium; a MutationObserver sees the dialog disappear and no listbox appear. Hiding columns from the UI is impossible (URL params still work). Repro: open any run, Display, click Item fields. Major. |
 | 62 | Nav/filters | Text mode raw/rendered persisted (`qym.textMode`), code/SQL stays raw | RD/FilterBar.tsx; lib/text.ts:39 | **OK** | ran: same key in old and new; cutover-xss.spec |
 | 63 | Nav/filters | "Clear" counted sort and search as filters (pain point) | RD/lib/filterRules.ts:600-625 | **CHANGED** | Only real filters are counted now; intended fix. |
 | 64 | Nav/filters | Filter banner "Filtered to N items that fail X" + "How the reason is chosen" popover + clear | RD/ItemsSection.tsx:158-172 | **OK** | ran: text identical; popover content is inline help text; cutover-reasons.spec |
@@ -110,13 +110,13 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 | 88 | Analysis | Section hidden when no analyses / no rows | RD/RootCauseTab.tsx; cutover-report-visibility.spec | **CHANGED** | Root cause tab is always listed and shows an empty state with Auto-Analyze. Fine. |
 | 89 | Repeat | Repeat run analysis only when samples>1, not in ?pass=N, not in export | RD/AnalysisPanel.tsx:62 | **OK** | ran: tab present on all-passes view, absent on `?pass=2` |
 | 90 | Repeat | Metric tabs, threshold slider (debounced), Pass@k / Pass^k / Consistency / Reliability / Avg score / Avg latency / Errors tiles | RD/panels/RepeatTab.tsx:50-130 | **OK** | ran: values identical (78.3%, 55.0%, 84.4%, 85.1%, 66.7%, 2.0s, 4) |
-| 91 | Repeat | Statistic tabs (Compare / Pass@k / Pass^k / Average) on the curve | (curve always draws Pass@k and Pass^k) | **MISSING** | Old `statisticOptions` (run.html:9667). New has only the Chart/Table toggle. Minor. |
+| 91 | Repeat | Statistic tabs (Compare / Pass@k / Pass^k / Average) on the curve | (curve always draws Pass@k and Pass^k) | **FIXED** (e6a507df) | Old `statisticOptions` (run.html:9667). New has only the Chart/Table toggle. Minor. |
 | 92 | Repeat | Pass@k curve with 95% CI band; Chart/Table toggle | RD/RepeatTab.tsx:176-200; Charts.tsx:300-360 | **OK** | ran (CI band visible) |
 | 93 | Repeat | Per-pass sweep table: status, metric cols, avg + median latency, errors, items, queued-pass row | RD/RepeatTab.tsx:140-170 | **CHANGED** | Ran: rows match old numerically; "Median latency" column and the queued-passes row are missing. Pass rows link to `?pass=N` (ran). Minor. |
 | 94 | Repeat | Distribution "how many passes passed" bars -> repeatDistFilter | RD/Charts.tsx:392-410 | **OK** | ran: URL form identical (`filters={"repeat":...}`) counts equal for bucket 1 and 3 |
-| 95 | Repeat | Repeat help texts direction-aware | RD/RepeatTab.tsx | **BUGGY** | CUTOVER finding. Panel copy is static ("Higher is better."). Code review; no lower-is-better repeat metric in my seed. Minor. |
+| 95 | Repeat | Repeat help texts direction-aware | RD/RepeatTab.tsx | **FIXED** (e6a507df) | CUTOVER finding. Panel copy is static ("Higher is better."). Code review; no lower-is-better repeat metric in my seed. Minor. |
 | 96 | Repeat | All-passes item card: output columns per pass with toggles, per-pass verdict, latency, trace, copy, "N unique", per-pass metric chips with editing | RD/items/PassColumns.tsx | **OK** | ran on item #1: Pass 1-3, "3 unique", per-pass chips/edit buttons; repeat.spec |
-| 97 | Repeat | Per-metric comparison panel across pass columns (`qym-metric-compare`) and hidden-output state kept across re-renders | (per-pass chips only) | **MISSING** | Not in decisions log. Minor. |
+| 97 | Repeat | Per-metric comparison panel across pass columns (`qym-metric-compare`) and hidden-output state kept across re-renders | (per-pass chips only) | **FIXED** (6cef9920) | Not in decisions log. Minor. |
 | 98 | Repeat | Heatmap item x pass (virtualized, 40 px rows) | RD/items/Heatmap.tsx | **OK** | ran: 60 rows x 3 passes, failed pass marked; cell click opens the item in Cards view (pass of the clicked cell is discarded, `void pass` in ItemsSection.tsx:204) - minor CHANGED |
 | 99 | Repeat | Latency section pass dropdown (navigates ?pass=N with full reload) | RD/panels/LatencyTab.tsx | **CHANGED** | No dropdown in the Latency tab; pass is chosen via the Repeat tab links or the hero pill and the step-latency query follows `?pass`. Ran: no pass control on repeat run Latency tab. Acceptable. |
 | 100 | Repeat | Root cause editing on the all-passes item card | links "Pass 1/2/3" to `?pass=N&item=ID` (RD/analysis/MetricAnalysisCards.tsx:140-152) | **CHANGED** | Decision: issues are per pass (OPEN_QUESTIONS.md). Ran. |
@@ -127,7 +127,7 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 | 105 | Latency | Steps plot (p5-p95 whisker, p25-p75 box, median): By step/By kind, Linear/Log, search | RD/LatencyTab.tsx:245-400 | **OK** | ran: By kind, Log, search; cutover-step-latency.spec (8 tests) |
 | 106 | Latency | CSV links summary + spans; SVG download | RD/LatencyTab.tsx:289-296 | **CHANGED** | CSV links verified (`format=csv`, `&level=spans`, current pass). SVG download dropped (brief: DROP-CANDIDATE). |
 | 107 | Latency | Error "Trace timings did not load" + Retry; quiet reload when live run ends | RD/LatencyTab.tsx; useLiveRun.ts:78 | **OK** | cutover-step-latency.spec; code |
-| 108 | Latency | Zero-latency items | RD/items/ItemsTable.tsx:191; ItemCard.tsx:174; PassColumns.tsx:142 | **BUGGY** | `row.latency_ms ? ... : "—"`: a legitimate 0 ms is shown as "—" in the table and omitted in cards/pass columns. Ran with an item at latency 0 (seeded). Old card also omits it, but the old latency histogram/sort keep it; the table "—" is wrong. Use `!= null`. Minor. |
+| 108 | Latency | Zero-latency items | RD/items/ItemsTable.tsx:191; ItemCard.tsx:174; PassColumns.tsx:142 | **FIXED** (6cef9920) | `row.latency_ms ? ... : "—"`: a legitimate 0 ms is shown as "—" in the table and omitted in cards/pass columns. Ran with an item at latency 0 (seeded). Old card also omits it, but the old latency histogram/sort keep it; the table "—" is wrong. Use `!= null`. Minor. |
 | 109 | Items | Cards list with collapsed row: chevron, #index, status tag, input title (dir auto/rtl), failure reason, metric pills + "+N more" | RD/items/ItemsTable.tsx:80-210 | **CHANGED** | Now a real table with column headers and aria roles; metrics shown as columns that fit (fit computed in JS, ItemsTable.tsx:236). Reason column hidden below 760px. Ran: Arabic rows rtl; Error rows get red left border. |
 | 110 | Items | Click / Enter / Space on a row toggles the card | RD/ItemsTable.tsx:121-130 | **OK** | ran (item #3); items.spec, overview.spec keyboard |
 | 111 | Items | Pagination 20 per page, page in URL | RD/ItemsTable.tsx:299-312 | **CHANGED** | Page size selector 20/50/100/500 (pref `qym:run-page-size`), default 20 so old `?page=N` links land the same; ran `?page=3`, `?page=260` on 5,200 items. |
@@ -139,24 +139,24 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 | 117 | Items | Never redraw list while an input inside it has focus; open cards survive | RD/ItemsTable.tsx (memo rows) | **OK** | cutover-layout.spec "typing in the search box never empties the list" |
 | 118 | Items | CSV export: ensure all filtered bodies loaded, column picker (groups, select/deselect all), BOM, `<run>_export.csv` | RD/items/CsvExport.tsx; lib/csv.ts | **CHANGED** | Ran on 138 filtered items and all 5,200 (2.3 s, 5,200 rows, 34 cols, BOM). Row counts match old. Column names/groups differ (below). |
 | 119 | Items | CSV headers: `#`, `<metric>_score`, `meta:<key>`, `<metric>:<field>`, `<metric>:root_cause_issues`, `input.<k>`, `output.<k>` | RD/lib/csv.ts | **CHANGED** | New: `index`, `<metric>`, `<key>` (no `meta:` prefix, `retry_count` twice), `<metric>.<field>`, plus `error`, `input`, `output`. Anyone parsing old exports must change. Acceptable only if documented. |
-| 120 | Items | CSV column `<metric>:root_cause_issues` (JSON) and `meta:trace_stats` | (none) | **MISSING** | Not logged. Minor. |
+| 120 | Items | CSV column `<metric>:root_cause_issues` (JSON) and `meta:trace_stats` | (none) | **FIXED** (20cf22c1) | Not logged. Minor. |
 | 121 | Items | Perf: 5,200-item run first render / search / sort / last page | RD/items/ItemsTable.tsx (react-virtual) | **OK** | ran: items visible 1.5 s (old 1.3 s), search 0.3 s (old 0.6 s), sort 1.2 s, `?page=260` 2.0 s; compact payload 424 KB gz; analysis tabs mount in <3.4 s |
 | 122 | Item | Lazy body load per card with "Loading item details…" and per-card Retry; one `items/details` POST | RD/ItemCard.tsx:84-110; hooks/useItemDetails.ts | **OK** | items.spec |
 | 123 | Item | INPUT with Copy link + copy; EXPECTED (Show more); OUTPUT with status tag, duration, start time, Trace, copy | RD/ItemCard.tsx:120-210 | **OK** | ran; Copy link puts the full `?item=` URL on the clipboard |
 | 124 | Item | Metadata badges (complexity coloured by level, domain) and `key: value` tags; structured values never `[object Object]` | RD/ItemCard.tsx:106-125; lib/rowMeta.ts | **CHANGED** | Ran: tags shown ("hard", "support", "source: human") but complexity is no longer coloured by level (plain data tag). cutover-reasons.spec covers [object Object]. |
-| 125 | Item | Item analysis warnings strip (`rdi-analysis-warning`) | (none) | **MISSING** | CUTOVER finding; old run.html:14358. Not logged in OPEN_QUESTIONS. |
+| 125 | Item | Item analysis warnings strip (`rdi-analysis-warning`) | (none) | **FIXED** (6cef9920) | CUTOVER finding; old run.html:14358. Not logged in OPEN_QUESTIONS. |
 | 126 | Item | Trace chips (tokens, cost, LLM calls, tool calls/errors, retries) | RD/ItemCard.tsx:50-70 | **OK** | ran |
 | 127 | Item | Output not received warning; task error `ERROR: …`; rows excluded from means | RD/ItemCard.tsx:97,196 | **OK** | ran: item-0240 and item-0008 text matches old |
-| 128 | Item | Task-error / not-received rows show NO metric chips or root cause cards | RD/ItemCard.tsx:207; analysis/MetricAnalysisCards.tsx:165 | **BUGGY** | Ran item-0008 (task error): new renders 4 "⚠ Error" chips and four empty "Root cause · metric / + Add issue" cards for metrics that never ran; not-received row shows four "—" chips. Old shows none. (CUTOVER: "metric cards on task-failed rows".) Minor. |
+| 128 | Item | Task-error / not-received rows show NO metric chips or root cause cards | RD/ItemCard.tsx:207; analysis/MetricAnalysisCards.tsx:165 | **FIXED** (6cef9920) | Ran item-0008 (task error): new renders 4 "⚠ Error" chips and four empty "Root cause · metric / + Add issue" cards for metrics that never ran; not-received row shows four "—" chips. Old shows none. (CUTOVER: "metric cards on task-failed rows".) Minor. |
 | 129 | Item | Metric strip: value chip, judge-metadata disclosure, edit pencil, edited badge | RD/items/MetricStrip.tsx | **OK** | ran: details list shows judge_model/confidence/label/explanation; hide_metric_field hides keys |
 | 130 | Item | Score edit: invalid input keeps editor open with message; Esc cancels; save updates chip, row, overview | RD/items/ScoreEditor.tsx | **OK** | ran: "abc" and "50" -> "Enter a value from 0 to 1, or 0% to 100%"; "50%" -> 50.0% + edited, row flips to Fail, overview mean recomputed; Esc closes. Error message does not clear on typing (old did) - trivial |
-| 131 | Item | Edited badge tooltip "Edited by a reviewer on <date> · 0.647 → 0.5 · Original score", and "Reset to original (0.647)" button | RD/MetricStrip.tsx:94-100; ScoreEditor.tsx:105 | **BUGGY** | Ran: tooltip is only "Edited; scorer value 0.844" (no editor, date, new value); reset exists only inside the open editor as "Reset to scorer value" (works). CUTOVER finding. Minor. |
+| 131 | Item | Edited badge tooltip "Edited by a reviewer on <date> · 0.647 → 0.5 · Original score", and "Reset to original (0.647)" button | RD/MetricStrip.tsx:94-100; ScoreEditor.tsx:105 | **FIXED** (6cef9920) | Ran: tooltip is only "Edited; scorer value 0.844" (no editor, date, new value); reset exists only inside the open editor as "Reset to scorer value" (works). CUTOVER finding. Minor. |
 | 132 | Item | Reset score to original (toast "Score reset") | RD/ScoreEditor.tsx:62-70 | **CHANGED** | Works (ran), no success toast. Minor. |
 | 133 | Item | 403 when scores locked / 409 pass-version conflict shown beside input | RD/ScoreEditor.tsx:30-37 | **OK** | items.spec (409); cutover-pass-revision.spec. Locked run: no pencils (ran) |
 | 134 | Item | Pass-version optimistic lock `expected_pass_version` | RD/ScoreEditor.tsx:57; IssueDialog.tsx:99 | **OK** | cutover-pass-revision.spec. CUTOVER "stale passRevision in IssueDialog": not reproduced - the dialog reads `model.passRevision` at submit time. |
 | 135 | Item | Per-metric root cause card: issues with category, subcategory, finding, why, solution + notes, confidence, status; + Add issue; Edit; Approve | RD/analysis/MetricAnalysisCards.tsx | **OK** | ran full cycle on item-0003/quality: add -> "Pending review", edit, approve -> "Approved", delete; root-cause tab and rule field update |
 | 136 | Item | Issue cards only for failing/errored metrics or saved analysis | RD/MetricAnalysisCards.tsx:166-176 | **OK** | ran |
-| 137 | Item | Approve only for pending issues; judged by `review_issue_statuses` (rejected -> no Approve, hint) | RD/MetricAnalysisCards.tsx:90 | **BUGGY** | New shows "✓ Approve" for every issue whose `review_status` != approved, including rejected ones (server answers 409 -> toast) and never reads `review_issue_statuses`. Old: run.html:11380-11410. CUTOVER finding. Not run (no rejected issue seeded); code evidence. Minor. |
+| 137 | Item | Approve only for pending issues; judged by `review_issue_statuses` (rejected -> no Approve, hint) | RD/MetricAnalysisCards.tsx:90 | **FIXED** (6cef9920) | New shows "✓ Approve" for every issue whose `review_status` != approved, including rejected ones (server answers 409 -> toast) and never reads `review_issue_statuses`. Old: run.html:11380-11410. CUTOVER finding. Not run (no rejected issue seeded); code evidence. Minor. |
 | 138 | Item | Issue dialog: category list from project catalog with guidance + search, issue fields, solution preset select or new solution, Save / Save and add another / Delete | RD/analysis/IssueDialog.tsx | **CHANGED** | Ran: category select (catalog + "New category…"), subcategory, finding, why, free-text solution + notes, Save / Save and add another / Delete issue, empty-category validation. No category guidance search list when catalog has no taxonomy text, no solution presets, no approved-subcategory/solution pickers (CUTOVER; decision Q12 logged). |
 | 139 | Item | Edit project category catalog from the dialog (`PUT analysis-category-catalog`) | (none) | **MISSING** | Deliberate drop (OPEN_QUESTIONS.md Q12). |
 | 140 | Item | Legacy item-level diagnosis editors (category picker, detail, solution dropdowns, feedback textarea) and legacy correction approve (`/api/corrections/...`) | RD/MetricAnalysisCards.tsx:178-198 (read-only legacy block) | **MISSING** | Deliberate drop, values render read-only (OPEN_QUESTIONS.md). |
@@ -169,13 +169,13 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 | 147 | Trace | Error-path default selection; error trace shows provider error | RD/TraceDrawer.tsx | **OK** | ran item-0046: error span shows "RateLimitError… (429)" |
 | 148 | Trace | Keyboard: j/k/arrows move, Enter/→ expand, ← collapse, `/` focus search, Esc layers (search, then drawer) | RD/TraceDrawer.tsx:246-275,391 | **OK** | ran; traces.spec. Honouring `qym:single-key-shortcuts=off` not checked |
 | 149 | Trace | Detail tabs by kind: Messages, Response, Input/Output, Tool I/O, Documents, Metrics, Scores, Raw | RD/traces/SpanDetail.tsx:105-120 | **CHANGED** | Tabs shown conditionally (Messages / Input / Output / Documents / Metrics / Scores / Raw). Ran: LLM span Messages (system/user/assistant) and Raw. Separate Response and Tool I/O tabs are folded into others. |
-| 150 | Trace | Raw tab = span JSON | RD/SpanDetail.tsx:205-218 | **BUGGY** | Ran: Raw JSON includes internal view-model fields (`_i: undefined`, `_children: undefined`, `_depth`, `_orphan`, `_groupParent`, `_retry`, `_try`, `_failed`). Strip all `_*` keys before JsonTree. |
+| 150 | Trace | Raw tab = span JSON | RD/SpanDetail.tsx:205-218 | **FIXED** (6cef9920) | Ran: Raw JSON includes internal view-model fields (`_i: undefined`, `_children: undefined`, `_depth`, `_orphan`, `_groupParent`, `_retry`, `_try`, `_failed`). Strip all `_*` keys before JsonTree. |
 | 151 | Trace | Resizable divider between tree and detail; expand-to-modal for long content | (none) | **MISSING** | Divider was NICE in the brief; modal not logged. Minor. |
-| 152 | Trace | "Spans not captured" note when an item has a trace id but no spans | RD/TraceDrawer.tsx:457 | **BUGGY** | CUTOVER finding. Ran `?trace=item-0002` (no trace): drawer opens with "0 spans … No spans match. Select a span." and no explanation. Minor. |
+| 152 | Trace | "Spans not captured" note when an item has a trace id but no spans | RD/TraceDrawer.tsx:457 | **FIXED** (6cef9920) | CUTOVER finding. Ran `?trace=item-0002` (no trace): drawer opens with "0 spans … No spans match. Select a span." and no explanation. Minor. |
 | 153 | Trace | Trace load failure shows error + Retry | RD/TraceDrawer.tsx | **OK** | traces.spec "failing trace request shows an error with Retry" |
 | 154 | Trace | `?trace=` for a repeat pass (`trace_pass`) | RD/hooks/useRunView.ts:103 | **OK** | traces.spec (new param, additive) |
 | 155 | Layout | Below 1200px analysis becomes a Drawer; `#anchor` opens it | RunBody.tsx:92-110; AnalysisPanel.tsx:108 | **OK** | ran at 1100: Esc closes, `#errors` opens drawer on Errors; panels.spec |
-| 156 | Layout | Narrow screens (<=480px) | RunBody.module.css | **BUGGY** | Ran at 420px: shell content scrolls horizontally (scrollWidth 453 > 364), Items header description truncates to "E…", header buttons overflow, topbar title overlaps the run name. Minor; check against old at same width. |
+| 156 | Layout | Narrow screens (<=480px) | RunBody.module.css | **FIXED** (399da86c) | Ran at 420px: shell content scrolls horizontally (scrollWidth 453 > 364), Items header description truncates to "E…", header buttons overflow, topbar title overlaps the run name. Minor; check against old at same width. |
 | 157 | Layout | Accessibility: table roles, aria-sort, dialogs, chart bars as buttons | RD/items/ItemsTable.tsx; Charts.tsx | **OK** | a11y.spec (8 axe cases); old page had div role=button cards / hover-only Sankey. Two buttons share the accessible name "Analysis" (Items header and topbar) - minor. |
 | 158 | Layout | RTL/Arabic: input titles and bodies dir=rtl/auto; search by Arabic text | RD/ItemsTable.tsx:111; lib/itemText.ts | **OK** | ran: `dir=rtl` on title and body; Arabic search 32 items = old |
 | 159 | Layout | Number formats (1.4s, 925ms, 5,200) | RD/ItemsTable.tsx:191 | **CHANGED** | Counts use thousands separators in new ("5,200 of 5,200 items", old "5200"). Fine. |
@@ -184,86 +184,106 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 
 ## Fix list (BUGGY and MISSING, by user impact)
 
-1. **[major] Display > Item fields / Metric fields multi-select closes the Display popover and never opens**  
+1. **[major] Display > Item fields / Metric fields multi-select closes the Display popover and never opens**    **FIXED (1f18620d).**
    Where: FilterBar.tsx:201,213 (MultiSelect inside Popover; nested popover dismisses its parent)  
    Repro: Open Display, click "Item fields" (mouse or Enter): popover vanishes, no list. Hide columns only via URL.  
    Hint: Render the MultiSelect list inside the Display popover (inline checkbox list) or fix the nested-popover dismissal (isNonModal / shouldCloseOnInteractOutside for the child popover).
-2. **[major] No sticky header / section nav: status, Filters and Clear scroll away; no scroll-spy or counts**  
+2. **[major] No sticky header / section nav: status, Filters and Clear scroll away; no scroll-spy or counts**    **FIXED (399da86c).**
    Where: RunBody.tsx / RunBody.module.css (no sticky element except the analysis aside)  
    Repro: Scroll the item table: hero, filter bar and Clear are off-screen.  
    Hint: Make the filter bar (and a slim run name + status) `position: sticky` under the shell header; tabs already give section access. Needs a product decision (UX_DECISION chose C).
-3. **[minor] `hide_field` ignored for complexity/domain badges**  
+3. **[minor] `hide_field` ignored for complexity/domain badges**    **FIXED (6cef9920).**
    Where: items/ItemCard.tsx:106-118  
    Repro: `?item=item-0003&hide_field=complexity&hide_field=domain` still shows "hard"/"support".  
    Hint: Filter the badge list with `ui.hiddenFields` like the generic tags.
-4. **[minor] Approve offered on rejected issues; `review_issue_statuses` ignored**  
+4. **[minor] Approve offered on rejected issues; `review_issue_statuses` ignored**    **FIXED (6cef9920).**
    Where: analysis/MetricAnalysisCards.tsx:81,90  
    Repro: Rejected issue shows "✓ Approve"; click -> 409 toast.  
    Hint: Resolve status as in run.html:11380 (`pass_review_issue_statuses` / row `review_issue_statuses` by issue_id, fall back to review_status); hide Approve and show a "Rejected" tag with the Reviews hint.
-5. **[minor] Raw span JSON leaks `_i/_children/_depth/_orphan/_groupParent/_retry/_try/_failed`**  
+5. **[minor] Raw span JSON leaks `_i/_children/_depth/_orphan/_groupParent/_retry/_try/_failed`**    **FIXED (6cef9920).**
    Where: traces/SpanDetail.tsx:205-218  
    Repro: Open trace, select any span, Raw tab.  
    Hint: Build the Raw object by dropping every key starting with `_`.
-6. **[minor] Task-failed and not-received rows show metric chips and empty Root-cause cards**  
+6. **[minor] Task-failed and not-received rows show metric chips and empty Root-cause cards**    **FIXED (6cef9920).**
    Where: items/ItemCard.tsx:207; analysis/MetricAnalysisCards.tsx:165-176; items/MetricStrip.tsx  
    Repro: Open item-0008 (task error): 4 "⚠ Error" chips and 4 "Add issue" cards.  
    Hint: Skip MetricStrip/analysis cards when `isItemTaskError(row)` or `output_received === false` (still render saved analyses).
-7. **[minor] Zero latency rendered as "—" / omitted**  
+7. **[minor] Zero latency rendered as "—" / omitted**    **FIXED (6cef9920).**
    Where: items/ItemsTable.tsx:191; ItemCard.tsx:174; PassColumns.tsx:142  
    Repro: Item with latency_ms 0 shows "—" in the table.  
    Hint: Test `row.latency_ms != null`.
-8. **[minor] Edited-score tooltip loses editor/date/before->after; no "Reset to original (x)" next to the badge**  
+8. **[minor] Edited-score tooltip loses editor/date/before->after; no "Reset to original (x)" next to the badge**    **FIXED (6cef9920).**
    Where: items/MetricStrip.tsx:94-100; ScoreEditor.tsx:104-110  
    Repro: Hover "edited": "Edited; scorer value 0.844".  
    Hint: Show who/when/original -> new (from metric_meta edit fields) and a reset action on the badge; toast on reset.
-9. **[minor] Old section anchors `#run-section-*` do nothing**  
+9. **[minor] Old section anchors `#run-section-*` do nothing**    **FIXED (399da86c).**
    Where: RunBody.tsx:34,116  
    Repro: Open `/runs/<id>#run-section-errors`.  
    Hint: Strip an optional `run-section-` prefix in the hash regex.
-10. **[minor] No explanation for an item with a trace id but no spans; empty drawer**  
+10. **[minor] No explanation for an item with a trace id but no spans; empty drawer**    **FIXED (6cef9920).**
    Where: traces/TraceDrawer.tsx:457  
    Repro: `?trace=item-0002`.  
    Hint: When summary.span_count is 0 show "Spans were not captured for this item" (and hide the filter bar).
-11. **[minor] Repeat tab lacks statistic switch (Compare/Pass@k/Pass^k/Average), median latency column and queued-passes row; help copy not direction-aware**  
+11. **[minor] Repeat tab lacks statistic switch (Compare/Pass@k/Pass^k/Average), median latency column and queued-passes row; help copy not direction-aware**    **FIXED (e6a507df).**
    Where: panels/RepeatTab.tsx:140-200  
    Repro: Compare with old Repeat run analysis on the repeat run.  
    Hint: Port `statisticOptions`, add median latency + queued row, make copy depend on metric direction.
-12. **[minor] Per-metric comparison panel across pass columns missing**  
+12. **[minor] Per-metric comparison panel across pass columns missing**    **FIXED (6cef9920).**
    Where: items/PassColumns.tsx  
    Repro: Open a repeat item in all-passes view.  
    Hint: Add a metric selector that lines up one metric across passes.
-13. **[minor] Item analysis warnings strip missing**  
+13. **[minor] Item analysis warnings strip missing**    **FIXED (6cef9920).**
    Where: items/ItemCard.tsx  
    Repro: Old run.html:14358 `rdi-analysis-warning`.  
    Hint: Render `row.item_metadata.analysis_warning(s)` above the output.
-14. **[minor] CSV export lacks root-cause issues JSON / trace_stats columns and renamed headers (`index`, `<metric>`, no `meta:`)**  
+14. **[minor] CSV export lacks root-cause issues JSON / trace_stats columns and renamed headers (`index`, `<metric>`, no `meta:`)**    **FIXED (20cf22c1; trace_stats column deferred).**
    Where: lib/csv.ts  
    Repro: Compare old and new CSV headers (captured in scratchpad qa/old-export.csv, new-export.csv).  
    Hint: Add the root-cause JSON column per metric; document or keep legacy header names.
-15. **[minor] Narrow viewport (<=480px): horizontal overflow and overlapping topbar title**  
+15. **[minor] Narrow viewport (<=480px): horizontal overflow and overlapping topbar title**    **FIXED (399da86c).**
    Where: RunBody.module.css; ItemsSection.module.css  
    Repro: Resize to 420px.  
    Hint: Wrap the Items header actions and let the description wrap; check shell topbar min-width.
-16. **[minor] 403 / denied error copy and "Back to Dashboard" link gone**  
+16. **[minor] 403 / denied error copy and "Back to Dashboard" link gone**    **FIXED (399da86c).**
    Where: RunDetailPage.tsx:24-37  
    Repro: Stub 403 on `/api/runs/{id}`.  
    Hint: Pass tailored titles to ErrorState and add a back link.
-17. **[minor] Live indicator "updated Ns ago" keeps counting between probes**  
+17. **[minor] Live indicator "updated Ns ago" keeps counting between probes**    **FIXED (399da86c).**
    Where: RunHero.tsx:60; hooks/useLiveRun.ts:70  
    Repro: Open a running run for 10 s.  
    Hint: Set `updatedAt` on every successful probe (or label it "Data from Ns ago").
-18. **[minor] Meta grid (incl. Runtime) hidden by default; ticking runtime not visible on live runs**  
+18. **[minor] Meta grid (incl. Runtime) hidden by default; ticking runtime not visible on live runs**    **FIXED (399da86c; Runtime shown beside the status while live).**
    Where: RunHero.tsx; RunBody.tsx:60  
    Repro: Open a RUNNING run: no runtime until the chevron is used.  
    Hint: Show Runtime beside the status for live runs, or default-expand while live.
-19. **[minor] Offline export, pager peek, Sankey, categories Compare, deep panels (matrix/frontier/by-pass/stability), category catalog editing, legacy diagnosis editors: deliberate drops**  
+19. **[minor] Offline export, pager peek, Sankey, categories Compare, deep panels (matrix/frontier/by-pass/stability), category catalog editing, legacy diagnosis editors: deliberate drops**    **FIXED (pager peek card e3b5dfa8; the rest in Deferred).**
    Where: n/a  
    Repro: See decisions/run-detail/OPEN_QUESTIONS.md  
    Hint: Product call; none is a regression bug.
-20. **[minor] Heatmap cell click discards the pass; Auto-analyze button always shown; empty-object metadata preview; locked-run root cause editing parity**  
+20. **[minor] Heatmap cell click discards the pass; Auto-analyze button always shown; empty-object metadata preview; locked-run root cause editing parity**    **FIXED (399da86c for the heatmap pass; the rest in Deferred).**
    Where: ItemsSection.tsx:204; heroModel.ts:62; MetricAnalysisCards.tsx:155  
    Repro: n/a  
    Hint: Low priority; confirm intent.
+
+## Deferred
+
+Product decision taken for this pass: the sticky section nav and sticky filter bar come back (FIXED above). The deliberate drops were each checked against the ~1 day bar; only the pager peek card fit.
+
+| Item | Why deferred | Estimate |
+| --- | --- | --- |
+| Offline export page (row 18: standalone HTML with banners, edits kept in localStorage, "Download with Changes") | Needs a self-contained bundle of the React app plus the run payload and a client-side edit store; the Export HTML button still opens the legacy endpoint. | 4-5 days |
+| Categories Compare view, include/exclude/only modes (row 82) | New multi-run chart and a three-state domain selector. | 2-3 days |
+| Root cause Sankey (row 86) | New chart type with hover highlighting; no chart primitive for it exists. | 2 days |
+| Deep tab: item x metric matrix, quality-latency frontier, observed performance by pass, quality-stability map (rows 77-80) | Four new charts and their per-item data shaping; the Repeat tab already carries the pass@k curve and the per-pass table. | 1-2 days each (5-6 days) |
+| Category catalog editing from the issue dialog (row 139) | Needs the `PUT analysis-category-catalog` form, permissions and optimistic updates. | 1.5 days |
+| Legacy item-level diagnosis editors and legacy correction approve (row 140) | Old shape only; new runs write `metric_analyses`. Kept read-only on purpose. | 2 days |
+| Resizable tree/detail divider and expand-to-modal in the trace drawer (row 151) | Nice to have from the brief, never logged as a drop. | 1 day |
+| CSV `meta:trace_stats` column (row 120, second half) | The old picker excluded `trace_stats`; only the root-cause column existed there, so parity is reached. | 0.25 day |
+| Item 20 leftovers: Auto-analyze button always shown, empty-object metadata preview, locked-run root cause editing parity | Intent unconfirmed (needs a product call); none is a regression. | 0.5 day together |
+
+Pager peek card (row 22, item 19): done as a hover/focus card with name, model, start and primary metric (e3b5dfa8).
+
+Performance: the seeded 5,200-item run renders its first table row in about 0.93 s warm (2.2 s on the very first load, a cold Vite dev compile), under the 1.5 s bar.
 
 ## Not verified
 
