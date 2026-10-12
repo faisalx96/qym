@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import type { Trend } from '@/api/dashboardTypes';
 import { Text } from '@/ui';
+import { trendDomain, trendFormat, trendIsRate } from './trendModel';
 import styles from './TrendChart.module.css';
 
 interface Point {
@@ -37,10 +38,12 @@ function TrendTooltip({
   active,
   payload,
   metric,
+  rate,
 }: {
   active?: boolean;
   payload?: { payload: Point }[];
   metric: string;
+  rate: boolean;
 }) {
   if (!active || !payload?.length) return null;
   const p = payload[0]!.payload;
@@ -49,7 +52,7 @@ function TrendTooltip({
       <div className={styles.tipDate}>{p.label}</div>
       <div className={styles.tipRow}>
         <span className={styles.tipKey} data-series="1" aria-hidden="true" />
-        <strong>{p.mean === null ? '—' : `${p.mean.toFixed(1)}%`}</strong>
+        <strong>{trendFormat(p.mean, rate)}</strong>
         <span>{metric}</span>
       </div>
       <div className={styles.tipRow}>
@@ -73,10 +76,16 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
   const data: Point[] = trend.points.map((p) => ({
     date: p.date,
     label: short(p.date),
-    mean: p.metric_mean === null ? null : Math.round(p.metric_mean * 1000) / 10,
+    mean: p.metric_mean,
     runs: p.runs,
     success: p.execution_success,
   }));
+  const rate = trendIsRate(data.map((p) => p.mean));
+  const [low, high] = trendDomain(
+    data.map((p) => p.mean),
+    rate,
+  );
+  const yTicks = [low, (low + high) / 2, high];
   const tickEvery = Math.max(1, Math.round(data.length / 6));
   const ticks = data.filter((_, i) => i % tickEvery === 0).map((d) => d.date);
   return (
@@ -107,15 +116,15 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
               interval={0}
             />
             <YAxis
-              domain={[0, 100]}
-              ticks={[0, 25, 50, 75, 100]}
-              width={36}
-              tickFormatter={(v: number) => `${v}%`}
+              domain={[low, high]}
+              ticks={yTicks}
+              width={rate ? 40 : 56}
+              tickFormatter={(v: number) => (rate ? `${Math.round(v * 100)}%` : trendFormat(v, false))}
               axisLine={false}
               tickLine={false}
               tick={{ fill: 'var(--text-muted)' }}
             />
-            <Tooltip content={<TrendTooltip metric={metric} />} cursor={{ stroke: 'var(--border-strong)' }} />
+            <Tooltip content={<TrendTooltip metric={metric} rate={rate} />} cursor={{ stroke: 'var(--border-strong)' }} />
             <Line
               type="monotone"
               dataKey="mean"
@@ -144,7 +153,7 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
           >
             <XAxis dataKey="date" hide />
             <YAxis width={36} hide domain={[0, 'dataMax']} />
-            <Tooltip content={<TrendTooltip metric={metric} />} cursor={{ fill: 'var(--bg-hover)' }} />
+            <Tooltip content={<TrendTooltip metric={metric} rate={rate} />} cursor={{ fill: 'var(--bg-hover)' }} />
             <Bar
               dataKey="runs"
               fill="var(--border-strong)"

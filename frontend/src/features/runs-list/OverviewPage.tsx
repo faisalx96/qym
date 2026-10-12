@@ -24,6 +24,7 @@ import { useSearchParamsState } from '@/lib/url-state';
 import { Mono, OwnerCell, StatusCell } from './cells';
 import { RunsCtx, type RunsCtxValue } from './context';
 import { useKpiTopbar } from './kpiTopbar';
+import { trendFormat, trendFormatDelta, trendIsRate } from './trendModel';
 // Recharts is ~100 kB: load it only with the Overview page.
 const TrendChart = lazy(() => import('./TrendChart').then((m) => ({ default: m.TrendChart })));
 import styles from './OverviewPage.module.css';
@@ -96,7 +97,8 @@ export function OverviewPage() {
   const entries = kpiEntries(kpis);
   const showSkeleton = useDelayedPending(kpisQ.isPending);
   const s = trend?.summary;
-  const deltaPts = s?.delta == null ? null : s.delta * 100;
+  const rate = trendIsRate(trend?.points.map((p) => p.metric_mean) ?? []);
+  const deltaPts = s?.delta == null ? null : s.delta;
   const good =
     deltaPts === null || trend?.direction == null
       ? null
@@ -287,7 +289,7 @@ export function OverviewPage() {
                   <>
                     <div className={styles.trendHead}>
                       <Text variant="xl" as="div" mono className={styles.trendValue}>
-                        {formatPercentValue(s?.metric_mean ?? null)}
+                        {trendFormat(s?.metric_mean ?? null, rate)}
                       </Text>
                       <Text
                         variant="sm"
@@ -306,7 +308,7 @@ export function OverviewPage() {
                       >
                         {deltaPts === null
                           ? 'no previous period'
-                          : `${deltaPts > 0 ? '+' : ''}${deltaPts.toFixed(1)} pts vs previous ${days} days`}
+                          : `${trendFormatDelta(deltaPts, rate) || '0'} vs previous ${days} days`}
                       </Text>
                       <Text variant="sm" tone="muted" as="span">
                         {s?.runs ?? 0} finished runs · execution success{' '}

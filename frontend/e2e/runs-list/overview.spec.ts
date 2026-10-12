@@ -84,7 +84,7 @@ test.describe('overview (J8)', () => {
     await expect(card.getByTestId('trend-chart')).toBeVisible({ timeout: 15_000 });
     const head = (await card.innerText()).replace(/\s+/g, ' ');
     expect(head).toMatch(/\d+(\.\d)?%/); // headline value
-    expect(head).toMatch(/(no previous period|[+-]?\d+\.\d pts vs previous 90 days)/);
+    expect(head).toMatch(/(no previous period|[+−-]?\d+\.\d pts vs previous 90 days)/);
     expect(head).toMatch(/\d+ finished runs · execution success/);
     const select = card.getByRole('button', { name: /Task · dataset/ });
     await select.click();
