@@ -60,7 +60,6 @@ export function UserMenu({ compact, placement = 'bottom end', className }: UserM
       trigger={
         <AriaButton
           className={[styles.trigger, className].filter(Boolean).join(' ')}
-          aria-label={compact ? `${me.display_name || me.email} — account menu` : undefined}
           data-user-menu
           data-compact={compact ? '' : undefined}
         >
@@ -72,7 +71,10 @@ export function UserMenu({ compact, placement = 'bottom end', className }: UserM
               <span className={styles.name}>{me.display_name || me.email}</span>
               <span className={styles.email}>{me.email}</span>
             </span>
-          ) : null}
+          ) : (
+            // Name from content (not aria-label): the visible initials must be part of the name (WCAG 2.5.3).
+            <span className={styles.srOnly}>{`${me.display_name || me.email} — account menu`}</span>
+          )}
         </AriaButton>
       }
     />

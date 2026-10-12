@@ -1,5 +1,6 @@
 /* User footer / menu trigger (shell.css user footer). */
 .trigger {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -70,4 +71,16 @@
   flex-direction: column;
   gap: 2px;
   min-width: 200px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }

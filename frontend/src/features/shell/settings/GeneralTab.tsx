@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useRenameProject, useReviewRules } from '@/api/projects';
 import { ApiError } from '@/lib/http';
+import { useSubmitLock } from '@/lib/pending';
 import { Button, Checkbox, KeyValueGrid, Select, Stack, Text, TextField, useToast } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
@@ -13,17 +14,20 @@ export function GeneralTab() {
   const [approvers, setApprovers] = useState<'members' | 'managers'>(project.correction_approvers);
   const [differentReviewer, setDifferentReviewer] = useState(project.correction_require_different_reviewer);
   const rules = useReviewRules(project.id);
+  const lock = useSubmitLock();
 
-  async function saveName() {
+  function saveName() {
     if (!name.trim() || name.trim() === project.name) return;
-    try {
-      const updated = await rename.mutateAsync({ name: name.trim() });
-      toast.show(`Renamed to ${updated.name}`, { tone: 'success' });
-    } catch (e) {
-      toast.show(e instanceof ApiError ? e.detail || 'Could not rename' : 'Could not rename', {
-        tone: 'error',
-      });
-    }
+    void lock(async () => {
+      try {
+        const updated = await rename.mutateAsync({ name: name.trim() });
+        toast.show(`Renamed to ${updated.name}`, { tone: 'success' });
+      } catch (e) {
+        toast.show(e instanceof ApiError ? e.detail || 'Could not rename' : 'Could not rename', {
+          tone: 'error',
+        });
+      }
+    });
   }
 
   return (
@@ -72,7 +76,7 @@ export function GeneralTab() {
               className={styles.addBar}
               onSubmit={(e) => {
                 e.preventDefault();
-                void saveName();
+                saveName();
               }}
             >
               <TextField label="Project name" hideLabel value={name} onChange={setName} width={320} />
@@ -132,19 +136,21 @@ export function GeneralTab() {
                   approvers === project.correction_approvers &&
                   differentReviewer === project.correction_require_different_reviewer
                 }
-                onPress={async () => {
-                  try {
-                    await rules.mutateAsync({
-                      correction_approvers: approvers,
-                      correction_require_different_reviewer: differentReviewer,
-                    });
-                    toast.show('Review rules saved', { tone: 'success' });
-                  } catch (e) {
-                    toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
-                      tone: 'error',
-                    });
-                  }
-                }}
+                onPress={() =>
+                  void lock(async () => {
+                    try {
+                      await rules.mutateAsync({
+                        correction_approvers: approvers,
+                        correction_require_different_reviewer: differentReviewer,
+                      });
+                      toast.show('Review rules saved', { tone: 'success' });
+                    } catch (e) {
+                      toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
+                        tone: 'error',
+                      });
+                    }
+                  })
+                }
               >
                 Save rules
               </Button>

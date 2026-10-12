@@ -7,7 +7,7 @@ import {
 } from '@/api/projectSettings';
 import type { LlmConnection } from '@/api/types';
 import { ApiError } from '@/lib/http';
-import { useDelayedPending } from '@/lib/pending';
+import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Button,
   Checkbox,
@@ -32,6 +32,7 @@ export function LlmConnectionsTab() {
   const list = useLlmConnections(project.id);
   const showSkeleton = useDelayedPending(list.isPending);
   const save = useSaveLlmConnection(project.id);
+  const lock = useSubmitLock();
   const action = useLlmConnectionAction(project.id);
   const toast = useToast();
   const [editing, setEditing] = useState<LlmConnection | null>(null);
@@ -172,17 +173,19 @@ export function LlmConnectionsTab() {
           initial={editing}
           busy={save.isPending}
           onCancel={() => setShowForm(false)}
-          onSubmit={async (body) => {
-            try {
-              await save.mutateAsync({ id: editing?.id, body });
-              toast.show(editing ? 'Connection updated' : 'Connection added', { tone: 'success' });
-              setShowForm(false);
-            } catch (e) {
-              toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
-                tone: 'error',
-              });
-            }
-          }}
+          onSubmit={(body) =>
+            void lock(async () => {
+              try {
+                await save.mutateAsync({ id: editing?.id, body });
+                toast.show(editing ? 'Connection updated' : 'Connection added', { tone: 'success' });
+                setShowForm(false);
+              } catch (e) {
+                toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
+                  tone: 'error',
+                });
+              }
+            })
+          }
         />
       ) : null}
       {deleting ? (

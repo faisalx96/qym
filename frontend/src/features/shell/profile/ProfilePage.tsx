@@ -135,7 +135,7 @@ function BootstrapAdminPanel({ onGranted }: { onGranted: () => void }) {
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
-          grant.mutate();
+          if (!grant.isPending) grant.mutate();
         }}
       >
         <TextField

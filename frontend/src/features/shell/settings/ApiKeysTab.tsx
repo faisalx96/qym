@@ -9,7 +9,7 @@ import {
 } from '@/api/projectSettings';
 import type { ApiKey, DatasetReadToken } from '@/api/types';
 import { ApiError } from '@/lib/http';
-import { useDelayedPending } from '@/lib/pending';
+import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Badge,
   Button,
@@ -55,6 +55,7 @@ function KeysCard({
   const keys = useApiKeys(projectId);
   const showSkeleton = useDelayedPending(keys.isPending);
   const create = useCreateApiKey(projectId);
+  const lock = useSubmitLock();
   const revoke = useRevokeApiKey(projectId);
   const toast = useToast();
   const [name, setName] = useState('');
@@ -105,18 +106,20 @@ function KeysCard({
         {!readOnly ? (
           <form
             className={styles.addBar}
-            onSubmit={async (e) => {
+            onSubmit={(e) => {
               e.preventDefault();
-              try {
-                const created = await create.mutateAsync({ name: name.trim() || undefined });
-                setSecret(created.token);
-                setName('');
-              } catch (err) {
-                toast.show(
-                  err instanceof ApiError ? err.detail || 'Could not create key' : 'Could not create key',
-                  { tone: 'error' },
-                );
-              }
+              void lock(async () => {
+                try {
+                  const created = await create.mutateAsync({ name: name.trim() || undefined });
+                  setSecret(created.token);
+                  setName('');
+                } catch (err) {
+                  toast.show(
+                    err instanceof ApiError ? err.detail || 'Could not create key' : 'Could not create key',
+                    { tone: 'error' },
+                  );
+                }
+              });
             }}
           >
             <TextField
@@ -186,6 +189,7 @@ function KeysCard({
 function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: boolean }) {
   const tokens = useDatasetReadTokens(projectId, true);
   const create = useCreateReadToken(projectId);
+  const lock = useSubmitLock();
   const revoke = useRevokeReadToken(projectId);
   const toast = useToast();
   const [name, setName] = useState('');
@@ -239,18 +243,22 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
         {!readOnly ? (
           <form
             className={styles.addBar}
-            onSubmit={async (e) => {
+            onSubmit={(e) => {
               e.preventDefault();
-              try {
-                const created = await create.mutateAsync({ name: name.trim() || undefined });
-                setSecret(created.token);
-                setName('');
-              } catch (err) {
-                toast.show(
-                  err instanceof ApiError ? err.detail || 'Could not create token' : 'Could not create token',
-                  { tone: 'error' },
-                );
-              }
+              void lock(async () => {
+                try {
+                  const created = await create.mutateAsync({ name: name.trim() || undefined });
+                  setSecret(created.token);
+                  setName('');
+                } catch (err) {
+                  toast.show(
+                    err instanceof ApiError
+                      ? err.detail || 'Could not create token'
+                      : 'Could not create token',
+                    { tone: 'error' },
+                  );
+                }
+              });
             }}
           >
             <TextField

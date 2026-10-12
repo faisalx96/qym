@@ -10,7 +10,7 @@ import {
 } from '@/api/projectSettings';
 import type { Member, MemberCandidate, RemovalPreview } from '@/api/types';
 import { ApiError } from '@/lib/http';
-import { useDelayedPending } from '@/lib/pending';
+import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
   Button,
   ConfirmDialog,
@@ -253,6 +253,7 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const add = useAddMember(projectId);
+  const lock = useSubmitLock();
   const toast = useToast();
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 200);
@@ -272,20 +273,22 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
     <form
       className={styles.addBar}
       data-add-member
-      onSubmit={async (e) => {
+      onSubmit={(e) => {
         e.preventDefault();
         if (!picked) return;
-        try {
-          await add.mutateAsync({ user_id: picked.id, role });
-          toast.show(`${picked.display_name || picked.email} added`, { tone: 'success' });
-          setPicked(null);
-          setQuery('');
-        } catch (err) {
-          toast.show(
-            err instanceof ApiError ? err.detail || 'Could not add member' : 'Could not add member',
-            { tone: 'error' },
-          );
-        }
+        void lock(async () => {
+          try {
+            await add.mutateAsync({ user_id: picked.id, role });
+            toast.show(`${picked.display_name || picked.email} added`, { tone: 'success' });
+            setPicked(null);
+            setQuery('');
+          } catch (err) {
+            toast.show(
+              err instanceof ApiError ? err.detail || 'Could not add member' : 'Could not add member',
+              { tone: 'error' },
+            );
+          }
+        });
       }}
     >
       <div className={styles.combo}>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useCreateUser } from '@/api/admin';
 import { ApiError } from '@/lib/http';
+import { useSubmitLock } from '@/lib/pending';
 import { Button, Select, TextField, useToast } from '@/ui';
 import { isValidEmail } from '../format';
 import styles from './users.module.css';
@@ -17,6 +18,7 @@ export function CreateUserForm({ onCreated }: CreateUserFormProps) {
   const [role, setRole] = useState<'ADMIN' | 'MEMBER'>('MEMBER');
   const [error, setError] = useState<string | null>(null);
   const create = useCreateUser();
+  const lock = useSubmitLock();
   const toast = useToast();
 
   async function submit() {
@@ -53,7 +55,7 @@ export function CreateUserForm({ onCreated }: CreateUserFormProps) {
       data-create-user
       onSubmit={(e) => {
         e.preventDefault();
-        void submit();
+        void lock(submit);
       }}
     >
       <TextField

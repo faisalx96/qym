@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useResetPassword, useUpdateUser, type AdminUser, type UpdateUserBody } from '@/api/admin';
 import { ApiError } from '@/lib/http';
+import { useSubmitLock } from '@/lib/pending';
 import { Button, Checkbox, ConfirmDialog, CopyButton, Dialog, Select, Text, TextField, useToast } from '@/ui';
 import { isValidEmail } from '../format';
 import styles from './users.module.css';
@@ -49,6 +50,7 @@ function EditUserDialogInner({
   const [confirmReset, setConfirmReset] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const update = useUpdateUser();
+  const lock = useSubmitLock();
   const reset = useResetPassword();
   const toast = useToast();
   const busy = update.isPending || reset.isPending;
@@ -114,7 +116,7 @@ function EditUserDialogInner({
           aria-busy={busy || undefined}
           onSubmit={(e) => {
             e.preventDefault();
-            void save();
+            void lock(save);
           }}
         >
           <TextField

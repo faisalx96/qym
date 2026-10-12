@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useEnqueueJob, type MaintenanceOverview } from '@/api/admin';
 import { ApiError } from '@/lib/http';
+import { useSubmitLock } from '@/lib/pending';
 import { Badge, Button, Select, Text, TextField, Textarea, useToast } from '@/ui';
 import styles from './maintenance.module.css';
 
@@ -27,6 +28,7 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const enqueue = useEnqueueJob();
+  const lock = useSubmitLock();
   const toast = useToast();
   const meta = kinds[kind];
   const irreversible = Boolean(meta?.irreversible);
@@ -67,7 +69,7 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
       data-enqueue-form
       onSubmit={(e) => {
         e.preventDefault();
-        void submit();
+        void lock(submit);
       }}
     >
       <div className={styles.jobFields}>
