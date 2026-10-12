@@ -13,6 +13,7 @@ import {
   seedClassic,
   seedProject,
   seedRepeat,
+  settleDashboard,
   client,
   type Seeded,
 } from './support';
@@ -321,6 +322,18 @@ test.describe('repeat runs', () => {
     await expect(compare).toBeVisible();
     await expect(compare.locator('[data-pass]')).toHaveCount(3);
   });
+});
+
+test('the pager arrow previews the neighbouring run', async ({ page }) => {
+  settleDashboard();
+  await openRun(page, s.slug, custom);
+  const step = page.getByRole('link', { name: /^(Previous|Next) run:/ }).first();
+  await expect(step).toBeVisible();
+  await step.hover();
+  const peek = page.getByTestId('pager-peek');
+  await expect(peek).toBeVisible();
+  await expect(peek).toContainText(/claude-sonnet-4|gpt-5-mini|cutover\/model/);
+  await expect(peek).toContainText(/2026/);
 });
 
 test('a heatmap cell opens its own pass', async ({ page }) => {

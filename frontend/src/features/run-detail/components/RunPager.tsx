@@ -1,10 +1,11 @@
 /** Previous / next run in the Runs-list order the reader came from (brief 04 J9). */
-import { useEffect, useMemo } from 'react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { runKeys, fetchNeighbors } from '@/api/runs';
 import { runPath } from '@/app/routes';
-import { Icon, Kbd, Tooltip } from '@/ui';
+import { Icon, Kbd } from '@/ui';
+import { formatIsoDateTime } from '../lib/heroModel';
 import { collation, neighborQuery, normalizeContext, runHref } from '../lib/runsOrder';
 import type { NeighborRun } from '../types';
 import styles from './RunPager.module.css';
@@ -28,15 +29,71 @@ export function useRunNeighbors(runId: string, slug: string, listParam: string |
   });
 }
 
-function peek(target: NeighborRun): string {
-  const parts = [
-    target.run_name ?? target.run_id,
-    target.model,
+/** The neighbour at a glance: name, model and start, then the primary metric. */
+export function Peek({ target }: { target: NeighborRun }) {
+  const score =
     target.primary?.metric && target.primary.value != null
       ? `${target.primary.metric} ${(target.primary.value * 100).toFixed(1)}%`
-      : null,
-  ];
-  return parts.filter(Boolean).join(' · ');
+      : null;
+  const meta = [target.model, target.started_at ? formatIsoDateTime(target.started_at) : null]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <span className={styles.peek} data-testid="pager-peek">
+      <span className={styles.peekName}>{target.run_name ?? target.run_id}</span>
+      {meta ? <span>{meta}</span> : null}
+      {score ? <span className={styles.peekScore}>{score}</span> : null}
+    </span>
+  );
+}
+
+/** An arrow link whose neighbour card opens on hover and keyboard focus, closes on leave, blur and Escape. */
+function PeekStep({
+  noun,
+  shortcut,
+  href,
+  target,
+  icon,
+}: {
+  noun: string;
+  shortcut: string;
+  href: string;
+  target: NeighborRun;
+  icon: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <span className={styles.stepWrap}>
+      <Link
+        className={styles.step}
+        to={href}
+        aria-label={`${noun}: ${target.run_name ?? target.run_id}`}
+        aria-keyshortcuts={shortcut}
+        aria-describedby={open ? id : undefined}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && open) {
+            e.stopPropagation();
+            setOpen(false);
+          }
+        }}
+      >
+        {icon}
+      </Link>
+      {open ? (
+        <span id={id} role="tooltip" className={styles.peekCard}>
+          <span>
+            {noun} <Kbd>{shortcut}</Kbd>
+          </span>
+          <Peek target={target} />
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 export function RunPager({
@@ -98,22 +155,13 @@ export function RunPager({
       );
     }
     return (
-      <Tooltip
-        content={
-          <span>
-            {noun} <Kbd>{which === 'previous' ? 'K' : 'J'}</Kbd> · {peek(target)}
-          </span>
-        }
-      >
-        <Link
-          className={styles.step}
-          to={href}
-          aria-label={`${noun}: ${target.run_name ?? target.run_id}`}
-          aria-keyshortcuts={which === 'previous' ? 'K' : 'J'}
-        >
-          {icon}
-        </Link>
-      </Tooltip>
+      <PeekStep
+        noun={noun}
+        shortcut={which === 'previous' ? 'K' : 'J'}
+        href={href}
+        target={target}
+        icon={icon}
+      />
     );
   };
 
