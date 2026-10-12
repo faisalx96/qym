@@ -35,14 +35,14 @@ Spec legend: e2e/experiments/{list,detail,queue,environments,models,run-panel,a1
 | A2 | Tabs Experiments / Queue / Environments | ExperimentsTabs.tsx | OK | Live. |
 | A3 | Status select (6 values) in URL `?status=` | ExperimentsPage.tsx:202-218 | CHANGED | Option labels lower-case ("queued"). Cosmetic. Live. |
 | A4 | "Created by me" `?mine=1` | :229-240 | OK | Live (list.spec). |
-| A5 | One select per versioning key, `?versioning=k=v` repeatable, label humanised ("KB version", "All kb versions"), tooltip | :219-228 | CHANGED | Label is the raw key, "Any kb_version", no tooltip. No facet data in seed: code only. list.spec covers facets. |
+| A5 | One select per versioning key, `?versioning=k=v` repeatable, label humanised ("KB version", "All kb versions"), tooltip | :219-228 | FIXED (f401fb88) | Label is the raw key, "Any kb_version", no tooltip. No facet data in seed: code only. list.spec covers facets. |
 | A6 | Table columns Name/Status/Environments/Base source/Jobs/Best score/Creator/Age, widths persisted `experiments.list.v1` | :95-133 | CHANGED | "Best score" dropped (API never sent it; decisions Q2). Creator cell lost its title tooltip. Persisted widths kept. Live. |
 | A7 | Environment names resolved client side | :259-272 | CHANGED | Adds "(disabled)" suffix. Improvement. |
 | A8 | Job tags ✓/✗/●/⊘ with titles | :274-296 | OK | Live. |
 | A9 | Row click opens detail (not on links) | rowHref | OK | Row is a link, Enter works (a11y.spec). |
 | A10 | Pagination 50, page not in URL | :246-254 | CHANGED | `page` now in URL. >50 rows not tested (code only). |
 | A11 | Empty states "No experiments yet" / "No matching experiments" | :151-176 | CHANGED | New copy, adds Clear filters action; empty-project action is "New experiment" (old pointed at Environments). |
-| A12 | Poll note "Auto-refreshing while experiments run" only while a live experiment exists | :241-243 | CHANGED | Note is always shown, even with nothing live. Minor. |
+| A12 | Poll note "Auto-refreshing while experiments run" only while a live experiment exists | :241-243 | FIXED (f401fb88) | Note is always shown, even with nothing live. Minor. |
 | A13 | Poll 5 s x1.5 to 60 s, paused when hidden, re-render on fingerprint change | api/experiments.ts:282-296 | OK | code + queue.spec polling test; list cadence not timed. |
 | A14 | Load error state with retry | :143-150 | OK | code |
 
@@ -50,7 +50,7 @@ Spec legend: e2e/experiments/{list,detail,queue,environments,models,run-panel,a1
 
 | # | Old behaviour | New code | Status | Verified / notes |
 |---|---|---|---|---|
-| B1 | Breadcrumb project / Experiments / <name>; "← All experiments" | shell/chrome/Breadcrumbs.tsx:25-31, detail/ExperimentDetailPage.tsx:30 | BUGGY | Crumb shows only "Experiments" (not a link, no name). Back link present. Live. |
+| B1 | Breadcrumb project / Experiments / <name>; "← All experiments" | shell/chrome/Breadcrumbs.tsx:25-31, detail/ExperimentDetailPage.tsx:30 | FIXED (fd6fd6bb) | Crumb shows only "Experiments" (not a link, no name). Back link present. Live. |
 | B2 | Header: name, description fallback text, meta (creator, age with abs title, priority, base, env names with "(disabled)"), status badge | ExperimentDetailPage.tsx:119-146 | OK | Live. |
 | B3 | "Retry failed (n)" always shown, disabled at 0 | :148-157 | CHANGED | Hidden when 0. Fine. |
 | B4 | "Cancel experiment" disabled w/o live jobs or permission, tooltip reason | :158-173 | CHANGED | Tooltip replaced by an inline note for non-controllers ("Only the experiment's creator or a project manager..."). Permission gating itself not exercised (needs non-manager login): code. |
@@ -58,7 +58,7 @@ Spec legend: e2e/experiments/{list,detail,queue,environments,models,run-panel,a1
 | B6 | Queue strip per environment, "position P", "Open in queue →", hidden without live jobs | detail/QueueStrip.tsx | CHANGED | Now a card, zero counts shown ("0 queued · 1 running · 0 blocked"). Live. |
 | B7 | Matrix: combo label + #index, env columns, "(disabled)" | MatrixCard.tsx:69-119 | OK | Live. |
 | B8 | Cell: select checkbox (only usable runs), status badge, "↻ N earlier", headline metric (+lower-is-better title), run link, "Run deleted", error / wait_reason | MatrixCard.tsx:140-206 | OK | Live; deleted run / wait reason: code. |
-| B9 | Cell actions Cancel / Retry / Save as preset / Promote (managers) | :207-250 | CHANGED | Save as preset is also disabled for non-creator members (`!canControl`); old enabled it for everyone with a config. Server rule not checked. |
+| B9 | Cell actions Cancel / Retry / Save as preset / Promote (managers) | :207-250 | FIXED (4b3ce9ae) | Save as preset is also disabled for non-creator members (`!canControl`); old enabled it for everyone with a config. Server rule not checked. |
 | B10 | Select all / Clear / Compare selected (n>=2) writes `sessionStorage.compareRuns`, goes to `/compare?runs=` | ExperimentDetailPage.tsx:86-95 | OK | Live: URL and sessionStorage identical to old. |
 | B11 | Selection survives polls | :62-66 | OK | code |
 | B12 | "↻ N earlier" opens history with superseded shown and scrolls to row | :97-117 | OK | Live (button and history toggle seen). |
@@ -83,15 +83,15 @@ Spec legend: e2e/experiments/{list,detail,queue,environments,models,run-panel,a1
 | C2 | Filters environment/status/experiment/mine in URL | :351-381 | OK | Live; status shows title-case. |
 | C3 | Experiment select from names seen + URL value kept | :133-140 | CHANGED | Built from project's experiments too (Q6). |
 | C4 | Environment cards: health, in flight/queued/blocked, paused note, stale note, HIGH box | EnvCard :500-531 | OK | Live HIGH box and counts. |
-| C5 | Jobs table columns # / Experiment+params / Environment / Priority / Status / Created by / Age / Elapsed / Run progress / actions | :199-329 | CHANGED | Priority column dropped: only HIGH is tagged, LOW/NORMAL invisible. Status shown upper-case. Progress empty shows "Not started". Params summary no longer prints slot_bindings. |
+| C5 | Jobs table columns # / Experiment+params / Environment / Priority / Status / Created by / Age / Elapsed / Run progress / actions | :199-329 | FIXED (5e2b4d31) | Priority column dropped: only HIGH is tagged, LOW/NORMAL invisible. Status shown upper-case. Progress empty shows "Not started". Params summary no longer prints slot_bindings. |
 | C6 | Select all I can cancel, Cancel selected (n) | :401-436 | OK | Live ("(4)"). |
 | C7 | Cancel split dialog (Queued here / On the service / Not allowed, reason, Keep jobs) | CancelSplitDialog.tsx | OK | e2e; row-cancel flow opens it (code). Not rendered by me. |
 | C8 | Cancel all queued in experiment (re-fetches exact set) | :166-185 | OK | code + queue.spec. |
 | C9 | "Showing the first N of M" | :470-474 | OK | code. Old limit 500: new limit not checked. |
 | C10 | Remote queue collapsed, lazy load, orphan/stale tags | RemoteQueueSection.tsx | OK | Live: loads on open, 3 orphans tag. |
-| C11 | Remote selection only on orphan/stale rows; cancel button only when some exist | :157-170 | BUGGY | Live: 9 checkboxes (every row + header) vs 1; cancel button always shown for managers. Selecting a matched row silently counts 0. |
-| C12 | Remote cancel dialog wording "orphan job" vs "remote job", audit note | :182-206 | CHANGED | Always "remote job". |
-| C13 | Stale badge + tooltip, "Local status X" | :126-132 | CHANGED | Tooltip dropped. Stale rows not produced in test: code. |
+| C11 | Remote selection only on orphan/stale rows; cancel button only when some exist | :157-170 | FIXED (5e2b4d31) | Live: 9 checkboxes (every row + header) vs 1; cancel button always shown for managers. Selecting a matched row silently counts 0. |
+| C12 | Remote cancel dialog wording "orphan job" vs "remote job", audit note | :182-206 | FIXED (5e2b4d31) | Always "remote job". |
+| C13 | Stale badge + tooltip, "Local status X" | :126-132 | FIXED (5e2b4d31) | Tooltip dropped. Stale rows not produced in test: code. |
 | C14 | Last refresh failed, fetched ago | :152-156 | OK | code |
 | C15 | Manager-only note | :173-177 | OK | code |
 | C16 | Polling always, paused when hidden | :98-107 | OK | queue.spec. |
@@ -138,8 +138,8 @@ Spec legend: e2e/experiments/{list,detail,queue,environments,models,run-panel,a1
 | # | Old behaviour | New code | Status | Verified / notes |
 |---|---|---|---|---|
 | F1 | Groups closed by default, count badge per group, "Other values" | sections/SettingsSection.tsx | CHANGED | Closed by default, matches-count while searching, but no static per-group count badge. |
-| F2 | Field shows label + raw setting key (ENABLE_RESPONSE_DRAFTING) | settings/FieldNode.tsx | MISSING | Raw key no longer displayed anywhere (live HTML has no key). Hurts mapping to Raw JSON. |
-| F3 | Search matches label, key, pointer, description | settings view | CHANGED | Live: label and key match; `/env_overrides/REQUEST` (pointer) matches nothing. |
+| F2 | Field shows label + raw setting key (ENABLE_RESPONSE_DRAFTING) | settings/FieldNode.tsx | FIXED (481b0d6a) | Raw key no longer displayed anywhere (live HTML has no key). Hurts mapping to Raw JSON. |
+| F3 | Search matches label, key, pointer, description | settings view | FIXED (481b0d6a) | Live: label and key match; `/env_overrides/REQUEST` (pointer) matches nothing. |
 | F4 | Changed only, "N changed", Reset all, per-field Reset, changed dot | SettingsSection / LeafField | OK | Live. |
 | F5 | Validation per field ("Enter a number", range) | model/descriptor.ts | OK | Live: "Enter a number", "Must be at most 3600". |
 | F6 | Widgets for every type (boolean, enum, number, endpoint-ref, array/object JSON, collections, role table with All roles row) | settings/LeafField, JsonFields, RoleTable, AllItemsControl | OK | Fixture test allTypes; live boolean/enum/number/role table seen. Structured JSON editing quirk logged in CUTOVER ("[1, 2]" char-by-char). |
@@ -159,7 +159,7 @@ Spec legend: e2e/experiments/{list,detail,queue,environments,models,run-panel,a1
 | # | Old behaviour | New code | Status | Verified / notes |
 |---|---|---|---|---|
 | G1 | Edit and publish: Publish disabled until change + notes, confirm dialog, toast | environments/DefaultPresetEditorPage.tsx, editor/PublishPane.tsx | OK | Live publish v2 on both; same gating and dialog text. |
-| G2 | Editor copy | LaunchContext editor mode | BUGGY (cosmetic) | Settings card still says "applied to every run of this experiment" in the editor. |
+| G2 | Editor copy | LaunchContext editor mode | FIXED (481b0d6a) | Settings card still says "applied to every run of this experiment" in the editor. |
 | G3 | Dataset optional in editor | EditorEntry.tsx | OK | Live. |
 | G4 | 409 stale publish | PublishPane | OK | preset-editor.spec. |
 | G5 | Leave with unpublished changes asks | DefaultPresetEditorPage | OK (new) | preset-editor.spec. |
@@ -174,29 +174,29 @@ Spec legend: e2e/experiments/{list,detail,queue,environments,models,run-panel,a1
 | H1 | List columns, Run default preset, Manage, Test, + Add | environments/EnvironmentsList.tsx | OK | Live, identical content. |
 | H2 | Environment page sections (Status, Schema, LLM groups, Presets, Ranking, Policies, Connection, Delete) | EnvironmentSections.tsx | OK | Live text identical. |
 | H3 | Add dialog step 1 (key hint, create key link) | AddEnvironmentDialog.tsx | OK | Live. |
-| H4 | Step 2 read-only generated form preview, first group open, per-field type/tags | FormPreview.tsx | CHANGED | All groups collapsed. |
+| H4 | Step 2 read-only generated form preview, first group open, per-field type/tags | FormPreview.tsx | FIXED (f401fb88) | All groups collapsed. |
 | H5 | Step 3 group LLM settings (cards, key sets, transport chips, merge, add group) | SlotEditor.tsx | OK | Live content identical; slot-editor spec. |
 | H6 | Test connection, Refresh schema diff, edit policies, moved-URL rule, delete/disable, re-enable | EnvironmentSections.tsx | OK | environments.spec; not exercised by me. |
 | H7 | Manager gating of write controls | environments/* | OK | code; no test (CUTOVER gap), not exercised. |
 | H8 | Run default preset one click + blockers | runDefaultPreset.tsx | OK | e2e. |
-| H9 | Breadcrumb Experiments / Environments / <env> | Breadcrumbs.tsx | BUGGY | Only "Environments" (page label); no env name crumb. Live. |
+| H9 | Breadcrumb Experiments / Environments / <env> | Breadcrumbs.tsx | FIXED (fd6fd6bb) | Only "Environments" (page label); no env name crumb. Live. |
 | H10 | Old URLs `?view=environments`, `?environment=` | routes | OK | list.spec legacy redirects. |
 
 ### I. Models page
 
 | # | Old behaviour | New code | Status | Verified / notes |
 |---|---|---|---|---|
-| I1 | Command bar: time range Today/7d/30d/Range popover; origin segmented | models/ModelsPage.tsx:176-188 | CHANGED | Today/7d/30d/All only; custom range popover missing (see I2). |
-| I2 | Multi-select filters Tasks/Datasets/Models/Versions/versioning/Status/Users + Clear | :189-205 | MISSING | Only single Task and Dataset selects. Logged as decision Q7 (own Task/Dataset selects); no replacement for the rest. |
-| I3 | "All runs"/"Filtered runs" global filter shared with runs page | ModelsPage | MISSING | CUTOVER gap verified: filters set on Runs are not applied. |
-| I4 | Topbar KPI chips and bottom status bar "4 of 24 runs — task, dataset" | n/a | MISSING | Not shown on Models. |
+| I1 | Command bar: time range Today/7d/30d/Range popover; origin segmented | models/ModelsPage.tsx:176-188 | FIXED (c3bf0922) | Today/7d/30d/All only; custom range popover missing (see I2). |
+| I2 | Multi-select filters Tasks/Datasets/Models/Versions/versioning/Status/Users + Clear | :189-205 | FIXED (c3bf0922) | Only single Task and Dataset selects. Logged as decision Q7 (own Task/Dataset selects); no replacement for the rest. |
+| I3 | "All runs"/"Filtered runs" global filter shared with runs page | ModelsPage | FIXED (c3bf0922) | CUTOVER gap verified: filters set on Runs are not applied. |
+| I4 | Topbar KPI chips and bottom status bar "4 of 24 runs — task, dataset" | n/a | FIXED (c3bf0922) | Not shown on Models. |
 | I5 | `?task=&dataset=` deep link | :84-102 | OK | Live: same URL works in both and gives the same cards. |
 | I6 | Require one task+dataset, infer when one exists, empty state | :216-227 | OK | Live. |
 | I7 | Metric select, K (1-100), Pass slider, Shown metrics | :232-271 | OK | Live; numbers match old exactly (90, 50, 90, 50, 75, 72.2, errors 1/7, retries 2, latency 1.4s). |
-| I8 | Percent tiles with 1 decimal ("63.6%") | ModelCard | CHANGED | Rounded to whole percent ("64%"). |
-| I9 | Trace tiles (avg tokens, LLM calls, tool calls, tool success rate) | none | MISSING | grep finds no handling of `avg_tokens` etc. Old showed "—" for this data but values with traces. |
+| I8 | Percent tiles with 1 decimal ("63.6%") | ModelCard | FIXED (c3bf0922) | Rounded to whole percent ("64%"). |
+| I9 | Trace tiles (avg tokens, LLM calls, tool calls, tool success rate) | none | FIXED (c3bf0922) | grep finds no handling of `avg_tokens` etc. Old showed "—" for this data but values with traces. |
 | I10 | Correct distribution bar, legend, items count, compare link (>=2 runs) | ModelCard.tsx | OK | Live; compare URL identical. |
-| I11 | Ranking with medals | :325-353 | CHANGED | "#1" text instead of medals. |
+| I11 | Ranking with medals | :325-353 | FIXED (c3bf0922) | "#1" text instead of medals. |
 | I12 | Edit run selection modal, paged, cap K, config groups | RunSelectionDialog.tsx | CHANGED | Live: works, no config-group headings (none in data). |
 | I13 | Last updated | :273 | OK | |
 
@@ -225,6 +225,14 @@ Ordered by impact.
 10. **minor** Poll note always visible (A12): show only while an experiment is queued/running.
 11. **minor** Versioning facet labels (A5): humanise keys and add the "Evaluation Service versioning: key" title.
 12. **minor** Add dialog preview collapsed (H4): open the first group by default.
+
+## Deferred
+
+- I3 as a literal "All runs / Filtered runs" switch: not added. The Models page now shares the Runs page's filters
+  (adopted when Models opens without filters of its own, cleared with Clear), which covers the use; a separate
+  switch needs a product decision (about 0.5 day).
+- I4 bottom status bar on Models: replaced by a one-line sentence under the filter row ("4 of 24 runs - task, dataset"); the topbar chips are the shared Runs ones.
+- C5 status in title case on the queue (still upper-case) and C14-style param summary: left as is (cosmetic).
 
 ## Not verified
 
