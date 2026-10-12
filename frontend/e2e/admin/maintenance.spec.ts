@@ -1,5 +1,7 @@
 /// <reference lib="dom" />
-/** Admin Maintenance tab (brief 09 §8.8). SQLite: db_stats errors, jobs stay queued (no worker loop). */
+/** Admin Maintenance tab (brief 09 §8.8). SQLite: db_stats errors. The e2e platform
+ * runs its background loops (QYM_ROLE=all, needed by the experiments and analyzer areas), so a queued job is
+ * picked up within seconds: the polling test pins the job's status to `running` in the list response. */
 import { test, expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
 
@@ -33,6 +35,13 @@ test('queue a reversible job, open its log, and polling runs every ~3 s while it
   await pickJob(page, 'vacuum_analyze');
   const form = page.locator('[data-enqueue-form]');
   await expect(form.getByLabel(/^Type .*to confirm/)).toHaveCount(0);
+  await page.route(/\/api\/admin\/maintenance(\?.*)?$/, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const res = await route.fetch();
+    const body = (await res.json()) as { jobs: { kind: string; status: string }[] };
+    body.jobs = body.jobs.map((j) => (j.kind === 'vacuum_analyze' ? { ...j, status: 'running' } : j));
+    return route.fulfill({ response: res, json: body });
+  });
   await form.getByRole('button', { name: 'Queue job' }).click();
   await expect(page.getByText('Queued vacuum_analyze')).toBeVisible();
   const table = page.getByRole('grid', { name: 'Maintenance jobs' });

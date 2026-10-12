@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -10,7 +11,9 @@ import path from 'node:path';
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..');
-const venvPython = path.join(repo, '.venv', 'bin', 'python');
+// Worktrees have no .venv of their own: honour QYM_PYTHON, else the repo venv, else the active python.
+const repoVenv = path.join(repo, '.venv', 'bin', 'python');
+const venvPython = process.env.QYM_PYTHON ?? (fs.existsSync(repoVenv) ? repoVenv : 'python');
 
 export const LIVE_PORT = 8818;
 export const FILE_PORT = 8819;

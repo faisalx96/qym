@@ -6,6 +6,7 @@
  */
 import { expect, type Locator, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -117,7 +118,10 @@ export async function scrollTop(page: Page): Promise<number> {
 export function settleDashboard(): void {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const repo = path.resolve(here, '..', '..', '..');
-  const python = process.env.QYM_E2E_PYTHON ?? path.join(repo, '.venv', 'bin', 'python');
+  // Worktrees have no .venv of their own: QYM_E2E_PYTHON, else QYM_PYTHON, else the repo venv, else python.
+  const repoVenv = path.join(repo, '.venv', 'bin', 'python');
+  const python =
+    process.env.QYM_E2E_PYTHON ?? process.env.QYM_PYTHON ?? (fs.existsSync(repoVenv) ? repoVenv : 'python');
   const db = process.env.QYM_E2E_DB_URL ?? `sqlite:///${path.resolve(here, '..', '..', '.qym-e2e.db')}`;
   execFileSync(python, [path.join(here, 'dashboard_tick.py')], {
     cwd: repo,
