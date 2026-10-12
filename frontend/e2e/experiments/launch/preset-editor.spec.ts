@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- request/response bodies are untyped JSON here */
 /** Brief 06 §2.6 (journey 6): the default preset editor (the launch form in editor mode). */
-import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
-import { resetFakes } from '../support';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { resetFakes, test } from '../support';
 import {
   dialog,
   listPresets,

@@ -3,8 +3,8 @@
  * Brief 06 §2.6 launch: real launch, HIGH confirmation, preemption confirm-and-resend, server 422
  * errors, the unsaved-changes guard, the dry-run debounce and keyboard-only completion.
  */
-import { test, expect } from '@playwright/test';
-import { getExperiment, resetFakes, fakeJobs } from '../support';
+import { expect } from '@playwright/test';
+import { getExperiment, resetFakes, test, fakeJobs } from '../support';
 import { pickSelect } from '../ui';
 import {
   captureConsole,

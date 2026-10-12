@@ -298,7 +298,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     const p = await createProject(request, 'Deep Links', uniqueSlug('deep'));
     const runId = 'eval/2026-01-01/abc';
     const encodedRun = runId.split('/').map(encodeURIComponent).join('/');
-    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' }[] = [
+    const urls: { path: string; expect: 'coming-soon' | 'page' | 'settings' | 'projects' | 'profile' }[] = [
       { path: '/', expect: 'projects' },
       { path: '/profile', expect: 'profile' },
       { path: '/admin', expect: 'coming-soon' },
@@ -311,11 +311,11 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       { path: `/projects/${p.slug}`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/overview`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/charts`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/models`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/experiments`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/experiments/queue`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/experiments/exp-1`, expect: 'coming-soon' },
-      { path: `/projects/${p.slug}/environments/env-1`, expect: 'coming-soon' },
+      { path: `/projects/${p.slug}/models`, expect: 'page' },
+      { path: `/projects/${p.slug}/experiments`, expect: 'page' },
+      { path: `/projects/${p.slug}/experiments/queue`, expect: 'page' },
+      { path: `/projects/${p.slug}/experiments/exp-1`, expect: 'page' },
+      { path: `/projects/${p.slug}/environments/env-1`, expect: 'page' },
       { path: `/projects/${p.slug}/datasets`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/datasets/ds-1`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/analysis`, expect: 'coming-soon' },
@@ -333,6 +333,9 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       await expect(page.locator('[data-project-not-found]'), u.path).toHaveCount(0);
       if (u.expect === 'coming-soon') {
         await expect(page.getByRole('heading', { name: /coming soon/ }), u.path).toBeVisible();
+      } else if (u.expect === 'page') {
+        // a real page (it may show its own empty or error state): the shell stays and nothing is a 404
+        await expect(page.getByRole('heading', { name: /coming soon/ }), u.path).toHaveCount(0);
       } else if (u.expect === 'settings') {
         await expect(page.locator('[data-settings-page]'), u.path).toBeVisible();
       } else if (u.expect === 'projects') {

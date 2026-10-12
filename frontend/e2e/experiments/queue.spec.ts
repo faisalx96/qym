@@ -3,7 +3,7 @@
  * selection, the split cancel dialog (reason sent), cancel-all-queued-in-experiment, the lazy
  * remote section with orphans, polling that pauses while the tab is hidden, keyboard use.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
 import {
   FAKE_A,
@@ -14,7 +14,7 @@ import {
   fakeJobs,
   launchExperiment,
   pauseEnvironment,
-  resetFakes,
+  resetFakes, test,
   seedProject,
   waitForExperiment,
   waitForSubmitted,

@@ -4,13 +4,13 @@
  * hygiene of temporary model keys, global model apply / clear, extra endpoints, and re-entering a
  * key after a clone.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import {
   experimentSpec,
   fakeJobs,
   getExperiment,
   launchExperiment,
-  resetFakes,
+  resetFakes, test,
   waitForSubmitted,
 } from '../support';
 import {

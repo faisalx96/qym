@@ -3,7 +3,7 @@
  * environment page (slot editor, test connection, schema refresh, moved-URL rule, delete),
  * "Run default preset" and the settings Environments tab deep links.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { gotoApp, uniqueSlug } from '../helpers';
 import {
   FAKE_A,
@@ -13,7 +13,7 @@ import {
   experimentSpec,
   launchExperiment,
   publishDefaultPreset,
-  resetFakes,
+  resetFakes, test,
   saveSavedPreset,
   seedProject,
   setFakeHealth,

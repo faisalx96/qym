@@ -2,7 +2,7 @@
  * Brief 06 §2.1 + scenario 1: experiments list, filters in the URL, live note,
  * empty / no-match states and the legacy query-string redirects.
  */
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { gotoApp } from '../helpers';
 import {
   FAKE_A,
@@ -11,7 +11,7 @@ import {
   experimentSpec,
   finishJob,
   launchExperiment,
-  resetFakes,
+  resetFakes, test,
   seedProject,
   waitForSubmitted,
 } from './support';

@@ -3,7 +3,7 @@
  * handoff, cancel experiment / job, retry incl. the HIGH acknowledgement and the temporary-key
  * re-entry, earlier attempts, save as preset, 403).
  */
-import { test, expect, type Locator, type Page, type Request } from '@playwright/test';
+import { expect, type Locator, type Page, type Request } from '@playwright/test';
 import { gotoApp } from '../helpers';
 import {
   FAKE_A,
@@ -18,7 +18,7 @@ import {
   launchExperiment,
   linkRunToJob,
   pauseEnvironment,
-  resetFakes,
+  resetFakes, test,
   seedProject,
   stopExperiment,
   waitForExperiment,

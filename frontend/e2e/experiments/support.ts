@@ -8,13 +8,51 @@
  * collide on the platform's one-URL-per-project rule. The fakes are shared by all specs
  * (one process each), so every test starts with `resetFakes()`.
  */
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { mkdirSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { createProject, uniqueSlug, type SeededProject } from '../helpers';
 
 const PLATFORM_PORT = Number(process.env.QYM_PLATFORM_PORT ?? '8800');
 export const FAKE_A = PLATFORM_PORT + 100;
 export const FAKE_B = PLATFORM_PORT + 101;
 export const PRIMARY = 'endpoint:primary';
+
+const LOCK = path.join(tmpdir(), `qym-e2e-fakes-${PLATFORM_PORT}.lock`);
+const LOCK_STALE_MS = 5 * 60_000;
+
+/**
+ * The two fake Evaluation Services are single processes shared by every worker, and each test
+ * starts by resetting them. Tests that touch them therefore take this lock (an atomic mkdir) so
+ * that two workers never reset the fakes under each other; the shell specs still run in parallel.
+ */
+export const test = base.extend<{ fakeServicesLock: void }>({
+  fakeServicesLock: [
+    async (_fixtures, run) => {
+      for (;;) {
+        try {
+          mkdirSync(LOCK);
+          break;
+        } catch {
+          try {
+            if (Date.now() - statSync(LOCK).mtimeMs > LOCK_STALE_MS)
+              rmSync(LOCK, { recursive: true, force: true });
+          } catch {
+            /* released by its owner in the meantime */
+          }
+          await new Promise((r) => setTimeout(r, 150));
+        }
+      }
+      try {
+        await run();
+      } finally {
+        rmSync(LOCK, { recursive: true, force: true });
+      }
+    },
+    { auto: true, timeout: 15 * 60_000 },
+  ],
+});
 
 export { axeSeriousViolations, describeViolations } from '../shell/support';
 

@@ -1,6 +1,6 @@
 /** Brief 06 §8 scenario 7: sweeps, range chips, run counts, linking axes and the run cap. */
-import { test, expect, type Locator, type Page } from '@playwright/test';
-import { resetFakes } from '../support';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { resetFakes, test } from '../support';
 import {
   expectReady,
   launchButton,

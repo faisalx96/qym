@@ -3,8 +3,8 @@
  * Evaluation inputs, run_metadata validation, Raw JSON (brief 06 §8 scenario 8) and the validation
  * list that focuses the field of a problem.
  */
-import { test, expect, type Page } from '@playwright/test';
-import { resetFakes } from '../support';
+import { expect, type Page } from '@playwright/test';
+import { resetFakes, test } from '../support';
 import {
   expectReady,
   launchButton,

@@ -2,9 +2,9 @@
  * Brief 06 §2.10: the Models page. Task + dataset are required, model cards with stat tiles,
  * K, the run-selection dialog and the compare handoff. Runs are created through the SDK ingest.
  */
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { createApiKey, ingestRun, resetFakes, seedProject, waitForDashboardRuns } from './support';
+import { createApiKey, ingestRun, resetFakes, test, seedProject, waitForDashboardRuns } from './support';
 import { pickSelect, query } from './ui';
 
 test.setTimeout(90_000);

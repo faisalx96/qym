@@ -4,7 +4,7 @@
  * and that component: an official run's detail carries the panel fields the component reads,
  * a local run carries none, and no token or secret ever travels with it.
  */
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
   createApiKey,
   createEnvironment,
@@ -14,7 +14,7 @@ import {
   ingestRun,
   launchExperiment,
   linkRunToJob,
-  resetFakes,
+  resetFakes, test,
   seedProject,
   waitForSubmitted,
 } from './support';

@@ -2,8 +2,8 @@
  * Brief 06 §2.4 / §2.5 (journey 4) + §8 scenarios 4 and 5: the entry screen, URL params and the
  * layering of edits on top of a starting point.
  */
-import { test, expect } from '@playwright/test';
-import { experimentSpec, launchExperiment, resetFakes, waitForSubmitted } from '../support';
+import { expect } from '@playwright/test';
+import { experimentSpec, launchExperiment, resetFakes, test, waitForSubmitted } from '../support';
 import {
   dialog,
   expectReady,

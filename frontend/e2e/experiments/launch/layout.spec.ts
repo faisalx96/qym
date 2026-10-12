@@ -1,6 +1,6 @@
 /** Mobile layout (390px: no page overflow, sticky launch bar) and axe-core on the entry and every section. */
-import { test, expect } from '@playwright/test';
-import { axeSeriousViolations, describeViolations, expectNoPageOverflow, resetFakes } from '../support';
+import { expect } from '@playwright/test';
+import { axeSeriousViolations, describeViolations, expectNoPageOverflow, resetFakes, test } from '../support';
 import {
   expectReady,
   maxAttempts,

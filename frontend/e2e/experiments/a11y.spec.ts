@@ -3,7 +3,7 @@
  * critical must be zero) with the page's dialogs open, keyboard-only operation of the main
  * controls, and no horizontal page overflow at 390px.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
 import {
   FAKE_A,
@@ -21,7 +21,7 @@ import {
   linkRunToJob,
   pauseEnvironment,
   publishDefaultPreset,
-  resetFakes,
+  resetFakes, test,
   saveSavedPreset,
   seedProject,
   waitForDashboardRuns,
