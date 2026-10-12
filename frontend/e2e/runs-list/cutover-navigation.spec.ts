@@ -70,8 +70,8 @@ test.describe('Runs list history', () => {
     expect(loads.count()).toBe(0);
   });
 
-  // FINDING: the table's own scroll position (the Runs table scrolls inside its container) is not restored by Back.
-  test.fail('Back restores the Runs table scroll position', async ({ page, request }) => {
+  // The Runs table scrolls inside its own container; Back puts it back.
+  test('Back restores the Runs table scroll position', async ({ page, request }) => {
     await page.setViewportSize({ width: 1280, height: 640 });
     const s = await sharedProject(request, 55, 'big');
     await openRuns(page, s.project.slug);

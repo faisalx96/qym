@@ -33,8 +33,7 @@ async function seedRepeat(page: Page, request: APIRequestContext, samples = 3) {
 
 const passRows = (panel: ReturnType<Page['getByRole']>) => panel.getByRole('table').locator('tbody tr');
 
-// The client sends no pass version; the server then only accepts a delete while the passes have never been renumbered,
-// so a stale confirm is refused (see the FINDING test below for the other side of that).
+// A stale confirm (passes renumbered elsewhere since the panel was read) is refused by the server.
 test('a delete confirmed after the passes were renumbered elsewhere is refused and removes nothing', async ({
   page,
   request,
@@ -77,11 +76,8 @@ test('deleting pass 2 keeps the other passes (renumbered) with their scores', as
   expect(final.run.samples).toBe(2);
 });
 
-// FINDING: the Runs list sends no expected_pass_version on DELETE /api/runs/{id}/passes/{n}. The server accepts a missing
-// token only while the run's passes were never renumbered, so after one pass delete every further delete on that run is
-// refused with "Passes changed; reload the run before editing" until it is reloaded elsewhere... and the client never learns
-// the new revision. Expected to fail until the client sends the revision it read (run.metadata.pass_revision).
-test.fail('a second pass delete on the same run still works', async ({ page, request }) => {
+// The client sends the pass revision it read (expected_pass_version), so a second delete on the same run succeeds.
+test('a second pass delete on the same run still works', async ({ page, request }) => {
   const { run, panel } = await seedRepeat(page, request, 4);
   for (const n of [2, 2]) {
     const done = page.waitForResponse((r) => r.request().method() === 'DELETE' && /\/passes\//.test(r.url()));
@@ -92,16 +88,20 @@ test.fail('a second pass delete on the same run still works', async ({ page, req
       .getByRole('button', { name: 'Delete pass' })
       .click();
     expect((await done).status()).toBe(200);
-    await expect(page.getByRole('status').filter({ hasText: `Pass ${n} deleted` })).toBeVisible();
+    await expect(
+      page
+        .getByRole('status')
+        .filter({ hasText: `Pass ${n} deleted` })
+        .last(),
+    ).toBeVisible();
     await page.waitForTimeout(500);
   }
   const final = (await (await request.get(`/api/runs/${run.id}`)).json()) as { run: { samples: number } };
   expect(final.run.samples).toBe(2);
 });
 
-// FINDING: picks of a run's passes are not dropped or renumbered when one of its passes is deleted, so `run::pass3`
-// stays selected although the run now has two passes (Compare would be handed a pass that no longer exists).
-test.fail("deleting a pass clears the picks of that run's passes", async ({ page, request }) => {
+// Picks of a run's passes are dropped when one of its passes is deleted (they are renumbered).
+test("deleting a pass clears the picks of that run's passes", async ({ page, request }) => {
   const { panel } = await seedRepeat(page, request);
   await page.getByRole('button', { name: 'Select', exact: true }).click();
   await clickBox(panel.getByRole('checkbox', { name: new RegExp(`^Select pass 3 of ${NAME}$`) }));

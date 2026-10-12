@@ -381,7 +381,7 @@ export function RowActions({
           onPress={() => onAction('submit', row)}
         />
       ) : null}
-      {canDelete && !isActiveRun(row) ? (
+      {canDelete ? (
         <IconButton
           label={`Delete ${name}`}
           icon="trash"

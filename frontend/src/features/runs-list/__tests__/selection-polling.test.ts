@@ -22,7 +22,6 @@ describe('selection refs', () => {
       'repeat::pass1',
       'repeat::pass2',
       'repeat::pass3',
-      'repeat::pass2',
     ]);
     expect(cohortUnitCount(['a', 'repeat', 'repeat::pass1'], samplesOf)).toBe(5);
     expect(cohortRefsConflict('repeat', 'repeat::pass1')).toBe(true);

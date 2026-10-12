@@ -1,6 +1,7 @@
 /** Inline passes panel under a repeat run (J6): group-metrics strip + one row per pass. */
-import { useState } from 'react';
-import type { RunRow } from '@/api/dashboardTypes';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import type { RunPass, RunRow } from '@/api/dashboardTypes';
 import { useDeletePasses, useGroupMetrics, useRunPasses } from '@/api/dashboard';
 import {
   ConfirmDialog,
@@ -16,7 +17,9 @@ import {
   Text,
   useToast,
 } from '@/ui';
-import { formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
+import { formatDateParts, formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
+import { runPath } from '@/app/routes';
+import { runHref } from '@/lib/runs-order';
 import { metricDirection } from '@/lib/metrics';
 import { defaultMetricName, defaultPassThreshold, groupStatRule, toChartRun } from './chartModel';
 import { Mono } from './cells';
@@ -32,6 +35,8 @@ export function PassesPanel({
   selected,
   onToggle,
   canDelete,
+  onNotePassRevision,
+  onPassesDeleted,
 }: {
   row: RunRow;
   slug: string;
@@ -39,8 +44,16 @@ export function PassesPanel({
   selected: Set<string>;
   onToggle: (ref: string) => void;
   canDelete: boolean;
+  /** Records the pass revision these refs were picked against (stale picks drop out when it changes). */
+  onNotePassRevision?: (runId: string, revision: number) => void;
+  /** Called after a pass delete so the run's pass picks (now renumbered) can be cleared. */
+  onPassesDeleted?: (runId: string) => void;
 }) {
-  const { metricTypes } = useRunsCtx();
+  const { metricTypes, slug: ctxSlug, listContext } = useRunsCtx();
+  useEffect(() => {
+    onNotePassRevision?.(row.run_id, row.pass_revision ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the callback is stable per selection; revision is what matters
+  }, [row.run_id, row.pass_revision]);
   const live = isActiveRun(row);
   const passesQ = useRunPasses(row.run_id, { refetchInterval: live ? 15_000 : false });
   const scoreMetrics = (passesQ.data?.metrics ?? row.metrics).filter((m) => metricTypes[m] !== 'numeric');
@@ -61,6 +74,7 @@ export function PassesPanel({
   });
   const del = useDeletePasses(slug);
   const toast = useToast();
+  const navigate = useNavigate();
   const [deleting, setDeleting] = useState<number | null>(null);
   const [draft, setDraft] = useState<number | null>(null);
 
@@ -81,12 +95,20 @@ export function PassesPanel({
         />
       </div>
     );
-  const passes = passesQ.data.passes;
-  const metrics = passesQ.data.metrics;
+  const data = passesQ.data;
+  const metrics = data.metrics;
   const g = groupQ.data?.group ?? null;
   const dir = metricDirection(row.metric_specs[activeMetric ?? '']);
   const canDeletePass = canDelete && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(row.status);
   const name = row.external_run_id || row.run_name;
+  const view = passRowsView(data.passes, data.samples || row.samples, row.status);
+  const passHref = (n: number, sub = '') => {
+    const base = runHref(`${runPath(ctxSlug, row.run_id)}${sub}`, listContext);
+    return `${base}${base.includes('?') ? '&' : '?'}pass=${n}`;
+  };
+  const cmp = dir === 'minimize' ? '≤' : '≥';
+  const thrPct = Math.round((draft ?? activeThreshold) * 100);
+  const colSpan = 7 + metrics.length + (selectMode ? 1 : 0);
 
   return (
     <div className={styles.panel} role="region" aria-label={`Passes of ${name}`}>
@@ -119,6 +141,12 @@ export function PassesPanel({
               dir={dir}
             />
             <Stat
+              label={`Avg@${g?.k ?? 'k'}`}
+              help={`Mean score across all items and all ${g?.k ?? row.samples} passes.`}
+              value={g?.avg_at_k}
+              dir={dir}
+            />
+            <Stat
               label="Consistency"
               help="Agreement between passes on the same item."
               value={g?.consistency}
@@ -130,6 +158,12 @@ export function PassesPanel({
               value={g?.reliability}
               dir={dir}
             />
+            <div>
+              <dt>Avg latency</dt>
+              <dd>
+                <Mono>{formatLatency(row.avg_latency_ms)}</Mono>
+              </dd>
+            </div>
           </dl>
         )}
         <div className={styles.controls}>
@@ -146,19 +180,39 @@ export function PassesPanel({
             }}
             width={180}
           />
-          <Slider
-            label="Pass threshold"
-            minValue={0}
-            maxValue={1}
-            step={0.05}
-            value={draft ?? activeThreshold}
-            onChange={(v) => setDraft(v as number)}
-            onChangeEnd={(v) => {
-              setThreshold(v as number);
-              setDraft(null);
-            }}
-            width={200}
-          />
+          {dir ? (
+            <>
+              <Text
+                variant="sm"
+                tone="muted"
+                as="span"
+                title={
+                  dir === 'minimize'
+                    ? 'An item passes when its score is at or below this threshold.'
+                    : 'An item passes when its score meets or exceeds this threshold.'
+                }
+              >
+                Pass if {cmp} {thrPct}%
+              </Text>
+              <Slider
+                label="Pass threshold"
+                minValue={0}
+                maxValue={1}
+                step={0.05}
+                value={draft ?? activeThreshold}
+                onChange={(v) => setDraft(v as number)}
+                onChangeEnd={(v) => {
+                  setThreshold(v as number);
+                  setDraft(null);
+                }}
+                width={200}
+              />
+            </>
+          ) : (
+            <Text variant="sm" tone="muted" as="span">
+              No direction declared
+            </Text>
+          )}
         </div>
       </div>
       <table className={styles.passes} aria-label={`${name} passes`}>
@@ -167,6 +221,8 @@ export function PassesPanel({
             {selectMode ? <th scope="col" className={styles.selectCol} /> : null}
             <th scope="col">Pass</th>
             <th scope="col">Status</th>
+            <th scope="col">Date</th>
+            <th scope="col">Analysis</th>
             {metrics.map((m) => (
               <th scope="col" key={m} data-align="end">
                 {m.replace(/_/g, ' ')}
@@ -187,10 +243,59 @@ export function PassesPanel({
           </tr>
         </thead>
         <tbody>
-          {passes.map((p) => {
+          {view.rows.length === 0 ? (
+            <tr>
+              <td colSpan={colSpan} className={styles.empty}>
+                No pass results are available yet.
+              </td>
+            </tr>
+          ) : null}
+          {view.rows.map((r) => {
+            if (r.kind === 'queued') {
+              const label = r.first === r.last ? `Pass ${r.first}` : `Passes ${r.first}–${r.last}`;
+              return (
+                <tr key={`queued-${r.first}`} data-queued="">
+                  {selectMode ? <td className={styles.selectCol} /> : null}
+                  <td>
+                    <Mono>{label}</Mono>{' '}
+                    <Text variant="sm" tone="muted" as="span">
+                      {r.count} {r.notRun ? 'not run' : 'waiting to start'}
+                    </Text>
+                  </td>
+                  <td>
+                    <RunStatusBadge
+                      status={r.notRun ? 'STOPPED' : 'PENDING'}
+                      label={r.notRun ? 'NOT RUN' : 'QUEUED'}
+                    />
+                  </td>
+                  <td colSpan={colSpan - (selectMode ? 3 : 2)} />
+                </tr>
+              );
+            }
+            const p = r.pass;
             const ref = passRef(row.run_id, p.pass_number);
+            const date = p.started_at ? formatDateParts(p.started_at) : null;
+            const open = () => navigate(passHref(p.pass_number));
+            const taskErr = p.task_error_count ?? 0;
+            const metricErr = p.metric_error_count ?? 0;
+            const retries = p.retry_count ?? 0;
+            const anyErr = p.error_count ?? 0;
+            const progress =
+              r.status === 'running' && p.items_total > 0
+                ? ` ${Math.round((p.completed_count / p.items_total) * 100)}% · ${p.completed_count}/${p.items_total}`
+                : '';
             return (
-              <tr key={p.pass_number} data-selected={selected.has(ref) ? '' : undefined}>
+              <tr
+                key={p.pass_number}
+                data-selected={selected.has(ref) ? '' : undefined}
+                data-pass-row={p.pass_number}
+                className={styles.openable}
+                title={`Open pass ${p.pass_number}`}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest('a, button, input, label, [role="button"]')) return;
+                  open();
+                }}
+              >
                 {selectMode ? (
                   <td className={styles.selectCol}>
                     <Checkbox
@@ -201,10 +306,67 @@ export function PassesPanel({
                   </td>
                 ) : null}
                 <td>
-                  <Mono>#{p.pass_number}</Mono>
+                  <Link
+                    to={passHref(p.pass_number)}
+                    className={styles.passLink}
+                    aria-label={`Open pass ${p.pass_number}`}
+                  >
+                    #{p.pass_number}
+                  </Link>
                 </td>
                 <td>
-                  <RunStatusBadge status={p.status.toUpperCase() as 'COMPLETED'} />
+                  <span className={styles.statusCell}>
+                    <RunStatusBadge status={r.status.toUpperCase() as 'COMPLETED'} />
+                    {progress ? <span className={styles.mono}>{progress}</span> : null}
+                    {taskErr || (anyErr && !metricErr) ? (
+                      <span
+                        className={styles.chip}
+                        data-tone="error"
+                        title={`${taskErr || anyErr} task error${(taskErr || anyErr) > 1 ? 's' : ''} in this pass`}
+                      >
+                        ⚠ {taskErr || anyErr}
+                      </span>
+                    ) : null}
+                    {metricErr ? (
+                      <span
+                        className={styles.chip}
+                        data-tone="metric"
+                        title={`${metricErr} metric error${metricErr > 1 ? 's' : ''} in this pass`}
+                      >
+                        ⚠ {metricErr}
+                      </span>
+                    ) : null}
+                    {retries ? (
+                      <span
+                        className={styles.chip}
+                        data-tone="info"
+                        title={`${retries} retr${retries === 1 ? 'y' : 'ies'} in this pass`}
+                      >
+                        {retries}↻
+                      </span>
+                    ) : null}
+                  </span>
+                </td>
+                <td>
+                  {date ? (
+                    <time className={styles.mono} dateTime={p.started_at ?? undefined} title={date.full}>
+                      {date.date} · {date.time}
+                    </time>
+                  ) : (
+                    <span className={styles.muted}>—</span>
+                  )}
+                </td>
+                <td>
+                  {r.status === 'running' || r.status === 'pending' ? (
+                    <span className={styles.muted}>—</span>
+                  ) : (
+                    <Link
+                      to={passHref(p.pass_number, '/analyzer')}
+                      className={p.analysis_cause_count ? styles.analyze : styles.analyzeQuiet}
+                    >
+                      {p.analysis_cause_count ? `${p.analysis_cause_count} causes` : 'Analyze'}
+                    </Link>
+                  )}
                 </td>
                 {metrics.map((m) => (
                   <td key={m} data-align="end">
@@ -255,12 +417,50 @@ export function PassesPanel({
         tone="danger"
         onConfirm={async () => {
           if (deleting === null) return;
-          await del.mutateAsync({ runId: row.run_id, passes: [deleting] });
+          await del.mutateAsync({
+            runId: row.run_id,
+            passes: [deleting],
+            expectedVersion: data.pass_revision ?? row.pass_revision ?? 0,
+          });
+          onPassesDeleted?.(row.run_id);
           toast.show(`Pass ${deleting} deleted`, { tone: 'success' });
         }}
       />
     </div>
   );
+}
+
+type PassView = { kind: 'pass'; pass: RunPass; status: string };
+type QueuedView = { kind: 'queued'; first: number; last: number; count: number; notRun: boolean };
+
+/** One row per started pass; waiting passes collapse into one row ("not run" once the run ended without them). */
+export function passRowsView(
+  passes: RunPass[],
+  samples: number,
+  runStatus: string,
+): { rows: Array<PassView | QueuedView> } {
+  const terminal = { STOPPED: 'stopped', FAILED: 'failed', COMPLETED: 'completed' }[runStatus.toUpperCase()];
+  const notRun = ['STOPPED', 'FAILED', 'CANCELED', 'CANCELLED'].includes(runStatus.toUpperCase());
+  const rows: Array<PassView | QueuedView> = [];
+  const have = new Set(passes.map((p) => p.pass_number));
+  const queued: number[] = [];
+  for (const p of passes) {
+    const raw = String(p.status || 'unknown').toLowerCase();
+    if (raw === 'pending') queued.push(p.pass_number);
+    else rows.push({ kind: 'pass', pass: p, status: raw === 'running' && terminal ? terminal : raw });
+  }
+  for (let n = 1; n <= samples; n++) if (!have.has(n)) queued.push(n);
+  if (queued.length) {
+    queued.sort((a, b) => a - b);
+    rows.push({
+      kind: 'queued',
+      first: queued[0]!,
+      last: queued[queued.length - 1]!,
+      count: queued.length,
+      notRun,
+    });
+  }
+  return { rows };
 }
 
 function Stat({

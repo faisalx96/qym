@@ -46,7 +46,7 @@ test.describe('runs list: selection and compare (J4)', () => {
   });
 
   test('the selection bar is one line and says "N executions selected" once', async ({ page, request }) => {
-    const s = await sharedProject(request, 12);
+    const s = await freshProject(request, 12, { running: false });
     await openRuns(page, s.project.slug);
     await page.getByRole('button', { name: 'Select', exact: true }).click();
     const first = dataRows(page).nth(0).locator('td[data-col="run"] a');
@@ -172,24 +172,31 @@ test.describe('runs list: selection and compare (J4)', () => {
     await expect(
       page.getByRole('status').filter({ hasText: 'Cohort A locked. Pick 2 executions for cohort B.' }),
     ).toBeVisible();
-    await expect(selected(page)).toHaveText('0 executions selected');
+    // cohort mode: B counter, no Compare / Submit / Delete, Clear reads Cancel Cohort
+    await expect(bar).toContainText('Cohort B 0/2 executions');
     await expect(bar).toContainText('Cohort A locked (2)');
-    const cohortBtn = bar.getByRole('button', { name: /Cohort B/ });
+    await expect(bar.getByRole('button', { name: 'Compare' })).toHaveCount(0);
+    await expect(bar.getByRole('button', { name: 'Submit' })).toHaveCount(0);
+    await expect(bar.getByRole('button', { name: 'Delete' })).toHaveCount(0);
+    await expect(bar.getByRole('button', { name: 'Cancel Cohort' })).toBeVisible();
+    const cohortBtn = bar.getByRole('button', { name: 'Open Cohort' });
+    await expect(cohortBtn).toBeDisabled();
     // unbalanced: one run on side B
     await tick(page, 'rag-qa-claude-sonnet-4-002');
-    await cohortBtn.click();
-    await expect(
-      page
-        .getByRole('alert')
-        .filter({ hasText: 'Cohort A holds 2 executions; B holds 1. Balance the two sides first.' }),
-    ).toBeVisible();
+    await expect(bar).toContainText('Select 1 more');
+    await expect(cohortBtn).toBeDisabled();
     // balanced but overlapping: add a run that is already in A
     await tick(page, 'text2sql-gpt-4o-000');
-    await cohortBtn.click();
-    await expect(page.getByRole('alert').filter({ hasText: 'already in Cohort A' })).toBeVisible();
-    // fix B: drop the overlap, add a disjoint run
-    await tick(page, 'text2sql-gpt-4o-000');
+    await expect(bar).toContainText('Cohort B 2/2 executions');
+    await expect(bar).toContainText('cannot include runs already in Cohort A');
+    await expect(cohortBtn).toBeDisabled();
+    // too many on side B
     await tick(page, 'summarize-gpt-4o-004');
+    await expect(bar).toContainText('Remove 1');
+    // fix B: drop the overlap
+    await tick(page, 'text2sql-gpt-4o-000');
+    await expect(bar).toContainText('Balanced: 2 vs 2');
+    await expect(cohortBtn).toBeEnabled();
     await cohortBtn.click();
     await expect(page).toHaveURL(/\/compare\?cohortA=/);
     const sp = new URL(page.url()).searchParams;

@@ -16,7 +16,7 @@ import { passNumber, passRefBase } from './selection';
 export type DialogState =
   | { kind: 'workflow'; action: 'approve' | 'reject' | 'unapprove' | 'unreject'; row: RunRow }
   | { kind: 'submit'; rows: RunRow[] }
-  | { kind: 'delete'; refs: string[]; names: string[] }
+  | { kind: 'delete'; refs: string[]; names: string[]; revisions: Record<string, number> }
   | { kind: 'transfer'; row: RunRow }
   | { kind: 'errors'; row: RunRow }
   | null;
@@ -192,7 +192,7 @@ export function RunDialogs({
             byRun.set(passRefBase(ref), [...(byRun.get(passRefBase(ref)) ?? []), passNumber(ref)!]);
           for (const [runId, passes] of byRun) {
             try {
-              await delPasses.mutateAsync({ runId, passes });
+              await delPasses.mutateAsync({ runId, passes, expectedVersion: rm.revisions[runId] ?? 0 });
             } catch {
               failed += passes.length;
             }

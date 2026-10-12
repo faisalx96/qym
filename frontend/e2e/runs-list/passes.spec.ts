@@ -114,9 +114,73 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     expect(stored.selected).toEqual([expect.stringMatching(/::pass1$/)]);
     await clickBox(passBoxes.nth(1));
     await expect(page.getByTestId('selection-bar')).toContainText('2 executions selected');
-    // ticking the parent selects the whole run (3 executions)
+    // ticking the parent of an expanded repeat run ticks all of its passes (3 executions)
     await clickBox(page.getByRole('checkbox', { name: `Select ${NAME}`, exact: true }));
-    await expect(page.getByTestId('selection-bar')).toContainText(/\d executions selected/);
+    await expect(page.getByTestId('selection-bar')).toContainText('3 executions selected');
+    await expect(passBoxes.nth(2)).toBeChecked();
+    await expect(parent).toBeChecked();
+    // and clears them all again
+    await clickBox(parent);
+    await expect(page.getByTestId('selection-bar')).toContainText('0 executions selected');
+    await expect(passBoxes.nth(0)).not.toBeChecked();
+  });
+
+  test('ticking every pass checks the parent; a pass and its run are exclusive; compare has no duplicates', async ({
+    page,
+    request,
+  }) => {
+    const s = await seedRepeat(page, request);
+    await page.getByRole('button', { name: 'Select', exact: true }).click();
+    await rowOf(page, NAME)
+      .getByRole('button', { name: `Expand 3 passes of ${NAME}` })
+      .click();
+    const panel = page.getByRole('region', { name: `Passes of ${NAME}` });
+    const passBoxes = panel.getByRole('checkbox', { name: new RegExp(`^Select pass \\d of ${NAME}$`) });
+    const parent = page.getByRole('checkbox', { name: `Select ${NAME}`, exact: true });
+    for (const i of [0, 1, 2]) await clickBox(passBoxes.nth(i));
+    await expect(parent).toBeChecked();
+    // collapse, tick the whole run: it replaces the pass picks
+    await rowOf(page, NAME)
+      .getByRole('button', { name: `Collapse 3 passes of ${NAME}` })
+      .click();
+    await clickBox(parent); // checked -> clear
+    await clickBox(parent); // whole run
+    await rowOf(page, NAME)
+      .getByRole('button', { name: `Expand 3 passes of ${NAME}` })
+      .click();
+    await clickBox(passBoxes.nth(0)); // pass 1 replaces the whole run
+    const stored = await page.evaluate(
+      (slug) => JSON.parse(sessionStorage.getItem(`qym:runs-selection:${slug}`) ?? 'null'),
+      s.project.slug,
+    );
+    expect(stored.selected).toEqual([expect.stringMatching(/::pass1$/)]);
+    await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
+    await clickBox(passBoxes.nth(1));
+    await page.getByTestId('selection-bar').getByRole('button', { name: 'Compare' }).click();
+    await expect(page).toHaveURL(/\/compare\?/);
+    const refs = new URL(page.url()).searchParams.getAll('runs');
+    expect(new Set(refs).size).toBe(refs.length);
+    expect(refs).toHaveLength(2);
+  });
+
+  test('pass rows show date, analysis link, errors, retries and open the pass', async ({ page, request }) => {
+    await seedRepeat(page, request);
+    await rowOf(page, NAME)
+      .getByRole('button', { name: `Expand 3 passes of ${NAME}` })
+      .click();
+    const panel = page.getByRole('region', { name: `Passes of ${NAME}` });
+    const rows = panel.getByRole('table').locator('tbody tr');
+    await expect(rows).toHaveCount(3);
+    await expect(panel.getByRole('columnheader', { name: 'Date' })).toBeVisible();
+    await expect(rows.first().locator('time')).toBeVisible();
+    await expect(panel.getByRole('term').filter({ hasText: /^Avg@3/ })).toBeVisible();
+    await expect(panel.getByRole('term').filter({ hasText: 'Avg latency' })).toBeVisible();
+    await expect(panel.getByText(/^Pass if [≥≤] \d+%$/)).toBeVisible();
+    const analyze = rows.nth(1).getByRole('link', { name: /Analyze|causes/ });
+    await expect(analyze).toHaveAttribute('href', /\/analyzer\?.*pass=2/);
+    // the pass row opens that pass of the run
+    await rows.nth(1).getByRole('link', { name: 'Open pass 2' }).click();
+    await expect(page).toHaveURL(/pass=2/);
   });
 
   test('deleting a pass asks for confirmation and removes it', async ({ page, request }) => {

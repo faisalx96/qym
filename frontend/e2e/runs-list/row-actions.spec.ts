@@ -177,11 +177,14 @@ test.describe('runs list: row actions (J5)', () => {
     await expect(page.getByLabel('Project KPIs')).toContainText(String(before - 1));
   });
 
-  test('a RUNNING row has no Delete or Submit action', async ({ page, request }) => {
+  test('a RUNNING row can be deleted (stuck runs must be removable) but not submitted', async ({
+    page,
+    request,
+  }) => {
     const s = await freshProject(request, 2);
     await openRuns(page, s.project.slug);
     const live = rowOf(page, 'live');
-    await expect(live.getByRole('button', { name: /^Delete / })).toHaveCount(0);
+    await expect(live.getByRole('button', { name: /^Delete / })).toHaveCount(1);
     await expect(live.getByRole('button', { name: /^Submit / })).toHaveCount(0);
   });
 });
