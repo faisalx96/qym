@@ -47,3 +47,18 @@ test('prompt drafts: leaving the tab with unsaved edits asks first', async ({ pa
   await page.getByRole('tab', { name: 'General' }).click();
   await expect(page).not.toHaveURL(/tab=prompts/);
 });
+
+test('command palette: choosing an entry clears the search for the next open', async ({ page, request }) => {
+  const p = await createProject(request, 'UX Palette Reset', uniqueSlug('uxpal'));
+  await gotoApp(page, `/projects/${p.slug}`);
+  await expect(page.locator('[data-app-shell]')).toBeVisible();
+  await page.keyboard.press('Control+k');
+  const palette = page.locator('[data-command-palette]');
+  const input = palette.getByRole('combobox');
+  await expect(input).toBeFocused();
+  await input.fill('settings');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/settings/);
+  await page.keyboard.press('Control+k');
+  await expect(palette.getByRole('combobox')).toHaveValue('');
+});
