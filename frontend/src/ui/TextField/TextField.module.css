@@ -1,0 +1,81 @@
+/* .qym-control: the single aligned-density input recipe (24px, radius 5, --font-sm). */
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.control {
+  width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  line-height: 1;
+  outline: none;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.control[data-mono] {
+  font-family: var(--font-mono);
+}
+
+.wrap[data-prefix] .control {
+  padding-inline-start: 26px;
+}
+
+.control[data-hovered] {
+  border-color: var(--border-strong);
+}
+
+.control[data-focused] {
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.control[data-invalid] {
+  border-color: var(--error);
+}
+
+.control[data-disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.control[readonly] {
+  background: var(--bg-active);
+}
+
+/* 42px authentication field: not a compact control (DESIGN_LANGUAGE §3 "Control"). */
+.wrap[data-size='auth'] .control {
+  min-height: 42px;
+  height: 42px;
+  font-size: var(--font-md);
+  padding: 0 var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.prefix {
+  position: absolute;
+  inset-inline-start: var(--space-sm);
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.suffix {
+  position: absolute;
+  inset-inline-end: 2px;
+  display: inline-flex;
+  align-items: center;
+}

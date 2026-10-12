@@ -1,0 +1,149 @@
+/* Project switcher trigger + popover (shell.css breadcrumb popover). Chrome uses --shell-font-*. */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 30px;
+  max-width: 280px;
+  padding: 0 var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--shell-font-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.trigger svg:last-child {
+  color: var(--text-muted);
+}
+.trigger[data-hovered] {
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+}
+.trigger[data-pressed],
+.trigger[aria-expanded='true'] {
+  background: var(--bg-active);
+}
+
+.trigger[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.triggerName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trigger[data-compact] .triggerName {
+  display: none;
+}
+
+.popover {
+  width: 320px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dropdown-radius);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-dropdown);
+  overflow: hidden;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: min(480px, 80vh);
+  outline: none;
+}
+
+.search {
+  padding: var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-xs);
+  list-style: none;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: var(--dropdown-option-height);
+  padding: var(--space-xs) var(--space-sm);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: start;
+  cursor: pointer;
+}
+
+.option:hover,
+.option:focus-visible {
+  background: var(--bg-hover);
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.option > svg {
+  color: var(--accent-primary);
+  flex: none;
+}
+
+.optionText {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.empty {
+  padding: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.footer {
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-xs);
+}
+
+.create {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: var(--dropdown-option-height);
+  padding: 0 var(--space-sm);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--accent-primary);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.create:hover,
+.create:focus-visible {
+  background: var(--bg-hover);
+}
+
+.create:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}

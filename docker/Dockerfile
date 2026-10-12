@@ -1,6 +1,18 @@
 # syntax=docker/dockerfile:1.7
 ARG BASE_IMAGE=python:3.11-slim
 
+# The React SPA (frontend/) is built once here and copied into the platform
+# package as _static/app/ (gitignored; the wheel and the image carry the build).
+FROM node:24-slim AS frontend-build
+WORKDIR /build/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+COPY frontend/ ./
+# vite.config.ts writes to ../packages/platform/qym_platform/_static/app and
+# vite.sdk.config.ts (the SDK's offline results viewer) to ../packages/sdk/qym/_static/ui
+RUN mkdir -p /build/packages/platform/qym_platform /build/packages/sdk/qym && npm run build && npm run build:sdk
+
+
 FROM ${BASE_IMAGE} AS python-base
 
 ARG PIP_INDEX_URL
@@ -37,6 +49,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY packages/sdk /app/packages/sdk
 COPY packages/platform /app/packages/platform
+COPY --from=frontend-build /build/packages/platform/qym_platform/_static/app /app/packages/platform/qym_platform/_static/app
+COPY --from=frontend-build /build/packages/sdk/qym/_static/ui /app/packages/sdk/qym/_static/ui
 COPY insightor_eval.py /app/insightor_eval.py
 COPY tools /app/tools
 
@@ -52,6 +66,8 @@ FROM python-base AS runtime-base
 
 COPY packages/sdk /app/packages/sdk
 COPY packages/platform /app/packages/platform
+COPY --from=frontend-build /build/packages/platform/qym_platform/_static/app /app/packages/platform/qym_platform/_static/app
+COPY --from=frontend-build /build/packages/sdk/qym/_static/ui /app/packages/sdk/qym/_static/ui
 COPY insightor_eval.py /app/insightor_eval.py
 COPY examples /app/examples
 COPY tools /app/tools

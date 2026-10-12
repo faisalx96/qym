@@ -1,0 +1,35 @@
+.builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-inline-start: 2px solid var(--border-default);
+}
+
+.group[data-root] {
+  padding: 0;
+  border-inline-start: 0;
+}
+
+.groupHead,
+.cond,
+.add {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.unit {
+  color: var(--text-muted);
+}

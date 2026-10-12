@@ -1,0 +1,75 @@
+/* Admin users: edit-user form recipe (24px fields in a column), one-time secret row. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.resetSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.resetRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.temp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.tempRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.tempInput {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+}
+
+.tempInput:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.addBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-sm);
+}
+
+.status[data-tone='muted'] {
+  color: var(--text-muted);
+}
+
+.rowActions {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+}
+
+.youTag {
+  margin-inline-start: var(--space-xs);
+}
+
+[data-highlight] {
+  color: var(--accent-primary);
+}

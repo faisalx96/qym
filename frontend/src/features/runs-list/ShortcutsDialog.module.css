@@ -1,0 +1,28 @@
+/* Shortcuts dialog body. */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table td {
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.keys {
+  width: 120px;
+  white-space: nowrap;
+}
+
+.or {
+  margin: 0 var(--space-xs);
+  color: var(--text-muted);
+}
+
+.optout {
+  margin-top: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}

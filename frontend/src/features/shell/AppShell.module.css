@@ -1,0 +1,306 @@
+/* App shell, variant A: sidebar (--sidebar-w / --sidebar-collapsed-w) + 50px topbar. Chrome type: --shell-font-*. */
+.shell {
+  display: flex;
+  height: 100%;
+  background: var(--bg-void);
+  color: var(--text-primary);
+}
+
+.skip {
+  position: absolute;
+  top: var(--space-xs);
+  inset-inline-start: var(--space-xs);
+  z-index: var(--z-toast);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--control-radius);
+  background: var(--accent-primary);
+  color: var(--bg-void);
+  font-size: var(--shell-font-sm);
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+
+.skip:focus-visible {
+  transform: none;
+  outline: 2px solid var(--text-primary);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-w);
+  flex: none;
+  background: var(--bg-base);
+  border-inline-end: 1px solid var(--border-subtle);
+  transition: width var(--transition-fast);
+}
+
+.shell[data-collapsed] .sidebar {
+  width: var(--sidebar-collapsed-w);
+}
+
+.sidebarTop {
+  display: flex;
+  align-items: center;
+  height: var(--topbar-h);
+  padding: 0 var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  flex: none;
+}
+
+.shell[data-collapsed] .sidebarTop {
+  justify-content: center;
+  padding: 0;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 32px;
+  border-radius: var(--control-radius);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.brand:hover {
+  text-decoration: none;
+}
+
+.brand:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.brandMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-primary);
+  color: var(--bg-void);
+  font-size: var(--shell-font-md);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.brandName {
+  font-size: var(--shell-font-md);
+  font-weight: 650;
+}
+
+.shell[data-collapsed] .brandName {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.sidebarScroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: var(--space-md);
+}
+
+.sidebarFooter {
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-xs);
+  flex: none;
+}
+
+.navSection {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-sm) var(--space-sm) 0;
+}
+
+.navTitle {
+  padding: var(--space-sm) var(--space-sm) var(--space-xs);
+  font-size: var(--shell-font-xs);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.navItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  border-radius: var(--control-radius);
+  color: var(--text-secondary);
+  font-size: var(--shell-font-sm);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.navItem:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.navItem:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.navItem[aria-current='page'] {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.navItem[aria-current='page'] .navIcon {
+  color: var(--accent-primary);
+}
+
+.navIcon {
+  display: inline-flex;
+  justify-content: center;
+  width: 20px;
+  flex: none;
+  color: var(--text-muted);
+}
+
+.navLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.navItem[data-collapsed] {
+  justify-content: center;
+  width: 36px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.navItem[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  inset-inline-start: calc(100% + var(--space-sm));
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: var(--shell-font-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-tooltip);
+  pointer-events: none;
+}
+
+.navItem[data-tooltip]:hover::after,
+.navItem[data-tooltip]:focus-visible::after {
+  display: block;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: var(--topbar-h);
+  flex: none;
+  padding: 0 var(--space-md);
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.readOnly {
+  flex: none;
+}
+
+.topbarEnd {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.paletteButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  height: 28px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: var(--shell-font-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.paletteButton:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.paletteButton:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.content {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-void);
+  outline: none;
+}
+
+@media (max-width: 760px) {
+  .shell[data-narrow] {
+    position: relative;
+  }
+
+  .shell[data-narrow]:not([data-collapsed]) .sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: var(--z-dropdown);
+    box-shadow: var(--shadow-popover);
+  }
+
+  .shell[data-narrow]:not([data-collapsed]) .main {
+    padding-inline-start: var(--sidebar-collapsed-w);
+  }
+
+  .topbarEnd [data-topbar-stats] {
+    display: none;
+  }
+  /* The palette button is nowrap: never squeeze its container, let the breadcrumbs give way. */
+  .topbarEnd {
+    flex: none;
+  }
+  .paletteLabel {
+    display: none;
+  }
+}

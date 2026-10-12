@@ -1,0 +1,37 @@
+/* Textarea recipe: roomy, --font-base, bidi plaintext. */
+.textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+.textarea[data-mono] {
+  font-family: var(--font-mono);
+}
+
+.textarea[data-hovered] {
+  border-color: var(--border-strong);
+}
+
+.textarea[data-focused] {
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.textarea[data-invalid] {
+  border-color: var(--error);
+}
+.textarea[data-disabled] {
+  opacity: 0.55;
+}

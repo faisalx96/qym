@@ -1,0 +1,105 @@
+/* Variant A: one-row command bar + chips, table hero. */
+.runs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  padding: var(--space-sm) var(--space-md) 0;
+  gap: var(--space-sm);
+}
+
+.commandBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.barEnd {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.table {
+  max-height: calc(100vh - 190px);
+  min-height: 240px;
+}
+
+.filterPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: 520px;
+  max-width: calc(100vw - 2 * var(--space-lg));
+  padding: var(--space-sm);
+}
+
+.filterRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.filterLabel {
+  width: 56px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 650;
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.facet {
+  width: 100%;
+}
+
+.filterNote {
+  margin: 0;
+}
+
+.filterFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-height: 100%;
+  padding: var(--space-sm) var(--space-md) 0;
+}
+
+.centered {
+  padding: var(--space-xl) var(--space-md);
+}
+
+.inlineLink {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}

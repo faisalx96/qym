@@ -1,0 +1,31 @@
+/* Reviews dialogs: shortcut list and conflict note. */
+.keys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+}
+
+.keyRow {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.keyRow dt {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.keyRow dd {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.conflictNote {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}

@@ -1,0 +1,33 @@
+/* Settings cards: composes SectionHeader/TextField/Textarea/Chip/Button. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-width: 760px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.danger {
+  border-color: var(--error-dim);
+}
+
+.tags {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}

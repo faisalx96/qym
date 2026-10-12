@@ -57,7 +57,7 @@ def test_no_literal_mono_stack_falls_back_to_courier() -> None:
     """Every hardcoded mono stack also names Menlo (the token is preferred)."""
     stacks = re.compile(r"font-family:\s*([^;{}\"`]*?monospace)\s*[;}\"]")
     problems = []
-    for path in list(DASHBOARD.glob("*.css")) + list(DASHBOARD.glob("*.html")) + [STATIC / "ui" / "app.css"]:
+    for path in list(DASHBOARD.glob("*.css")) + list(DASHBOARD.glob("*.html")):
         for match in stacks.finditer(path.read_text(encoding="utf-8")):
             stack = match.group(1)
             if "var(--font-mono" in stack:

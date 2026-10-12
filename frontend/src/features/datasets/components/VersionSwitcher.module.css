@@ -1,0 +1,113 @@
+/* Version pill (.dsx-version-pill) + popover listbox; composes Popover/SearchField/Badge. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  max-width: 420px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: var(--font-base);
+  cursor: pointer;
+  outline: none;
+}
+
+.pill[data-hovered] {
+  border-color: var(--border-strong);
+}
+
+.pill[data-focus-visible] {
+  box-shadow: var(--focus-ring);
+}
+
+.pillVersion {
+  font-family: var(--font-mono);
+  font-weight: 650;
+  color: var(--accent-primary);
+}
+
+.pillName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 360px;
+  max-width: calc(100vw - 2 * var(--space-lg));
+  padding: var(--space-xs);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  max-height: var(--dropdown-max-height);
+  overflow: auto;
+  outline: none;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--control-radius);
+  color: var(--text-secondary);
+  text-decoration: none;
+  cursor: pointer;
+  outline: none;
+}
+
+.row[data-hovered],
+.row[data-focused] {
+  background: var(--bg-hover);
+}
+
+.row[data-focus-visible] {
+  box-shadow: inset var(--focus-ring);
+}
+
+.row[data-selected] {
+  background: var(--bg-hover);
+  box-shadow: inset 3px 0 0 var(--accent-primary);
+}
+
+.rowMain {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.rowVersion {
+  font-family: var(--font-mono);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.rowName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.rowMeta {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.empty {
+  padding: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}

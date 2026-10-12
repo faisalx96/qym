@@ -1,0 +1,142 @@
+/* .qym-tabs: underline-only active state; dense variant for chart dataset tabs. */
+.tabs {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tabs[data-orientation='vertical'] {
+  flex-direction: row;
+}
+
+.list {
+  display: flex;
+  gap: var(--space-xs);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.list:hover {
+  scrollbar-width: thin;
+}
+
+.tabs[data-orientation='vertical'] > .list {
+  flex-direction: column;
+  border-bottom: 0;
+  border-inline-end: 1px solid var(--border-subtle);
+  min-width: var(--settings-prompt-rail-width);
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--tab-height);
+  padding: 0 var(--space-md);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.tabs[data-orientation='vertical'] > .list > .tab {
+  border-bottom: 0;
+  border-inline-end: 2px solid transparent;
+  margin-bottom: 0;
+  margin-inline-end: -1px;
+  justify-content: space-between;
+  min-width: var(--settings-prompt-tab-width);
+}
+
+.tab[data-hovered] {
+  color: var(--text-primary);
+}
+
+.tab[data-selected] {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.tab[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+  border-radius: 3px;
+}
+
+.tab[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 var(--space-xs);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-sm);
+}
+
+.tab[data-tone='danger'] .count {
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.tab[data-selected] .count {
+  color: var(--accent-primary);
+}
+
+/* Dense dataset tabs: elevated strip, filled active surface. */
+.tabs[data-variant='dense'] .list {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.tabs[data-variant='dense'] .tab {
+  min-height: var(--control-height);
+  padding: 0 var(--space-sm);
+  border-bottom: 0;
+  margin-bottom: 0;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.tabs[data-variant='dense'] .tab[data-selected] {
+  background: var(--bg-active);
+  color: var(--accent-primary);
+  box-shadow: inset 0 -2px 0 var(--accent-primary);
+}
+
+.panel {
+  padding-top: var(--space-md);
+  outline: none;
+  min-width: 0;
+  flex: 1;
+}
+
+.tabs[data-orientation='vertical'] > .panel {
+  padding-top: 0;
+  padding-inline-start: var(--space-lg);
+}
+
+.panel[data-inert] {
+  display: none;
+}

@@ -1,0 +1,123 @@
+/* .qym-inline-action (neutral/accent/danger) + .btn-primary consolidated (brief 02 §3). */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  height: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0 var(--space-md);
+  border: 0;
+  border-radius: var(--control-radius);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: var(--bg-active);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+  text-decoration: none;
+}
+
+.button[data-size='md'] {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 var(--space-md);
+  font-size: var(--font-md);
+}
+
+.button[data-icon-only] {
+  padding: 0;
+  width: var(--control-height);
+}
+
+.button[data-icon-only][data-size='md'] {
+  width: 32px;
+}
+
+.button[data-hovered] {
+  background: var(--bg-hover);
+}
+.button[data-pressed] {
+  background: var(--bg-elevated);
+}
+
+.button[data-variant='accent'] {
+  color: var(--accent-primary);
+  background: rgba(0, 212, 170, 0.14);
+}
+.button[data-variant='accent'][data-hovered] {
+  background: rgba(0, 212, 170, 0.22);
+}
+
+.button[data-variant='primary'] {
+  color: var(--bg-void);
+  background: var(--accent-primary);
+}
+.button[data-variant='primary'][data-hovered] {
+  background: var(--accent-primary-hover);
+}
+
+.button[data-variant='danger'] {
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+}
+.button[data-variant='danger'][data-hovered] {
+  background: color-mix(in srgb, var(--error) 20%, transparent);
+}
+
+.button[data-variant='ghost'] {
+  color: var(--text-secondary);
+  background: transparent;
+}
+.button[data-variant='ghost'][data-hovered] {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.button[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.label {
+  display: inline-block;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentcolor;
+  border-right-color: transparent;
+  border-radius: var(--radius-pill);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -1,0 +1,23 @@
+/* Archived read-only banner (shell.css 550-561). */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  background: rgba(245, 158, 11, 0.1);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+}
+
+.banner a {
+  text-decoration: underline;
+}
+
+.banner svg {
+  color: var(--warning);
+  flex: none;
+}
+.banner strong {
+  color: var(--text-primary);
+}

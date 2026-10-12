@@ -1,0 +1,16 @@
+/* .qym-stale-banner: warning left border, muted copy. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-inline-start: 3px solid var(--warning);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.banner svg {
+  color: var(--warning);
+  flex: none;
+}

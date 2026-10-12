@@ -1,0 +1,58 @@
+/* Switch: 28x16 track, accent when on. */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.track {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  border: 1px solid var(--border-strong);
+  transition: background var(--transition-fast);
+}
+
+.thumb {
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--text-secondary);
+  transition:
+    transform var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.switch[data-selected] .track {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.switch[data-selected] .thumb {
+  background: var(--bg-void);
+  transform: translateX(12px);
+}
+
+[dir='rtl'] .switch[data-selected] .thumb {
+  transform: translateX(-12px);
+}
+
+.switch[data-focus-visible] .track {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.switch[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

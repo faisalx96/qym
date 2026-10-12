@@ -1,0 +1,78 @@
+/**
+ * Run labels (compare.html compareRunLabels): columns tell runs apart by model
+ * and start date; when every run uses one model the label is the part of the
+ * run name the runs do not share. Full names go in the title.
+ */
+export interface LabelInput {
+  base: string;
+  name: string;
+  model: string;
+  started: string;
+}
+
+export interface RunLabel {
+  label: string;
+  title: string;
+}
+
+export function modelShortName(raw: unknown): string {
+  const text = String(raw ?? '').trim();
+  return text ? (text.split('/').filter(Boolean).pop() ?? '') : '';
+}
+
+export function dateLabel(value: string, withTime = false, now: Date = new Date()): string {
+  const d = new Date(value);
+  if (!value || Number.isNaN(d.getTime())) return '';
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const date = d.toLocaleDateString(
+    'en-US',
+    sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' },
+  );
+  return withTime ? `${date} ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}` : date;
+}
+
+/** The distinct part of each name after the prefix they all share; null when none is worth stripping. */
+export function stripSharedPrefix(names: string[]): string[] | null {
+  if (names.length < 2) return null;
+  let prefix = names[0] ?? '';
+  for (const name of names.slice(1)) {
+    let i = 0;
+    while (i < prefix.length && i < name.length && prefix[i] === name[i]) i += 1;
+    prefix = prefix.slice(0, i);
+  }
+  const boundary = Math.max(...['-', '_', ' ', '.', '/', ':'].map((sep) => prefix.lastIndexOf(sep)));
+  const cut = boundary + 1;
+  if (cut < 3) return null;
+  const rests = names.map((name) => name.slice(cut).replace(/^[-_\s.,/:]+/, ''));
+  return rests.every(Boolean) ? rests : null;
+}
+
+export function computeRunLabels(inputs: LabelInput[], now?: Date): Record<string, RunLabel> {
+  const models = new Set(inputs.map((i) => i.model));
+  let labels: string[] | null = null;
+  if (models.size === 1) labels = stripSharedPrefix(inputs.map((i) => i.name));
+  if (labels && new Set(labels).size !== labels.length) labels = null;
+  if (!labels) {
+    const byDate = inputs.map((i) => [i.model || i.name, dateLabel(i.started, false, now)].filter(Boolean).join(' · '));
+    const withTime: string[] = inputs.map((entry, index) =>
+      byDate.filter((other) => other === byDate[index]).length > 1
+        ? [entry.model || entry.name, dateLabel(entry.started, true, now)].filter(Boolean).join(' · ')
+        : (byDate[index] ?? ''),
+    );
+    const counts: Record<string, number> = {};
+    labels = withTime.map((label) => {
+      if (withTime.filter((other) => other === label).length < 2) return label;
+      counts[label] = (counts[label] ?? 0) + 1;
+      return `${label} #${counts[label]}`;
+    });
+  }
+  const out: Record<string, RunLabel> = {};
+  const finalLabels = labels;
+  inputs.forEach((entry, index) => {
+    out[entry.base] = {
+      label: finalLabels[index] || entry.name,
+      title: [entry.name, entry.model, entry.started].filter(Boolean).join(' · '),
+    };
+  });
+  return out;
+}

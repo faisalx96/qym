@@ -1,0 +1,63 @@
+/* Range slider (threshold control): accent fill, 14px thumb. */
+.slider {
+  min-width: 120px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.output {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+}
+
+.track {
+  position: relative;
+  height: var(--control-height);
+}
+
+.track::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+}
+
+.fill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: var(--radius-pill);
+  background: var(--accent-primary);
+}
+
+.thumb {
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  background: var(--text-primary);
+  border: 2px solid var(--accent-primary);
+  cursor: grab;
+}
+
+.thumb[data-dragging] {
+  cursor: grabbing;
+}
+
+.thumb[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}

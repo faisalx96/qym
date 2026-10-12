@@ -59,6 +59,20 @@ def parse_versioning_details(
     return normalize_versioning_details(details)
 
 
+def _hold_local_viewer(ui_server: Any) -> None:
+    """Keep the viewer reachable after the run when a person is at the terminal."""
+    if is_json_mode() or not sys.stdin.isatty():
+        ui_server.stop()
+        return
+    err_console.print(f"[blue]Viewer still running:[/blue] {ui_server.url}  (Ctrl+C to exit)")
+    try:
+        ui_server._stop.wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        ui_server.stop()
+
+
 # ── qym run create ──────────────────────────────────────────
 
 
@@ -81,9 +95,10 @@ def run_create(
     samples: int = typer.Option(1, "--samples", min=1, help="Evaluate every item k times (k sequential passes) as one run; reports Pass@k, Pass^k, etc."),
     task_name: Optional[str] = typer.Option(None, "--task-name", help="Override auto-derived task name"),
     config_json: Optional[str] = typer.Option(None, "--config", help="JSON configuration string"),
-    no_ui: bool = typer.Option(False, "--no-ui", help="Disable local web UI"),
-    ui_port: int = typer.Option(0, "--ui-port", help="Port for local web UI (0 for auto)"),
-    no_open: bool = typer.Option(False, "--no-open", help="Do not open browser automatically"),
+    no_ui: bool = typer.Option(False, "--no-ui", help="Hide the live terminal table"),
+    local_ui: bool = typer.Option(False, "--local-ui", help="Serve the offline results viewer on localhost while the run executes"),
+    ui_port: int = typer.Option(0, "--ui-port", help="Port for --local-ui (0 for auto)"),
+    no_open: bool = typer.Option(False, "--no-open", help="Do not open the browser automatically"),
     output_file: Optional[str] = typer.Option(None, "--output", help="Save results to JSON file"),
     platform_url: Optional[str] = typer.Option(None, "--platform-url", help="Override platform base URL"),
     platform_api_key: Optional[str] = typer.Option(None, "--platform-api-key", help="Platform API key"),
@@ -244,6 +259,9 @@ def run_create(
             pass
 
         config["ui_port"] = ui_port
+        if local_ui:
+            config["local_ui"] = True
+            config["local_ui_open"] = not (no_open or quiet or is_json_mode())
         if samples and samples > 1:
             config["samples"] = samples
         if task_name:
@@ -309,7 +327,7 @@ def run_create(
         status("Starting evaluation...")
         show_progress = not no_progress and not quiet
         show_table = not no_ui
-        raw_results = evaluator.run(show_progress=show_progress, show_table=show_table)
+        raw_results = evaluator.run(show_tui=show_progress and show_table)
         run_results = raw_results if isinstance(raw_results, list) else [raw_results]
 
         # Output results
@@ -348,6 +366,10 @@ def run_create(
                 err_console.print(f"[yellow]Partial results saved to {resume_path}[/yellow]")
                 err_console.print(f"[yellow]Resume with: qym run create --resume-from {resume_path} ...[/yellow]")
             raise typer.Exit(code=ExitCode.FAILURE)
+
+        ui_server = getattr(evaluator, "_ui_server", None)
+        if ui_server is not None:
+            _hold_local_viewer(ui_server)
 
         try:
             if getattr(primary_result, "html_url", None) and not no_open and not quiet and not is_json_mode():

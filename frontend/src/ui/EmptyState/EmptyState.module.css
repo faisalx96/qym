@@ -1,0 +1,41 @@
+/* Empty state recipe. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-sm);
+  padding: var(--space-xl) var(--space-lg);
+  max-width: var(--empty-state-width, 460px);
+  margin: 0 auto;
+}
+
+.empty[data-compact] {
+  padding: var(--space-lg) var(--space-md);
+}
+
+.icon {
+  font-size: var(--glyph-lg); /* decorative glyph */
+  line-height: 1;
+  color: var(--text-dim); /* decorative */
+  opacity: 0.7;
+}
+
+.icon svg {
+  width: var(--glyph-lg);
+  height: var(--glyph-lg);
+}
+
+.title {
+  margin: 0;
+}
+
+.body {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.action {
+  margin-top: var(--space-sm);
+}

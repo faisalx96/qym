@@ -1,11 +1,6 @@
-"""Local web UI server for قيِّم (qym).
-
-Exposes a minimal HTTP server that serves the packaged static UI and
-streams live evaluation snapshots over Server-Sent Events (SSE).
-"""
+"""Local offline results viewer server for قيِّم (qym)."""
 
 from .app import UIServer
-from .dashboard_server import DashboardServer, run_dashboard
+from .live import LiveTracker
 
-__all__ = ["UIServer", "DashboardServer", "run_dashboard"]
-
+__all__ = ["UIServer", "LiveTracker"]

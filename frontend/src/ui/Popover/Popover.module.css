@@ -1,0 +1,35 @@
+/* Popover surface: --bg-surface panel with the popover shadow. */
+.popover {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dropdown-radius);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-dropdown);
+  outline: none;
+}
+
+.popover[data-entering] {
+  animation: pop 120ms ease;
+}
+
+.dialog {
+  outline: none;
+  max-height: inherit;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popover[data-entering] {
+    animation: none;
+  }
+}

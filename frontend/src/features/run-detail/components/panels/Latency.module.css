@@ -1,0 +1,323 @@
+/* Latency and traces tab. */
+.kpis {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.eyebrow {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hero {
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pins {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.pin {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0 var(--space-sm);
+  padding-block: var(--space-xs);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.pin em {
+  font-style: normal;
+  color: var(--text-muted);
+}
+
+.pin b {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.pin:focus-visible,
+.bin:focus-visible,
+.steps button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.hist {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 100px;
+}
+
+.bin {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bin:disabled {
+  cursor: default;
+}
+
+.bin[data-out] {
+  opacity: 0.35;
+}
+
+.binBar {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--chart-2);
+  overflow: hidden;
+}
+
+.bin[data-tone='p90'] .binBar {
+  background: var(--score-3);
+}
+
+.bin[data-tone='p95'] .binBar {
+  background: var(--score-2);
+}
+
+.binErr {
+  width: 100%;
+  background: repeating-linear-gradient(45deg, var(--bg-void) 0 2px, transparent 2px 4px);
+}
+
+.axis,
+.axisRow {
+  position: relative;
+  height: 16px;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.axis span,
+.axisRow span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.failPill {
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--error);
+}
+
+.budget {
+  display: flex;
+  gap: 2px;
+  height: 22px;
+}
+
+.seg {
+  flex-basis: 0;
+  min-width: 2px;
+  border-radius: 4px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: var(--space-xs);
+  border-radius: 2px;
+}
+
+.kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-sm);
+}
+
+.kind {
+  padding: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-base);
+}
+
+.kindHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.kindStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: var(--space-xs);
+  margin: var(--space-xs) 0 0;
+}
+
+.kindStats dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.kindStats dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.kindStats small {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.csv {
+  display: flex;
+  gap: var(--space-md);
+  font-size: var(--font-sm);
+}
+
+.csv a {
+  color: var(--accent-primary);
+}
+
+.steps {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-base);
+}
+
+.stepsHead,
+.stepRow {
+  display: grid;
+  grid-template-columns: minmax(90px, 1.2fr) 56px 72px minmax(80px, 1.4fr);
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.stepsHead {
+  padding: var(--space-xs) 0;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--bg-elevated);
+}
+
+.stepsHead button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.stepRow {
+  min-height: 28px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.stepName {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.groupToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+}
+
+.err {
+  color: var(--error);
+}
+
+.interval {
+  position: relative;
+  height: 14px;
+}
+
+.whisker {
+  position: absolute;
+  top: 6px;
+  height: 2px;
+  opacity: 0.5;
+}
+
+.box {
+  position: absolute;
+  top: 2px;
+  height: 10px;
+  border-radius: 2px;
+  opacity: 0.85;
+}
+
+.median {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 14px;
+  background: var(--text-primary);
+}
+
+.axisRow {
+  margin-inline-start: auto;
+  width: 40%;
+}
+
+/* Kind colours (carried over from latency_traces.css .lt). */
+.root {
+  --k-llm: var(--accent-secondary);
+  --k-tool: var(--warning);
+  --k-retrieval: var(--chart-4);
+  --k-guard: var(--score-4);
+  --k-other: var(--text-muted);
+  --k-agent: var(--accent-primary);
+  --k-eval: var(--accent-tertiary-soft);
+}

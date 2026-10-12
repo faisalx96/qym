@@ -1,0 +1,195 @@
+/* .qdt-table reference table recipe (DESIGN_LANGUAGE §3 "Data table"). */
+.container {
+  position: relative;
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  outline: none;
+}
+
+.thead {
+  background: var(--bg-elevated);
+}
+
+.table[data-sticky] .thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.table[data-dimmed] .tbody {
+  opacity: 0.55;
+}
+
+.thead th {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 650;
+  text-align: start;
+  padding: 0 var(--space-sm);
+  height: 30px;
+  border-bottom: 1px solid var(--border-subtle);
+  position: relative;
+  outline: none;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.th[data-align='end'] {
+  text-align: end;
+}
+
+.th[data-allows-sorting] {
+  cursor: pointer;
+}
+.th[data-hovered] {
+  color: var(--text-primary);
+}
+.th[data-sorted] {
+  color: var(--accent-primary);
+}
+
+.th[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.thInner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.th[data-align='end'] .thInner {
+  justify-content: flex-end;
+}
+
+.thLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thLabel[data-hidden] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.sortGlyph {
+  color: var(--text-dim); /* decorative sort hint */
+  font-size: var(--font-xs); /* glyph */
+}
+
+.sortGlyph[data-active] {
+  color: var(--accent-primary);
+}
+
+.resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-end: -6px;
+  width: 13px;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  z-index: 2;
+}
+
+.th:last-child .resizer {
+  inset-inline-end: 0;
+  width: 7px;
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: 1px;
+  background: var(--border-default);
+}
+
+.resizer[data-hovered]::after,
+.resizer[data-resizing]::after,
+.resizer[data-focus-visible]::after {
+  background: var(--accent-primary);
+  width: 2px;
+}
+
+.resizer[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.tbody td {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  padding: 0 var(--space-sm);
+  height: 32px;
+  border-bottom: 1px solid var(--border-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  outline: none;
+  text-align: start;
+}
+
+.td[data-align='end'] {
+  text-align: end;
+}
+
+.td[data-mono] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.td[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.tr {
+  outline: none;
+}
+
+.tr[data-hovered] td {
+  background: var(--bg-hover);
+}
+.tr[data-selected] td {
+  background: rgba(0, 212, 170, 0.08);
+}
+
+.tr[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.tr[data-href] {
+  cursor: pointer;
+}
+
+.empty {
+  padding: var(--space-lg);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-base);
+}

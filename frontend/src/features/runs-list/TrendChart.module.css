@@ -1,0 +1,89 @@
+/* Trend chart chrome: recessive grid, muted axis ink, tokenised tooltip. */
+.figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.figure :global(.recharts-wrapper) {
+  outline: none;
+}
+
+.figure :global(.recharts-wrapper:focus-visible) {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--control-radius);
+}
+
+.figure :global(.recharts-text) {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.panel {
+  position: relative;
+}
+
+.panelLabel {
+  margin-bottom: 2px;
+}
+
+.caption {
+  margin-top: var(--space-xs);
+}
+
+.tooltip {
+  min-width: 160px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.tipDate {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+.tipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 1px 0;
+}
+
+.tipRow strong {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.tipKey {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--chart-1);
+}
+
+.tipKey[data-series='bar'] {
+  height: 8px;
+  width: 8px;
+  background: var(--border-strong);
+}
+
+.tipKey[data-series='none'] {
+  background: transparent;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}

@@ -1,0 +1,91 @@
+/** Builders for unit tests of the experiments lib (not imported by app code). */
+import type { ExperimentDetail, ExperimentJob, JobRun } from '@/api/experiments';
+
+export function makeJob(over: Partial<ExperimentJob> = {}): ExperimentJob {
+  return {
+    id: 'j1',
+    experiment_id: 'x1',
+    environment_id: 'e1',
+    environment_name: 'staging',
+    combo_index: 0,
+    combo_label: 'timeout=10',
+    attempt: 0,
+    retry_of_job_id: null,
+    superseded: false,
+    run_name: null,
+    params: { sweep: { '/t': 10 } },
+    schema_id: null,
+    status: 'RUNNING',
+    remote_job_id: null,
+    remote_status: null,
+    remote_result: null,
+    remote_versioning: null,
+    error: null,
+    wait_reason: null,
+    submit_attempts: 1,
+    next_attempt_at: null,
+    submitted_at: null,
+    finished_at: null,
+    cancel_requested_at: null,
+    cancelled_by_user_id: null,
+    cancel_reason: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    run_id: null,
+    run: null,
+    qym_config: null,
+    ...over,
+  };
+}
+
+export function makeRun(over: Partial<JobRun> = {}): JobRun {
+  return {
+    id: 'r1',
+    status: 'COMPLETED',
+    status_reason: null,
+    task: null,
+    dataset: null,
+    model: null,
+    origin: null,
+    created_at: null,
+    started_at: null,
+    ended_at: null,
+    deleted: false,
+    metric_means: {},
+    headline_metric: null,
+    ...over,
+  };
+}
+
+export function makeDetail(jobs: ExperimentJob[], over: Partial<ExperimentDetail> = {}): ExperimentDetail {
+  return {
+    id: 'x1',
+    project_id: 'p1',
+    name: 'sweep',
+    description: '',
+    environment_ids: ['e1', 'e2'],
+    base_source: { kind: 'blank' },
+    spec: {},
+    versioning_details: {},
+    priority: 'NORMAL',
+    preemption_acknowledged_at: null,
+    status: 'RUNNING',
+    job_count: jobs.length,
+    job_counts: {},
+    created_by_user_id: 'u1',
+    created_by_email: 'a@b.c',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    cancelled_at: null,
+    cancelled_by_user_id: null,
+    temporary_keys_stored: false,
+    environments: [
+      { id: 'e1', name: 'staging', is_active: true },
+      { id: 'e2', name: 'production', is_active: false },
+    ],
+    ranking_metrics: {},
+    sweep_keys: { '/t': 'timeout' },
+    jobs,
+    ...over,
+  };
+}

@@ -1,0 +1,18 @@
+/* Entity identicon mark (colours are per-seed hsl(), computed in JS). */
+.mark {
+  display: inline-grid;
+  flex: none;
+}
+
+.mark i {
+  display: block;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}

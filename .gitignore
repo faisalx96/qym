@@ -1,5 +1,6 @@
 # Virtual environments
 .venv/
+.venv
 .venv39/
 .myenv/
 venv/
@@ -20,6 +21,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!frontend/src/**/lib/
 lib64/
 parts/
 sdist/
@@ -114,8 +116,12 @@ scripts/build_insightor_dashboard_html.py
 scripts/insightor_eval_dashboard.template.html
 scripts/median_triplet_bootstrap.cpp
 
-# Local frontend build and test output (never committed)
-packages/platform/frontend/storybook-static/
-packages/platform/frontend/test-results/
-packages/platform/frontend/playwright-report*/
-packages/platform/frontend/.generated/
+# Vite build output and local frontend test output (never committed; see frontend/README.md)
+packages/platform/qym_platform/_static/app/
+packages/sdk/qym/_static/ui/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report*/
+frontend/blob-report/
+frontend/.qym-e2e.db*
+.qym-dev.db*

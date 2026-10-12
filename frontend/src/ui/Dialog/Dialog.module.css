@@ -1,0 +1,128 @@
+/* .shell-modal-backdrop / .shell-modal: body-mounted modal, 440px, radius 10. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  background: rgba(10, 10, 16, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.backdrop[data-entering] {
+  animation: fade 160ms ease;
+}
+.backdrop[data-exiting] {
+  animation: fade 120ms ease reverse;
+}
+
+.modal {
+  width: 440px;
+  max-width: 100%;
+  max-height: calc(100vh - 2 * var(--space-lg));
+  display: flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  box-shadow: var(--shadow-dialog);
+  outline: none;
+}
+
+.modal[data-size='sm'] {
+  width: 360px;
+}
+.modal[data-size='lg'] {
+  width: 600px;
+}
+.modal[data-size='data'] {
+  width: 760px;
+}
+
+.modal[data-entering] {
+  animation: rise 180ms ease;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: inherit;
+  outline: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-md) var(--space-sm) var(--space-lg);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal[data-size='data'] .title,
+.modal[data-size='lg'] .title {
+  font-size: var(--font-xl);
+  font-weight: 650;
+}
+
+.description {
+  margin: 0;
+  padding: 0 var(--space-lg);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg) var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop[data-entering],
+  .backdrop[data-exiting],
+  .modal[data-entering] {
+    animation: none;
+  }
+}

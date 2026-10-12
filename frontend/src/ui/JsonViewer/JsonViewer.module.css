@@ -1,0 +1,114 @@
+/* JSON viewer: mono preview button, tree with role=tree/treeitem/group. */
+.preview {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 var(--space-xs);
+  border: 1px dashed var(--border-default);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  unicode-bidi: plaintext;
+}
+
+.preview[data-hovered] {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.preview[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.plain {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  unicode-bidi: plaintext;
+}
+
+.toolbar {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.root,
+.group {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.group {
+  padding-inline-start: var(--space-lg);
+}
+
+.leaf,
+.branch {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-inline-end: 2px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.toggle[data-hovered] {
+  color: var(--accent-primary);
+}
+
+.toggle[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.key {
+  color: var(--accent-secondary);
+}
+.string {
+  color: var(--text-primary);
+}
+.number {
+  color: var(--chart-5);
+}
+.boolean {
+  color: var(--accent-tertiary-soft);
+}
+.null {
+  color: var(--text-muted);
+}
+.punct {
+  color: var(--text-muted);
+}
+
+.summary {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  padding: 0 var(--space-xs);
+}

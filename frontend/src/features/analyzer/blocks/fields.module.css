@@ -1,0 +1,96 @@
+/* Recipe: DESIGN_LANGUAGE §3 form rows; tree indent via --depth (space token multiples). */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.row[data-open] {
+  border-color: var(--border-default);
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.label {
+  min-width: 108px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.arrow {
+  color: var(--text-dim);
+}
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.metaGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.treeNode {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.tree .tree {
+  padding-inline-start: var(--space-md);
+}
+
+.nodeKind {
+  margin-inline-start: var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.includeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+}

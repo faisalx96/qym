@@ -1,0 +1,66 @@
+/* Page hero recipe (DESIGN_LANGUAGE §3 "Page hero"). */
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-lg);
+}
+
+.titleBlock {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.leading {
+  flex: none;
+  padding-top: 2px;
+}
+
+.titleText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+}
+
+.description {
+  margin: 0;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) 0;
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.metaItem + .metaItem::before {
+  content: '·';
+  margin: 0 var(--space-sm);
+  color: var(--text-dim); /* decorative separator */
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: none;
+}
+
+.tabs {
+  margin-bottom: calc(-1 * var(--space-md));
+}

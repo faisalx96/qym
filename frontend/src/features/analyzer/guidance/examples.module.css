@@ -1,0 +1,108 @@
+.dialog {
+  max-height: 90vh;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-sm);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.budget {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.budgetHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.bar {
+  height: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: var(--accent-primary);
+}
+
+.barFill[data-over] {
+  background: var(--error);
+}
+
+.tableWrap {
+  max-height: 40vh;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.tableWrap[data-fetching] {
+  opacity: 0.7;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  text-align: start;
+}
+
+.table td {
+  padding: var(--space-xs) var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+
+.table tr[data-selected] td {
+  background: var(--bg-hover);
+}
+
+.checkCol {
+  width: var(--space-xl);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.spacer {
+  flex: 1;
+}

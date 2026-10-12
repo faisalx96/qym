@@ -1,0 +1,64 @@
+/* .qym-help-marker / .qym-help-tooltip: 12px circle, 240px tooltip. */
+.marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--info-marker-size);
+  height: var(--info-marker-size);
+  padding: 0;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--accent-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-xs); /* glyph inside a 12px circle */
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.marker[data-hovered],
+.marker[data-pinned] {
+  background: var(--accent-primary);
+  color: var(--bg-void);
+}
+
+.marker[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.tooltip {
+  width: var(--help-tooltip-width);
+  max-width: calc(100vw - 16px);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dropdown-radius);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  z-index: var(--z-tooltip);
+}
+
+.arrow svg {
+  display: block;
+  fill: var(--bg-elevated);
+  stroke: var(--border-default);
+}
+
+.tooltip[data-placement='bottom'] .arrow svg {
+  transform: rotate(180deg);
+}

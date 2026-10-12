@@ -1,0 +1,100 @@
+/* Base reset and document styles (dashboard.css 160-211). Tokens only. */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  background: var(--bg-void);
+  color: var(--text-primary);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 120, 150, 0.55) rgba(255, 255, 255, 0.04);
+  overflow: hidden; /* the shell content area is the only page scroller */
+}
+
+#root {
+  height: 100%;
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 120, 150, 0.55) rgba(255, 255, 255, 0.04);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-pill);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(122, 122, 144, 0.82) 0%, rgba(80, 80, 94, 0.92) 100%);
+  border: 2px solid rgba(16, 16, 24, 0.75);
+  border-radius: var(--radius-pill);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(0, 212, 170, 0.82) 0%, rgba(0, 168, 255, 0.82) 100%);
+}
+
+*::-webkit-scrollbar-corner {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+::placeholder {
+  color: var(--text-dim); /* decorative: placeholder */
+}
+
+/* The dialog container takes focus on open but draws no ring (brief 02 §1d). */
+[aria-modal='true'][tabindex='-1']:focus {
+  outline: none;
+}
+
+/* Uniform keyboard focus ring: 2px accent at 2px offset (brief 02 §7.15).
+   React Aria exposes data-focus-visible; native controls use :focus-visible. */
+:focus-visible,
+[data-focus-visible='true'] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

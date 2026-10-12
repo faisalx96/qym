@@ -1,0 +1,76 @@
+/* Add-environment dialog: step list, connect form, step panels. */
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin: 0 0 var(--space-md);
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-base);
+  color: var(--text-muted);
+}
+
+.step[aria-current='step'] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.stepNum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--badge-height);
+  height: var(--badge-height);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.step[aria-current='step'] .stepNum {
+  background: var(--accent-primary);
+  color: var(--bg-void);
+}
+
+.step[data-done] .stepNum {
+  background: rgba(0, 212, 170, 0.12);
+  color: var(--accent-primary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.callout {
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.callout[data-tone='error'] {
+  border-color: color-mix(in srgb, var(--error) 55%, var(--border-default));
+  color: var(--text-primary);
+}
+
+.intro {
+  margin: 0 0 var(--space-md);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.note {
+  margin-inline-end: auto;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}

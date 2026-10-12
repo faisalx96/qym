@@ -26,3 +26,10 @@ dist/
 .env
 .env.*
 .DS_Store
+
+# Frontend: only sources are sent to the build stage
+frontend/node_modules/
+frontend/test-results/
+frontend/playwright-report*/
+frontend/.qym-e2e.db*
+packages/platform/qym_platform/_static/app/
