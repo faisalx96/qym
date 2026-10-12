@@ -179,7 +179,6 @@ export function JobHistoryCard({
         columns={columns}
         rows={rows}
         rowKey={(j) => j.id}
-        storageKey="experiments.jobs.v1"
         minWidth={1000}
         emptyState="This experiment has no jobs."
       />

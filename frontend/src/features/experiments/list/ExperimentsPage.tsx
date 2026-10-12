@@ -184,7 +184,6 @@ export function ExperimentsPage() {
           rows={experiments}
           rowKey={(x) => x.id}
           rowHref={(x) => experimentPath(slug, x.id)}
-          storageKey="experiments.list.v1"
           minWidth={1000}
         />
       </RouterProvider>
