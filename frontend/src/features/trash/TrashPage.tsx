@@ -9,7 +9,7 @@ import { RESTORE_MAX, TRASH_PAGE, useRestoreRuns, useTrash, useTrashProjects, ty
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { useAuth, useDocumentTitle } from '@/features/shell';
-import { constrained } from '@/features/shell/layout';
+import { constrained, fullWidth } from '@/features/shell/layout';
 import { Badge, Button, DataTable, EmptyState, ErrorState, Icon, PageHeader, Pagination, RunStatusBadge, SearchField, Select, Skeleton, Tag, Text, Tooltip, useToast, type RunStatus } from '@/ui';
 import styles from './TrashPage.module.css';
 
@@ -111,7 +111,7 @@ export function TrashPage() {
   const grace = list.data?.graceDays;
   const filtered = Boolean(q || projectId);
   return (
-    <div className={constrained} data-trash-page>
+    <div className={fullWidth} data-trash-page>
       <PageHeader
         title="Deleted runs"
         description={
@@ -193,7 +193,7 @@ export function TrashPage() {
               {
                 id: 'project',
                 label: 'Project',
-                width: 170,
+                width: 140,
                 cell: (r) => (
                   <span className={styles.stack}>
                     <span>{r.project_name}</span>
@@ -204,7 +204,7 @@ export function TrashPage() {
               {
                 id: 'purges',
                 label: 'Purges',
-                width: 170,
+                width: 140,
                 cell: (r) => {
                   const p = purgeInfo(r);
                   return (
@@ -218,7 +218,7 @@ export function TrashPage() {
               {
                 id: 'deleted',
                 label: 'Deleted',
-                width: 170,
+                width: 140,
                 cell: (r) => (
                   <span className={styles.stack}>
                     <span className={styles.mono}>{fmtDate(r.deleted_at)}</span>
@@ -226,15 +226,21 @@ export function TrashPage() {
                   </span>
                 ),
               },
-              { id: 'status', label: 'Status', width: 120, cell: (r) => <RunStatusBadge status={r.status as RunStatus} /> },
-              { id: 'model', label: 'Model', width: 150, cell: (r) => r.model ?? '—' },
-              { id: 'task', label: 'Task', width: 140, cell: (r) => r.task ?? '—' },
-              { id: 'dataset', label: 'Dataset', width: 140, cell: (r) => r.dataset ?? '—' },
+              { id: 'status', label: 'Status', width: 110, cell: (r) => <RunStatusBadge status={r.status as RunStatus} /> },
+              { id: 'model', label: 'Model', width: 140, cell: (r) => (
+                  <span className={styles.stack}>
+                    <span>{r.model ?? '—'}</span>
+                    {r.trace_stats?.has_reasoning ? <Tag tone="info">reasoning</Tag> : null}
+                  </span>
+                ),
+              },
+              { id: 'task', label: 'Task', width: 120, cell: (r) => r.task ?? '—' },
+              { id: 'dataset', label: 'Dataset', width: 120, cell: (r) => r.dataset ?? '—' },
               {
                 id: 'actions',
                 label: 'Restore',
                 hideLabel: true,
-                width: 100,
+                width: 96,
                 align: 'end',
                 cell: (r) =>
                   r.project_archived ? (
