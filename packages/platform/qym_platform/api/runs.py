@@ -4,25 +4,20 @@ import json
 import os
 import re
 from collections import defaultdict
-from html import escape
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import parse_qsl, quote, urlencode
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
+from fastapi.responses import HTMLResponse
 from sqlalchemy import Text, case, cast, func, null, or_, type_coerce
 from sqlalchemy.orm import Session, load_only
 
-from qym_platform.auth import Principal, require_ui_principal
-from qym_platform.auth_oidc import (
-    get_session_user_and_provider,
-    request_root_path,
-    sanitize_next,
-    session_auth_enabled,
-    with_root_path,
+from qym_platform.services.html_export import (
+    build_compare_export_html,
+    build_run_export_html,
+    run_export_filename,
 )
+from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
     Approval,
@@ -34,7 +29,6 @@ from qym_platform.db.models import (
     Project,
     ProjectMembership,
     ReviewCorrection,
-    RootCauseRevision,
     Run,
     RunEvent,
     RunItem,
@@ -1259,377 +1253,28 @@ def _extract_langfuse_ids(run_metadata: dict) -> tuple[str, str]:
     return host, project_id
 
 
-def _platform_static_dir() -> Path:
-    """Return the platform static directory."""
-    return Path(__file__).resolve().parent.parent / "_static"
 
 
-def _dashboard_html_response(idx: Path, request: Request) -> HTMLResponse:
-    """Serve a dashboard HTML page, rewriting absolute asset paths and
-    injecting ``window.__QYM_ROOT_PATH__`` so client-side JS can build
-    correct URLs when the platform is mounted under a sub-path (e.g. ``/qym``)."""
-    html = idx.read_text(encoding="utf-8")
-    root = request_root_path(request)
-    if root:
-        html = html.replace('="/static/', f'="{root}/static/')
-        html = html.replace("='/static/", f"='{root}/static/")
-    injection = f"<script>window.__QYM_ROOT_PATH__ = {json.dumps(root)};</script>"
-    if "<head>" in html:
-        html = html.replace("<head>", "<head>\n  " + injection, 1)
-    else:
-        html = injection + html
-    return HTMLResponse(html, media_type="text/html; charset=utf-8")
 
 
-def _platform_static_dashboard_index() -> Path:
-    return _platform_static_dir() / "dashboard" / "index.html"
 
 
-def _platform_static_dashboard_compare() -> Path:
-    return _platform_static_dir() / "dashboard" / "compare.html"
 
 
-def _platform_static_profile_index() -> Path:
-    return _platform_static_dir() / "dashboard" / "profile.html"
 
 
-def _platform_static_admin_index() -> Path:
-    return _platform_static_dir() / "dashboard" / "admin.html"
 
 
-def _platform_static_dashboard_run() -> Path:
-    return _platform_static_dir() / "dashboard" / "run.html"
 
 
-def _platform_static_dashboard_analyzer() -> Path:
-    return _platform_static_dir() / "dashboard" / "analyzer.html"
 
 
-def _platform_static_project_settings() -> Path:
-    return _platform_static_dir() / "dashboard" / "project_settings.html"
 
 
-def _platform_static_overview() -> Path:
-    return _platform_static_dir() / "dashboard" / "overview.html"
 
 
-def _platform_static_projects() -> Path:
-    return _platform_static_dir() / "dashboard" / "projects.html"
 
 
-def _platform_static_charts() -> Path:
-    return _platform_static_dir() / "dashboard" / "charts.html"
-
-
-def _platform_static_models() -> Path:
-    return _platform_static_dir() / "dashboard" / "models.html"
-
-
-def _platform_static_experiments() -> Path:
-    return _platform_static_dir() / "dashboard" / "experiments.html"
-
-
-def _platform_static_eval_queue() -> Path:
-    return _platform_static_dir() / "dashboard" / "eval_queue.html"
-
-
-def _platform_static_datasets() -> Path:
-    return _platform_static_dir() / "dashboard" / "datasets.html"
-
-
-def _platform_static_docs_guide() -> Path:
-    return _platform_static_dir() / "dashboard" / "docs.html"
-
-
-def _project_path_prefix(request: Request, project_slug: str) -> str:
-    path = request.url.path
-    marker = f"/projects/{project_slug}"
-    idx = path.find(marker)
-    if idx < 0:
-        return ""
-    return path[:idx]
-
-
-def _resolve_project_by_slug_for_ui(
-    db: Session,
-    principal: Principal,
-    project_slug: str,
-    *,
-    allow_archived: bool = True,
-) -> Project:
-    # An archived project's pages open read-only for its members and admins.
-    # Auto-analysis and Reviews stay hidden: they exist to change things.
-    project = project_for_read_by_slug(db, principal, project_slug)
-    if not allow_archived and not project.is_active:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
-
-
-def _maybe_redirect_to_login(
-    request: Request, db: Session
-) -> Optional[RedirectResponse]:
-    settings = PlatformSettings()
-    if not session_auth_enabled(settings):
-        return None
-    if get_session_user_and_provider(db, request):
-        return None
-    root = request_root_path(request)
-    # ``request.url.path`` already includes ``root_path`` under a Starlette mount,
-    # so do NOT prepend it again here. Only the redirect target needs the prefix.
-    full_path = request.url.path + (
-        f"?{request.url.query}" if request.url.query else ""
-    )
-    next_value = sanitize_next(full_path, default=(root + "/") if root else "/")
-    # Encoded whole: a share link carries several query parameters (pass, item).
-    return RedirectResponse(url=f"{root}/login?next={quote(next_value, safe='/')}", status_code=303)
-
-
-def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse:
-    prefix = _project_path_prefix(request, project_slug).rstrip("/")
-    static_root = f"{prefix}/static" if prefix else "/static"
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>قيِّم • Project Not Found</title>
-  <link rel="icon" type="image/png" href="{static_root}/qym_icon.png">
-  <link rel="stylesheet" href="{static_root}/dashboard.css?v=p1-20261011-1">
-  <link rel="stylesheet" href="{static_root}/shell.css?v=p1-20261005-6">
-  <script src="{static_root}/qym_safe.js?v=p1-20261001"></script>
-  <script src="{static_root}/auth.js?v=p1-20261005"></script>
-  <script src="{static_root}/shell.js?v=p1-20261011-1"></script>
-</head>
-<body>
-  <main style="min-height:50vh;display:flex;align-items:center;justify-content:center;padding:32px;color:var(--text-muted);">
-    <div>Loading project…</div>
-    <noscript>
-      <section style="width:min(640px,100%);background:var(--bg-surface);border:1px solid var(--border-default);border-radius:12px;padding:32px 28px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--error);margin-bottom:12px;">Missing Project</div>
-        <h1 style="margin:0 0 10px 0;font-size:30px;line-height:1.15;color:var(--text-primary);">Project not found</h1>
-        <p style="margin:0;color:var(--text-secondary);font-size:14px;line-height:1.65;">The requested project "{escape(project_slug)}" does not exist, is archived, or you no longer have access to it.</p>
-      </section>
-    </noscript>
-  </main>
-</body>
-</html>"""
-    return HTMLResponse(content=html, status_code=404)
-
-
-def _guard_project_page(
-    request: Request, db: Session, project_slug: str, *, allow_archived: bool = True
-) -> Optional[Any]:
-    redirect = _maybe_redirect_to_login(request, db)
-    if redirect:
-        return redirect
-    try:
-        principal = require_ui_principal(
-            request=request,
-            db=db,
-            x_user_email=request.headers.get("X-User-Email"),
-            x_email=request.headers.get("X-Email"),
-            x_admin_bootstrap=request.headers.get("X-Admin-Bootstrap"),
-        )
-        _resolve_project_by_slug_for_ui(
-            db, principal, project_slug, allow_archived=allow_archived
-        )
-    except HTTPException as exc:
-        if exc.status_code == 404:
-            return _project_not_found_page(request, project_slug)
-        raise
-    return None
-
-
-def _analysis_query(
-    request: Request,
-    *,
-    remove: set[str] | None = None,
-    scope: str | None = None,
-) -> str:
-    """Preserve harmless analyzer query state while canonicalizing routes."""
-    remove = remove or set()
-    pairs = parse_qsl(request.url.query, keep_blank_values=True)
-    result: list[tuple[str, str]] = []
-    scope_written = False
-    for key, value in pairs:
-        if key in remove:
-            continue
-        if key == "scope" and scope is not None:
-            if not scope_written:
-                result.append(("scope", scope))
-                scope_written = True
-            continue
-        result.append((key, value))
-    if scope is not None and not scope_written:
-        result.append(("scope", scope))
-    return urlencode(result, doseq=True)
-
-
-def _analysis_project_base(request: Request) -> str:
-    path = request.url.path
-    marker = "/projects/"
-    return path.split(marker, 1)[0] if marker in path else ""
-
-
-def _analysis_project_url(
-    request: Request,
-    project_slug: str,
-    suffix: str = "analysis",
-    query: str = "",
-) -> str:
-    path = (
-        _analysis_project_base(request).rstrip("/")
-        + "/projects/"
-        + quote(str(project_slug), safe="")
-        + ("/" + suffix.lstrip("/") if suffix else "")
-    )
-    return path + ("?" + query if query else "")
-
-
-def _visible_run_for_redirect(
-    db: Session,
-    request: Request,
-    run_id: str,
-) -> Run | None:
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if run is None:
-        return None
-    try:
-        principal = require_ui_principal(
-            request=request,
-            db=db,
-            x_user_email=request.headers.get("X-User-Email"),
-            x_email=request.headers.get("X-Email"),
-            x_admin_bootstrap=request.headers.get("X-Admin-Bootstrap"),
-        )
-    except HTTPException:
-        return None
-    return run if can_view_run(db, principal, run) else None
-
-
-def _canonical_legacy_analyzer_redirect(
-    run_id: str,
-    request: Request,
-    db: Session,
-) -> RedirectResponse | None:
-    run = _visible_run_for_redirect(db, request, run_id)
-    if run is None:
-        return None
-    project = db.get(Project, run.project_id)
-    if project is None:
-        return None
-    requested_scope = dict(parse_qsl(request.url.query, keep_blank_values=True)).get(
-        "scope"
-    )
-    query = _analysis_query(
-        request,
-        scope="run" if requested_scope == "dashboard" else None,
-    )
-    return RedirectResponse(
-        url=_analysis_project_url(
-            request,
-            project.slug,
-            "runs/" + quote(run.id, safe="") + "/analyzer",
-            query,
-        ),
-        status_code=307,
-    )
-
-
-def _canonical_project_analysis_redirect(
-    project_slug: str,
-    request: Request,
-    db: Session,
-) -> RedirectResponse | None:
-    params = dict(parse_qsl(request.url.query, keep_blank_values=True))
-    requested_run_id = params.get("run", "").strip()
-    if requested_run_id:
-        run = _visible_run_for_redirect(db, request, requested_run_id)
-        if run is None:
-            return None
-        project = db.get(Project, run.project_id)
-        if project is None:
-            return None
-        query = _analysis_query(request, remove={"run", "scope"})
-        return RedirectResponse(
-            url=_analysis_project_url(
-                request,
-                project.slug,
-                "runs/" + quote(run.id, safe="") + "/analyzer",
-                query,
-            ),
-            status_code=307,
-        )
-
-    aliases = {"diagnosis": "categories", "project": "rules", "dashboard": "run"}
-    requested_scope = params.get("scope")
-    canonical_scope = aliases.get(requested_scope or "")
-    if canonical_scope is not None:
-        query = _analysis_query(request, scope=canonical_scope)
-        return RedirectResponse(
-            url=_analysis_project_url(request, project_slug, "analysis", query),
-            status_code=307,
-        )
-    return None
-
-
-def _canonical_project_run_analyzer_redirect(
-    project_slug: str,
-    run_id: str,
-    request: Request,
-    db: Session,
-) -> RedirectResponse | None:
-    run = _visible_run_for_redirect(db, request, run_id)
-    if run is not None:
-        project = db.get(Project, run.project_id)
-        if project is not None and project.slug != project_slug:
-            return RedirectResponse(
-                url=_analysis_project_url(
-                    request,
-                    project.slug,
-                    "runs/" + quote(run.id, safe="") + "/analyzer",
-                    _analysis_query(request),
-                ),
-                status_code=307,
-            )
-    requested_scope = dict(parse_qsl(request.url.query, keep_blank_values=True)).get(
-        "scope"
-    )
-    if requested_scope == "dashboard":
-        return RedirectResponse(
-            url=_analysis_project_url(
-                request,
-                project_slug,
-                "runs/" + quote(run_id, safe="") + "/analyzer",
-                _analysis_query(request, remove={"scope"}, scope="run"),
-            ),
-            status_code=307,
-        )
-    aliases = {"diagnosis": "categories", "project": "rules"}
-    canonical_scope = aliases.get(requested_scope or "")
-    if canonical_scope is not None:
-        return RedirectResponse(
-            url=_analysis_project_url(
-                request,
-                project_slug,
-                "analysis",
-                _analysis_query(request, remove={"scope"}, scope=canonical_scope),
-            ),
-            status_code=307,
-        )
-    if requested_scope in {"categories", "rules", "documents"}:
-        return RedirectResponse(
-            url=_analysis_project_url(
-                request,
-                project_slug,
-                "analysis",
-                _analysis_query(
-                    request, remove={"scope"}, scope=str(requested_scope)
-                ),
-            ),
-            status_code=307,
-        )
-    return None
 
 
 def _iso(dt: Optional[datetime]) -> str:
@@ -2209,285 +1854,6 @@ def _summarize_runs_for_admin(db: Session, runs: List[Run]) -> List[Dict[str, An
         )
         for run in runs
     ]
-
-
-@router.get("/", response_model=None)
-def dashboard_index(request: Request, db: Session = Depends(get_db)) -> Any:
-    redirect = _maybe_redirect_to_login(request, db)
-    if redirect:
-        return redirect
-    idx = _platform_static_projects()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Projects UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}", response_model=None)
-def dashboard_project_index(
-    project_slug: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
-    if guarded:
-        return guarded
-    idx = _platform_static_dashboard_index()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Dashboard UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/profile", response_model=None)
-def profile_index(request: Request, db: Session = Depends(get_db)) -> Any:
-    redirect = _maybe_redirect_to_login(request, db)
-    if redirect:
-        return redirect
-    idx = _platform_static_profile_index()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Profile UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/admin", response_model=None)
-def admin_index(request: Request, db: Session = Depends(get_db)) -> Any:
-    redirect = _maybe_redirect_to_login(request, db)
-    if redirect:
-        return redirect
-    idx = _platform_static_admin_index()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Admin UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/compare", response_model=None)
-def compare_index(request: Request, db: Session = Depends(get_db)) -> Any:
-    redirect = _maybe_redirect_to_login(request, db)
-    if redirect:
-        return redirect
-    idx = _platform_static_dashboard_compare()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Compare UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/docs-guide", response_model=None)
-def docs_guide_index(request: Request, db: Session = Depends(get_db)) -> Any:
-    redirect = _maybe_redirect_to_login(request, db)
-    if redirect:
-        return redirect
-    idx = _platform_static_docs_guide()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Docs UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/trash", response_model=None)
-def trash_index(request: Request, db: Session = Depends(get_db)) -> Any:
-    redirect = _maybe_redirect_to_login(request, db)
-    if redirect:
-        return redirect
-    idx = _platform_static_dir() / "dashboard" / "trash.html"
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Trash UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/reviews", response_model=None)
-def reviews_index(request: Request, db: Session = Depends(get_db)) -> Any:
-    redirect = _maybe_redirect_to_login(request, db)
-    if redirect:
-        return redirect
-    idx = _platform_static_dir() / "dashboard" / "reviews.html"
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Reviews UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/reviews", response_model=None)
-def project_reviews_index(
-    project_slug: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug, allow_archived=False)
-    if guarded:
-        return guarded
-    return reviews_index(request=request, db=db)
-
-
-@router.get("/projects/{project_slug}/charts", response_model=None)
-def project_charts(
-    project_slug: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
-    if guarded:
-        return guarded
-    idx = _platform_static_charts()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Charts UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/models", response_model=None)
-def project_models(
-    project_slug: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
-    if guarded:
-        return guarded
-    idx = _platform_static_models()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Models UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/experiments", response_model=None)
-def project_experiments(
-    project_slug: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
-    if guarded:
-        return guarded
-    idx = _platform_static_experiments()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Experiments UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/experiments/queue", response_model=None)
-def project_experiments_queue(
-    project_slug: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
-    if guarded:
-        return guarded
-    idx = _platform_static_eval_queue()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Queue UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/datasets", response_model=None)
-def project_datasets(
-    project_slug: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
-    if guarded:
-        return guarded
-    idx = _platform_static_datasets()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Datasets UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/datasets/{dataset_ref:path}", response_model=None)
-def project_dataset_detail(
-    project_slug: str, dataset_ref: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
-    if guarded:
-        return guarded
-    idx = _platform_static_datasets()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Datasets UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/overview", response_model=None)
-def project_overview(
-    project_slug: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
-    if guarded:
-        return guarded
-    idx = _platform_static_overview()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Overview UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/settings", response_model=None)
-def project_settings_index(
-    project_slug: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
-    if guarded:
-        return guarded
-    idx = _platform_static_project_settings()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Project settings UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/run/{run_id:path}/analyzer", response_model=None)
-def analyzer_ui(run_id: str, request: Request, db: Session = Depends(get_db)) -> Any:
-    redirect = _maybe_redirect_to_login(request, db)
-    if redirect:
-        return redirect
-    canonical = _canonical_legacy_analyzer_redirect(run_id, request, db)
-    if canonical:
-        return canonical
-    idx = _platform_static_dashboard_analyzer()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="LLM Analyzer UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/analysis", response_model=None)
-def project_analysis_ui(
-    project_slug: str,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> Any:
-    """Serve the project's first-class auto-analysis workspace."""
-    guarded = _guard_project_page(request, db, project_slug, allow_archived=False)
-    if guarded:
-        return guarded
-    canonical = _canonical_project_analysis_redirect(project_slug, request, db)
-    if canonical:
-        return canonical
-    idx = _platform_static_dashboard_analyzer()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Auto-analysis UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/runs/{run_id:path}/analyzer", response_model=None)
-def project_analyzer_ui(
-    project_slug: str,
-    run_id: str,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug, allow_archived=False)
-    if guarded:
-        return guarded
-    canonical = _canonical_project_run_analyzer_redirect(
-        project_slug, run_id, request, db
-    )
-    if canonical:
-        return canonical
-    idx = _platform_static_dashboard_analyzer()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="LLM Analyzer UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/run/{run_id:path}", response_model=None)
-def run_ui(run_id: str, request: Request, db: Session = Depends(get_db)) -> Any:
-    redirect = _maybe_redirect_to_login(request, db)
-    if redirect:
-        return redirect
-    idx = _platform_static_dashboard_run()
-    if not idx.exists():
-        raise HTTPException(status_code=404, detail="Run UI not found")
-    return _dashboard_html_response(idx, request)
-
-
-@router.get("/projects/{project_slug}/runs/{run_id:path}", response_model=None)
-def project_run_ui(
-    project_slug: str, run_id: str, request: Request, db: Session = Depends(get_db)
-) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
-    if guarded:
-        return guarded
-    return run_ui(run_id=run_id, request=request, db=db)
 
 
 def _published_run_rows(db: Session, run_ids: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -4451,6 +3817,16 @@ def _build_run_data(
     )
 
 
+def _run_export_payload(db: Session, principal: Principal, run_id: str) -> Dict[str, Any]:
+    """The run's page data for an HTML export; 404/403 like the run page itself."""
+    run = Run.active(db).filter(Run.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+    if not can_view_run(db, principal, run):
+        raise HTTPException(status_code=403, detail="Access denied")
+    return _with_item_visibility(db, principal, run, _build_run_data(db, run))
+
+
 @router.get("/api/runs/{run_id}/export-html")
 def export_run_html(
     run_id: str,
@@ -4458,185 +3834,42 @@ def export_run_html(
     principal: Principal = Depends(require_ui_principal),
 ) -> HTMLResponse:
     """Export a run page as a self-contained HTML file with all assets inlined."""
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if not can_view_run(db, principal, run):
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    data = _with_item_visibility(db, principal, run, _build_run_data(db, run))
-    dashboard_dir = _platform_static_dir() / "dashboard"
-
-    # Read source files
-    run_html = (dashboard_dir / "run.html").read_text(encoding="utf-8")
-    css_content = (dashboard_dir / "dashboard.css").read_text(encoding="utf-8")
-    shell_css_content = (dashboard_dir / "shell.css").read_text(encoding="utf-8")
-    ui_components_css_content = (dashboard_dir / "ui_components.css").read_text(
-        encoding="utf-8"
-    )
-    latency_traces_css = (dashboard_dir / "latency_traces.css").read_text(encoding="utf-8")
-    versioning_details_css = (dashboard_dir / "run_versioning_details.css").read_text(
-        encoding="utf-8"
-    )
-    ui_components_js = (dashboard_dir / "ui_components.js").read_text(encoding="utf-8")
-    metrics_js = (dashboard_dir / "metrics.js").read_text(encoding="utf-8")
-    safe_js = (dashboard_dir / "qym_safe.js").read_text(encoding="utf-8")
-
-    # Inline dashboard.css
-    run_html = re.sub(
-        r'\s*<link\s+rel="stylesheet"\s+href="/static/dashboard\.css(?:\?[^"]*)?">\s*',
-        lambda _match: f"<style>\n{css_content}\n</style>",
-        run_html,
-        count=1,
-    )
-    run_html = re.sub(
-        r'\s*<link\s+rel="stylesheet"\s+href="/static/shell\.css(?:\?[^"]*)?">\s*',
-        lambda _match: f"<style>\n{shell_css_content}\n</style>",
-        run_html,
-        count=1,
-    )
-    run_html = re.sub(
-        r'\s*<link\s+rel="stylesheet"\s+href="/static/ui_components\.css(?:\?[^"]*)?">\s*',
-        lambda _match: f"<style>\n{ui_components_css_content}\n</style>",
-        run_html,
-        count=1,
-    )
-    run_html = re.sub(
-        r'\s*<link\s+rel="stylesheet"\s+href="/static/latency_traces\.css(?:\?[^"]*)?">\s*',
-        lambda _match: f"<style>\n{latency_traces_css}\n</style>",
-        run_html,
-        count=1,
-    )
-    json_viewer_css = (dashboard_dir / "json_viewer.css").read_text(encoding="utf-8")
-    run_html = re.sub(
-        r'\s*<link\s+rel="stylesheet"\s+href="/static/json_viewer\.css(?:\?[^"]*)?">\s*',
-        lambda _match: f"<style>\n{json_viewer_css}\n</style>",
-        run_html,
-        count=1,
-    )
-    run_html = re.sub(
-        r'\s*<link\s+rel="stylesheet"\s+href="/static/run_versioning_details\.css(?:\?[^"]*)?">\s*',
-        lambda _match: f"<style>\n{versioning_details_css}\n</style>",
-        run_html,
-        count=1,
-    )
-
-    # Inline the shared escaping/text layer first: every other script uses it.
-    run_html = re.sub(
-        r'\s*<script\s+src="/static/qym_safe\.js(?:\?[^"]*)?"></script>\s*',
-        lambda _match: f"<script>\n{safe_js}\n</script>",
-        run_html,
-        count=1,
-    )
-
-    # Inline metrics.js
-    run_html = re.sub(
-        r'\s*<script\s+src="/static/metrics\.js(?:\?[^"]*)?"></script>\s*',
-        lambda _match: f"<script>\n{metrics_js}\n</script>",
-        run_html,
-        count=1,
-    )
-    run_html = re.sub(
-        r'\s*<script\s+defer\s+src="/static/ui_components\.js(?:\?[^"]*)?"></script>\s*',
-        lambda _match: f"<script>\n{ui_components_js}\n</script>",
-        run_html,
-        count=1,
-    )
-
-    trace_viewer_path = dashboard_dir / "trace_viewer.js"
-    if trace_viewer_path.exists():
-        trace_viewer_js = trace_viewer_path.read_text(encoding="utf-8")
-        run_html = re.sub(
-            r'\s*<script\s+src="/static/trace_viewer\.js(?:\?[^"]*)?"></script>\s*',
-            lambda _match: f"<script>\n{trace_viewer_js}\n</script>",
-            run_html,
-            count=1,
-        )
-
-    # The run page's own helpers (failure reasons, sticky section nav, the
-    # Response time charts of Latency and traces, the versioning details) work
-    # offline, so the export keeps them.
-    for page_script in (
-        "item_reasons.js",
-        "run_section_nav.js",
-        "latency_traces.js",
-        "json_viewer.js",
-        "run_versioning_details.js",
-    ):
-        page_script_js = (dashboard_dir / page_script).read_text(encoding="utf-8")
-        run_html = re.sub(
-            r'\s*<script\s+src="/static/'
-            + re.escape(page_script)
-            + r'(?:\?[^"]*)?"></script>\s*',
-            lambda _match, source=page_script_js: f"<script>\n{source}\n</script>",
-            run_html,
-            count=1,
-        )
-
-    # Remove browser/session-only scripts that are not needed in standalone export.
-    run_html = re.sub(
-        r'\s*<script\s+src="/static/auth\.js(?:\?[^"]*)?"></script>\s*', "\n", run_html
-    )
-    run_html = re.sub(
-        r'\s*<script\s+src="/static/shell\.js(?:\?[^"]*)?"></script>\s*', "\n", run_html
-    )
-    run_html = re.sub(
-        r'\s*<script\s+src="/static/playground\.js(?:\?[^"]*)?"></script>\s*',
-        "\n",
-        run_html,
-    )
-
-    # Export embeds full rows and needs no network hydration helper.
-    run_html = re.sub(
-        r'\s*<script\s+(?:defer\s+)?src="/static/run_details\.js(?:\?[^"]*)?"></script>\s*',
-        "\n", run_html,
-    )
-    # The Experiment panel (#26) links into the platform; exports leave it out.
-    # Review history and step latency load from the API, which an offline file
-    # cannot reach; run.html skips both sections in exports (IS_EXPORT). Any
-    # other script still pointing at /static/ would only fail to load offline.
-    run_html = re.sub(
-        r'\s*<script\s+(?:defer\s+)?src="/static/[^"]+"></script>\s*',
-        "\n",
-        run_html,
-    )
-
-    # Remove favicon (would be a broken link)
-    run_html = re.sub(
-        r'\s*<link\s+rel="icon"\s+type="image/png"\s+href="/static/qym_icon\.png(?:\?[^"]*)?">\s*',
-        "\n",
-        run_html,
-        count=1,
-    )
-
-    # Serialize data. Escape every "<" (JSON has none outside strings) so stored
-    # text can neither close this script ("</script>") nor switch the parser
-    # into a comment state that swallows it ("<!--<script>").
-    data_json = json.dumps(data, ensure_ascii=False, default=str)
-    data_json = data_json.replace("<", "\\u003c")
-
-    # Inject export flag + data before the main inline <script> block
-    export_script = (
-        "<script>\n"
-        "window.__QYM_EXPORT__ = true;\n"
-        f"window.__QYM_EXPORT_DATA__ = {data_json};\n"
-        "</script>\n"
-    )
-    # Insert just before the main <script> that starts the app
-    run_html = run_html.replace(
-        "  <script>\n    (() => {",
-        f"{export_script}  <script>\n    (() => {{",
-        1,
-    )
-
-    run_name = data["run"].get("run_name", run_id)
-    # Sanitize filename
-    safe_name = re.sub(r"[^\w\-.]", "_", str(run_name))[:80]
-    filename = f"qym-run-{safe_name}.html"
-
+    data = _run_export_payload(db, principal, run_id)
+    filename = run_export_filename(data, run_id)
     return HTMLResponse(
-        content=run_html,
+        content=build_run_export_html(data),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# Every run is built in full into the one file: keep the request bounded.
+MAX_COMPARE_EXPORT_RUNS = 8
+
+
+@router.get("/api/compare/export-html")
+def export_compare_html(
+    files: List[str] = Query(default=[]),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> HTMLResponse:
+    """Export a comparison as one self-contained HTML file.
+
+    A summary table of the runs on top of each run's own offline export (the
+    same document ``/api/runs/{id}/export-html`` returns), one tab per run.
+    ``files`` takes run ids like ``/api/compare``.
+    """
+    run_ids = list(dict.fromkeys(_parse_requested_run_ids(files)))
+    if len(run_ids) < 2:
+        raise HTTPException(status_code=422, detail="Select at least two runs to export a comparison")
+    if len(run_ids) > MAX_COMPARE_EXPORT_RUNS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Export at most {MAX_COMPARE_EXPORT_RUNS} runs at once ({len(run_ids)} requested)",
+        )
+    payloads = [_run_export_payload(db, principal, run_id) for run_id in run_ids]
+    return HTMLResponse(
+        content=build_compare_export_html(payloads),
+        headers={"Content-Disposition": 'attachment; filename="qym-compare.html"'},
     )
 
 
@@ -4817,7 +4050,7 @@ def run_passes(
     if not can_view_run(db, principal, run):
         return {"error": "Access denied"}
 
-    from qym_platform.db.models import RunItemAttempt, RunItemPassScore
+    from qym_platform.db.models import RunItemPassScore
 
     samples = int(getattr(run, "samples", 1) or 1)
     metrics = list(run.metrics or [])
