@@ -6,8 +6,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useCreateEnvironment, useEnvironmentForm, type EvalSlot } from '@/api/evalEnvironments';
 import type { EvalEnvironment } from '@/api/evalCommon';
-import { errorMessage } from '@/api/evalCommon';
 import { Button, Dialog, ErrorState, Skeleton, TextField, useToast } from '@/ui';
+import { mapEnvironmentError, type EnvironmentField, type FieldErrors } from './fieldErrors';
 import styles from './AddEnvironmentDialog.module.css';
 import { FormPreview } from './FormPreview';
 import { SlotEditor, useSlotEditor } from './SlotEditor';
@@ -42,6 +42,8 @@ function AddEnvironmentDialogInner({
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const inputs = useRef<Partial<Record<EnvironmentField, HTMLInputElement | null>>>({});
   const create = useCreateEnvironment(projectId);
   const form = useEnvironmentForm(projectId, env?.id, Boolean(env));
   const editor = useSlotEditor(projectId, env?.id ?? '');
@@ -65,8 +67,14 @@ function AddEnvironmentDialogInner({
   async function connect(event?: FormEvent) {
     event?.preventDefault();
     setError('');
-    if (!name.trim() || !baseUrl.trim() || !apiKey.trim()) {
-      setError('Name, base URL and API key are required.');
+    const missing: FieldErrors = {};
+    if (!name.trim()) missing.name = 'Enter a name.';
+    if (!baseUrl.trim()) missing.base_url = 'Enter the service base URL.';
+    if (!apiKey.trim()) missing.api_key = 'Enter the API key.';
+    setErrors(missing);
+    const first = (['name', 'base_url', 'api_key'] as const).find((k) => missing[k]);
+    if (first) {
+      inputs.current[first]?.focus();
       return;
     }
     try {
@@ -81,7 +89,13 @@ function AddEnvironmentDialogInner({
       toast.show(`Connected “${r.environment.name}”`, { tone: 'success' });
       setStep(2);
     } catch (e) {
-      setError(errorMessage(e) || 'Could not connect to the Evaluation Service.');
+      const mapped = mapEnvironmentError(e);
+      setErrors(mapped.fields);
+      setError(
+        mapped.general || (Object.keys(mapped.fields).length ? '' : 'Could not connect to the Evaluation Service.'),
+      );
+      const first = (['name', 'base_url', 'api_key'] as const).find((k) => mapped.fields[k]);
+      if (first) setTimeout(() => inputs.current[first]?.focus(), 0);
     }
   }
 
@@ -171,8 +185,15 @@ function AddEnvironmentDialogInner({
           <TextField
             label="Name"
             placeholder="e.g. staging"
+            ref={(el) => {
+              inputs.current.name = el;
+            }}
+            errorMessage={errors.name}
             value={name}
-            onChange={setName}
+            onChange={(v) => {
+              setName(v);
+              setErrors((e) => ({ ...e, name: undefined }));
+            }}
             maxLength={200}
             isRequired
             autoFocus
@@ -182,8 +203,15 @@ function AddEnvironmentDialogInner({
             mono
             type="url"
             placeholder="https://evals.example.com/api"
+            ref={(el) => {
+              inputs.current.base_url = el;
+            }}
+            errorMessage={errors.base_url}
             value={baseUrl}
-            onChange={setBaseUrl}
+            onChange={(v) => {
+              setBaseUrl(v);
+              setErrors((e) => ({ ...e, base_url: undefined }));
+            }}
             maxLength={500}
             isRequired
             help={
@@ -198,8 +226,15 @@ function AddEnvironmentDialogInner({
             mono
             type="password"
             autoComplete="new-password"
+            ref={(el) => {
+              inputs.current.api_key = el;
+            }}
+            errorMessage={errors.api_key}
             value={apiKey}
-            onChange={setApiKey}
+            onChange={(v) => {
+              setApiKey(v);
+              setErrors((e) => ({ ...e, api_key: undefined }));
+            }}
             maxLength={4096}
             isRequired
             help="Stored encrypted; only its last four characters are shown afterwards."

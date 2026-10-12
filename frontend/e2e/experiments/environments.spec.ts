@@ -103,7 +103,9 @@ test.describe('add environment', () => {
     // required fields are checked before any request is made
     await dialog.getByRole('textbox', { name: /^Name/ }).fill('');
     await dialog.getByRole('button', { name: 'Test & connect' }).click();
-    await expect(alert).toContainText('Name, base URL and API key are required.');
+    await expect(dialog.getByText('Enter a name.')).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: /^Name/ })).toBeFocused();
+    await expect(dialog.getByRole('textbox', { name: /^Name/ })).toHaveAttribute('aria-invalid', 'true');
   });
 
   test('connect, review the generated form, group the LLM settings, confirm', async ({ page, request }) => {

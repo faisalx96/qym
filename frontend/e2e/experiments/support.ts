@@ -29,7 +29,9 @@ const LOCK_STALE_MS = 5 * 60_000;
  */
 export const test = base.extend<{ fakeServicesLock: void }>({
   fakeServicesLock: [
-    async (_fixtures, run) => {
+    // Playwright requires the destructuring pattern, even when no fixture is used.
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, run) => {
       for (;;) {
         try {
           mkdirSync(LOCK);
