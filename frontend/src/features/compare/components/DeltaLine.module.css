@@ -1,0 +1,43 @@
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.deltas {
+  flex: 1;
+  display: flex;
+  gap: var(--space-md);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-xs) 0;
+  list-style: none;
+  overflow-x: auto;
+}
+
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: none;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  white-space: nowrap;
+}
+
+.letter {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.verdict {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}

@@ -339,13 +339,14 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
     const p = await createProject(request, 'Deep Links', uniqueSlug('deep'));
     const runId = 'eval/2026-01-01/abc';
     const encodedRun = runId.split('/').map(encodeURIComponent).join('/');
-    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' | 'runs' | 'overview' | 'charts' | 'run' }[] = [
+    const urls: { path: string; expect: 'coming-soon' | 'settings' | 'projects' | 'profile' | 'trash' | 'reviews' | 'datasets' | 'runs' | 'overview' | 'charts' | 'run' | 'compare' }[] = [
       { path: '/', expect: 'projects' },
       { path: '/profile', expect: 'profile' },
       { path: '/admin', expect: 'coming-soon' },
       { path: '/admin/users', expect: 'coming-soon' },
       { path: '/trash', expect: 'trash' },
-      { path: '/compare', expect: 'coming-soon' },
+      { path: '/compare', expect: 'compare' },
+      { path: `/projects/${p.slug}/compare`, expect: 'compare' },
       { path: '/reviews', expect: 'reviews' },
       { path: '/docs-guide', expect: 'coming-soon' },
       { path: '/docs/sdk', expect: 'coming-soon' },
@@ -388,6 +389,9 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       } else if (u.expect === 'datasets') {
         // catalog, or the dataset detail / not-found state for an unknown ref
         await expect(page.locator('[data-datasets-catalog], [data-dataset-detail], [role="alert"], [data-error-state]').first(), u.path).toBeVisible();
+      } else if (u.expect === 'compare') {
+        // Implemented by the compare area: with no ?runs= it shows its empty state.
+        await expect(page.getByText('No runs to compare'), u.path).toBeVisible();
       } else if (u.expect === 'projects') {
         await expect(page.locator('[data-projects-page]'), u.path).toBeVisible();
       } else {

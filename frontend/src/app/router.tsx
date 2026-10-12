@@ -39,6 +39,7 @@ const DatasetsRoutes = () => (
   </Suspense>
 );
 import { RunDetailPage } from '@/features/run-detail/RunDetailPage';
+import { ComparePage } from '@/features/compare/ComparePage';
 
 const C = ROUTES.projectChildren;
 
@@ -56,6 +57,7 @@ const projectChildren: RouteObject[] = [
   { path: C.datasetsSplat, element: <DatasetsRoutes /> },
   { path: C.analysis, element: <ComingSoon brief="08-playground" title="Auto-analysis" /> },
   { path: C.reviews, element: <ReviewsPage /> },
+  { path: C.compare, element: <ComparePage /> },
   { path: C.settings, element: <ProjectSettingsPage /> },
   { path: C.runs_detail, element: <RunDetailPage /> },
 ];
@@ -96,7 +98,7 @@ export const routes: RouteObject[] = [
             path: ROUTES.trash,
             element: <TrashPage />,
           },
-          { path: ROUTES.compare, element: <ComingSoon brief="05-compare-analyzer" title="Compare" /> },
+          { path: ROUTES.compare, element: <ComparePage /> },
           { path: ROUTES.reviews, element: <ReviewsPage /> },
           { path: ROUTES.docs, element: <DocsRedirect /> },
           { path: ROUTES.docsIndex, element: <DocsRedirect /> },
