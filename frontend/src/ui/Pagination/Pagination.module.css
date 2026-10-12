@@ -2,7 +2,9 @@
 .pagination {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-md);
+  flex-wrap: wrap; /* narrow bars: the summary wraps above the controls, never clips them */
+  gap: var(--space-xs) var(--space-md);
+  max-width: 100%;
 }
 
 .summary {
@@ -14,6 +16,7 @@
 }
 
 .controls {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -52,6 +55,7 @@
   font-size: var(--font-sm);
   color: var(--text-muted);
   padding: 0 var(--space-xs);
+  white-space: nowrap;
 }
 
 .size {

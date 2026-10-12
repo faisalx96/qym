@@ -11,8 +11,28 @@
   white-space: nowrap;
 }
 
-.guidance {
+.actions > * {
+  flex-shrink: 0;
+}
+
+/* Guidance gives way first: it adds no minimum width, so the buttons never clip. */
+.actions > .guidance {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  flex-shrink: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .actions {
+    flex-wrap: wrap;
+  }
+
+  .actions > .guidance {
+    flex-basis: 100%;
+    width: auto;
+  }
 }

@@ -100,6 +100,7 @@
 }
 
 .table thead th {
+  position: relative; /* anchors the sort button's full-cell hit area */
   font-size: var(--font-sm);
   color: var(--text-muted);
   background: var(--bg-elevated);
@@ -140,6 +141,12 @@
   letter-spacing: inherit;
   text-transform: inherit;
   cursor: pointer;
+}
+
+.sortButton::after {
+  content: '';
+  position: absolute;
+  inset: 0; /* the whole header cell sorts, not just the label */
 }
 
 .sortButton[data-hovered] {

@@ -398,29 +398,36 @@ function MiniRuns({ slug, rows, hideStatus }: { slug: string; rows: RunRow[]; hi
       rowKey={(r) => r.run_id}
       stickyHeader={false}
       columns={[
-        { id: 'run', label: 'Run', flex: true, mono: true, cell: (r) => <RunLink slug={slug} row={r} /> },
-        { id: 'owner', label: 'User', width: 130, cell: (r) => <OwnerCell row={r} /> },
+        {
+          id: 'run',
+          label: 'Run',
+          flex: true,
+          minWidth: 120,
+          mono: true,
+          cell: (r) => <RunLink slug={slug} row={r} />,
+        },
+        { id: 'owner', label: 'User', width: 96, cell: (r) => <OwnerCell row={r} /> },
         ...(hideStatus
           ? []
           : [
               {
                 id: 'status',
                 label: 'Status',
-                width: 110,
+                width: 104,
                 cell: (r: RunRow) => <RunStatusBadge status={r.status} />,
               },
             ]),
         {
           id: 'items',
           label: 'Items',
-          width: 130,
+          width: 76,
           align: 'end' as const,
           cell: (r: RunRow) => <Mono>{itemProgress(r)}</Mono>,
         },
         {
           id: 'date',
           label: 'Date',
-          width: 90,
+          width: 84,
           align: 'end' as const,
           mono: true,
           cell: (r: RunRow) => formatRelative(r.timestamp),

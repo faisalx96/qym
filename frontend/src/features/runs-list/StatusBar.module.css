@@ -18,11 +18,10 @@
 }
 
 .left {
-  min-width: 0;
+  min-width: min-content; /* the selection buttons never clip */
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  overflow: hidden;
 }
 
 .center {
@@ -58,8 +57,29 @@
   }
 }
 
+/* The selection cluster needs ~620px: it gets a row of its own, pager and freshness share the next. */
+@media (max-width: 1500px) {
+  .bar[data-selecting] {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .bar[data-selecting] .left {
+    grid-column: 1 / -1;
+  }
+
+  .bar[data-selecting] .right {
+    grid-column: 2;
+    justify-content: flex-end;
+  }
+}
+
 @media (max-width: 640px) {
-  .bar {
+  .left {
+    min-width: 0;
+  }
+
+  .bar,
+  .bar[data-selecting] {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-xs);
     padding-block: var(--space-xs);
@@ -71,7 +91,9 @@
     overflow-x: auto;
   }
 
-  .right {
+  .right,
+  .bar[data-selecting] .right {
+    grid-column: 1 / -1;
     flex-wrap: wrap;
     justify-content: space-between;
   }

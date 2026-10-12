@@ -426,6 +426,7 @@ export function RunsPage() {
         ) : null}
         {body}
         <StatusBar
+          selecting={selectMode}
           left={
             selectMode ? (
               <SelectionBar
