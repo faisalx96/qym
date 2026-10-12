@@ -14,7 +14,11 @@ export function RunBar({ ws, config, className }: { ws: RunWorkspace; config: An
     <div className={[s.runBar, className].filter(Boolean).join(' ')}>
       <Select
         label="LLM connection"
-        items={config.llm_connections.map((c) => ({ key: c.id, label: `${c.name} · ${c.llm_model}` }))}
+        items={config.llm_connections.map((c) => ({
+          key: c.id,
+          label: `${c.name} · ${c.llm_model}${c.llm_api_key_set ? "" : " · key missing"}`,
+          disabled: !c.llm_api_key_set,
+        }))}
         value={ws.connectionId}
         onChange={(k) => k != null && ws.setConnectionId(String(k))}
         isDisabled={running || test.testing || config.llm_connections.length === 0}

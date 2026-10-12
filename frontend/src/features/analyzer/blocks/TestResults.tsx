@@ -55,6 +55,14 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
             <Text variant="base" tone="secondary" as="p" dir="auto">
               {i.finding}
             </Text>
+            {i.category_reason ? (
+              <details className={s.details}>
+                <summary>Why this category</summary>
+                <Text variant="base" tone="secondary" as="p" dir="auto">
+                  {i.category_reason}
+                </Text>
+              </details>
+            ) : null}
           </li>
         ))}
       </ol>

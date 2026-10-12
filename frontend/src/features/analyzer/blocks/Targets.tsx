@@ -1,15 +1,39 @@
-import { useState } from 'react';
-import { Button, Checkbox, Chip, EmptyState, NumberField, Pagination, Slider, Switch, Tag, Text } from '@/ui';
-import { existingAnalysis, isHumanMetricAnalysis } from '../model/targets';
-import { rootCauseCategories } from '../model/rootCause';
-import { targetKeyOf, type RunWorkspace } from '../workspace/useRunWorkspace';
-import { useRunDirection } from './direction';
-import s from './blocks.module.css';
+import { useState } from "react";
+import {
+  Button,
+  Checkbox,
+  Chip,
+  EmptyState,
+  LinkButton,
+  NumberField,
+  Pagination,
+  Slider,
+  Switch,
+  Tag,
+  Text,
+} from "@/ui";
+import { projectPath } from "@/app/routes";
+import { existingAnalysis, isHumanMetricAnalysis } from "../model/targets";
+import { rootCauseCategories } from "../model/rootCause";
+import { targetKeyOf, type RunWorkspace } from "../workspace/useRunWorkspace";
+import { useRunDirection } from "./direction";
+import s from "./blocks.module.css";
 
 export const PAGE_SIZE = 10;
 
 /** Max score, skip analyzed, human overwrite, timeout, limit, max issues. */
-export function TargetFilters({ ws, maxTimeout }: { ws: RunWorkspace; maxTimeout: number }) {
+export function TargetFilters({
+  ws,
+  maxTimeout,
+  maxRetries,
+  defaults,
+}: {
+  ws: RunWorkspace;
+  maxTimeout: number;
+  maxRetries: number;
+  /** Values restored when a field is emptied or set to 0 (the old page did the same). */
+  defaults: { timeoutSeconds: number; maxIssues: number };
+}) {
   const { settings, update } = ws;
   return (
     <div className={s.filters}>
@@ -34,10 +58,15 @@ export function TargetFilters({ ws, maxTimeout }: { ws: RunWorkspace; maxTimeout
       <div className={s.numberRow}>
         <NumberField
           label="Timeout (s)"
-          minValue={1}
+          minValue={0}
           maxValue={maxTimeout}
           value={settings.timeoutSeconds}
-          onChange={(v) => Number.isFinite(v) && update({ timeoutSeconds: v })}
+          help={
+            maxRetries === 0
+              ? "The first LLM attempt uses this timeout. Timeout retries are disabled by server configuration."
+              : `The first LLM attempt uses this timeout. A timed-out request retries up to ${maxRetries} ${maxRetries === 1 ? "time" : "times"}; each retry doubles the previous timeout.`
+          }
+          onChange={(v) => update({ timeoutSeconds: Number.isFinite(v) && v >= 1 ? v : defaults.timeoutSeconds })}
           width={110}
         />
         <NumberField
@@ -51,10 +80,11 @@ export function TargetFilters({ ws, maxTimeout }: { ws: RunWorkspace; maxTimeout
         />
         <NumberField
           label="Max issues per item"
-          minValue={1}
+          minValue={0}
           maxValue={10}
           value={settings.maxIssues}
-          onChange={(v) => Number.isFinite(v) && update({ maxIssues: v })}
+          help="Limits how many root-cause issues the analyzer can return for each item. Higher values allow multiple independent causes."
+          onChange={(v) => update({ maxIssues: Number.isFinite(v) && v >= 1 ? v : defaults.maxIssues })}
           width={110}
         />
       </div>
@@ -69,7 +99,7 @@ const preview = (value: unknown): string => {
 };
 
 /** Failing item cards, 10 per page, one toggle button per metric target. */
-export function TargetList({ ws }: { ws: RunWorkspace }) {
+export function TargetList({ ws, slug }: { ws: RunWorkspace; slug: string }) {
   const [page, setPage] = useState(1);
   const total = ws.matched.length;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -92,9 +122,14 @@ export function TargetList({ ws }: { ws: RunWorkspace }) {
         }
         action={
           ws.settings.skipAnalyzed ? (
-            <Button size="sm" onPress={() => ws.update({ skipAnalyzed: false })}>
-              Include analyzed targets
-            </Button>
+            <div className={s.inline}>
+              <Button size="sm" onPress={() => ws.update({ skipAnalyzed: false })}>
+                Include analyzed targets
+              </Button>
+              <LinkButton size="sm" to={projectPath(slug, "reviews")}>
+                Open Reviews
+              </LinkButton>
+            </div>
           ) : undefined
         }
       />

@@ -119,7 +119,8 @@ function Workspace({
         <div className={s.banner} role="status">
           <Icon name="info" size={14} />
           <Text variant="base" tone="secondary" as="span">
-            You can read this workspace, but running analyses needs project member access.
+            You can view this analysis setup. Only project managers and the run’s owner can upload documents or run
+            analysis, and only managers can change rules.
           </Text>
         </div>
       ) : null}
@@ -163,8 +164,16 @@ function Workspace({
             </Card>
             <Card title="Targets" description="The limit is applied to the most severe matching item–metric targets. Task and metric errors are never analyzed.">
               <div className={s.stack}>
-                <TargetFilters ws={ws} maxTimeout={config.analysis_defaults.max_timeout_seconds} />
-                <TargetList ws={ws} />
+                <TargetFilters
+                  ws={ws}
+                  maxTimeout={config.analysis_defaults.max_timeout_seconds}
+                  maxRetries={config.analysis_defaults.max_timeout_retries}
+                  defaults={{
+                    timeoutSeconds: config.analysis_defaults.request_timeout_seconds || 120,
+                    maxIssues: config.max_root_cause_categories || 3,
+                  }}
+                />
+                <TargetList ws={ws} slug={slug} />
                 <Text variant="sm" tone="muted" as="p">
                   Check up to 3 targets to test them together on the Run step.
                 </Text>
@@ -207,9 +216,19 @@ function Workspace({
         <Text variant="sm" tone="muted" as="span">
           {`Step ${idx + 1} of ${STEPS.length}: ${STEPS[idx]?.hint}`}
         </Text>
-        <Button variant="accent" isDisabled={idx === STEPS.length - 1} onPress={() => onStep(STEP_IDS[idx + 1] as StepId)} iconEnd={<Icon name="next" size={12} className={s.dirIcon} />}>
-          {idx < STEPS.length - 1 ? `Next: ${STEPS[idx + 1]?.label}` : 'Done'}
-        </Button>
+        {idx < STEPS.length - 1 ? (
+          <Button
+            variant="accent"
+            onPress={() => onStep(STEP_IDS[idx + 1] as StepId)}
+            iconEnd={<Icon name="next" size={12} className={s.dirIcon} />}
+          >
+            {`Next: ${STEPS[idx + 1]?.label}`}
+          </Button>
+        ) : (
+          <Button variant="accent" onPress={() => onStep("configure")}>
+            Back to Configure
+          </Button>
+        )}
       </footer>
 
       <ConfirmDialog

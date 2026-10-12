@@ -27,6 +27,64 @@ export function tryParseJson(value: unknown): object | null {
     const parsed = JSON.parse(text);
     return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
+    return parsePythonLiteral(text);
+  }
+}
+
+function readPythonString(text: string, start: number): { value: string; next: number } | null {
+  const quote = text[start];
+  let value = "";
+  for (let i = start + 1; i < text.length; i += 1) {
+    const ch = text[i] as string;
+    if (ch === "\\") {
+      i += 1;
+      if (i >= text.length) return null;
+      const esc = text[i] as string;
+      const simple: Record<string, string> = { n: "\n", r: "\r", t: "\t", b: "\b", f: "\f" };
+      if (esc in simple) value += simple[esc];
+      else if (esc === "u" && /^[0-9a-fA-F]{4}$/.test(text.slice(i + 1, i + 5))) {
+        value += String.fromCharCode(parseInt(text.slice(i + 1, i + 5), 16));
+        i += 4;
+      } else value += esc;
+      continue;
+    }
+    if (ch === quote) return { value, next: i + 1 };
+    value += ch;
+  }
+  return null;
+}
+
+/** A stringified Python dict/list (`str(dict)`): quotes, True/False/None are converted, then parsed as JSON. */
+function parsePythonLiteral(text: string): object | null {
+  if (text[0] !== "{" && text[0] !== "[") return null;
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i] as string;
+    if (ch === "'" || ch === '"') {
+      const str = readPythonString(text, i);
+      if (!str) return null;
+      out += JSON.stringify(str.value);
+      i = str.next;
+      continue;
+    }
+    if (/[A-Za-z_]/.test(ch)) {
+      const start = i;
+      while (i < text.length && /[A-Za-z_]/.test(text[i] as string)) i += 1;
+      const word = text.slice(start, i);
+      if (word === "True") out += "true";
+      else if (word === "False") out += "false";
+      else if (word === "None") out += "null";
+      else return null;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  try {
+    const parsed = JSON.parse(out);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
     return null;
   }
 }
