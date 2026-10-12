@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   useLlmConnectionAction,
   useLlmConnections,
@@ -40,6 +40,13 @@ export function LlmConnectionsTab() {
   const [deleting, setDeleting] = useState<LlmConnection | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const canEdit = canManage && !readOnly;
+  // The form replaces the Add button; keep keyboard focus on a live control when it closes.
+  const addRef = useRef<HTMLDivElement>(null);
+  const formWasOpen = useRef(false);
+  useEffect(() => {
+    if (formWasOpen.current && !showForm) addRef.current?.querySelector('button')?.focus();
+    formWasOpen.current = showForm;
+  }, [showForm]);
 
   async function test(c: LlmConnection) {
     setTesting(c.id);
@@ -155,7 +162,7 @@ export function LlmConnectionsTab() {
         />
       )}
       {canEdit && !showForm ? (
-        <div>
+        <div ref={addRef}>
           <Button
             variant="accent"
             onPress={() => {
@@ -246,7 +253,14 @@ function ConnectionForm({
       </div>
       <div className={styles.cardBody}>
         <div className={styles.formRow}>
-          <TextField label="Name" value={name} onChange={setName} isRequired placeholder="OpenAI prod" />
+          <TextField
+            label="Name"
+            value={name}
+            onChange={setName}
+            isRequired
+            placeholder="OpenAI prod"
+            autoFocus
+          />
           <TextField
             label="Base URL"
             value={baseUrl}
