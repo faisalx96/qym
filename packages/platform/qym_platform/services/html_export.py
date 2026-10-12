@@ -15,6 +15,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
+from qym_platform.services.compare_export import build_comparison, render_comparison_html
+
 EXPORT_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "export_templates" / "run"
 
 
@@ -193,26 +195,36 @@ def run_export_filename(data: Dict[str, Any], fallback: str) -> str:
 
 
 _COMPARE_STYLE = """
-:root { color-scheme: dark; --bg: #0f1115; --panel: #171a21; --line: #2a2f3a; --text: #e6e8ee; --muted: #9aa3b2; --accent: #7aa2ff; }
-@media (prefers-color-scheme: light) { :root { color-scheme: light; --bg: #f6f7f9; --panel: #fff; --line: #d9dde5; --text: #1b1f27; --muted: #5b6577; --accent: #2f5fd0; } }
+:root { color-scheme: dark; --bg: #0f1115; --panel: #171a21; --line: #2a2f3a; --text: #e6e8ee; --muted: #9aa3b2; --accent: #7aa2ff; --good: #4ade80; --bad: #f87171; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif; display: flex; flex-direction: column; min-height: 100vh; }
 header { padding: 16px 20px 8px; }
 h1 { margin: 0 0 4px; font-size: 18px; }
+h2 { margin: 16px 20px 4px; font-size: 15px; }
 .muted { color: var(--muted); }
+p.muted { margin: 0 20px 6px; }
+.cmp { padding-bottom: 20px; }
+.cmp table { display: block; overflow-x: auto; max-width: calc(100% - 40px); }
 table { border-collapse: collapse; margin: 8px 20px 12px; background: var(--panel); }
-th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+td.preview { max-width: 38ch; overflow-wrap: anywhere; }
+.delta[data-verdict=improved] { color: var(--good); }
+.delta[data-verdict=regressed] { color: var(--bad); }
+.pill[data-state=pass] { color: var(--good); }
+.pill[data-state=fail] { color: var(--bad); }
+.pill[data-state=error] { color: #fbbf24; }
+.strip { display: flex; gap: 16px; flex-wrap: wrap; list-style: none; margin: 4px 20px 8px; padding: 0; }
 [role=tablist] { display: flex; gap: 4px; padding: 0 20px; flex-wrap: wrap; }
 [role=tab] { background: var(--panel); color: var(--muted); border: 1px solid var(--line); border-bottom: 0; padding: 6px 12px; border-radius: 6px 6px 0 0; cursor: pointer; font: inherit; }
 [role=tab][aria-selected=true] { color: var(--text); border-color: var(--accent); }
 iframe { flex: 1; width: 100%; min-height: 70vh; border: 0; border-top: 1px solid var(--line); background: var(--bg); }
-iframe[hidden] { display: none; }
+[role=tabpanel][hidden] { display: none; }
 """
 
 _COMPARE_SCRIPT = """
 (function () {
   var tabs = Array.prototype.slice.call(document.querySelectorAll('[role=tab]'));
-  var frames = Array.prototype.slice.call(document.querySelectorAll('iframe'));
+  var frames = Array.prototype.slice.call(document.querySelectorAll('[role=tabpanel]'));
   function select(i) {
     tabs.forEach(function (t, j) { t.setAttribute('aria-selected', String(i === j)); t.tabIndex = i === j ? 0 : -1; });
     frames.forEach(function (f, j) { f.hidden = i !== j; });
@@ -235,36 +247,28 @@ def _label(data: Dict[str, Any], index: int) -> str:
 
 
 def build_compare_export_html(payloads: Sequence[Dict[str, Any]]) -> str:
-    """One offline document for several runs: a summary table, then a tab per run.
+    """One offline document for several runs: a Comparison tab, then a tab per run.
 
-    Each tab is that run's own self-contained export (``build_run_export_html``)
-    inside a ``srcdoc`` frame, so the runs' scripts and styles cannot
-    collide and nothing in a stored value can reach the outer page.
+    The Comparison tab carries what the Compare page shows: per-run averages with
+    deltas against the baseline (95% band, p-value), the winner / stat strip and the
+    aligned item-level diff (``services/compare_export.py``). Each run tab is that run's
+    own self-contained export (``build_run_export_html``) inside a ``srcdoc`` frame, so
+    the runs' scripts and styles cannot collide and nothing in a stored value can reach
+    the outer page.
     """
     esc = html_lib.escape
-    rows: List[str] = []
-    tabs: List[str] = []
-    frames: List[str] = []
+    comparison = build_comparison(payloads)
+    tabs: List[str] = [
+        '<button role="tab" type="button" aria-selected="true" aria-controls="comparison" id="tab-comparison">Comparison</button>'
+    ]
+    frames: List[str] = [
+        '<div id="comparison" role="tabpanel" aria-labelledby="tab-comparison">'
+        + render_comparison_html(comparison)
+        + "</div>"
+    ]
     for index, data in enumerate(payloads):
-        run = data.get("run") or {}
         label = _label(data, index)
         letter = chr(ord("A") + index) if index < 26 else str(index + 1)
-        rows.append(
-            "<tr>"
-            + "".join(
-                f"<td>{esc(str(value if value not in (None, '') else '-'))}</td>"
-                for value in (
-                    letter,
-                    label,
-                    run.get("status"),
-                    run.get("dataset_name"),
-                    run.get("model_name"),
-                    run.get("total_items"),
-                    run.get("error_count"),
-                )
-            )
-            + "</tr>"
-        )
         tabs.append(
             f'<button role="tab" type="button" aria-selected="false" aria-controls="run-{index}" id="tab-{index}">'
             f"{esc(letter)} · {esc(label)}</button>"
@@ -281,11 +285,7 @@ def build_compare_export_html(payloads: Sequence[Dict[str, Any]]) -> str:
         "<title>qym comparison</title>\n"
         f"<style>{_COMPARE_STYLE}</style>\n</head>\n<body>\n"
         "<header><h1>Run comparison</h1>"
-        f"<div class=\"muted\">{len(payloads)} runs. Each tab is that run's full offline report.</div></header>\n"
-        "<table><thead><tr><th>Run</th><th>Name</th><th>Status</th><th>Dataset</th><th>Model</th>"
-        "<th>Items</th><th>Errors</th></tr></thead><tbody>\n"
-        + "\n".join(rows)
-        + "\n</tbody></table>\n"
+        f"<div class=\"muted\">{len(payloads)} runs. The Comparison tab summarises them; each other tab is that run's full offline report.</div></header>\n"
         f"<div role=\"tablist\" aria-label=\"Runs\">{''.join(tabs)}</div>\n"
         + "\n".join(frames)
         + f"\n<script>window.__QYM_COMPARE_EXPORT_RUNS__ = {summary};{_COMPARE_SCRIPT}</script>\n</body>\n</html>\n"
