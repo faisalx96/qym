@@ -190,3 +190,28 @@
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
+
+/* inline: the list expands in place (inside another popover) */
+.inline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.inlineTrigger {
+  width: 100%;
+  max-width: none;
+}
+
+.inlineTrigger .triggerValue {
+  flex: 1;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+.inlinePanel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--dropdown-radius);
+  overflow: hidden;
+}

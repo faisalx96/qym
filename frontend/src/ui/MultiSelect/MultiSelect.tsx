@@ -26,6 +26,11 @@ export interface MultiSelectProps<T extends MultiSelectItem> {
   placeholder?: string;
   className?: string;
   isDisabled?: boolean;
+  /**
+   * Expand the list in place (a disclosure) instead of in a popover. For use inside another popover,
+   * where a nested popover would be dismissed with its parent. Escape folds the list.
+   */
+  inline?: boolean;
 }
 
 /**
@@ -45,11 +50,13 @@ export function MultiSelect<T extends MultiSelectItem>({
   placeholder = 'All',
   className,
   isDisabled,
+  inline,
 }: MultiSelectProps<T>) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const all = useMemo(() => (emptyOption ? [emptyOption as T, ...items] : items), [items, emptyOption]);
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -76,7 +83,122 @@ export function MultiSelect<T extends MultiSelectItem>({
     const idx = nodes.findIndex((n) => n === document.activeElement || n.contains(document.activeElement));
     const nextIdx =
       idx === -1 ? (delta > 0 ? 0 : nodes.length - 1) : (idx + delta + nodes.length) % nodes.length;
-    nodes[nextIdx]?.focus();
+    // The checkbox inside the row takes focus, so Space toggles it.
+    const target = nodes[nextIdx];
+    (target?.querySelector<HTMLElement>('input[type=checkbox]') ?? target)?.focus();
+  }
+
+  const renderPanel = (close: () => void) => (
+    <div
+      className={styles.panel}
+      role="presentation"
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          moveFocus(1);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          moveFocus(-1);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          // Inline: fold the list only; the surrounding popover stays open for a second Escape.
+          if (inline) e.stopPropagation();
+          close();
+          if (inline) triggerRef.current?.focus();
+        }
+      }}
+    >
+      {searchable ? (
+        <div className={styles.searchWrap}>
+          <Icon name="search" size={12} />
+          <input
+            className={styles.search}
+            placeholder="Search…"
+            aria-label={`Search ${label}`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            autoFocus
+          />
+        </div>
+      ) : null}
+      {selectAll ? (
+        <div className={styles.actions}>
+          <button
+            type="button"
+            className={styles.action}
+            onClick={() => onChange(new Set(visible.map((i) => i.key)))}
+          >
+            Select all
+          </button>
+          <button type="button" className={styles.action} onClick={() => onChange(new Set())}>
+            None
+          </button>
+        </div>
+      ) : null}
+      <div className={styles.list} ref={listRef}>
+        {visible.length === 0 ? <div className={styles.empty}>No matches</div> : null}
+        {visible.map((item) => (
+          <div
+            key={String(item.key)}
+            className={styles.option}
+            data-option=""
+            tabIndex={-1}
+            role="presentation"
+          >
+            <Checkbox
+              isSelected={value.has(item.key)}
+              onChange={() => toggle(item.key)}
+              className={styles.checkbox}
+            >
+              <span className={styles.optionLabel}>{renderItem ? renderItem(item) : item.label}</span>
+              {typeof item.count === 'number' ? <span className={styles.count}>{item.count}</span> : null}
+            </Checkbox>
+            {onlyAction ? (
+              <button
+                type="button"
+                className={styles.only}
+                aria-label={`Only ${item.label}`}
+                onClick={() => onChange(new Set([item.key]))}
+              >
+                Only
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (inline) {
+    return (
+      <div className={styles.inline}>
+        <button
+          ref={triggerRef}
+          type="button"
+          className={[styles.trigger, styles.inlineTrigger, className].filter(Boolean).join(' ')}
+          disabled={isDisabled}
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          data-active={selectedCount ? '' : undefined}
+          onClick={() => setOpen(!open)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown' && open) {
+              e.preventDefault();
+              moveFocus(1);
+            }
+          }}
+        >
+          <span className={styles.triggerLabel}>{label}</span>
+          <span className={styles.triggerValue}>{summary}</span>
+          <Icon name="chevron-down" size={12} />
+        </button>
+        {open ? (
+          <div id={listId} className={styles.inlinePanel} role="group" aria-label={`${label} options`}>
+            {renderPanel(() => setOpen(false))}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -94,85 +216,7 @@ export function MultiSelect<T extends MultiSelectItem>({
       </AriaButton>
       <Popover className={styles.popover} placement="bottom start" offset={4}>
         <Dialog className={styles.dialog} aria-label={`${label} options`} id={listId}>
-          {({ close }) => (
-            <div
-              className={styles.panel}
-              role="presentation"
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  moveFocus(1);
-                } else if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  moveFocus(-1);
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  close();
-                }
-              }}
-            >
-              {searchable ? (
-                <div className={styles.searchWrap}>
-                  <Icon name="search" size={12} />
-                  <input
-                    className={styles.search}
-                    placeholder="Search…"
-                    aria-label={`Search ${label}`}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    autoFocus
-                  />
-                </div>
-              ) : null}
-              {selectAll ? (
-                <div className={styles.actions}>
-                  <button
-                    type="button"
-                    className={styles.action}
-                    onClick={() => onChange(new Set(visible.map((i) => i.key)))}
-                  >
-                    Select all
-                  </button>
-                  <button type="button" className={styles.action} onClick={() => onChange(new Set())}>
-                    None
-                  </button>
-                </div>
-              ) : null}
-              <div className={styles.list} ref={listRef}>
-                {visible.length === 0 ? <div className={styles.empty}>No matches</div> : null}
-                {visible.map((item) => (
-                  <div
-                    key={String(item.key)}
-                    className={styles.option}
-                    data-option=""
-                    tabIndex={-1}
-                    role="presentation"
-                  >
-                    <Checkbox
-                      isSelected={value.has(item.key)}
-                      onChange={() => toggle(item.key)}
-                      className={styles.checkbox}
-                    >
-                      <span className={styles.optionLabel}>{renderItem ? renderItem(item) : item.label}</span>
-                      {typeof item.count === 'number' ? (
-                        <span className={styles.count}>{item.count}</span>
-                      ) : null}
-                    </Checkbox>
-                    {onlyAction ? (
-                      <button
-                        type="button"
-                        className={styles.only}
-                        aria-label={`Only ${item.label}`}
-                        onClick={() => onChange(new Set([item.key]))}
-                      >
-                        Only
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {({ close }) => renderPanel(close)}
         </Dialog>
       </Popover>
     </DialogTrigger>
