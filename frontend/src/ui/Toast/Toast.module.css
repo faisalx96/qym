@@ -30,6 +30,10 @@
 .toast[data-tone='success'] {
   border-inline-start-color: var(--success);
 }
+.toast[data-tone='warning'] {
+  border-inline-start-color: var(--warning);
+}
+
 .toast[data-tone='error'] {
   border-inline-start-color: var(--error);
 }

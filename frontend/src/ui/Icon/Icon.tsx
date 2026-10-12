@@ -7,6 +7,7 @@ export type IconName =
   | 'chevron-left'
   | 'chevron-up'
   | 'copy'
+  | 'link'
   | 'check'
   | 'first'
   | 'prev'
@@ -58,6 +59,7 @@ const PATHS: Record<IconName, string> = {
   'chevron-left': 'M15 6l-6 6 6 6',
   'chevron-up': 'M6 15l6-6 6 6',
   copy: 'M9 9h10v10H9zM5 15V5h10',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   check: 'M5 12l5 5L20 7',
   first: 'M18 6l-6 6 6 6M8 6v12',
   prev: 'M15 6l-6 6 6 6',
