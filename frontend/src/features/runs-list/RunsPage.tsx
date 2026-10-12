@@ -377,7 +377,7 @@ export function RunsPage() {
         onOpen={openRun}
         perm={perm}
         onAction={onAction}
-        onSignalDetails={(row) => setDialog({ kind: 'errors', row })}
+        onSignalDetails={(row, metric) => setDialog({ kind: 'errors', row, metric })}
         dimmed={stale || d.runsQ.isPlaceholderData}
         emptyState={empty}
         className={styles.table}

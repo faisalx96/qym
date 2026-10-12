@@ -3,9 +3,19 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button as AriaButton } from 'react-aria-components';
 import type { RunRow } from '@/api/dashboardTypes';
-import { Badge, DropdownMenu, Icon, IconButton, RunStatusBadge, ScoreValue, Tag, Tooltip } from '@/ui';
+import {
+  Badge,
+  DropdownMenu,
+  HelpMarker,
+  Icon,
+  IconButton,
+  RunStatusBadge,
+  ScoreValue,
+  Tag,
+  Tooltip,
+} from '@/ui';
 import { formatDateParts, formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
-import { metricDirection } from '@/lib/metrics';
+import { errorsLeftOut, metricDirection } from '@/lib/metrics';
 import { projectPath, runPath } from '@/app/routes';
 import { runHref } from '@/lib/runs-order';
 import { textDirAttrs } from '@/lib/text';
@@ -217,22 +227,81 @@ export function Signals({ row, onDetails }: { row: RunRow; onDetails?: (row: Run
   );
 }
 
-export function MetricCell({ row, metric }: { row: RunRow; metric: string }) {
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
+}
+
+/** The per-metric error marker: how many errors this metric's mean left out (lower is better) or counted as 0. */
+export function metricErrorLabel(row: RunRow, metric: string, leftOut: boolean, scope: string): string {
+  const scorer = row.metric_error_counts?.[metric] ?? 0;
+  const task = row.task_error_count ?? 0;
+  if (leftOut) {
+    return [
+      scorer
+        ? `${plural(scorer, 'scorer error')}${scope} ${scorer === 1 ? 'is' : 'are'} not counted in the ${metric} mean (lower is better).`
+        : '',
+      task && scorer
+        ? `The run also has ${plural(task, 'task error')}${scope}, left out too unless a reviewer scored them.`
+        : '',
+      task && !scorer
+        ? `The run has ${plural(task, 'task error')}${scope}. Lower is better for ${metric}, so they are left out of its mean unless a reviewer scored them.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+  return `${plural(scorer, `${metric} scorer error`)}${scope}, counted as 0%`;
+}
+
+export function MetricCell({
+  row,
+  metric,
+  onErrorDetails,
+}: {
+  row: RunRow;
+  metric: string;
+  onErrorDetails?: (row: RunRow, metric: string) => void;
+}) {
   const { metricTypes } = useRunsCtx();
   const v = row.metric_averages?.[metric];
   if (v === undefined || !row.metrics.includes(metric)) return <span className={styles.empty}>—</span>;
   const type = metricTypes[metric];
   const dir = metricDirection(row.metric_specs?.[metric]);
+  const leftOut = errorsLeftOut(dir);
   const metricErr = row.metric_error_counts?.[metric] ?? 0;
   const taskErr = row.task_error_count ?? 0;
   const error = metricErr ? 'metric' : taskErr && dir === 'minimize' ? 'task' : null;
+  const scope = row.samples > 1 ? ' across all passes' : '';
+  const marked = leftOut ? metricErr + taskErr > 0 : metricErr > 0;
+  const label = marked ? metricErrorLabel(row, metric, leftOut, scope) : '';
+  const marker = marked ? (
+    <AriaButton
+      className={styles.metricError}
+      data-tone={leftOut || !metricErr ? 'error' : 'metric'}
+      aria-label={label}
+      onPress={() => onErrorDetails?.(row, metric)}
+    >
+      <Tooltip content={label}>
+        <span aria-hidden="true">⚠</span>
+      </Tooltip>
+    </AriaButton>
+  ) : null;
+  const lowSamples = row.report_k != null && row.samples < 2 * row.report_k;
+  const noise = lowSamples ? (
+    <HelpMarker label="high-noise estimate">
+      {`pass@${row.report_k} estimated from only ${row.samples} passes is high-noise; ${2 * (row.report_k ?? 0)}+ recommended.`}
+    </HelpMarker>
+  ) : null;
   if (type === 'numeric') {
     return (
-      <span
-        className={[styles.numeric, styles.mono].join(' ')}
-        title={`${metric}: raw value${dir === 'minimize' ? ', lower is better' : ''}`}
-      >
-        {formatNumericValue(v, 2)}
+      <span className={styles.metric}>
+        <span
+          className={[styles.numeric, styles.mono].join(' ')}
+          title={`${metric}: raw value${dir === 'minimize' ? ', lower is better' : ''}`}
+        >
+          {formatNumericValue(v, 2)}
+        </span>
+        {marker}
       </span>
     );
   }
@@ -253,11 +322,8 @@ export function MetricCell({ row, metric }: { row: RunRow; metric: string }) {
         digits={smartDigits(v, row.metric_neighbor_values?.[metric])}
         error={error}
       />
-      {taskErr && !error ? (
-        <span className={styles.metricGlyph} data-tone="error" title={`${taskErr} task errors counted as 0`}>
-          ⚠
-        </span>
-      ) : null}
+      {marker}
+      {noise}
     </span>
   );
 }

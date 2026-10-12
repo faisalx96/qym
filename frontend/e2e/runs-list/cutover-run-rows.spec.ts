@@ -1,7 +1,8 @@
 /** Cutover of test_dashboard_static.py: empty-state docs link and the Analysis column states. */
 import { test, expect } from '@playwright/test';
 import { createProject, uniqueSlug } from '../helpers';
-import { freshProject, openRuns, runsUrl, dataRows } from './support';
+import { BOOL, LOWER, seedRun } from './seed';
+import { freshProject, openRuns, runsUrl, dataRows, rowOf } from './support';
 
 test.describe('runs list: cutover row details', () => {
   test('the empty project links to the first-run guide', async ({ page, request }) => {
@@ -42,5 +43,31 @@ test.describe('runs list: cutover row details', () => {
     }
     expect(live).toBeGreaterThan(0);
     expect(finished).toBeGreaterThan(0);
+  });
+
+  test('a lower-is-better metric cell says its errors were left out and the marker opens the explanation', async ({
+    page,
+    request,
+  }) => {
+    const s = await freshProject(request, 2, { running: false });
+    await seedRun(request, s.token, {
+      name: 'lower-errors-run',
+      task: 'summarize',
+      dataset: 'cnn-sample',
+      model: 'openai/gpt-4o',
+      metrics: { accuracy: BOOL, latency_s: LOWER },
+      items: [{ accuracy: 1, latency_s: 0.5 }, null, { accuracy: 0, latency_s: 0.7 }],
+      status: 'COMPLETED',
+    });
+    await openRuns(page, s.project.slug);
+    const marker = rowOf(page, 'lower-errors-run').getByRole('button', {
+      name: /Lower is better for latency_s/,
+    });
+    await expect(marker).toBeVisible();
+    await marker.focus();
+    await page.keyboard.press('Enter');
+    const dlg = page.getByRole('dialog', { name: 'latency_s errors' });
+    await expect(dlg).toContainText('Task errors in the run');
+    await expect(dlg).toContainText('left out of its mean');
   });
 });

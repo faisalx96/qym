@@ -51,7 +51,7 @@ export interface RunsTableProps {
   onOpen: (row: RunRow) => void;
   perm: RowPermissions;
   onAction: (id: string, row: RunRow) => void;
-  onSignalDetails: (row: RunRow) => void;
+  onSignalDetails: (row: RunRow, metric?: string) => void;
   loading?: boolean;
   dimmed?: boolean;
   emptyState?: ReactNode;
@@ -60,7 +60,8 @@ export interface RunsTableProps {
 }
 
 function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
-  if (col.id.startsWith('metric-')) return <MetricCell row={row} metric={col.id.slice(7)} />;
+  if (col.id.startsWith('metric-'))
+    return <MetricCell row={row} metric={col.id.slice(7)} onErrorDetails={p.onSignalDetails} />;
   if (col.id.startsWith('trace-')) {
     const v = row.trace_stats?.[col.id.slice(6)];
     if (typeof v !== 'number') return <span>—</span>;
@@ -82,7 +83,7 @@ function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
     case 'status':
       return <StatusCell row={row} />;
     case 'signals':
-      return <Signals row={row} onDetails={p.onSignalDetails} />;
+      return <Signals row={row} onDetails={(r) => p.onSignalDetails(r)} />;
     case 'task':
       return <span title={row.task_name}>{row.task_name || '—'}</span>;
     case 'model':
