@@ -297,9 +297,17 @@ export interface CurvePoint {
 export function Curve({
   series,
   label,
+  domain = [0, 1],
+  format = (v: number) => `${(v * 100).toFixed(1)}%`,
+  xLabel = 'k',
 }: {
   series: Array<{ name: string; tone: string; dash?: boolean; points: CurvePoint[] }>;
   label: string;
+  /** Y range; a score is 0..1, a raw numeric average needs its own. */
+  domain?: [number, number];
+  format?: (value: number) => string;
+  /** X tick prefix: `k` for attempts allowed, `n` for passes observed. */
+  xLabel?: string;
 }) {
   const W = 320;
   const H = 180;
@@ -310,21 +318,31 @@ export function Curve({
     (ks.length > 1
       ? ((k - ks[0]!) / (ks[ks.length - 1]! - ks[0]!)) * (W - pad.l - pad.r)
       : (W - pad.l - pad.r) / 2);
-  const sy = (v: number) => H - pad.b - v * (H - pad.t - pad.b);
+  const span = domain[1] - domain[0] || 1;
+  const sy = (v: number) => H - pad.b - ((v - domain[0]) / span) * (H - pad.t - pad.b);
   return (
     <figure className={styles.curve}>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
-        {[0, 0.25, 0.5, 0.75, 1].map((t) => (
-          <g key={t}>
-            <line className={styles.grid} x1={pad.l} x2={W - pad.r} y1={sy(t)} y2={sy(t)} />
-            <text className={styles.tick} x={pad.l - 4} y={sy(t)} textAnchor="end" dominantBaseline="middle">
-              {Math.round(t * 100)}%
-            </text>
-          </g>
-        ))}
+        {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+          const t = domain[0] + f * span;
+          return (
+            <g key={f}>
+              <line className={styles.grid} x1={pad.l} x2={W - pad.r} y1={sy(t)} y2={sy(t)} />
+              <text
+                className={styles.tick}
+                x={pad.l - 4}
+                y={sy(t)}
+                textAnchor="end"
+                dominantBaseline="middle"
+              >
+                {domain[1] === 1 && domain[0] === 0 ? `${Math.round(t * 100)}%` : format(t)}
+              </text>
+            </g>
+          );
+        })}
         {ks.map((k) => (
           <text key={k} className={styles.tick} x={sx(k)} y={H - pad.b + 14} textAnchor="middle">
-            k={k}
+            {xLabel}={k}
           </text>
         ))}
         {series.map((s) => {
@@ -357,7 +375,7 @@ export function Curve({
                   className={styles.marker}
                   style={{ stroke: s.tone }}
                 >
-                  <title>{`${s.name} @k=${p.k}: ${(p.value! * 100).toFixed(1)}%`}</title>
+                  <title>{`${s.name} @${xLabel}=${p.k}: ${format(p.value!)}`}</title>
                 </circle>
               ))}
             </g>

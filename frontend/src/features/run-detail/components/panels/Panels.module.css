@@ -111,6 +111,7 @@
 
 .rowHead {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-sm);
@@ -229,4 +230,10 @@
   font-size: var(--font-md);
   font-weight: 700;
   color: var(--text-primary);
+}
+
+/* A wide table scrolls inside the panel instead of widening it. */
+.tableScroll {
+  max-width: 100%;
+  overflow-x: auto;
 }
