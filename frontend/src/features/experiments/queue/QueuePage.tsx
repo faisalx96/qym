@@ -61,6 +61,7 @@ import {
   runProgress,
   splitJobs,
   CONTROL_HINT,
+  titleCase,
 } from './lib';
 import styles from './QueuePage.module.css';
 
@@ -246,6 +247,12 @@ export function QueuePage() {
           </span>
         );
       },
+    },
+    {
+      id: 'priority',
+      label: 'Priority',
+      width: 90,
+      cell: (j) => (j.priority ? titleCase(j.priority) : '—'),
     },
     {
       id: 'status',
@@ -439,7 +446,7 @@ export function QueuePage() {
               columns={columns}
               rows={jobs}
               rowKey={(j) => j.id}
-              minWidth={960}
+              minWidth={1050}
               selection={{ selected, onChange: setSelected }}
               aria-label="Queued jobs in dispatch order"
               emptyState={

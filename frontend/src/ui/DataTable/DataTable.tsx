@@ -53,7 +53,13 @@ export interface DataTableProps<Row> {
   className?: string;
   /** Row-level href makes rows links (keyboard: Enter). */
   rowHref?: (row: Row) => string | undefined;
-  selection?: { selected: Set<Key>; onChange: (keys: Set<Key>) => void; mode?: 'multiple' | 'single' };
+  selection?: {
+    selected: Set<Key>;
+    onChange: (keys: Set<Key>) => void;
+    mode?: 'multiple' | 'single';
+    /** Rows that cannot be selected (the checkbox is disabled, the row stays otherwise usable). */
+    isDisabled?: (row: Row) => boolean;
+  };
   dimmed?: boolean;
 }
 
@@ -126,9 +132,15 @@ export function DataTable<Row>({
         }}
         selectionMode={selection?.mode ?? (selection ? 'multiple' : 'none')}
         selectedKeys={selection?.selected}
+        disabledKeys={selection?.isDisabled ? rows.filter(selection.isDisabled).map(rowKey) : undefined}
+        disabledBehavior="selection"
         onSelectionChange={(keys) => {
           if (!selection) return;
-          selection.onChange(keys === 'all' ? new Set(rows.map(rowKey)) : new Set(keys));
+          selection.onChange(
+            keys === 'all'
+              ? new Set(rows.filter((r) => !selection.isDisabled?.(r)).map(rowKey))
+              : new Set(keys),
+          );
         }}
         onRowAction={
           onRowAction

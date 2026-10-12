@@ -127,7 +127,12 @@ function RemoteEnv({
           <div className={styles.cell}>
             <Link to={experimentPath(slug, i.match.experiment_id)}>{i.match.experiment_name}</Link>
             <span className={styles.meta}>
-              Local status {titleCase(i.match.status)} {i.stale ? <Tag tone="warning">Stale</Tag> : null}
+              Local status {titleCase(i.match.status)}{' '}
+              {i.stale ? (
+                <Tag tone="warning" title="The local job already finished, but the service still runs it.">
+                  Stale
+                </Tag>
+              ) : null}
             </span>
           </div>
         ) : (
@@ -143,6 +148,10 @@ function RemoteEnv({
     },
   ];
   const stale = env.items.some((i) => i.stale);
+  const cancellable = env.orphan_count + env.stale_count > 0 || env.items.some((i) => i.orphan || i.stale);
+  // Orphans only: the wording is "orphan job"; once a stale job is selected it is "remote job".
+  const staleSelected = ids.some((id) => env.items.find((i) => i.remote_job_id === id)?.stale);
+  const noun = staleSelected ? 'remote job' : 'orphan job';
   return (
     <div className={styles.env}>
       <div className={styles.envHead}>
@@ -154,7 +163,7 @@ function RemoteEnv({
           {env.stale ? ' · refreshing' : ''} · {plural(env.orphan_count, 'orphan')} · {env.stale_count} stale
         </span>
         {env.fetch_error ? <span className={styles.err}>Last refresh failed: {env.fetch_error}</span> : null}
-        {canCancel ? (
+        {canCancel && cancellable ? (
           <Button size="sm" variant="danger" isDisabled={!ids.length} onPress={() => setConfirm(true)}>
             Cancel selected {stale ? 'remote jobs' : 'orphans'} ({ids.length})
           </Button>
@@ -166,7 +175,11 @@ function RemoteEnv({
         rows={env.items}
         rowKey={(i) => i.remote_job_id}
         minWidth={860}
-        selection={canCancel ? { selected, onChange: setSelected } : undefined}
+        selection={
+          canCancel && cancellable
+            ? { selected, onChange: setSelected, isDisabled: (i) => !(i.orphan || i.stale) }
+            : undefined
+        }
         aria-label={`Remote jobs on ${env.environment_name}`}
         emptyState={<Text tone="secondary">The service holds no queued or running jobs.</Text>}
       />
@@ -179,13 +192,13 @@ function RemoteEnv({
         <CancelSplitDialog
           open
           onOpenChange={(o) => !o && setConfirm(false)}
-          title={`Cancel ${plural(ids.length, 'remote job')} on ${env.environment_name}?`}
+          title={`Cancel ${plural(ids.length, noun)} on ${env.environment_name}?`}
           description={[
             'These jobs are cancelled directly on the Evaluation Service. The call is audit-logged.',
           ]}
           sections={remoteSections(env.items, ids)}
           actionable={ids.length}
-          confirmLabel={`Cancel ${plural(ids.length, 'remote job')}`}
+          confirmLabel={`Cancel ${plural(ids.length, staleSelected ? 'remote job' : 'orphan')}`}
           onConfirm={async (reason) => {
             try {
               const res = await cancel.mutateAsync({
