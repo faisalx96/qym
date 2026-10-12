@@ -33,13 +33,16 @@ export function useRunsData(
     () => buildColumns(overview?.all_metrics ?? [], traceWithData, visibleKeys),
     [overview?.all_metrics, traceWithData, visibleKeys],
   );
-  const sort = sortColumnVisible(view.sort, columnSet.visible) ? view.sort : DEFAULT_SORT;
+  // A metric/trace sort waits for the overview (the column set is empty until it lands): no flash of time-desc.
+  const needsColumns = /^(metric-|trace-)/.test(view.sort);
+  const columnsKnown = !needsColumns || Boolean(overview);
+  const sort = !columnsKnown || sortColumnVisible(view.sort, columnSet.visible) ? view.sort : DEFAULT_SORT;
 
   const column = collatedColumn(sort);
   const order = column
     ? collation(sort, overview?.sort_values?.[column as keyof NonNullable<typeof overview>['sort_values']])
     : null;
-  const ready = !column || Boolean(overview);
+  const ready = (!column || Boolean(overview)) && columnsKnown;
 
   const body: RunsBody = {
     project_slug: slug,

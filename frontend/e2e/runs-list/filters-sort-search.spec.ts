@@ -293,6 +293,16 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await expect(page.locator('th[aria-sort="descending"], th[aria-sort="ascending"]')).toHaveCount(1);
   });
 
+  test('a deep-linked metric sort never asks for the time-desc order first', async ({ page, request }) => {
+    const s = await sharedProject(request, 12);
+    const cap = capture(page, 'runs');
+    await openRuns(page, s.project.slug, 'sort=metric-accuracy-desc');
+    await expect(page.locator('th[aria-sort="descending"]')).toContainText(/accuracy/i);
+    const sorts = listRequests(cap).map((c) => c.body.sort);
+    expect(sorts.length).toBeGreaterThan(0);
+    expect(sorts.every((x) => x === 'metric-accuracy-desc')).toBe(true);
+  });
+
   test('a sort on a hidden metric column falls back to time-desc', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug, 'sort=metric-accuracy-asc');

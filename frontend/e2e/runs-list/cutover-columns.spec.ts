@@ -82,6 +82,21 @@ test.describe('runs list: Display > Columns', () => {
     expect(again[0]).toContain('Run');
   });
 
+  test('the menu searches columns and All / None act on what is listed', async ({ page, request }) => {
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    await openMenu(page);
+    await menu(page).getByRole('searchbox', { name: 'Search columns' }).fill('mod');
+    await expect(box(page, 'Model')).toBeVisible();
+    await expect(box(page, 'Task')).toHaveCount(0);
+    await menu(page).getByRole('button', { name: 'None', exact: true }).click();
+    await expect(box(page, 'Model')).not.toBeChecked();
+    expect((await headers(page)).some((h) => h.startsWith('Model'))).toBe(false);
+    expect((await headers(page)).some((h) => h.startsWith('Task'))).toBe(true);
+    await menu(page).getByRole('button', { name: 'All', exact: true }).click();
+    await expect(box(page, 'Model')).toBeChecked();
+  });
+
   test('a saved choice survives a reload; Reset to default restores every column', async ({
     page,
     request,

@@ -23,3 +23,10 @@
 .option {
   padding: 2px 0;
 }
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-sm) 0;
+}

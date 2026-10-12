@@ -192,6 +192,22 @@ test.describe('charts (J7)', () => {
     await expect(table.getByRole('button', { name: /^Expand / }).first()).toBeVisible();
   });
 
+  test('the Columns menu toggles the group stats and offers no Duration', async ({ page, request }) => {
+    const s = await chartsProject(request);
+    await page.goto(chartsUrl(s.project.slug));
+    const c = card(page, 'text2sql');
+    await expect(loadedTable(page, 'text2sql')).toBeVisible();
+    await c.getByRole('radiogroup', { name: 'text2sql rows' }).getByText('Grouped', { exact: true }).click();
+    const table = loadedTable(page, 'text2sql');
+    await expect(table.locator('thead th', { hasText: 'Consistency' })).toBeVisible();
+    await page.getByRole('button', { name: 'Columns' }).click();
+    const menu = page.getByRole('dialog', { name: 'Columns' });
+    await expect(menu.getByRole('checkbox', { name: 'Duration', exact: true })).toHaveCount(0);
+    await menu.getByRole('checkbox', { name: 'Consistency', exact: true }).click({ force: true });
+    await expect(table.locator('thead th', { hasText: 'Consistency' })).toHaveCount(0);
+    await expect(table.locator('thead th', { hasText: 'Pass@K' })).toBeVisible();
+  });
+
   test('filters apply to the charts (task filter leaves one card) and Clear filters restores', async ({
     page,
     request,
