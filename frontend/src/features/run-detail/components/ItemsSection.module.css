@@ -1,5 +1,6 @@
 /* Items section frame. */
 .section {
+  position: relative; /* contains the absolutely positioned .srOnly live regions */
   container-type: inline-size;
   display: flex;
   flex-direction: column;
@@ -43,6 +44,8 @@
 
 .srOnly {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   overflow: hidden;

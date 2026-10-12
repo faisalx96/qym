@@ -147,6 +147,8 @@ describe('csv with the old headers', () => {
     expect(head).toContain('meta:domain');
     expect(head).toContain('q_score');
     expect(head).toContain('q:root_cause_issues');
+    expect(head).not.toContain('meta:metric_analyses');
+    expect(head).not.toContain('meta:analysis_warning');
     const line = csv[1]!;
     expect(line).toContain('"[{""category"":""Retrieval""');
     expect(line.split(',')[head.indexOf('latency_ms')]).toBe('0');

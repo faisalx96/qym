@@ -43,6 +43,27 @@ function parseObject(value: unknown): Record<string, unknown> | null {
 const scalar = (v: unknown): string =>
   v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
 
+/** Item metadata that is internal or has its own column (root cause JSON), never a `meta:` column. */
+export const CSV_META_SKIP = new Set([
+  'task_started_at_ms',
+  'trace_stats',
+  'metric_analyses',
+  'analysis_error',
+  'analysis_warning',
+  'retry_count',
+  'root_cause',
+  'root_causes',
+  'root_cause_issues',
+  'root_cause_detail',
+  'root_cause_reason',
+  'root_cause_note',
+  'root_cause_source',
+  'root_cause_confidence',
+  'solution',
+  'solution_note',
+  'solution_source',
+]);
+
 export function discoverColumns(rows: Row[], model: RunModel): CsvColumn[] {
   const cols: CsvColumn[] = [
     { id: 'index', label: 'index', header: '#', group: 'Core', value: (r) => String(r.index + 1) },
@@ -79,9 +100,7 @@ export function discoverColumns(rows: Row[], model: RunModel): CsvColumn[] {
   sub('output', (r) => r.output_full ?? r.output);
   const metaKeys = new Set<string>();
   rows.forEach((r) =>
-    Object.keys(r.item_metadata ?? {}).forEach(
-      (k) => k !== 'task_started_at_ms' && k !== 'trace_stats' && metaKeys.add(k),
-    ),
+    Object.keys(r.item_metadata ?? {}).forEach((k) => !CSV_META_SKIP.has(k) && metaKeys.add(k)),
   );
   Array.from(metaKeys)
     .sort()

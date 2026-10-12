@@ -373,6 +373,12 @@ test('at 420px neither the page nor the topbar title overflows', async ({ page }
     return sc.scrollWidth - sc.clientWidth;
   });
   expect(overflow).toBeLessThanOrEqual(1);
+  await page.evaluate(() => document.getElementById('shell-content')?.scrollTo(0, 400));
+  const doc = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    inner: window.innerWidth,
+  }));
+  expect(doc.scroll).toBeLessThanOrEqual(doc.inner);
   const boxes = await page.evaluate(() => {
     const crumbs = Array.from(document.querySelectorAll('header nav ol > li')).map((li) => {
       const r = li.getBoundingClientRect();
