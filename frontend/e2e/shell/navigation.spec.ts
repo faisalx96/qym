@@ -324,7 +324,7 @@ test.describe('deep links (brief 01 §8 route contract)', () => {
       { path: `/projects/${p.slug}/runs/${encodedRun}/analyzer`, expect: 'coming-soon' },
       { path: `/projects/${p.slug}/settings`, expect: 'settings' },
       { path: `/projects/${p.slug}/settings?tab=apikeys`, expect: 'settings' },
-      { path: `/projects/${p.slug}/settings?tab=environments&env=e1&promote=saved&id=x`, expect: 'settings' },
+      { path: `/projects/${p.slug}/settings?tab=environments&env=e1&promote=saved&id=x`, expect: 'page' },
     ];
     for (const u of urls) {
       await gotoApp(page, u.path);
