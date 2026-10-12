@@ -62,11 +62,11 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
       ) : (
         <>
           {/* Scrollable region: focusable so keyboard users can scroll it. */}
-          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
           <div
             ref={box}
             className={s.messages}
             data-expanded={expanded || !maxHeight ? '' : undefined}
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
             tabIndex={0}
             role="region"
             aria-label="Prompt messages"
