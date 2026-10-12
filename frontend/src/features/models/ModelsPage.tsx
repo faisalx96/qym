@@ -114,7 +114,19 @@ export function ModelsPage() {
     { owner: (id) => owners[id] ?? id, dataset: datasetLabel },
   );
 
-  const [custom, setCustom] = useState<Record<string, string[]>>({});
+  // Hand-picked runs belong to one task, dataset and filter set: they reset when any of those change.
+  const scopeKey = `${task}|${dataset}|${viewKey}`;
+  const [customState, setCustomState] = useState<{ scope: string; picks: Record<string, string[]> }>({
+    scope: '',
+    picks: {},
+  });
+  const custom = useMemo(
+    () => (customState.scope === scopeKey ? customState.picks : {}),
+    [customState, scopeKey],
+  );
+  const setCustom = (
+    next: Record<string, string[]> | ((c: Record<string, string[]>) => Record<string, string[]>),
+  ) => setCustomState({ scope: scopeKey, picks: typeof next === 'function' ? next(custom) : next });
   const [editing, setEditing] = useState<string | null>(null);
   const [thresholds, setThresholds] = useState<Record<string, number>>({});
   const [shownState, setShownState] = useState<Set<string> | null>(null);

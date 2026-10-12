@@ -300,9 +300,13 @@ export function distributionSegments(dist: number[], k: number, totalItems: numb
   return out;
 }
 
-/** The options a filter leaves for a task or dataset select (a NONE selection leaves everything). */
+/**
+ * The options a filter leaves for a task or dataset select. A NONE selection or a single value (which is
+ * just the select's own current pick, mirrored into the URL) leaves everything, so the select can switch;
+ * two or more values (chosen in the Filters popover) narrow the options to those.
+ */
 export function scopedOptions(selected: string[], available: string[], none = '__none__'): string[] {
-  if (!selected.length || selected.includes(none)) return available;
+  if (selected.length < 2 || selected.includes(none)) return available;
   return available.filter((a) => selected.includes(a));
 }
 
