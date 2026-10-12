@@ -97,4 +97,32 @@ test.describe('runs list: UX layout regressions', () => {
     await dlg.getByRole('button', { name: 'Cancel' }).click();
     await expect(dlg).toHaveCount(0);
   });
+
+  for (const width of [390, 1280]) {
+    test(`trend x-axis labels neither overlap nor clip at ${width}px`, async ({ page, request }) => {
+      const s = await freshProject(request, 12);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/projects/${s.project.slug}/overview?range=90d`);
+      const fig = page.getByTestId('trend-chart');
+      await expect(fig).toBeVisible({ timeout: 15_000 });
+      await expect(
+        fig
+          .locator('text.recharts-cartesian-axis-tick-value', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ })
+          .first(),
+      ).toBeVisible();
+      const boxes = await fig
+        .locator('text.recharts-cartesian-axis-tick-value', { hasText: /^[A-Z][a-z]{2} \d{1,2}$/ })
+        .evaluateAll((els) =>
+          els.map((e) => {
+            const r = e.getBoundingClientRect();
+            return { l: r.left, r: r.right };
+          }),
+        );
+      expect(boxes.length).toBeGreaterThan(1);
+      const frame = (await fig.boundingBox())!;
+      for (let i = 1; i < boxes.length; i++)
+        expect(boxes[i]!.l).toBeGreaterThanOrEqual(boxes[i - 1]!.r - 0.5);
+      expect(boxes.at(-1)!.r).toBeLessThanOrEqual(frame.x + frame.width + 0.5);
+    });
+  }
 });
