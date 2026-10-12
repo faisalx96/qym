@@ -1,5 +1,5 @@
 /** UX review (group C): the single-key opt-out (WCAG 2.1.4) also covers J / K on the run page and "/" in the trace drawer. */
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { openRun, seedClassic, seedProject, settleDashboard, type Seeded } from './support';
 
 let s: Seeded;
@@ -12,8 +12,7 @@ test.beforeAll(async () => {
   settleDashboard();
 });
 
-const pager = (page: import('@playwright/test').Page) =>
-  page.getByRole('navigation', { name: 'Previous and next run' });
+const pager = (page: Page) => page.getByRole('navigation', { name: 'Previous and next run' });
 
 test('J and K do nothing once single-key shortcuts are switched off', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('qym:single-key-shortcuts', 'off'));
