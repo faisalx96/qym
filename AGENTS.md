@@ -12,7 +12,7 @@ This is a monorepo with two independently-buildable packages under `packages/`:
   - `adapters/`: task adapters (functions, LangChain/OpenAI)
   - `platform/`: platform client and defaults
   - `utils/`: errors and HTML/HTTP frontend helpers
-  - `server/`: local UIServer + DashboardServer
+  - `server/`: local UIServer (offline viewer: live run SSE + saved .csv/.xlsx files)
   - `cli/`: agent-native CLI package (Typer-based, noun-verb subcommands)
   - `_static/ui/`: the offline local run viewer (build output of `frontend/`, gitignored)
 - `packages/platform/qym_platform/`: Platform Python package (`pip install qym-platform`)
@@ -123,6 +123,10 @@ qym metric list --json
 # Analysis
 qym analyze run <run_id> --json
 qym analyze summary <run_id> --json
+
+# Local viewer (offline, no platform)
+qym run create ... --local-ui [--ui-port N] [--no-open]   # live viewer while the run executes
+qym ui [FILE.csv|FILE.xlsx] [--port N] [--results-dir DIR]  # open a saved results file
 
 # Config
 qym config show --json
