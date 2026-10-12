@@ -30,13 +30,13 @@ describe('archive previews', () => {
   it('a failed archive preview shows a warning and keeps Archive available', async () => {
     wrap(<ArchiveProjectDialog project={project} open onOpenChange={() => {}} />);
     expect(await screen.findByText(/Could not check for running runs/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Archive project' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Archive anyway' })).toBeEnabled();
   });
 
   it('a failed unarchive preview shows a warning and keeps both actions', async () => {
     wrap(<UnarchiveProjectDialog project={project} open onOpenChange={() => {}} />);
     expect(await screen.findByText(/Could not check for active API keys/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unarchive' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Unarchive anyway' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Revoke keys first' })).toBeInTheDocument();
   });
 });
