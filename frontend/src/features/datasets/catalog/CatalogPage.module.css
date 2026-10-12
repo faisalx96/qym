@@ -108,3 +108,11 @@
   display: flex;
   gap: var(--space-sm);
 }
+
+.state [data-kind='prod'] {
+  color: var(--success);
+}
+
+.state [data-kind='draft'] {
+  color: var(--warning);
+}

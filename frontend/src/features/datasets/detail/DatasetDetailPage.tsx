@@ -10,6 +10,7 @@ import { downloadUrl, useDataset, useDatasetVersions, useSetProduction, type Dat
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import { platformUrl } from '@/lib/runtime';
+import { useCrumbLabel } from '@/lib/crumb-label';
 import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { Badge, Button, DropdownMenu, ErrorState, Icon, IconButton, Identicon, PageHeader, Skeleton, TabPanel, Tabs, Tag, Text, Tooltip, useToast } from '@/ui';
@@ -40,6 +41,7 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
   const active = useMemo(() => resolveActiveVersion(versions, route.version), [versions, route.version]);
   const pending = dsQuery.isPending || (Boolean(dataset) && versionsQuery.isPending);
   const showSkeleton = useDelayedPending(pending);
+  useCrumbLabel(dataset?.name);
   useDocumentTitle(dataset ? `${dataset.name}${route.itemId ? ` · ${route.itemId}` : ''}` : `${project.name} · Datasets`);
 
   // Normalise the URL: canonical slug, `?v=` always present, legacy tab=versions → lineage.

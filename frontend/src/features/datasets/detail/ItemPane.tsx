@@ -1,7 +1,8 @@
 /** Docked (non-modal) item editor beside the items table: Text/JSON fields, sticky footer, Prev/Next. */
+import { useState } from 'react';
 import { useDatasetItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
-import { Button, ErrorState, IconButton, LinkButton, Skeleton, Text, useToast } from '@/ui';
+import { Button, ConfirmDialog, ErrorState, IconButton, LinkButton, Skeleton, Text, useToast } from '@/ui';
 import { FieldEditor } from '../components/FieldEditor';
 import { useItemEditor } from '../item/useItemEditor';
 import { datasetPath } from '../lib/route';
@@ -27,11 +28,18 @@ export function ItemPane({ slug, dataset, version, itemId, editable, position, q
   const q = useDatasetItem(slug, dataset.slug, version.version, itemId);
   const item: DatasetItem | undefined = q.data;
   const editor = useItemEditor(slug, dataset.slug, version.version, item);
+  // Saving a field as a different type (string -> number ...) asks first (UX must-fix 7).
+  const [typeConfirm, setTypeConfirm] = useState<{ names: string[]; resolve: (ok: boolean) => void } | null>(null);
+  const askTypeChange = (names: string[]) => new Promise<boolean>((resolve) => setTypeConfirm({ names, resolve }));
+  const answerTypeChange = (ok: boolean) => {
+    typeConfirm?.resolve(ok);
+    setTypeConfirm(null);
+  };
 
   // Publish dirtiness + imperative save/reset to the workspace on every render.
   const saveAll = async (): Promise<boolean> => {
     if (!editor.valid) return false;
-    if (editor.typeChanges.length && onTypeChangeConfirm && !(await onTypeChangeConfirm(editor.typeChanges))) return false;
+    if (editor.typeChanges.length && !(await (onTypeChangeConfirm ?? askTypeChange)(editor.typeChanges))) return false;
     try {
       const saved = await editor.save();
       if (saved) toast.show(`Item ${saved.item_id} saved`, { tone: 'success' });
@@ -84,6 +92,17 @@ export function ItemPane({ slug, dataset, version, itemId, editable, position, q
           </Button>
         </footer>
       ) : null}
+      <ConfirmDialog
+        open={typeConfirm !== null}
+        onOpenChange={(o) => {
+          if (!o) answerTypeChange(false);
+        }}
+        title="Change the stored type?"
+        description={`These fields will be saved as a different type: ${(typeConfirm?.names ?? []).join(', ')}.`}
+        confirmLabel="Save with new type"
+        tone="accent"
+        onConfirm={() => answerTypeChange(true)}
+      />
     </aside>
   );
 }

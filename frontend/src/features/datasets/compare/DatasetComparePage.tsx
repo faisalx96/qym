@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchFullCompare, useCompare, useDataset, useDatasetVersions, type CompareChangedEntry, type CompareItemEntry, type CompareKind, type DatasetVersion } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
+import { useCrumbLabel } from '@/lib/crumb-label';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { Button, EmptyState, ErrorState, Icon, IconButton, LinkButton, PageHeader, Select, Skeleton, StatStrip, TabPanel, Tabs, Tag, Text, useToast } from '@/ui';
@@ -33,6 +34,7 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
   const versionsQuery = useDatasetVersions(slug, datasetRef, Boolean(dsQuery.data));
   const versions = useMemo(() => versionsQuery.data ?? [], [versionsQuery.data]);
   const dataset = dsQuery.data;
+  useCrumbLabel(dataset?.name);
   useDocumentTitle(dataset ? `${dataset.name} · Compare` : `${project.name} · Compare versions`);
 
   // Defaults: head = active (production/newest), base = its parent or the previous version.
@@ -68,7 +70,19 @@ export function DatasetComparePage({ datasetRef }: { datasetRef: string }) {
       </div>
     );
   }
-  if (!head || !base) return null;
+  if (!head || !base) {
+    const missing = [route.base && !base ? route.base : null, route.head && !head ? route.head : null].filter(Boolean).join(', ');
+    return (
+      <div className={fullWidth}>
+        <PageHeader title="Compare versions" description={dataset.name} />
+        <EmptyState
+          title="Version not found"
+          body={`Dataset version or alias not found${missing ? `: ${missing}` : ''}.`}
+          action={<LinkButton to={comparePath(slug, dataset.slug)} variant="neutral">Compare the default versions</LinkButton>}
+        />
+      </div>
+    );
+  }
 
   const items = versions.map((v) => ({ key: v.version, label: `${v.version}${v.name ? ` — ${v.name}` : ''} (${v.status})` }));
   const go = (next: { base?: string; head?: string; tab?: CompareKind }) =>

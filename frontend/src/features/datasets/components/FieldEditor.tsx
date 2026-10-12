@@ -38,13 +38,15 @@ export interface FieldStatus {
   toType: StoredType | null;
 }
 
+const METADATA_SHAPE_ERROR = 'Metadata must be a JSON object.';
+
 /** Derive validity / touched / resulting type from editor state. */
 export function fieldStatus(original: unknown, state: FieldState, jsonOnly = false): FieldStatus {
   const fromType = storedType(original);
   const parsed = editorTextToValue(state.text, state.mode);
   if (!parsed.ok) return { ok: false, touched: true, error: parsed.error, fromType, toType: null };
   if (jsonOnly && parsed.value !== null && (typeof parsed.value !== 'object' || Array.isArray(parsed.value)))
-    return { ok: false, touched: true, error: 'Metadata must be a JSON object.', fromType, toType: null };
+    return { ok: false, touched: true, error: METADATA_SHAPE_ERROR, fromType, toType: null };
   const touched = !sameValue(parsed.value, original);
   return { ok: true, touched, value: parsed.value, fromType, toType: storedType(parsed.value) };
 }
@@ -128,7 +130,9 @@ export function FieldEditor({ label, value, editable, jsonOnly, state, onChange,
             <span id={`${id}-status`} className={styles.status} data-state={!status.ok ? 'error' : status.touched ? 'changed' : 'same'} aria-live="polite">
               <span className={styles.dot} aria-hidden="true" />
               {!status.ok
-                ? `Not valid JSON${!jsonOnly ? '. Switch to Text to save it as a string.' : ''}${status.error ? ` (${status.error})` : ''}`
+                ? status.error === METADATA_SHAPE_ERROR
+                  ? METADATA_SHAPE_ERROR
+                  : `Not valid JSON${!jsonOnly ? '. Switch to Text to save it as a string.' : ''}${status.error ? ` (${status.error})` : ''}`
                 : status.touched
                   ? status.toType !== status.fromType
                     ? `will be saved as ${status.toType}`

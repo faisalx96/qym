@@ -47,6 +47,8 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
           : { label: pageLabel || 'Environment' },
       );
       if (nested) crumbs.push({ label: 'Default preset' });
+    } else if (route.page === 'datasets' && /\/datasets\/[^/]+/.test(pathname)) {
+      crumbs.push({ label: 'Datasets', to: projectPath(project.slug, 'datasets') }, { label: pageLabel || 'Dataset' });
     } else {
       crumbs.push({ label: route.label });
     }

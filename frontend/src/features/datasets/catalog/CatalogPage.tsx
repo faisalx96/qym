@@ -3,7 +3,7 @@
  * client-side and mirrored to `?q=`; sort lives in `?sort=`.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useDatasetCatalog, type Dataset } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
@@ -27,6 +27,7 @@ export function CatalogPage() {
   const [search, setSearch] = useState(params.get('q') ?? '');
   const sortRaw = params.get('sort') ?? 'updated_desc';
   const sort = (CATALOG_SORTS.some((s) => s.key === sortRaw) ? sortRaw : 'updated_desc') as CatalogSort;
+  const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
 
@@ -58,38 +59,40 @@ export function CatalogPage() {
       title="Datasets"
       description={query.data ? `${pluralize(datasets.length, 'dataset')} · ${pluralize(runTotal, 'run')}` : 'Versioned test sets for this project'}
       actions={
-        datasets.length ? (
-          <>
-            <SearchField label="Search datasets" placeholder="Search datasets…" value={search} onChange={setSearch} width={240} />
-            <Select
-              label="Sort"
-              hideLabel
-              items={CATALOG_SORTS.map((s) => ({ key: s.key, label: s.label }))}
-              value={sort}
-              onChange={(k) => replaceUrlQuery({ sort: k === 'updated_desc' ? null : String(k) })}
-              searchable={false}
-              width={150}
-            />
-            <LinkButton to={catalogPath(slug, { view: 'deleted' })} variant="ghost">
-              Deleted datasets
-            </LinkButton>
-            {canCreate ? (
-              <DropdownMenu
-                label="New dataset"
-                trigger={
-                  <Button variant="primary" icon={<Icon name="plus" size={12} />} iconEnd={<Icon name="chevron-down" size={12} />} data-testid="new-dataset">
-                    New dataset
-                  </Button>
-                }
-                items={[
-                  { id: 'blank', label: 'Start blank', description: 'Create an empty dataset' },
-                  { id: 'import', label: 'Import CSV / TSV / JSON / JSONL', description: 'Upload a file as version v1' },
-                ]}
-                onAction={(id) => (id === 'blank' ? setCreating(true) : setImporting(true))}
+        <>
+          {datasets.length ? (
+            <>
+              <SearchField label="Search datasets" placeholder="Search datasets…" value={search} onChange={setSearch} width={240} />
+              <Select
+                label="Sort"
+                hideLabel
+                items={CATALOG_SORTS.map((s) => ({ key: s.key, label: s.label }))}
+                value={sort}
+                onChange={(k) => replaceUrlQuery({ sort: k === 'updated_desc' ? null : String(k) })}
+                searchable={false}
+                width={150}
               />
-            ) : null}
-          </>
-        ) : undefined
+            </>
+          ) : null}
+          <LinkButton to={catalogPath(slug, { view: 'deleted' })} variant="ghost">
+            Deleted datasets
+          </LinkButton>
+          {canCreate ? (
+            <DropdownMenu
+              label="New dataset"
+              trigger={
+                <Button variant="primary" icon={<Icon name="plus" size={12} />} iconEnd={<Icon name="chevron-down" size={12} />} data-testid="new-dataset">
+                  New dataset
+                </Button>
+              }
+              items={[
+                { id: 'blank', label: 'Start blank', description: 'Create an empty dataset' },
+                { id: 'import', label: 'Import CSV / TSV / JSON / JSONL', description: 'Upload a file as version v1' },
+              ]}
+              onAction={(id) => (id === 'blank' ? setCreating(true) : setImporting(true))}
+            />
+          ) : null}
+        </>
       }
     />
   );
@@ -131,7 +134,9 @@ export function CatalogPage() {
         </ul>
       ) : null}
       <NewDatasetDialog open={creating} onOpenChange={setCreating} slug={slug} />
-      <UploadWizard open={importing} onOpenChange={setImporting} slug={slug} mode="new" catalog={datasets} canSetProduction onDone={() => undefined} />
+      <UploadWizard open={importing} onOpenChange={setImporting} slug={slug} mode="new" catalog={datasets} canSetProduction onDone={(r) => {
+          if (r.dataset) navigate(datasetPath(slug, r.dataset.slug, { tab: 'items', v: r.version?.version }));
+        }} />
     </div>
   );
 }
@@ -145,7 +150,16 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
           <Text variant="lg" as="span" truncate>
             {d.name}
           </Text>
-          <span className={styles.state}>{catalogStateLine(d)}</span>
+          <span className={styles.state}>
+            {catalogStateLine(d)
+              .split(' · ')
+              .map((part, i) => (
+                <span key={part} data-kind={part.endsWith(' prod') ? 'prod' : part.endsWith(' draft') ? 'draft' : undefined}>
+                  {i ? ' · ' : ''}
+                  {part}
+                </span>
+              ))}
+          </span>
         </div>
         {d.private_test_set ? <Badge tone="warning">Private test set</Badge> : null}
       </div>
@@ -160,7 +174,7 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
           <strong>{catalogVersionCount(d)}</strong> {catalogVersionCount(d) === 1 ? 'version' : 'versions'}
         </span>
         <span>
-          <strong>{d.run_count.toLocaleString()}</strong> runs
+          <strong>{d.run_count.toLocaleString()}</strong> {d.run_count === 1 ? 'run' : 'runs'}
         </span>
       </div>
       <div className={styles.cardFoot}>

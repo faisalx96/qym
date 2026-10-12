@@ -403,6 +403,11 @@ function WizardInner({
                     width={260}
                   />
                 ) : null}
+                {parsed.kind === 'csv' && parsed.detectedEncoding !== 'utf-8' && (encoding ?? parsed.encoding) === parsed.detectedEncoding ? (
+                  <Text variant="sm" tone="muted" data-testid="encoding-note">
+                    This file is not UTF-8, so it was read as {encodingLabel(parsed.detectedEncoding)}. Pick another encoding if the text looks wrong.
+                  </Text>
+                ) : null}
                 {parsed.kind === 'csv' && parsed.warnings.length ? (
                   <Text variant="sm" tone="warning" role="status">
                     {parsed.warnings.join(' ')}

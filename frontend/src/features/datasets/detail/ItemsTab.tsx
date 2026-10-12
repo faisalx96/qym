@@ -3,7 +3,8 @@
  * with metric columns; private test sets show the locked state and never
  * request items.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Key } from 'react-aria-components';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDatasetItems, useDeleteItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
@@ -312,13 +313,38 @@ export function ItemsTab({ slug, dataset, version, readOnly, onAddItem, onImport
   );
 }
 
-/** Mono one-line preview; Arabic text flows RTL. */
+/** Mono one-line preview; Arabic text flows RTL. Hovering for 700 ms shows the full value. */
 export function Preview({ value }: { value: unknown }) {
   const text = previewValue(value);
   const dir = textDirAttrs(typeof value === 'string' ? value : text);
+  const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  const hide = () => {
+    window.clearTimeout(timer.current);
+    setTip(null);
+  };
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   return (
-    <span className={styles.preview} {...dir} title={text.length > 60 ? text : undefined}>
+    <span
+      className={styles.preview}
+      {...dir}
+      onMouseEnter={(e) => {
+        if (!text) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => setTip({ x: r.left, y: r.bottom + 4 }), 700);
+      }}
+      onMouseLeave={hide}
+    >
       {text || <span className={styles.empty}>—</span>}
+      {tip
+        ? createPortal(
+            <div className={styles.hoverTip} role="tooltip" style={{ left: Math.max(8, Math.min(tip.x, window.innerWidth - 488)), top: Math.min(tip.y, window.innerHeight - 248) }} {...dir} data-cell-popover>
+              {typeof value === 'string' ? value : formatJson(value)}
+            </div>,
+            document.body,
+          )
+        : null}
     </span>
   );
 }

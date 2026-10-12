@@ -57,7 +57,8 @@ test.describe('upload wizard', () => {
     await dialog.getByTestId('wizard-next').click(); // Create dataset
     await expect(dialog).toBeHidden({ timeout: 15_000 });
     await expect(page.getByText(/Dataset "Wizard Imported" created · 3 items/)).toBeVisible();
-    await expect(page.locator('[data-dataset-card=wizard-imported]')).toContainText('3');
+    await expect(page).toHaveURL(/\/datasets\/wizard-imported/);
+    await expect(page.getByRole('heading', { name: 'Wizard Imported' })).toBeVisible();
   });
 
   test('a 6,000-row CSV is parsed off the main thread: UI stays responsive and the import lands', async ({ page, request }) => {
@@ -148,7 +149,8 @@ test.describe('upload wizard', () => {
     await expect(dialog.getByText('Not imported: extra')).toBeVisible();
     await dialog.getByTestId('wizard-next').click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
-    await expect(page.locator('[data-dataset-card=good-lines]')).toContainText('2');
+    await expect(page).toHaveURL(/\/datasets\/good-lines/);
+    await expect(page.getByRole('heading', { name: 'Good Lines' })).toBeVisible();
   });
 
   test('name clash offers "Upload as a new version" and creates v2 of the existing dataset', async ({ page, request }) => {

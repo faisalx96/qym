@@ -222,6 +222,7 @@ test.describe('detail: items table', () => {
     await expect(input.getByTestId('type-tag')).toHaveText('string → number');
     await expect(input).toContainText('will be saved as number');
     await pane.getByTestId('pane-save').click();
+    await page.getByRole('button', { name: 'Save with new type' }).click();
     await expect(page.getByText('Item num-1 saved')).toBeVisible();
 
     await pane.getByTestId('pane-open-page').click();
