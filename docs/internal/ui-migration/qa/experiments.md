@@ -242,3 +242,46 @@ Ordered by impact.
 - Temporary-model launch with a key, key re-entry after retry, HIGH acknowledgement on retry/launch: left to the existing specs.
 - Polling cadence (timing) and hidden-tab pause, RTL, mobile widths other than what layout.spec covers.
 - Models: multi-config-group run selection, boolean/numeric metrics (only exact_match and execution_accuracy checked).
+
+## Re-review
+
+Built `ui/qa` at ea9153d1 from a clean detached worktree (`npm run build`), served by the platform on :8835 with fresh seed
+data and fake services on 8935/8936; every row below was exercised in the browser (Playwright) unless noted.
+Result: all 25 FIXED rows hold; no row is BUGGY after the re-review.
+
+FIXED rows verified:
+
+- I1, I2, I3, I4: the Models page has the Runs Filters popover (time incl. "Range…" custom date popover, origin, tasks,
+  datasets, models, versions, status, users), chips, "Clear N", topbar KPIs ("All runs"/"Filtered runs") and the sentence
+  "4 of 24 runs — task: text2sql, dataset: spider-dev". Set Tasks "Only text2sql" on Runs, open Models: URL becomes
+  `?task=text2sql`, chip and "Filtered runs 7 runs" adopted. Models filter, origin=local round-trip in the URL and survive
+  reload; Clear returns to a bare URL.
+- I8, I11: tiles show one decimal (90.0%, 63.6%, 36.4%), ranking shows medals; numbers equal the old page.
+- I9: with the `/api/dashboard/models` response intercepted to add `trace_stats`, the four tiles render (Avg tokens 1.2K,
+  Avg LLM calls 3.5, Avg tool calls 2.0, Tool success rate 87.5%).
+- C5: queue table has a Priority column (Normal/High).
+- C11, C12, C13: remote table has checkboxes only on orphan rows (3 incl. header vs 9 before); a manager button appears
+  only for environments that have orphans or stale jobs; dialog title "Cancel 1 orphan job on production?", button
+  "Cancel 1 orphan"; a stale row (local FAILED, service RUNNING) shows a "Stale" badge with a tooltip and "Cancel selected
+  remote jobs".
+- B1, H9: breadcrumbs are Demo project > Experiments > <experiment name>, ... > New experiment, ... > Queue,
+  Experiments > Environments > <env>, and ... > <env> > Default preset on the editor, each parent a link.
+- B9: Save as preset enabled for a member who cannot cancel/retry (unit test MatrixCard.test.tsx; the server only requires
+  project access for saved presets, `eval_presets.py:130-135`). Not exercised as a non-manager (auth none).
+- A5, A12: facet selects read "All KB versions" with title "Evaluation Service versioning: kb_version" (response
+  intercepted to add facets); the "Refreshes automatically" note shows while an experiment is live and is gone for
+  status PARTIAL / FAILED.
+- F2, F3, G2: each setting shows its raw key (ENABLE_RESPONSE_DRAFTING, REQUEST_TIMEOUT); searching `/env_overrides/REQUEST`,
+  `REQUEST_TIMEOUT` and `Request` all find Request Timeout; the editor's settings card no longer says "experiment".
+- H4: the Add environment preview opens the first group by default.
+
+Spot-checked OK rows (still OK): A2, A4, B2, B5, B10 (compare handoff: URL and `compareRuns` sessionStorage), B15-B17 (cancel
+job / cancel experiment copy and toast, retry failed), B19 (save as preset), B20 (promote opens the editor), D3, D13 (clone body
+identical to the old form except ids and the source `description`), F8 (two swept axes over two environments = 12 runs,
+"Link selected"), F13 (launch body equal to the old form for default preset + four edits + versioning), G1 (publish v2
+gating, confirm, toast), H1-H2, H3/H5 (add environment connect, group, confirm; test connection, refresh schema, save, delete
+all work), C1, C2, C4, C10.
+
+Remaining notes (not regressions): the Environments list page crumb is just "Environments" (old: Experiments / Environments);
+C5 status casing and the literal All/Filtered switch are Deferred by the implementer and acceptable; my
+non-manager/permission, >50 pagination and schema-drift items from "Not verified" are still unverified.
