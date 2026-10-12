@@ -107,6 +107,7 @@ export function OverviewPage() {
         : deltaPts > 0;
   const emptyTrend = trend ? trend.points.every((p) => p.runs === 0) : false;
   const pendingItems = pending.data?.corrections ?? pending.data?.items ?? [];
+  const pendingTotal = pending.data?.total ?? pendingItems.length;
 
   return (
     <RunsCtx.Provider value={ctx}>
@@ -214,14 +215,25 @@ export function OverviewPage() {
                 <ul className={styles.reviews}>
                   {pendingItems.map((c) => (
                     <li key={c.id}>
-                      <Link to={projectPath(slug, 'reviews')} className={styles.runLink}>
-                        {String(c.run_name ?? c.run_id ?? c.id).slice(0, 60)}
+                      <Link
+                        to={`${projectPath(slug, 'reviews')}?status=pending&id=${encodeURIComponent(String(c.id))}`}
+                        className={styles.runLink}
+                        title={`Open review #${c.id}`}
+                      >
+                        #{String(c.id)}
                       </Link>{' '}
                       <Text variant="sm" tone="muted" as="span">
-                        {String(c.human_root_cause ?? c.ai_root_cause ?? '').slice(0, 90)}
+                        {String(c.ai_root_cause ?? c.human_root_cause ?? '—').slice(0, 90)}
                       </Text>
                     </li>
                   ))}
+                  {pendingTotal > pendingItems.length ? (
+                    <li>
+                      <Text variant="sm" tone="muted" as="span">
+                        + {pendingTotal - pendingItems.length} more pending
+                      </Text>
+                    </li>
+                  ) : null}
                 </ul>
               ) : (
                 <EmptyState

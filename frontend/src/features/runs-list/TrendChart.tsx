@@ -86,6 +86,17 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
     rate,
   );
   const yTicks = [low, (low + high) / 2, high];
+  const withMean = data.filter((p) => p.mean !== null);
+  const totalRuns = data.reduce((n, p) => n + p.runs, 0);
+  const summary = withMean.length
+    ? `${metric}: ${withMean.length} days with finished runs, lowest ${trendFormat(
+        Math.min(...withMean.map((p) => p.mean as number)),
+        rate,
+      )}, highest ${trendFormat(Math.max(...withMean.map((p) => p.mean as number)), rate)}, latest ${trendFormat(
+        withMean[withMean.length - 1]!.mean,
+        rate,
+      )} on ${withMean[withMean.length - 1]!.label}. ${totalRuns} finished runs in ${data.length} days.`
+    : `${totalRuns} finished runs in ${data.length} days, none with a ${metric} score.`;
   const tickEvery = Math.max(1, Math.round(data.length / 6));
   const ticks = data.filter((_, i) => i % tickEvery === 0).map((d) => d.date);
   return (
@@ -124,9 +135,12 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
               tickLine={false}
               tick={{ fill: 'var(--text-muted)' }}
             />
-            <Tooltip content={<TrendTooltip metric={metric} rate={rate} />} cursor={{ stroke: 'var(--border-strong)' }} />
+            <Tooltip
+              content={<TrendTooltip metric={metric} rate={rate} />}
+              cursor={{ stroke: 'var(--border-strong)' }}
+            />
             <Line
-              type="monotone"
+              type="linear"
               dataKey="mean"
               stroke="var(--chart-1)"
               strokeWidth={2}
@@ -153,7 +167,10 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
           >
             <XAxis dataKey="date" hide />
             <YAxis width={36} hide domain={[0, 'dataMax']} />
-            <Tooltip content={<TrendTooltip metric={metric} rate={rate} />} cursor={{ fill: 'var(--bg-hover)' }} />
+            <Tooltip
+              content={<TrendTooltip metric={metric} rate={rate} />}
+              cursor={{ fill: 'var(--bg-hover)' }}
+            />
             <Bar
               dataKey="runs"
               fill="var(--border-strong)"
@@ -164,6 +181,7 @@ export function TrendChart({ trend, height = 180 }: { trend: Trend; height?: num
           </BarChart>
         </ResponsiveContainer>
       </div>
+      <p className={styles.srOnly}>{summary}</p>
       <figcaption className={styles.caption}>
         <Text variant="sm" tone="muted" as="span">
           Focus the chart and use ← → to read each day.

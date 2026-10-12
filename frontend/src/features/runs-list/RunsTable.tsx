@@ -145,7 +145,6 @@ export function RunsTable(p: RunsTableProps) {
         data-dimmed={p.dimmed ? '' : undefined}
         style={{ minWidth: totalWidth }}
         aria-label="Runs"
-        aria-rowcount={p.rows.length}
       >
         <colgroup>
           {p.selectMode ? <col style={{ width: 36 }} /> : null}
@@ -226,7 +225,6 @@ export function RunsTable(p: RunsTableProps) {
                 data-status={row.status}
                 data-run-id={row.run_id}
                 aria-selected={p.selectMode ? isSelected : undefined}
-                aria-rowindex={i + 1}
                 onFocus={(e) => {
                   if (e.target === e.currentTarget && !isFocused) p.onFocusIndex(i);
                 }}

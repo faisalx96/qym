@@ -57,3 +57,22 @@
     justify-content: space-between;
   }
 }
+
+@media (max-width: 640px) {
+  .bar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-xs);
+    padding-block: var(--space-xs);
+  }
+
+  .center {
+    justify-content: flex-start;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .right {
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+}
