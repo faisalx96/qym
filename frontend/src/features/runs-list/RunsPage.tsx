@@ -87,7 +87,7 @@ export function RunsPage() {
   useEffect(() => {
     if (!d.data || !pinnedReady || d.runsQ.isFetching || d.runsQ.isError) return;
     reconcile([...d.pinnedRows, ...rows], new Set([...d.pinnedRows, ...rows].map((r) => r.run_id)));
-  }, [d.data, pinnedReady, d.runsQ.isFetching, d.pinnedRows, rows, reconcile]);
+  }, [d.data, pinnedReady, d.runsQ.isFetching, d.runsQ.isError, d.pinnedRows, rows, reconcile]);
 
   // Focus resets on a sort/page change (declared first so a pending keyboard landing wins).
   useEffect(() => {
@@ -130,7 +130,7 @@ export function RunsPage() {
   useEffect(() => {
     // The total shrank under the current page (filters, deletes): clamp.
     if (d.data && !d.runsQ.isError && view.page > totalPages) setPage(totalPages);
-  }, [d.data, view.page, totalPages, setPage]);
+  }, [d.data, d.runsQ.isError, view.page, totalPages, setPage]);
 
   useTableScrollRestoration(pageRef, Boolean(d.data) && rows.length > 0);
   const sortSpec = parseSort(d.sort);
@@ -235,7 +235,8 @@ export function RunsPage() {
       },
       toggleFocused: () => {
         const r = rows[focusedIndex];
-        if (!r) return;
+        // a page change is in flight: the focused row belongs to the page being left
+        if (!r || pending.current) return;
         setSelectMode(true);
         selection.toggle(r.run_id);
       },

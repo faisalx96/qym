@@ -15,7 +15,9 @@ export function useTableScrollRestoration(host: RefObject<HTMLElement | null>, r
   const key = useRef(location.key);
   const restored = useRef(false);
   const mountedAsPop = useRef(type === 'POP');
-  key.current = location.key;
+  useEffect(() => {
+    key.current = location.key;
+  }, [location.key]);
 
   // scroll does not bubble: listen in the capture phase on the host.
   useEffect(() => {

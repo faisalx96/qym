@@ -441,7 +441,7 @@ export function RowActions({
     <span className={styles.actions}>
       {canSubmit ? (
         <IconButton
-          label={`Submit ${name} for review`}
+          label={`Submit ${name} for review${!isOwner && row.owner ? ` on behalf of ${row.owner.display_name || row.owner.email}` : ''}`}
           icon="check"
           tone="approve"
           onPress={() => onAction('submit', row)}

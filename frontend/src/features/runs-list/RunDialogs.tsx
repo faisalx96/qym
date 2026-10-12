@@ -8,6 +8,7 @@ import {
   useTransferOwner,
 } from '@/api/dashboard';
 import type { RunRow } from '@/api/dashboardTypes';
+import { useAuth } from '@/features/shell';
 import { announceRunStatus } from '@/lib/run-status';
 import { ApiError } from '@/lib/http';
 import { errorsLeftOut, metricDirection } from '@/lib/metrics';
@@ -74,6 +75,7 @@ export function RunDialogs({
   onSubmitted: () => void;
 }) {
   const toast = useToast();
+  const { me } = useAuth();
   const workflow = useRunWorkflow(slug);
   const submit = useSubmitRuns(slug);
   const del = useDeleteRuns(slug);
@@ -133,7 +135,17 @@ export function RunDialogs({
             ? `Submit ${name(sub.rows[0]!)} for review`
             : `Submit ${sub?.rows.length ?? 0} runs for review`
         }
-        description="Reviewers are asked to approve or reject. Runs stay read-only while submitted."
+        description={[
+          'Reviewers are asked to approve or reject. Runs stay read-only while submitted.',
+          sub?.rows.some((r) => r.owner && r.owner.id !== me.id)
+            ? 'Runs owned by someone else are submitted on their behalf.'
+            : '',
+          sub?.rows.some((r) => r.status === 'REJECTED')
+            ? 'A rejected run is being resubmitted for another review.'
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         confirmLabel="Submit"
         fields={[
           {

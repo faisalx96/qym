@@ -99,7 +99,7 @@ export function useOverview(
     sort?: string;
     collation?: string[] | null;
     enabled?: boolean;
-    refetchInterval?: number | false;
+    refetchInterval?: number | false | (() => number | false);
   } = {},
 ) {
   return useQuery({

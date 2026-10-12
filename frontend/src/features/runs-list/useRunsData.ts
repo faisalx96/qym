@@ -61,7 +61,7 @@ export function useRunsData(
   const bodyKey = JSON.stringify(body);
   const [good, setGood] = useState<{ key: string; data: RunsPage; at: number } | null>(null);
   if (runsQ.data && !runsQ.isPlaceholderData && good?.data !== runsQ.data)
-    setGood({ key: bodyKey, data: runsQ.data, at: runsQ.dataUpdatedAt || Date.now() });
+    setGood({ key: bodyKey, data: runsQ.data, at: runsQ.dataUpdatedAt });
   const failed = runsQ.isError;
   const data = runsQ.data ?? (failed ? good?.data : undefined);
   /** The request that failed asked for a different view than the rows on screen. */

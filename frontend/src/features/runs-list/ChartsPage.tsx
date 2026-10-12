@@ -23,7 +23,13 @@ import {
   Tooltip,
 } from '@/ui';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
-import { formatDateParts, formatLatency, formatNumericValue, formatPercentValue } from '@/lib/format';
+import {
+  formatClock,
+  formatDateParts,
+  formatLatency,
+  formatNumericValue,
+  formatPercentValue,
+} from '@/lib/format';
 import { runPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
 import { Mono, ModelMark } from './cells';
@@ -162,7 +168,8 @@ export function ChartsPage() {
             </Text>
             <Text variant="sm" tone="muted" as="p">
               {countActiveFilters(view) && overview ? `Filtered: ${overview.total_runs} runs · ` : ''}Average
-              metric scores across all items in matching runs. Bars are relative to the best run in the card.
+              metric scores across all items in matching runs. Score bars use a 0-100% scale; numeric metrics
+              and latency are relative to the best run in the card.
             </Text>
           </div>
           {models.length ? (
@@ -237,12 +244,16 @@ export function ChartsPage() {
             />
           ))
         )}
+        {d.overviewQ.dataUpdatedAt ? (
+          <Text variant="sm" tone="muted" as="p" aria-live="polite">
+            Last updated <Mono>{formatClock(new Date(d.overviewQ.dataUpdatedAt))}</Mono>
+          </Text>
+        ) : null}
       </div>
     </RunsCtx.Provider>
   );
 }
 
-/** Overview-only slice of useRunsData (charts do not page the runs list). */
 /** Charts have no Duration column; the repeat-run group stats are toggleable instead. */
 function withGroupColumns(set: ColumnSet, visibleKeys: Set<string> | null): ColumnSet {
   const all = [...set.all.filter((c) => c.id !== 'duration'), ...GROUP_DISPLAY_COLUMNS];
@@ -253,16 +264,19 @@ function withGroupColumns(set: ColumnSet, visibleKeys: Set<string> | null): Colu
   return { all, visible };
 }
 
+/** Overview-only slice of useRunsData (charts do not page the runs list). */
 function useRunsDataLite(slug: string, view: RunsView, visibleKeys: Set<string> | null) {
   const filters = useMemo(() => viewToFilters(view), [view]);
   // Same cadence as the runs list: 15 s while runs are live, 2 s while a stop settles, 60 s otherwise.
-  const [cadence, setCadence] = useState<number | false>(60_000);
-  const overviewQ = useOverview(slug, filters, { refetchInterval: cadence });
+  const cadence = useRef<number | false>(60_000);
+  const overviewQ = useOverview(slug, filters, { refetchInterval: () => cadence.current });
   const overview = overviewQ.data;
   const refetchOverview = overviewQ.refetch;
   const onAnnounce = useCallback(() => void refetchOverview(), [refetchOverview]);
   const interval = useRunsCadence({ rows: [], hasActiveRuns: overview?.has_active_runs }, onAnnounce);
-  useEffect(() => setCadence(interval), [interval]);
+  useEffect(() => {
+    cadence.current = interval;
+  }, [interval]);
   useRefetchOnVisible(onAnnounce);
   const trace = useMemo(
     () => new Set<string>(overview?.has_trace_stats ? TRACE_METRICS.map((t) => t.key) : []),
