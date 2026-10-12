@@ -4,7 +4,7 @@ Compared the vanilla pages at `7814183` (legacy platform on :8827) with the Reac
 
 ## Summary
 
-Total rows: 133. OK 94, CHANGED 29, BUGGY 7, MISSING 3.
+Total rows: 133. Initial pass: OK 94, CHANGED 29, BUGGY 7, MISSING 3. After the re-review (below) all 10 BUGGY/MISSING rows are FIXED (status shown as **FIXED**), 0 still broken: OK 94, CHANGED 29, FIXED 10.
 
 Highest-impact findings: (1) live runs progress shows `done/done` instead of `done/total` (4/4 instead of 4/9); (2) the maintenance workers-service liveness (alive / NOT RESPONDING, n/m processes) is gone, so a down workers service reads "unknown"; (3) Archive/Unarchive lose the "anyway" escalation label and the raw ISO start time appears in the archive preview; (4) small polish bugs (no tooltip on the self-disable button, `?page=` out of range, search popover race, phone overflow from the docs pager). Everything else in the brief ported faithfully; content parity of all 27 docs partials is exact.
 
@@ -34,7 +34,7 @@ Legend for the Spec column: `runs`=e2e/admin/runs.spec.ts, `projects`=e2e/admin/
 | # | Old behaviour | New code | Spec | Status | Verified / notes |
 |---|---|---|---|---|---|
 | 12 | Live runs table: project, run (+task), owner, status with pulsing dot, progress, updated, Force stop | frontend/src/features/admin/runs/RunTables.tsx; RunsTab.tsx | runs | **OK** | Same data, same columns. Project name falls back to slug/id; owner falls back display_name -> email local part -> id (format.ts:41-53). |
-| 13 | Live progress shows completed/progress_total (e.g. 4/9) | frontend/src/features/admin/format.ts:55-60 | - | **BUGGY** | Live API row has progress_completed 4, progress_total 9, total_items 4 (items seen so far). Old shows `4/9`, new shows `4/4` for every live run (6/12 -> 6/6). The live column is useless as a progress indicator. Fix below (B1). |
+| 13 | Live progress shows completed/progress_total (e.g. 4/9) | frontend/src/features/admin/format.ts:55-60 | - | **FIXED** | Live API row has progress_completed 4, progress_total 9, total_items 4 (items seen so far). Old shows `4/9`, new shows `4/4` for every live run (6/12 -> 6/6). The live column is useless as a progress indicator. Fix below (B1). |
 | 14 | Recent runs "Items" column = completed/total_items, "—" when unknown | frontend/src/features/admin/format.ts:55-60 | runs | **OK** | Matches old for recent rows. |
 | 15 | Live subtitle "N running across all qym projects" (count from server total) | frontend/src/features/admin/RunsTab.tsx:23-30 | - | **CHANGED** | "N running across all projects". When the request fails the subtitle still says "0 running" under the error state (minor). |
 | 16 | Live runs table "No live runs" empty state, "Failed to load live runs" error | RunsTab.tsx:33-42 | - | **OK** | Verified empty state and the 500 state (after the 2 react-query retries, ~3 s) with a Retry button; retry works. Old showed the error at once, no retry. |
@@ -45,7 +45,7 @@ Legend for the Spec column: `runs`=e2e/admin/runs.spec.ts, `projects`=e2e/admin/
 | 21 | Relative time "just now / Nm / Nh / Nd ago" (floor) | frontend/src/features/admin/format.ts:4-17 | - | **CHANGED** | Rounds instead of floors (old 6d ago -> new 7d ago for 6.6 days; 1d -> 33h), switches to hours up to 48 h and to a date after 30 d. Harmless. |
 | 22 | Recent runs: "Most recent eval runs", 6 per page, server offset paging, "N total" | frontend/src/features/admin/runs/RunsTab.tsx:10-13,49-70 | runs | **OK** | `1-6 of 20 runs`; page size 6 kept. |
 | 23 | Recent paging state | frontend/src/features/admin/runs/RunsTab.tsx:13,69 | - | **CHANGED** | Now `?page=N` in the URL (survives reload, Back works). Acceptable. |
-| 24 | Out-of-range page | frontend/src/features/admin/runs/RunsTab.tsx:13 | - | **BUGGY** | `/admin/runs?page=99` shows "No recent eval runs" with a pager reading "19-20 of 20 runs". Not reachable in the old page (no URL state). Fix B2. |
+| 24 | Out-of-range page | frontend/src/features/admin/runs/RunsTab.tsx:13 | - | **FIXED** | `/admin/runs?page=99` shows "No recent eval runs" with a pager reading "19-20 of 20 runs". Not reachable in the old page (no URL state). Fix B2. |
 | 25 | Recent table subtitle | frontend/src/features/admin/runs/RunsTab.tsx:49 | - | **CHANGED** | "N total finished runs" (old "N total eval runs"). Total is the server `total_count` of non-live runs. |
 | 26 | Force stop button only when can_force_stop and not stopped locally | frontend/src/features/admin/runs/RunTables.tsx:36-50 | runs | **CHANGED** | Also hidden for terminal statuses (STOPPED/COMPLETED/FAILED) even if the server says can_force_stop. Acceptable. |
 | 27 | Force stop opens danger confirm "Force stop run" with run name and two paragraphs | frontend/src/features/admin/runs/ForceStopDialog.tsx:16-40 | runs | **CHANGED** | Copy drops "Coder" ("may keep running where it was launched"). Escape/Cancel send no request (verified). Acceptable (decided). |
@@ -55,7 +55,7 @@ Legend for the Spec column: `runs`=e2e/admin/runs.spec.ts, `projects`=e2e/admin/
 | 31 | Status line `role=status` announces "... was force stopped. Further updates are blocked." | frontend/src/features/admin/AdminPage.tsx:36-38; RunsTab.tsx:70-86 | runs | **CHANGED** | Sr-only status line (8 s) plus a success toast; old line was visible and never cleared. |
 | 32 | Force stop in flight: button shows "Stopping..." and is disabled | frontend/src/features/admin/runs/ForceStopDialog.tsx; RunTables.tsx | - | **CHANGED** | Pending state now lives in the dialog (buttons locked, confirm shows spinner). The row button never shows "Stopping" (stoppingIds is never passed). |
 | 33 | Force stop failure (409): red text, button re-enabled | frontend/src/features/admin/runs/ForceStopDialog.tsx:30-39 | - | **OK** | Mocked a 409: dialog stays open with the server detail inline, status line + error toast, can retry/cancel. |
-| 34 | Force stop on a run that is already stopped by someone else | frontend/src/features/admin/runs/ForceStopDialog.tsx:32-33 | - | **BUGGY** | Server answers ok with `stopped:false`; UI still says "was force stopped" (result.stopped ignored). Same wording as old, so a pre-existing gap. Minor, B8. |
+| 34 | Force stop on a run that is already stopped by someone else | frontend/src/features/admin/runs/ForceStopDialog.tsx:32-33 | - | **FIXED** | Server answers ok with `stopped:false`; UI still says "was force stopped" (result.stopped ignored). Same wording as old, so a pre-existing gap. Minor, B8. |
 
 ### C. Admin > Projects tab
 
@@ -65,12 +65,12 @@ Legend for the Spec column: `runs`=e2e/admin/runs.spec.ts, `projects`=e2e/admin/
 | 36 | "+ New Project" opens the shell create dialog; after create navigates to the project and updates the switcher | frontend/src/features/admin/projects/ProjectsTab.tsx:18-29 | projects | **OK** | Dialog auto-slugs ("QA Fresh Project" -> qa-fresh-project), POST /v1/projects, lands on /projects/qa-fresh-project, new row on Projects tab. Same as old (navigate). |
 | 37 | Active project: Settings link + Archive button | frontend/src/features/admin/projects/ProjectsTable.tsx:54-60 | projects | **OK** |  |
 | 38 | Archive preview lists up to 5 in-progress runs with "and N more" | features/shell/dialogs/ArchiveProjectDialogs.tsx:41-55 | projects | **OK** | Verified "1 run is still running ... They will be stopped." |
-| 39 | Archive preview run rows show "started <localised date>" | ArchiveProjectDialogs.tsx:47 | projects | **BUGGY** | Meta is the raw ISO string `2026-10-12T15:22:51.641256Z`. Fix B3. |
-| 40 | Archive confirm turns into "Archive anyway" (danger) when runs are in progress | ArchiveProjectDialogs.tsx:67 | projects | **MISSING** | Button always reads "Archive project" (tone danger always). Old escalated the label so the loss of running results is explicit. Also copy is shorter (old described read-only rules and Trash purge pause; API-key line kept). Fix B4. |
+| 39 | Archive preview run rows show "started <localised date>" | ArchiveProjectDialogs.tsx:47 | projects | **FIXED** | Meta is the raw ISO string `2026-10-12T15:22:51.641256Z`. Fix B3. |
+| 40 | Archive confirm turns into "Archive anyway" (danger) when runs are in progress | ArchiveProjectDialogs.tsx:67 | projects | **FIXED** | Button always reads "Archive project" (tone danger always). Old escalated the label so the loss of running results is explicit. Also copy is shorter (old described read-only rules and Trash purge pause; API-key line kept). Fix B4. |
 | 41 | Confirm archive: POST archive, sidebar switcher drops the project, row becomes Archived, "Archived name" message | frontend/src/features/admin/projects/ProjectsTable.tsx:76-98 | projects | **OK** | Row flips to ARCHIVED in place (stays on /admin/projects); toast "<name> archived". |
 | 42 | Archived project: Open (read-only), Settings, Unarchive | frontend/src/features/admin/projects/ProjectsTable.tsx:32,54-66 | projects | **CHANGED** | No "Open" button; the project name is a link to the project (opens read-only). Settings + Unarchive kept. Acceptable. |
 | 43 | Unarchive preview lists API keys that start working again with creator; "Revoke keys first" | ArchiveProjectDialogs.tsx:98-142 | projects | **OK** | Verified key `seed-e6c329` + "Dev User"; list capped at 5 + "more" (old used the server list). "Revoke keys first" goes to /projects/old-proj/settings?tab=apikeys. |
-| 44 | Unarchive confirm label "Unarchive anyway" (danger) when keys would start working | ArchiveProjectDialogs.tsx:127 | projects | **MISSING** | Label stays "Unarchive", tone accent. Same cause as the Archive row. Fix B4. Copy also lost "Deleted runs in Trash resume their purge countdown". |
+| 44 | Unarchive confirm label "Unarchive anyway" (danger) when keys would start working | ArchiveProjectDialogs.tsx:127 | projects | **FIXED** | Label stays "Unarchive", tone accent. Same cause as the Archive row. Fix B4. Copy also lost "Deleted runs in Trash resume their purge countdown". |
 | 45 | Unarchive confirm: POST, project reappears active in switcher | frontend/src/features/admin/projects/ProjectsTable.tsx:88-98 | projects | **OK** | Verified Active row, toast "Demo project is active again", /projects lists it. |
 | 46 | Preview fetch failure falls back to a "could not check" warning | ArchiveProjectDialogs.tsx:50-55,120-125 | - | **OK** | Code only. |
 | 47 | 403 on archive-preview toasts "Only an admin can archive" | ArchiveProjectDialogs.tsx:39 | - | **CHANGED** | Generic text "Could not check..." with the server detail; admins only reach this tab anyway. |
@@ -89,7 +89,7 @@ Legend for the Spec column: `runs`=e2e/admin/runs.spec.ts, `projects`=e2e/admin/
 | 55 | Disable asks first (danger dialog with sign-out and API-key text) | frontend/src/features/admin/users/UsersTable.tsx:131-148 | users | **OK** | Copy identical to old. |
 | 56 | Disable success: inline "User disabled" + 10 s toast with Undo that re-enables | frontend/src/features/admin/users/UsersTable.tsx:34-47 | users | **OK** | Undo present at 9 s, gone at 12.5 s; Undo re-enables with "Enabled X again. They need to sign in again." |
 | 57 | Enable has no confirmation | frontend/src/features/admin/users/UsersTable.tsx:34-40 | users | **OK** | Toast "Enabled X". |
-| 58 | Own row: Disable permanently disabled with tooltip "You cannot disable your own account" | frontend/src/features/admin/users/UsersTable.tsx:101-108 | users | **BUGGY** | Button is disabled and aria-labelled correctly, but hovering it shows no tooltip (React Aria tooltip never opens on a disabled button; old used a native `title`). Mouse users get no explanation. Fix B5. |
+| 58 | Own row: Disable permanently disabled with tooltip "You cannot disable your own account" | frontend/src/features/admin/users/UsersTable.tsx:101-108 | users | **FIXED** | Button is disabled and aria-labelled correctly, but hovering it shows no tooltip (React Aria tooltip never opens on a disabled button; old used a native `title`). Mouse users get no explanation. Fix B5. |
 | 59 | Edit modal: email, display name, role, Active, password section, self note | frontend/src/features/admin/users/EditUserDialog.tsx | users | **OK** | Title now "Edit <name>"; Escape, Cancel, close and backdrop all close it (verified). |
 | 60 | Editing yourself locks role + active and omits them from the PUT | frontend/src/features/admin/users/EditUserDialog.tsx:54-64 | users | **OK** | Verified role select + checkbox disabled; PUT body `{email,display_name}`. |
 | 61 | Save requires email; PUT; success closes + "User updated" | frontend/src/features/admin/users/EditUserDialog.tsx:54-72 | users | **OK** | Empty email -> "Email is required."; success toast. |
@@ -109,7 +109,7 @@ Legend for the Spec column: `runs`=e2e/admin/runs.spec.ts, `projects`=e2e/admin/
 | # | Old behaviour | New code | Spec | Status | Verified / notes |
 |---|---|---|---|---|---|
 | 72 | Lazy load on first open; summary of DB size, role, maintenance mode, event log, retention, grace | frontend/src/features/admin/maintenance/MaintenanceSummary.tsx; api/admin.ts:251 | maintenance | **CHANGED** | One sentence became a key/value grid (+ partitions-ahead, + Role/service). Statistics line says "refreshed N s ago". |
-| 73 | Workers line: separate-process layout shows workers service alive / NOT RESPONDING and n/m processes | frontend/src/features/admin/maintenance/MaintenanceSummary.tsx:14-30; api/admin.ts:96-101 | - | **MISSING** | `workers.workers_service` ({alive, processes[]}) is not typed or rendered. With loops="separate" and no heartbeat the old UI says "workers service NOT RESPONDING (0/2 processes)", the new one only "summary: unknown / maintenance: unknown" (mocked). Fix B6. |
+| 73 | Workers line: separate-process layout shows workers service alive / NOT RESPONDING and n/m processes | frontend/src/features/admin/maintenance/MaintenanceSummary.tsx:14-30; api/admin.ts:96-101 | - | **FIXED** | `workers.workers_service` ({alive, processes[]}) is not typed or rendered. With loops="separate" and no heartbeat the old UI says "workers service NOT RESPONDING (0/2 processes)", the new one only "summary: unknown / maintenance: unknown" (mocked). Fix B6. |
 | 74 | Refresh button forces ?refresh=1 | frontend/src/features/admin/maintenance/MaintenanceTab.tsx:44-52 | maintenance | **OK** | Verified GET `?refresh=1`; spinner while loading; error toast on failure. |
 | 75 | Top-12 table sizes table (total/heap/TOAST/index, live/dead rows) and run_events by type | frontend/src/features/admin/maintenance/MaintenanceTab.tsx:14-27,62-66 | - | **CHANGED** | Rendering checked with a mocked Postgres payload (1.0 GB / 477 MB / 1,234,567). No client `.slice(0,12)`: relies on the server cap (api/admin.py). PostgreSQL itself not available here. |
 | 76 | db_stats.error shown in the table body | frontend/src/features/admin/maintenance/MaintenanceTab.tsx:58-61 | maintenance | **OK** | First-class "Table statistics are unavailable (they need PostgreSQL)" + the error text on SQLite. |
@@ -176,7 +176,7 @@ Legend for the Spec column: `runs`=e2e/admin/runs.spec.ts, `projects`=e2e/admin/
 | 122 | Enter opens the first/highlighted match; Arrow keys move | frontend/src/features/docs/DocsSearch.tsx:41-48,67-90 | docs.spec | **OK** | "install"+Enter -> install; ArrowDown x2 + Enter -> third hit; mouse click on result works; search clears afterwards. |
 | 123 | Escape clears, second Escape blurs | frontend/src/features/docs/DocsSearch.tsx:67-90 | docs.spec | **OK** |  |
 | 124 | "No results" message; Enter with no results does nothing | frontend/src/features/docs/DocsSearch.tsx:97-100 | docs.spec | **OK** | "No results for "zzzzqq"". |
-| 125 | Search popover reopens correctly after Escape + `/` pressed quickly | frontend/src/features/docs/DocsSearch.tsx:66 | - | **BUGGY** | The blur handler schedules `setOpen(false)` in 150 ms and is never cleared. Esc, Esc, `/`, type text within 150 ms leaves the input with text but no results list (reproduced). Fix B7. |
+| 125 | Search popover reopens correctly after Escape + `/` pressed quickly | frontend/src/features/docs/DocsSearch.tsx:66 | - | **FIXED** | The blur handler schedules `setOpen(false)` in 150 ms and is never cleared. Esc, Esc, `/`, type text within 150 ms leaves the input with text but no results list (reproduced). Fix B7. |
 | 126 | Index loaded lazily on first keystroke (~110 KB gzip chunk) | frontend/src/features/docs/DocsSearch.tsx:33-35; content.ts:90-95 | - | **OK** | Shows "Searching..." until ready. |
 | 127 | Search results listbox accessibility | frontend/src/features/docs/DocsSearch.tsx:93-130 | docs.spec | **OK** | role=combobox/listbox, aria-activedescendant. |
 
@@ -185,7 +185,7 @@ Legend for the Spec column: `runs`=e2e/admin/runs.spec.ts, `projects`=e2e/admin/
 | # | Old behaviour | New code | Spec | Status | Verified / notes |
 |---|---|---|---|---|---|
 | 128 | <=1100 px hides TOC rail; <=780 px nav stacks above content (old) / collapses behind "Browse docs" | frontend/src/features/docs/DocsPage.module.css:204-256 | docs.spec (760px) | **OK** | Checked 1000/700/390: rail hidden, disclosure + nav toggle appear. |
-| 129 | No horizontal page scroll on phones | frontend/src/features/docs/DocsPage.module.css:172-200 | - | **BUGGY** | At 390 px the Next/Previous pager buttons (long titles, no wrap) overflow: `#shell-content` scrollWidth 511 vs 334 on sdk-guide/config, 347 on developer/endpoints. Fix B9. |
+| 129 | No horizontal page scroll on phones | frontend/src/features/docs/DocsPage.module.css:172-200 | - | **FIXED** | At 390 px the Next/Previous pager buttons (long titles, no wrap) overflow: `#shell-content` scrollWidth 511 vs 334 on sdk-guide/config, 347 on developer/endpoints. Fix B9. |
 | 130 | Dark theme only (as old) | styles/tokens.css | axe | **OK** | App is dark-only; code colours come from --code-* tokens. Nothing to compare for light. |
 | 131 | Prose sizes via --docs-* tokens (design lint) | tokens.css; design-language.test.ts | vitest | **OK** | Not re-run. |
 | 132 | axe on docs and admin tabs | e2e/docs/docs.spec.ts:186; e2e/admin/a11y.spec.ts | specs | **OK** | Spec results not re-run; no violations spotted by eye. |
@@ -228,3 +228,27 @@ None. B7 (blur-timer race) and B8 (already-stopped wording) have no dedicated re
 - Cross-tab `announceRunStatus` after a force stop (needs two tabs on a run page) and a paused maintenance job from the real worker (none can be created on SQLite) were read from code / mocked.
 - The "not written yet" docs state cannot occur in the built app (all 27 partials exist) and was read from code only.
 - Axe/Vitest/design-language suites were not re-run.
+
+## Re-review
+
+Built from a clean detached worktree of `ui/qa` at a9aa2113 (`npm run build`), served by the platform on 8837 (auth none for the admin/docs flows; `proxy_headers` + local auth for the member and reset-password paths). Every FIXED row was exercised in a browser:
+
+| Row | Fix | Result |
+|---|---|---|
+| 13 live progress | `progress_total ?? total_items` for Live | Live shows 4/8, 6/12, 5/11 (API progress_total), Recent unchanged. FIXED |
+| 24 `?page=99` | clamped | URL becomes `?page=6`, "31-31 of 31 runs". `?page=0`/`abc` keep the odd query but render page 1. FIXED |
+| 34 already-stopped run | wording | Stopped via API first, then confirmed in UI: "<name> was already stopped." FIXED |
+| 39 archive timestamps | formatted | "started Oct 12, 2026, 6:59 PM". FIXED |
+| 40/44 "anyway" labels | restored | "Archive anyway" with running runs, "Archive project" without; "Unarchive anyway" with keys, "Unarchive" without. The longer old copy was deliberately not restored (accepted, CHANGED-level). FIXED |
+| 58 self-disable tooltip | focusable stand-in | Tooltip appears on mouse hover and on keyboard focus (reached with Arrow keys inside the table row, which is how the grid is navigated). FIXED |
+| 73 workers liveness | `workers_service` rendered | Mocked: down -> "Workers service NOT RESPONDING (0/0 processes)", partial -> "RUNNING (1/2 processes)", local layout unchanged. FIXED |
+| 125 search race | timer cleared | Esc, Esc, `/`, type within 150 ms keeps the results list; blur still closes it, refocus reopens. FIXED |
+| 129 docs pager at 390 px | wraps | scrollWidth 334 = clientWidth on sdk-guide/config, developer/endpoints, sdk-guide/multi-model, get-started/errors. FIXED |
+| B10 live subtitle on error | count hidden | Error state shows "Failed to load live runs" with no "0 running". FIXED |
+| B11 | note corrected, nav still not filtered | Accepted as a documented difference. FIXED (doc) |
+
+Member path (real MEMBER, session login): all four `/admin/*` URLs show "Admin access required", no Admin sidebar link, no admin API requests, docs still open. Admin password reset: self row has no password section, another user's reset shows a 16-char one-time password, clipboard equals it, gone after reopen.
+
+Spot-checked 33 OK rows (all PASS): /admin and unknown-tab redirects, stat strip only on Runs, tab click/Back, `?page=2`, live poll cadence (2 requests in 21 s), Escape sends no POST, exactly one force-stop POST, row leaves Live, status line, STOPPED in Recent, create project navigates, archive/unarchive without warnings, archived badge, "Revoke keys first" target, create user, duplicate toast, disable + Undo, edit duplicate email inline, self locks, irreversible job confirm field and disabled submit, queue job, log drawer, legacy docs deep link, TOC current entry, search + Enter, code copy, next page, `<slug>` text on api-keys.
+
+Regressions: none found. Note: the Unarchive dialog without a warning opens with `role=dialog` (with a warning it is `alertdialog`); harmless.
