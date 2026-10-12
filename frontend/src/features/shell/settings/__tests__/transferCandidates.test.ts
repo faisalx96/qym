@@ -14,11 +14,18 @@ const member = (user_id: string, is_active: boolean): Member => ({
 
 describe('transferCandidates', () => {
   it('leaves out the removed member and disabled members', () => {
-    const members = [member('owner', true), member('gone', true), member('disabled', false), member('peer', true)];
+    const members = [
+      member('owner', true),
+      member('gone', true),
+      member('disabled', false),
+      member('peer', true),
+    ];
     expect(transferCandidates(members, 'gone').map((m) => m.user_id)).toEqual(['owner', 'peer']);
   });
 
   it('offers everyone active when nobody is being removed', () => {
-    expect(transferCandidates([member('a', true), member('b', false)], undefined).map((m) => m.user_id)).toEqual(['a']);
+    expect(
+      transferCandidates([member('a', true), member('b', false)], undefined).map((m) => m.user_id),
+    ).toEqual(['a']);
   });
 });

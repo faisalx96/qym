@@ -110,10 +110,10 @@ function ProjectCard({ project }: { project: Project }) {
       </div>
       <div className={styles.cardMeta}>
         <span>
-          <strong>{project.run_count}</strong> runs
+          <strong>{project.run_count}</strong> {project.run_count === 1 ? 'run' : 'runs'}
         </span>
         <span>
-          <strong>{project.member_count}</strong> members
+          <strong>{project.member_count}</strong> {project.member_count === 1 ? 'member' : 'members'}
         </span>
         <span>updated {relativeDate(project.updated_at)}</span>
       </div>

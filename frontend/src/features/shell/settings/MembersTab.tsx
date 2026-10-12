@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   fetchRemovalPreview,
+  useApiKeys,
   useAddMember,
   useMemberCandidates,
   useMembers,
@@ -25,6 +26,7 @@ import {
 } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
+import { plural } from '../plural';
 import styles from './settings.module.css';
 import { transferCandidates } from './transferCandidates';
 
@@ -49,6 +51,13 @@ export function MembersTab() {
   const columns: Column<Member>[] = [
     { id: 'name', label: 'Member', flex: true, minWidth: 160, cell: (m) => m.display_name || m.email },
     { id: 'email', label: 'Email', width: 220, mono: true, cell: (m) => m.email },
+    {
+      id: 'added',
+      label: 'Added',
+      width: 130,
+      mono: true,
+      cell: (m) => (m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'),
+    },
     {
       id: 'role',
       label: 'Role',
@@ -128,6 +137,16 @@ export function MembersTab() {
   ];
 
   const others = transferCandidates(members.data ?? [], removing?.member.user_id);
+  const keys = useApiKeys(project.id);
+  const removingKeys = removing
+    ? (keys.data ?? []).filter((k) => !k.revoked_at && k.creator?.id === removing.member.user_id)
+    : [];
+  const who = removing ? removing.member.display_name || removing.member.email : '';
+  const ownedLive = removing?.preview?.owned_runs ?? 0;
+  const ownedDeleted = removing?.preview?.owned_deleted_runs ?? 0;
+  const ownedTotal = ownedLive + ownedDeleted;
+  const target = others.find((m) => m.user_id === transferTo);
+  const canTransfer = ownedTotal > 0 && !readOnly && others.length > 0;
 
   return (
     <Stack gap="lg">
@@ -160,32 +179,59 @@ export function MembersTab() {
           title={`Remove ${removing.member.display_name || removing.member.email}?`}
           tone="danger"
           description={[
-            'Their API keys for this project are revoked.',
-            removing.preview?.owned_runs
-              ? `They own ${removing.preview.owned_runs} run${removing.preview.owned_runs === 1 ? '' : 's'} here.`
-              : 'They own no runs in this project.',
+            removingKeys.length
+              ? `Revokes ${plural(removingKeys.length, 'API key')} they created here: ${removingKeys
+                  .map((k) => k.name || `${k.prefix}…`)
+                  .join(', ')}.`
+              : 'Any API keys they created for this project are revoked.',
+            !removing.preview
+              ? 'Checking the runs they own…'
+              : ownedTotal
+                ? `${who} owns ${plural(ownedTotal, 'run')} in this project${ownedDeleted ? `, ${ownedDeleted} of them in Deleted Runs.` : '.'}`
+                : `${who} owns no runs in this project.`,
           ]}
           note={
-            removing.preview?.owned_runs ? (
-              <Select
-                label="Transfer their runs to"
-                items={[
-                  { key: '', label: 'Keep the runs (no transfer)' },
-                  ...others.map((m) => ({ key: m.user_id, label: m.display_name || m.email })),
-                ]}
-                value={transferTo ?? ''}
-                onChange={(k) => setTransferTo(k ? String(k) : null)}
-              />
+            removing.preview && ownedTotal ? (
+              <Stack gap="sm">
+                {canTransfer ? (
+                  <Select
+                    label="Transfer their runs to"
+                    items={[
+                      { key: '', label: 'Keep the runs (no transfer)' },
+                      ...others.map((m) => ({ key: m.user_id, label: m.display_name || m.email })),
+                    ]}
+                    value={transferTo ?? ''}
+                    onChange={(k) => setTransferTo(k ? String(k) : null)}
+                  />
+                ) : null}
+                <Text variant="sm">
+                  {readOnly
+                    ? `Runs can be transferred after the project is unarchived; until then they stay owned by ${who}.`
+                    : !others.length
+                      ? `No other active member can take them, so they stay owned by ${who}.`
+                      : target
+                        ? `${target.display_name || target.email} becomes their owner and can submit and delete them. Their results and review history stay as they are.`
+                        : `They stay in the project, owned by ${who}; a manager can still submit or transfer them later.`}
+                </Text>
+              </Stack>
             ) : undefined
           }
-          confirmLabel="Remove member"
+          confirmLabel={
+            target && ownedTotal ? `Transfer ${plural(ownedTotal, 'run')} and remove` : 'Remove member'
+          }
           onConfirm={async () => {
             try {
-              await removeMember.mutateAsync({
+              const res = await removeMember.mutateAsync({
                 userId: removing.member.user_id,
-                transferTo: transferTo ?? undefined,
+                transferTo: canTransfer ? (transferTo ?? undefined) : undefined,
               });
-              toast.show('Member removed', { tone: 'info' });
+              const moved = Number(res.transferred_runs) || 0;
+              toast.show(
+                target && moved
+                  ? `${who} was removed. ${plural(moved, 'run')} now ${moved === 1 ? 'belongs' : 'belong'} to ${target.display_name || target.email}.`
+                  : `${who} was removed.`,
+                { tone: 'info' },
+              );
             } catch (e) {
               throw new Error(e instanceof ApiError ? e.detail || 'Could not remove' : String(e));
             }
@@ -282,6 +328,15 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
             }
           }}
         />
+        {open && options.length === 0 && !candidates.isFetching ? (
+          <div className={styles.comboHint} role="status">
+            {candidates.isError
+              ? `Could not search people: ${candidates.error instanceof ApiError ? candidates.error.detail || candidates.error.message : 'try again'}`
+              : debounced
+                ? `No one outside the project matches “${debounced}”.`
+                : 'Everyone is already a member.'}
+          </div>
+        ) : null}
         {open && options.length > 0 ? (
           <ul id={listId} role="listbox" className={styles.comboList} aria-label="Matching users">
             {options.map((c, i) => (
@@ -299,6 +354,11 @@ function AddMemberBar({ projectId, existing }: { projectId: string; existing: Me
                 <small>{c.email}</small>
               </li>
             ))}
+            {candidates.data?.has_more ? (
+              <li role="presentation" className={styles.comboHintRow}>
+                Keep typing to narrow the list.
+              </li>
+            ) : null}
           </ul>
         ) : null}
       </div>

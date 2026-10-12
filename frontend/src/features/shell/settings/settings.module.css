@@ -208,3 +208,24 @@
     grid-template-columns: 1fr;
   }
 }
+
+.comboHint {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  width: 100%;
+  padding: var(--space-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--dropdown-radius);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  z-index: var(--z-dropdown);
+}
+
+.comboHintRow {
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}

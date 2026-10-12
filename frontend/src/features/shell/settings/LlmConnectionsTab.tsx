@@ -98,6 +98,14 @@ export function LlmConnectionsTab() {
                     action
                       .mutateAsync({ id: c.id, action: 'set-default' })
                       .then(() => toast.show('Default connection updated', { tone: 'success' }))
+                      .catch((e) =>
+                        toast.show(
+                          e instanceof ApiError
+                            ? e.detail || 'Could not set the default'
+                            : 'Could not set the default',
+                          { tone: 'error' },
+                        ),
+                      )
                   }
                 >
                   Set default
@@ -160,6 +168,7 @@ export function LlmConnectionsTab() {
       ) : null}
       {canEdit && showForm ? (
         <ConnectionForm
+          key={editing?.id ?? 'new'}
           initial={editing}
           busy={save.isPending}
           onCancel={() => setShowForm(false)}
@@ -242,6 +251,7 @@ function ConnectionForm({
             isRequired
             mono
             placeholder="https://api.openai.com/v1"
+            help="An https:// URL is required to offer the connection for experiments."
           />
           <TextField label="Model" value={model} onChange={setModel} isRequired mono placeholder="gpt-4.1" />
           <TextField

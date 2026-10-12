@@ -89,7 +89,7 @@ export function GeneralTab() {
         </section>
       ) : null}
 
-      {canManage ? (
+      {
         <section className={styles.card} aria-labelledby="general-rules">
           <div className={styles.cardHeader}>
             <div>
@@ -98,6 +98,7 @@ export function GeneralTab() {
               </Text>
               <Text variant="sm">
                 Who may approve corrections and whether the author can review their own.
+                {canManage ? '' : ' Only project managers can change these rules.'}
               </Text>
             </div>
           </div>
@@ -111,14 +112,18 @@ export function GeneralTab() {
                 ]}
                 value={approvers}
                 onChange={(k) => setApprovers((k as 'members' | 'managers') ?? 'members')}
-                isDisabled={readOnly}
+                isDisabled={readOnly || !canManage}
               />
             </div>
-            <Checkbox isSelected={differentReviewer} onChange={setDifferentReviewer} isDisabled={readOnly}>
+            <Checkbox
+              isSelected={differentReviewer}
+              onChange={setDifferentReviewer}
+              isDisabled={readOnly || !canManage}
+            >
               Require a different reviewer than the author
             </Checkbox>
           </div>
-          {!readOnly ? (
+          {!readOnly && canManage ? (
             <div className={styles.cardFooter}>
               <Button
                 variant="primary"
@@ -146,7 +151,7 @@ export function GeneralTab() {
             </div>
           ) : null}
         </section>
-      ) : null}
+      }
     </Stack>
   );
 }

@@ -23,6 +23,7 @@ import {
   useToast,
   type Column,
 } from '@/ui';
+import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
 import { SecretRevealDialog } from '../dialogs';
 import styles from './settings.module.css';
@@ -32,16 +33,25 @@ function fmt(iso: string | null | undefined): string {
 }
 
 export function ApiKeysTab() {
-  const { project, readOnly, isAdmin } = useProjectContext();
+  const { project, readOnly, isAdmin, canManage } = useProjectContext();
   return (
     <Stack gap="xl">
-      <KeysCard projectId={project.id} readOnly={readOnly} />
+      <KeysCard projectId={project.id} readOnly={readOnly} canManage={canManage} />
       {isAdmin ? <ReadTokensCard projectId={project.id} readOnly={readOnly} /> : null}
     </Stack>
   );
 }
 
-function KeysCard({ projectId, readOnly }: { projectId: string; readOnly: boolean }) {
+function KeysCard({
+  projectId,
+  readOnly,
+  canManage,
+}: {
+  projectId: string;
+  readOnly: boolean;
+  canManage: boolean;
+}) {
+  const { me } = useAuth();
   const keys = useApiKeys(projectId);
   const showSkeleton = useDelayedPending(keys.isPending);
   const create = useCreateApiKey(projectId);
@@ -74,7 +84,7 @@ function KeysCard({ projectId, readOnly }: { projectId: string; readOnly: boolea
       width: 100,
       resizable: false,
       cell: (k) =>
-        !k.revoked_at ? (
+        !k.revoked_at && (canManage || k.creator?.id === me.id) ? (
           <Button variant="danger" onPress={() => setRevoking(k)}>
             Revoke
           </Button>
@@ -148,6 +158,7 @@ function KeysCard({ projectId, readOnly }: { projectId: string; readOnly: boolea
         onClose={() => setSecret(null)}
         title="API key created"
         noun="API key"
+        description="Copy it now; it is shown once. Store it in a secret manager or your .env as QYM_API_KEY."
         secret={secret}
       />
       {revoking ? (
@@ -182,6 +193,13 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
   const [revoking, setRevoking] = useState<DatasetReadToken | null>(null);
   const columns: Column<DatasetReadToken>[] = [
     { id: 'name', label: 'Name', flex: true, minWidth: 140, cell: (t) => t.name || 'Unnamed token' },
+    { id: 'prefix', label: 'Prefix', width: 140, mono: true, cell: (t) => (t.prefix ? `${t.prefix}…` : '—') },
+    {
+      id: 'creator',
+      label: 'Created by',
+      width: 180,
+      cell: (t) => t.creator?.display_name || t.creator?.email || '—',
+    },
     { id: 'created', label: 'Created', width: 170, mono: true, cell: (t) => fmt(t.created_at) },
     {
       id: 'status',
@@ -269,6 +287,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
         onClose={() => setSecret(null)}
         title="Read token created"
         noun="Dataset read token"
+        description="Copy it now; it is shown once. Set it on the Evaluation Service as QYM_DATASET_READ_TOKEN. It can read every dataset in this project, private test sets included."
         secret={secret}
       />
       {revoking ? (
