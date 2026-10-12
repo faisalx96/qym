@@ -51,6 +51,7 @@ export function useLiveRun(runId: string, payload: RunPayload | undefined): Live
   const lastReloadAt = useRef(0);
   const lastReloadDuration = useRef(0);
   const reloading = useRef(false);
+  const finalQueued = useRef(false);
   const pendingRevision = useRef<string | null>(null);
   const liveRef = useRef(initiallyLive);
   const backoff = useRef(0);
@@ -59,18 +60,27 @@ export function useLiveRun(runId: string, payload: RunPayload | undefined): Live
 
   const reload = useCallback(
     async (final = false) => {
-      if (reloading.current) return;
+      if (reloading.current) {
+        // The run finished while a reload was in flight: that reload predates the end, so go again after it.
+        if (final) finalQueued.current = true;
+        return;
+      }
       reloading.current = true;
-      const started = Date.now();
+      let again = final;
       try {
-        await qc.refetchQueries({ queryKey: runKeys.compact(runId), exact: true });
-        lastReloadAt.current = Date.now();
-        lastReloadDuration.current = Date.now() - started;
-        setState((s) => ({ ...s, updatedAt: Date.now() }));
+        do {
+          finalQueued.current = false;
+          const started = Date.now();
+          await qc.refetchQueries({ queryKey: runKeys.compact(runId), exact: true });
+          lastReloadAt.current = Date.now();
+          lastReloadDuration.current = Date.now() - started;
+          setState((s) => ({ ...s, updatedAt: Date.now() }));
+          again = again || finalQueued.current;
+        } while (finalQueued.current);
       } finally {
         reloading.current = false;
       }
-      if (final) {
+      if (again) {
         void qc.invalidateQueries({ queryKey: runKeys.stepLatency(runId, null) });
         void qc.invalidateQueries({ queryKey: runKeys.reviewHistory(runId) });
         void qc.invalidateQueries({ queryKey: runKeys.passes(runId) });

@@ -439,6 +439,28 @@ describe('item reasons', () => {
 });
 
 describe('trace tree', () => {
+  it('builds a 6000-span trace without going quadratic and still drops true duplicates', () => {
+    const spans: Span[] = [];
+    for (let i = 0; i < 6000; i++) {
+      spans.push({
+        span_id: `s${i}`,
+        parent_span_id: null,
+        name: 'llm',
+        start_time_ns: i * 1e6,
+        end_time_ns: (i + 1) * 1e6 - 1,
+        duration_ms: 1,
+        status: 'OK',
+        attributes: { 'openinference.span.kind': 'LLM', 'llm.model_name': 'm', 'input.value': `q${i}` },
+      } as Span);
+    }
+    // an exact twin of span 10 (same model, input, output, timing)
+    spans.push({ ...spans[10]!, span_id: 'twin' });
+    const started = performance.now();
+    const tree = buildTree(spans);
+    expect(performance.now() - started).toBeLessThan(2500);
+    expect(flattenTree(tree.roots)).toHaveLength(6000);
+  });
+
   const span = (
     id: string,
     parent: string | null,
@@ -598,8 +620,18 @@ describe('normalizeTrace retried items', () => {
       summary: {},
       spans: [],
       attempts: [
-        { attempt_number: 1, status: 'failed', is_last_attempt: false, spans: [span('a', 'root', null, 'OK'), span('b', 'llm', 'a', 'ERROR', 1e6)] },
-        { attempt_number: 2, status: 'completed', is_last_attempt: true, spans: [span('c', 'root', null), span('d', 'llm', 'c', 'OK', 2e6)] },
+        {
+          attempt_number: 1,
+          status: 'failed',
+          is_last_attempt: false,
+          spans: [span('a', 'root', null, 'OK'), span('b', 'llm', 'a', 'ERROR', 1e6)],
+        },
+        {
+          attempt_number: 2,
+          status: 'completed',
+          is_last_attempt: true,
+          spans: [span('c', 'root', null), span('d', 'llm', 'c', 'OK', 2e6)],
+        },
       ],
     } as never);
     expect(norm.combined!.nodes.length).toBe(3);

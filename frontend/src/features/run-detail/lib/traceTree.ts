@@ -349,14 +349,20 @@ function pruneNodes(list: SpanNode[], toRemove: Set<SpanNode>): void {
 }
 
 function dedupeGlobalLlmSpans(tree: SpanTree): void {
-  const llms = tree.nodes.filter((n) => spanKind(n) === 'LLM');
+  // Duplicates must overlap in time by >= 90%, so sorting by start lets the inner loop stop at the first span
+  // that begins after `a` ends (spans without times can never match). Keeps big traces from going quadratic.
+  const llms = tree.nodes
+    .filter((n) => spanKind(n) === 'LLM' && spanStart(n) != null)
+    .sort((x, y) => spanStart(x)! - spanStart(y)! || x._i - y._i);
   if (llms.length < 2) return;
   const toRemove = new Set<SpanNode>();
   for (let i = 0; i < llms.length; i++) {
     const a = llms[i]!;
     if (toRemove.has(a)) continue;
+    const aEnd = spanEnd(a)!;
     for (let j = i + 1; j < llms.length; j++) {
       const b = llms[j]!;
+      if (spanStart(b)! >= aEnd) break;
       if (toRemove.has(b) || !llmLooksDuplicate(a, b)) continue;
       const keep = llmKeepPriority(a) >= llmKeepPriority(b) ? a : b;
       toRemove.add(keep === a ? b : a);
@@ -663,9 +669,7 @@ export function normalizeTrace(data: TracePayload): NormalizedTrace {
   // buildRetriedTree splices failed spans into the final attempt's tree, so it gets fresh copies:
   // a single-attempt view must keep showing only that attempt.
   const combined =
-    attempts.length > 1
-      ? buildRetriedTree(attempts.map((a) => ({ ...a, tree: buildTree(a.spans) })))
-      : null;
+    attempts.length > 1 ? buildRetriedTree(attempts.map((a) => ({ ...a, tree: buildTree(a.spans) }))) : null;
   if (combined) detectRetries(combined);
   return { item, attempts, lastAttempt, combined };
 }
