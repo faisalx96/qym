@@ -175,7 +175,7 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
 | 153 | Trace | Trace load failure shows error + Retry | RD/TraceDrawer.tsx | **OK** | traces.spec "failing trace request shows an error with Retry" |
 | 154 | Trace | `?trace=` for a repeat pass (`trace_pass`) | RD/hooks/useRunView.ts:103 | **OK** | traces.spec (new param, additive) |
 | 155 | Layout | Below 1200px analysis becomes a Drawer; `#anchor` opens it | RunBody.tsx:92-110; AnalysisPanel.tsx:108 | **OK** | ran at 1100: Esc closes, `#errors` opens drawer on Errors; panels.spec |
-| 156 | Layout | Narrow screens (<=480px) | RunBody.module.css | **BUGGY** (re-review: 399da86c did not close it) | Ran at 420px: shell content scrolls horizontally (scrollWidth 453 > 364), Items header description truncates to "E…", header buttons overflow, topbar title overlaps the run name. Minor; check against old at same width. |
+| 156 | Layout | Narrow screens (<=480px) | RunBody.module.css | **FIXED** (9470d413) (re-review: 399da86c did not close it) | Ran at 420px: shell content scrolls horizontally (scrollWidth 453 > 364), Items header description truncates to "E…", header buttons overflow, topbar title overlaps the run name. Minor; check against old at same width. |
 | 157 | Layout | Accessibility: table roles, aria-sort, dialogs, chart bars as buttons | RD/items/ItemsTable.tsx; Charts.tsx | **OK** | a11y.spec (8 axe cases); old page had div role=button cards / hover-only Sankey. Two buttons share the accessible name "Analysis" (Items header and topbar) - minor. |
 | 158 | Layout | RTL/Arabic: input titles and bodies dir=rtl/auto; search by Arabic text | RD/ItemsTable.tsx:111; lib/itemText.ts | **OK** | ran: `dir=rtl` on title and body; Arabic search 32 items = old |
 | 159 | Layout | Number formats (1.4s, 925ms, 5,200) | RD/ItemsTable.tsx:191 | **CHANGED** | Counts use thousands separators in new ("5,200 of 5,200 items", old "5200"). Fine. |
@@ -240,7 +240,7 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
    Where: lib/csv.ts  
    Repro: Compare old and new CSV headers (captured in scratchpad qa/old-export.csv, new-export.csv).  
    Hint: Add the root-cause JSON column per metric; document or keep legacy header names.
-15. **[minor] Narrow viewport (<=480px): horizontal overflow and overlapping topbar title**    **BUGGY (re-review: see ## Re-review).**
+15. **[minor] Narrow viewport (<=480px): horizontal overflow and overlapping topbar title**    **FIXED (9470d413; re-review round 2).**
    Where: RunBody.module.css; ItemsSection.module.css  
    Repro: Resize to 420px.  
    Hint: Wrap the Items header actions and let the description wrap; check shell topbar min-width.
