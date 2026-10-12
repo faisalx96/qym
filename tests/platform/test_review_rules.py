@@ -55,7 +55,6 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 
-DASHBOARD = ROOT / "packages/platform/qym_platform/_static/dashboard"
 ENDED_AT = datetime(2026, 9, 1, 12, 0, 0)
 
 OWNER = "owner@example.com"
@@ -404,41 +403,10 @@ def test_passes_of_a_reviewed_run_cannot_be_deleted(client, session_factory, sta
         assert "Unapprove the run before deleting passes" in response.json()["detail"]
 
 
-def test_runs_list_offers_no_pass_deletion_on_reviewed_runs():
-    """The row's pass delete icon and the bulk Delete follow the server's
-    409 on submitted and approved runs instead of offering a refused action."""
-    js = (DASHBOARD / "dashboard.js").read_text(encoding="utf-8")
-    assert (
-        "data-can-delete-pass=\"${canDelete && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED']"
-        ".includes(status) ? 'true' : 'false'}\"" in js
-    )
-    assert "&& !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(run.status || ''));" in js
-
-
-def test_run_page_locks_scores_and_offers_reset_and_equal_editor_actions():
-    run_html = (DASHBOARD / "run.html").read_text(encoding="utf-8")
-    compare_html = (DASHBOARD / "compare.html").read_text(encoding="utf-8")
-    assert "body.run-scores-locked .metric-edit-open" in run_html
-    assert "function applyScoreLockMode()" in run_html
-    assert "applyScoreLockMode();" in run_html
-    assert "metric-reset-btn" in run_html and "reset: true" in run_html
-    assert "scoreEditBadge(passMetricMeta" in run_html
-    assert "scoreEditBadge(fullMetricMeta" in run_html
-    # The chip editor's save button no longer has its own smaller size: save
-    # and cancel share the .qym-metric-edit-action square.
-    assert ".chip-edit .metric-edit-save {" not in run_html
-    assert "compareRunScoresLocked(runIdx)" in compare_html
-    assert "scoreEditTitle(score.meta)" in compare_html
-    # Edit bookkeeping is not listed as score metadata.
-    assert "['modified', 'original_score']" not in run_html + compare_html
-
-
 def test_edit_record_stays_in_the_lean_run_index():
     from qym_platform.services.run_payloads import _keep_index_meta_value
 
     assert _keep_index_meta_value("last_edit", {"by": "x" * 300})
-    details_js = (DASHBOARD / "run_details.js").read_text(encoding="utf-8")
-    assert "new Set(['error', 'status', 'task_error', 'last_edit'])" in details_js
 
 
 # ---------------------------------------------------------------------------
@@ -559,18 +527,6 @@ def test_managers_transfer_ownership(client, session_factory):
     # The new owner now submits it; the old one no longer can.
     assert client.post("/v1/runs/r1/submit", headers=_ui(OWNER)).status_code == 403
     _ok(client.post("/v1/runs/r1/submit", headers=_ui(MEMBER)))
-
-
-def test_runs_list_confirms_submission_and_offers_manager_actions():
-    js = (DASHBOARD / "dashboard.js").read_text(encoding="utf-8")
-    index = (DASHBOARD / "index.html").read_text(encoding="utf-8")
-    # The row icon and the bulk button open the confirmation, never POST directly.
-    assert "showWorkflowModal('submit', run.run_id, name, { runs: [run] });" in js
-    assert "showWorkflowModal('submit', null, '', { runs: selectedRuns });" in js
-    assert "apiUrl('v1/runs/submit')" in js
-    assert "for (const run of submittable)" not in js
-    assert "canSubmit = writable && (isOwner || isProjectManager)" in js
-    assert "Transfer ownership" in js and 'id="transfer-modal"' in index
 
 
 # ---------------------------------------------------------------------------
@@ -798,20 +754,6 @@ def test_editing_an_approved_correction_returns_it_to_pending(client, session_fa
         old = db.get(ReviewCorrection, first_id)
         assert old.is_active is False
         assert (old.reviewed_by_user_id, old.review_comment) == ("manager-1", "Checked the trace, correct")
-
-
-def test_reviews_page_disables_blocked_decisions_with_the_rule_and_equal_buttons():
-    html = (DASHBOARD / "reviews.html").read_text(encoding="utf-8")
-    assert "function renderDecisionActions(c, st, block)" in html
-    assert "review-decision-rule" in html and "title=\"${escapeHtml(block)}\"" in html
-    assert "Self-approved" in html
-    assert "refuseBlockedSelection(ids)" in html
-    # Approve and reject are the same square with the same icon size.
-    assert "&#10003;</button>" not in html and "&#10007;</button>" not in html
-    assert ".card-actions .review-decision {" in html
-    settings = (DASHBOARD / "project_settings.html").read_text(encoding="utf-8")
-    assert 'id="review-approvers"' in settings and 'id="review-different-reviewer"' in settings
-    assert "v1/projects/${state.project.id}/review-rules" in settings
 
 
 def test_review_rules_migration_is_quick_ddl_and_reversible(monkeypatch):

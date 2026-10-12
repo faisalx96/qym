@@ -41,11 +41,6 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 
-DASHBOARD = PLATFORM_SRC / "qym_platform" / "_static" / "dashboard"
-RUN_HTML = DASHBOARD / "run.html"
-PANEL_JS = DASHBOARD / "run_experiment_panel.js"
-RUNS_API = PLATFORM_SRC / "qym_platform" / "api" / "runs.py"
-
 TOKEN = "launch-token-secret-ZZZZ9999"
 SECRET_REF = "tmpkey-ref-abc123"
 LITERAL_KEY = "sk-live-literal-KKKK"
@@ -378,51 +373,16 @@ def test_clone_access_follows_project_membership(client, seed):
 # --------------------------------------------------------------------------- UI
 
 
-def test_run_page_loads_and_mounts_panel():
-    html = RUN_HTML.read_text(encoding="utf-8")
-    head = html.split("</head>", 1)[0]
-    assert '<script src="/static/run_experiment_panel.js?v=' in head
-    assert '<div id="run-experiment-panel"></div>' in html
-    assert "renderSummary();\n        renderExperimentPanel();" in html
-    assert "window.QymRunExperimentPanel.render(container, run," in html
-    assert "#run-experiment-panel:empty { display: none; }" in html
-    # Official runs show qym_* in the panel, not again in the metadata context.
-    assert "if (run.experiment) { hiddenMetadataKeys.add('qym_config');" in html
-
-
-def test_panel_js_renders_only_official_and_escapes():
-    js = PANEL_JS.read_text(encoding="utf-8")
-    assert "panel.origin !== 'official'" in js
-    assert "container.innerHTML = '';" in js
-    assert "function esc(value)" in js
-    for raw in ("panel.experiment_name +", "panel.error +", "panel.remote_job_id +"):
-        assert raw not in js, raw
-    # Rerun URL contract shared with the launch form (#23/#31).
-    assert "'/experiments?'" in js
-    assert "params.set('new', '1');" in js
-    assert "params.set('clone', String(panel.experiment_id));" in js
-    assert "if (panel.job_available && panel.job_id) params.set('job', String(panel.job_id));" in js
-    assert "Rerun with this config" in js
-    assert "Official run" in js
-
-
-def test_panel_follows_design_components():
-    js = PANEL_JS.read_text(encoding="utf-8")
-    assert "qym-inline-action qym-inline-action--accent" in js
-    assert "qym-tag qym-tag--accent" in js
-    assert "qym-badge qym-badge--" in js
-    assert "fontSize" not in js
-    html = RUN_HTML.read_text(encoding="utf-8")
-    panel_css = html.split("/* ─── Experiment panel", 1)[1].split("</style>", 1)[0]
-    assert "px;\n      font-size" not in panel_css
-    assert "var(--text-dim)" not in panel_css
-    assert "font-size: var(--font-" in panel_css
+# The live panel is React: frontend/src/features/experiments/RunExperimentPanel.test.tsx and
+# .states.test.tsx (official only, rerun URL contract with clone/job, promote rules, no actions in
+# the export), frontend/e2e/experiments/run-panel.spec.ts (an official run carries it, a local run
+# does not). What stays here is the offline export, which cannot load the panel's script.
 
 
 def test_run_export_drops_panel_script():
-    # The export strips every remaining /static/ script; the panel's tag must match it.
-    source = RUNS_API.read_text(encoding="utf-8")
-    strip_all = r'\s*<script\s+(?:defer\s+)?src="/static/[^"]+"></script>\s*'
-    assert strip_all in source
-    tag = re.search(r'<script[^>]*run_experiment_panel\.js[^>]*></script>', RUN_HTML.read_text(encoding="utf-8"))
-    assert tag and re.fullmatch(strip_all, tag.group(0))
+    from _support_a2 import source_run_api
+
+    with source_run_api(count=2) as client:
+        html = client.get("/api/runs/run-1/export-html").text
+    assert not re.search(r"<script[^>]*run_experiment_panel", html)
+    assert 'src="/static/' not in html

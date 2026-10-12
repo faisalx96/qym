@@ -347,12 +347,6 @@ def test_blocked_delete_says_when_trash_stops_blocking(client, session_factory, 
     reason = client.get(url, headers=ADMIN).json()["blocked_reason"]
     assert "automatic Trash purging is turned off" in reason
 
-    settings = (
-        ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard" / "project_settings.html"
-    ).read_text(encoding="utf-8")
-    assert "delete its runs first" not in settings
-    assert "until its runs are deleted and purged from Trash" in settings
-
 
 def test_patch_toggling_is_active_is_audited_like_archive(client, session_factory):
     """PATCH is_active cuts off or restores API keys, so it leaves the same trail."""
@@ -398,21 +392,3 @@ def test_project_lifecycle_endpoints_are_admin_only(client, session_factory):
     ):
         assert getattr(client, method)(url, headers=MANAGER).status_code == 403
     assert _row_counts(session_factory, project_id)["project"] == 1
-
-
-def test_danger_zone_buttons_call_their_own_endpoints() -> None:
-    dashboard = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-    settings = (dashboard / "project_settings.html").read_text(encoding="utf-8")
-    admin = (dashboard / "admin.html").read_text(encoding="utf-8")
-
-    assert "v1/admin/projects/${state.project.id}/archive" in settings
-    assert "v1/admin/projects/${state.project.id}/deletion" in settings
-    assert "v1/admin/projects/${state.project.id}?confirm=${encodeURIComponent(name)}" in settings
-    assert "backend will archive it instead" not in settings
-    assert "Runs and data are preserved" not in settings
-    assert "Permanently delete this project, all runs" not in settings
-    # Admin table: archive/unarchive only, via the shared dialog, never DELETE.
-    assert "data-project-unarchive" in admin
-    assert "${archived ? 'archive' : 'unarchive'}" in admin
-    assert "confirm('Archive this project?')" not in admin
-    assert "v1/admin/projects/${btn.dataset.projectDelete}" not in admin

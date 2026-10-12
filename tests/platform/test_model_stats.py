@@ -2,16 +2,17 @@
 
 ``POST /api/dashboard/models/stats`` replaces downloading every selected run's
 item rows (``GET /api/models/runs``) and reducing them in the browser. Its
-numbers must equal what ``metrics.js`` (``calculateItemLevelMetrics``) and
-``dashboard.js`` (``expandSampledRunsData``) computed from those rows.
+numbers must equal what the browser reduction (the vanilla ``metrics.js``
+``calculateItemLevelMetrics`` over ``dashboard.js`` ``expandSampledRunsData``)
+computed from those rows. That reduction is gone with the vanilla dashboard (the Models and Charts
+pages read this endpoint only), so its outputs are frozen as golden files
+(``fixtures/golden/model_stats_*.json``, recorded from the deleted code on the very same inputs).
 """
 
 from __future__ import annotations
 
 import json
 import random
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -26,43 +27,10 @@ from qym_platform.services.dashboard_cache import DashboardSnapshotCache
 from qym_platform.services.model_stats import group_stats, k_run_stats
 from test_dashboard_durable_summaries import drain, item, run
 from test_lost_outcome_events import emitter, rid  # noqa: F401
-from test_minimize_errors import _node, _principal, _spec
+from test_minimize_errors import _principal, _spec
 from test_repeat_task_errors_per_pass import _run as _repeat_run
 
-DASHBOARD_JS = (
-    Path(__file__).resolve().parents[2]
-    / "packages/platform/qym_platform/_static/dashboard/dashboard.js"
-)
-
-# The browser's former reduction (dashboard.js calculateModelStatsFromItems):
-# expand repeat runs that carry every pass, then metrics.js.
-JS_STATS = """
-const source = input.expand;
-const expand = (new Function('window', source + '\\nreturn expandSampledRunsData;'))({ QymMetrics: m });
-const out = input.cases.map(c => {
-  const met = m.calculateItemLevelMetrics({
-    runsData: expand(c.runs),
-    metricName: c.metric,
-    threshold: c.is_boolean ? 0.9999 : c.threshold,
-    direction: c.direction,
-    isBoolean: !!c.is_boolean,
-    getMetricIndex: rd => (rd?.snapshot?.metric_names || rd?.run?.metric_names || []).indexOf(c.metric),
-    getItemId: row => row.item_id || String(row.index),
-    trackDistribution: true,
-  });
-  const noScore = met.totalScoreCount === 0 && m.errorsLeftOut(c.direction);
-  return {
-    passAtK: met.passAtK, passHatK: met.passHatK, maxAtK: noScore ? null : met.maxAtK,
-    consistency: met.consistency, reliability: met.reliability,
-    avgScore: noScore ? null : met.avgScore, avgLatency: met.avgLatency,
-    medianLatency: met.medianLatency, totalItems: met.totalItems,
-    failedCount: met.failedCount, minScore: noScore ? null : met.minScore,
-    stddevScore: met.stddevScore, K: met.K, correctDistribution: met.correctDistribution,
-    totalScoreCount: met.totalScoreCount,
-  };
-});
-process.stdout.write(JSON.stringify(out));
-"""
+GOLDEN = Path(__file__).parent / "fixtures" / "golden"
 
 FIELDS = (
     "passAtK",
@@ -81,17 +49,6 @@ FIELDS = (
     "correctDistribution",
     "totalScoreCount",
 )
-
-
-def _expand_source():
-    source = DASHBOARD_JS.read_text()
-    start = source.index("  function expandSampledRunsData(runsData) {")
-    end = source.index("\n  }\n", start) + 4
-    return source[start:end]
-
-
-def _js(cases):
-    return _node(JS_STATS, {"expand": _expand_source(), "cases": cases})
 
 
 def _same(python, javascript):
@@ -179,20 +136,16 @@ def _random_runs(rng):
 
 
 def test_server_statistics_equal_the_browser_reduction_on_random_rows():
+    golden = json.loads((GOLDEN / "model_stats_random_rows.json").read_text())
+    assert len(golden["cases"]) == 120
+    # the generator still produces the recorded inputs
     rng = random.Random(20261001)
-    cases = []
-    for _ in range(120):
-        cases.append(
-            {
-                "runs": _random_runs(rng),
-                "metric": "accuracy",
-                "threshold": rng.choice([0.5, 0.8, 0.2]),
-                "is_boolean": rng.random() < 0.2,
-                "direction": rng.choice(["maximize", "minimize", None]),
-            }
-        )
-    expected = _js(cases)
-    for case, javascript in zip(cases, expected):
+    for case in golden["cases"]:
+        assert case["runs"] == _random_runs(rng)
+        assert case["threshold"] == rng.choice([0.5, 0.8, 0.2])
+        assert case["is_boolean"] == (rng.random() < 0.2)
+        assert case["direction"] == rng.choice(["maximize", "minimize", None])
+    for case, javascript in zip(golden["cases"], golden["expected"]):
         if not case["runs"]:
             continue  # the view never asks for an empty group
         python = k_run_stats(
@@ -233,20 +186,6 @@ def test_empty_pass_scores_do_not_pool_a_repeat_run_into_k_entries():
     stats = k_run_stats([run], "accuracy", 0.8, False, "maximize")
     assert stats["K"] == 1
     assert stats["passAtK"] == 1.0
-    assert (
-        _js(
-            [
-                {
-                    "runs": [run],
-                    "metric": "accuracy",
-                    "threshold": 0.8,
-                    "is_boolean": False,
-                    "direction": "maximize",
-                }
-            ]
-        )[0]["K"]
-        == 1
-    )
 
 
 def _seed_classic(db):
@@ -294,8 +233,10 @@ def _seed_classic(db):
 def test_endpoint_matches_the_browser_on_stored_runs_and_reads_one_metric(
     database, emitter
 ):
+    golden = json.loads((GOLDEN / "model_stats_stored_runs.json").read_text())
     repeat_last = _repeat_run(emitter, "fails-last", 3)
     repeat_first = _repeat_run(emitter, "fails-first", 1)
+    assert golden["ids"] == {"fails-last": repeat_last, "fails-first": repeat_first}
     with Session(database) as db:
         _seed_classic(db)
     drain(database)
@@ -304,12 +245,6 @@ def test_endpoint_matches_the_browser_on_stored_runs_and_reads_one_metric(
         {"key": "repeat", "runs": [repeat_last, repeat_first]},
         {"key": "mixed", "runs": ["c2", repeat_last]},
     ]
-    with Session(database) as db:
-        runs = {r.id: r for r in db.query(Run).all()}
-        payload = runs_api._build_models_runs_data(
-            db, [runs[r] for r in ("c1", "c2", repeat_last, repeat_first)]
-        )
-    by_id = {entry["run"]["run_id"]: entry for entry in payload}
     for metric, direction in (
         ("score", "maximize"),
         ("cost", "minimize"),
@@ -329,20 +264,9 @@ def test_endpoint_matches_the_browser_on_stored_runs_and_reads_one_metric(
                 principal=_principal(db),
             )
         assert response["missing"] == []
-        expected = _js(
-            [
-                {
-                    "runs": [by_id[r] for r in group["runs"]],
-                    "metric": metric,
-                    "threshold": 0.5,
-                    "is_boolean": False,
-                    "direction": direction,
-                }
-                for group in groups
-            ]
-        )
-        for group, javascript in zip(groups, expected):
-            _same(response["groups"][group["key"]], javascript)
+        expected = golden["expected"][metric]
+        for group in groups:
+            _same(response["groups"][group["key"]], expected[group["key"]])
         # A statistics response is a few hundred bytes per group.
         assert len(json.dumps(response)) < 600 * len(groups)
 
@@ -474,62 +398,3 @@ def test_nonfinite_score_text_is_no_score():
         assert model_stats.parse_score_value(raw) is None
     assert model_stats.parse_score_value("85%") == pytest.approx(0.85)
     assert model_stats.parse_score_value("0.5 points") == pytest.approx(0.5)
-
-
-def _stats_fetch_source():
-    source = DASHBOARD_JS.read_text()
-    start = source.index("  let modelStatsCache = null;")
-    end = source.index("  function calculateModelTraceStats(runs) {", start)
-    return source[start:end]
-
-
-def test_large_stat_requests_split_within_the_server_limits():
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("Node.js is required to check dashboard.js")
-    script = """
-const fs = require('fs');
-const calls = [];
-const state = {};
-const getProjectSlugFromPath = () => 'p';
-async function dashboardQuery(path, payload) {
-  calls.push(payload.groups.map(group => group.runs.length));
-  const groups = {};
-  payload.groups.forEach(group => { groups[group.key] = { n: group.runs.length }; });
-  return { groups, missing: [] };
-}
-eval(fs.readFileSync(0, 'utf8') + `
-(async () => {
-  const many = Array.from({ length: 101 }, (_, i) => ({ key: 'g' + i, runs: ['r' + i] }));
-  const wide = [0, 1, 2].map(i => ({ key: 'w' + i, runs: Array.from({ length: 900 }, (_, j) => i + '-' + j) }));
-  const a = await fetchModelStats(many, 'm', 0.5, false, null, 1);
-  const b = await fetchModelStats(wide, 'm', 0.5, false, null, 2);
-  const modelCalls = calls.splice(0);
-  const big = Array.from({ length: 2001 }, (_, j) => 'b' + j);
-  const results = await Promise.allSettled([
-    fetchChartGroupStats('big', big, 'm', 0.5, false, null),
-    fetchChartGroupStats('ok', ['x'], 'm', 0.5, false, null),
-  ]);
-  console.log(JSON.stringify({
-    groups: [Object.keys(a.groups).length, Object.keys(b.groups).length],
-    modelCalls,
-    chartCalls: calls,
-    chart: results.map(r => r.status),
-  }));
-})();
-`);
-"""
-    result = subprocess.run(
-        [node, "-e", script],
-        input=_stats_fetch_source(),
-        text=True,
-        capture_output=True,
-        timeout=60,
-    )
-    assert result.returncode == 0, result.stderr
-    out = json.loads(result.stdout)
-    assert out["groups"] == [101, 3]
-    assert out["modelCalls"] == [[1] * 100, [1], [900, 900], [900]]
-    # The oversized group fails alone; the other group of its tick still loads.
-    assert out["chart"] == ["rejected", "fulfilled"]
-    assert out["chartCalls"] == [[1]]

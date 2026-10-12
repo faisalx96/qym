@@ -1,18 +1,14 @@
-"""Official defaults editor, publish and history UI; saved presets list (#30).
+"""Official defaults publish and history API; saved presets list (#30).
 
-- API round trip exactly as ``eval_official_defaults.js`` drives it (P3 exit: a
-  manager publishes v1): the drawer reads ``can_publish_official``/``can_publish``,
-  the editor publishes the §8.1 document it builds (no dataset needed, schema hash
-  pinned) with required release notes, and members see the history (notes, author,
-  date) but are refused when they try to publish.
-- Static checks: the launch form's editor mode (mountEditor), the drawer section,
-  the settings page wiring and the new stylesheet (no browser needed).
-"""
+API round trip exactly as the default preset editor drives it (P3 exit: a manager
+publishes v1): the page reads ``can_publish_official``/``can_publish``, the editor
+publishes the 8.1 document it builds (no dataset needed, schema hash pinned) with
+required release notes, and members see the history (notes, author, date) but are
+refused when they try to publish. The UI is covered by
+frontend/e2e/experiments/launch/preset-editor.spec.ts."""
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
 
 from qym_platform.db.models import EvalConfigPresetVersion
 
@@ -31,15 +27,6 @@ from test_experiments_api import (  # noqa: F401  (pytest fixtures)
     env,
     session_factory,
 )
-
-ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-LAUNCH = (DASHBOARD / "experiment_launch.js").read_text(encoding="utf-8")
-MODULE = (DASHBOARD / "eval_official_defaults.js").read_text(encoding="utf-8")
-STYLES = (DASHBOARD / "eval_official_defaults.css").read_text(encoding="utf-8")
-ENVIRONMENTS_JS = (DASHBOARD / "eval_environments.js").read_text(encoding="utf-8")
-SETTINGS = (DASHBOARD / "project_settings.html").read_text(encoding="utf-8")
-EXPERIMENTS = (DASHBOARD / "experiments.html").read_text(encoding="utf-8")
 
 
 def _presets(env_id: str, suffix: str = "") -> str:
@@ -144,9 +131,10 @@ def test_manager_publishes_v1_and_members_read_history_but_cannot_publish(
         headers=_headers(MEMBER),
     )
     assert old.status_code == 200
-    assert old.json()["version"]["config"]["env_overrides"][
-        "MILVUS_SEARCH_THRESHOLD"
-    ] == 0.7
+    assert (
+        old.json()["version"]["config"]["env_overrides"]["MILVUS_SEARCH_THRESHOLD"]
+        == 0.7
+    )
     assert old.json()["remap"]["ok"] is True
     with session_factory() as s:
         versions = (
@@ -159,9 +147,7 @@ def test_manager_publishes_v1_and_members_read_history_but_cannot_publish(
         assert versions[0].config["env_overrides"]["MILVUS_SEARCH_THRESHOLD"] == 0.7
 
 
-def test_publish_refuses_temporary_models_and_sweeps_with_pointed_errors(
-    client, env
-):
+def test_publish_refuses_temporary_models_and_sweeps_with_pointed_errors(client, env):
     doc = _editor_document(env, None)
     doc["slot_bindings"] = {
         PRIMARY: {"temporary": {"label": "trial", "model": "gpt-4o-mini"}}
@@ -199,125 +185,3 @@ def test_saved_presets_list_names_author_and_update_time(client, env, conn):
     assert saved["name"] == "Low threshold"
     assert saved["created_by"] == {"id": "member-2", "name": "member2"}
     assert saved["updated_at"] and saved["current_version"]["version"] == 1
-
-
-# --------------------------------------------------------------------------- static
-
-
-def test_launch_form_has_a_small_editor_mode():
-    assert "function mountEditor(options)" in LAUNCH
-    assert "{ mount, mountEditor, BASE_OPTIONS }" in LAUNCH
-    assert "opts.mode === 'editor'" in LAUNCH
-    # Editor mode is the launch wizard over one environment: no environments,
-    # priority, name or dry-run preview; the last step reviews and publishes.
-    groups = LAUNCH[LAUNCH.index("function wizardGroups(newEnvButton)") :]
-    groups = groups[: groups.index("    function stepChangeCount(")]
-    editor_groups = groups[groups.index("      if (editor) {") : groups.index("      return Object.assign({\n        1: [")]
-    for section in ("'dataset'", "'base'", "'models'"):
-        assert section in editor_groups
-    for section in ("'environments'", "'run'", "data-xl-sweeps", "'settings'"):
-        assert section not in editor_groups
-    # Steps 4 to 6 are shared: Environment configurations (no sweeps in the
-    # editor), Evaluation configurations, then the review step with Raw JSON.
-    shared = groups[groups.index("      const shared = {") : groups.index("      if (editor) {")]
-    for part in ("section('settings'", "'data-xl-advanced': '1'", "'data-xl-advanced-slot': 'json'"):
-        assert part in shared, part
-    assert "editor ? null : el('div', { 'data-xl-sweeps': '1'" in shared
-    for label in ("Environment configurations", "Evaluation configurations"):
-        assert LAUNCH.count(f"label: '{label}'") == 2, label
-    assert "if (editor) { renderWizardLayout(null); return; }" in LAUNCH
-    assert "label: 'Review and ' + (opts.saveVerb || 'publish')" in LAUNCH
-    assert "if (editor) { renderPreviewSoon(); return; }" in LAUNCH
-    assert "if (editor) { renderEditorPanel(host); return; }" in LAUNCH
-    # One configuration: sweeps and (for official defaults) temporary models refused.
-    assert "Sweeps are not allowed here" in LAUNCH
-    assert "opts.allowTemporary === false" in LAUNCH
-    # Output is a config document handed to onSave, never a launch.
-    assert "opts.onSave({ config: editorConfig()" in LAUNCH
-    assert "delete spec.slot_bindings[key].temporary.api_key" in LAUNCH
-    # Diff vs base reuses #31's counting; notes can be required.
-    assert "diff: diffVsBase()" in LAUNCH
-    assert "opts.notesRequired" in LAUNCH
-    # #34 sweeps can tell the modes apart.
-    assert "mode: editor ? 'editor' : 'launch'" in LAUNCH
-
-
-def test_launch_form_opens_a_saved_preset_from_the_url():
-    assert "params.get('preset')" in LAUNCH
-    assert "params.get('base')) === 'saved'" in LAUNCH
-    assert "st.savedPresetId = presetParam" in LAUNCH
-
-
-def test_drawer_section_publish_history_and_saved_presets():
-    for needle in (
-        "function renderDrawerSection(container, options)",
-        "function openEditor(options)",
-        "can_publish_official",
-        "can_publish",
-        "'/versions'",
-        "?remap=current",
-        "kind: 'official'",
-        "notesRequired: true",
-        "notesLabel: 'Release notes'",
-        "allowTemporary: false",
-        "Version history",
-        "published_by",
-        "Config document (read-only)",
-        "Only project managers publish the default preset",
-        "&base=saved&preset=",
-        "Saved presets",
-        "created_by",
-        "launch.mountEditor(",
-    ):
-        assert needle in MODULE, needle
-    # Write actions only when the API says so and a host can mount the editor.
-    assert "if (!data.canPublishOfficial) return false;" in MODULE
-    assert "typeof opts.onEdit === 'function'" in MODULE
-    # Nothing is parsed as HTML.
-    assert "innerHTML" not in MODULE
-    assert "ensureStylesheet()" in MODULE
-
-
-def test_environment_drawer_and_settings_page_are_wired():
-    assert "presets: presetsSection" in ENVIRONMENTS_JS
-    assert "window.QymOfficialDefaults.renderDrawerSection(target" in ENVIRONMENTS_JS
-    assert "onEditOfficial: ctl.opts.onEditOfficial" in ENVIRONMENTS_JS
-    for script in (
-        "eval_temporary_model.js",
-        "experiment_launch_advanced.js",
-        "experiment_launch.js",
-        "eval_official_defaults.js",
-    ):
-        assert f'src="/static/{script}' in SETTINGS, script
-    assert 'href="/static/eval_official_defaults.css' in SETTINGS
-    assert 'id="env-editor-host"' in SETTINGS
-    assert "onEditOfficial: openOfficialDefaultsEditor" in SETTINGS
-    assert "window.QymOfficialDefaults.openEditor({" in SETTINGS
-    # Both pages load the same launch-form build.
-    version = re.search(r"experiment_launch\.js\?v=([\w-]+)", SETTINGS).group(1)
-    assert f"experiment_launch.js?v={version}" in EXPERIMENTS
-
-
-def test_new_styles_follow_the_design_language():
-    assert not re.search(r"font-size:\s*\d", STYLES)
-    assert "var(--text-dim)" not in STYLES
-    assert not re.search(r"#[0-9a-fA-F]{3,6}\b", STYLES)
-    rules = re.sub(r"/\*.*?\*/", "", STYLES, flags=re.S)
-    selectors = re.findall(r"([^{}]+)\{", rules)
-    for selector in selectors:
-        for part in selector.split(","):
-            assert part.strip().startswith(".odx-"), part
-
-
-def test_editor_mode_never_mounts_the_sweep_ui():
-    # Official defaults can't hold sweeps (#30), so the editor turns #34 off.
-    from pathlib import Path
-
-    js = (
-        Path(__file__).resolve().parents[2]
-        / "packages/platform/qym_platform/_static/dashboard/experiment_launch.js"
-    ).read_text()
-    editor = js[js.index("function mountEditor(") :]
-    editor = editor[: editor.index("\n  }\n")]
-    assert "sweeps: false" in editor
-    assert "opts.sweeps === false" in js

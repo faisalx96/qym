@@ -8,7 +8,6 @@ the key. Rows live in ``dashboard_run_versions``, kept by the projection worker.
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -41,11 +40,6 @@ from qym_platform.services.run_versioning import (
     parse_versioning_params,
 )
 from test_dashboard_durable_summaries import drain, item, run
-
-STATIC = (
-    Path(__file__).resolve().parents[2]
-    / "packages/platform/qym_platform/_static/dashboard"
-)
 
 # run id -> (experiment, stored remote_versioning, legacy remote_result, started day)
 RUNS = {
@@ -462,18 +456,3 @@ def test_experiments_versioning_filter_and_facets(database, client):  # noqa: F8
         "kb_version": ["400", "381"],
         "prompt_version": ["p7"],
     }
-
-
-def test_versioning_filter_static_contract():
-    source = (STATIC / "dashboard.js").read_text()
-    assert "filters.versioning = versioningFilters();" in source
-    assert "facets?.versioning" in source
-    assert "filterVersioning:" in source
-    for page in ("index.html", "charts.html", "models.html"):
-        markup = (STATIC / page).read_text()
-        assert 'id="versioning-filters"' in markup, page
-    experiments = (STATIC / "experiments.js").read_text()
-    assert "include_versioning_facets" in experiments
-    assert (
-        "params.append('versioning', key + '=' + state.versioning[key])" in experiments
-    )

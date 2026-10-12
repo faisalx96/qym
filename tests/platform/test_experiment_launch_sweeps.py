@@ -1,9 +1,8 @@
 """Sweep UI of the launch form (plan §8.3, §12.2, §8.1; issue #34).
 
-Static contract checks on ``experiment_launch_sweeps.js``/``.css``, the hooks in
-``experiment_launch.js`` and the Raw JSON round trip in
-``experiment_launch_advanced.js`` (no browser or ``node`` needed), plus API round
-trips with the spec the UI builds. ``ui_spec()`` mirrors ``buildSpec()``: swept
+API round trips with the spec the sweeps UI builds (the UI itself is covered by
+frontend/e2e/experiments/launch/sweeps.spec.ts and launch/model/sweeps.test.ts).
+``ui_spec()`` mirrors ``buildSpec()``: swept
 values are stored as ``{"sweep": [...]}`` in ``st.values`` (flattened pointers,
 nested by ``buildOverrides``), a model sweep is ``st.bindings[slot] = {kind: 'raw',
 value: {sweep: [binding, ...]}}``, and "Link selected" writes ``st.links``. The P4
@@ -13,8 +12,6 @@ exit criterion: 2 models × 2 thresholds × 2 environments = 8 runs from one sub
 from __future__ import annotations
 
 import json
-import re
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -35,14 +32,6 @@ from test_experiments_api import (  # noqa: F401  (fixtures)
     env,
     session_factory,
 )
-
-ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-PAGE = (DASHBOARD / "experiments.html").read_text(encoding="utf-8")
-LAUNCH = (DASHBOARD / "experiment_launch.js").read_text(encoding="utf-8")
-ADVANCED = (DASHBOARD / "experiment_launch_advanced.js").read_text(encoding="utf-8")
-MODULE = (DASHBOARD / "experiment_launch_sweeps.js").read_text(encoding="utf-8")
-STYLES = (DASHBOARD / "experiment_launch_sweeps.css").read_text(encoding="utf-8")
 
 THR = "/env_overrides/MILVUS_SEARCH_THRESHOLD"
 TEMP = "/env_overrides/LLM_OVERRIDES/main/temperature"
@@ -132,157 +121,6 @@ def _p4_spec(conn_a: str, conn_b: str, **kwargs) -> dict:
         },
         **kwargs,
     )
-
-
-# --------------------------------------------------------------------------- page + hooks
-
-
-def test_page_loads_the_sweeps_assets_before_the_form(client):
-    assets = re.findall(r'(?:src|href)="/static/([^"?]+)', PAGE)
-    for asset in ("experiment_launch_sweeps.js", "experiment_launch_sweeps.css"):
-        assert asset in assets, asset
-        assert client.get(f"/static/{asset}").status_code == 200, asset
-    assert PAGE.index('src="/static/experiment_launch_sweeps.js') < PAGE.index(
-        'src="/static/experiment_launch.js'
-    )
-    assert "'static/experiment_launch_sweeps.css" in LAUNCH
-
-
-def test_launch_form_hooks_are_small_and_can_be_disabled():
-    assert "'data-xl-sweeps': '1'" in LAUNCH
-    assert "const api = window.QymLaunchSweeps;" in LAUNCH
-    assert "sweeps = api.mount(host, sweepsApi());" in LAUNCH
-    # Editor mode (#30) and other forms without sweeps: mount({ sweeps: false }).
-    assert "opts.sweeps === false" in LAUNCH
-    for call in (
-        "sweeps.localErrors()",
-        "sweeps.onSpecChange()",
-        "sweeps.modelCard(slot, { head, fills })",
-        "sweeps.modelToggle(slot)",
-        "sweeps.editor({",
-        "sweeps.toggle({",
-        "sweeps.previewAxes(st.preview)",
-    ):
-        assert LAUNCH.count(call) == 1, call
-    assert "if (sweeps) sweeps.teardown();" in LAUNCH
-    # Every hook is guarded, so the form works without the module.
-    assert "sweeps ? sweeps.modelCard" in LAUNCH
-    assert "if (!sweeps || boundBy" in LAUNCH
-    # Advanced sees the module (or null) and shares the role-cell helper.
-    assert "sweeps, // #34: null when sweeps are off" in LAUNCH
-    assert "api.fillCell(td, control, entry, pointer, bound[pointer]" in ADVANCED
-
-
-def test_swept_values_live_in_the_form_state():
-    # One source of truth: {"sweep": [...]} in st.values / st.bindings, links in st.links.
-    assert "set: (value) => sweepTarget(pointer).set(value)" in LAUNCH
-    assert "api.setBinding(slot.slot_key, { kind: 'raw', value: { sweep: " in MODULE
-    assert "st.links = model.groups.concat([picked]);" in MODULE
-    assert "if (st.links) spec.links = deepCopy(st.links);" in LAUNCH
-    # Links of values that stop being swept are dropped; base switches keep them.
-    assert "const groups = cleanLinks(st.links, sweptSet());" in MODULE
-    assert "st.clone.linkedGroups) : links;" in LAUNCH
-    # A sweep editor (or the structured JSON editor) writes the state itself; the
-    # leaf listener only re-marks.
-    assert (
-        "if (!control.hasAttribute('data-xs-sweep') && "
-        "!control.hasAttribute('data-xl-structured'))" in LAUNCH
-    )
-
-
-def test_widgets():
-    assert "window.QymLaunchSweeps = { mount, sweepable, checkValues, bindingKey };" in MODULE
-    # "+ values" on every sweepable field: scalars only, never keys.
-    assert "text: '+ values'" in MODULE
-    assert "SCALAR_TYPES = ['integer', 'number', 'boolean', 'enum', 'string']" in MODULE
-    assert "entry.secret || entry.widget === 'secret'" in MODULE
-    # Booleans: [true, false] in one click.
-    assert "if (o.entry.type === 'boolean') start = [true, false];" in MODULE
-    # Enums, booleans and endpoint references: a multi-select of pressed chips.
-    assert "className: 'qym-chip xs-chip', 'aria-pressed':" in MODULE
-    assert "o.entry.type === 'enum'" in MODULE and "'endpoint-ref'" in MODULE
-    # Numbers: typed lists and a start/stop/step range expanded client-side.
-    assert "function expandRange(entry, startRaw, stopRaw, stepRaw)" in MODULE
-    assert "RANGE_MAX = 100" in MODULE
-    assert "'Add range'" in MODULE and "'Range…'" in MODULE
-    # Back to one value.
-    assert "'Single value'" in MODULE and "'Single model'" in MODULE
-
-
-def test_models_multi_select_per_slot():
-    assert "text: '+ models'" in MODULE
-    assert "api.slotConnections(slot)" in MODULE
-    assert "chip('inherit', { inherit: true }, 'Inherit'" in MODULE
-    # Temporary models may be swept; their keys go straight to the form's memory.
-    assert "api.rememberSecret(result.secretRef, result.apiKey)" in MODULE
-    assert "canSaveToProject: false" in MODULE
-    assert "rememberSecret: (ref, key) => { st.secrets[ref] = key; }" in LAUNCH
-    # Keys of swept temporary models are sent in `secrets` and survive edits.
-    assert "bindingSecretRefs(b).forEach((ref) => { if (has(st.secrets, ref))" in LAUNCH
-    assert "clearBinding(slotKey, bindingSecretRefs(binding));" in LAUNCH
-
-
-def test_linked_groups_ui():
-    assert "text: 'Sweeps'" in MODULE
-    assert "text: 'Link selected'" in MODULE and "text: 'Unlink'" in MODULE
-    assert "'data-xl-pointer': '/links'" in MODULE  # link errors focus the card
-    assert "Linked values need the same number of values" in MODULE
-    assert "function checkLinks(doc)" in MODULE
-
-
-def test_preview_runs_and_cap():
-    assert "count + ' run' + (count === 1 ? '' : 's') + ' to launch'" in LAUNCH
-    assert "st.preview.combo_count" in LAUNCH
-    assert "if (res.data && res.data.max_jobs != null) st.maxJobs = res.data.max_jobs;" in LAUNCH
-    # Submit is disabled over the cap, on the dry run's count or the local estimate.
-    assert "disabled: st.launching || !st.selected.length || overCap," in LAUNCH
-    assert "if (st.launching || overRunLimit()) return;" in LAUNCH
-    assert "return estimate > cap || runCount() > cap;" in LAUNCH
-    assert "function jobEstimate()" in MODULE
-    assert "'data-xl-over-cap': '1'" in LAUNCH
-
-
-def test_raw_json_round_trips_sweeps():
-    assert "not editable in this form yet" not in ADVANCED
-    assert "adv.links" not in ADVANCED
-    assert "api.sweeps.checkValues(entry, value)" in ADVANCED
-    assert "api.sweeps.checkLinks(doc)" in ADVANCED
-    assert "next[slotKey] = { kind: 'raw', value: { sweep: items } };" in ADVANCED
-    assert "st.links = result.links || undefined;" in ADVANCED
-    assert "api.sweeps.editor({" in ADVANCED  # evaluation inputs are sweepable too
-    # Without the module, JSON sweeps are refused rather than silently dropped.
-    assert "if (!api.sweeps) { errors.push({ pointer, message: SWEEP_MESSAGE });" in ADVANCED
-
-
-def test_nothing_parses_as_html_and_keys_are_never_read():
-    for banned in (
-        "innerHTML",
-        "outerHTML",
-        "insertAdjacentHTML",
-        "document.write",
-        "localStorage",
-        "sessionStorage",
-        "indexedDB",
-        "document.cookie",
-        "console.",
-        "st.secrets",
-    ):
-        assert banned not in MODULE, banned
-    assert "node.textContent" not in MODULE  # nodes come from api.el()
-    assert LAUNCH.count("innerHTML") == 2  # still only the escaped temporary chip
-
-
-def test_styles_follow_the_design_language():
-    assert not re.search(r"font-size:\s*\d", STYLES)
-    assert not re.search(r"#[0-9a-fA-F]{3,6}\b", STYLES)
-    assert "qym-" not in STYLES  # shared components are never restyled
-    body = re.sub(r"/\*.*?\*/", "", STYLES, flags=re.S)
-    for selector in re.findall(r"(?:^|\})\s*([^{}]+?)\s*\{", body):
-        for part in selector.split(","):
-            classes = re.findall(r"\.([\w-]+)", part)
-            assert classes and all(c.startswith("xs-") for c in classes), part
-    assert not re.search(r"fontSize:\s*['\"]\d", MODULE)
-    assert not re.search(r"#[0-9a-fA-F]{6}\b", MODULE)
 
 
 # --------------------------------------------------------------------------- API
@@ -428,7 +266,10 @@ def test_invalid_sweeps_point_at_the_chip(
     # The editor refuses these locally; the service points at the same place.
     spec = ui_spec(
         {PRIMARY: {"connection_id": conn.id}},
-        {"/LLM_OVERRIDES/endpoints/primary/timeout": 60, "/MILVUS_SEARCH_THRESHOLD": value},
+        {
+            "/LLM_OVERRIDES/endpoints/primary/timeout": 60,
+            "/MILVUS_SEARCH_THRESHOLD": value,
+        },
     )
     data = _post(client, ui_request([env.id], spec, dry_run=True)).json()
     assert not data["ok"]

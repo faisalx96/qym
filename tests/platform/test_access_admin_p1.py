@@ -335,8 +335,6 @@ def test_signup_is_off_once_an_admin_exists_unless_enabled(local, monkeypatch):
         refused = client.post("/v1/auth/signup/password", json=payload, headers=ORIGIN)
         assert refused.status_code == 403
         assert "Ask an admin" in refused.json()["detail"]
-        page = client.get("/login")
-        assert '"signup_enabled": false' in page.text
     monkeypatch.setenv("QYM_AUTH_LOCAL_SIGNUP", "true")
     with _client(local) as client:
         assert client.get("/v1/auth/providers").json()["local_auth"]["signup_enabled"] is True

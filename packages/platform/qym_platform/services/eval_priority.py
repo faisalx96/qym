@@ -3,7 +3,7 @@
 A ``HIGH`` job preempts every running ``LOW``/``NORMAL`` job on its environment, for
 all users. Launching (or retrying) at ``HIGH`` needs a project manager and an explicit
 ``acknowledge_preemption: true``. The UI mirrors this text in
-``_static/dashboard/eval_environments.js`` (``HIGH_PRIORITY_WARNING``).
+``frontend/src/features/environments/format.ts`` (``highPriorityWarning``).
 """
 
 from __future__ import annotations

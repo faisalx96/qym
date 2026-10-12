@@ -277,10 +277,13 @@ def versioning_conditions(
         if EMPTY in values:
             # Correlated on the (run_key, key) primary key: an anti-join that
             # doesn't hash every run reporting the key across all projects.
+            # ``correlate_except``: the facet queries also join ``RunVersion``
+            # in the outer select, and auto-correlation would otherwise strip
+            # this subquery's own FROM.
             terms.append(
-                ~exists().where(
-                    RunVersion.run_key == run_key_column, RunVersion.key == key
-                )
+                ~exists()
+                .where(RunVersion.run_key == run_key_column, RunVersion.key == key)
+                .correlate_except(RunVersion)
             )
         conditions.append(or_(*terms))
     return conditions

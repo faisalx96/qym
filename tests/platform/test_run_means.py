@@ -1,8 +1,5 @@
 """Every view shows the same run mean: task and scorer errors count as 0 (C015)."""
 
-import json
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -20,6 +17,7 @@ from qym_platform.services.run_means import (
     mean_without_metric_errors,
     run_metric_mean,
 )
+from _support_a1 import share_with_react, trim_rows
 from sqlalchemy.orm import Session
 from test_dashboard_durable_summaries import (
     drain,
@@ -119,40 +117,12 @@ def test_list_summary_insights_and_run_page_agree(database):
     assert points[0]["metric_averages"] == _approx(EXPECTED)
     assert points[0]["metric_counts"] == {"score": 5, "other": 5}
 
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("Node.js is required to check the run page's metrics.js")
-    script = """
-const fs = require('fs'), vm = require('vm');
-const ctx = vm.createContext({ window: {} });
-vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), ctx);
-const m = ctx.window.QymMetrics;
-const { rows, metrics } = JSON.parse(fs.readFileSync(0, 'utf8'));
-const out = {};
-metrics.forEach((name, idx) => {
-  let sum = 0, cnt = 0;
-  for (const row of rows) {
-    const { score } = m.getRowScore(row, idx, name);
-    if (score !== null) { sum += score; cnt++; }
-  }
-  out[name] = sum / cnt;
-});
-process.stdout.write(JSON.stringify(out));
-"""
-    result = subprocess.run(
-        [
-            node,
-            "-e",
-            script,
-            str(REPO / "packages/platform/qym_platform/_static/dashboard/metrics.js"),
-        ],
-        input=json.dumps({"rows": rows, "metrics": ["score", "other"]}),
-        text=True,
-        capture_output=True,
-        timeout=60,
+    # The run page (React lib/metrics.ts) averages these very rows to the same
+    # means: frontend/src/lib/__tests__/cutover-run-means.test.ts.
+    share_with_react(
+        "run_means_classic",
+        {"rows": trim_rows(rows), "metrics": ["score", "other"], "expected": EXPECTED},
     )
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == _approx(EXPECTED)
 
 
 def test_repeat_pass_with_unscored_scorer_error_counts_as_zero(database):
@@ -261,34 +231,6 @@ def _summaries(engine):
     }
 
 
-def _js_row_scores(rows, metric):
-    node = shutil.which("node")
-    if not node:
-        return None
-    script = """
-const fs = require('fs'), vm = require('vm');
-const ctx = vm.createContext({ window: {} });
-vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), ctx);
-const m = ctx.window.QymMetrics;
-const { rows, metric } = JSON.parse(fs.readFileSync(0, 'utf8'));
-process.stdout.write(JSON.stringify(rows.map(r => m.getRowScore(r, 0, metric))));
-"""
-    result = subprocess.run(
-        [
-            node,
-            "-e",
-            script,
-            str(REPO / "packages/platform/qym_platform/_static/dashboard/metrics.js"),
-        ],
-        input=json.dumps({"rows": rows, "metric": metric}),
-        text=True,
-        capture_output=True,
-        timeout=60,
-    )
-    assert result.returncode == 0, result.stderr
-    return json.loads(result.stdout)
-
-
 def test_a_score_edited_over_a_scorer_error_is_no_longer_an_error(database):
     """C009 x C010 x C015: the edit counts at its value and stops being an error."""
     with Session(database) as db:
@@ -349,10 +291,11 @@ def test_a_score_edited_over_a_scorer_error_is_no_longer_an_error(database):
         rows = runs_api.legacy_run_data("r", db=db, principal=_principal(db))[
             "snapshot"
         ]["rows"]
-    scores = _js_row_scores(rows, "score")
-    if scores is not None:
-        assert [s["isError"] for s in scores] == [False, False, False]
-        assert [s["score"] for s in scores] == _approx_list([1.0, 0.45, 0.5])
+    # The run page reads the edited row as a clean 0.45 (React lib/metrics.ts):
+    # frontend/src/lib/__tests__/cutover-run-means.test.ts.
+    share_with_react(
+        "run_means_edited_score", {"rows": trim_rows(rows), "metric": "score"}
+    )
 
 
 def _approx_list(values):
@@ -505,38 +448,12 @@ def test_repeat_run_publishes_the_mean_without_scorer_errors(database):
         assert summary["metric_scored_averages"] == _approx({"q": 0.8}), name
         assert summary["metric_error_counts"] == {"q": 3}, name
 
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("Node.js is required to check the run page's metrics.js")
     with Session(database) as db:
         rows = runs_api.legacy_run_data("r", db=db, principal=_principal(db))[
             "snapshot"
         ]["rows"]
-    script = """
-const fs = require('fs'), vm = require('vm');
-const ctx = vm.createContext({ window: {} });
-vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), ctx);
-const m = ctx.window.QymMetrics;
-const { rows } = JSON.parse(fs.readFileSync(0, 'utf8'));
-let sum = 0, cnt = 0, errors = 0;
-for (const row of rows) {
-  const clean = m.scoreWithoutMetricErrors(row, 0, 'q');
-  errors += clean.errors;
-  if (clean.score !== null) { sum += clean.score; cnt++; }
-}
-process.stdout.write(JSON.stringify({ scored: sum / cnt, errors }));
-"""
-    result = subprocess.run(
-        [
-            node,
-            "-e",
-            script,
-            str(REPO / "packages/platform/qym_platform/_static/dashboard/metrics.js"),
-        ],
-        input=json.dumps({"rows": rows}),
-        text=True,
-        capture_output=True,
-        timeout=60,
+    # The run page (React lib/metrics.ts scoreWithoutMetricErrors) agrees on the
+    # 0.8 mean and the 3 errored passes: cutover-run-means.test.ts.
+    share_with_react(
+        "run_means_repeat_errors", {"rows": trim_rows(rows), "metric": "q"}
     )
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {"scored": pytest.approx(0.8), "errors": 3}

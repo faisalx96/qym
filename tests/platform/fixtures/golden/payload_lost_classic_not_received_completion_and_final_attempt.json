@@ -1,0 +1,98 @@
+{
+ "expected": {
+  "means": {
+   "h": 0.3,
+   "q": 0.75
+  }
+ },
+ "kind": "run_page",
+ "samples": 1,
+ "snapshot": {
+  "metric_names": [
+   "q",
+   "h"
+  ],
+  "metric_specs": {
+   "h": {
+    "direction": "minimize",
+    "pass_threshold": null,
+    "precision": null,
+    "primary": false,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   },
+   "q": {
+    "direction": "maximize",
+    "pass_threshold": null,
+    "precision": null,
+    "primary": false,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   }
+  },
+  "rows": [
+   {
+    "error": "",
+    "index": 0,
+    "item_id": "item-0",
+    "item_metadata": {
+     "task_started_at_ms": 1790726399995
+    },
+    "latency_ms": 5.0,
+    "metric_meta": {},
+    "metric_values": [
+     1.0,
+     0.2
+    ],
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 1,
+    "item_id": "item-1",
+    "item_metadata": {
+     "task_started_at_ms": 1790726399995
+    },
+    "latency_ms": 5.0,
+    "metric_meta": {},
+    "metric_values": [
+     0.5,
+     0.4
+    ],
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 2,
+    "item_id": "item-2",
+    "item_metadata": {},
+    "latency_ms": 0,
+    "metric_meta": {},
+    "metric_values": [
+     0.0,
+     0.0
+    ],
+    "output_received": false,
+    "pass_attempts": null,
+    "pass_metric_meta": null,
+    "pass_scores": null,
+    "retry_count": 0,
+    "status": "not_received"
+   }
+  ]
+ }
+}

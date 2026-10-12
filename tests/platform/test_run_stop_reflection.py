@@ -9,13 +9,11 @@ performed a stop tell every open runs list / run page to re-read now.
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 import sys
 from pathlib import Path
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
 ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_SRC = ROOT / "packages" / "platform"
@@ -45,8 +43,6 @@ from test_eval_queue import (  # noqa: E402,F401
     _submitted,
     service,
 )
-
-STATIC = PLATFORM_SRC / "qym_platform" / "_static" / "dashboard"
 
 
 def _run_changes(sessions, run_id):
@@ -180,51 +176,7 @@ def test_runs_without_a_cancelling_job_are_never_stop_requested(sessions):
         assert not is_run_stop_requested(db, done)
 
 
-# --------------------------------------------------------------------------- pages
-
-
-def _read(name):
-    return (STATIC / name).read_text(encoding="utf-8")
-
-
-def test_shell_broadcasts_run_status_changes_across_pages_and_tabs():
-    shell = _read("shell.js")
-    assert "announceRunStatus: announceRunStatus" in shell
-    assert "new BroadcastChannel('qym-run-status')" in shell
-    assert "'qym:run-status'" in shell
-    # Every stop action announces its stop.
-    assert "announceRunStatus?.({ runIds: [runId], status: 'STOPPED' })" in _read(
-        "admin.html"
-    )
-    experiments = _read("experiments.js")
-    assert "announceStops([job]);" in experiments
-    assert "announceStops(stopRunning ? running : pending);" in experiments
-    assert "announceRunStatus?.({ runIds: [], status: 'STOPPING' })" in _read(
-        "eval_queue.js"
-    )
-
-
-def test_runs_list_shows_stopping_and_polls_fast_while_a_stop_is_under_way():
-    js = _read("dashboard.js")
-    assert "const STOPPING_REFRESH_INTERVAL_MS = 2000;" in js
-    assert re.search(r"const intervalMs = stopping \? STOPPING_REFRESH_INTERVAL_MS", js)
-    assert "function isStoppingRun(run)" in js
-    assert "const badgeLabel = stopping ? 'STOPPING…' : status;" in js
-    # The stopping badge reuses the warning (stopped) tone: no new CSS.
-    assert "const badgeStatus = stopping ? 'STOPPED' : status;" in js
-    assert "document.addEventListener('qym:run-status'" in js
-    assert "state._announcedStopUntil = Date.now() + ANNOUNCED_STOP_WINDOW_MS;" in js
-    # A slow-to-confirm stop falls back to the live cadence.
-    assert "now - state._stoppingSince < 60000" in js
-    index = _read("index.html")
-    assert "dashboard.js?v=p1-20261008-cols" in index
-
-
-def test_run_page_shows_stopping_and_reacts_at_once():
-    html = _read("run.html")
-    assert "const stopping = !pass && !!run.stop_requested && isLiveStatus(run.status);" in html
-    assert "const statusText = stopping ? 'STOPPING…'" in html
-    assert "const stopChanged = !ended && !!info.stop_requested !== !!state.run?.stop_requested;" in html
-    assert "if (ended || stopChanged ||" in html
-    assert "return info.stop_requested ? 1500 : undefined;" in html
-    assert "liveRun.poller.now()" in html
+# The pages that reflect a stop are React now: the runs list status badge and its fast polling
+# (frontend/src/features/runs-list/__tests__/cutover-status.test.tsx, selection-polling.test.ts), the run
+# page's STOPPING state and 1.5 s probe (frontend/e2e/run-detail/cutover-live-controls.spec.ts), and the
+# cross-page status bus (frontend/src/lib/__tests__/lib.test.ts, e2e/runs-list/live-status.spec.ts).

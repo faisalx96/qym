@@ -1,0 +1,173 @@
+{
+ "expected": {
+  "categories": {
+   "groups": {
+    "complexity": {
+     "easy:h": [
+      0.4,
+      0
+     ],
+     "easy:q": [
+      1.0,
+      1
+     ]
+    }
+   },
+   "view_pass": 3
+  }
+ },
+ "kind": "run_page",
+ "samples": 3,
+ "snapshot": {
+  "metric_names": [
+   "h",
+   "q"
+  ],
+  "metric_specs": {
+   "h": {
+    "direction": "minimize",
+    "pass_threshold": 0.3,
+    "precision": null,
+    "primary": true,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   },
+   "q": {
+    "direction": "maximize",
+    "pass_threshold": null,
+    "precision": null,
+    "primary": false,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   }
+  },
+  "rows": [
+   {
+    "error": "",
+    "index": 0,
+    "item_id": "a",
+    "item_metadata": {
+     "complexity": "easy",
+     "topic": "all"
+    },
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "item_edit": "true",
+      "last_edit": {
+       "action": "edit",
+       "at": "<timestamp>",
+       "by": "",
+       "by_user_id": null,
+       "from": 0.20000000000000004,
+       "to": 0.9
+      },
+      "modified": "true",
+      "original_score": 0.20000000000000004,
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     },
+     "q": {
+      "item_edit": "true",
+      "last_edit": {
+       "action": "edit",
+       "at": "<timestamp>",
+       "by": "",
+       "by_user_id": null,
+       "from": 0.6666666666666666,
+       "to": 0.1
+      },
+      "modified": "true",
+      "original_score": 0.6666666666666666,
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.9,
+     0.1
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      null,
+      {
+       "status": "error"
+      },
+      null
+     ],
+     "q": [
+      null,
+      {
+       "status": "error"
+      },
+      null
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2,
+      0.0,
+      0.4
+     ],
+     "q": [
+      1.0,
+      0.0,
+      1.0
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   }
+  ]
+ }
+}

@@ -1,0 +1,187 @@
+{
+ "expected": {
+  "card_notes": {
+   "q": "1 task error across passes"
+  },
+  "error_counts": {
+   "q": [
+    1,
+    0
+   ]
+  },
+  "means": {
+   "q": 0.8
+  }
+ },
+ "kind": "run_page",
+ "samples": 3,
+ "snapshot": {
+  "metric_names": [
+   "q"
+  ],
+  "metric_specs": {
+   "q": {
+    "direction": "maximize",
+    "pass_threshold": null,
+    "precision": null,
+    "primary": false,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   }
+  },
+  "rows": [
+   {
+    "error": "",
+    "index": 0,
+    "item_id": "a",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "q": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     1.0
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": null,
+    "pass_scores": {
+     "q": [
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 1,
+    "item_id": "x",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "q": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.6
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "ERROR: tool crashed",
+      "__has_output": true,
+      "error": "tool crashed",
+      "latency_ms": 10.0,
+      "output_digest": "9a213bd5fc9d5b317fd53fa3aec0c8e661125374eb6d12ca5314636da4a530af",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "error",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "q": [
+      {
+       "label": "error",
+       "task_error": true
+      },
+      null,
+      null
+     ]
+    },
+    "pass_scores": {
+     "q": [
+      0.0,
+      0.9,
+      0.9
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   }
+  ]
+ }
+}

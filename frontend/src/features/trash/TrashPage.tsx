@@ -164,6 +164,7 @@ export function TrashPage() {
         <>
           <DataTable<TrashRun>
             aria-label="Deleted runs"
+            className={styles.table}
             storageKey="trash-v2"
             rows={rows}
             rowKey={(r) => r.id}

@@ -3,18 +3,17 @@
 - Server: ``base_source`` of kind ``official``/``saved`` must name a version of that
   kind of preset belonging to a selected environment, and ``clone`` an experiment
   (and job) of the project; all are stored canonically.
-- The one-click path exactly as ``eval_environments.js`` ``runOfficialDefaults``
+- The one-click path exactly as the environments page "Run default preset"
   drives it: read the current official version re-mapped onto the current schema,
   then create a 1-job experiment with ``base_source = {kind: official, …}`` (P3 exit
   criterion: a member launches official defaults in one click).
 - Clone prefill data for ``?clone=<xid>&job=<jid>`` and a relaunch from it.
-- Static checks on the launch form and the environments tab (no browser needed).
+- The UI is covered by frontend/e2e/experiments/launch/entry.spec.ts and
+  environments.spec.ts.
 """
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
 
 from qym_platform.db.models import (
     EvalConfigPresetKind,
@@ -42,13 +41,6 @@ from test_experiments_api import (  # noqa: F401  (pytest fixtures)
     env,
     session_factory,
 )
-
-ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-MODULE = (DASHBOARD / "experiment_launch.js").read_text(encoding="utf-8")
-STYLES = (DASHBOARD / "experiment_launch.css").read_text(encoding="utf-8")
-ENVIRONMENTS_JS = (DASHBOARD / "eval_environments.js").read_text(encoding="utf-8")
-SETTINGS = (DASHBOARD / "project_settings.html").read_text(encoding="utf-8")
 
 
 def _envs_url(project_id: str = P1, suffix: str = "") -> str:
@@ -86,9 +78,7 @@ def _detail(res) -> str:
 def test_environment_payload_names_its_official_defaults(
     client, session_factory, env, conn
 ):
-    (listed,) = client.get(_envs_url(), headers=_headers(MEMBER)).json()[
-        "environments"
-    ]
+    (listed,) = client.get(_envs_url(), headers=_headers(MEMBER)).json()["environments"]
     assert listed["official_preset_version"] is None
     assert listed["official_preset_id"] is None
     assert listed["official_preset_version_id"] is None
@@ -99,9 +89,7 @@ def test_environment_payload_names_its_official_defaults(
     _add_preset_version(
         session_factory, env, _spec(), kind=EvalConfigPresetKind.SAVED, name="mine"
     )
-    (listed,) = client.get(_envs_url(), headers=_headers(MEMBER)).json()[
-        "environments"
-    ]
+    (listed,) = client.get(_envs_url(), headers=_headers(MEMBER)).json()["environments"]
     single = client.get(_envs_url(suffix=f"/{env.id}"), headers=_headers(MEMBER))
     for payload in (listed, single.json()):
         assert payload["official_preset_version"] == 2
@@ -326,9 +314,7 @@ def test_clone_base_must_be_an_experiment_and_job_of_this_project(
 
 
 def test_clone_prefill_and_rerun_of_one_job(client, session_factory, env, conn):
-    source = _launch(
-        client, [env.id], {"kind": "blank"}, spec=_spec(conn.id)
-    ).json()
+    source = _launch(client, [env.id], {"kind": "blank"}, spec=_spec(conn.id)).json()
     (job,) = _jobs(session_factory, source["id"])
 
     prefill = client.post(
@@ -362,108 +348,3 @@ def test_clone_prefill_and_rerun_of_one_job(client, session_factory, env, conn):
     assert rerun.json()["job_count"] == 1
     (new_job,) = _jobs(session_factory, rerun.json()["id"])
     assert new_job.request_body["env_overrides"] == job.request_body["env_overrides"]
-
-
-# --------------------------------------------------------------------------- static UI
-
-
-def test_launch_form_offers_official_and_saved_bases():
-    base = re.search(r"const BASE_OPTIONS = \[(.*?)\];", MODULE, re.S).group(1)
-    assert re.search(r"kind: 'official'[^}]*available: true", base)
-    assert re.search(r"kind: 'saved'[^}]*available: true", base)
-    assert re.search(r"kind: 'best_run'[^}]*available: true", base)  # #38
-    assert "const CLONE_OPTION = { kind: 'clone'" in MODULE
-    # Official defaults is the default when published; otherwise Blank, with a note.
-    assert "if (!st.baseTouched) kind = 'official';" in MODULE
-    assert "so the form starts from Blank." in MODULE
-    assert "return official ? official.id : (envs[0] ? envs[0].id : null);" in MODULE
-    # Presets load re-mapped onto the current schema; dropped settings are listed.
-    assert "'/presets'" in MODULE and "'?remap=current'" in MODULE
-    assert "remap.dropped" in MODULE and "data-xl-remap-dropped" in MODULE
-    assert "(w) => w.rule !== 'schema_hash'" in MODULE
-    # base_source names the version; the server checks it.
-    assert "{ kind: st.base, preset_version_id: info.versionId }" in MODULE
-    assert "pointer: '#base'" in MODULE and "if (pointer === '#base') return hosts.base;" in MODULE
-
-
-def test_changed_dots_reset_to_base_diff_counter_and_switch_base():
-    # "Changed" means different from the base, not merely set.
-    assert "!sameValue(st.values[pointer], st.baseline.values[pointer])" in MODULE
-    assert "const changed = isChanged(pointer);" in MODULE
-    assert "(row._xlPointers || []).some(isChanged)" in MODULE
-    # Reset puts the base value back.
-    assert "st.values[pointer] = deepCopy(st.baseline.values[pointer])" in MODULE
-    assert "'Undo all changes'" in MODULE and "function resetAllToBase()" in MODULE
-    assert "'data-xl-binding-changed': '1'" in MODULE
-    # Diff vs base in the base section, header meta and preview.
-    assert "' on top'" in MODULE and "' vs this version'" in MODULE
-    assert "'data-xl-diff-count': '1'" in MODULE
-    assert "'data-xl-base-meta': '1'" in MODULE
-    assert "baseLabel() + ' · ' + diffText()" in MODULE
-    # Switch base: confirmed, keeps the edits that exist on the new base.
-    assert "title: 'Change the starting point?'" in MODULE
-    assert "confirmLabel: 'Change starting point'" in MODULE
-    assert "const edits = captureEdits();" in MODULE
-    assert "if (!matchTemplate(fields, p)) { dropped += 1; return; }" in MODULE
-    assert "if (slotKeys.indexOf(k) < 0) { dropped += 1; return; }" in MODULE
-    # Base evaluator inputs are sent; settings no selected env knows are reported.
-    assert "Object.assign(deepCopy(st.evaluatorExtra) || {}" in MODULE
-    assert "' was dropped: not in any selected environment.'" in MODULE
-
-
-def test_clone_prefill_asks_for_temporary_keys_again():
-    assert "params.get('clone')" in MODULE and "params.get('job')" in MODULE
-    assert "params.get('env')" in MODULE
-    assert "'/clone' + (jobId ? '?job_id=' + encodeURIComponent(jobId) : '')" in MODULE
-    assert "row.qym_config" in MODULE  # fallback without ?job_id= support
-    assert "source.job_id = st.clone.jobId" in MODULE
-    assert "Temporary models are copied without their API keys" in MODULE
-    assert "secretRef: null, needsKey: true" in MODULE
-    assert "type: 'password'" in MODULE and "'Use key'" in MODULE
-    # Re-entered keys live only in st.secrets, like the temporary-model form's.
-    assert "st.secrets[ref] = key;" in MODULE
-    assert "function pruneSecrets()" in MODULE
-    # Still no HTML parsing beyond the escaped chip, and no storage.
-    assert MODULE.count("innerHTML") == 2
-    for banned in ("localStorage", "sessionStorage", "console.", "history."):
-        assert banned not in MODULE, banned
-
-
-def test_environments_tab_runs_official_defaults_in_one_click():
-    assert "data-env-run-official=\"${id}\"" in ENVIRONMENTS_JS
-    assert ">Run default preset</button>" in ENVIRONMENTS_JS
-    # Only for active environments with a schema and a published version.
-    assert (
-        "env.is_active && env.current_schema_id && env.official_preset_id "
-        "&& env.official_preset_version != null" in ENVIRONMENTS_JS
-    )
-    assert "button.dataset.envRunOfficial" in ENVIRONMENTS_JS
-    assert "runOfficialDefaults," in ENVIRONMENTS_JS  # exported
-    for needle in (
-        "?remap=current",
-        "base_source: { kind: 'official', preset_version_id: version.id }",
-        "environment_ids: [env.id]",
-        "spec: remap.config",
-        "if (env.default_priority === 'HIGH')",
-        "body.acknowledge_preemption = true",
-        "highPriorityWarning(env.name)",
-        "'preemption_acknowledgement_required'",
-        "new=1&env=${encodeURIComponent(env.id)}",
-        "experiment=${encodeURIComponent(launch.data.id)}",
-    ):
-        assert needle in ENVIRONMENTS_JS, needle
-    # Not launchable as is → the launch form, never a silent change of model.
-    fn = ENVIRONMENTS_JS[ENVIRONMENTS_JS.index("function officialLaunchBlocker") :]
-    fn = fn[: fn.index("\n  }\n")]
-    for needle in ("remap.errors", "evaluator.dataset", ".temporary", "connection_missing"):
-        assert needle in fn, needle
-    # The button title is escaped like every other interpolated string.
-    assert "title=\"${esc(`Launch a 1-job experiment" in ENVIRONMENTS_JS
-    assert "projectSlug: state.project.slug" in SETTINGS
-
-
-def test_new_styles_follow_the_design_language():
-    for selector in (".xl-base-status", ".xl-base-label", ".xl-callout-list", ".xl-model-key"):
-        assert selector in STYLES, selector
-    assert not re.search(r"font-size:\s*\d", STYLES)
-    assert not re.search(r"#[0-9a-fA-F]{3,6}\b", STYLES)

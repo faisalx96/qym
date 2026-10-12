@@ -1,4 +1,9 @@
-"""Static guards for the dashboard's one HTML-escaping layer (C006) and run text (C013).
+"""Static guards for the one HTML-escaping layer (C006) and run text (C013) of the offline export.
+
+The live UI is React (JSX escapes by itself; ``dangerouslySetInnerHTML`` is allowed only in
+frontend/src/ui/TextBlock by an ESLint rule, and the safe markdown subset is covered by
+frontend/src/lib/__tests__/lib.test.ts). The self-contained HTML export is the one place the
+vanilla markup still ships (``export_templates/run/``), so these guards read those templates.
 
 These fail on the patterns that produced stored XSS: escape helpers built on the
 textContent -> innerHTML trick (quotes survive, so attributes break), helpers
@@ -12,10 +17,9 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD_DIR = ROOT / "packages/platform/qym_platform/_static/dashboard"
+DASHBOARD_DIR = ROOT / "packages/platform/qym_platform/export_templates/run"
 SAFE_JS = DASHBOARD_DIR / "qym_safe.js"
-RUNS_API = ROOT / "packages/platform/qym_platform/api/runs.py"
-SKIP = {"codemirror-bundle.js", "docs-hljs.min.js"}
+SKIP: set[str] = set()
 
 
 def sources():
@@ -172,30 +176,22 @@ def test_shared_helper_escapes_all_five_characters():
     assert "global.QymSafe = {" in source
 
 
-def test_every_page_loads_the_shared_helper_before_any_other_script():
-    pages = [path for path in DASHBOARD_DIR.glob("*.html")]
-    assert pages
-    for page in pages:
-        text = page.read_text(encoding="utf-8")
-        scripts = re.findall(r'<script[^>]*\ssrc="([^"]+)"', text)
-        assert scripts, page.name
-        assert re.search(
-            r"/static/qym_safe\.js\?v=[^\"]+$", scripts[0]
-        ), f"{page.name} must load qym_safe.js first, got {scripts[0]}"
-    not_found_page = RUNS_API.read_text(encoding="utf-8").split(
-        "def _project_not_found_page", 1
-    )[1]
-    assert not_found_page.index("qym_safe.js") < not_found_page.index("shell.js")
+def test_the_export_page_loads_the_shared_helper_before_any_other_script():
+    text = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
+    scripts = re.findall(r'<script[^>]*\ssrc="([^"]+)"', text)
+    assert scripts
+    assert re.search(
+        r"/static/qym_safe\.js\?v=[^\"]+$", scripts[0]
+    ), f"run.html must load qym_safe.js first, got {scripts[0]}"
 
 
 def test_self_contained_exports_inline_the_shared_helper():
-    runs = RUNS_API.read_text(encoding="utf-8")
-    assert (
-        'safe_js = (dashboard_dir / "qym_safe.js").read_text(encoding="utf-8")' in runs
-    )
-    assert r'<script\s+src="/static/qym_safe\.js(?:\?[^"]*)?"></script>' in runs
-    compare = (DASHBOARD_DIR / "compare.html").read_text(encoding="utf-8")
-    assert r"static\/(?:qym_safe|metrics|trace_viewer|ui_components)\.js" in compare
+    from _support_a2 import source_run_api
+
+    with source_run_api(count=2) as client:
+        html = client.get("/api/runs/run-1/export-html").text
+    assert "window.QymSafe" in html or "global.QymSafe = {" in html
+    assert "/static/qym_safe.js" not in html
 
 
 def test_no_escape_helper_uses_the_textcontent_innerhtml_trick():
@@ -230,7 +226,7 @@ def test_local_escape_helpers_delegate_to_the_shared_helper():
             assert (
                 delegates
             ), f"{path.name}: {name}() must delegate to QymSafe.escapeHtml"
-    assert helpers >= 18
+    assert helpers >= 3  # the export templates define 6; not vacuous
 
 
 def test_no_hand_rolled_entity_replacement_chains():
@@ -303,14 +299,8 @@ def test_template_scanner_sees_nested_templates_strings_and_regexes():
     )
 
 
-def test_runs_table_names_are_escaped():
-    dashboard = (DASHBOARD_DIR / "dashboard.js").read_text(encoding="utf-8")
-    truncate = dashboard.split("function truncateText(", 1)[1].split("\n  }\n", 1)[0]
-    assert "return escapeHtml(" in truncate
-
-
 def test_run_text_uses_the_shared_renderer_not_regex_markdown():
-    for name in ("run.html", "compare.html"):
+    for name in ("run.html",):
         source = (DASHBOARD_DIR / name).read_text(encoding="utf-8")
         renderer = source.split("function renderMarkdownSafe(value) {", 1)[1].split(
             "\n      }\n", 1

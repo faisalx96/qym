@@ -26,6 +26,7 @@ import {
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
+import { transferCandidates } from './transferCandidates';
 
 type Role = 'MEMBER' | 'MANAGER';
 const ROLE_ITEMS = [
@@ -126,7 +127,7 @@ export function MembersTab() {
     },
   ];
 
-  const others = (members.data ?? []).filter((m) => m.user_id !== removing?.member.user_id);
+  const others = transferCandidates(members.data ?? [], removing?.member.user_id);
 
   return (
     <Stack gap="lg">

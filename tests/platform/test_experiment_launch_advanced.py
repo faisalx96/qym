@@ -1,8 +1,6 @@
 """Advanced panel of the launch form (plan §8.4, issue #24).
 
-Static contract checks on ``experiment_launch_advanced.js``/``.css`` and the hook in
-``experiment_launch.js`` (no browser or ``node`` needed), the static
-``EvaluatorRequestConfig`` descriptor and its endpoint (D5), server-side rejection of
+The static ``EvaluatorRequestConfig`` descriptor and its endpoint (D5), server-side rejection of
 ``qym_*`` run_metadata keys and platform-owned fields, and a JSON <-> spec round trip
 at the API level: the document the Raw JSON tab shows is exactly what is launched, and
 the stored ``qym_config`` loads back as the same document.
@@ -12,8 +10,6 @@ from __future__ import annotations
 
 import copy
 import json
-import re
-from pathlib import Path
 
 import pytest
 from qym_platform.services.eval_config import (
@@ -44,13 +40,6 @@ from test_experiments_api import (  # noqa: F401  (pytest fixtures)
     env,
     session_factory,
 )
-
-ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-PAGE = (DASHBOARD / "experiments.html").read_text(encoding="utf-8")
-LAUNCH = (DASHBOARD / "experiment_launch.js").read_text(encoding="utf-8")
-MODULE = (DASHBOARD / "experiment_launch_advanced.js").read_text(encoding="utf-8")
-STYLES = (DASHBOARD / "experiment_launch_advanced.css").read_text(encoding="utf-8")
 
 TEMP_KEY = "sk-advanced-temporary-KEY-4242"
 PANEL_URL = f"/v1/projects/{P1}/experiments/evaluator-config"
@@ -99,140 +88,6 @@ def _request(env_id: str, spec: dict, **extra) -> dict:
         "save_to_project_models": [],
         **extra,
     }
-
-
-# --------------------------------------------------------------------------- page
-
-
-def test_page_loads_the_advanced_assets_before_the_form(client):
-    assets = re.findall(r'(?:src|href)="/static/([^"?]+)', PAGE)
-    for asset in ("experiment_launch_advanced.js", "experiment_launch_advanced.css"):
-        assert asset in assets, asset
-        assert client.get(f"/static/{asset}").status_code == 200, asset
-    assert PAGE.index('src="/static/experiment_launch_advanced.js') < PAGE.index(
-        'src="/static/experiment_launch.js'
-    )
-    # The CodeMirror bundle it loads lazily is served next to it.
-    assert client.get("/static/codemirror-bundle.js").status_code == 200
-
-
-def test_launch_form_hook_is_small_and_separated():
-    # The one mount point, plus the calls the form makes into the panel.
-    assert "'data-xl-advanced': '1'" in LAUNCH
-    assert "const api = window.QymLaunchAdvanced;" in LAUNCH
-    assert "advanced = api.mount(host, advancedApi());" in LAUNCH
-    for call in (
-        "advanced.decorateSpec(spec)",
-        "advanced.localErrors()",
-        "advanced.onSpecChange()",
-        "advanced.reveal(error.pointer)",
-        "advanced.roleTableSummary(model, table)",
-    ):
-        assert LAUNCH.count(call) == 1, call
-    assert "if (advanced) advanced.teardown();" in LAUNCH
-    assert "'static/experiment_launch_advanced.css" in LAUNCH
-    # The #23 security contract still holds.
-    assert LAUNCH.count("innerHTML") == 2
-
-
-def test_module_mounts_three_separate_cards():
-    assert "window.QymLaunchAdvanced = { mount };" in MODULE
-    for label in ("'Evaluation inputs'", "'Role overrides'", "'Raw JSON'"):
-        assert label in MODULE, label
-    # Unrelated parts: one card each, no tabs and no disclosure of their own.
-    assert "role: 'tablist'" not in MODULE and "el('details'" not in MODULE
-    assert "'data-xa-section': section.id" in MODULE
-    # Role overrides sit under the form's environment overrides (step 4) and Raw
-    # JSON on the review step; Evaluation inputs stay in the host (step 5).
-    assert "['roles', 'json'].forEach((id) =>" in MODULE
-    assert "'[data-xl-advanced-slot=\"' + id + '\"]'" in MODULE
-    # One set of slots, shared by the launch form and the editor.
-    assert LAUNCH.count("'data-xl-advanced-slot': 'roles'") == 1
-    assert LAUNCH.count("'data-xl-advanced-slot': 'json'") == 1
-    assert LAUNCH.count("'data-xl-advanced': '1'") == 1
-
-
-def test_evaluation_inputs_tab():
-    assert "api.projectPath('/experiments/evaluator-config')" in MODULE
-    # The selected environments' evaluator schemas (guide v1.1 §3.4).
-    assert "'environment_id=' + encodeURIComponent(id)" in MODULE
-    assert "(adv.panel.fields || []).map((name) => configField(name))" in MODULE
-    assert "'data-xl-pointer': pointer" in MODULE  # errors focus the field
-    assert "'/evaluator/config/' + name" in MODULE
-    # run_metadata editor: JSON values, reserved prefix refused locally.
-    assert "parseMetadataValue" in MODULE and "metadataText" in MODULE
-    assert "isReservedKey(key)" in MODULE
-    assert "'+ Add key'" in MODULE
-    # No custom dataset string field; Raw JSON can still carry one (applyDataset).
-    assert "data-xa-custom-dataset" not in MODULE
-    assert "st.datasetMode = 'custom';" in MODULE
-    # Platform-owned fields are read-only.
-    for text in (
-        "'run_name'",
-        "'live_mode'",
-        "'model / models'",
-        "'run_metadata.qym_*'",
-    ):
-        assert text in MODULE, text
-    assert "'Set by the platform'" in MODULE and "'read-only'" in MODULE
-
-
-def test_role_overrides_tab_is_the_single_role_editor():
-    assert "'Search roles'" in MODULE and "'Overridden only'" in MODULE
-    assert "api.roleColumns(model, table)" in MODULE
-    assert "api.leafControl(entry, pointer, model.fields, bound[pointer]" in MODULE
-    assert "api.onLeafInput(entry, pointer, control, td)" in MODULE
-    # The Settings form shows a summary that opens this tab instead of a 2nd table.
-    assert "if (advanced) return advanced.roleTableSummary(model, table);" in LAUNCH
-    assert "'Edit role overrides'" in MODULE and "open('roles', true)" in MODULE
-
-
-def test_raw_json_tab_syncs_both_ways():
-    assert "new URL('codemirror-bundle.js', SCRIPT_SRC)" in MODULE
-    assert "cm.langJson.json()" in MODULE
-    # Form -> JSON: the document is the one the form sends.
-    assert "JSON.stringify(api.buildSpec(), null, 2)" in MODULE
-    # JSON -> form: validated on blur, then written into the form's state.
-    assert "contentDOM.addEventListener('blur', onEditorBlur)" in MODULE
-    assert "st.values = result.values;" in MODULE
-    assert "st.bindings = result.bindings;" in MODULE
-    assert "api.rerender();" in MODULE
-    # Unapplied errors block the launch and focus the editor.
-    assert "pointer: JSON_POINTER" in MODULE and "'#advanced-json'" in MODULE
-
-
-def test_keys_are_only_refs_and_nothing_parses_as_html():
-    for banned in (
-        "innerHTML",
-        "outerHTML",
-        "insertAdjacentHTML",
-        "document.write",
-        "localStorage",
-        "sessionStorage",
-        "indexedDB",
-        "document.cookie",
-        "console.",
-        "st.secrets[",  # never reads a key value
-        "apiKey",
-    ):
-        assert banned not in MODULE, banned
-    assert "has(st.secrets, ref)" in MODULE  # a ref must point at an in-memory key
-    assert "Keys are never typed into JSON" in MODULE
-    assert "Keys are never entered here" in MODULE
-
-
-def test_styles_follow_the_design_language():
-    assert not re.search(r"font-size:\s*\d", STYLES)
-    assert not re.search(r"#[0-9a-fA-F]{3,6}\b", STYLES)
-    assert "qym-" not in STYLES  # shared components are never restyled
-    body = re.sub(r"/\*.*?\*/", "", STYLES, flags=re.S)
-    for selector in re.findall(r"(?:^|\})\s*([^{}]+?)\s*\{", body):
-        for part in selector.split(","):
-            classes = re.findall(r"\.([\w-]+)", part)
-            assert classes and all(c.startswith(("xa-", "cm-")) for c in classes), part
-    # JS-built CodeMirror theme uses tokens, never hardcoded sizes or colors.
-    assert not re.search(r"fontSize:\s*['\"]\d", MODULE)
-    assert not re.search(r"#[0-9a-fA-F]{6}\b", MODULE)
 
 
 # --------------------------------------------------------------------------- descriptor

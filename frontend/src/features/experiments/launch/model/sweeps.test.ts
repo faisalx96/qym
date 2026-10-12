@@ -73,6 +73,7 @@ describe('numeric ranges (at most 100 values)', () => {
   it('expands start/stop/step avoiding float noise', () => {
     expect(expandRange(threshold, '0.1', '0.5', '0.1')).toEqual({ values: [0.1, 0.2, 0.3, 0.4, 0.5] });
     expect(expandRange(limit, '1', '10', '3')).toEqual({ values: [1, 4, 7, 10] });
+    expect(expandRange(threshold, '0.5', '0.75', '0.1')).toEqual({ values: [0.5, 0.6, 0.7] });
   });
 
   it('refuses bad input and more than 100 values', () => {

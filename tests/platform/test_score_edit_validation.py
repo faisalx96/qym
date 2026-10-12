@@ -1,11 +1,7 @@
 """Manual score edits are validated by metric type and never store text (C009)."""
 
-import json
-import shutil
-import subprocess
-from pathlib import Path
-
 import pytest
+from _support_a1 import share_with_react
 from fastapi import HTTPException
 from qym_platform.api import runs as runs_api
 from qym_platform.auth import Principal
@@ -23,8 +19,6 @@ from qym_platform.services.score_edits import (
 )
 from sqlalchemy.orm import Session
 from test_dashboard_durable_summaries import item, run
-
-REPO = Path(__file__).resolve().parents[2]
 
 # (input, score_type, expected value or the ScoreEditError message)
 CASES = [
@@ -71,49 +65,49 @@ def test_parse_score_edit(raw, score_type, expected):
 
 
 def test_run_page_validator_matches_the_server():
-    """metrics.js parseMetricScoreInput applies the same rules before posting."""
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("Node.js is required to check metrics.js")
-    script = """
-const fs = require('fs'), vm = require('vm');
-const ctx = vm.createContext({ window: {} });
-vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), ctx);
-const m = ctx.window.QymMetrics;
-const cases = JSON.parse(fs.readFileSync(0, 'utf8'));
-process.stdout.write(JSON.stringify(cases.map(([raw, type]) =>
-  m.parseMetricScoreInput(raw, type ? { score_type: type } : null))));
-"""
+    """The React lib/metrics.ts parseMetricScoreInput applies the same rules before
+    posting: the server's table is pinned for
+    frontend/src/lib/__tests__/cutover-metric-rules.test.ts."""
     js_cases = [
-        (raw, score_type)
-        for raw, score_type, _ in CASES
+        {
+            "raw": raw,
+            "score_type": score_type,
+            "expected": (
+                {"error": expected}
+                if isinstance(expected, str)
+                else {"value": expected}
+            ),
+        }
+        for raw, score_type, expected in CASES
         if not isinstance(raw, float) and raw is not None
     ]
-    result = subprocess.run(
-        [
-            node,
-            "-e",
-            script,
-            str(REPO / "packages/platform/qym_platform/_static/dashboard/metrics.js"),
-        ],
-        input=json.dumps(js_cases),
-        text=True,
-        capture_output=True,
-        timeout=60,
+    share_with_react(
+        "score_edit_cases",
+        {
+            "cases": js_cases,
+            # A repeat item's value is a rate (0.5 is a valid boolean rate); a count stays whole-ish.
+            "reduced": [
+                {
+                    "raw": "0.5",
+                    "score_type": "boolean",
+                    "reduced": True,
+                    "expected": {"value": 0.5},
+                },
+                {
+                    "raw": "0.5",
+                    "score_type": "boolean",
+                    "reduced": False,
+                    "expected": {"error": HINTS["boolean"]},
+                },
+                {
+                    "raw": "2.5",
+                    "score_type": "count",
+                    "reduced": True,
+                    "expected": {"value": 2.5},
+                },
+            ],
+        },
     )
-    assert result.returncode == 0, result.stderr
-    outcomes = json.loads(result.stdout)
-    expected = {
-        (json.dumps(raw), score_type): value
-        for raw, score_type, value in CASES
-    }
-    for (raw, score_type), outcome in zip(js_cases, outcomes):
-        want = expected[(json.dumps(raw), score_type)]
-        if isinstance(want, str):
-            assert outcome == {"ok": False, "message": want}, (raw, score_type)
-        else:
-            assert outcome["ok"] is True, (raw, score_type, outcome)
-            assert outcome["value"] == pytest.approx(want), (raw, score_type)
 
 
 def _principal(db):
@@ -237,37 +231,6 @@ def test_repeat_run_item_value_is_a_rate(database):
         with pytest.raises(HTTPException) as exc:
             _edit(db, "exact", "1.5")
         assert exc.value.detail == HINTS["percentage"]
-    run_metrics_js = shutil.which("node")
-    if not run_metrics_js:
-        return
-    script = """
-const fs = require('fs'), vm = require('vm');
-const ctx = vm.createContext({ window: {} });
-vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), ctx);
-const m = ctx.window.QymMetrics;
-const spec = { score_type: 'boolean' };
-process.stdout.write(JSON.stringify([
-  m.parseMetricScoreInput('0.5', spec, { reduced: true }),
-  m.parseMetricScoreInput('0.5', spec),
-  m.parseMetricScoreInput('2.5', { score_type: 'count' }, { reduced: true }),
-]));
-"""
-    result = subprocess.run(
-        [
-            run_metrics_js,
-            "-e",
-            script,
-            str(REPO / "packages/platform/qym_platform/_static/dashboard/metrics.js"),
-        ],
-        text=True,
-        capture_output=True,
-        timeout=60,
-    )
-    assert result.returncode == 0, result.stderr
-    reduced, single, count = json.loads(result.stdout)
-    assert reduced == {"ok": True, "value": 0.5}
-    assert single == {"ok": False, "message": HINTS["boolean"]}
-    assert count == {"ok": True, "value": 2.5}
 
 
 def test_pass_edit_uses_the_same_rules(database):

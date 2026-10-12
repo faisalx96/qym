@@ -1,0 +1,279 @@
+{
+ "expected": {
+  "label_verdicts": {
+   "h": [
+    false,
+    false,
+    false,
+    false,
+    true,
+    true,
+    false,
+    true,
+    false
+   ]
+  }
+ },
+ "kind": "run_page",
+ "samples": 3,
+ "snapshot": {
+  "metric_names": [
+   "h"
+  ],
+  "metric_specs": {
+   "h": {
+    "direction": "minimize",
+    "score_type": "percentage"
+   }
+  },
+  "rows": [
+   {
+    "metric_meta": {},
+    "metric_values": [
+     0.4
+    ],
+    "pass_attempts": [
+     {
+      "output": "answer",
+      "status": "completed"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "reason": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+       "task_error": false
+      }
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2
+     ]
+    },
+    "status": "completed"
+   },
+   {
+    "metric_meta": {},
+    "metric_values": [
+     0.4
+    ],
+    "pass_attempts": [
+     {
+      "output": "answer",
+      "status": "completed"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "details": {
+        "tone": {
+         "score": 2
+        }
+       },
+       "label": "error",
+       "task_error": false
+      }
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2
+     ]
+    },
+    "status": "completed"
+   },
+   {
+    "metric_meta": {},
+    "metric_values": [
+     0.4
+    ],
+    "pass_attempts": [
+     {
+      "output": "answer",
+      "status": "completed"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "explanation": "Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic Off topic ",
+       "label": "error",
+       "task_error": false
+      }
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2
+     ]
+    },
+    "status": "completed"
+   },
+   {
+    "metric_meta": {},
+    "metric_values": [
+     0.4
+    ],
+    "pass_attempts": [
+     {
+      "output": "answer",
+      "status": "completed"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "task_error": false
+      }
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2
+     ]
+    },
+    "status": "completed"
+   },
+   {
+    "metric_meta": {},
+    "metric_values": [
+     0.4
+    ],
+    "pass_attempts": [
+     {
+      "output": "answer",
+      "status": "error"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "explanation": "partial",
+       "label": "error",
+       "reason": "partial",
+       "task_error": true
+      }
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2
+     ]
+    },
+    "status": "completed"
+   },
+   {
+    "metric_meta": {},
+    "metric_values": [
+     0.4
+    ],
+    "pass_attempts": [
+     {
+      "output": "answer",
+      "status": "error"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "task_error": true
+      }
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2
+     ]
+    },
+    "status": "completed"
+   },
+   {
+    "metric_meta": {},
+    "metric_values": [
+     0.4
+    ],
+    "pass_attempts": [
+     {
+      "output": "answer",
+      "status": "error"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "modified": "true",
+       "task_error": false
+      }
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2
+     ]
+    },
+    "status": "completed"
+   },
+   {
+    "metric_meta": {},
+    "metric_values": [
+     0.4
+    ],
+    "pass_attempts": [
+     {
+      "output": "answer",
+      "status": "completed"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "status": "timeout",
+       "task_error": false
+      }
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2
+     ]
+    },
+    "status": "completed"
+   },
+   {
+    "metric_meta": {},
+    "metric_values": [
+     0.4
+    ],
+    "pass_attempts": [
+     {
+      "output": "answer",
+      "status": "completed"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "explanation": "Off topic",
+       "label": "error",
+       "reason": "judged",
+       "task_error": false
+      }
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2
+     ]
+    },
+    "status": "completed"
+   }
+  ]
+ }
+}

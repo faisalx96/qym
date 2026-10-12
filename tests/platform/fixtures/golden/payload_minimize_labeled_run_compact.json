@@ -1,0 +1,747 @@
+{
+ "expected": {
+  "means": {
+   "h": 0.43333333333333335
+  },
+  "meta_keys_exclude": [
+   "task_error"
+  ]
+ },
+ "kind": "run_page",
+ "samples": 3,
+ "snapshot": {
+  "metric_names": [
+   "h"
+  ],
+  "metric_specs": {
+   "h": {
+    "direction": "minimize",
+    "pass_threshold": null,
+    "precision": null,
+    "primary": true,
+    "run_reducer": "mean",
+    "sample_reducer": "mean",
+    "schema_version": 2,
+    "score_type": "percentage",
+    "unit": null
+   }
+  },
+  "rows": [
+   {
+    "error": "",
+    "index": 0,
+    "item_id": "long_reason",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.39999999999999997
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "task_error": false
+      },
+      null,
+      null
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2,
+      0.4,
+      0.6
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 1,
+    "item_id": "nested",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.39999999999999997
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "task_error": false
+      },
+      null,
+      null
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2,
+      0.4,
+      0.6
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 2,
+    "item_id": "explained",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.39999999999999997
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "task_error": false
+      },
+      null,
+      null
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2,
+      0.4,
+      0.6
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 3,
+    "item_id": "verdict_marked",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.39999999999999997
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "task_error": false
+      },
+      null,
+      null
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2,
+      0.4,
+      0.6
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 4,
+    "item_id": "failed",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.5
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "ERROR: boom",
+      "__has_output": true,
+      "error": "boom",
+      "latency_ms": 10.0,
+      "output_digest": "3e2a17f63ca730bf170df820f73de0ca4fb5eb2cc77935a2351160bab9e751f9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "error",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "reason": "partial",
+       "task_error": true
+      },
+      null,
+      null
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.0,
+      0.4,
+      0.6
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 5,
+    "item_id": "legacy_zero_fill",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.5
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "ERROR: boom",
+      "__has_output": true,
+      "error": "boom",
+      "latency_ms": 10.0,
+      "output_digest": "3e2a17f63ca730bf170df820f73de0ca4fb5eb2cc77935a2351160bab9e751f9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "error",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "task_error": true
+      },
+      null,
+      null
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.0,
+      0.4,
+      0.6
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 6,
+    "item_id": "reviewed",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.39999999999999997
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "ERROR: boom",
+      "__has_output": true,
+      "error": "boom",
+      "latency_ms": 10.0,
+      "output_digest": "3e2a17f63ca730bf170df820f73de0ca4fb5eb2cc77935a2351160bab9e751f9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "error",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "modified": "true",
+       "task_error": false
+      },
+      null,
+      null
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2,
+      0.4,
+      0.6
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 7,
+    "item_id": "scorer_error",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.5
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "status": "timeout",
+       "task_error": false
+      },
+      null,
+      null
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.0,
+      0.4,
+      0.6
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   },
+   {
+    "error": "",
+    "index": 8,
+    "item_id": "imported",
+    "item_metadata": {},
+    "latency_ms": 10.0,
+    "metric_meta": {
+     "h": {
+      "sample_reducer": "mean",
+      "samples_observed": 3
+     }
+    },
+    "metric_values": [
+     0.39999999999999997
+    ],
+    "pass_attempts": [
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 1,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 2,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     },
+     {
+      "__execution_error": "",
+      "__has_output": true,
+      "error": "",
+      "latency_ms": 10.0,
+      "output_digest": "0db52f4076c082518412afd3dd3576e2cb0c63703fd7fed5e23ade60efef31d9",
+      "pass_number": 3,
+      "retry_count": 0,
+      "status": "completed",
+      "task_started_at_ms": null,
+      "trace_id": "",
+      "trace_stats": null,
+      "trace_url": ""
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "reason": "judged",
+       "task_error": false
+      },
+      null,
+      null
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2,
+      0.4,
+      0.6
+     ]
+    },
+    "retry_count": 0,
+    "status": "completed"
+   }
+  ]
+ }
+}

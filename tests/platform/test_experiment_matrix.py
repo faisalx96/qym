@@ -2,14 +2,12 @@
 
 Backend: the detail payload carries each combination's sweep label, the job's
 secret-free ``qym_config`` (for "Save as preset"), and the linked run's metric means
-with a headline metric (the environment's ``ranking_metric`` first). Frontend: static
-contract checks on ``experiment_matrix.js`` (no browser or ``node`` needed).
+with a headline metric (the environment's ``ranking_metric`` first). The matrix UI is covered by
+frontend/e2e/experiments/detail.spec.ts and frontend/src/features/experiments/lib/lib.test.ts.
 """
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
 
 from qym_platform.db.models import (
     EvalEnvironment,
@@ -38,12 +36,6 @@ from test_experiments_api import (  # noqa: F401  (pytest fixtures)
     env,
     session_factory,
 )
-
-ROOT = Path(__file__).resolve().parents[2]
-DASHBOARD = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
-PAGE = (DASHBOARD / "experiments.html").read_text(encoding="utf-8")
-PAGE_JS = (DASHBOARD / "experiments.js").read_text(encoding="utf-8")
-MATRIX = (DASHBOARD / "experiment_matrix.js").read_text(encoding="utf-8")
 
 
 def _swept_spec() -> dict:
@@ -99,7 +91,9 @@ def _link_run(session_factory, job_id: str, scores: dict, errors: int = 0, **run
 # --------------------------------------------------------------------------- data
 
 
-def test_detail_labels_combinations_and_exposes_sweep_keys(client, session_factory, env):
+def test_detail_labels_combinations_and_exposes_sweep_keys(
+    client, session_factory, env
+):
     created = _created(client, [env.id], spec=_swept_spec())
     detail = client.get(
         _url(suffix=f"/{created['id']}"), headers=_headers(MEMBER2)
@@ -117,7 +111,9 @@ def test_detail_labels_combinations_and_exposes_sweep_keys(client, session_facto
 
 def test_unswept_experiment_has_one_unlabelled_combination(client, env):
     created = _created(client, [env.id])
-    detail = client.get(_url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)).json()
+    detail = client.get(
+        _url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)
+    ).json()
     assert detail["sweep_keys"] == {}
     (job,) = detail["jobs"]
     assert job["combo_label"] == "" and job["run"] is None
@@ -126,7 +122,9 @@ def test_unswept_experiment_has_one_unlabelled_combination(client, env):
 def test_job_carries_secret_free_qym_config_for_presets(client, session_factory, env):
     spec = _swept_spec()
     created = _created(client, [env.id], spec=spec)
-    detail = client.get(_url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)).json()
+    detail = client.get(
+        _url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)
+    ).json()
     job = detail["jobs"][1]
     config = job["qym_config"]
     assert config["schema_hash"] == "h-staging"
@@ -137,7 +135,10 @@ def test_job_carries_secret_free_qym_config_for_presets(client, session_factory,
     assert "$secret" not in str(config)
 
     # The page posts these keys as a saved preset; the preset API accepts them.
-    preset = {k: config[k] for k in ("schema_hash", "evaluator", "slot_bindings", "env_overrides")}
+    preset = {
+        k: config[k]
+        for k in ("schema_hash", "evaluator", "slot_bindings", "env_overrides")
+    }
     res = client.post(
         f"/v1/projects/project-1/eval-environments/{env.id}/presets",
         headers=_headers(MEMBER2),
@@ -195,7 +196,10 @@ def test_temporary_binding_is_saved_without_its_key(client, session_factory, env
             "base_url": "https://llm.example.com/v1",
         }
     }
-    preset = {k: snapshot[k] for k in ("schema_hash", "evaluator", "slot_bindings", "env_overrides")}
+    preset = {
+        k: snapshot[k]
+        for k in ("schema_hash", "evaluator", "slot_bindings", "env_overrides")
+    }
     res = client.post(
         f"/v1/projects/project-1/eval-environments/{env.id}/presets",
         headers=_headers(MEMBER),
@@ -213,18 +217,26 @@ def test_run_summary_has_metric_means_and_headline(client, session_factory, env)
     )
     # Errored items count as 0, like the runs list: (1 + 0.5) / (2 + 1) = 0.5.
     run_a = _link_run(
-        session_factory, first.id, {"accuracy": [1.0, 0.5], "latency": [3.0, 5.0]}, errors=1
+        session_factory,
+        first.id,
+        {"accuracy": [1.0, 0.5], "latency": [3.0, 5.0]},
+        errors=1,
     )
     run_b = _link_run(session_factory, second.id, {"accuracy": [1.0, 1.0]})
     with session_factory() as s:
         s.add(
             RunMetricSpec(
-                run_id=run_a, metric_name="latency", score_type="numeric", direction="minimize"
+                run_id=run_a,
+                metric_name="latency",
+                score_type="numeric",
+                direction="minimize",
             )
         )
         s.commit()
 
-    detail = client.get(_url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)).json()
+    detail = client.get(
+        _url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)
+    ).json()
     runs = {j["combo_index"]: j["run"] for j in detail["jobs"]}
     assert runs[0]["metric_means"] == {"accuracy": 0.5, "latency": 8.0 / 3}
     assert runs[0]["headline_metric"] == {
@@ -239,7 +251,9 @@ def test_run_summary_has_metric_means_and_headline(client, session_factory, env)
     with session_factory() as s:
         s.get(EvalEnvironment, env.id).ranking_metric = "latency"
         s.commit()
-    detail = client.get(_url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)).json()
+    detail = client.get(
+        _url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)
+    ).json()
     runs = {j["combo_index"]: j["run"] for j in detail["jobs"]}
     assert runs[0]["headline_metric"]["name"] == "latency"
     assert runs[0]["headline_metric"]["direction"] == "minimize"
@@ -263,7 +277,9 @@ def test_run_without_scores_has_no_headline(client, session_factory, env):
         s.flush()
         s.get(EvalExperimentJob, job.id).run_id = row.id
         s.commit()
-    detail = client.get(_url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)).json()
+    detail = client.get(
+        _url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)
+    ).json()
     (row,) = detail["jobs"]
     assert row["run"]["metric_means"] == {} and row["run"]["headline_metric"] is None
 
@@ -271,63 +287,9 @@ def test_run_without_scores_has_no_headline(client, session_factory, env):
 def test_matrix_spans_environments(client, session_factory, env):
     other = _add_env(session_factory, "prod")
     created = _created(client, [env.id, other.id], spec=_swept_spec())
-    detail = client.get(_url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)).json()
+    detail = client.get(
+        _url(suffix=f"/{created['id']}"), headers=_headers(MEMBER)
+    ).json()
     cells = {(j["combo_index"], j["environment_name"]) for j in detail["jobs"]}
     assert cells == {(0, "staging"), (0, "prod"), (1, "staging"), (1, "prod")}
     assert len({j["combo_label"] for j in detail["jobs"]}) == 2
-
-
-# --------------------------------------------------------------------------- page
-
-
-def test_page_loads_the_matrix_module_before_the_page_script():
-    assert '<script src="/static/experiment_matrix.js' in PAGE
-    assert PAGE.index("experiment_matrix.js") < PAGE.index('src="/static/experiments.js')
-    assert "window.QymExperimentMatrix" in PAGE_JS
-    assert "window.QymExperimentMatrix = " in MATRIX
-
-
-def test_matrix_has_rows_columns_cells_and_bulk_actions():
-    for hook in (
-        "data-exp-matrix",
-        "data-exp-cell",
-        "data-exp-compare",
-        "data-exp-select",
-        "data-exp-save-preset",
-        "data-exp-chart",
-        "data-exp-attempts",
-    ):
-        assert hook in MATRIX, hook
-    # Cells show only the current attempt; earlier attempts stay reachable.
-    assert "!job.superseded" in MATRIX
-    # Compare selected opens the compare page with repeated runs= parameters.
-    assert "'compare?'" in MATRIX and "'runs=' + encodeURIComponent(" in MATRIX
-    # Retry all failed goes through the page (HIGH acknowledgement stays there).
-    assert "data-exp-retry-all" in PAGE_JS and "async function retryAll(" in PAGE_JS
-    retry_all = PAGE_JS[PAGE_JS.index("async function retryAll(") :]
-    retry_all = retry_all[: retry_all.index("\n  }\n")]
-    assert "PREEMPTION_ACK_REQUIRED" in retry_all
-    assert retry_all.index("confirmDialog(") < retry_all.index("postJson(")
-
-
-def test_save_as_preset_posts_a_saved_preset_without_sweeps_or_keys():
-    save = MATRIX[MATRIX.index("function presetConfig(") :]
-    save = save[: save.index("\n  }\n")]
-    for key in ("schema_hash", "evaluator", "slot_bindings", "env_overrides"):
-        assert f"'{key}'" in save, key
-    assert "sweep" not in save and "base_source" not in save
-    assert "/eval-environments/" in MATRIX and "'/presets'" in MATRIX
-    assert "kind: 'saved'" in MATRIX
-    # Temporary models: the key is never saved, and the dialog says so.
-    assert "temporary" in MATRIX and "without its key" in MATRIX
-
-
-def test_chart_uses_chart_tokens_and_escapes_nothing():
-    assert "createElementNS" in MATRIX
-    assert "var(--chart-" in MATRIX
-    for sink in ("innerHTML", "insertAdjacentHTML", "outerHTML", "document.write"):
-        assert sink not in MATRIX, sink
-    assert "node.textContent = String(value)" in MATRIX
-    # No hardcoded font sizes or hex colours (DESIGN_LANGUAGE §2).
-    assert not re.search(r"fontSize|font-size:\s*\d", MATRIX)
-    assert not re.search(r"#[0-9a-fA-F]{3,6}\b", MATRIX)

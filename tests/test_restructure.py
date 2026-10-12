@@ -557,7 +557,11 @@ class TestPyprojectToml:
 
     def test_platform_package_data(self, platform_toml):
         pkg_data = platform_toml["tool"]["setuptools"]["package-data"]["qym_platform"]
-        assert "_static/dashboard/*" in pkg_data
+        # The React app is a build output (frontend/, npm run build) shipped from _static/app;
+        # the export-html page templates ship as package data too.
+        assert "_static/app/**/*" in pkg_data
+        assert "export_templates/run/*" in pkg_data
+        assert "_static/dashboard/*" not in pkg_data
         assert "migrations/*" in pkg_data
 
 
@@ -643,10 +647,15 @@ class TestStaticAssets:
             assert (built / "index.html").exists()
             assert {p.name for p in built.iterdir() if p.is_dir()} == set()
 
-    def test_platform_dashboard_has_index(self):
-        assert (
-            PLATFORM_ROOT / "qym_platform" / "_static" / "dashboard" / "index.html"
-        ).exists()
+    def test_platform_app_is_a_build_output_and_the_vanilla_dashboard_is_gone(self):
+        """The React app is built from frontend/ into the gitignored _static/app; the
+        export templates are tracked in the package."""
+        static = PLATFORM_ROOT / "qym_platform" / "_static"
+        assert not (static / "dashboard").exists()
+        built = static / "app"
+        if built.exists():
+            assert (built / "index.html").exists()
+        assert (PLATFORM_ROOT / "qym_platform" / "export_templates" / "run" / "run.html").exists()
 
     def test_platform_has_no_ui_copy(self):
         """The dead platform /ui viewer is gone; the SDK owns the local viewer."""

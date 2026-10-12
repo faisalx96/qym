@@ -1,0 +1,87 @@
+{
+ "expected": {
+  "clean_means": {
+   "h": {
+    "errors": 0,
+    "score": 0.3
+   }
+  },
+  "means": {
+   "h": 0.3
+  }
+ },
+ "kind": "run_page",
+ "samples": 2,
+ "snapshot": {
+  "metric_names": [
+   "h"
+  ],
+  "metric_specs": {
+   "h": {
+    "direction": "minimize",
+    "score_type": "percentage"
+   }
+  },
+  "rows": [
+   {
+    "metric_values": [
+     0.3
+    ],
+    "pass_attempts": [
+     {
+      "status": "completed"
+     },
+     {
+      "status": "completed"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "reason": "judged"
+      },
+      {}
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.2,
+      0.4
+     ]
+    },
+    "status": "completed"
+   },
+   {
+    "metric_values": [
+     0.3
+    ],
+    "pass_attempts": [
+     {
+      "status": "error"
+     },
+     {
+      "status": "completed"
+     }
+    ],
+    "pass_metric_meta": {
+     "h": [
+      {
+       "label": "error",
+       "modified": "true",
+       "original_score": 0
+      },
+      {}
+     ]
+    },
+    "pass_scores": {
+     "h": [
+      0.1,
+      0.5
+     ]
+    },
+    "status": "completed"
+   }
+  ]
+ }
+}

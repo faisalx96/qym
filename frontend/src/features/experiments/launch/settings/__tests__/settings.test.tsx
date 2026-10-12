@@ -21,10 +21,10 @@ function Probe() {
 
 const envs = [makeEnv(PRODUCTION, 'production')];
 
-function setup(ui: React.ReactElement, doc?: Partial<LaunchDocument>) {
+function setup(ui: React.ReactElement, doc?: Partial<LaunchDocument>, mode?: 'launch' | 'editor') {
   const user = userEvent.setup();
   const utils = render(
-    <LaunchTestProvider envs={envs} doc={createDocument({ environmentIds: [PRODUCTION], ...doc })}>
+    <LaunchTestProvider envs={envs} mode={mode} doc={createDocument({ environmentIds: [PRODUCTION], ...doc })}>
       {ui}
       <Probe />
     </LaunchTestProvider>,
@@ -143,6 +143,13 @@ describe('SettingsSection', () => {
     expect(values()).toEqual({ '/ENABLE_RESPONSE_DRAFTING': { sweep: [true, false] } });
     await user.click(screen.getByRole('button', { name: 'false' }));
     expect(values()).toEqual({ '/ENABLE_RESPONSE_DRAFTING': { sweep: [true] } });
+  });
+
+  it('offers no sweeps in the default preset editor (a default holds one configuration)', async () => {
+    const { user } = setup(<SettingsSection />, undefined, 'editor');
+    await openGroup(user, /Misc/);
+    expect(screen.getByRole('textbox', { name: 'Request Timeout' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Sweep values/ })).not.toBeInTheDocument();
   });
 
   it('edits a value the widget cannot show as JSON', async () => {

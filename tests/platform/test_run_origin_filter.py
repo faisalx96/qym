@@ -6,8 +6,6 @@ expose ``origin`` plus an ``experiment`` reference, and ``origin`` is a filter.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -33,8 +31,6 @@ from qym_platform.deps import get_db
 from qym_platform.services import dashboard_summaries as service
 from qym_platform.services.run_origin import parse_origin_filter
 from test_dashboard_durable_summaries import drain, item, run
-
-STATIC = Path(__file__).resolve().parents[2] / "packages/platform/qym_platform/_static/dashboard"
 
 
 def _seed(engine):
@@ -252,34 +248,3 @@ def test_descriptor_without_origin_counts_as_local_and_is_requeued(database, cli
     drain(database)
     page = _dashboard(client, "runs", {"origins": ["official"]}).json()
     assert [row["run_id"] for row in page["rows"]] == ["official"]
-
-
-def test_origin_facet_and_badge_static_contract():
-    source = (STATIC / "dashboard.js").read_text()
-    for page in ("index.html", "charts.html", "models.html"):
-        markup = (STATIC / page).read_text()
-        assert 'class="origin-filters qym-segmented"' in markup, page
-        for origin in ("all", "official", "local"):
-            assert f'data-origin="{origin}"' in markup, page
-        # Must not reuse .filter-btn: those buttons drive the time quick filter.
-        assert "origin-filter-btn qym-segmented__option" in markup
-        assert 'class="filter-btn origin' not in markup
-    index = (STATIC / "index.html").read_text()
-    assert index.index("col-experiment") < index.index("col-version")
-    assert "if (state.filterOrigin !== 'all') filters.origins = [state.filterOrigin];" in source
-    assert "origin: state.filterOrigin," in source
-    assert "${inherit('col-experiment')}" in source
-    # Badge text is "Official run", never the preset's "Official defaults".
-    for text in (
-        source,
-        (STATIC / "overview.html").read_text(),
-        (STATIC / "compare.html").read_text(),
-    ):
-        assert ">Official run</span>" in text
-        assert ">Official defaults" not in text
-    # Experiment names are user text: always escaped before reaching markup.
-    assert "escapeHtml(label)" in source and "encodeURIComponent(experimentId)" in source
-    compare = (STATIC / "compare.html").read_text()
-    assert "escapeHtml(experiment.name || experiment.id)" in compare
-    overview = (STATIC / "overview.html").read_text()
-    assert "filters: withOrigin(filters)" in overview

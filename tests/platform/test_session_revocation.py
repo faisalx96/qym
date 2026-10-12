@@ -433,6 +433,12 @@ def test_session_cookie_keeps_the_14_day_lifetime(app):
     assert "httponly" in cookie_header.lower()
 
 
+def _spa_asset_name() -> str:
+    from qym_platform.api.spa import spa_dir
+
+    return sorted((spa_dir() / "assets").glob("*.js"))[0].name
+
+
 def test_private_responses_are_not_cached(app):
     with _browser(app) as client:
         _signup(client)
@@ -441,13 +447,13 @@ def test_private_responses_are_not_cached(app):
         assert page.status_code == 200
         assert page.headers["cache-control"] == "no-store"
         assert client.get("/login", follow_redirects=False).headers["cache-control"] == "no-store"
-        asset = client.get("/static/auth.js")
+        asset = client.get(f"/assets/{_spa_asset_name()}")
         assert asset.status_code == 200
         assert "no-store" not in asset.headers.get("cache-control", "")
 
 
 def test_static_assets_stay_cacheable_under_a_root_path(monkeypatch):
-    """Behind an ingress prefix the mounted app sees /qym/static/...; assets must
+    """Behind an ingress prefix the mounted app sees /qym/assets/...; assets must
     still skip no-store or every page view re-downloads them."""
     from qym_platform import main
     from qym_platform.settings import PlatformSettings
@@ -455,7 +461,7 @@ def test_static_assets_stay_cacheable_under_a_root_path(monkeypatch):
     settings = PlatformSettings(environment="test", auth_mode="none", root_path="/qym")
     monkeypatch.setattr(main, "PlatformSettings", lambda: settings)
     client = TestClient(main.build_app())  # no lifespan: no background workers
-    for path in ("/qym/static/auth.js",):
+    for path in (f"/qym/assets/{_spa_asset_name()}",):
         asset = client.get(path)
         assert asset.status_code == 200
         assert "no-store" not in asset.headers.get("cache-control", "")
