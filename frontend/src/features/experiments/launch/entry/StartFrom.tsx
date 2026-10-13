@@ -77,19 +77,26 @@ export function StartFrom() {
             />
           ) : null}
         </div>
-        <div className={styles.startSub}>{baseState.savedPresets.length ? 'Saved presets' : 'Other'}</div>
+        {baseState.savedPresets.length ? (
+          <>
+            <div className={styles.startSub}>Saved presets</div>
+            <div className={styles.startGridCompact}>
+              {baseState.savedPresets.map((p) => (
+                <StartCard
+                  key={p.id}
+                  compact
+                  title={p.name}
+                  body={`v${p.current_version?.version ?? 1}${p.created_by?.name ? ` · by ${p.created_by.name}` : ''}`}
+                  checked={savedChecked(p.id)}
+                  disabled={readOnly}
+                  onSelect={() => void chooseBase('saved', { presetId: p.id })}
+                />
+              ))}
+            </div>
+          </>
+        ) : null}
+        <div className={styles.startSub}>Other</div>
         <div className={styles.startGridCompact}>
-          {baseState.savedPresets.map((p) => (
-            <StartCard
-              key={p.id}
-              compact
-              title={p.name}
-              body={`v${p.current_version?.version ?? 1}${p.created_by?.name ? ` · by ${p.created_by.name}` : ''}`}
-              checked={savedChecked(p.id)}
-              disabled={readOnly}
-              onSelect={() => void chooseBase('saved', { presetId: p.id })}
-            />
-          ))}
           <StartCard
             compact
             title="From scratch"

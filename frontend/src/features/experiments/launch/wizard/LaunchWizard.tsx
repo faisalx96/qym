@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useMediaQuery } from '@/features/shell';
-import { Stepper } from '@/ui';
+import { Skeleton, Stepper } from '@/ui';
 import { plural } from '../../lib/format';
 import { EntryBlock } from '../entry/EntryBlock';
 import { StartFrom } from '../entry/StartFrom';
@@ -46,10 +46,43 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
     return `Step ${index} of ${WIZARD_STEPS.length}: ${stepLabel(step)}`;
   }, [step]);
 
-  // A step change: the rail comes to the top of the view and the heading takes focus.
+  // A step change: the rail comes to the top of the view and the heading takes focus. The stage keeps
+  // the previous step's height until the scroll ends, so a shorter step cannot clamp the scroll to 0
+  // and make it jump back down to the rail.
+  const stage = useRef<HTMLDivElement>(null);
+  const lastHeight = useRef(0);
+  const held = useRef(false);
+  const firstStep = useRef(true);
   useEffect(() => {
-    rail.current?.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    const el = stage.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(() => {
+      if (!held.current) lastHeight.current = el.offsetHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const el = stage.current;
+    const smooth = !prefersReducedMotion();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (el && !firstStep.current && lastHeight.current) {
+      held.current = true;
+      el.style.minHeight = `${lastHeight.current}px`;
+      timer = setTimeout(
+        () => {
+          el.style.minHeight = '';
+          held.current = false;
+        },
+        smooth ? 700 : 50,
+      );
+    }
+    firstStep.current = false;
+    rail.current?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
     heading.current?.focus({ preventScroll: true });
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [step]);
 
   // The Raw JSON card is always open in the wizard; its editor registers its field while open.
@@ -135,7 +168,9 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
         <StepPanel key={step} ref={heading} stepId={step} title={title}>
           {!hasEnv ? (
             <p className={styles.hint}>Pick an environment first (step 1) to configure this step.</p>
-          ) : loading ? null : (
+          ) : loading ? (
+            <Skeleton kind="cards" count={3} label="Loading the environments’ settings" />
+          ) : (
             <StaticSections
               untitled={step === 'models' ? ['models'] : step === 'settings' ? ['settings'] : ['evaluation']}
             >
@@ -170,7 +205,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
           {announce}
           {review.items.length ? `, ${plural(review.items.length, 'problem')} to fix` : ''}
         </div>
-        {body}
+        <div ref={stage}>{body}</div>
         <StepNav step={step} next={next} prev={prev} onGo={onGo} />
         {wide || step === 'review' ? null : <ReviewPane onCancel={onCancel} hideActions />}
         {wide || step === 'review' ? null : <MobileLaunchBar onCancel={onCancel} />}

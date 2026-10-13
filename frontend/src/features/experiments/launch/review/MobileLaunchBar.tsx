@@ -39,12 +39,13 @@ export function MobileLaunchBar({ onCancel }: { onCancel: () => void }) {
         )}
       </div>
       <div className={styles.actions}>
-        <Button size="sm" variant="ghost" onPress={onCancel}>
+        <Button size="sm" variant="ghost" className={styles.barSecondary} onPress={onCancel}>
           Cancel
         </Button>
         <Button
           size="sm"
           variant="neutral"
+          className={styles.barSecondary}
           onPress={() => {
             openSection('raw');
             focusField(pointerToFieldName(PSEUDO.rawJson), 'raw');

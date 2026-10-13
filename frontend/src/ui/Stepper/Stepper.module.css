@@ -12,7 +12,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-xs);
+  gap: 2px;
   width: 100%;
   min-width: 0;
   padding: 0;
@@ -73,10 +73,7 @@
 }
 
 .text {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
+  display: block;
   font-size: var(--font-base);
   line-height: 1.3;
   min-width: 0;
@@ -91,6 +88,7 @@
 }
 
 .index {
+  margin-inline-end: var(--space-xs);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }

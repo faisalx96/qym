@@ -83,7 +83,7 @@ export function LaunchSection({
         aria-labelledby={titled ? sectionHeadingId(id) : undefined}
         aria-label={titled ? undefined : title}
       >
-        <div className={styles.staticHead}>
+        <div className={styles.staticHead} data-titled={titled}>
           {titled ? (
             <h3 id={sectionHeadingId(id)} className={styles.toggleTitle}>
               {title}

@@ -205,3 +205,91 @@ test.describe('motion', () => {
     await expect(page.getByRole('textbox', { name: 'Max Attempts' })).toHaveCount(0);
   });
 });
+
+test.describe('polish', () => {
+  test('a deep link to a settings step shows a skeleton, never a heading alone', async ({ page }) => {
+    await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
+    const panel = page.locator('[data-step]');
+    // Once the heading is there, the panel is never only the heading.
+    const heights = await panel.evaluate(
+      (el) =>
+        new Promise<number[]>((resolve) => {
+          const out: number[] = [];
+          let n = 0;
+          const tick = () => {
+            out.push(Math.round(el.getBoundingClientRect().height));
+            if (++n < 20) requestAnimationFrame(tick);
+            else resolve(out);
+          };
+          tick();
+        }),
+    );
+    expect(Math.min(...heights)).toBeGreaterThan(60);
+  });
+
+  test('Continue to a shorter step keeps the rail in place (scroll never clamps to 0)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 700 });
+    await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'settings');
+    await expect(page.getByRole('heading', { name: 'LLM routing', level: 4 })).toBeVisible();
+    await page.getByRole('heading', { name: 'LLM routing', level: 4 }).getByRole('button').click();
+    await page.getByRole('button', { name: /Continue to evaluation/ }).scrollIntoViewIfNeeded();
+    const scroller = await page.evaluateHandle(() => document.querySelector('main')!);
+    const before = await scroller.evaluate((el) => el.scrollTop);
+    expect(before).toBeGreaterThan(100);
+    await scroller.evaluate((el) => {
+      (window as unknown as { __tops: number[] }).__tops = [];
+      const sample = () => {
+        (window as unknown as { __tops: number[] }).__tops.push(el.scrollTop);
+        requestAnimationFrame(sample);
+      };
+      sample();
+    });
+    await page.getByRole('button', { name: /Continue to evaluation/ }).click();
+    await expect(page.getByRole('heading', { name: 'Evaluation configurations', level: 2 })).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const t = (window as unknown as { __tops: number[] }).__tops;
+          return t.length > 20 && t.slice(-15).every((v) => v === t[t.length - 1]);
+        }),
+      )
+      .toBe(true);
+    const tops = await page.evaluate(() => (window as unknown as { __tops: number[] }).__tops);
+    const lowest = Math.min(...tops.slice(1));
+    // It scrolls up towards the rail without first collapsing to the very top of the page.
+    expect(lowest).toBeGreaterThan(0);
+  });
+
+  test('390px: step navigation is one row and the launch bar is one compact row', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
+    const nav = page.getByRole('navigation', { name: 'Step navigation' });
+    const bar = page.getByRole('region', { name: 'Launch', exact: true });
+    const [nb, bb] = [await nav.boundingBox(), await bar.boundingBox()];
+    expect(nb!.height).toBeLessThan(50);
+    expect(bb!.height).toBeLessThan(70);
+    await expect(nav.getByRole('button', { name: 'Continue to environment configurations' })).toBeVisible();
+    await expect(nav.getByRole('button', { name: 'Skip to review' })).toBeVisible();
+  });
+
+  test('home: Launch as is is the accent action; saved presets and "Other" are separate rows', async ({
+    page,
+  }) => {
+    await openHome(page, f.project.slug, `?env=${f.env.id}`);
+    await expect(page.getByRole('button', { name: 'Launch as is' })).toHaveAttribute(
+      'data-variant',
+      'accent',
+    );
+    await expect(page.getByRole('button', { name: /Customize/ })).toHaveAttribute('data-variant', 'neutral');
+    await expect(page.getByText('Saved presets', { exact: true })).toBeVisible();
+    await expect(page.getByText('Other', { exact: true })).toBeVisible();
+  });
+
+  test('390px home: no header gap and the bar leaves room for the first start card', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openHome(page, f.project.slug, `?env=${f.env.id}`);
+    await expect(page.getByRole('link', { name: 'All experiments' })).toHaveCount(0);
+    const bar = await page.getByRole('region', { name: 'Launch', exact: true }).boundingBox();
+    expect(bar!.height).toBeLessThan(150);
+  });
+});

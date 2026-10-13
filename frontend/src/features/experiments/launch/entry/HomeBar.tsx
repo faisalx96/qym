@@ -95,14 +95,14 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
       </div>
       <div className={styles.homeActions}>
         <Button
-          variant="neutral"
+          variant="accent"
           loading={isLaunching}
           isDisabled={readOnly || !review.canLaunch || review.items.length > 0 || isLaunching}
           onPress={() => void launch()}
         >
           Launch as is
         </Button>
-        <Button variant="accent" onPress={() => onCustomize(away ? stepOfItem(away) : 'where')}>
+        <Button variant="neutral" onPress={() => onCustomize(away ? stepOfItem(away) : 'where')}>
           Customize →
         </Button>
       </div>

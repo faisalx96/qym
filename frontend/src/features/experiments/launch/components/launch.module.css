@@ -133,8 +133,12 @@
   gap: var(--space-sm);
 }
 
-.staticDesc {
+.staticHead[data-titled='true'] .staticDesc {
   flex: 1 1 100%;
+}
+
+.staticDesc {
+  flex: 0 1 auto;
   margin: 0;
   font-size: var(--font-sm);
   color: var(--text-muted);

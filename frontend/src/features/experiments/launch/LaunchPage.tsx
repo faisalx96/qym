@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useBlocker, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useEvalEnvironments } from '@/api/evalCommon';
-import { useDocumentTitle, useProjectContext } from '@/features/shell';
+import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { Button, ConfirmDialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, Tag } from '@/ui';
 import { environmentsPath, experimentPath, experimentsPath } from '../paths';
@@ -35,6 +35,8 @@ function LaunchBody({
 }) {
   const { flags, baseState, doc } = useLaunch();
   const { step, goToStep, next, prev } = useStep();
+  // Phones drop the header link (the breadcrumb has Experiments) so the title is not pushed down.
+  const narrow = useMediaQuery('(max-width: 760px)');
 
   // Unsaved-changes guard: closing the tab and leaving through the router. Moving between the home
   // view and the steps (`?step=`) is not leaving.
@@ -72,9 +74,11 @@ function LaunchBody({
           <Button variant="ghost" onPress={() => goToStep(null)}>
             ← Start
           </Button>
-          <LinkButton to={experimentsPath(slug)} variant="ghost">
-            All experiments
-          </LinkButton>
+          {narrow ? null : (
+            <LinkButton to={experimentsPath(slug)} variant="ghost">
+              All experiments
+            </LinkButton>
+          )}
         </>
       }
     />
@@ -83,9 +87,11 @@ function LaunchBody({
       title="New experiment"
       description="Pick where it runs and what to start from. You can change anything in Customize."
       actions={
-        <LinkButton to={experimentsPath(slug)} variant="ghost">
-          All experiments
-        </LinkButton>
+        narrow ? undefined : (
+          <LinkButton to={experimentsPath(slug)} variant="ghost">
+            All experiments
+          </LinkButton>
+        )
       }
     />
   );

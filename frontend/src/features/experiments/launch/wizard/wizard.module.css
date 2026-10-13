@@ -77,3 +77,19 @@
     animation: none;
   }
 }
+
+/* Narrow: one row (Back left, Skip and Continue right); the long label parts drop out. */
+@media (max-width: 760px) {
+  .nav {
+    flex-wrap: nowrap;
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .navNext {
+    flex-wrap: nowrap;
+  }
+
+  .long {
+    display: none;
+  }
+}

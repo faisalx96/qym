@@ -26,13 +26,17 @@ export function StepNav({
       </div>
       <div className={styles.navNext}>
         {optional ? (
-          <Button variant="neutral" onPress={() => onGo('review')}>
-            Skip to review
+          <Button variant="neutral" aria-label="Skip to review" onPress={() => onGo('review')}>
+            Skip<span className={styles.long}> to review</span>
           </Button>
         ) : null}
         {next ? (
-          <Button variant="accent" onPress={() => onGo(next)}>
-            {`Continue to ${stepLabel(next).toLowerCase()}`}
+          <Button
+            variant="accent"
+            aria-label={`Continue to ${stepLabel(next).toLowerCase()}`}
+            onPress={() => onGo(next)}
+          >
+            Continue<span className={styles.long}>{` to ${stepLabel(next).toLowerCase()}`}</span>
           </Button>
         ) : null}
       </div>
