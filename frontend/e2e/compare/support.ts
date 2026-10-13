@@ -55,3 +55,11 @@ export async function expectShown(page: Page, n: number): Promise<void> {
       .first(),
   ).toContainText(`${n} of `);
 }
+
+/** Jump to a report section through the sticky "Comparison sections" nav (sections are stacked, not tabs). */
+export async function goSection(page: Page, name: string): Promise<void> {
+  await page
+    .getByRole('navigation', { name: 'Comparison sections' })
+    .getByRole('link', { name: new RegExp(`^${name}`) })
+    .click();
+}

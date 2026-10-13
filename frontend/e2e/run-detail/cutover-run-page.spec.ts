@@ -21,8 +21,6 @@ for (const width of [1088, 1248]) {
     test(`metric cards keep every part inside the card at ${width}px (${kind})`, async ({ page }) => {
       await page.setViewportSize({ width, height: 1100 });
       await openRun(page, s.slug, kind === 'repeat' ? repeat : classic);
-      // under 1200 px the analysis panel is a drawer opened by the Analysis button
-      if (width < 1200) await page.getByRole('button', { name: 'Analysis', exact: true }).click();
       const cards = page.locator('[data-testid=metric-card]');
       await expect(cards.first()).toBeVisible();
       const overflow = await cards.evaluateAll((nodes) =>

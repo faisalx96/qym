@@ -3,7 +3,7 @@
  * column; a slow superseded search never replaces the newest results).
  */
 import { expect, test, type Route } from '@playwright/test';
-import { compareUrl, client, expectShown, seedScenario, urlParams, waitLoaded } from './support';
+import { compareUrl, client, expectShown, seedScenario, urlParams, waitLoaded, goSection } from './support';
 import { createApiKey, seedTracedRun, type CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -49,7 +49,7 @@ test('the Steps tab shows one lane per compared run, with the change against the
   });
   await page.goto(compareUrl([traced, base, a]));
   await waitLoaded(page);
-  await page.getByRole('tab', { name: 'Steps' }).click();
+  await goSection(page, 'Steps');
   // One pooled request carries every lane (group_by=ref) and the columns in order.
   await expect.poll(() => requests.length).toBe(1);
   const q = new URL(requests[0]!).searchParams;
@@ -67,7 +67,7 @@ test('the Steps tab shows one lane per compared run, with the change against the
     .last()
     .click();
   await expect.poll(() => urlParams(page).getAll('runs')).toEqual([traced, base]);
-  await page.getByRole('tab', { name: 'Steps' }).click();
+  await goSection(page, 'Steps');
   await expect.poll(() => requests.length).toBe(2);
   expect(new URL(requests[1]!).searchParams.get('run_ids')!.split(',')).toEqual([traced, base]);
   await page.unrouteAll({ behavior: 'ignoreErrors' });

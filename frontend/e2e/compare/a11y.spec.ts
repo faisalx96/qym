@@ -118,10 +118,10 @@ test('every control has an accessible name; remove buttons say what they remove'
   });
   expect(unnamed).toEqual([]);
   // landmarks
-  await expect(page.getByRole('region', { name: 'Items' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Item-by-item comparison' })).toBeAttached();
   await expect(page.getByRole('main')).toHaveCount(1); // the shell's; the items list must not nest a second main
-  await expect(page.getByRole('complementary', { name: 'Analytics for the filtered items' })).toBeVisible();
-  await expect(page.getByRole('tablist', { name: 'Analytics' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Comparison sections' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Per-run averages' })).toBeVisible();
   await expect(page.getByRole('table', { name: /Average per run/ })).toBeVisible();
 });
 

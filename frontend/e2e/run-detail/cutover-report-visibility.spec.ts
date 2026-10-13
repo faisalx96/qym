@@ -42,8 +42,19 @@ test.beforeAll(async () => {
   s = await seedProject('rd-cutover-reports');
 });
 
+async function goCompare(page: Page, name: string) {
+  await page
+    .getByRole('navigation', { name: 'Comparison sections' })
+    .getByRole('link', { name: new RegExp(`^${name}`) })
+    .click();
+}
+
+/** Jump to a section of the run report through the sticky nav (sections are stacked, not tabs). */
 async function tab(page: Page, name: string) {
-  await page.getByRole('tab', { name: new RegExp(`^${name}`) }).click();
+  await page
+    .getByRole('navigation', { name: 'Run sections' })
+    .getByRole('link', { name: new RegExp(`^${name}`) })
+    .click();
 }
 
 test('run page: errors, root causes and categories vanish with the filtered data and return', async ({
@@ -97,19 +108,19 @@ test('compare: the Errors and Root cause reports follow the filtered items and c
   await page.goto(compareUrl([a, b]));
   await waitCompareLoaded(page);
   const search = page.getByRole('searchbox').first();
-  await page.getByRole('tab', { name: /^Errors/ }).click();
+  await goCompare(page, 'Errors');
   await expect(page.getByText(/upstream unavailable/).first()).toBeVisible();
-  await page.getByRole('tab', { name: /^Root cause/ }).click();
+  await goCompare(page, 'Root cause');
   await expect(page.getByText('Reasoning Error').first()).toBeVisible();
 
   await search.fill('clean question');
-  await page.getByRole('tab', { name: /^Errors/ }).click();
+  await goCompare(page, 'Errors');
   await expect(page.getByText(/No errors among the 1 filtered items/)).toBeVisible();
-  await page.getByRole('tab', { name: /^Root cause/ }).click();
+  await goCompare(page, 'Root cause');
   await expect(page.getByText('Reasoning Error')).toHaveCount(0);
 
   await search.fill('');
-  await page.getByRole('tab', { name: /^Errors/ }).click();
+  await goCompare(page, 'Errors');
   await expect(page.getByText(/upstream unavailable/).first()).toBeVisible();
 });
 

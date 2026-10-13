@@ -9,7 +9,7 @@ test.beforeAll(async () => {
 });
 const three = () => compareUrl([seed.runs.base, seed.runs.a, seed.runs.b]);
 
-test('the analytics caption wraps inside the scroll region instead of being cut off', async ({ page }) => {
+test('the averages caption wraps inside the scroll region instead of being cut off', async ({ page }) => {
   await page.goto(three());
   await waitLoaded(page);
   const scroller = page.getByLabel('Metrics table');

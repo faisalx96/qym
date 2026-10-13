@@ -1,6 +1,6 @@
 /** Scenarios 3, 4 and 8: count-button filters, Overview tab, the rule builder, search, Display and panel chips. */
 import { expect, test, type Page } from '@playwright/test';
-import { compareUrl, expectShown, seedScenario, urlParams, waitLoaded } from './support';
+import { compareUrl, expectShown, seedScenario, urlParams, waitLoaded, goSection } from './support';
 import type { CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -75,7 +75,7 @@ test('count button in the Metrics table selects that metric and filters the list
 
 test('Overview: threshold slider changes Pass@K and is written to ?thr=', async ({ page }) => {
   await open4(page);
-  await page.getByRole('tab', { name: 'Overview' }).click();
+  await goSection(page, 'Overview');
   const slider = page.getByRole('slider', { name: /Pass if/ });
   await expect(slider).toBeVisible();
   const strip = async () => {
@@ -95,7 +95,7 @@ test('Overview: threshold slider changes Pass@K and is written to ?thr=', async 
 
 test('Overview: Winner bar and Runs-correct distribution bars set filter chips', async ({ page }) => {
   await open4(page);
-  await page.getByRole('tab', { name: 'Overview' }).click();
+  await goSection(page, 'Overview');
   const win = page.getByRole('group', { name: 'Items won by each run' }).getByRole('button').first();
   const label = (await win.getAttribute('aria-label')) ?? '';
   const wins = Number(/won (\d+) items/.exec(label)?.[1]);
@@ -157,7 +157,7 @@ test('rule builder: a rules deep link edits, switches AND/OR and deletes; count 
     );
   // data cross-check: items with >= 2 passing runs (Overview distribution)
   await open4(page);
-  await page.getByRole('tab', { name: 'Overview' }).click();
+  await goSection(page, 'Overview');
   const dist = await page
     .getByRole('button', { name: /items with \d of 4 runs correct; filter/ })
     .evaluateAll((els) =>
@@ -251,7 +251,7 @@ test('Categories and Errors tabs: pressing a row / card filters the items and ad
   page,
 }) => {
   await open4(page);
-  await page.getByRole('tab', { name: 'Categories' }).click();
+  await goSection(page, 'Categories');
   const easy = page.getByRole('button', { name: /^easy \d+$/ }).first();
   const n = Number(/(\d+)$/.exec((await easy.innerText()).trim())![1]);
   await easy.click();
@@ -261,7 +261,7 @@ test('Categories and Errors tabs: pressing a row / card filters the items and ad
   await easy.click();
   await expectShown(page, 40);
 
-  await page.getByRole('tab', { name: 'Errors' }).click();
+  await goSection(page, 'Errors');
   const card = page.getByRole('button', { name: /TimeoutError/ }).first();
   await expect(card).toBeVisible();
   await card.click();

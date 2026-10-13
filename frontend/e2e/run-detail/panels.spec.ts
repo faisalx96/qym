@@ -1,4 +1,4 @@
-/** Analysis side panel: tabs, ?panel=, hash anchors, error / category / deep / root-cause tabs, collapse, narrow viewport. */
+/** Report sections: stacked order, nav jumps, hash and ?panel= anchors, lazy mounting, error / category / deep / root-cause sections. */
 import { test, expect, type Page } from '@playwright/test';
 import { itemsCount, openRun, params, runUrl, seedClassic, seedProject, type Seeded } from './support';
 
@@ -10,47 +10,47 @@ test.beforeAll(async () => {
   classic = await seedClassic(s);
 });
 
-const tab = (page: Page, name: string | RegExp) => page.getByRole('tab', { name });
+const section = (page: Page, name: string) => page.locator(`#run-section-${name}`);
+const navLink = (page: Page, name: string | RegExp) =>
+  page.getByRole('navigation', { name: 'Run sections' }).getByRole('link', { name });
 
-test.describe('analysis panel tabs', () => {
-  test('Overview is the default; tabs switch the panel and write ?panel=', async ({ page }) => {
+test.describe('report sections', () => {
+  test('every analysis section is on the page, stacked in report order, Items last', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await expect(page.locator('#analysis-panel')).toBeVisible();
-    await expect(tab(page, 'Overview')).toHaveAttribute('aria-selected', 'true');
-    await tab(page, /^Errors/).click();
-    await expect.poll(() => params(page).get('panel')).toBe('errors');
-    await expect(page.getByRole('tabpanel')).toContainText('Task errors');
-    await tab(page, 'Categories').click();
-    await expect.poll(() => params(page).get('panel')).toBe('categories');
-    await tab(page, 'Overview').click();
-    await expect.poll(() => params(page).get('panel')).toBeNull();
-    // tabs only exist for data the run has
-    await expect(tab(page, 'Repeat')).toHaveCount(0);
-    await expect(tab(page, /Reviews/)).toHaveCount(0);
+    const order = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-report-section], #run-items')).map((e) =>
+        e.id.replace('run-section-', '').replace('run-items', 'items'),
+      ),
+    );
+    expect(order).toEqual(['overview', 'latency', 'deep', 'categories', 'errors', 'items']);
+    await expect(page.getByRole('heading', { level: 2, name: 'Overview' })).toBeVisible();
+    // no side panel and no tabs any more
+    await expect(page.locator('#analysis-panel')).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Overview' })).toHaveCount(0);
+    // sections for data the run does not have are absent
+    await expect(section(page, 'repeat')).toHaveCount(0);
+    await expect(section(page, 'root-cause')).toHaveCount(0);
+    await expect(navLink(page, 'Repeat')).toHaveCount(0);
   });
 
-  test('arrow keys move between tabs', async ({ page }) => {
+  test('nav links jump to the section and ?panel= is not written', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await tab(page, 'Overview').focus();
-    await page.keyboard.press('ArrowRight');
-    await expect(tab(page, /^Errors/)).toBeFocused();
-    await page.keyboard.press('ArrowRight');
-    await expect(tab(page, 'Categories')).toBeFocused();
+    await navLink(page, /^Errors/).click();
+    await expect(section(page, 'errors')).toBeInViewport();
+    await expect(section(page, 'errors')).toContainText('Task errors');
+    await navLink(page, 'Categories').click();
+    await expect(section(page, 'categories')).toBeInViewport();
+    expect(params(page).get('panel')).toBeNull();
+    await expect(navLink(page, 'Categories')).toHaveAttribute('aria-current', 'location');
   });
 
-  test('hash anchors open the matching tab (#errors #categories #deep #root-cause #overview)', async ({
+  test('hash anchors scroll to the matching section (#errors #categories #deep #overview)', async ({
     page,
   }) => {
-    for (const [hash, name] of [
-      ['errors', /^Errors/],
-      ['categories', 'Categories'],
-      ['deep', 'Deep'],
-      ['root-cause', 'Root cause'],
-      ['overview', 'Overview'],
-    ] as const) {
+    for (const hash of ['errors', 'categories', 'deep', 'overview']) {
       await page.goto(`/projects/${s.slug}/runs/${classic}#${hash}`);
       await expect(page.getByTestId('items-count')).toBeVisible();
-      await expect(tab(page, name)).toHaveAttribute('aria-selected', 'true');
+      await expect(section(page, hash)).toBeInViewport();
     }
   });
 
@@ -60,30 +60,24 @@ test.describe('analysis panel tabs', () => {
     await expect(page.getByRole('table', { name: 'Items' })).toBeInViewport();
   });
 
-  test('the panel collapses and the Analysis button brings it back', async ({ page }) => {
+  test('lazy sections mount once they near the viewport', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await page.getByRole('button', { name: 'Collapse analysis panel' }).click();
-    await expect(page.locator('#analysis-panel')).toBeHidden();
-    await page.getByRole('button', { name: 'Analysis', exact: true }).click();
-    await expect(page.locator('#analysis-panel')).toBeVisible();
+    await expect(section(page, 'deep')).not.toHaveAttribute('data-mounted', '');
+    await navLink(page, 'Deep').click();
+    await expect(section(page, 'deep')).toHaveAttribute('data-mounted', '');
+    await expect(page.getByRole('grid', { name: 'Pearson correlation matrix' })).toBeVisible();
   });
 
-  test('under 1200px the panel is a drawer opened by the Analysis button', async ({ page }) => {
-    await page.setViewportSize({ width: 1000, height: 800 });
+  test('metric cards sit three per row at 1280 without a scope', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await expect(tab(page, 'Overview')).toHaveCount(0);
-    const open = page.getByRole('button', { name: 'Analysis', exact: true });
-    await open.click();
-    const drawer = page.getByRole('dialog');
-    await expect(drawer).toBeVisible();
-    await expect(drawer.getByRole('tab', { name: 'Overview' })).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(drawer).toHaveCount(0);
-    await expect(open).toBeFocused();
+    const cards = page.getByTestId('metric-card');
+    const tops = await cards.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    const first = tops.filter((t) => t === tops[0]).length;
+    expect(first).toBeGreaterThanOrEqual(2);
   });
 });
 
-test.describe('errors tab', () => {
+test.describe('errors section', () => {
   test('error cards group by message and filter the table on click', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=errors');
     const cards = page.getByTestId('error-card');
@@ -108,7 +102,7 @@ test.describe('errors tab', () => {
   });
 });
 
-test.describe('categories tab', () => {
+test.describe('categories section', () => {
   test('category rows show averages and filter by metadata value', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=categories');
     const rows = page.getByTestId('category-row');
@@ -148,7 +142,7 @@ test.describe('categories tab', () => {
   });
 });
 
-test.describe('deep and root cause tabs', () => {
+test.describe('deep and root cause sections', () => {
   test('Deep: correlation matrix cells plot the pair', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=deep');
     const grid = page.getByRole('grid', { name: 'Pearson correlation matrix' });
@@ -160,15 +154,10 @@ test.describe('deep and root cause tabs', () => {
     await expect(rel).toContainText('hallucination');
   });
 
-  test('Root cause: empty state offers Auto-Analyze; the link goes to the analyzer route', async ({
-    page,
-  }) => {
+  test('Root cause: hidden while the run has no analyses', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=root-cause');
-    await expect(page.getByText(/No root causes recorded yet/)).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Auto-Analyze' }).first()).toHaveAttribute(
-      'href',
-      new RegExp(`/projects/${s.slug}/runs/${classic}/analyzer$`),
-    );
+    await expect(section(page, 'root-cause')).toHaveCount(0);
+    await expect(navLink(page, 'Root cause')).toHaveCount(0);
   });
 });
 
@@ -186,7 +175,7 @@ test.describe('analysis metric and threshold', () => {
     await page.goto(`/run/${classic}#errors`);
     await expect(page).toHaveURL(new RegExp(`/projects/[^/]+/runs/${classic}`));
     await expect(page.getByTestId('items-count')).toBeVisible();
-    await expect(tab(page, /^Errors/)).toHaveAttribute('aria-selected', 'true');
+    await expect(section(page, 'errors')).toBeInViewport();
   });
 
   test('the run URL helper stays in sync with the router', () => {

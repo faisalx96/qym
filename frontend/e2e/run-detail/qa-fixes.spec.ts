@@ -90,7 +90,8 @@ test.describe('sticky section nav and filter bar', () => {
     const nav = page.getByRole('navigation', { name: 'Run sections' });
     const filters = page.getByRole('search', { name: 'Filter items' });
     await expect(nav.getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'location');
-    await page.evaluate(() => document.getElementById('shell-content')?.scrollTo(0, 400));
+    await nav.getByRole('link', { name: /^Items/ }).click();
+    await page.evaluate(() => document.getElementById('shell-content')?.scrollBy(0, 200));
     await expect.poll(() => scrollTop(page)).toBeGreaterThan(300);
     const scroller = await page.locator('#shell-content').boundingBox();
     const navBox = await nav.boundingBox();
@@ -103,22 +104,22 @@ test.describe('sticky section nav and filter bar', () => {
     await expect.poll(() => scrollTop(page)).toBeLessThan(5);
   });
 
-  test('old #run-section-* anchors select the panel tab and scroll to the table', async ({ page }) => {
+  test('old #run-section-* anchors scroll to the section and to the table', async ({ page }) => {
     await page.goto(`/projects/${s.slug}/runs/${classic}#run-section-errors`);
     await expect(page.getByTestId('items-count')).toBeVisible();
-    await expect(page.getByRole('tab', { name: /Errors/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#run-section-errors')).toBeInViewport();
     await page.goto(`/projects/${s.slug}/runs/${classic}#run-section-items`);
     await expect(page.getByTestId('items-count')).toBeVisible();
     await expect.poll(() => scrollTop(page)).toBeGreaterThan(0);
   });
 
-  test('nav links open the analysis tabs', async ({ page }) => {
+  test('nav links scroll to the analysis sections', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await page
       .getByRole('navigation', { name: 'Run sections' })
       .getByRole('link', { name: /Latency/ })
       .click();
-    await expect(page.getByRole('tab', { name: 'Latency' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#run-section-latency')).toBeInViewport();
   });
 });
 
