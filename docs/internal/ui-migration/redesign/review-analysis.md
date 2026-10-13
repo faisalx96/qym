@@ -53,3 +53,23 @@ Walked in the running page or covered by the 67 analyzer specs: run header with 
 - `ui/Disclosure` added with a gallery entry, primitive tests and design-language doc; `Skeleton` gets `rows`; additive.
 - No `any`, no `@ts-` suppressions added. `phase.test.ts` covers the phase machine; `smoothness.spec.ts`, `clutter.spec.ts` cover motion and budget.
 - Page-local re-implementations: none found beyond the dead `RunBar`.
+
+## Re-review (polish commit 3b32e838)
+
+Implementer gate (`an-gate.log`): check, build, build:sdk all `EXIT 0`. My own runs: `e2e/analyzer` + `e2e/shell` = 161 passed, 8 skipped, 0 failed (includes the loosened `clutter.spec.ts`). Leftover servers on 8837/5837/8937/8938/9837: none.
+
+| Item | Status | Evidence |
+|---|---|---|
+| Major 1: 390 px rows two-line | NOT FIXED | `r2scroll-390-600.png`: each row is still 3 to 4 lines (id + chip, Preview on its own line, clipped input text; on a long metric name the chip wraps under the id). The spec test only asserts a row height of 90 px or less under a "two lines" title, so it passes without the layout being two-line. Fix: at narrow width put id, chip and Preview on one line and the input text on the second, and cap the assertion near 64 px. |
+| Major 2: layout shift | FIXED | Same Test then 34-target job as before: CLS 0.0034 (was 0.0226, budget 0.01). The reserved "analyzed" tag slot removes the row-text shift. Smoothness spec now covers Test then job. |
+| Major 3: honest clutter budget | PARTLY | Spec now uses the brief's definition (any border side, chips/tags included). Budgets are 11 boxes and 5 chips, set to the measured result, not to a target. That is honest, but the original goal (4 boxes, 2 chips) is abandoned. My hit-tested numbers at 1280x900: controls 30, boxes 8, chips 6 (before polish 27 / 9 / 5). Against the brief's before (Configure 20 / 7 / 3, legacy 13 / 9 / 2) the fold is not lighter in counts; the win is structural (no stepper, bar or footer) and in smoothness. Say so in the spec doc instead of presenting 11 / 5 as a clutter target. |
+| Minor: dead RunBar.tsx | FIXED | file deleted |
+| Minor: mapping card-in-card, rail select height | FIXED (not re-screenshotted for mapping; rail select aligned in `job-done.png`) | |
+| Minor: "View run" underlined | NOT FIXED | `job-done.png` |
+| Minor: subtitle units | FIXED | "34 targets analyzed this session" |
+| Minor: eslint-disable reasons, header description on guidance tabs, More options alignment | not verified / not changed in the commit list | |
+
+New defect found: at 390 px the Targets count tag wraps into two lines ("2" over "2") in the card header (`r2scroll-390-600.png`). Also the gap between the COMPLETED chip and "Analysis complete" in the job card is wide (`job-done.png`). Minor.
+
+### Final verdict
+Still MEETS THE STANDARD (no blockers; feedback point addressed; gate green: check 118 files / 1099 tests, build, build:sdk, analyzer + shell 161 passed). Remaining before sign-off, about 2 hours: the 390 px rows really two-line (major, with a tighter test), the wrapped count tag, the underlined View run, and a sentence in the spec admitting the fold counts did not fall.
