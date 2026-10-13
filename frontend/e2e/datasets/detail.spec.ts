@@ -211,15 +211,14 @@ test.describe('detail: items table', () => {
     await expect(page.locator('[data-item-link]').first()).toHaveText('25');
     expect(query(page).get('size')).toBe('25');
 
-    await page.getByRole('columnheader', { name: /^Input/ }).click();
+    await page.getByRole('button', { name: 'Sort by Input' }).click();
     await expect.poll(() => query(page).get('sort')).toMatch(/^input_(asc|desc)$/);
     const sortParam = query(page).get('sort');
     await page.reload();
     expect(query(page).get('sort')).toBe(sortParam);
-    await expect(page.getByRole('columnheader', { name: /^Input/ })).toHaveAttribute(
-      'aria-sort',
-      /ascending|descending/,
-    );
+    await expect(
+      page.getByRole('columnheader').filter({ has: page.getByRole('button', { name: 'Sort by Input' }) }),
+    ).toHaveAttribute('aria-sort', /ascending|descending/);
 
     const search = page.getByRole('searchbox', { name: 'Search items' });
     await search.fill('#17.');
@@ -358,12 +357,12 @@ test.describe('detail: items table', () => {
     await draftWithItems(request, p.slug, d, 6);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
     await expect(page.locator('[data-item-link]')).toHaveCount(6);
-    // keyboard selection (Space on a focused row): the table renders no checkbox column, see the [BUG] test below
+    // keyboard selection (Space on a focused row); the checkbox column is covered by the test below
     await rowOf(page, 'q-000').focus();
     await page.keyboard.press('Space');
     await rowOf(page, 'q-001').focus();
     await page.keyboard.press('Space');
-    await expect(page.getByRole('region', { name: 'Bulk actions' })).toContainText('2 selected');
+    await expect(page.getByRole('region', { name: 'Selection actions' })).toContainText('2 selected');
     await page.getByTestId('bulk-delete-items').click();
     const confirm = page.getByRole('alertdialog', { name: 'Delete 2 items?' });
     await confirm.getByRole('button', { name: 'Delete 2' }).click();
@@ -371,7 +370,7 @@ test.describe('detail: items table', () => {
     await expect(page.locator('[data-item-link]')).toHaveCount(4);
   });
 
-  test('changing the search drops the row selection so bulk delete never hits hidden rows', async ({
+  test('selection is scoped to the visible rows: with a search active, select-all and bulk delete only see the matches', async ({
     page,
     request,
   }) => {
@@ -379,13 +378,20 @@ test.describe('detail: items table', () => {
     await draftWithItems(request, p.slug, d, 6);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
     await expect(page.locator('[data-item-link]')).toHaveCount(6);
-    await rowOf(page, 'q-000').focus();
-    await page.keyboard.press('Space');
-    const bulk = page.getByRole('region', { name: 'Bulk actions' });
-    await expect(bulk).toContainText('1 selected');
     await page.getByRole('searchbox', { name: 'Search items' }).fill('order #3');
     await expect(page.locator('[data-item-link]')).toHaveCount(1);
+    // the selection bar replaces the toolbar while rows are selected
+    await page
+      .locator('label')
+      .filter({ has: page.getByRole('checkbox', { name: 'Select all rows' }) })
+      .click();
+    const bulk = page.getByRole('region', { name: 'Selection actions' });
+    await expect(bulk).toContainText('1 selected');
+    await expect(bulk.getByTestId('bulk-delete-items')).toHaveText('Delete 1');
+    await expect(page.getByRole('searchbox', { name: 'Search items' })).toHaveCount(0);
+    await bulk.getByRole('button', { name: 'Clear selection' }).click();
     await expect(bulk).toHaveCount(0);
+    await expect(page.getByRole('searchbox', { name: 'Search items' })).toBeVisible();
   });
 
   test('[BUG] items table exposes a selection checkbox per row on drafts', async ({ page, request }) => {
@@ -400,7 +406,7 @@ test.describe('detail: items table', () => {
     const { p, d } = await seed(request, 'rowdel');
     await draftWithItems(request, p.slug, d, 3);
     await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
-    await page.getByRole('button', { name: 'Actions for item q-001' }).click();
+    await rowOf(page, 'q-001').getByRole('button', { name: 'Row actions' }).click();
     await page.getByRole('menuitem', { name: 'Delete item' }).click();
     await page
       .getByRole('alertdialog', { name: /Delete item q-001/ })

@@ -70,18 +70,19 @@ export function ItemsWorkspace({
   });
   useEffect(() => {
     if (!paneId) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return;
-      if (e.key === 'Escape') {
-        if (
-          document.querySelector(
-            '[role="dialog"][aria-modal="true"], [role="alertdialog"], [role="listbox"], [role="menu"]',
-          )
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.key !== 'Escape') return;
+      if (
+        document.querySelector(
+          '[role="dialog"][aria-modal="true"], [role="alertdialog"], [role="listbox"], [role="menu"]',
         )
-          return;
-        attempt(() => setPaneId(null));
+      )
         return;
-      }
+      attempt(() => setPaneId(null));
+    };
+    // Capture phase: the table also maps j / k to row focus; the pane stepping wins while it is open.
+    const onStep = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if ((e.key === 'j' || e.key === 'k') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         const t = e.target as HTMLElement | null;
         if (
@@ -96,12 +97,17 @@ export function ItemsWorkspace({
         const nextRow = list[at + (e.key === 'j' ? 1 : -1)];
         if (nextRow) {
           e.preventDefault();
+          e.stopPropagation();
           attempt(() => setPaneId(nextRow.item_id));
         }
       }
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onEscape);
+    document.addEventListener('keydown', onStep, true);
+    return () => {
+      document.removeEventListener('keydown', onEscape);
+      document.removeEventListener('keydown', onStep, true);
+    };
   }, [paneId, attempt]);
 
   // Leaving the Items tab / version / dataset with unsaved edits asks first; sorting, paging and

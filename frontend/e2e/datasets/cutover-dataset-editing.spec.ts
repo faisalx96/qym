@@ -89,11 +89,8 @@ test.describe('items table and item page editing (C003, C017)', () => {
     await gotoApp(page, dsUrl(p, d));
     const row = page.locator('[data-item-link="case-1"]').locator('xpath=ancestor::*[@role="row"]');
     await expect(row).toBeVisible();
-    for (const cell of [2, 3, 4])
-      await row
-        .getByRole('gridcell')
-        .nth(cell - 1)
-        .dblclick();
+    // (the index cell is the row link; the previews are plain cells)
+    for (const col of ['input', 'expected', 'metadata']) await row.locator(`[data-col="${col}"]`).dblclick();
     await expect(page.getByRole('grid').locator('textarea')).toHaveCount(0);
     await page.waitForTimeout(300);
     expect(patches).toEqual([]);

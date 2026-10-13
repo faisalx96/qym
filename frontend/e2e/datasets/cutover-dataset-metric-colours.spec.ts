@@ -113,10 +113,10 @@ async function seed(page: Page, request: Parameters<typeof createProject>[0]) {
   return { p, d };
 }
 
-/** data-band of every ScoreValue in scope (null: no colour). */
+/** data-band of every ScoreValue / ScoreBar in scope (null: no colour). */
 const bandsOf = (scope: Locator) =>
   scope
-    .locator('span[class*="_score_"]')
+    .locator('span[class*="_score_"], span[class*="_scoreBar_"]')
     .evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-band')));
 
 async function runRows(table: Locator) {

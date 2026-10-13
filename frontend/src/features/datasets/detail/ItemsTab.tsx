@@ -214,7 +214,18 @@ export function ItemsTab({
       hideable: false,
       priority: 1,
       cell: (item) => (
-        <Link to={itemHref(item)} className={styles.indexLink} data-item-link={item.item_id}>
+        <Link
+          to={itemHref(item)}
+          className={styles.indexLink}
+          data-item-link={item.item_id}
+          onKeyDown={(e) => {
+            // Keyboard activation opens the docked pane; a click on the link opens the item page.
+            if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+              e.preventDefault();
+              openItem(item);
+            }
+          }}
+        >
           {item.index}
         </Link>
       ),
@@ -240,7 +251,7 @@ export function ItemsTab({
       minWidth: 220,
       wrap: 2,
       priority: 1,
-      cell: (item) => <PreviewText value={item.input} />,
+      cell: (item) => <Preview value={item.input} wrap />,
     },
     {
       id: 'expected',
@@ -250,7 +261,7 @@ export function ItemsTab({
       minWidth: 180,
       wrap: 2,
       priority: 2,
-      cell: (item) => <PreviewText value={item.expected_output} />,
+      cell: (item) => <Preview value={item.expected_output} wrap />,
     },
     {
       id: 'metadata',
@@ -258,7 +269,7 @@ export function ItemsTab({
       sort: 'metadata',
       width: 180,
       priority: 3,
-      cell: (item) => <PreviewText value={item.metadata} />,
+      cell: (item) => <Preview value={item.metadata} />,
     },
     {
       id: 'labels',
@@ -476,21 +487,8 @@ export function ItemsTab({
   );
 }
 
-/** Wrapped (2 lines, tooltip when clipped by the table) mono preview; Arabic text flows RTL. */
-function PreviewText({ value }: { value: unknown }) {
-  const text = previewValue(value);
-  const dir = textDirAttrs(typeof value === 'string' ? value : text);
-  return text ? (
-    <span className={styles.previewWrap} {...dir}>
-      {text}
-    </span>
-  ) : (
-    <span className={styles.empty}>—</span>
-  );
-}
-
 /** Mono one-line preview; Arabic text flows RTL. Hovering for 700 ms shows the full value. */
-export function Preview({ value }: { value: unknown }) {
+export function Preview({ value, wrap }: { value: unknown; wrap?: boolean }) {
   const text = previewValue(value);
   const dir = textDirAttrs(typeof value === 'string' ? value : text);
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
@@ -502,7 +500,7 @@ export function Preview({ value }: { value: unknown }) {
   useEffect(() => () => window.clearTimeout(timer.current), []);
   return (
     <span
-      className={styles.preview}
+      className={wrap ? styles.previewWrap : styles.preview}
       {...dir}
       onMouseEnter={(e) => {
         if (!text) return;
