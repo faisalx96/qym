@@ -438,7 +438,7 @@ export function LatencyTab() {
     return <p className={panel.note}>No latency or trace data for this run.</p>;
   return (
     <div className={`${panel.stack} ${styles.root}`} data-testid="latency-panel">
-      <div className={panel.twoUp}>
+      <div className={`${panel.twoUp} ${panel.pair}`}>
         <ResponseTime items={latencyItems} />
         {metric ? <QualityLatency items={latencyItems} metric={metric} /> : null}
       </div>

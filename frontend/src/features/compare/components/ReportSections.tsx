@@ -1,6 +1,7 @@
 /** The compare report: stacked full-width sections in legacy order, a jump nav with scroll-spy, and section anchors. */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
+import { alignToElement } from '@/lib/scrollToElement';
 import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
 import { ReportSection } from '@/ui';
 import { useCompare } from '../CompareContext';
@@ -34,11 +35,9 @@ const ALIASES: Record<string, SectionKey> = {
   items: 'items',
 };
 
-export function scrollToSection(key: SectionKey, smooth = true): void {
+export function scrollToSection(key: SectionKey): void {
   const el = document.getElementById(sectionDomId(key));
-  if (!el) return;
-  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  el.scrollIntoView({ block: 'start', behavior: smooth && !reduce ? 'smooth' : 'auto' });
+  if (el) alignToElement(el);
 }
 
 /** The sections this comparison offers, in page order. */
@@ -132,8 +131,8 @@ export function useSectionAnchor(): void {
   const wanted = ALIASES[(params.get('panel') ?? hash.replace(/^#(compare-)?/, '')).toLowerCase()];
   useEffect(() => {
     if (!wanted) return undefined;
-    const t = setTimeout(() => scrollToSection(wanted, false), 50);
-    return () => clearTimeout(t);
+    scrollToSection(wanted);
+    return undefined;
   }, [wanted]);
 }
 

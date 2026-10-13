@@ -5,6 +5,7 @@
   flex-wrap: wrap;
   gap: var(--space-sm) var(--space-md);
   margin-top: var(--space-lg);
+  margin-bottom: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -34,6 +35,21 @@
   align-items: center;
   gap: var(--space-xs);
   margin-inline-start: auto;
+}
+
+/* Under 1200px the bar stays under the nav while a section is read; on a phone it scrolls away. */
+@media (max-width: 1199px) {
+  .bar {
+    position: sticky;
+    top: var(--report-nav-h, 0px);
+    z-index: 4;
+  }
+}
+
+@media (max-width: 767px) {
+  .bar {
+    position: static;
+  }
 }
 
 @keyframes scope-in {

@@ -15,3 +15,15 @@
 .clear {
   align-self: flex-start;
 }
+
+.active {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}

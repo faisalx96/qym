@@ -42,6 +42,13 @@
     gap: var(--space-sm);
   }
 
+  /* Descriptions wrap on a phone instead of ending in an ellipsis. */
+  .description[data-truncate] {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
   .aside {
     flex: initial;
     flex-wrap: wrap;

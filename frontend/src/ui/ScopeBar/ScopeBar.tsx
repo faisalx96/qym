@@ -11,6 +11,28 @@ export interface ScopeChip {
   onClear: () => void;
 }
 
+/** The removable filter chips of a scope (ScopeBar and the sidebar's Active group share them). */
+export function ScopeChips({ chips, maxChips = 6 }: { chips: ScopeChip[]; maxChips?: number }) {
+  const visible = chips.slice(0, maxChips);
+  const more = chips.length - visible.length;
+  return (
+    <>
+      {visible.map((chip) => (
+        <Chip
+          key={chip.key}
+          isSelected
+          removeLabel={`Remove ${chip.label} from scope`}
+          onRemove={chip.onClear}
+          onChange={chip.onClear}
+        >
+          {chip.label.length > 56 ? `${chip.label.slice(0, 55)}…` : chip.label}
+        </Chip>
+      ))}
+      {more > 0 ? <Tag kind="count">+{more}</Tag> : null}
+    </>
+  );
+}
+
 export interface ScopeBarProps {
   shown: number;
   total: number;
@@ -25,6 +47,8 @@ export interface ScopeBarProps {
   /** Chips beyond this are folded into "+N". */
   maxChips?: number;
   noun?: string;
+  /** The sidebar beside the report already lists the chips (Active group). */
+  hideChips?: boolean;
 }
 
 /** The scope strip above the report: "N of M items", the removable filters, Clear and the sidebar toggle. */
@@ -39,28 +63,18 @@ export function ScopeBar({
   narrow = false,
   maxChips = 6,
   noun = 'items',
+  hideChips = false,
 }: ScopeBarProps) {
-  const visible = chips.slice(0, maxChips);
-  const more = chips.length - visible.length;
   return (
     <div className={styles.bar} role="region" aria-label="Scope of this report" data-testid="scope-bar">
       <Text variant="base" tone="primary" weight={650} className={styles.count}>
         Scope: {shown.toLocaleString('en-US')} of {total.toLocaleString('en-US')} {noun}
       </Text>
-      <div className={styles.chips}>
-        {visible.map((chip) => (
-          <Chip
-            key={chip.key}
-            isSelected
-            removeLabel={`Remove ${chip.label} from scope`}
-            onRemove={chip.onClear}
-            onChange={chip.onClear}
-          >
-            {chip.label.length > 56 ? `${chip.label.slice(0, 55)}…` : chip.label}
-          </Chip>
-        ))}
-        {more > 0 ? <Tag kind="count">+{more}</Tag> : null}
-      </div>
+      {hideChips ? null : (
+        <div className={styles.chips}>
+          <ScopeChips chips={chips} maxChips={maxChips} />
+        </div>
+      )}
       <div className={styles.actions}>
         <Button size="sm" variant="ghost" onPress={onClearAll} data-testid="scope-clear">
           Clear all

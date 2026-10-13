@@ -5,6 +5,7 @@
  * the URL (brief 05 §8 "State placement"); the page never writes it.
  */
 import { useCallback, useEffect, useMemo } from 'react';
+import { rememberScroll } from '@/lib/scrollToElement';
 import { compareKeys, useCompareQuery } from '@/api/compare';
 import { useSearchParamsState } from '@/lib/url-state';
 import { buildCompareModel, type CompareModel } from '../lib/model';
@@ -157,6 +158,7 @@ export function useCompareController(): CompareController {
   );
   const removeRun = useCallback(
     (ref: string) => {
+      rememberScroll();
       const base = passRefBase(ref);
       const drop = (list: string[]) => list.filter((r) => passRefBase(r) !== base);
       if (selection.cohorts) {

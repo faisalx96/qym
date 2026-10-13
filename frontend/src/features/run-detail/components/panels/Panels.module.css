@@ -245,7 +245,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-md);
-  align-items: start;
+  align-items: stretch;
 }
 
 @container (min-width: 640px) {
@@ -280,5 +280,28 @@
 @container (min-width: 760px) {
   .twoUp {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* A pair whose columns share one height (latency histogram beside the scatter). */
+.pair {
+  align-items: stretch;
+}
+
+/* Metric cards in a row share one height. */
+.cards > article {
+  height: 100%;
+}
+
+/* Four metrics read as 2x2 (or one row of four when wide), never three plus an orphan. */
+@container (min-width: 960px) {
+  .cards[data-count='4'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1400px) {
+  .cards[data-count='4'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

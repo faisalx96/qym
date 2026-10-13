@@ -60,17 +60,13 @@ test.describe('desktop 1280', () => {
       .getByRole('group', { name: /^Category/ })
       .first();
     await category.getByRole('button').first().click();
-    await expect(
-      page
-        .getByTestId('scope-bar')
-        .getByRole('button', { name: /from scope/ })
-        .nth(1),
-    ).toBeVisible();
+    await expect(sidebar(page).getByRole('button', { name: /from scope/ })).toHaveCount(2);
   });
 
   test('removing the last chip closes the scope', async ({ page }) => {
     await openRun(page, s.slug, classic, 'show=failed');
-    await scopeBar(page)
+    await sidebar(page)
+      .getByRole('group', { name: 'Active filters' })
       .getByRole('button', { name: /from scope/ })
       .click();
     await expect(scopeBar(page)).toHaveCount(0);
@@ -134,5 +130,54 @@ test.describe('narrow', () => {
     await scopeBar(page).getByRole('button', { name: 'Quick filters' }).click();
     await expect(page.getByRole('dialog', { name: 'Quick filters' })).toBeVisible();
     await audit(page, 'drawer at 390', '[role=dialog]');
+  });
+});
+
+test.describe('scope stays visible', () => {
+  test('wide: the Active group lists the chips once (sidebar), the bar carries the count; Hide moves them to the bar', async ({
+    page,
+  }) => {
+    await openRun(page, s.slug, classic, 'show=failed');
+    await expect(sidebar(page).getByRole('group', { name: 'Active filters' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /from scope/ })).toHaveCount(1);
+    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(0);
+    // still visible after reading far down the report: the sidebar is sticky
+    await page
+      .getByRole('navigation', { name: 'Run sections' })
+      .getByRole('link', { name: /^Errors/ })
+      .click();
+    await expect(sidebar(page).getByRole('group', { name: 'Active filters' })).toBeInViewport();
+    await sidebar(page).getByRole('button', { name: 'Hide quick filters' }).click();
+    await expect(scopeBar(page).getByRole('button', { name: /from scope/ })).toHaveCount(1);
+  });
+
+  test('1000px: the scope bar sticks under the nav while a lower section is read; the drawer has the Active group and one title', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await openRun(page, s.slug, classic, 'show=failed');
+    await page
+      .getByRole('navigation', { name: 'Run sections' })
+      .getByRole('link', { name: /^Errors/ })
+      .click();
+    await expect(scopeBar(page)).toBeInViewport();
+    const nav = (await page.getByRole('navigation', { name: 'Run sections' }).boundingBox())!;
+    await expect
+      .poll(async () => Math.abs((await scopeBar(page).boundingBox())!.y - (nav.y + nav.height)))
+      .toBeLessThan(6);
+    await scopeBar(page).getByRole('button', { name: 'Quick filters' }).click();
+    const drawer = page.getByRole('dialog', { name: 'Quick filters' });
+    await expect(drawer.getByRole('group', { name: 'Active filters' })).toBeVisible();
+    await expect(drawer.getByText('Quick filters', { exact: true })).toHaveCount(1);
+  });
+
+  test('390px: section descriptions wrap instead of ending in an ellipsis', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await openRun(page, s.slug, classic);
+    const clipped = await page
+      .locator('#run-section-overview p')
+      .first()
+      .evaluate((p) => p.scrollWidth > p.clientWidth + 1);
+    expect(clipped).toBe(false);
   });
 });

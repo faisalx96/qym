@@ -7,10 +7,14 @@ import { compareScope } from '../lib/scope';
 
 export function useScope() {
   const { c, model, defs, columns, items } = useCompare();
-  const label = (key: string) => columns.find((col) => col.key === key)?.label ?? key;
   const scope = useMemo(
-    () => compareScope(c.view, model, defs, label),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () =>
+      compareScope(
+        c.view,
+        model,
+        defs,
+        (key: string) => columns.find((col) => col.key === key)?.label ?? key,
+      ),
     [c.view, model, defs, columns],
   );
   return {

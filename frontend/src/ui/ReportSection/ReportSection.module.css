@@ -6,6 +6,13 @@
   scroll-margin-top: calc(var(--report-nav-h, 0px) - var(--space-xl) * 1.5 + var(--space-sm));
 }
 
+/* The first section sits right under the nav: no 48px lead-in and no second hairline. */
+.section:first-child > div:first-child {
+  margin-top: var(--space-md);
+  padding-top: 0;
+  border-top: 0;
+}
+
 .body {
   /* The containing block for visually hidden (absolute) text, which must never widen the page. */
   position: relative;

@@ -19,7 +19,9 @@ import { ItemsSection } from './components/ItemsSection';
 import { TraceHost } from './components/TraceHost';
 import { useItemSearch } from './hooks/useItemSearch';
 import { useLiveRun } from './hooks/useLiveRun';
-import { useScope, useSidebarHidden } from './hooks/useScope';
+import { alignToElement } from '@/lib/scrollToElement';
+import { useSidebarHidden } from '@/lib/useSidebarHidden';
+import { useScope } from './hooks/useScope';
 import { readPassParam, useRunView } from './hooks/useRunView';
 import { applyItemFilters } from './lib/filterRules';
 import { inferPassSummary } from './lib/passScope';
@@ -44,23 +46,7 @@ function scrollToSection(id: SectionId, host: HTMLElement | null) {
   }
   const el = document.getElementById(sectionDomId(id));
   if (!el) return;
-  el.scrollIntoView({ block: 'start' });
-  if (!host || typeof ResizeObserver === 'undefined') return;
-  let done = false;
-  const stop = () => {
-    done = true;
-    ro.disconnect();
-    clearTimeout(timer);
-    ['wheel', 'touchstart', 'keydown'].forEach((t) => window.removeEventListener(t, stop));
-  };
-  const ro = new ResizeObserver(() => {
-    if (!done) el.scrollIntoView({ block: 'start' });
-  });
-  const timer = setTimeout(stop, 1200);
-  ro.observe(host);
-  ['wheel', 'touchstart', 'keydown'].forEach((t) =>
-    window.addEventListener(t, stop, { passive: true, once: true }),
-  );
+  alignToElement(el, host);
 }
 
 /** Everything below the hero: nav, scope bar, sidebar, sections and items (needs the run context). */
@@ -116,6 +102,7 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
             }}
             onJumpToItems={jumpToItems}
             narrow={!wide}
+            hideChips={wide && !sidebarHidden}
             sidebarOpen={wide ? !sidebarHidden : drawerOpen}
             onToggleSidebar={() => (wide ? setSidebarHidden(!sidebarHidden) : setDrawerOpen(true))}
           />

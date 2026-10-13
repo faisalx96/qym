@@ -3,11 +3,30 @@
  * gaps, 4px rounded data ends, every mark a real button with an accessible
  * name, a text legend next to colour). All colours are design tokens.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MetricDirection } from '@/lib/metrics';
 import { metricBand } from '@/lib/metrics';
 import { bucketTone, scoreTone, type BoolSegment, type ScoreBucket } from '../../lib/overviewModel';
 import styles from './Charts.module.css';
+
+/** Width of an element in CSS px (ResizeObserver); `fallback` until measured. Charts draw at this width so text and marks keep their size. */
+export function useMeasuredWidth<T extends HTMLElement>(fallback: number): [React.RefObject<T>, number] {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(fallback);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const measure = () => {
+      const w = Math.floor(el.getBoundingClientRect().width);
+      if (w > 0) setWidth((prev) => (prev === w ? prev : w));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref as React.RefObject<T>, width];
+}
 
 const SEGMENT_TONE: Record<BoolSegment['tone'], string> = {
   pass: 'var(--score-5)',
@@ -216,7 +235,7 @@ export function Scatter({
   fmtX?: (v: number) => string;
   fmtY?: (v: number) => string;
 }) {
-  const W = 300;
+  const [boxRef, W] = useMeasuredWidth<HTMLDivElement>(300);
   const H = 220;
   const pad = { l: 46, r: 8, t: 8, b: 28 };
   const shown = useMemo(
@@ -232,60 +251,64 @@ export function Scatter({
   const sy = (v: number) => H - pad.b - ((v - y0) / (y1 - y0 || 1)) * (H - pad.t - pad.b);
   const ticks = [0, 0.5, 1];
   return (
-    <svg
-      className={styles.scatter}
-      viewBox={`0 0 ${W} ${H}`}
-      role="img"
-      aria-label={`${yLabel} versus ${xLabel}, ${points.length} items`}
-    >
-      {ticks.map((t) => (
-        <g key={t}>
-          <line
-            className={styles.grid}
-            x1={pad.l}
-            x2={W - pad.r}
-            y1={sy(y0 + t * (y1 - y0))}
-            y2={sy(y0 + t * (y1 - y0))}
-          />
-          <text
-            className={styles.tick}
-            x={pad.l - 4}
-            y={sy(y0 + t * (y1 - y0))}
-            textAnchor="end"
-            dominantBaseline="middle"
-          >
-            {(fmtY ?? fmt)(y0 + t * (y1 - y0))}
-          </text>
-          <text className={styles.tick} x={sx(x0 + t * (x1 - x0))} y={H - pad.b + 14} textAnchor="middle">
-            {(fmtX ?? fmt)(x0 + t * (x1 - x0))}
-          </text>
-        </g>
-      ))}
-      {shown.map((p) => (
-        <circle
-          key={p.id}
-          className={styles.dot2}
-          cx={sx(p.x)}
-          cy={sy(p.y)}
-          r={3.5}
-          onClick={() => onPick(p.id)}
-        >
-          <title>{`${p.id}: ${(fmtX ?? fmt)(p.x)}, ${(fmtY ?? fmt)(p.y)}`}</title>
-        </circle>
-      ))}
-      <text className={styles.axisTitle} x={(W + pad.l) / 2} y={H - 2} textAnchor="middle">
-        {xLabel}
-      </text>
-      <text
-        className={styles.axisTitle}
-        x={10}
-        y={H / 2}
-        textAnchor="middle"
-        transform={`rotate(-90 10 ${H / 2})`}
+    <div ref={boxRef} className={styles.chartBox}>
+      <svg
+        className={styles.scatter}
+        width={W}
+        height={H}
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={`${yLabel} versus ${xLabel}, ${points.length} items`}
       >
-        {yLabel}
-      </text>
-    </svg>
+        {ticks.map((t) => (
+          <g key={t}>
+            <line
+              className={styles.grid}
+              x1={pad.l}
+              x2={W - pad.r}
+              y1={sy(y0 + t * (y1 - y0))}
+              y2={sy(y0 + t * (y1 - y0))}
+            />
+            <text
+              className={styles.tick}
+              x={pad.l - 4}
+              y={sy(y0 + t * (y1 - y0))}
+              textAnchor="end"
+              dominantBaseline="middle"
+            >
+              {(fmtY ?? fmt)(y0 + t * (y1 - y0))}
+            </text>
+            <text className={styles.tick} x={sx(x0 + t * (x1 - x0))} y={H - pad.b + 14} textAnchor="middle">
+              {(fmtX ?? fmt)(x0 + t * (x1 - x0))}
+            </text>
+          </g>
+        ))}
+        {shown.map((p) => (
+          <circle
+            key={p.id}
+            className={styles.dot2}
+            cx={sx(p.x)}
+            cy={sy(p.y)}
+            r={3.5}
+            onClick={() => onPick(p.id)}
+          >
+            <title>{`${p.id}: ${(fmtX ?? fmt)(p.x)}, ${(fmtY ?? fmt)(p.y)}`}</title>
+          </circle>
+        ))}
+        <text className={styles.axisTitle} x={(W + pad.l) / 2} y={H - 2} textAnchor="middle">
+          {xLabel}
+        </text>
+        <text
+          className={styles.axisTitle}
+          x={10}
+          y={H / 2}
+          textAnchor="middle"
+          transform={`rotate(-90 10 ${H / 2})`}
+        >
+          {yLabel}
+        </text>
+      </svg>
+    </div>
   );
 }
 
@@ -311,7 +334,7 @@ export function Curve({
   /** X tick prefix: `k` for attempts allowed, `n` for passes observed. */
   xLabel?: string;
 }) {
-  const W = 320;
+  const [boxRef, W] = useMeasuredWidth<HTMLElement>(320);
   const H = 180;
   const pad = { l: 34, r: 12, t: 8, b: 24 };
   const ks = Array.from(new Set(series.flatMap((s) => s.points.map((p) => p.k)))).sort((a, b) => a - b);
@@ -323,8 +346,8 @@ export function Curve({
   const span = domain[1] - domain[0] || 1;
   const sy = (v: number) => H - pad.b - ((v - domain[0]) / span) * (H - pad.t - pad.b);
   return (
-    <figure className={styles.curve}>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
+    <figure ref={boxRef} className={styles.curve}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
         {[0, 0.25, 0.5, 0.75, 1].map((f) => {
           const t = domain[0] + f * span;
           return (

@@ -1,6 +1,6 @@
 /** Quick-filter sidebar body: shown while a scope is active; every control writes the one filter model. */
 import { useMemo, useState } from 'react';
-import { Button, IconButton, QuickFilterGroup, Select, Slider, Text } from '@/ui';
+import { Button, IconButton, QuickFilterGroup, ScopeChips, Select, Slider, Text } from '@/ui';
 import { useScope } from '../hooks/useScope';
 import { latencyFilterLabel } from '../lib/latencyModel';
 import { SORT_VALUES, type ItemShow, type SortBy } from '../lib/filterRules';
@@ -68,12 +68,14 @@ export function QuickFilters({ onHide, onJump }: { onHide?: () => void; onJump: 
   const status = STATUS.some((s) => s.id === view.show) ? [view.show] : [];
   return (
     <div className={styles.root} data-testid="quick-filters">
-      <div className={styles.head}>
-        <Text as="h2" variant="lg">
-          Quick filters
-        </Text>
-        {onHide ? <IconButton label="Hide quick filters" icon="chevron-right" onPress={onHide} /> : null}
-      </div>
+      {onHide ? (
+        <div className={styles.head}>
+          <Text as="h2" variant="lg">
+            Quick filters
+          </Text>
+          <IconButton label="Hide quick filters" icon="chevron-right" onPress={onHide} />
+        </div>
+      ) : null}
       <Text variant="sm" tone="muted">
         {scope.shown.toLocaleString('en-US')} of {scope.total.toLocaleString('en-US')} items
       </Text>
@@ -81,6 +83,14 @@ export function QuickFilters({ onHide, onJump }: { onHide?: () => void; onJump: 
         Clear all
       </Button>
 
+      <div className={styles.active} role="group" aria-label="Active filters">
+        <Text variant="sm" tone="muted" weight={650}>
+          ACTIVE
+        </Text>
+        <div className={styles.chips}>
+          <ScopeChips chips={scope.chips} maxChips={20} />
+        </div>
+      </div>
       <QuickFilterGroup
         label="Status"
         mode="single"

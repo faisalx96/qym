@@ -43,7 +43,8 @@ import type { NoiseStat } from '../../lib/noise';
 import { ItemDetail } from '../items/ItemDetail';
 import { sweepScopeChips } from '../../lib/scope';
 import { ScrollRegion } from '../ScrollRegion';
-import { WIDE_QUERY, useSidebarHidden } from '../CompareBody';
+import { useSidebarHidden } from '@/lib/useSidebarHidden';
+import { WIDE_QUERY } from '../CompareBody';
 import styles from './SweepView.module.css';
 
 const pct = (v: number | null | undefined, d = 1) =>
@@ -377,6 +378,7 @@ export function SweepView() {
           onJumpToItems={viewItems}
           sidebarOpen={wide ? !sidebarHidden : drawer}
           narrow={!wide}
+          hideChips={wide && !sidebarHidden}
           onToggleSidebar={() => (wide ? setSidebarHidden(!sidebarHidden) : setDrawer(true))}
         />
       ) : null}

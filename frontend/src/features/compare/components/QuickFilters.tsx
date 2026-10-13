@@ -5,6 +5,7 @@ import {
   Button,
   IconButton,
   QuickFilterGroup,
+  ScopeChips,
   SearchField,
   Select,
   Text,
@@ -120,12 +121,14 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
 
   return (
     <div className={styles.body} data-testid="quick-filters">
-      <div className={styles.head}>
-        <Text variant="md" weight={650} tone="primary">
-          Quick filters
-        </Text>
-        {onHide ? <IconButton label="Hide quick filters" icon="close" onPress={onHide} /> : null}
-      </div>
+      {onHide ? (
+        <div className={styles.head}>
+          <Text variant="md" weight={650} tone="primary">
+            Quick filters
+          </Text>
+          <IconButton label="Hide quick filters" icon="close" onPress={onHide} />
+        </div>
+      ) : null}
       <Text variant="sm" tone="muted">
         {scope.shown.toLocaleString('en-US')} of {scope.total.toLocaleString('en-US')} items
       </Text>
@@ -136,6 +139,21 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
         <Button size="sm" variant="neutral" onPress={onViewItems}>
           View {scope.shown.toLocaleString('en-US')} items
         </Button>
+      </div>
+      <div className={styles.active} role="group" aria-label="Active filters">
+        <Text variant="sm" tone="muted" weight={650}>
+          ACTIVE
+        </Text>
+        <div className={styles.chips}>
+          <ScopeChips
+            chips={scope.chips.map((chip) => ({
+              key: chip.key,
+              label: chip.label,
+              onClear: () => scope.clearChip(chip),
+            }))}
+            maxChips={20}
+          />
+        </div>
       </div>
       <SearchField
         label="Filter by text"

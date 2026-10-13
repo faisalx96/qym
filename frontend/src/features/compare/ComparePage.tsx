@@ -4,7 +4,8 @@
  * analytics live in a side panel that follows the filter. `/compare` and
  * `/projects/:slug/compare` share this page; the URL is the whole state.
  */
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { restoreScroll } from '@/lib/scrollToElement';
 import { Link, useSearchParams } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { useDocumentTitle, useOptionalProject } from '@/features/shell';
@@ -48,6 +49,10 @@ export function ComparePage() {
   const slug = project?.slug ?? readLocal(KEYS.lastProjectSlug) ?? undefined;
   const store = useNewDetailsStore();
   useDocumentTitle('Compare runs');
+  // A run removed from the comparison unmounts the body while the new set loads; put the reader back where they were.
+  useLayoutEffect(() => {
+    if (c.model) restoreScroll();
+  }, [c.model]);
   const pending = useDelayedPending(c.query.isPending && c.selectionState === 'ok' && !c.tooMany);
 
   const [searchParams] = useSearchParams();
@@ -172,6 +177,7 @@ function CompareLoaded({
     [model, c.ctx, itemIds],
   );
   const stickyRef = useRef<HTMLDivElement>(null);
+  const chromeRef = useRef<HTMLDivElement>(null);
   // Sections and the sticky toolbar offset themselves by the real height of the sticky chrome.
   const stuck =
     !!info && !!metric && !!c.ctx && !!result && !!stats && !(c.view.tab === 'sweep' && !!c.cohorts);
@@ -179,13 +185,23 @@ function CompareLoaded({
     const el = stickyRef.current;
     const host = el?.parentElement;
     if (!el || !host || typeof ResizeObserver === 'undefined') return undefined;
-    const set = () => host.style.setProperty('--report-nav-h', `${el.offsetHeight}px`);
+    const chrome = chromeRef.current;
+    // On a short viewport the run chips and delta line scroll away (negative sticky top); only the nav stays.
+    const short = window.matchMedia('(max-height: 999px)');
+    const set = () => {
+      const chromeH = chrome ? chrome.offsetHeight : 0;
+      host.style.setProperty('--compare-chrome-h', `${chromeH}px`);
+      host.style.setProperty('--report-nav-h', `${el.offsetHeight - (short.matches ? chromeH + 16 : 0)}px`);
+    };
     set();
     const ro = new ResizeObserver(set);
     ro.observe(el);
+    short.addEventListener('change', set);
     return () => {
       ro.disconnect();
+      short.removeEventListener('change', set);
       host.style.removeProperty('--report-nav-h');
+      host.style.removeProperty('--compare-chrome-h');
     };
   }, [stuck]);
   if (!info || !metric || !c.ctx || !result || !stats)
@@ -256,8 +272,10 @@ function CompareLoaded({
       {c.cohorts ? <CohortBanner /> : null}
       {sweep ? null : (
         <div ref={stickyRef} className={styles.sticky} data-compare-sticky="">
-          <SelectionBar />
-          <DeltaLine info={info} />
+          <div ref={chromeRef} className={styles.chrome}>
+            <SelectionBar />
+            <DeltaLine info={info} />
+          </div>
           <ReportNav />
         </div>
       )}
