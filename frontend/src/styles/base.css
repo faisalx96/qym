@@ -98,3 +98,10 @@ textarea {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* A field the user was sent to (a clicked problem): a static outline for 1.2s, set by the launch form. */
+[data-flash='true'] {
+  outline: 2px solid var(--warning);
+  outline-offset: 2px;
+  border-radius: var(--control-radius);
+}
