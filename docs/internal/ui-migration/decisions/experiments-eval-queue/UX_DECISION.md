@@ -95,3 +95,13 @@ No console errors, no page-level horizontal overflow, no unlabeled controls dete
 7. Experiment filter must come from the experiments list, not from returned jobs.
 8. Temp-model key re-entry (`temporary_key_required` 422) is still unmodelled: reserve a place in the Models
    section and the launch bar for it.
+
+
+## Experiment creation redesign (home + Customize wizard)
+
+- The single long page became a home view (3 decisions: tick an environment, name it, Launch as is) and a six-step Customize wizard
+  (`?step=`), restoring the legacy structure with new 180 ms motion (`Stepper`, `Collapse`, step enter).
+- Open questions took the brief defaults: a sole environment is pre-ticked (Q1), the name stays required with a suggested-name
+  placeholder (Q3), priority and versioning live only in step 1 (Q5), the rail never gates (Q6), the narrow rail is a "Step n of N"
+  header with a jump select (Q7), "Copy an experiment" still reloads the form through `?clone=` (Q8).
+- Deferred: the default-preset editor wizard (brief T10, phase 2, about 6 h).
