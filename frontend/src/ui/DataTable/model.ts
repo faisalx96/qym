@@ -10,7 +10,7 @@ export const SELECT_COL_WIDTH = 40;
 
 export function sortKeyOf<R>(col: Column<R>): string | undefined {
   if (typeof col.sort === 'string') return col.sort;
-  return col.sort?.key ?? col.sortKey;
+  return col.sort?.key;
 }
 
 export function alignOf<R>(col: Column<R>): 'start' | 'end' {
@@ -23,7 +23,7 @@ export function isMono<R>(col: Column<R>): boolean {
 }
 
 export function headerOf<R>(col: Column<R>) {
-  return col.header ?? col.label;
+  return col.header;
 }
 
 export function headerText<R>(col: Column<R>): string {

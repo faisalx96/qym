@@ -89,18 +89,18 @@ const ROWS: Row[] = [
 ];
 
 const COLUMNS: Column<Row>[] = [
-  { id: 'name', label: 'Run', sortKey: 'name', flex: true, minWidth: 120 },
-  { id: 'model', label: 'Model', sortKey: 'model', width: 140 },
+  { id: 'name', header: 'Run', sort: 'name', flex: true, minWidth: 120 },
+  { id: 'model', header: 'Model', sort: 'model', width: 140 },
   {
     id: 'score',
-    label: 'Accuracy',
-    sortKey: 'score',
+    header: 'Accuracy',
+    sort: 'score',
     width: 110,
     align: 'end',
     mono: true,
     cell: (r) => <ScoreValue value={r.score} direction="higher" />,
   },
-  { id: 'status', label: 'Status', width: 120, cell: (r) => <RunStatusBadge status={r.status} /> },
+  { id: 'status', header: 'Status', width: 120, cell: (r) => <RunStatusBadge status={r.status} /> },
 ];
 
 const ITEMS = Array.from({ length: 12 }, (_, i) => ({ key: `m${i}`, label: `model-${i}`, count: i * 3 }));
@@ -541,13 +541,13 @@ export default function UiGalleryPage() {
             columns={COLUMNS}
             rows={[]}
             rowKey={(r) => r.id}
-            emptyState="No runs match these filters."
+            empty="No runs match these filters."
           />
         </Case>
         <Case label="Dimmed (stale)">
           <Stack gap="sm">
             <StaleBanner since={staleSince} filtersApplied={false} onRetry={() => toast.show('Retrying')} />
-            <DataTable aria-label="Stale" columns={COLUMNS} rows={ROWS} rowKey={(r) => r.id} dimmed />
+            <DataTable aria-label="Stale" columns={COLUMNS} rows={ROWS} rowKey={(r) => r.id} refreshing />
           </Stack>
         </Case>
       </Section>

@@ -6,8 +6,6 @@ import type { Column, Density } from './types';
 export interface DataTableModelOptions<R> {
   columns: Column<R>[];
   storageKey?: string;
-  /** Controlled hide list (v1 API); always applied on top of the user's choice. */
-  hiddenColumns?: string[];
   density?: Density;
   /** The page fixes the density; no toggle. */
   densityLocked?: boolean;
@@ -20,7 +18,6 @@ export interface DataTableModelOptions<R> {
 export function useDataTableModel<R>({
   columns,
   storageKey,
-  hiddenColumns,
   density: densityProp = 'regular',
   densityLocked,
 }: DataTableModelOptions<R>) {
@@ -40,10 +37,10 @@ export function useDataTableModel<R>({
 
   const hidden = useMemo(() => {
     const base = state.hidden ?? columns.filter((c) => c.defaultHidden).map((c) => c.id);
-    const set = new Set([...base, ...(hiddenColumns ?? [])]);
+    const set = new Set(base);
     for (const c of columns) if (c.hideable === false) set.delete(c.id);
     return set;
-  }, [state.hidden, columns, hiddenColumns]);
+  }, [state.hidden, columns]);
 
   const visible = useMemo(
     () =>

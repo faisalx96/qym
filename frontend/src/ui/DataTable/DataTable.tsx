@@ -85,14 +85,10 @@ export interface DataTableProps<R> {
 
   loading?: boolean;
   refreshing?: boolean;
-  /** Legacy alias of `refreshing`. */
-  dimmed?: boolean;
   error?: unknown;
   onRetry?: () => void;
   empty?: ReactNode;
   filteredEmpty?: ReactNode;
-  /** Legacy alias of `empty`. */
-  emptyState?: ReactNode;
   isFiltered?: boolean;
 
   sort?: SortState | null;
@@ -102,8 +98,6 @@ export interface DataTableProps<R> {
 
   rowHref?: (row: R) => string | undefined;
   onRowOpen?: (row: R) => void;
-  /** Legacy alias of `onRowOpen` (receives the key too). */
-  onRowAction?: (key: Key, row: R) => void;
   rowState?: (row: R) => RowStateKind | undefined;
   rowActions?: (row: R) => RowAction<R>[];
   /** Extra attributes for a row (test ids, data attributes). */
@@ -134,9 +128,6 @@ export interface DataTableProps<R> {
   /** Roving focus, controlled (runs list keeps its own cursor). */
   focusedKey?: Key | null;
   onFocusedKeyChange?: (key: Key | null) => void;
-
-  /** Legacy v1 prop: hide these columns on top of the user's choice. */
-  hiddenColumns?: string[];
 
   children?: ReactNode;
 }
@@ -219,19 +210,16 @@ function DataTableInner<R>({
   columnMenu,
   loading,
   refreshing,
-  dimmed,
   error,
   onRetry,
   empty,
   filteredEmpty,
-  emptyState,
   isFiltered,
   sort: sortProp,
   onSortChange,
   allowUnsorted,
   rowHref,
   onRowOpen,
-  onRowAction,
   rowState,
   rowActions,
   rowProps,
@@ -250,7 +238,6 @@ function DataTableInner<R>({
   responsive = 'cards',
   focusedKey: focusedProp,
   onFocusedKeyChange,
-  hiddenColumns,
   children,
   ...rest
 }: DataTableProps<R>) {
@@ -258,7 +245,6 @@ function DataTableInner<R>({
   const model = useDataTableModel({
     columns,
     storageKey,
-    hiddenColumns,
     density: densityProp ?? (embedded ? 'compact' : 'regular'),
     densityLocked: densityLocked || embedded,
   });
@@ -529,13 +515,9 @@ function DataTableInner<R>({
       onRowOpen(r);
       return true;
     }
-    if (onRowAction) {
-      onRowAction(rowKey(r), r);
-      return true;
-    }
     return false;
   };
-  const openable = Boolean(rowHref || onRowOpen || onRowAction);
+  const openable = Boolean(rowHref || onRowOpen);
 
   /* keyboard */
   const rowEls = () => Array.from(bodyRef.current?.querySelectorAll<HTMLElement>('tr[data-row-id]') ?? []);
@@ -562,7 +544,7 @@ function DataTableInner<R>({
       }
     };
     const k = e.key;
-    const vim = openable && !e.metaKey && !e.ctrlKey && !e.altKey;
+    const vim = Boolean(rowHref) && !e.metaKey && !e.ctrlKey && !e.altKey;
     const entry = dataRows.find((d) => `${uid}:${String(d.key)}` === tr.dataset.rowId);
     if (k === 'ArrowDown' || (vim && k === 'j')) goto(i + 1);
     else if (k === 'ArrowUp' || (vim && k === 'k')) goto(i - 1);
@@ -732,7 +714,7 @@ function DataTableInner<R>({
     useMedia('(max-width: 639px)') && responsive !== 'scroll' && visible.some((c) => c.priority);
   const isEmpty = !loading && !error && rows.length === 0;
   const showFilteredEmpty = isEmpty && isFiltered && filteredEmpty !== undefined;
-  const emptyNode = showFilteredEmpty ? filteredEmpty : (empty ?? emptyState);
+  const emptyNode = showFilteredEmpty ? filteredEmpty : empty;
 
   /* compound slots */
   const kids = Children.toArray(children);
@@ -1095,7 +1077,7 @@ function DataTableInner<R>({
     );
   });
 
-  const progress = refreshing || dimmed;
+  const progress = refreshing;
 
   const tableEl = (
     <table

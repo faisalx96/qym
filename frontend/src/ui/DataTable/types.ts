@@ -29,10 +29,7 @@ export interface CellCtx {
 
 export interface Column<R> {
   id: string;
-  /** Header content (v2). */
   header?: ReactNode;
-  /** Header content (v1 name; kept so existing callers work). */
-  label?: ReactNode;
   /** HelpMarker-style hint rendered after the header text (title attribute). */
   hint?: string;
   /** Header band, e.g. 'Metrics'. Adjacent columns of one group share the band. */
@@ -43,8 +40,6 @@ export interface Column<R> {
   /** Muted second line (forces at least the regular row height). */
   secondary?: (r: R) => ReactNode;
   sort?: string | SortSpec<R>;
-  /** v1 name of `sort` (string key). */
-  sortKey?: string;
   width?: number;
   minWidth?: number;
   maxWidth?: number;
@@ -62,9 +57,9 @@ export interface Column<R> {
   summary?: ReactNode | ((rows: R[]) => ReactNode);
   /** A filter targets this column: dot in the header. */
   filtered?: boolean;
-  /** v1 alignment; v2 derives alignment from `type`. */
+  /** Overrides the alignment derived from `type`. */
   align?: 'start' | 'end';
-  /** v1 mono flag; v2 derives mono from `type`. */
+  /** Overrides the mono default derived from `type`. */
   mono?: boolean;
   /** Icon/actions column: header text is visually hidden. */
   hideLabel?: boolean;
