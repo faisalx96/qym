@@ -124,6 +124,8 @@ export interface DataTableProps<R> {
   expanded?: Set<Key>;
   onExpandedChange?: (keys: Set<Key>) => void;
   expandOnRowClick?: boolean;
+  /** Accessible name of a row's expand button (default "Expand row" / "Collapse row"). */
+  expandLabel?: (row: R, open: boolean) => string;
   /** Render the leading chevron column (default true); false when a cell hosts its own toggle. */
   expandColumn?: boolean;
   /** Rows that cannot expand (no chevron). */
@@ -243,6 +245,7 @@ function DataTableInner<R>({
   expanded: expandedProp,
   onExpandedChange,
   expandOnRowClick,
+  expandLabel,
   expandColumn = true,
   canExpand,
   groupBy,
@@ -1005,7 +1008,7 @@ function DataTableInner<R>({
         <td key={col.id} {...common} role="gridcell" data-pseudo="expand">
           {can ? (
             <IconButton
-              label={isOpen ? 'Collapse row' : 'Expand row'}
+              label={expandLabel ? expandLabel(r, isOpen) : isOpen ? 'Collapse row' : 'Expand row'}
               icon={<Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} />}
               aria-expanded={isOpen}
               onPress={() => toggleExpanded(r)}
@@ -1303,6 +1306,7 @@ function DataTableInner<R>({
               rowState={rowState}
               rowLabel={rowLabel}
               rowProps={rowProps}
+              expandLabel={expandLabel}
             />
           ) : (
             <div
@@ -1374,6 +1378,7 @@ function CardList<R>({
   rowState,
   rowLabel,
   rowProps,
+  expandLabel,
 }: {
   display: DisplayRow<R>[];
   columns: Column<R>[];
@@ -1397,6 +1402,7 @@ function CardList<R>({
   rowState?: (r: R) => RowStateKind | undefined;
   rowLabel?: (r: R) => string;
   rowProps?: (r: R) => Record<string, string | undefined>;
+  expandLabel?: (r: R, open: boolean) => string;
 }) {
   const [more, setMore] = useState<Set<Key>>(new Set());
   const sortCols = columns.filter((c) => sortKeyOf(c) && sortable(c));
@@ -1489,7 +1495,13 @@ function CardList<R>({
                 <div className={styles.cardTitle}>{lead ? cellOf(lead) : String(rowKey(r))}</div>
                 {renderExpanded && rowCanExpand(r) ? (
                   <IconButton
-                    label={expanded.has(d.key) ? 'Collapse row' : 'Expand row'}
+                    label={
+                      expandLabel
+                        ? expandLabel(r, expanded.has(d.key))
+                        : expanded.has(d.key)
+                          ? 'Collapse row'
+                          : 'Expand row'
+                    }
                     icon={<Icon name={expanded.has(d.key) ? 'chevron-down' : 'chevron-right'} size={12} />}
                     aria-expanded={expanded.has(d.key)}
                     onPress={() => toggleExpanded(r)}
