@@ -65,9 +65,9 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
-function Case({ label, children }: { label: string; children: ReactNode }) {
+function Case({ label, wide, children }: { label: string; wide?: boolean; children: ReactNode }) {
   return (
-    <div className={styles.case} data-case={label}>
+    <div className={styles.case} data-case={label} data-wide={wide ? '' : undefined}>
       <Eyebrow>{label}</Eyebrow>
       <div className={styles.caseBody}>{children}</div>
     </div>
@@ -529,7 +529,10 @@ export default function UiGalleryPage() {
             onSortChange={setSort}
           />
         </Case>
-        <Case label="v2: toolbar, footer, selection + bulk bar, row actions, expansion, bands, pins, states (resize below 640px for cards)">
+        <Case
+          wide
+          label="v2: toolbar, footer, selection + bulk bar, row actions, expansion, bands, pins, states (resize below 640px for cards)"
+        >
           <DataTableGallery />
         </Case>
         <Case label="Empty">

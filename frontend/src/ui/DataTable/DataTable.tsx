@@ -880,6 +880,7 @@ function DataTableInner<R>({
     if (pseudo === 'select') {
       return (
         <td
+          key={col.id}
           {...common}
           role="gridcell"
           data-pseudo="select"
@@ -952,6 +953,7 @@ function DataTableInner<R>({
     const header = ci === 0 && !selection && !renderExpanded;
     return (
       <td
+        key={col.id}
         {...common}
         role={header ? 'rowheader' : 'gridcell'}
         data-align={alignOf(col)}

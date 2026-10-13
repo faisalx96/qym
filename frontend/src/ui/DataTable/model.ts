@@ -2,7 +2,7 @@
 import { KEYS, readJson } from '@/lib/storage';
 import type { CellType, Column, Density, DisplayRow, GroupByConfig, Key, SortState } from './types';
 
-export const NUMERIC_TYPES: ReadonlySet<CellType> = new Set(['number', 'score', 'delta', 'duration']);
+export const NUMERIC_TYPES: ReadonlySet<CellType> = new Set(['number', 'delta', 'duration']);
 export const MONO_TYPES: ReadonlySet<CellType> = new Set(['id', 'number', 'score', 'delta', 'duration']);
 export const DEFAULT_MIN_WIDTH = 44;
 export const FLEX_MIN_WIDTH = 120;
