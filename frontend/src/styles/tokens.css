@@ -121,7 +121,6 @@
   --font-stat: 26px;
 
   /* Shared width for the charts view label/control column */
-  --chart-first-col-width: 320px;
 
   /* Mono font for data. 'Qym Arabic' leads both stacks: its unicode-range
      limits it to Arabic glyphs, so Latin falls through untouched while any
