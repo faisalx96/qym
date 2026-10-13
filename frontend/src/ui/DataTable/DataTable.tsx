@@ -373,6 +373,7 @@ function DataTableInner<R>({
   const dataRows = display.filter((d): d is Extract<DisplayRow<R>, { kind: 'row' }> => d.kind === 'row');
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
+    enabled: virtual,
     count: virtual ? display.length : 0,
     getScrollElement: () => scrollParent ?? scrollerRef.current,
     estimateSize: () => vcfg?.estimateRowHeight ?? 40,

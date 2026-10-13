@@ -180,7 +180,7 @@ test('compare: structured item metadata never renders as [object Object]', async
   await page.goto(compareUrl([a, b]));
   await waitLoaded(page);
   await page
-    .getByRole('button', { name: /^Item 1:/ })
+    .getByRole('button', { name: /^Expand item 1$/ })
     .first()
     .click();
   // scalars and lists show as badges; the structured value shows as nothing wrong, never as [object Object]
