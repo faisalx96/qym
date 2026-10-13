@@ -51,6 +51,8 @@ export interface Column<R> {
   defaultHidden?: boolean;
   /** Card mode: 1 = headline, 2 = body grid, 3 = detail only. Unset = not shown in cards. */
   priority?: 1 | 2 | 3;
+  /** Card mode: this column leads the card (default: the first priority-1 column). */
+  cardTitle?: boolean;
   truncate?: 'end' | 'middle';
   /** Clamp text to n lines (forces at least the regular row height). */
   wrap?: number;

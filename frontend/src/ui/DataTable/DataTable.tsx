@@ -1,4 +1,4 @@
-/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/mouse-events-have-key-events, jsx-a11y/click-events-have-key-events --
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/mouse-events-have-key-events, jsx-a11y/click-events-have-key-events --
    This is the grid widget: rows are roving-focus stops with the key handler delegated on <tbody>,
    the scroller is a keyboard-scrollable region, and the overflow title is a progressive hint. */
 import {
@@ -25,6 +25,7 @@ import { DropdownMenu, type MenuItemSpec } from '../DropdownMenu';
 import { EmptyState } from '../EmptyState';
 import { ErrorState } from '../ErrorState';
 import { Icon, type IconName } from '../Icon';
+import { Tooltip } from '../Tooltip';
 import { IconButton } from '../IconButton';
 import { Button } from '../Button';
 import { DataTableContext } from './context';
@@ -33,6 +34,7 @@ import {
   buildDisplayRows,
   effectivePin,
   groupBands,
+  headerMinWidth,
   headerOf,
   headerText,
   isMono,
@@ -83,10 +85,12 @@ export interface DataTableProps<R> {
   /** Header kebab menu (sort, pin, hide, autosize). Default on, off for embedded. */
   columnMenu?: boolean;
 
-  loading?: boolean;
+  /** true = skeleton rows; 'quiet' = empty body while a delayed skeleton has not appeared yet. */
+  loading?: boolean | 'quiet';
   refreshing?: boolean;
   error?: unknown;
   onRetry?: () => void;
+  errorTitle?: string;
   empty?: ReactNode;
   filteredEmpty?: ReactNode;
   isFiltered?: boolean;
@@ -105,6 +109,8 @@ export interface DataTableProps<R> {
 
   selection?: SelectionConfig<R>;
   bulkActions?: ReactNode;
+  /** `bulkActions` already show their own count and Clear (the runs list counts executions). */
+  bulkOwnSummary?: boolean;
   /** Accessible name of a row's checkbox (default "Select row"). */
   rowLabel?: (row: R) => string;
   /** Accessible name of the header checkbox (default "Select all rows"). */
@@ -212,6 +218,7 @@ function DataTableInner<R>({
   refreshing,
   error,
   onRetry,
+  errorTitle,
   empty,
   filteredEmpty,
   isFiltered,
@@ -225,6 +232,7 @@ function DataTableInner<R>({
   rowProps,
   selection,
   bulkActions,
+  bulkOwnSummary,
   rowLabel,
   selectAllLabel = 'Select all rows',
   selectOnRowClick,
@@ -330,27 +338,40 @@ function DataTableInner<R>({
       pin: 'start',
       resizable: false,
     } as PseudoColumn);
-  const trailing: PseudoColumn[] = actionsOf
-    ? [
-        {
-          id: '__actions',
-          pseudo: 'actions',
-          width: 96,
-          pin: 'end',
-          resizable: false,
-          header: 'Actions',
-          hideLabel: true,
-        } as PseudoColumn,
-      ]
-    : [];
+  // Width follows the busiest row (icon buttons + one overflow button); no actions anywhere = no column.
+  const actionSlots = actionsOf
+    ? Math.max(
+        0,
+        ...rows.map((r) => {
+          const a = actionsOf(r);
+          const primary = a.filter((x) => x.primary).slice(0, 2).length;
+          return primary + (a.length - primary > 0 ? 1 : 0);
+        }),
+      )
+    : 0;
+  const trailing: PseudoColumn[] =
+    actionsOf && actionSlots > 0
+      ? [
+          {
+            id: '__actions',
+            pseudo: 'actions',
+            width: 16 + 26 * actionSlots,
+            pin: 'end',
+            resizable: false,
+            header: 'Actions',
+            hideLabel: true,
+          } as PseudoColumn,
+        ]
+      : [];
   const visible = model.visible;
   const hasExpander = Boolean(renderExpanded) && expandColumn;
-  const hasActions = Boolean(actionsOf);
+  const hasActions = actionSlots;
   const renderCols = useMemo(
     () => [...(leading as unknown as Column<R>[]), ...visible, ...(trailing as unknown as Column<R>[])],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [visible, multi, hasExpander, hasActions],
   );
+  const pseudoOf = (c: Column<R>) => (c as unknown as PseudoColumn).pseudo;
   const hasBands = visible.some((c) => c.group);
   const tall = visible.some((c) => c.secondary || c.wrap);
 
@@ -584,8 +605,20 @@ function DataTableInner<R>({
     }
   };
 
+  // A click that ends a text selection or a drag must not open the row; a plain single click
+  // waits one double-click interval so double-clicking a word still selects it.
+  const downAt = useRef<{ x: number; y: number } | null>(null);
+  const openTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(openTimer.current), []);
   const onRowClick = (e: ReactMouseEvent, r: R, key: Key) => {
     if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
+    const moved = downAt.current
+      ? Math.hypot(e.clientX - downAt.current.x, e.clientY - downAt.current.y) > 4
+      : false;
+    const sel = window.getSelection();
+    const selectedText = sel && !sel.isCollapsed && sel.toString().trim() !== '';
+    clearTimeout(openTimer.current);
+    if (moved || selectedText || e.detail > 1) return;
     setFocusedKey(key);
     if (selection && (selectOnRowClick || selection.mode === 'single')) {
       shiftRef.current = e.shiftKey;
@@ -593,7 +626,15 @@ function DataTableInner<R>({
       return;
     }
     if (openable) {
-      open(r, e);
+      if (e.metaKey || e.ctrlKey || e.shiftKey) {
+        open(r, e);
+        return;
+      }
+      openTimer.current = setTimeout(() => {
+        const cur = window.getSelection();
+        if (cur && !cur.isCollapsed && cur.toString().trim() !== '') return;
+        open(r);
+      }, 220);
       return;
     }
     if (expandOnRowClick) toggleExpanded(r);
@@ -664,6 +705,49 @@ function DataTableInner<R>({
     model.setWidth(col.id, max + 28, true);
   };
 
+  /* header roving focus: one tab stop for the header row (spec 5.7) */
+  const [headFocus, setHeadFocus] = useState<string | null>(null);
+  const headIds = renderCols.filter((c) => !pseudoOf(c)).map((c) => c.id);
+  const headStop = headFocus && headIds.includes(headFocus) ? headFocus : (headIds[0] ?? null);
+  const focusHead = (id: string | undefined) => {
+    if (!id) return;
+    setHeadFocus(id);
+    requestAnimationFrame(() =>
+      tableRef.current?.querySelector<HTMLElement>(`thead th[data-col="${CSS.escape(id)}"]`)?.focus(),
+    );
+  };
+  const onHeadKeyDown = (col: Column<R>, e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.target !== e.currentTarget) return;
+    const i = headIds.indexOf(col.id);
+    const rtl = getComputedStyle(e.currentTarget).direction === 'rtl';
+    const key = e.key;
+    if (e.altKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+      e.preventDefault();
+      const w = e.currentTarget.getBoundingClientRect().width;
+      const dir = (key === 'ArrowRight' ? 1 : -1) * (rtl ? -1 : 1);
+      model.setWidth(col.id, w + 16 * dir, true);
+    } else if (key === 'ArrowRight' || key === 'ArrowLeft') {
+      e.preventDefault();
+      focusHead(headIds[i + ((key === 'ArrowRight') !== rtl ? 1 : -1)]);
+    } else if (key === 'Home') {
+      e.preventDefault();
+      focusHead(headIds[0]);
+    } else if (key === 'End') {
+      e.preventDefault();
+      focusHead(headIds[headIds.length - 1]);
+    } else if (key === 'Enter' || key === ' ') {
+      if (sortKeyOf(col) && sortable(col)) {
+        e.preventDefault();
+        setSort(nextSort(sort, col, unsortedOk));
+      }
+    } else if (key === 'ContextMenu' || (key === 'F10' && e.shiftKey)) {
+      if (menuEnabled) {
+        e.preventDefault();
+        setMenuCol(col.id);
+      }
+    }
+  };
+
   /* column menu */
   const [menuCol, setMenuCol] = useState<string | null>(null);
   const menuEnabled = columnMenu ?? !embedded;
@@ -701,12 +785,16 @@ function DataTableInner<R>({
   };
 
   /* layout */
+  const headMin = (c: Column<R>) => (pseudoOf(c) ? 0 : headerMinWidth(c, sortable(c)));
   const widthStyle = (c: Column<R>) => {
     const w = model.widths[c.id] ?? c.width;
     if (c.flex && model.widths[c.id] === undefined) return undefined;
-    return w ?? (c.flex ? undefined : 120);
+    return Math.max(w ?? 120, headMin(c));
   };
-  const minTotal = renderCols.reduce((n, c) => n + (widthStyle(c) ?? c.minWidth ?? FLEX_MIN_WIDTH), 0);
+  const minTotal = renderCols.reduce(
+    (n, c) => n + (widthStyle(c) ?? Math.max(c.minWidth ?? 0, headMin(c), FLEX_MIN_WIDTH)),
+    0,
+  );
   const zebraOn =
     zebra === 'auto' ? !embedded && model.density !== 'comfortable' && dataRows.length > 8 : zebra;
 
@@ -728,6 +816,7 @@ function DataTableInner<R>({
     selectedCount: selected.size,
     clearSelection: () => selection?.onChange(new Set()),
     bulkActions: bulkActions ?? null,
+    bulkOwnSummary: Boolean(bulkOwnSummary),
     isFiltered: Boolean(isFiltered),
   };
 
@@ -784,6 +873,11 @@ function DataTableInner<R>({
         data-band={hasBands ? '' : undefined}
         aria-sort={ariaSort}
         aria-label={pseudo === 'select' ? undefined : text}
+        tabIndex={pseudo ? undefined : col.id === headStop ? 0 : -1}
+        onFocus={(e) => {
+          if (e.target === e.currentTarget && !pseudo) setHeadFocus(col.id);
+        }}
+        onKeyDown={pseudo ? undefined : (e) => onHeadKeyDown(col, e)}
         style={style}
         onContextMenu={
           menuEnabled && !pseudo
@@ -809,6 +903,7 @@ function DataTableInner<R>({
             {canSort ? (
               <AriaButton
                 className={styles.sortButton}
+                excludeFromTabOrder
                 onPress={() => setSort(nextSort(sort, col, unsortedOk))}
               >
                 <span
@@ -840,7 +935,7 @@ function DataTableInner<R>({
                   label={`${text} column menu`}
                   isOpen={menuCol === col.id}
                   onOpenChange={(o) => setMenuCol(o ? col.id : null)}
-                  trigger={<IconButton label={`${text} column menu`} icon="more" />}
+                  trigger={<IconButton label={`${text} column menu`} icon="more" excludeFromTabOrder />}
                   items={headerMenuItems(col)}
                   onAction={(id) => onHeaderMenu(col, id)}
                 />
@@ -853,7 +948,7 @@ function DataTableInner<R>({
                 aria-orientation="vertical"
                 aria-valuenow={Math.round(measured[col.id] ?? model.widths[col.id] ?? 0)}
                 aria-label={`Resize ${text}`}
-                tabIndex={0}
+                tabIndex={-1}
                 onPointerDown={(e) => startResize(col, e)}
                 onDoubleClick={() => autosize(col)}
                 onKeyDown={(e) => onResizerKey(col, e)}
@@ -923,14 +1018,15 @@ function DataTableInner<R>({
         <td key={col.id} {...common} role="gridcell" data-pseudo="actions">
           <span className={styles.rowActions}>
             {primary.map((a) => (
-              <IconButton
-                key={a.id}
-                label={a.label}
-                icon={a.icon ?? 'more'}
-                tone={a.danger ? 'danger' : 'default'}
-                isDisabled={a.disabled}
-                onPress={() => a.onPress(r)}
-              />
+              <Tooltip key={a.id} content={a.hint ?? a.label}>
+                <IconButton
+                  label={a.label}
+                  icon={a.icon ?? 'more'}
+                  tone={a.danger ? 'danger' : 'default'}
+                  isDisabled={a.disabled}
+                  onPress={() => a.onPress(r)}
+                />
+              </Tooltip>
             ))}
             {more.length ? (
               <DropdownMenu
@@ -942,6 +1038,7 @@ function DataTableInner<R>({
                   icon: typeof a.icon === 'string' ? <Icon name={a.icon as IconName} size={12} /> : a.icon,
                   tone: a.danger ? ('danger' as const) : undefined,
                   disabled: a.disabled,
+                  description: a.hint,
                 }))}
                 onAction={(id) => more.find((a) => a.id === id)?.onPress(r)}
               />
@@ -1070,6 +1167,13 @@ function DataTableInner<R>({
           if (e.target === e.currentTarget && focusedKey !== d.key) setFocusedKey(d.key);
         }}
         onClick={(e) => onRowClick(e, r, d.key)}
+        onPointerDown={(e) => {
+          downAt.current = { x: e.clientX, y: e.clientY };
+        }}
+        onMouseDown={(e) => {
+          // shift-click in select mode ranges rows; it must not also start a native text selection
+          if (e.shiftKey && selection) e.preventDefault();
+        }}
         {...(rowProps?.(r) ?? {})}
       >
         {renderCols.map((c, ci) => renderTd(c, r, d, ci))}
@@ -1086,7 +1190,7 @@ function DataTableInner<R>({
       role={renderExpanded ? 'treegrid' : 'grid'}
       aria-label={tableLabel}
       aria-rowcount={display.length + 1}
-      aria-busy={loading || undefined}
+      aria-busy={loading ? true : undefined}
       data-sticky={stickyHeader && !embedded ? '' : undefined}
       data-tall={tall ? '' : undefined}
       style={{ minWidth: Math.max(minWidth ?? 0, minTotal) || undefined }}
@@ -1098,27 +1202,29 @@ function DataTableInner<R>({
       </colgroup>
       <thead className={styles.thead}>
         {hasBands ? (
-          <tr className={styles.bandRow} aria-hidden="true">
+          <tr className={styles.bandRow} role="row">
             {renderBands(renderCols, styles)}
           </tr>
         ) : null}
         <tr role="row">{renderCols.map((c) => thFor(c))}</tr>
       </thead>
       <tbody ref={bodyRef} className={styles.tbody} onKeyDown={onBodyKeyDown} onMouseOver={onBodyMouseOver}>
-        {loading
-          ? Array.from({ length: 8 }, (_, i) => (
-              <tr key={`sk-${i}`} className={styles.tr} aria-hidden="true">
-                {renderCols.map((c) => (
-                  <td key={c.id} className={styles.td} data-col={c.id}>
-                    <span
-                      className={styles.bone}
-                      style={{ inlineSize: `${50 + ((i * 7 + c.id.length * 11) % 40)}%` }}
-                    />
-                  </td>
-                ))}
-              </tr>
-            ))
-          : bodyRows}
+        {loading === 'quiet'
+          ? null
+          : loading
+            ? Array.from({ length: 8 }, (_, i) => (
+                <tr key={`sk-${i}`} className={styles.tr} aria-hidden="true">
+                  {renderCols.map((c) => (
+                    <td key={c.id} className={styles.td} data-col={c.id}>
+                      <span
+                        className={styles.bone}
+                        style={{ inlineSize: `${50 + ((i * 7 + c.id.length * 11) % 40)}%` }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            : bodyRows}
       </tbody>
       {visible.some((c) => c.summary) && !groupBy && !loading && rows.length > 0 ? (
         <tfoot className={styles.tfoot}>
@@ -1136,7 +1242,7 @@ function DataTableInner<R>({
 
   const stateBlock = loading ? null : error ? (
     <div className={styles.state}>
-      <ErrorState error={error} compact onRetry={onRetry} />
+      <ErrorState error={error} compact onRetry={onRetry} title={errorTitle} />
     </div>
   ) : isEmpty ? (
     <div className={styles.state}>
@@ -1158,7 +1264,7 @@ function DataTableInner<R>({
         data-zebra={zebraOn ? '' : undefined}
         data-testid="data-table"
       >
-        <SelectionBar />
+        {toolbarNode ? null : <SelectionBar />}
         {toolbarNode}
         {otherKids}
         {banner}
@@ -1188,7 +1294,7 @@ function DataTableInner<R>({
               setSort={setSort}
               unsortedOk={unsortedOk}
               sortable={sortable}
-              loading={loading}
+              loading={loading === true}
               ariaLabel={tableLabel}
               rowState={rowState}
               rowLabel={rowLabel}
@@ -1226,7 +1332,14 @@ function DataTableInner<R>({
 function renderBands<R>(cols: Column<R>[], s: Record<string, string>) {
   // Pseudo (select/expand/actions) columns never carry a group.
   return groupBands(cols).map((b) => (
-    <th key={b.key} colSpan={b.span} className={s.bandCell} data-labelled={b.label ? '' : undefined}>
+    <th
+      key={b.key}
+      colSpan={b.span}
+      scope="colgroup"
+      role={b.label ? 'columnheader' : 'presentation'}
+      className={s.bandCell}
+      data-labelled={b.label ? '' : undefined}
+    >
       {b.label}
     </th>
   ));
@@ -1286,8 +1399,8 @@ function CardList<R>({
   const headline = columns.filter((c) => c.priority === 1);
   const body = columns.filter((c) => c.priority === 2);
   const detail = columns.filter((c) => c.priority === 3);
-  const lead = headline[0];
-  const restHead = headline.slice(1);
+  const lead = headline.find((c) => c.cardTitle) ?? headline[0];
+  const restHead = headline.filter((c) => c !== lead);
   if (loading)
     return (
       <div className={styles.cards} aria-busy="true">

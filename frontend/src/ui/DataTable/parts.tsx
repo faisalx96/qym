@@ -33,13 +33,33 @@ const DENSITIES: { id: Density; label: string }[] = [
 
 /** Search, filters, chips, count, then the built-in Columns and Density menus. */
 export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, densityMenu }: ToolbarProps) {
-  const { model, columns, selectedCount, bulkActions } = useDataTableCtx();
-  if (selectedCount > 0 && bulkActions) return null; // the selection bar takes this slot
+  const { model, columns, selectedCount, bulkActions, bulkOwnSummary, clearSelection } = useDataTableCtx();
+  const selecting = selectedCount > 0 && Boolean(bulkActions);
   const hideable = columns.filter((c) => c.hideable !== false && !c.id.startsWith('__'));
   const showColumns = columnsMenu ?? hideable.length >= 5;
   const showDensity = densityMenu ?? !model.densityLocked;
   return (
     <div className={styles.toolbar} data-dt-toolbar="">
+      {selecting ? (
+        <div
+          className={styles.selectionCluster}
+          role="group"
+          aria-label="Selection actions"
+          data-selection-bar=""
+        >
+          {bulkOwnSummary ? null : (
+            <span className={styles.selCount} role="status">
+              {selectedCount} selected
+            </span>
+          )}
+          {bulkActions}
+          {bulkOwnSummary ? null : (
+            <Button variant="ghost" onPress={clearSelection}>
+              Clear selection
+            </Button>
+          )}
+        </div>
+      ) : null}
       <div className={styles.toolbarMain}>
         {search}
         {filters}
@@ -91,6 +111,9 @@ export function SelectionBar() {
 }
 
 export interface FooterProps {
+  /** Test id / accessible name of the footer landmark. */
+  testId?: string;
+  ariaLabel?: string;
   /** "1-50 of 423 runs". */
   summary?: ReactNode;
   pagination?: PaginationProps;
@@ -98,10 +121,10 @@ export interface FooterProps {
   trailing?: ReactNode;
 }
 
-export function Footer({ summary, pagination, trailing }: FooterProps) {
+export function Footer({ summary, pagination, trailing, testId, ariaLabel }: FooterProps) {
   const { selectedCount } = useDataTableCtx();
   return (
-    <footer className={styles.footer} data-dt-footer="">
+    <footer className={styles.footer} data-dt-footer="" data-testid={testId} aria-label={ariaLabel}>
       <div className={styles.footerStart}>
         {summary ? <span className={styles.count}>{summary}</span> : null}
         {selectedCount > 0 ? <span className={styles.count}>{selectedCount} selected</span> : null}

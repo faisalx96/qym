@@ -257,10 +257,13 @@
 }
 
 .kebab {
-  position: relative;
+  position: absolute;
   z-index: 1;
-  flex: none;
-  margin-inline-start: auto;
+  inset-block: 0;
+  inset-inline-end: 2px;
+  display: flex;
+  align-items: center;
+  background: var(--bg-elevated);
   opacity: 0;
   transition: opacity var(--transition-fast);
 }
@@ -477,15 +480,25 @@
   box-shadow: inset 0 0 0 1px var(--accent-primary);
 }
 
+.selectionCluster {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  padding-inline-end: var(--space-sm);
+  border-inline-end: 1px solid var(--border-default);
+}
+
 .rowActions {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: 2px;
   width: 100%;
-  opacity: 0;
+  opacity: 0.6; /* resting state: present, quiet; full strength on hover/focus/selection */
   transition: opacity var(--transition-fast);
 }
+.tr[data-selected] .rowActions,
 .tr:hover .rowActions,
 .tr:focus-within .rowActions,
 .rowActions:focus-within {
@@ -855,4 +868,9 @@
   .progress::after {
     animation: none;
   }
+}
+
+.thead th:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
 }

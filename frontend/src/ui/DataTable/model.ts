@@ -208,3 +208,12 @@ export function middleTruncate(text: string, keep = 8): string {
   if (text.length <= keep * 2 + 1) return text;
   return `${text.slice(0, keep)}…${text.slice(-keep)}`;
 }
+
+/** Narrowest width at which the header text is not clipped: uppercase 11px text plus padding and the sort glyph. */
+export function headerMinWidth<R>(col: Column<R>, sortable: boolean): number {
+  if (col.hideLabel) return DEFAULT_MIN_WIDTH;
+  const text = headerText(col);
+  const label = typeof headerOf(col) === 'string' || typeof headerOf(col) === 'number' ? text.length : 0;
+  if (!label) return DEFAULT_MIN_WIDTH;
+  return Math.ceil(label * 7.6) + 16 + (sortable ? 16 : 0);
+}

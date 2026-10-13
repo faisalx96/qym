@@ -9,6 +9,7 @@ export interface DataTableCtx {
   selectedCount: number;
   clearSelection: () => void;
   bulkActions: ReactNode;
+  bulkOwnSummary: boolean;
   isFiltered: boolean;
 }
 
