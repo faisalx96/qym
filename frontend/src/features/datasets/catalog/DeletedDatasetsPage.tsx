@@ -10,17 +10,15 @@ import {
   Button,
   DataTable,
   EmptyState,
-  ErrorState,
   LinkButton,
   PageHeader,
-  Skeleton,
+  RelativeTime,
   Tag,
   Text,
   Tooltip,
   useToast,
 } from '@/ui';
 import { UserPill } from '../components/UserPill';
-import { formatDate } from '../lib/itemValue';
 import { catalogPath, datasetPath } from '../lib/route';
 import { RESTORE_RULE } from '../lib/versions';
 
@@ -60,94 +58,106 @@ export function DeletedDatasetsPage() {
           </LinkButton>
         }
       />
-      {showSkeleton ? (
-        <Skeleton kind="table" rows={4} label="Loading deleted datasets" />
-      ) : query.isError ? (
-        <ErrorState
-          error={query.error}
-          title="Couldn’t load deleted datasets"
-          onRetry={() => void query.refetch()}
-        />
-      ) : query.data && rows.length === 0 ? (
-        <EmptyState title="No deleted datasets" body="Datasets you delete appear here and can be restored." />
-      ) : query.data ? (
-        <DataTable<Dataset>
-          aria-label="Deleted datasets"
-          storageKey="datasets.deleted.v1"
-          rows={rows}
-          rowKey={(d) => d.id}
-          columns={[
-            {
-              id: 'name',
-              label: 'Dataset',
-              flex: true,
-              minWidth: 220,
-              cell: (d) => (
-                <span>
-                  <Text as="span" variant="md" weight={600}>
-                    {d.name}
-                  </Text>{' '}
-                  <Tag kind="data">{d.original_slug ?? d.slug}</Tag>
-                </span>
-              ),
-            },
-            {
-              id: 'deleted_at',
-              label: 'Deleted',
-              width: 180,
-              mono: true,
-              cell: (d) => formatDate(d.deleted_at),
-            },
-            {
-              id: 'deleted_by',
-              label: 'Deleted by',
-              width: 180,
-              cell: (d) => <UserPill user={d.deleted_by} />,
-            },
-            {
-              id: 'latest',
-              label: 'Latest version',
-              width: 150,
-              mono: true,
-              cell: (d) =>
-                d.latest_version ? `${d.latest_version.version} ${d.latest_version.status}` : '—',
-            },
-            {
-              id: 'restore',
-              label: 'Restore',
-              hideLabel: true,
-              width: 110,
-              align: 'end',
-              cell: (d) =>
-                canRestore ? (
+      <DataTable<Dataset>
+        aria-label="Deleted datasets"
+        storageKey="datasets.deleted.v2"
+        density="regular"
+        rows={rows}
+        rowKey={(d) => d.id}
+        loading={showSkeleton}
+        error={query.isError ? query.error : undefined}
+        onRetry={() => void query.refetch()}
+        empty={
+          query.data ? (
+            <EmptyState
+              title="No deleted datasets"
+              body="Datasets you delete appear here and can be restored."
+            />
+          ) : undefined
+        }
+        columns={[
+          {
+            id: 'name',
+            header: 'Dataset',
+            flex: true,
+            minWidth: 220,
+            pin: 'start',
+            hideable: false,
+            priority: 1,
+            cell: (d) => (
+              <span>
+                <Text as="span" variant="md" weight={600}>
+                  {d.name}
+                </Text>{' '}
+                <Tag kind="data">{d.original_slug ?? d.slug}</Tag>
+              </span>
+            ),
+          },
+          {
+            id: 'deleted_at',
+            header: 'Deleted',
+            type: 'date',
+            width: 130,
+            priority: 2,
+            cell: (d) => <RelativeTime iso={d.deleted_at} />,
+          },
+          {
+            id: 'deleted_by',
+            header: 'Deleted by',
+            width: 180,
+            priority: 2,
+            cell: (d) => <UserPill user={d.deleted_by} />,
+          },
+          {
+            id: 'latest',
+            header: 'Latest version',
+            type: 'id',
+            width: 150,
+            priority: 3,
+            cell: (d) => (d.latest_version ? `${d.latest_version.version} ${d.latest_version.status}` : '—'),
+          },
+          {
+            id: 'restore',
+            header: 'Restore',
+            type: 'actions',
+            hideLabel: true,
+            width: 110,
+            hideable: false,
+            cell: (d) =>
+              canRestore ? (
+                <Button
+                  variant="accent"
+                  size="sm"
+                  onPress={() => void onRestore(d)}
+                  loading={busyId === d.id}
+                  data-testid={`restore-${d.slug}`}
+                >
+                  Restore
+                </Button>
+              ) : (
+                <Tooltip content={readOnly ? 'This project is archived.' : RESTORE_RULE}>
                   <Button
-                    variant="accent"
+                    variant="neutral"
                     size="sm"
-                    onPress={() => void onRestore(d)}
-                    loading={busyId === d.id}
-                    data-testid={`restore-${d.slug}`}
+                    aria-disabled="true"
+                    data-disabled-reason=""
+                    onPress={() =>
+                      toast.show(readOnly ? 'This project is archived.' : RESTORE_RULE, { tone: 'info' })
+                    }
                   >
                     Restore
                   </Button>
-                ) : (
-                  <Tooltip content={readOnly ? 'This project is archived.' : RESTORE_RULE}>
-                    <Button
-                      variant="neutral"
-                      size="sm"
-                      aria-disabled="true"
-                      data-disabled-reason=""
-                      onPress={() =>
-                        toast.show(readOnly ? 'This project is archived.' : RESTORE_RULE, { tone: 'info' })
-                      }
-                    >
-                      Restore
-                    </Button>
-                  </Tooltip>
-                ),
-            },
-          ]}
+                </Tooltip>
+              ),
+          },
+        ]}
+      >
+        <DataTable.Footer
+          summary={
+            query.data ? `${rows.length} deleted ${rows.length === 1 ? 'dataset' : 'datasets'}` : undefined
+          }
         />
-      ) : null}
+      </DataTable>
     </div>
   );
 }

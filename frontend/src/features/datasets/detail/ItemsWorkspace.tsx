@@ -15,7 +15,7 @@ import {
 } from '@/api/datasets';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/http';
-import { Button, ConfirmDialog, Text, useToast } from '@/ui';
+import { Button, ConfirmDialog, useToast } from '@/ui';
 import { ItemPane } from './ItemPane';
 import { ItemsTab } from './ItemsTab';
 import styles from './ItemsWorkspace.module.css';
@@ -157,24 +157,6 @@ export function ItemsWorkspace({
   return (
     <div className={styles.layout} data-has-pane={paneId ? '' : undefined}>
       <div className={styles.table}>
-        {editable && selected.size ? (
-          <div className={styles.bulk} role="region" aria-label="Bulk actions">
-            <Text as="span" variant="md" weight={600}>
-              {selected.size} selected
-            </Text>
-            <Button
-              variant="danger"
-              size="sm"
-              onPress={() => setConfirmBulk(true)}
-              data-testid="bulk-delete-items"
-            >
-              Delete {selected.size}
-            </Button>
-            <Button variant="ghost" size="sm" onPress={() => setSelected(new Set())}>
-              Clear
-            </Button>
-          </div>
-        ) : null}
         <ItemsTab
           slug={slug}
           dataset={dataset}
@@ -184,6 +166,16 @@ export function ItemsWorkspace({
           onImport={onImport}
           onRows={setRows}
           selection={editable ? { selected, onChange: setSelected } : undefined}
+          bulkActions={
+            <Button
+              variant="danger"
+              size="sm"
+              onPress={() => setConfirmBulk(true)}
+              data-testid="bulk-delete-items"
+            >
+              Delete {selected.size}
+            </Button>
+          }
           onOpenItem={open}
           onFilterChange={clearSelection}
           onDeleted={(id) => {

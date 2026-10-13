@@ -375,6 +375,32 @@ export function useDatasetVersions(slug: string, ref: string, enabled = true) {
   });
 }
 
+/** Every item id matching a filter (server-paged tables: "select all N matching"). */
+export async function fetchMatchingItemIds(
+  slug: string,
+  ref: string,
+  version: string,
+  params: Pick<ItemsParams, 'search' | 'label'>,
+  total: number,
+): Promise<string[]> {
+  const ids: string[] = [];
+  const size = 1000;
+  for (let offset = 0; offset < total; offset += size) {
+    const page = await api.get<ItemsResponse>(
+      withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items`, slug, {
+        limit: size,
+        offset,
+        search: params.search,
+        label: params.label,
+        include_context: 'false',
+      }),
+    );
+    ids.push(...page.items.map((i) => i.item_id));
+    if (page.items.length < size) break;
+  }
+  return ids;
+}
+
 export function useDatasetItems(
   slug: string,
   ref: string,
