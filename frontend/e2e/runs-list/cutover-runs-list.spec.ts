@@ -189,7 +189,7 @@ test('a Charts table sorts another column on the first click: metrics highest fi
 }) => {
   const s = await sharedProject(request, 12);
   await page.goto(`${APP}/projects/${s.project.slug}/charts`);
-  const table = page.getByTestId('chart-card-text2sql').getByRole('table');
+  const table = page.getByTestId('chart-card-text2sql').getByRole('grid');
   await expect(table).toBeVisible();
   const quality = table.locator('thead th', { hasText: /^quality/i });
   await quality.getByRole('button').click();

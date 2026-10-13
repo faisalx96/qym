@@ -93,7 +93,7 @@ test.describe('axe on the runs-list surfaces', () => {
   test('Charts: grouped rows with a group expanded', async ({ page, request }) => {
     await page.goto(`${APP}/projects/${await ensureProject(request)}/charts`);
     const card = page.getByTestId('chart-card-summarize');
-    await expect(card.getByRole('table')).toBeVisible();
+    await expect(card.getByRole('grid')).toBeVisible();
     await card
       .getByRole('radiogroup', { name: 'summarize rows' })
       .getByText('Grouped', { exact: true })
@@ -104,7 +104,7 @@ test.describe('axe on the runs-list surfaces', () => {
       .click();
     await expect(
       card
-        .getByRole('table')
+        .getByRole('grid')
         .getByRole('button', { name: /^Collapse / })
         .first(),
     ).toBeVisible();
@@ -113,7 +113,7 @@ test.describe('axe on the runs-list surfaces', () => {
 
   test('Charts: default', async ({ page, request }) => {
     await page.goto(`${APP}/projects/${await ensureProject(request)}/charts`);
-    await expect(page.getByTestId('chart-card-text2sql').getByRole('table')).toBeVisible();
+    await expect(page.getByTestId('chart-card-text2sql').getByRole('grid')).toBeVisible();
     await expectClean(page, 'charts default');
   });
 

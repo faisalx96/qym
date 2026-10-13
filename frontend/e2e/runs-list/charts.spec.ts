@@ -30,7 +30,7 @@ async function chartsProject(request: APIRequestContext) {
 
 const chartsUrl = (slug: string, qs = '') => `${APP}/projects/${slug}/charts${qs}`;
 const card = (page: Page, task: string) => page.getByTestId(`chart-card-${task}`);
-const loadedTable = (page: Page, task: string) => card(page, task).getByRole('table');
+const loadedTable = (page: Page, task: string) => card(page, task).getByRole('grid');
 
 test.describe('charts (J7)', () => {
   test('one card per task with dataset tabs; switching tab requests points for that task+dataset; height is remembered', async ({
@@ -64,7 +64,7 @@ test.describe('charts (J7)', () => {
       .poll(() => points.all().some((p) => p.body.task === 'text2sql' && p.body.dataset === 'spider-test'))
       .toBe(true);
     await expect(
-      card(page, 'text2sql').getByRole('table', { name: 'text2sql · spider-test runs' }),
+      card(page, 'text2sql').getByRole('grid', { name: 'text2sql · spider-test runs' }),
     ).toBeVisible();
     await expect(card(page, 'text2sql').getByRole('link')).toHaveCount(3);
     await expect
@@ -175,7 +175,7 @@ test.describe('charts (J7)', () => {
     );
     for (const h of ['Pass@K', 'Consistency', 'Reliability'])
       await expect(table.locator('thead th', { hasText: h })).toBeVisible();
-    const cols = await table.locator('thead th').count();
+    const cols = await table.locator('thead tr').last().getByRole('columnheader').count();
     const groupCells = await table.locator('tbody tr').first().locator('th, td').count();
     expect(groupCells).toBeGreaterThanOrEqual(cols);
     // Expand all / Collapse all
