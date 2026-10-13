@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.7
 ARG BASE_IMAGE=python:3.11-slim
+ARG BASE_IMAGE=python:3.11-slim
 
 # The React SPA (frontend/) is built once here and copied into the platform
 # package as _static/app/ (gitignored; the wheel and the image carry the build).
