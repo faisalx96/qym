@@ -1,175 +1,84 @@
-/* Auto-analysis workspace: guided flow (configure, preview, run, review). */
+/* Auto-analysis workspace: one page (Setup, Targets, Results) and a sticky action rail. */
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  max-width: var(--analysis-content-width);
+  margin-inline: auto;
 }
 
-.stickyBar {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--bg-void);
-  padding-block: var(--space-xs);
-}
-
-.banner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-}
-
-.testTargets {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.results:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-
-[dir='rtl'] .dirIcon {
-  transform: scaleX(-1);
-}
-
-.areaRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-md);
+/* The tab panel is empty (the view is its content), so it must not add spacing under the strip. */
+.tabPanel {
   padding: 0;
 }
 
-.pad {
-  padding-top: var(--space-lg);
+.liveDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--accent-primary);
 }
 
 .flow {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  min-width: 0;
 }
 
-.stepper {
+/* Another sample is loading: the previous one stays in place, dimmed and inert. */
+.dimmed {
+  opacity: 0.6;
+  pointer-events: none;
+  transition: opacity var(--arrive-fade) ease;
+}
+
+/* Setup: three hairline-separated groups in one card, never nested cards. */
+.setupGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-sm);
-  list-style: none;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.step {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  width: 100%;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  text-align: start;
-  cursor: pointer;
-  font: inherit;
-}
-
-.step:hover {
-  background: var(--bg-hover);
-}
-
-.step:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-
-.step[aria-current='step'] {
-  border-color: var(--accent-primary);
-  background: var(--bg-elevated);
-}
-
-.stepNum {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border-strong);
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.step[data-done] .stepNum,
-.step[aria-current='step'] .stepNum {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-}
-
-.stepText {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.stepBody {
-  min-width: 0;
-}
-
-.col {
+.group {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
   min-width: 0;
+  padding-block: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.group:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.groupWide {
+  min-width: 0;
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--border-subtle);
+}
+
+@media (min-width: 1500px) {
+  .setupGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: var(--space-xl);
+  }
+
+  .group {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .groupWide {
+    grid-column: 1 / -1;
+  }
 }
 
 .stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-}
-
-.split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  gap: var(--space-md);
-  align-items: start;
-}
-
-.previewPick {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-md);
-}
-
-.nav {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding: var(--space-md) 0;
-  border-top: 1px solid var(--border-default);
-  background: var(--bg-void);
-}
-
-@media (max-width: 1100px) {
-  .split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 760px) {
-  .stepper {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }

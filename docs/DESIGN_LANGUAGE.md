@@ -183,6 +183,15 @@ The recipes, by intent:
   run detail page's sticky section nav (jump links, `aria-current` on the section
   in view, sliding green underline, page-wide Filters + Clear, back-to-top) is
   the one jump-link variant; no percentages or progress bars in it.
+- **Disclosure** (`Disclosure`): a closed-by-default group inside a section,
+  one trigger row (chevron, `--font-md` title, muted `--font-sm` summary such as
+  "Default fields") and a panel that animates its height in `--transition-fast`
+  (none under `prefers-reduced-motion`). Use it instead of a nested card for
+  advanced settings; never inside another Disclosure.
+- **Action rail** (auto-analysis, `features/analyzer/blocks/ActionRail`): a page-level sticky bottom bar of
+  `--action-rail-height`, always mounted, with a fixed primary-button width (`--action-primary-width`) so
+  label changes never move neighbours. Exactly one accent button per state. The sections above it reserve
+  their space (`--results-slot-min-height`) so state changes insert nothing above existing content.
 - **Run section header**: every top-level run-page section opens with a
   `--font-xl` / 650 primary title, one muted `--font-base` description line,
   the section controls on the right, a `--border-subtle` hairline above and

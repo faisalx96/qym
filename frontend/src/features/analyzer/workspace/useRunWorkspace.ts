@@ -2,7 +2,7 @@
  * The Analyze-run view model: configuration, targets, prompt preview, Test and
  * the background job in one place so any layout can render it.
  */
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   usePromptPreview,
   useTestItems,
@@ -34,6 +34,8 @@ import {
   type RunGuard,
 } from '../model/settings';
 import {
+  analyzedKeysOf,
+  touchesTargetFilter,
   effectiveCount,
   humanOverwriteTargets,
   matchTargets,
@@ -85,10 +87,22 @@ export function useRunWorkspace(
   const testMutation = useTestItems(runId);
   const [humanConfirm, setHumanConfirm] = useState<{ count: number; metrics: string[] } | null>(null);
 
-  const update = useCallback(
-    (patch: Partial<AnalyzerSettings>) => setSettings((s) => ({ ...s, ...patch })),
-    [],
-  );
+  /* Target list freeze: rows as they were when a job started, so finishing it does not collapse the list. */
+  const [frozen, setFrozen] = useState<AnalyzerRow[] | null>(null);
+  const busyRef = useRef(false);
+  const rowsRef = useRef(data.rows);
+  useEffect(() => {
+    rowsRef.current = data.rows;
+  }, [data.rows]);
+
+  const update = useCallback((patch: Partial<AnalyzerSettings>) => {
+    setSettings((s) => ({ ...s, ...patch }));
+    // A deliberate filter change re-filters against the live data (never while a job runs).
+    if (touchesTargetFilter(patch) && !busyRef.current) setFrozen(null);
+  }, []);
+  const refreshTargets = useCallback(() => {
+    if (!busyRef.current) setFrozen(null);
+  }, []);
 
   /* configuration -> payload */
   const customVars = useMemo(() => customVarsOf(settings), [settings]);
@@ -108,17 +122,32 @@ export function useRunWorkspace(
   const cfg: PlaygroundConfigPayload = useMemo(() => buildConfigPayload(settings, trees), [settings, trees]);
 
   /* targets */
-  const matched: MatchedTarget[] = useMemo(
-    () =>
-      matchTargets(data.rows, {
-        selectedMetrics: settings.selectedMetrics,
-        maxScore: settings.maxScorePct / 100,
-        skipAnalyzed: settings.skipAnalyzed,
-        allowHumanOverwrite: settings.allowHuman,
-      }),
+  const matchOptions = {
+    selectedMetrics: settings.selectedMetrics,
+    maxScore: settings.maxScorePct / 100,
+    skipAnalyzed: settings.skipAnalyzed,
+    allowHumanOverwrite: settings.allowHuman,
+  };
+  /** Live matches: what "Analyze N" would send if started now. */
+  const liveMatched: MatchedTarget[] = useMemo(
+    () => matchTargets(data.rows, matchOptions),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- matchOptions is rebuilt every render; its fields are listed explicitly
     [data.rows, settings.selectedMetrics, settings.maxScorePct, settings.skipAnalyzed, settings.allowHuman],
   );
-  const targetCount = effectiveCount(matched, settings.limit);
+  /** What the list shows: the frozen snapshot while a job ran, otherwise the live matches. */
+  const matched: MatchedTarget[] = useMemo(
+    () => (frozen ? matchTargets(frozen, matchOptions) : liveMatched),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- matchOptions is rebuilt every render; its fields are listed explicitly
+    [
+      frozen,
+      liveMatched,
+      settings.selectedMetrics,
+      settings.maxScorePct,
+      settings.skipAnalyzed,
+      settings.allowHuman,
+    ],
+  );
+  const targetCount = effectiveCount(liveMatched, settings.limit);
   const rowById = useMemo(
     () => new Map<string, AnalyzerRow>(data.rows.map((r) => [r.item_id, r])),
     [data.rows],
@@ -151,6 +180,20 @@ export function useRunWorkspace(
 
   /* job */
   const busy = runner.busy || testing;
+  useEffect(() => {
+    busyRef.current = runner.busy;
+  }, [runner.busy]);
+  // Freeze the list as soon as a job is running (also a job resumed after a reload).
+  useEffect(() => {
+    if (runner.busy) setFrozen((cur) => cur ?? rowsRef.current);
+  }, [runner.busy]);
+  const sessionAnalyzed = useMemo(
+    () =>
+      runner.job?.status === 'completed' || runner.job?.status === 'cancelled'
+        ? analyzedKeysOf(runner.job.result?.results)
+        : new Set<string>(),
+    [runner.job],
+  );
   const connection = config.llm_connections.find((c) => c.id === connectionId);
   const llmReady =
     config.llm_configured &&
@@ -161,7 +204,7 @@ export function useRunWorkspace(
   const doAnalyze = useCallback(async () => {
     setHumanConfirm(null);
     await runner.start(analyzeRequest(cfg, settings, guard));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the request body is built from the listed settings; callbacks are stable
   }, [runner, cfg, settings, connectionId, data.pass, data.passRevision]);
 
   const analyze = useCallback(async () => {
@@ -210,7 +253,7 @@ export function useRunWorkspace(
       setTesting(false);
       testAbort.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the request body is built from the listed settings; callbacks are stable
   }, [liveTestKeys, effectiveFocus, cfg, settings, connectionId, data.pass, data.passRevision, testMutation]);
 
   const cancelTest = useCallback(() => testAbort.current?.abort(), []);
@@ -230,6 +273,10 @@ export function useRunWorkspace(
     customVars,
     matched,
     targetCount,
+    /** The list is a snapshot from when the last job started (analysed targets stay visible). */
+    frozen: frozen !== null,
+    sessionAnalyzed,
+    refreshTargets,
     rowById,
     allKeys,
     focus,

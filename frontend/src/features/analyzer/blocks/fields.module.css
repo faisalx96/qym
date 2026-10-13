@@ -9,21 +9,19 @@
 .rows {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
 }
 
+/* Hairline rows, not boxes: the mapping sits inside the Setup card. */
 .row {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.row[data-open] {
-  border-color: var(--border-default);
+.row:last-child {
+  border-bottom: 0;
 }
 
 .line {

@@ -239,3 +239,24 @@ export function effectiveCount(matched: MatchedTarget[], limit: number | null): 
   if (limit == null || limit < 1) return matched.length;
   return Math.min(limit, matched.length);
 }
+
+/** Item-metric keys (`itemId\0metric`) a finished job analysed without error (optimistic "analyzed" tags). */
+export function analyzedKeysOf(
+  results: ReadonlyArray<{ item_id?: unknown; metric_name?: unknown; error?: unknown }> | undefined,
+): Set<string> {
+  const out = new Set<string>();
+  for (const r of results ?? []) {
+    if (String(r?.error ?? '').trim()) continue;
+    const itemId = String(r?.item_id ?? '');
+    const metric = String(r?.metric_name ?? '');
+    if (itemId && metric) out.add(`${itemId}\u0000${metric}`);
+  }
+  return out;
+}
+
+/** Settings that decide which targets match: changing one releases a frozen target list. */
+export const TARGET_FILTER_KEYS = ['selectedMetrics', 'maxScorePct', 'skipAnalyzed', 'allowHuman'] as const;
+
+export function touchesTargetFilter(patch: Record<string, unknown>): boolean {
+  return TARGET_FILTER_KEYS.some((k) => k in patch);
+}

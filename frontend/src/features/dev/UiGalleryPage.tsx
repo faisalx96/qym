@@ -9,6 +9,7 @@ import {
   CopyButton,
   DataTable,
   Dialog,
+  Disclosure,
   Drawer,
   DropdownMenu,
   EmptyState,
@@ -359,6 +360,13 @@ export default function UiGalleryPage() {
             <TabPanel id="keys">Keys panel</TabPanel>
             <TabPanel id="danger">Danger</TabPanel>
           </Tabs>
+        </Case>
+        <Case label="Disclosure">
+          <Disclosure title="Input mapping" summary="Default fields">
+            <Text variant="base" tone="secondary">
+              Collapsed by default; the summary stays on the trigger row.
+            </Text>
+          </Disclosure>
         </Case>
         <Case label="Tabs (dense)">
           <Tabs

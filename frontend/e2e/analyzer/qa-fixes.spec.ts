@@ -2,21 +2,29 @@
 /** QA fix list (docs/internal/ui-migration/qa/analyzer.md): job outcome, drafts, redirects, defaults, confirmations. */
 import { test, expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { analysisUrl, patchJson, seedAnalyzer, step, toggleBox, waitWorkspace } from './helpers';
+import {
+  analysisUrl,
+  analyzeButton,
+  jobCard,
+  patchJson,
+  rail,
+  seedAnalyzer,
+  toggleBox,
+  waitWorkspace,
+} from './helpers';
 
-const jobRegion = (page: Page) => page.getByRole('region', { name: 'Analysis job' });
+const jobRegion = jobCard;
 const isRuleSave = (r: { method(): string; url(): string }) =>
   r.method() === 'PATCH' && /analysis-context$/.test(r.url());
 
 async function openRun(page: Page, slug: string, runId: string, query = ''): Promise<void> {
   await gotoApp(page, analysisUrl(slug, runId, query));
   await waitWorkspace(page);
-  await step(page, 'Run').click();
-  await expect(page.getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeVisible();
+  await expect(analyzeButton(page)).toBeVisible();
 }
 
 test.describe('job outcome (1, 6, 12)', () => {
-  test('every analysis failed: bar, Review card and toast say "Analysis failed"', async ({
+  test('every analysis failed: Results card, rail and toast say "Analysis failed"', async ({
     page,
     request,
   }) => {
@@ -26,14 +34,14 @@ test.describe('job outcome (1, 6, 12)', () => {
     await expect(jobRegion(page)).toContainText('0 of 6 metric analyses succeeded, 6 failed', {
       timeout: 30_000,
     });
-    await expect(jobRegion(page).getByText('Analysis failed', { exact: true })).toBeVisible();
     await expect(
       page.getByText('Analysis failed: 0 of 6 metric analyses succeeded, 6 failed').first(),
     ).toBeVisible();
-    await jobRegion(page).getByRole('button', { name: 'Review results' }).click();
     const card = jobRegion(page);
     await expect(card).toContainText('0 of 6 metric analyses succeeded, 6 failed.');
     await expect(card.getByText('Analysis failed', { exact: true }).first()).toBeVisible();
+    // the one accent action of a failed job is "Analyze again"
+    await expect(rail(page).getByRole('button', { name: 'Analyze again' })).toBeVisible();
     await expect(card.getByText('Created ', { exact: false })).toHaveCount(0);
     // never filed under the generic "error" code
     await expect(card.getByRole('list', { name: 'Errors by code' })).not.toContainText(/^error\b/);
@@ -47,14 +55,9 @@ test.describe('job outcome (1, 6, 12)', () => {
       'href',
       new RegExp(`/runs/${seed.repeatId}\\?pass=2$`),
     );
-    await step(page, 'Run').click();
-    await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
+    await analyzeButton(page).click();
     await expect(jobRegion(page)).toContainText('metric analyses succeeded', { timeout: 30_000 });
-    await expect(jobRegion(page).getByRole('link', { name: 'View run' })).toHaveAttribute(
-      'href',
-      /\?pass=2$/,
-    );
-    await jobRegion(page).getByRole('button', { name: 'Review results' }).click();
+    await expect(rail(page).getByRole('link', { name: 'View run' })).toHaveAttribute('href', /\?pass=2$/);
     await expect(jobRegion(page)).toContainText(/Created \d+ categor/);
   });
 });
@@ -87,7 +90,16 @@ test.describe('settings (4, 15, 16, 21)', () => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
+    // the less common options sit in a closed disclosure with a one-line summary
+    await page.getByRole('button', { name: /^More options/ }).click();
     const timeout = page.getByRole('textbox', { name: 'Timeout (s)' });
+    // Timeout and Analyze limit share a row and line up at the top (Max issues wraps under its help text)
+    const tops = await Promise.all(
+      ['Timeout (s)', 'Analyze limit'].map((n) =>
+        page.getByRole('textbox', { name: n }).evaluate((el) => Math.round(el.getBoundingClientRect().top)),
+      ),
+    );
+    expect(new Set(tops).size, `More options inputs at ${tops.join(', ')}`).toBe(1);
     const issues = page.getByRole('textbox', { name: 'Max issues per item' });
     await expect(
       page.getByText(/each retry doubles the previous timeout|retries are disabled/),
@@ -104,13 +116,12 @@ test.describe('settings (4, 15, 16, 21)', () => {
     await issues.fill('');
     await issues.blur();
     await expect(issues).toHaveValue(beforeIssues);
-    await step(page, 'Run').click();
     const body = page.waitForRequest((r) => r.url().includes('/analyze-test'));
-    await page.getByRole('button', { name: 'Test Selected (1)' }).click();
+    await rail(page).getByRole('button', { name: 'Test selected (1)' }).click();
     expect(((await body).postDataJSON() as { timeout_seconds: number }).timeout_seconds).toBe(Number(before));
   });
 
-  test('zero targets with Skip analyzed offers Open Reviews; the last step has no disabled Done', async ({
+  test('after a job the list stays; Refresh targets then offers Open Reviews for the empty result', async ({
     page,
     request,
   }) => {
@@ -118,15 +129,14 @@ test.describe('settings (4, 15, 16, 21)', () => {
     await openRun(page, seed.slug, seed.runId);
     await page.getByRole('button', { name: 'Analyze 4 items' }).click();
     await expect(jobRegion(page)).toContainText('metric analyses succeeded', { timeout: 30_000 });
-    await step(page, 'Configure').click();
+    await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+    await page.getByRole('button', { name: 'Refresh targets' }).click();
     await expect(page.getByRole('link', { name: 'Open Reviews' })).toHaveAttribute(
       'href',
       `/projects/${seed.slug}/reviews`,
     );
-    await step(page, 'Review').click();
+    await expect(rail(page).getByRole('link', { name: 'View run' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Done' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Back to Configure' }).click();
-    await expect(page).not.toHaveURL(/step=review/);
   });
 });
 
@@ -199,12 +209,14 @@ test.describe('connection without a key (11)', () => {
       };
     });
     await openRun(page, seed.slug, seed.runId);
-    await page.getByRole('button', { name: /LLM connection/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /LLM connection/ })
+      .click();
     const option = page.getByRole('option', { name: /key missing/ });
     await expect(option).toHaveAttribute('aria-disabled', 'true');
     await option.click({ force: true });
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('button', { name: 'Test Selected (1)' })).toBeEnabled();
-    await expect(page.getByRole('button', { name: /LLM connection/ })).not.toContainText('nokey');
+    await expect(rail(page).getByRole('button', { name: 'Test selected (1)' })).toBeEnabled();
+    await expect(rail(page).getByRole('button', { name: /LLM connection/ })).not.toContainText('nokey');
   });
 });

@@ -281,13 +281,39 @@ export function trackErrors(page: Page): { errors: string[] } {
   return { errors };
 }
 
-/** Wait until the analyzer workspace (stepper) is on screen. */
+/** Wait until the single-page workspace (Setup card and the action rail) is on screen. */
 export async function waitWorkspace(page: Page): Promise<void> {
-  await expect(page.getByRole('list', { name: 'Analysis steps' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Setup', exact: true })).toBeVisible();
+  await expect(rail(page)).toBeVisible();
 }
 
-export const step = (page: Page, label: 'Configure' | 'Preview' | 'Run' | 'Review') =>
-  page.getByRole('list', { name: 'Analysis steps' }).getByRole('button', { name: new RegExp(`^${label}`) });
+/** The sticky action rail (connection, prompt preview, Test, the one primary action). */
+export const rail = (page: Page) => page.getByRole('region', { name: 'Analysis actions' });
+
+/** The job card in the Results section (progress, then the completion summary). */
+export const jobCard = (page: Page) => page.getByRole('region', { name: 'Analysis job' });
+
+/** The single tab row (Analyze run, Diagnosis categories, Production rules, Documents). */
+export const viewTabs = (page: Page) => page.getByRole('tablist', { name: 'Auto-analysis views' });
+
+export const analyzeButton = (page: Page) => rail(page).getByRole('button', { name: /^Analyze \d+ items?$/ });
+
+export const previewDrawer = (page: Page) => page.getByRole('dialog', { name: 'Prompt preview' });
+
+/** Open the prompt preview drawer from the rail and wait for the messages. */
+export async function openPreview(page: Page): Promise<void> {
+  await rail(page)
+    .getByRole('button', { name: /^Prompt preview/ })
+    .click();
+  await expect(previewDrawer(page)).toBeVisible();
+  await expect(previewDrawer(page).getByRole('region', { name: 'Prompt messages' })).toBeVisible();
+}
+
+/** Run the stub analysis to completion and wait for the summary in the Results section. */
+export async function analyzeToCompletion(page: Page): Promise<void> {
+  await analyzeButton(page).click();
+  await expect(jobCard(page)).toContainText('metric analyses succeeded', { timeout: 30_000 });
+}
 
 /** The visual box of our Checkbox/Switch sits over the native input: click its wrapping label instead. */
 export async function toggleBox(box: Locator): Promise<void> {

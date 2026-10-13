@@ -1,28 +1,42 @@
-/** UX review (group C): wizard history, double-submit, unsaved category edits, Review from the guidance scope. */
+/** UX review (group C): history, double-submit, unsaved category edits, and tabs while a job runs. */
 import { test, expect } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { analysisUrl, seedAnalyzer, step, trackErrors, waitWorkspace } from './helpers';
+import {
+  analysisUrl,
+  analyzeButton,
+  jobCard,
+  previewDrawer,
+  rail,
+  seedAnalyzer,
+  trackErrors,
+  viewTabs,
+  waitWorkspace,
+} from './helpers';
 
-test('Back walks the wizard steps instead of leaving the workspace', async ({ page, request }) => {
+test('the preview drawer is a deep link and Escape closes it without a history entry', async ({
+  page,
+  request,
+}) => {
   const seed = await seedAnalyzer(request);
   await gotoApp(page, analysisUrl(seed.slug, seed.runId));
   await waitWorkspace(page);
-  await step(page, 'Preview').click();
-  await step(page, 'Run').click();
-  await expect(page).toHaveURL(/step=run/);
-  await page.goBack();
-  await expect(page).toHaveURL(/step=preview/);
-  await expect(step(page, 'Preview')).toHaveAttribute('aria-current', 'step');
-  await page.goBack();
-  await expect(page).not.toHaveURL(/step=/);
-  await expect(step(page, 'Configure')).toHaveAttribute('aria-current', 'step');
+  await rail(page)
+    .getByRole('button', { name: /^Prompt preview/ })
+    .click();
+  await expect(page).toHaveURL(/preview=1/);
+  await expect(previewDrawer(page)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page).not.toHaveURL(/preview=1/);
+  await expect(previewDrawer(page)).toHaveCount(0);
 });
 
 test('Back leaves Project guidance for the run workspace', async ({ page, request }) => {
   const seed = await seedAnalyzer(request);
   await gotoApp(page, analysisUrl(seed.slug, seed.runId));
   await waitWorkspace(page);
-  await page.getByText('Project guidance', { exact: true }).first().click();
+  await viewTabs(page)
+    .getByRole('tab', { name: /^Diagnosis categories/ })
+    .click();
   await expect(page).toHaveURL(/scope=categories/);
   await page.goBack();
   await expect(page).not.toHaveURL(/scope=/);
@@ -35,10 +49,10 @@ test('a double click on Analyze starts one job', async ({ page, request }) => {
   page.on('request', (r) => {
     if (r.method() === 'POST' && r.url().endsWith('/analysis-jobs')) posts.push(r.url());
   });
-  await gotoApp(page, analysisUrl(seed.slug, seed.runId, '&step=run'));
+  await gotoApp(page, analysisUrl(seed.slug, seed.runId));
   await waitWorkspace(page);
-  await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).dblclick();
-  await expect(page.getByRole('region', { name: 'Analysis job' })).toBeVisible();
+  await analyzeButton(page).dblclick();
+  await expect(jobCard(page)).toBeVisible();
   expect(posts).toHaveLength(1);
 });
 
@@ -56,7 +70,7 @@ test('unsaved category edits ask before they are discarded', async ({ page, requ
   await dialog.getByRole('button', { name: 'Keep editing' }).click();
   await expect(page).toHaveURL(/\/analysis/);
   await expect(description).toHaveValue('Edited but not saved');
-  // switching to another guidance tab unmounts the draft: also asked
+  // switching to another tab unmounts the draft: also asked
   await page.getByRole('tab', { name: /Production rules/ }).click();
   await expect(dialog.getByText('Discard unsaved changes?')).toBeVisible();
   await dialog.getByRole('button', { name: 'Discard changes' }).click();
@@ -66,20 +80,40 @@ test('unsaved category edits ask before they are discarded', async ({ page, requ
   expect(t.errors, t.errors.join('\n')).toEqual([]);
 });
 
-test('Review results from the guidance scope opens the Review step of the run workspace', async ({
+test('a running job is visible from the guidance tabs (dot, compact rail) and finishes there', async ({
   page,
   request,
 }) => {
   const seed = await seedAnalyzer(request);
-  await gotoApp(page, analysisUrl(seed.slug, seed.runId, '&step=run'));
+  await gotoApp(page, analysisUrl(seed.slug, seed.runId));
   await waitWorkspace(page);
-  await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
-  await page.getByText('Project guidance', { exact: true }).first().click();
+  await analyzeButton(page).click();
+  await expect(rail(page).getByRole('button', { name: /Cancel analysis|Analyze again/ })).toBeVisible();
+  await viewTabs(page)
+    .getByRole('tab', { name: /^Diagnosis categories/ })
+    .click();
   await expect(page).toHaveURL(/scope=categories/);
-  const bar = page.getByRole('region', { name: 'Analysis job' });
-  await expect(bar.getByText(/COMPLETED/i)).toBeVisible({ timeout: 20_000 });
-  await bar.getByRole('button', { name: /Review results/ }).click();
-  await expect(page).toHaveURL(/step=review/);
+  const compact = page.getByRole('region', { name: 'Analysis job status' });
+  await expect(compact).toBeVisible();
+  await expect(compact).toContainText('succeeded', { timeout: 30_000 });
+  // back to the run: the results are on the page, the tab carries no dot any more
+  await compact.getByRole('button', { name: 'Open results' }).click();
   await expect(page).not.toHaveURL(/scope=/);
-  await expect(step(page, 'Review')).toHaveAttribute('aria-current', 'step');
+  await expect(jobCard(page)).toContainText('metric analyses succeeded');
+  await expect(page.getByRole('img', { name: 'Analysis running' })).toHaveCount(0);
+});
+
+test('the page description follows the tab: run wording on Analyze run, guidance wording elsewhere', async ({
+  page,
+  request,
+}) => {
+  const seed = await seedAnalyzer(request);
+  await gotoApp(page, analysisUrl(seed.slug, seed.runId));
+  await waitWorkspace(page);
+  await expect(page.getByText('Diagnose the failed metric targets of one run.')).toBeVisible();
+  await viewTabs(page)
+    .getByRole('tab', { name: /^Production rules/ })
+    .click();
+  await expect(page.getByText('Diagnose the failed metric targets of one run.')).toHaveCount(0);
+  await expect(page.getByText(/Project guidance the analyzer uses for every run/)).toBeVisible();
 });

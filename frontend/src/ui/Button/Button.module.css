@@ -121,3 +121,8 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* An anchor styled as a button never underlines on hover (base.css a:hover would). */
+a.button:hover {
+  text-decoration: none;
+}

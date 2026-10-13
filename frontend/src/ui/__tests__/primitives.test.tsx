@@ -17,6 +17,7 @@ import {
   ToastProvider,
   useToast,
   Dialog,
+  Disclosure,
   HelpMarker,
   JsonTree,
   LinkButton,
@@ -324,5 +325,41 @@ describe('JsonViewer strings', () => {
   it('carry dir=auto', () => {
     const { container } = render(<JsonTree data={{ q: 'مرحبا' }} />);
     expect(container.querySelector('[dir="auto"]')).toHaveTextContent('مرحبا');
+  });
+});
+
+describe('Disclosure', () => {
+  it('toggles with the keyboard, exposes aria-expanded and has no axe violations', async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <Disclosure title="Input mapping" summary="Default fields">
+        <p>Mapping body</p>
+      </Disclosure>,
+    );
+    const trigger = screen.getByRole('button', { name: /Input mapping/ });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('Default fields')).toBeInTheDocument();
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Mapping body')).toBeVisible();
+    await user.keyboard(' ');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('can be controlled and reports changes', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <Disclosure title="Context" open onOpenChange={onOpenChange}>
+        <p>Body</p>
+      </Disclosure>,
+    );
+    const trigger = screen.getByRole('button', { name: /Context/ });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await user.click(trigger);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 });

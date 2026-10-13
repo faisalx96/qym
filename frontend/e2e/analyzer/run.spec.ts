@@ -2,15 +2,23 @@
 /** Analyzer scenarios 6-9: Test Selected, Analyze job lifecycle, cancel / resume / sample guard, human-label overwrite. */
 import { test, expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { analysisUrl, seedAnalyzer, step, toggleBox, trackErrors, waitWorkspace } from './helpers';
+import {
+  analysisUrl,
+  analyzeButton,
+  jobCard,
+  rail,
+  seedAnalyzer,
+  toggleBox,
+  trackErrors,
+  waitWorkspace,
+} from './helpers';
 
-const jobRegion = (page: Page) => page.getByRole('region', { name: 'Analysis job' });
+const jobRegion = jobCard;
 
 async function openRun(page: Page, slug: string, runId: string, query = ''): Promise<void> {
   await gotoApp(page, analysisUrl(slug, runId, query));
   await waitWorkspace(page);
-  await step(page, 'Run').click();
-  await expect(page.getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeVisible();
+  await expect(analyzeButton(page)).toBeVisible();
 }
 
 test.describe('Test Selected (6)', () => {
@@ -21,7 +29,7 @@ test.describe('Test Selected (6)', () => {
     const seed = await seedAnalyzer(request);
     const t = trackErrors(page);
     await openRun(page, seed.slug, seed.runId);
-    await page.getByRole('button', { name: 'Test Selected (1)' }).click();
+    await rail(page).getByRole('button', { name: 'Test selected (1)' }).click();
     const card = page.getByRole('article', { name: 'Test result for item item-1' });
     await expect(card).toBeVisible();
     await expect(card).toContainText('82% confidence');
@@ -30,12 +38,9 @@ test.describe('Test Selected (6)', () => {
     await expect(card).toContainText('Fields sent:');
     for (const f of ['Input', 'Expected', 'Output'])
       await expect(card.getByText(f, { exact: true })).toBeVisible();
-    await expect(
-      page.getByRole('region', { name: 'Test results' }).or(page.getByLabel('Test results')).first(),
-    ).toBeFocused();
-    // a test saves nothing: the Configure step still shows all 4 targets and no "analyzed" tag
-    await step(page, 'Configure').click();
-    await expect(step(page, 'Configure')).toContainText('4 targets');
+    // a test never steals focus (the rail announces it) and saves nothing: still 4 targets, no "analyzed" tag
+    await expect(card).not.toBeFocused();
+    await expect(analyzeButton(page)).toHaveText('Analyze 4 items');
     await expect(page.getByText('analyzed', { exact: true })).toHaveCount(0);
     expect(t.errors, t.errors.join('\n')).toEqual([]);
   });
@@ -49,9 +54,8 @@ test.describe('Test Selected (6)', () => {
       if (n < 4) await toggleBox(box);
       else await expect(box).toBeDisabled(); // the fourth is refused
     }
-    await step(page, 'Run').click();
     const body = page.waitForRequest((r) => r.url().includes('/analyze-test'));
-    await page.getByRole('button', { name: 'Test Selected (3)' }).click();
+    await rail(page).getByRole('button', { name: 'Test selected (3)' }).click();
     expect(((await body).postDataJSON() as { item_ids: string[] }).item_ids).toEqual([
       'item-1',
       'item-2',
@@ -63,16 +67,16 @@ test.describe('Test Selected (6)', () => {
   test('Cancel test aborts a slow connection', async ({ page, request }) => {
     const seed = await seedAnalyzer(request, { model: 'slow-model' });
     await openRun(page, seed.slug, seed.runId);
-    await page.getByRole('button', { name: 'Test Selected (1)' }).click();
+    await rail(page).getByRole('button', { name: 'Test selected (1)' }).click();
     await expect(page.getByText('Testing against the connection')).toBeVisible();
-    await page.getByRole('button', { name: 'Cancel test' }).click();
+    await rail(page).getByRole('button', { name: 'Cancel test' }).click();
     await expect(page.getByText('Test cancelled.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Test Selected (1)' })).toBeEnabled();
+    await expect(rail(page).getByRole('button', { name: 'Test selected (1)' })).toBeEnabled();
   });
 });
 
 test.describe('Analyze job (7)', () => {
-  test('stub job: 202 -> progress -> completed, summary on the bar and Review card, then Skip analyzed hides the targets', async ({
+  test('stub job: 202 -> progress -> completed, summary in Results and the rail, the target list stays put, no success toast', async ({
     page,
     request,
   }) => {
@@ -82,31 +86,35 @@ test.describe('Analyze job (7)', () => {
     const created = page.waitForResponse(
       (r) => r.url().endsWith('/analysis-jobs') && r.request().method() === 'POST',
     );
-    await page.getByRole('button', { name: 'Analyze 4 items' }).click();
+    const targets = page.getByRole('list', { name: 'Targets' }).getByRole('listitem');
+    const before = await targets.count();
+    await rail(page).getByRole('button', { name: 'Analyze 4 items' }).click();
     expect((await created).status()).toBe(202);
     await expect(jobRegion(page)).toBeVisible();
     await expect(jobRegion(page)).toContainText('6 of 6 metric analyses succeeded', { timeout: 30_000 });
-    await expect(jobRegion(page).getByText('Completed')).toBeVisible();
-    await expect(jobRegion(page).getByRole('link', { name: 'View run' })).toHaveAttribute(
+    await expect(jobRegion(page).getByText('Completed', { exact: true })).toBeVisible();
+    await expect(jobRegion(page)).toContainText('Analysis complete');
+    await expect(rail(page)).toContainText('6 of 6 succeeded');
+    await expect(rail(page).getByRole('link', { name: 'View run' })).toHaveAttribute(
       'href',
       new RegExp(`/projects/${seed.slug}/runs/${seed.runId}$`),
     );
-    await expect(page.getByText('Analysis finished: 6 of 6 metric analyses succeeded').first()).toBeVisible();
-    // Review step: the bar gives way to the card
-    await jobRegion(page).getByRole('button', { name: 'Review results' }).click();
-    await expect(page).toHaveURL(/step=review/);
-    const card = jobRegion(page);
-    await expect(card).toContainText('6 of 6 metric analyses succeeded.');
-    await expect(card.getByText('Analysis complete')).toBeVisible();
-    await expect(card.getByRole('link', { name: 'View run' })).toBeVisible();
-    await expect(step(page, 'Review')).toContainText('Complete');
+    // success is announced in place; a toast is for trouble only
+    await expect(page.getByText('Analysis finished')).toHaveCount(0);
+    // the list the user was looking at is still there, now with "analyzed" tags
+    await expect(targets).toHaveCount(before);
+    await expect(page.getByText('analyzed', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/analyzed this session/)).toBeVisible();
 
-    // Skip analyzed now drops the analysed targets
-    await step(page, 'Configure').click();
+    // an explicit refresh re-filters: Skip analyzed now drops the analysed targets
+    await page.getByRole('button', { name: 'Refresh targets' }).click();
     await expect(page.getByText('All matching targets already have analysis')).toBeVisible();
     await page.getByRole('button', { name: 'Include analyzed targets' }).click();
     await expect(page.getByText('4 items with failed metric targets')).toBeVisible();
     await expect(page.getByText('analyzed', { exact: true }).first()).toBeVisible();
+    // Analyze again clears the finished job from the rail
+    await rail(page).getByRole('button', { name: 'Analyze again' }).click();
+    await expect(jobRegion(page)).toHaveCount(0);
     expect(t.errors, t.errors.join('\n')).toEqual([]);
   });
 
@@ -186,14 +194,15 @@ test.describe('Analyze job (7)', () => {
       });
     });
     await openRun(page, seed.slug, seed.runId);
-    await page.getByRole('button', { name: 'Analyze 4 items' }).click();
+    await rail(page).getByRole('button', { name: 'Analyze 4 items' }).click();
     await expect(jobRegion(page)).toContainText(
       'Retrying exact_match on item-2 (attempt 2 of 3): rate limited',
     );
     await expect(jobRegion(page).getByText('Retrying', { exact: true })).toBeVisible();
     await expect(jobRegion(page)).toContainText('2 of 3 metric analyses succeeded, 1 failed');
-    await jobRegion(page).getByRole('button', { name: 'Review results' }).click();
-    await expect(page.getByText('Completed with errors')).toBeVisible();
+    await expect(jobRegion(page).getByText('Completed with errors').first()).toBeVisible();
+    // partial failure is trouble: it raises a warning toast
+    await expect(page.getByText('Analysis finished with errors').first()).toBeVisible();
     const groups = page.getByRole('list', { name: 'Errors by code' });
     await expect(groups).toContainText('llm_timeout');
     await expect(groups).toContainText('1 target');
@@ -253,7 +262,7 @@ test.describe('Analyze job (7)', () => {
       });
     });
     await openRun(page, seed.slug, seed.runId);
-    await page.getByRole('button', { name: 'Analyze 4 items' }).click();
+    await rail(page).getByRole('button', { name: 'Analyze 4 items' }).click();
     await expect(jobRegion(page)).toContainText('Reconnecting to the background analysis');
     await expect(jobRegion(page)).toContainText('LLM provider rejected the API key');
   });
@@ -266,21 +275,23 @@ test.describe('cancel, resume and the sample guard (8)', () => {
   }) => {
     const seed = await seedAnalyzer(request, { model: 'slow-model' });
     await openRun(page, seed.slug, seed.runId);
-    await page.getByRole('button', { name: 'Analyze 4 items' }).click();
-    await expect(jobRegion(page).getByRole('button', { name: 'Cancel analysis' })).toBeVisible();
+    await rail(page).getByRole('button', { name: 'Analyze 4 items' }).click();
+    await expect(rail(page).getByRole('button', { name: 'Cancel analysis' })).toBeVisible();
     // hold the cancel response briefly so the transient state is observable
     await page.route(/analysis-jobs\/[^/]+\/cancel$/, async (route) => {
       await new Promise((r) => setTimeout(r, 700));
       await route.continue();
     });
-    await jobRegion(page).getByRole('button', { name: 'Cancel analysis' }).click();
-    await expect(jobRegion(page).getByRole('button', { name: 'Cancelling…' })).toBeDisabled();
+    await rail(page).getByRole('button', { name: 'Cancel analysis' }).click();
+    await expect(rail(page).getByRole('button', { name: 'Cancelling…' })).toBeDisabled();
     await expect(jobRegion(page).getByText('Cancelled', { exact: true })).toBeVisible({ timeout: 40_000 });
     await expect(
       page.getByText('Analysis cancelled. Items already analyzed were kept.').first(),
     ).toBeVisible();
     await expect(jobRegion(page)).toContainText('Stopped at');
-    await expect(page.getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeEnabled();
+    await expect(rail(page).getByRole('button', { name: 'Analyze again' })).toBeEnabled();
+    await rail(page).getByRole('button', { name: 'Analyze again' }).click();
+    await expect(analyzeButton(page)).toBeEnabled();
   });
 
   test('switching sample while a job runs is blocked; reload resumes via analysis-jobs/active', async ({
@@ -290,25 +301,23 @@ test.describe('cancel, resume and the sample guard (8)', () => {
     const seed = await seedAnalyzer(request, { model: 'slow-model', withRepeat: true });
     await gotoApp(page, analysisUrl(seed.slug, seed.repeatId!, '&pass=1'));
     await waitWorkspace(page);
-    await step(page, 'Run').click();
-    await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
-    await expect(jobRegion(page).getByRole('button', { name: 'Cancel analysis' })).toBeVisible();
-    // Configure shows the Sample select disabled with the reason
-    await step(page, 'Configure').click();
+    await analyzeButton(page).click();
+    await expect(rail(page).getByRole('button', { name: 'Cancel analysis' })).toBeVisible();
+    // the Sample select is disabled with the reason
     const sample = page.getByRole('button', { name: /Sample 1 \(4\/4\)/ });
     await expect(sample).toBeDisabled();
     await expect(page.getByText('Wait for the running job, or cancel it, to switch samples.')).toBeVisible();
 
-    // reload: the job is still running on the server and the bar resumes
+    // reload: the job is still running on the server and the rail resumes
     const active = page.waitForResponse((r) => /analysis-jobs\/active/.test(r.url()));
     await page.reload();
     await waitWorkspace(page);
     expect((await active).ok()).toBeTruthy();
     await expect(jobRegion(page)).toBeVisible();
-    await expect(jobRegion(page).getByRole('button', { name: 'Cancel analysis' })).toBeVisible();
+    await expect(rail(page).getByRole('button', { name: 'Cancel analysis' })).toBeVisible();
     await expect(page.getByRole('button', { name: /Sample 1 \(4\/4\)/ })).toBeDisabled();
     // tidy up: cancel and wait for the server to finish the job
-    await jobRegion(page).getByRole('button', { name: 'Cancel analysis' }).click();
+    await rail(page).getByRole('button', { name: 'Cancel analysis' }).click();
     await expect(jobRegion(page).getByText('Cancelled', { exact: true })).toBeVisible({ timeout: 40_000 });
   });
 });
@@ -343,12 +352,11 @@ test.describe('re-analyze human labels (9)', () => {
     ).toBeVisible();
     await expect(page.getByText('human', { exact: true }).first()).toBeVisible();
 
-    await step(page, 'Run').click();
     let posted = 0;
     page.on('request', (r) => {
       if (r.method() === 'POST' && r.url().endsWith('/analysis-jobs')) posted += 1;
     });
-    await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
+    await analyzeButton(page).click();
     const dialog = page.getByRole('alertdialog').or(page.getByRole('dialog'));
     await expect(dialog.getByText('Overwrite human diagnoses?')).toBeVisible();
     await expect(dialog).toContainText('Metrics affected: exact_match.');
@@ -358,7 +366,7 @@ test.describe('re-analyze human labels (9)', () => {
     await page.waitForTimeout(400);
     expect(posted).toBe(0);
 
-    await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
+    await analyzeButton(page).click();
     const req = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/analysis-jobs'));
     await page.getByRole('button', { name: 'Re-analyze human labels' }).click();
     expect(((await req).postDataJSON() as { allow_human_overwrite: boolean }).allow_human_overwrite).toBe(
