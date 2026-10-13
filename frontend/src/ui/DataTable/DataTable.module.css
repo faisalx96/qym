@@ -64,7 +64,7 @@
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-surface);
   scrollbar-width: thin;
-  scrollbar-color: var(--text-dim) var(--bg-surface);
+  scrollbar-color: var(--text-dim) var(--bg-surface); /* decorative scroll thumb */
 }
 
 .rail::-webkit-scrollbar {
