@@ -459,21 +459,20 @@ markup (`role="grid"`, `role="treegrid"` when rows expand so `aria-expanded` is 
 
 ## Deferred
 
-Delivered in this pass: T0 spike, T1 tokens and design doc, T2 core, T3 selection/expansion/grouping/keyboard, T4 column
-menu/autosize/density, T5 cell kit, T6 scroll cues/rail/card mode, T8 gallery, A1 runs list, A4 datasets, A5 experiments,
-A6 admin/settings/profile/environments/trash/overview, T9 legacy shim removed. Not done:
+Review pass (review-tables.md) closed M1-M7 and the eight minors: row click vs text selection, runs list score bars/chips/
+Date on first paint/band names, roving header focus, header-fit widths, queue card title and Position header, Charts on
+DataTable, auto-sized resting row actions, three-state sort, exposed header bands, stronger scroll cues, Density and page
+size on the runs list, the raw-table allow-list rule, selection cluster inside the toolbar, runs toolbar and status bar
+inside `DataTable.Toolbar/Footer`, `RowAction.hint` (tooltip and menu description). Still deferred:
 
-- **A2 run-detail items table and A3 compare matrix**: assigned to the second pass (other agent restructures those pages).
-- **T7 virtualization** (`virtualize`, spacer rows, `scrollParent`): only the run-detail items table needs it, so it ships
-  with A2. Estimate 4 h.
-- **A7 `runs-list/ChartsPage.tsx`** (grouped table with `groupBy` + `summary` + relative-scale `ScoreBar`; the primitive
-  already supports all three, see the gallery): not migrated, 914-line hand-built table with its own e2e (`charts.spec.ts`,
-  `ux-charts.spec.ts`). Estimate 6 h. Other raw tables (PassesPanel, RepeatTab, MatrixCard, RoleTable, ...) stay as they are.
-- **`?` shortcut sheet** scoped to a table and `Ctrl+A` select-all in the primitive: not built (the runs list keeps its own
-  shortcuts dialog; trash has a local Ctrl+A handler). Estimate 2 h.
-- **Runs list toolbar and status bar into `DataTable.Toolbar/Footer`**: they stay page-level (selection bar content, freshness
-  note, cohort rules). The search field disappears while rows are selected on tables that use `bulkActions`. Estimate 4 h.
-- **Dataset items read-only row preview** (`renderExpanded`), experiments-list Cancel row action (needs the detail page's
-  cancel flow), search on the experiments list (no API param), `RowAction.hint` rendering. Estimate 3 h together.
-- The `test.fail` spec in `e2e/runs-list/cutover-navigation.spec.ts` ("Back to a run restores its scroll...") belongs to
-  run-detail and was left as it was.
+- **A2 run-detail items table and A3 compare matrix**: second pass (other agent restructures those pages).
+- **T7 virtualization** (`virtualize`, spacer rows, `scrollParent`): ships with A2. Estimate 4 h.
+- **`?` shortcut sheet** scoped to a table and `Ctrl+A` in the primitive. Estimate 2 h.
+- **Dataset items read-only row preview**, experiments-list Cancel row action (needs the detail page's cancel flow),
+  search on the experiments list (no API param). Estimate 3 h.
+- **Primitive gaps found by the Charts adoption**: multi-level `groupBy` (version then model is rendered by hand), external
+  control of group collapse, custom group count, a `color`/`series` prop on `ScoreBar`, group summaries in card mode.
+  Estimate 4 h.
+- **Queue filters at 390 px** stack as three full-width selects above the cards; a compact Filters popover would be tidier.
+- Other raw tables stay on the allow-list in `design-language.test.ts` (compare, run-detail, matrices, prose, dialogs).
+- The `test.fail` spec in `e2e/runs-list/cutover-navigation.spec.ts` belongs to run-detail and was left as it was.
