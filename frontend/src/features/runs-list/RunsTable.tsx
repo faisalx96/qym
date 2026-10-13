@@ -5,7 +5,7 @@
  */
 import { useMemo, type ReactNode } from 'react';
 import type { RunRow } from '@/api/dashboardTypes';
-import { DataTable, EmptyState, type Column, type Key } from '@/ui';
+import { DataTable, EmptyState, Tag, type Column, type FooterProps, type Key, type ToolbarProps } from '@/ui';
 import { formatNumericValue } from '@/lib/format';
 import {
   AnalysisCell,
@@ -35,7 +35,8 @@ export interface RunsTableProps {
   rows: RunRow[];
   columns: ColumnDef[];
   sort: SortSpec;
-  onSort: (sortKey: string, direction?: 'asc' | 'desc') => void;
+  /** `null` clears the sort (back to the default order). */
+  onSort: (sortKey: string | null, direction?: 'asc' | 'desc') => void;
   selectMode: boolean;
   selected: Set<string>;
   onToggleSelect: (ref: string) => void;
@@ -50,8 +51,16 @@ export interface RunsTableProps {
   perm: RowPermissions;
   onAction: (id: string, row: RunRow) => void;
   onSignalDetails: (row: RunRow, metric?: string) => void;
-  loading?: boolean;
+  loading?: boolean | 'quiet';
+  error?: unknown;
+  onRetry?: () => void;
   dimmed?: boolean;
+  /** DataTable.Toolbar props (search, filters, chips, trailing). */
+  toolbar?: ToolbarProps;
+  /** DataTable.Footer props (summary, pagination, trailing). */
+  footer?: FooterProps;
+  /** Selection cluster (Compare, Cohort, ...), shown in the toolbar in select mode. */
+  bulk?: ReactNode;
   emptyState?: ReactNode;
   slug: string;
   className?: string;
@@ -83,7 +92,13 @@ function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
     case 'signals':
       return <Signals row={row} onDetails={(r) => p.onSignalDetails(r)} />;
     case 'task':
-      return <span title={row.task_name}>{row.task_name || '—'}</span>;
+      return row.task_name ? (
+        <Tag kind="data" title={row.task_name}>
+          {row.task_name}
+        </Tag>
+      ) : (
+        <span>—</span>
+      );
     case 'model':
       return <ModelCell row={row} />;
     case 'dataset':
@@ -112,12 +127,18 @@ function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
 }
 
 const GROUP_LABEL: Record<string, string> = {
-  run: 'Run',
   metrics: 'Scores',
   system: 'System',
   trace: 'Trace',
   group: 'Repeat runs',
 };
+
+/** Header bands: Overview (Run, Status, Signals), Scores, Context (Date, Task, ...), System, Trace. */
+function bandOf(def: ColumnDef): string | undefined {
+  if (def.group !== 'run') return GROUP_LABEL[def.group];
+  if (def.id === 'actions') return undefined;
+  return ['run', 'status', 'signals'].includes(def.id) ? 'Overview' : 'Context';
+}
 
 /** Card layout (< 640 px): Run + Status + actions up top, model/date/first scores below, the rest behind More. */
 function priorityOf(col: ColumnDef, metricRank: number): 1 | 2 | 3 {
@@ -148,7 +169,7 @@ export function RunsTable(p: RunsTableProps) {
         id: def.id,
         header: def.label,
         hint: def.label,
-        group: GROUP_LABEL[def.group],
+        group: bandOf(def),
         sort: def.sortKey ? { key: def.sortKey, first: defaultDirection(def.sortKey) } : undefined,
         width: def.width,
         align: def.align,
@@ -176,7 +197,6 @@ export function RunsTable(p: RunsTableProps) {
         aria-label="Runs"
         storageKey="runs.v2"
         density="compact"
-        densityLocked
         columns={columns}
         rows={p.rows}
         rowKey={(r) => r.run_id}
@@ -192,7 +212,14 @@ export function RunsTable(p: RunsTableProps) {
           )
         }
         sort={{ key: p.sort.field, direction: p.sort.direction }}
-        onSortChange={(s) => s && p.onSort(s.key, s.direction)}
+        allowUnsorted
+        onSortChange={(s) => (s ? p.onSort(s.key, s.direction) : p.onSort(null))}
+        error={p.error}
+        onRetry={p.onRetry}
+        errorTitle="Could not load runs"
+        bulkActions={p.selectMode ? p.bulk : undefined}
+        bulkOwnSummary
+        bulkAlways={p.selectMode}
         onRowOpen={p.onOpen}
         rowState={(r) => (r.status === 'RUNNING' ? 'live' : undefined)}
         rowProps={(r) => ({
@@ -240,7 +267,10 @@ export function RunsTable(p: RunsTableProps) {
         onFocusedKeyChange={(key) =>
           p.onFocusIndex(key === null ? -1 : p.rows.findIndex((r) => r.run_id === key))
         }
-      />
+      >
+        <DataTable.Toolbar columnsMenu={false} {...p.toolbar} />
+        <DataTable.Footer testId="status-bar" ariaLabel="Runs status" {...p.footer} />
+      </DataTable>
     </div>
   );
 }

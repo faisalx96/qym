@@ -10,6 +10,7 @@ export interface DataTableCtx {
   clearSelection: () => void;
   bulkActions: ReactNode;
   bulkOwnSummary: boolean;
+  bulkAlways: boolean;
   isFiltered: boolean;
 }
 

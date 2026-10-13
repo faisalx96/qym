@@ -286,6 +286,42 @@ describe('primitive module contracts', () => {
     expect(css).not.toMatch(/rgba\(0, 212, 170/);
   });
 
+  it('raw <table> markup lives in ui/DataTable (the allow-list may only shrink)', () => {
+    // Remaining raw tables, each with a reason. Compare/run-detail/report tables move in the second pass;
+    // the rest are specialised matrices, prose, a dialog key list or tiny form tables.
+    const ALLOWED = new Set([
+      'features/analyzer/guidance/ExamplePicker.tsx', // selectable example list in a popover
+      'features/compare/components/panel/CategoriesTab.tsx', // compare panels: second pass
+      'features/compare/components/panel/MetricsTab.tsx',
+      'features/compare/components/panel/RootCauseTab.tsx',
+      'features/compare/components/panel/StepsTab.tsx',
+      'features/compare/components/RunCards.tsx',
+      'features/compare/components/sweep/SweepView.tsx',
+      'features/datasets/wizard/UploadWizard.tsx', // preview grid of an uploaded file
+      'features/docs/DocsArticle.tsx', // docs prose tables
+      'features/experiments/detail/ChartCard.tsx', // chart legend table
+      'features/experiments/detail/MatrixCard.tsx', // heatmap matrix
+      'features/experiments/launch/settings/JsonFields.tsx', // key/value form rows
+      'features/experiments/launch/settings/RoleTable.tsx', // role form table
+      'features/run-detail/components/panels/RepeatTab.tsx', // run-detail: second pass
+      'features/runs-list/PassesPanel.tsx', // nested passes list with its own select/delete controls
+      'features/runs-list/ShortcutsDialog.tsx', // key list in a dialog
+      'sdk-viewer/components/RowList.tsx', // offline viewer, separate bundle
+    ]);
+    const found = tsxFiles
+      .filter((f) => /<table[\s>]/.test(read(f)) && !rel(f).startsWith('ui/DataTable/'))
+      .map(rel)
+      .filter((f) => !f.includes('__tests__'));
+    expect(
+      found.filter((f) => !ALLOWED.has(f)),
+      'Use DataTable (docs/DESIGN_LANGUAGE.md §3) instead of a raw <table>',
+    ).toEqual([]);
+    expect(
+      [...ALLOWED].filter((f) => !found.includes(f)),
+      'Remove migrated files from the allow-list',
+    ).toEqual([]);
+  });
+
   it('features compose primitives instead of restyling them', () => {
     const featureCss = cssFiles.filter((f) => rel(f).startsWith('features/'));
     const problems: string[] = [];

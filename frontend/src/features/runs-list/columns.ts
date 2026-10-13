@@ -145,8 +145,7 @@ export function metricColumn(name: string): ColumnDef {
     label: name.replace(/_/g, ' '),
     group: 'metrics',
     sortKey: `metric-${name}`,
-    width: 124,
-    align: 'end',
+    width: 150,
     visKey: name,
   };
 }
@@ -170,13 +169,17 @@ export function buildColumns(
     DURATION_COLUMN,
     ACTIONS_COLUMN,
   ];
-  // Table order: base (through version), metrics, latency, trace, duration, actions.
+  // Table order: Run, Status, Signals, first two scores, Date, the other context columns, more scores, system, trace, duration, actions.
   // The first two metric columns follow Status so a score is visible on first paint.
   const metricCols = metrics.map(metricColumn);
+  const byId = (id: string) => BASE_COLUMNS.find((c) => c.id === id)!;
   const ordered = [
-    ...BASE_COLUMNS.slice(0, 2),
+    byId('run'),
+    byId('status'),
+    byId('signals'),
     ...metricCols.slice(0, 2),
-    ...BASE_COLUMNS.slice(2).filter((c) => c.id !== 'duration'),
+    byId('time'),
+    ...BASE_COLUMNS.filter((c) => !['run', 'status', 'signals', 'time', 'duration'].includes(c.id)),
     ...metricCols.slice(2),
     ...SYSTEM_COLUMNS,
     ...TRACE_COLUMNS,

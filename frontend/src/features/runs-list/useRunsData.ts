@@ -12,6 +12,7 @@ export function useRunsData(
   view: RunsView,
   visibleKeys: Set<string> | null,
   pinnedIds: string[],
+  pageSize: number = PAGE_SIZE,
 ) {
   const key = filterKey(view);
   const filters = useMemo(() => viewToFilters({ ...DEFAULT_VIEW, ...JSON.parse(key) } as RunsView), [key]);
@@ -48,8 +49,8 @@ export function useRunsData(
     project_slug: slug,
     filters,
     sort,
-    limit: PAGE_SIZE,
-    offset: (view.page - 1) * PAGE_SIZE,
+    limit: pageSize,
+    offset: (view.page - 1) * pageSize,
     ids: [],
     include_overview: false,
     collation: order,

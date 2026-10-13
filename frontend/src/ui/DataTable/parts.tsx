@@ -33,8 +33,9 @@ const DENSITIES: { id: Density; label: string }[] = [
 
 /** Search, filters, chips, count, then the built-in Columns and Density menus. */
 export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, densityMenu }: ToolbarProps) {
-  const { model, columns, selectedCount, bulkActions, bulkOwnSummary, clearSelection } = useDataTableCtx();
-  const selecting = selectedCount > 0 && Boolean(bulkActions);
+  const { model, columns, selectedCount, bulkActions, bulkOwnSummary, bulkAlways, clearSelection } =
+    useDataTableCtx();
+  const selecting = (selectedCount > 0 || bulkAlways) && Boolean(bulkActions);
   const hideable = columns.filter((c) => c.hideable !== false && !c.id.startsWith('__'));
   const showColumns = columnsMenu ?? hideable.length >= 5;
   const showDensity = densityMenu ?? !model.densityLocked;
@@ -91,8 +92,8 @@ export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, 
 }
 
 export function SelectionBar() {
-  const { selectedCount, clearSelection, bulkActions } = useDataTableCtx();
-  if (selectedCount === 0 || !bulkActions) return null;
+  const { selectedCount, clearSelection, bulkActions, bulkAlways } = useDataTableCtx();
+  if ((selectedCount === 0 && !bulkAlways) || !bulkActions) return null;
   return (
     <div className={styles.toolbar} data-selection-bar="" role="region" aria-label="Selection actions">
       <div className={styles.toolbarMain}>

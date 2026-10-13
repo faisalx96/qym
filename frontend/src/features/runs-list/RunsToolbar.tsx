@@ -65,3 +65,51 @@ export function RunsToolbar({
     </div>
   );
 }
+
+/** The runs toolbar pieces for DataTable.Toolbar: search, Filters popover, active-filter chips. */
+export function useRunsToolbarParts({
+  view,
+  facets,
+  owners,
+  onChange,
+  searchRef,
+}: {
+  view: RunsView;
+  facets: Facets | undefined;
+  owners: Record<string, string>;
+  onChange: (patch: ViewPatch) => void;
+  searchRef?: Ref<HTMLInputElement>;
+}) {
+  const count = countActiveFilters(view);
+  const chips = activeChips(view, (id) => owners[id] ?? id);
+  const search = useDebouncedSearch(view.q, (q) => onChange({ q }));
+  const clear = () => onChange({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort });
+  return {
+    search: (
+      <SearchField
+        ref={searchRef}
+        label="Search runs"
+        placeholder="Search runs"
+        hint="/"
+        value={search.text}
+        onChange={search.change}
+        onClear={() => search.flush('')}
+        onSubmit={(v) => search.flush(v)}
+        width={260}
+      />
+    ),
+    filters: <FiltersPopover view={view} facets={facets} owners={owners} onChange={onChange} />,
+    chips: chips.length ? (
+      <div className={styles.chips} role="group" aria-label="Active filters">
+        {chips.map((c) => (
+          <Chip key={c.id} isSelected onRemove={() => onChange(c.remove)} removeLabel={`Remove ${c.label}`}>
+            {c.label}
+          </Chip>
+        ))}
+        <Button variant="ghost" onPress={clear}>
+          Clear {count}
+        </Button>
+      </div>
+    ) : null,
+  };
+}

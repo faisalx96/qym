@@ -202,12 +202,13 @@ export function QueuePage() {
   const columns: Column<QueueJob>[] = [
     {
       id: 'pos',
-      header: '#',
+      header: 'Position',
+      hint: 'Position in the queue (waiting jobs only)',
       type: 'number',
-      width: 48,
+      width: 90,
       pin: 'start',
       hideable: false,
-      priority: 1,
+      priority: 2,
       cell: (j) => (j.queue_position ? String(j.queue_position) : '—'),
     },
     {
@@ -216,6 +217,7 @@ export function QueuePage() {
       flex: true,
       minWidth: 200,
       priority: 1,
+      cardTitle: true,
       cell: (j) => (
         <TwoLine
           primary={

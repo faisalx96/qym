@@ -111,6 +111,8 @@ export interface DataTableProps<R> {
   bulkActions?: ReactNode;
   /** `bulkActions` already show their own count and Clear (the runs list counts executions). */
   bulkOwnSummary?: boolean;
+  /** Show the bulk cluster even with nothing selected (select mode, cohort picking). */
+  bulkAlways?: boolean;
   /** Accessible name of a row's checkbox (default "Select row"). */
   rowLabel?: (row: R) => string;
   /** Accessible name of the header checkbox (default "Select all rows"). */
@@ -233,6 +235,7 @@ function DataTableInner<R>({
   selection,
   bulkActions,
   bulkOwnSummary,
+  bulkAlways,
   rowLabel,
   selectAllLabel = 'Select all rows',
   selectOnRowClick,
@@ -817,6 +820,7 @@ function DataTableInner<R>({
     clearSelection: () => selection?.onChange(new Set()),
     bulkActions: bulkActions ?? null,
     bulkOwnSummary: Boolean(bulkOwnSummary),
+    bulkAlways: Boolean(bulkAlways),
     isFiltered: Boolean(isFiltered),
   };
 

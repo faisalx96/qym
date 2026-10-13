@@ -1,19 +1,20 @@
 /** /projects/:slug — the runs list (brief 03 J1–J6). Variant A "dense table" per UX_DECISION. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, EmptyState, ErrorState, Skeleton, StaleBanner, Text, useToast } from '@/ui';
+import { Button, EmptyState, StaleBanner, useToast } from '@/ui';
 import { useAuth, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { ROUTES, runPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
+import { KEYS, readLocal, writeLocal } from '@/lib/storage';
 import { runHref } from '@/lib/runs-order';
 import { ColumnsMenu } from './ColumnsMenu';
 import { RunDialogs, type DialogState } from './RunDialogs';
 import { RunsCtx, type RunsCtxValue } from './context';
 import { RunsTable } from './RunsTable';
-import { RunsToolbar } from './RunsToolbar';
+import { useRunsToolbarParts } from './RunsToolbar';
 import { SelectionBar } from './SelectionBar';
 import { ShortcutsDialog } from './ShortcutsDialog';
-import { StatusBar } from './StatusBar';
+import { FooterTrailing } from './StatusBar';
 import { useKpiTopbar } from './kpiTopbar';
 import { useRunsData } from './useRunsData';
 import { useRunsKeyboard, type RunsKeyboardHandlers } from './useRunsKeyboard';
@@ -37,6 +38,7 @@ import {
   filterSummary,
   DEFAULT_VIEW,
   PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
   parseSort,
 } from './urlState';
 import { defaultDirection, sortString } from './urlState';
@@ -58,6 +60,10 @@ export function RunsPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [pageSize, setPageSizeState] = useState<number>(() => {
+    const n = Number(readLocal(KEYS.runsPageSize));
+    return PAGE_SIZE_OPTIONS.includes(n) ? n : PAGE_SIZE;
+  });
   const [dialog, setDialog] = useState<DialogState>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
@@ -67,7 +73,7 @@ export function RunsPage() {
     () => [...new Set([...selection.selected, ...selection.cohortA].map(passRefBase))],
     [selection.selected, selection.cohortA],
   );
-  const d = useRunsData(slug, view, visibleKeys, pinnedIds);
+  const d = useRunsData(slug, view, visibleKeys, pinnedIds, pageSize);
   const { rows, columnSet } = d;
   useKpiTopbar(d.overview?.kpis);
 
@@ -125,7 +131,7 @@ export function RunsPage() {
   );
   const showSkeleton = useDelayedPending(d.runsQ.isPending && !d.runsQ.isError);
   const stale = d.runsQ.isError && Boolean(d.data);
-  const totalPages = Math.max(1, Math.ceil(d.total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(d.total / pageSize));
   const page = Math.min(view.page, totalPages);
   useEffect(() => {
     // The total shrank under the current page (filters, deletes): clamp.
@@ -134,8 +140,14 @@ export function RunsPage() {
 
   useTableScrollRestoration(pageRef, Boolean(d.data) && rows.length > 0);
   const sortSpec = parseSort(d.sort);
-  const onSort = (field: string, forced?: 'asc' | 'desc') =>
+  const setPageSize = (size: number) => {
+    writeLocal(KEYS.runsPageSize, String(size));
+    setPageSizeState(size);
+    setPage(1);
+  };
+  const onSort = (field: string | null, forced?: 'asc' | 'desc') =>
     setView((v) => {
+      if (field === null) return { ...v, sort: DEFAULT_VIEW.sort };
       const cur = parseSort(v.sort);
       const direction =
         forced ??
@@ -299,125 +311,172 @@ export function RunsPage() {
     );
   const cohortOverlap = refs.some((r) => selection.cohortA.some((l) => cohortRefsConflict(l, r)));
 
-  let body;
-  if (d.runsQ.isError && !d.data) {
-    body = (
-      <div className={styles.centered}>
-        <ErrorState error={d.runsQ.error} title="Could not load runs" onRetry={() => d.runsQ.refetch()} />
-      </div>
-    );
-  } else if (d.runsQ.isPending || (!d.data && !d.runsQ.isError)) {
-    body = showSkeleton ? (
-      <Skeleton kind="table" rows={12} label="Loading runs" />
-    ) : (
-      <div style={{ minHeight: 240 }} aria-busy="true" />
-    );
-  } else {
-    const empty =
-      d.projectTotal === 0 && !filtered ? (
-        <EmptyState
-          title={d.data?.freshness.unpublished_runs ? 'Run history is preparing' : 'No evaluation runs found'}
-          body={
-            d.data?.freshness.unpublished_runs ? (
-              'Available runs will appear automatically.'
-            ) : (
-              <>
-                Push a run with the SDK, or read{' '}
-                <Link to={`${ROUTES.docs}#get-started/first-run`} className={styles.inlineLink}>
-                  how to log your first run
-                </Link>
-                .
-              </>
-            )
-          }
-        />
-      ) : (
-        <EmptyState
-          compact
-          title="No runs match current filters"
-          body={
-            d.data?.freshness.unpublished_runs
-              ? 'Run history is preparing. Available runs will appear automatically.'
-              : 'Clear a filter or widen the time range.'
-          }
-          action={
-            filtered ? (
-              <Button
-                variant="neutral"
-                onPress={() => setView({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort })}
-              >
-                Clear filters
-              </Button>
-            ) : undefined
-          }
-        />
-      );
-    body = (
-      <RunsTable
-        slug={slug}
-        rows={rows}
-        columns={columnSet.visible}
-        sort={sortSpec}
-        onSort={onSort}
-        selectMode={selectMode}
-        selected={selection.selected}
-        onToggleSelect={selection.toggle}
-        onSelectPage={selection.setMany}
-        onNotePassRevision={selection.notePassRevision}
-        onPassesDeleted={selection.dropPassPicks}
-        expanded={expanded}
-        onToggleExpand={(id) =>
-          setExpanded((s) => {
-            const n = new Set(s);
-            if (n.has(id)) n.delete(id);
-            else n.add(id);
-            return n;
-          })
+  const empty = () =>
+    d.projectTotal === 0 && !filtered ? (
+      <EmptyState
+        title={d.data?.freshness.unpublished_runs ? 'Run history is preparing' : 'No evaluation runs found'}
+        body={
+          d.data?.freshness.unpublished_runs ? (
+            'Available runs will appear automatically.'
+          ) : (
+            <>
+              Push a run with the SDK, or read{' '}
+              <Link to={`${ROUTES.docs}#get-started/first-run`} className={styles.inlineLink}>
+                how to log your first run
+              </Link>
+              .
+            </>
+          )
         }
-        focusedIndex={focusedIndex}
-        onFocusIndex={setFocusedIndex}
-        onOpen={openRun}
-        perm={perm}
-        onAction={onAction}
-        onSignalDetails={(row, metric) => setDialog({ kind: 'errors', row, metric })}
-        dimmed={stale || d.runsQ.isPlaceholderData}
-        emptyState={empty}
-        className={styles.table}
+      />
+    ) : (
+      <EmptyState
+        compact
+        title="No runs match current filters"
+        body={
+          d.data?.freshness.unpublished_runs
+            ? 'Run history is preparing. Available runs will appear automatically.'
+            : 'Clear a filter or widen the time range.'
+        }
+        action={
+          filtered ? (
+            <Button
+              variant="neutral"
+              onPress={() => setView({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort })}
+            >
+              Clear filters
+            </Button>
+          ) : undefined
+        }
       />
     );
-  }
+  const emptyNode = empty();
+  const toolbarParts = useRunsToolbarParts({
+    view,
+    facets: d.overview?.facets,
+    owners,
+    onChange: setView,
+    searchRef,
+  });
+  const loadPending = d.runsQ.isPending || (!d.data && !d.runsQ.isError);
+  const loadError = d.runsQ.isError && !d.data ? d.runsQ.error : undefined;
+  const table = (
+    <RunsTable
+      slug={slug}
+      rows={rows}
+      columns={columnSet.visible}
+      sort={sortSpec}
+      onSort={onSort}
+      selectMode={selectMode}
+      selected={selection.selected}
+      onToggleSelect={selection.toggle}
+      onSelectPage={selection.setMany}
+      onNotePassRevision={selection.notePassRevision}
+      onPassesDeleted={selection.dropPassPicks}
+      expanded={expanded}
+      onToggleExpand={(id) =>
+        setExpanded((s) => {
+          const n = new Set(s);
+          if (n.has(id)) n.delete(id);
+          else n.add(id);
+          return n;
+        })
+      }
+      focusedIndex={focusedIndex}
+      onFocusIndex={setFocusedIndex}
+      onOpen={openRun}
+      perm={perm}
+      onAction={onAction}
+      onSignalDetails={(row, metric) => setDialog({ kind: 'errors', row, metric })}
+      loading={loadPending && !loadError ? (showSkeleton ? true : 'quiet') : false}
+      error={loadError}
+      onRetry={() => d.runsQ.refetch()}
+      dimmed={stale || d.runsQ.isPlaceholderData}
+      emptyState={emptyNode}
+      className={styles.table}
+      toolbar={{
+        search: toolbarParts.search,
+        filters: toolbarParts.filters,
+        chips: toolbarParts.chips,
+        trailing: (
+          <>
+            <ColumnsMenu
+              all={columnSet.all}
+              visible={columnSet.visible}
+              onChange={(keys) => {
+                setVisibleKeys(keys);
+                writeVisibleColumns(keys);
+              }}
+            />
+            <Button
+              variant={selectMode ? 'accent' : 'neutral'}
+              onPress={() => (selectMode ? clearSelection() : setSelectMode(true))}
+              aria-pressed={selectMode}
+            >
+              {selectMode ? 'Done selecting' : 'Select'}
+            </Button>
+          </>
+        ),
+      }}
+      footer={{
+        summary: (
+          <span aria-live="polite">
+            {d.data ? sentence : 'Loading runs…'}
+            {stale ? ' · showing runs from an earlier refresh' : ''}
+          </span>
+        ),
+        pagination: {
+          total: d.total,
+          page,
+          pageSize,
+          noun: 'runs',
+          showSummary: false,
+          pageSizeOptions: PAGE_SIZE_OPTIONS,
+          onPageSizeChange: setPageSize,
+          onPageChange: setPage,
+        },
+        trailing: (
+          <FooterTrailing
+            updatedAt={d.updatedAt}
+            freshness={d.data?.freshness}
+            failed={stale}
+            onHelp={() => setHelpOpen(true)}
+          />
+        ),
+      }}
+      bulk={
+        <SelectionBar
+          count={cohortUnitCount(refs, samplesOf)}
+          cohortA={selection.cohortA}
+          cohortAUnits={cohortUnitCount(selection.cohortA, samplesOf)}
+          cohortOverlap={cohortOverlap}
+          readOnly={readOnly}
+          canSubmit={canSubmitAll}
+          canDelete={canDeleteAll}
+          onCompare={compare}
+          onCohort={cohort}
+          onSubmit={() => setDialog({ kind: 'submit', rows: selectedRows() })}
+          onDelete={() =>
+            setDialog({
+              kind: 'delete',
+              refs,
+              revisions: Object.fromEntries(picked.map((r) => [r.run_id, r.pass_revision ?? 0])),
+              names: refs.map(
+                (r) =>
+                  nameOf(passRefBase(r)) + (r.includes('::pass') ? ` (pass ${r.split('::pass')[1]})` : ''),
+              ),
+            })
+          }
+          onClear={clearSelection}
+        />
+      }
+    />
+  );
 
   return (
     <RunsCtx.Provider value={ctx}>
       <div className={styles.runs} data-testid="runs-page" ref={pageRef}>
         <h1 className={styles.srOnly}>Runs</h1>
-        <RunsToolbar
-          mode="runs"
-          view={view}
-          facets={d.overview?.facets}
-          owners={owners}
-          onChange={setView}
-          searchRef={searchRef}
-          end={
-            <>
-              <ColumnsMenu
-                all={columnSet.all}
-                visible={columnSet.visible}
-                onChange={(keys) => {
-                  setVisibleKeys(keys);
-                  writeVisibleColumns(keys);
-                }}
-              />
-              <Button
-                variant={selectMode ? 'accent' : 'neutral'}
-                onPress={() => (selectMode ? clearSelection() : setSelectMode(true))}
-                aria-pressed={selectMode}
-              >
-                {selectMode ? 'Done selecting' : 'Select'}
-              </Button>
-            </>
-          }
-        />
         {stale && d.updatedAt ? (
           <StaleBanner
             since={d.updatedAt}
@@ -425,51 +484,7 @@ export function RunsPage() {
             onRetry={() => d.runsQ.refetch()}
           />
         ) : null}
-        {body}
-        <StatusBar
-          selecting={selectMode}
-          left={
-            selectMode ? (
-              <SelectionBar
-                count={cohortUnitCount(refs, samplesOf)}
-                cohortA={selection.cohortA}
-                cohortAUnits={cohortUnitCount(selection.cohortA, samplesOf)}
-                cohortOverlap={cohortOverlap}
-                readOnly={readOnly}
-                canSubmit={canSubmitAll}
-                canDelete={canDeleteAll}
-                onCompare={compare}
-                onCohort={cohort}
-                onSubmit={() => setDialog({ kind: 'submit', rows: selectedRows() })}
-                onDelete={() =>
-                  setDialog({
-                    kind: 'delete',
-                    refs,
-                    revisions: Object.fromEntries(picked.map((r) => [r.run_id, r.pass_revision ?? 0])),
-                    names: refs.map(
-                      (r) =>
-                        nameOf(passRefBase(r)) +
-                        (r.includes('::pass') ? ` (pass ${r.split('::pass')[1]})` : ''),
-                    ),
-                  })
-                }
-                onClear={clearSelection}
-              />
-            ) : (
-              <Text variant="sm" tone="muted" as="span" aria-live="polite">
-                {d.data ? sentence : 'Loading runs…'}
-                {stale ? ' · showing runs from an earlier refresh' : ''}
-              </Text>
-            )
-          }
-          total={d.total}
-          page={page}
-          onPage={setPage}
-          updatedAt={d.updatedAt}
-          freshness={d.data?.freshness}
-          failed={stale}
-          onHelp={() => setHelpOpen(true)}
-        />
+        {table}
         <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
         <RunDialogs
           slug={slug}
