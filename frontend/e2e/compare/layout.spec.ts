@@ -64,7 +64,7 @@ for (const width of [1440, 1024]) {
         (els) => els.filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).length,
       );
     expect(clipped).toBe(0);
-    // the delta line holds 19 candidates (scrolls inside its own region) and the Analytics panel stays reachable
+    // the delta line holds 19 candidates (scrolls inside its own region) and the section nav stays reachable
     await expect(page.locator('[aria-label="Change against the baseline"] li[data-column]')).toHaveCount(19);
     expect((await overflow()).sw).toBeLessThanOrEqual(width);
   });

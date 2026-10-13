@@ -1,0 +1,43 @@
+/* Jump nav inside the sticky compare chrome: one scrolling row of section links. */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: none;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--control-radius);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.link[aria-current='location'] {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  font-weight: 650;
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}

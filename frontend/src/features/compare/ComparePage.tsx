@@ -4,7 +4,8 @@
  * analytics live in a side panel that follows the filter. `/compare` and
  * `/projects/:slug/compare` share this page; the URL is the whole state.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { restoreScroll } from '@/lib/scrollToElement';
 import { Link, useSearchParams } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { useDocumentTitle, useOptionalProject } from '@/features/shell';
@@ -15,12 +16,11 @@ import { KEYS, readLocal } from '@/lib/storage';
 import { EmptyState, ErrorState, LinkButton, PageHeader, SegmentedControl, Skeleton, useToast } from '@/ui';
 import { CompareCtx, type CompareValue } from './CompareContext';
 import { DeltaLine } from './components/DeltaLine';
-import { ItemsSection } from './components/items/ItemsSection';
+import { CompareBody } from './components/CompareBody';
 import { ItemsUiHost } from './components/items/ItemsUi';
 import { Notices } from './components/Notices';
-import { AnalyticsPanel } from './components/panel/AnalyticsPanel';
-import { RunCards } from './components/RunCards';
-import { SelectionBar } from './components/SelectionBar';
+import { ReportNav } from './components/ReportSections';
+import { CohortBanner, SelectionBar } from './components/SelectionBar';
 import { SweepView } from './components/sweep/SweepView';
 import { DetailsProvider, useNewDetailsStore } from './hooks/useDetails';
 import { useCompareController, type CompareController } from './hooks/useCompareController';
@@ -49,6 +49,10 @@ export function ComparePage() {
   const slug = project?.slug ?? readLocal(KEYS.lastProjectSlug) ?? undefined;
   const store = useNewDetailsStore();
   useDocumentTitle('Compare runs');
+  // A run removed from the comparison unmounts the body while the new set loads; put the reader back where they were.
+  useLayoutEffect(() => {
+    if (c.model) restoreScroll();
+  }, [c.model]);
   const pending = useDelayedPending(c.query.isPending && c.selectionState === 'ok' && !c.tooMany);
 
   const [searchParams] = useSearchParams();
@@ -172,7 +176,34 @@ function CompareLoaded({
     () => (c.ctx ? computeComparisonStats(model, c.ctx, itemIds) : null),
     [model, c.ctx, itemIds],
   );
-  const [panel, setPanel] = useState(true);
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const chromeRef = useRef<HTMLDivElement>(null);
+  // Sections and the sticky toolbar offset themselves by the real height of the sticky chrome.
+  const stuck =
+    !!info && !!metric && !!c.ctx && !!result && !!stats && !(c.view.tab === 'sweep' && !!c.cohorts);
+  useEffect(() => {
+    const el = stickyRef.current;
+    const host = el?.parentElement;
+    if (!el || !host || typeof ResizeObserver === 'undefined') return undefined;
+    const chrome = chromeRef.current;
+    // On a short viewport the run chips and delta line scroll away (negative sticky top); only the nav stays.
+    const short = window.matchMedia('(max-height: 999px)');
+    const set = () => {
+      const chromeH = chrome ? chrome.offsetHeight : 0;
+      host.style.setProperty('--compare-chrome-h', `${chromeH}px`);
+      host.style.setProperty('--report-nav-h', `${el.offsetHeight - (short.matches ? chromeH + 16 : 0)}px`);
+    };
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    short.addEventListener('change', set);
+    return () => {
+      ro.disconnect();
+      short.removeEventListener('change', set);
+      host.style.removeProperty('--report-nav-h');
+      host.style.removeProperty('--compare-chrome-h');
+    };
+  }, [stuck]);
   if (!info || !metric || !c.ctx || !result || !stats)
     return (
       <ErrorState
@@ -238,25 +269,17 @@ function CompareLoaded({
         }
       />
       <Notices />
-      <div className={styles.sticky}>
-        <SelectionBar />
-        {sweep ? null : (
-          <DeltaLine info={info} analyticsOpen={panel} onToggleAnalytics={() => setPanel((p) => !p)} />
-        )}
-      </div>
-      <RunCards />
-      <ItemsUiHost>
-        {sweep ? (
-          <SweepView />
-        ) : (
-          <div className={styles.body} data-panel={panel ? '' : undefined}>
-            <section className={styles.main} aria-label="Items">
-              <ItemsSection />
-            </section>
-            {panel ? <AnalyticsPanel /> : null}
+      {c.cohorts ? <CohortBanner /> : null}
+      {sweep ? null : (
+        <div ref={stickyRef} className={styles.sticky} data-compare-sticky="">
+          <div ref={chromeRef} className={styles.chrome}>
+            <SelectionBar />
+            <DeltaLine info={info} />
           </div>
-        )}
-      </ItemsUiHost>
+          <ReportNav />
+        </div>
+      )}
+      <ItemsUiHost>{sweep ? <SweepView /> : <CompareBody />}</ItemsUiHost>
     </CompareCtx.Provider>
   );
 }

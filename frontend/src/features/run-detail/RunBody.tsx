@@ -1,24 +1,27 @@
 /**
- * Items-first layout (UX_DECISION: variant C). Hero on top; the item table is
- * the page; analysis lives in a sticky side panel whose charts are filter
- * sources. Under 1200 px the panel opens as a drawer.
+ * Report layout: hero on top, the sticky section nav, then every analysis section stacked at full width and the
+ * Items table last. While the reader has narrowed the item set (a scope), a quick-filter sidebar appears.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { runPath } from '@/app/routes';
 import { usePassesQuery } from '@/api/runs';
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { readJson, writeJson } from '@/lib/storage';
-import { Stack } from '@/ui';
-import { AnalysisPanel, PANEL_TABS, type PanelTab } from './components/AnalysisPanel';
-import { ExperimentPanel, RunNotices, VersioningDetails } from './components/RunPanels';
+import { ReportLayout, ScopeBar, Stack } from '@/ui';
+import { ExperimentPanel, ReviewHistory, RunNotices, VersioningDetails } from './components/RunPanels';
 import { RunHero } from './components/RunHero';
+import { QuickFilters } from './components/QuickFilters';
+import { ReportSections, isSectionKey, sectionDomId } from './components/ReportSections';
 import { SectionNav, type SectionId } from './components/SectionNav';
 import { ItemsSection } from './components/ItemsSection';
 import { TraceHost } from './components/TraceHost';
 import { useItemSearch } from './hooks/useItemSearch';
 import { useLiveRun } from './hooks/useLiveRun';
+import { alignToElement } from '@/lib/scrollToElement';
+import { useSidebarHidden } from '@/lib/useSidebarHidden';
+import { useScope } from './hooks/useScope';
 import { readPassParam, useRunView } from './hooks/useRunView';
 import { applyItemFilters } from './lib/filterRules';
 import { inferPassSummary } from './lib/passScope';
@@ -31,24 +34,89 @@ import styles from './RunBody.module.css';
 const HERO_KEY = 'qym:run-hero-expanded';
 export const WIDE_QUERY = '(min-width: 1200px)';
 
-/** Legacy section anchors (#overview …) → the panel tab that now holds them. */
-const HASH_TAB: Record<string, PanelTab | 'items' | 'summary'> = {
-  summary: 'summary',
-  overview: 'overview',
-  latency: 'latency',
-  deep: 'deep',
-  categories: 'categories',
-  errors: 'errors',
-  'root-cause': 'root-cause',
-  repeat: 'repeat',
-  reviews: 'reviews',
-  items: 'items',
-};
+/** Old anchors that name no section (`#summary`) or a retired alias. */
+const HASH_ALIASES: Record<string, SectionId> = { summary: 'summary' };
+
+/** Scroll the shell to a section; lazy sections above it mount while it travels, so re-align until the layout settles. */
+function scrollToSection(id: SectionId, host: HTMLElement | null) {
+  const scroller = document.getElementById('shell-content');
+  if (id === 'summary') {
+    scroller?.scrollTo({ top: 0 });
+    return;
+  }
+  const el = document.getElementById(sectionDomId(id));
+  if (!el) return;
+  alignToElement(el, host);
+}
+
+/** Everything below the hero: nav, scope bar, sidebar, sections and items (needs the run context). */
+function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null> }) {
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const wide = useMediaQuery(WIDE_QUERY);
+  const scope = useScope();
+  const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  if (!scope.active && drawerOpen) setDrawerOpen(false);
+  const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current), [pageRef]);
+
+  // Links from before the report layout: `#overview`, `#run-section-errors`, `?panel=latency`.
+  const hash = location.hash.replace(/^#(run-section-|section-)?/, '');
+  const panelParam = params.get('panel');
+  useEffect(() => {
+    const target: SectionId | null = isSectionKey(hash)
+      ? hash
+      : (HASH_ALIASES[hash] ?? (isSectionKey(panelParam) ? panelParam : null));
+    if (target) scrollToSection(target, pageRef.current);
+  }, [hash, panelParam, pageRef]);
+
+  const jumpToItems = () => {
+    setDrawerOpen(false);
+    onSection('items');
+  };
+  const scopeNote = scope.active
+    ? `over ${scope.shown.toLocaleString('en-US')} of ${scope.total.toLocaleString('en-US')} items`
+    : undefined;
+  return (
+    <>
+      <SectionNav onSection={onSection} />
+      <ReportLayout
+        wide={wide}
+        sidebarOpen={scope.active && !sidebarHidden}
+        drawerOpen={drawerOpen && scope.active}
+        onDrawerOpenChange={setDrawerOpen}
+        sidebar={
+          scope.active ? (
+            <QuickFilters onHide={wide ? () => setSidebarHidden(true) : undefined} onJump={jumpToItems} />
+          ) : undefined
+        }
+      >
+        {scope.active ? (
+          <ScopeBar
+            shown={scope.shown}
+            total={scope.total}
+            chips={scope.chips}
+            onClearAll={() => {
+              setDrawerOpen(false);
+              scope.clearAll();
+            }}
+            onJumpToItems={jumpToItems}
+            narrow={!wide}
+            hideChips={wide && !sidebarHidden}
+            sidebarOpen={wide ? !sidebarHidden : drawerOpen}
+            onToggleSidebar={() => (wide ? setSidebarHidden(!sidebarHidden) : setDrawerOpen(true))}
+          />
+        ) : null}
+        <ReportSections scopeNote={scopeNote} />
+        <ItemsSection />
+      </ReportLayout>
+    </>
+  );
+}
 
 export function RunBody({ runId, payload }: { runId: string; payload: RunPayload }) {
   const { slug, readOnly } = useProjectContext();
-  const [params, setParams] = useSearchParams();
-  const location = useLocation();
+  const [params] = useSearchParams();
   const passParam = readPassParam(params);
   const model = useMemo(() => buildRunModel(payload, passParam), [payload, passParam]);
   const api = useRunView(model);
@@ -80,7 +148,7 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
     [api.ctx, api.view, api.defs, search.searchMatcher, search.outputMatcher],
   );
 
-  const [heroExpanded, setHeroExpanded] = useState(() => readJson<boolean>(HERO_KEY, false));
+  const [heroExpanded, setHeroExpanded] = useState(() => readJson<boolean>(HERO_KEY, true));
   const toggleHero = useCallback(() => {
     setHeroExpanded((v) => {
       writeJson(HERO_KEY, !v);
@@ -88,63 +156,6 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
     });
   }, []);
 
-  const wide = useMediaQuery(WIDE_QUERY);
-  const panelParam = params.get('panel');
-  const tab: PanelTab = (PANEL_TABS as readonly string[]).includes(panelParam ?? '')
-    ? (panelParam as PanelTab)
-    : 'overview';
-  const [panelOpen, setPanelOpen] = useState(() => wide || !!panelParam);
-  const [wasWide, setWasWide] = useState(wide);
-  if (wasWide !== wide) {
-    setWasWide(wide);
-    setPanelOpen(wide);
-  }
-  const selectTab = useCallback(
-    (next: PanelTab) => {
-      setParams(
-        (prev) => {
-          const n = new URLSearchParams(prev);
-          if (next === 'overview') n.delete('panel');
-          else n.set('panel', next);
-          return n;
-        },
-        { replace: true, preventScrollReset: true },
-      );
-    },
-    [setParams],
-  );
-
-  // Section anchors from old links.
-  const hash = location.hash.replace(/^#(run-section-|section-)?/, '');
-  useEffect(() => {
-    const target = HASH_TAB[hash];
-    if (!target) return;
-    if (target === 'summary') {
-      document.getElementById('shell-content')?.scrollTo({ top: 0 });
-      return;
-    }
-    if (target === 'items') {
-      document.getElementById('run-items')?.scrollIntoView({ block: 'start' });
-      return;
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPanelOpen(true);
-    selectTab(target);
-  }, [hash, selectTab]);
-
-  const onSection = useCallback(
-    (id: SectionId | PanelTab) => {
-      if (id === 'summary') {
-        document.getElementById('shell-content')?.scrollTo({ top: 0, behavior: 'smooth' });
-      } else if (id === 'items') {
-        document.getElementById('run-items')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      } else {
-        setPanelOpen(true);
-        selectTab(id);
-      }
-    },
-    [selectTab],
-  );
   const basePath = runPath(slug, runId);
   const value: RunPageValue = {
     slug,
@@ -160,9 +171,10 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
     basePath,
   };
   const run = payload.run;
+  const pageRef = useRef<HTMLDivElement>(null);
   return (
     <RunContext.Provider value={value}>
-      <div className={`${fullWidth} ${styles.page}`}>
+      <div ref={pageRef} className={`${fullWidth} ${styles.page}`}>
         <Stack gap="md">
           <RunHero
             run={run}
@@ -182,18 +194,11 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
             </>
           ) : null}
           <RunNotices run={run} readOnly={readOnly} />
+          <div id={sectionDomId('reviews')} className={styles.reviews}>
+            <ReviewHistory runId={runId} status={run.status} />
+          </div>
         </Stack>
-        <SectionNav tab={tab} panelOpen={panelOpen} onSection={onSection} />
-        <div className={styles.split} data-panel={panelOpen && wide ? 'open' : 'closed'}>
-          <ItemsSection panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} wide={wide} />
-          <AnalysisPanel
-            open={panelOpen}
-            onOpenChange={setPanelOpen}
-            tab={tab}
-            onTab={selectTab}
-            wide={wide}
-          />
-        </div>
+        <RunReport pageRef={pageRef} />
       </div>
       <TraceHost />
     </RunContext.Provider>

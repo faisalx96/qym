@@ -172,7 +172,7 @@ test.describe('latency and traces panel (J5)', () => {
     await openRun(page, s.slug, classic, 'panel=latency');
     const panel = page.getByTestId('latency-panel');
     await expect(panel).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Latency' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#run-section-latency')).toBeInViewport();
     await expect(panel.getByRole('group', { name: 'Latency percentiles' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Quality versus latency' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Time budget' })).toBeVisible();
@@ -211,9 +211,9 @@ test.describe('latency and traces panel (J5)', () => {
     await expect(steps.getByRole('radio', { name: 'Log' })).toBeChecked();
   });
 
-  test('#latency hash opens the Latency tab', async ({ page }) => {
+  test('#latency hash scrolls to the Latency section', async ({ page }) => {
     await page.goto(`/projects/${s.slug}/runs/${classic}#latency`);
     await expect(page.getByTestId('latency-panel')).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Latency' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#run-section-latency')).toBeInViewport();
   });
 });

@@ -1,10 +1,9 @@
 /** The Items section: header, filter bar, filter banner, virtualized table or heatmap, deep link to ?item=. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTextMode, type TextMode } from '@/lib/text';
-import { Button, HelpMarker, Icon, LinkButton, SectionHeader, StatStrip } from '@/ui';
+import { Button, HelpMarker, Icon, LinkButton, SectionHeader } from '@/ui';
 import { useItemDetails } from '../hooks/useItemDetails';
 import { REASON_ORDER } from '../lib/itemReasons';
-import { runCounts } from '../lib/overviewModel';
 import { emptyFilters, type SortBy } from '../lib/filterRules';
 import { useRunPage } from '../RunContext';
 import { CsvExport } from './items/CsvExport';
@@ -17,15 +16,7 @@ import styles from './ItemsSection.module.css';
 const HIGHLIGHT_MS = 2600;
 void PAGE_SIZES;
 
-export function ItemsSection({
-  panelOpen,
-  onOpenPanel,
-  wide,
-}: {
-  panelOpen: boolean;
-  onOpenPanel: () => void;
-  wide: boolean;
-}) {
+export function ItemsSection() {
   const { runId, model, api, items, payload, basePath, readOnly } = useRunPage();
   const { view } = api;
   const sectionRef = useRef<HTMLElement>(null);
@@ -122,14 +113,6 @@ export function ItemsSection({
     ],
   );
 
-  const counts = useMemo(
-    () =>
-      runCounts(
-        items.map((i) => i.row),
-        model.isRepeat && !model.viewPass,
-      ),
-    [items, model.isRepeat, model.viewPass],
-  );
   const metric = api.selectedMetric;
   const bannerKinds: Record<string, string> = { failed: 'fail', passed: 'pass', metric_errors: 'error on' };
   const showBanner = view.show === 'passed' || view.show === 'failed' || view.show === 'metric_errors';
@@ -140,36 +123,11 @@ export function ItemsSection({
         <div className={styles.head}>
           <SectionHeader
             id="run-items-title"
+            level="xl"
             title="Items"
-            description="Every input, outcome and metric. Filters apply to the table and to the analysis panel."
+            description="Every input, outcome and metric. Filters apply to the table and to every section above."
             aside={
               <span className={styles.aside}>
-                <span className={styles.stats}>
-                  <StatStrip
-                    variant="compact-header"
-                    aria-label="Run counts"
-                    items={[
-                      { key: 'items', label: 'Items', value: counts.total },
-                      { key: 'completed', label: 'Completed', value: counts.completed },
-                      {
-                        key: 'errors',
-                        label: 'Errors',
-                        value: counts.errors,
-                        tone: counts.errors ? 'danger' : undefined,
-                      },
-                      ...(counts.notReceived
-                        ? [
-                            {
-                              key: 'nr',
-                              label: 'Not received',
-                              value: counts.notReceived,
-                              tone: 'warning' as const,
-                            },
-                          ]
-                        : []),
-                    ]}
-                  />
-                </span>
                 {readOnly ? null : (
                   <LinkButton
                     size="sm"
@@ -181,18 +139,6 @@ export function ItemsSection({
                   </LinkButton>
                 )}
                 <CsvExport />
-                {!panelOpen || !wide ? (
-                  <Button
-                    size="sm"
-                    variant="neutral"
-                    icon={<Icon name="chart" size={12} />}
-                    onPress={onOpenPanel}
-                    aria-controls={panelOpen && wide ? 'analysis-panel' : undefined}
-                    aria-expanded={panelOpen && wide}
-                  >
-                    Analysis
-                  </Button>
-                ) : null}
               </span>
             }
           />

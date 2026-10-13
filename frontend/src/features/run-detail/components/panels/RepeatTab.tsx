@@ -225,97 +225,99 @@ export function RepeatTab() {
           </table>
         </div>
       ) : null}
-      {g?.band ? (
-        <section className={styles.stack} aria-label="Performance across attempts">
-          <div className={styles.rowHead}>
-            <h3 className={styles.groupTitle}>Performance across attempts</h3>
-            <span className={styles.controls}>
-              {options.length > 1 ? (
+      <div className={styles.twoUp}>
+        {g?.band ? (
+          <section className={styles.stack} aria-label="Performance across attempts">
+            <div className={styles.rowHead}>
+              <h3 className={styles.groupTitle}>Performance across attempts</h3>
+              <span className={styles.controls}>
+                {options.length > 1 ? (
+                  <SegmentedControl
+                    label="Repeat performance view"
+                    options={options.map((o) => ({ value: o.key, label: o.label }))}
+                    value={selected.key}
+                    onChange={setStatistic}
+                  />
+                ) : null}
                 <SegmentedControl
-                  label="Repeat performance view"
-                  options={options.map((o) => ({ value: o.key, label: o.label }))}
-                  value={selected.key}
-                  onChange={setStatistic}
+                  label="Curve view"
+                  options={[
+                    { value: 'chart', label: 'Chart' },
+                    { value: 'table', label: 'Table' },
+                  ]}
+                  value={view}
+                  onChange={setView}
                 />
-              ) : null}
-              <SegmentedControl
-                label="Curve view"
-                options={[
-                  { value: 'chart', label: 'Chart' },
-                  { value: 'table', label: 'Table' },
-                ]}
-                value={view}
-                onChange={setView}
+              </span>
+            </div>
+            <p className={styles.note}>{selected.copy}</p>
+            {!hasCurve ? (
+              <p className={styles.note} data-testid="curve-empty">
+                Every pass errored, so there is no {selected.label.toLowerCase()} to show.
+              </p>
+            ) : view === 'chart' ? (
+              <Curve
+                series={shownSeries}
+                label={`${selected.label} for ${metric}`}
+                domain={domain}
+                format={numericAverage ? (v) => String(Math.round(v * 100) / 100) : undefined}
+                xLabel={selected.key === 'cumulative_avg' ? 'n' : 'k'}
               />
-            </span>
-          </div>
-          <p className={styles.note}>{selected.copy}</p>
-          {!hasCurve ? (
-            <p className={styles.note} data-testid="curve-empty">
-              Every pass errored, so there is no {selected.label.toLowerCase()} to show.
-            </p>
-          ) : view === 'chart' ? (
-            <Curve
-              series={shownSeries}
-              label={`${selected.label} for ${metric}`}
-              domain={domain}
-              format={numericAverage ? (v) => String(Math.round(v * 100) / 100) : undefined}
-              xLabel={selected.key === 'cumulative_avg' ? 'n' : 'k'}
-            />
-          ) : (
-            <table className={styles.table} aria-label={`${selected.label} values`}>
-              <thead>
-                <tr>
-                  <th scope="col">{selected.key === 'cumulative_avg' ? 'Passes' : 'k'}</th>
-                  {shownSeries.map((sr) => (
-                    <th key={sr.name} scope="col">
-                      {sr.name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {shownSeries[0]!.points.map((p, i) => (
-                  <tr key={p.k}>
-                    <td>{p.k}</td>
+            ) : (
+              <table className={styles.table} aria-label={`${selected.label} values`}>
+                <thead>
+                  <tr>
+                    <th scope="col">{selected.key === 'cumulative_avg' ? 'Passes' : 'k'}</th>
                     {shownSeries.map((sr) => (
-                      <td key={sr.name}>
-                        {numericAverage
-                          ? String(Math.round((sr.points[i]?.value ?? 0) * 100) / 100)
-                          : formatPercent(sr.points[i]?.value ?? null, 1)}
-                      </td>
+                      <th key={sr.name} scope="col">
+                        {sr.name}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-      ) : null}
-      {g?.distribution?.length ? (
-        <section className={styles.stack} aria-label="Distribution of passes passed">
-          <h3 className={styles.groupTitle}>Passes passed</h3>
-          <p className={styles.note}>
-            Items by number of passes that passed. Select a bar to filter the table.
-          </p>
-          <PassCountBars
-            counts={g.distribution}
-            total={model.samples}
-            selected={
-              api.view.filters.repeat?.metric === metric &&
-              api.view.filters.repeat.threshold === (g.threshold ?? committed)
-                ? api.view.filters.repeat.bucket
-                : null
-            }
-            onPick={(bucket) =>
-              api.setFilters({
-                repeat: { metric, bucket, samples: model.samples, threshold: g.threshold ?? committed },
-                score: null,
-              })
-            }
-          />
-        </section>
-      ) : null}
+                </thead>
+                <tbody>
+                  {shownSeries[0]!.points.map((p, i) => (
+                    <tr key={p.k}>
+                      <td>{p.k}</td>
+                      {shownSeries.map((sr) => (
+                        <td key={sr.name}>
+                          {numericAverage
+                            ? String(Math.round((sr.points[i]?.value ?? 0) * 100) / 100)
+                            : formatPercent(sr.points[i]?.value ?? null, 1)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        ) : null}
+        {g?.distribution?.length ? (
+          <section className={styles.stack} aria-label="Distribution of passes passed">
+            <h3 className={styles.groupTitle}>Passes passed</h3>
+            <p className={styles.note}>
+              Items by number of passes that passed. Select a bar to filter the table.
+            </p>
+            <PassCountBars
+              counts={g.distribution}
+              total={model.samples}
+              selected={
+                api.view.filters.repeat?.metric === metric &&
+                api.view.filters.repeat.threshold === (g.threshold ?? committed)
+                  ? api.view.filters.repeat.bucket
+                  : null
+              }
+              onPick={(bucket) =>
+                api.setFilters({
+                  repeat: { metric, bucket, samples: model.samples, threshold: g.threshold ?? committed },
+                  score: null,
+                })
+              }
+            />
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }

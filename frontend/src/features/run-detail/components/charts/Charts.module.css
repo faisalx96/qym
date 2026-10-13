@@ -199,8 +199,14 @@ button.col:hover .bar,
 
 .scatter,
 .curve svg {
+  /* Drawn at the measured width (width/height attributes): text and marks keep their size at any column width. */
+  display: block;
+  max-width: 100%;
+}
+
+.chartBox {
+  min-width: 0;
   width: 100%;
-  height: auto;
 }
 
 .grid {

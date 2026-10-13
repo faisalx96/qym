@@ -1,6 +1,15 @@
 /** QA fix list (docs/internal/ui-migration/qa/compare.md): run cards, score pills, per-pass baseline, export, trace rows, small defects. */
 import { expect, test, type Page } from '@playwright/test';
-import { client, cohortUrl, compareUrl, PLATFORM_URL, seedScenario, urlParams, waitLoaded } from './support';
+import {
+  client,
+  cohortUrl,
+  compareUrl,
+  PLATFORM_URL,
+  seedScenario,
+  urlParams,
+  waitLoaded,
+  goSection,
+} from './support';
 import { createApiKey, createRun, ensureProject, EventStream, seedTracedRun, type CompareSeed } from './seed';
 import { uniqueSlug } from '../helpers';
 
@@ -129,7 +138,8 @@ test('C020 run cards show status, counts and dataset version; the chip flags an 
   await page.goto(compareUrl([fix.a, fix.b, fix.c]));
   await waitLoaded(page);
   await expect(page.getByRole('group', { name: 'Runs in this comparison' })).toContainText('RUNNING');
-  await page.getByRole('button', { name: 'Run details' }).click();
+  // up to four runs the cards are always visible (no toggle)
+  await expect(page.getByRole('button', { name: 'Run details' })).toHaveCount(0);
   const cards = page.getByTestId('run-card');
   await expect(cards).toHaveCount(3);
   const b = page.locator(`[data-testid="run-card"][data-run="${fix.b}"]`);
@@ -168,7 +178,7 @@ test('C107/C108 the compare export carries averages, deltas, the winner strip an
 test('C037 trace statistic rows appear when a compared run has spans', async ({ page }) => {
   await page.goto(compareUrl([traced, seed.runs.base]));
   await waitLoaded(page);
-  await page.getByRole('tab', { name: 'Metrics' }).click();
+  await goSection(page, 'Averages');
   const table = page.getByTestId('trace-stats-table');
   await expect(table).toBeVisible();
   await expect(table.getByRole('row').nth(1)).toBeVisible();
@@ -213,17 +223,18 @@ test('C012 the not-found panel names the missing run and links back; the toast l
   await expect(page.getByRole('link', { name: /Back to runs/ })).toBeVisible();
 });
 
-test('C017 the analytics tab survives removing a run', async ({ page }) => {
+test('C017 the report keeps working after a run is removed', async ({ page }) => {
   await page.goto(compareUrl([fix.a, fix.b, fix.c]));
   await waitLoaded(page);
-  await page.getByRole('tab', { name: 'Errors' }).click();
-  await expect.poll(() => urlParams(page).get('panel')).toBe('errors');
+  await goSection(page, 'Errors');
+  await expect(page.locator('#compare-errors')).toBeInViewport();
   await page
     .getByRole('button', { name: /^Remove .* from the comparison$/ })
     .last()
     .click();
   await waitLoaded(page);
-  await expect(page.getByRole('tab', { name: 'Errors' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('run-card')).toHaveCount(2);
+  await expect(page.getByRole('navigation', { name: 'Comparison sections' })).toBeVisible();
 });
 
 test('C103 the Sweep view has no baseline reset', async ({ page }) => {

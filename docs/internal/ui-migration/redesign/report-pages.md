@@ -326,3 +326,8 @@ Risks:
 - No URL contract changes; `?panel=` and old hashes scroll to sections; nothing in React is dropped; Deferred lists untouched.
 - Total estimate: 74 h (P1 8, run 33, compare 25, cohort in C4, docs/QA 8); about 5 days with three agents.
 - Defaults: scope = narrowed item set; sidebar right; no auto-scroll to Items; no manual sidebar without scope; hero expanded; sections not collapsible; run cards visible up to 4 runs; Items last; empty Root cause/Reviews hidden.
+
+## Deferred
+
+- X2 manual QA (5k-item run, live run, 20-run compare timing): only the existing automated perf tests and the full Playwright suite were run; a hand timing pass is about 2 h.
+- Deviations from the brief, by decision: the sidebar omits the "Active" chip list because the ScopeBar directly above the report already lists the same removable chips (one set of "Remove ... from scope" buttons avoids duplicate controls); section jumps scroll instantly (re-aligning while lazy sections above settle) instead of smoothly; `?panel=` is read for old links but never written; compare no longer remounts to a stored tab, so removing a run returns the compare view to the top.

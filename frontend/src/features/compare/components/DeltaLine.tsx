@@ -1,6 +1,6 @@
 /** The sticky one-line delta header: one chip per candidate column (verdict, band, improved / regressed filters). */
 import { useMemo } from 'react';
-import { Button, Icon, Tag, Text } from '@/ui';
+import { Button, Tag, Text } from '@/ui';
 import { useCompare, letterOf } from '../CompareContext';
 import { useColumnStats, type ColumnsInfo } from '../hooks/useColumnStats';
 import type { DeltaKind } from '../lib/baseline';
@@ -43,15 +43,7 @@ function CohortVerdict() {
   );
 }
 
-export function DeltaLine({
-  info,
-  analyticsOpen,
-  onToggleAnalytics,
-}: {
-  info: ColumnsInfo;
-  analyticsOpen: boolean;
-  onToggleAnalytics: () => void;
-}) {
+export function DeltaLine({ info }: { info: ColumnsInfo }) {
   const { model, ctx, metric, c, cohorts } = useCompare();
   const stats = useColumnStats(model, info, ctx);
   const type = model.types[metric] ?? 'score';
@@ -109,15 +101,6 @@ export function DeltaLine({
           })}
         </ul>
       )}
-      <Button
-        size="sm"
-        variant="neutral"
-        icon={<Icon name="sidebar" size={14} />}
-        aria-expanded={analyticsOpen}
-        onPress={onToggleAnalytics}
-      >
-        Analytics
-      </Button>
     </div>
   );
 }

@@ -23,7 +23,9 @@ export function ItemsSection() {
     );
   return (
     <div className={styles.section}>
-      <ItemsToolbar metaKeys={metaKeys} />
+      <div className={styles.sticky} data-compare-toolbar="">
+        <ItemsToolbar metaKeys={metaKeys} />
+      </div>
       {items.length ? (
         <ItemList />
       ) : (

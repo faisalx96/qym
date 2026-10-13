@@ -87,23 +87,25 @@ export function ErrorsTab() {
           <h3 className={styles.groupTitle}>
             {g.kind}s <Tag kind="count">{g.buckets.reduce((a, b) => a + b.count, 0)}</Tag>
           </h3>
-          {g.buckets.map((b) => {
-            const slot = slotOfKind(b.kind);
-            const on = active[slot]?.label === b.label;
-            return (
-              <ErrorCard
-                key={b.kind + b.label}
-                bucket={b}
-                active={on}
-                onToggle={() => {
-                  const errors = { ...api.view.filters.errors };
-                  if (on) delete errors[slot];
-                  else errors[slot] = { kind: b.kind, label: b.label };
-                  api.setFilters({ errors });
-                }}
-              />
-            );
-          })}
+          <div className={styles.cards}>
+            {g.buckets.map((b) => {
+              const slot = slotOfKind(b.kind);
+              const on = active[slot]?.label === b.label;
+              return (
+                <ErrorCard
+                  key={b.kind + b.label}
+                  bucket={b}
+                  active={on}
+                  onToggle={() => {
+                    const errors = { ...api.view.filters.errors };
+                    if (on) delete errors[slot];
+                    else errors[slot] = { kind: b.kind, label: b.label };
+                    api.setFilters({ errors });
+                  }}
+                />
+              );
+            })}
+          </div>
         </section>
       ))}
     </div>

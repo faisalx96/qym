@@ -197,6 +197,23 @@ The recipes, by intent:
   the section controls on the right, a `--border-subtle` hairline above and
   about 48px from the previous section. The header owns the spacing; sections add
   no top or bottom margin of their own.
+- **Report page and scope sidebar** (`ReportSection`, `ReportLayout`, `ScopeBar`,
+  `QuickFilterGroup`): run detail and compare are one stacked report. Every
+  analytic topic is a full-width `ReportSection` (run section header, `xl`
+  title, container-query body so cards respond to the real column width: 2 / 3 /
+  4 per row, never a fixed 380px column); sections below the fold mount lazily
+  (`lazy`, once, with a reserved `minHeight`) and are hidden, not shown empty,
+  when the run has no such data. The quick-filter sidebar (`--report-sidebar-width`
+  300px, 320px from 1920px) exists only while the reader has narrowed the item
+  set (a scope: any chip, rule or search; sort, page, metric and layout are not
+  scope). The `ScopeBar` above the report lists "N of M items" with removable
+  chips, Clear all, View N items and the Hide / Show toggle (stored in
+  `localStorage qym:report-sidebar-hidden`). Under 1200px the sidebar is a
+  `Drawer` (360px) opened from the ScopeBar. The sidebar's first group lists the active
+  chips (the ScopeBar then shows only the count and actions; below 1200px the sticky
+  ScopeBar carries the chips). Lazy section bodies are not in the DOM until they near the
+  viewport, so browser find-in-page cannot see them and the scrollbar thumb grows as they mount. Sidebar and ScopeBar fade with
+  `--transition-fast` and not at all under `prefers-reduced-motion`.
 - **Badge** (`Badge`, `RunStatusBadge`): status and outcome labels, 20px minimum
   (`--badge-height`), fully rounded, tinted 1px outline, sans `--font-xs` / 650.
   Tones: success (completed/approved/improved), info (running), danger

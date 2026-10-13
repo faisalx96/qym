@@ -1,38 +1,42 @@
 /**
- * Sticky section nav: run name and status once the hero has scrolled away, links to Summary, Items and each
- * analysis tab (`#run-section-*` anchors), with a scroll-spy on Summary / Items and live counts.
+ * Sticky section nav: run name and status once the hero has scrolled away, jump links to every section of the
+ * report (scroll-spy marks the one in view), and the page-wide Filters rule builder and Clear.
  */
 import { useEffect, useRef, useState } from 'react';
-import { RunStatusBadge } from '@/ui';
+import { Button, Icon, Popover, RunStatusBadge } from '@/ui';
 import { useShellScroller } from '../hooks/useScrollMargin';
+import { countActiveFilters, type FilterGroup } from '../lib/filterRules';
 import { useRunPage } from '../RunContext';
-import { usePanelEntries, type PanelTab } from './AnalysisPanel';
+import { RuleBuilder } from './items/RuleBuilder';
+import { sectionDomId, useSectionEntries, type SectionKey } from './ReportSections';
 import styles from './SectionNav.module.css';
 
-export type SectionId = 'summary' | 'items';
+export type SectionId = 'summary' | SectionKey;
 
-export interface SectionNavProps {
-  tab: PanelTab;
-  panelOpen: boolean;
-  onSection: (id: SectionId | PanelTab) => void;
-}
-
-/** Which of Summary / Items the reader is in: Items once the nav has stuck and the table has reached it. */
-export function useScrollSpy(navRef: React.RefObject<HTMLElement | null>): SectionId {
+/** Which section the reader is in: the last one whose top has passed the nav; Summary until the nav sticks. */
+export function useScrollSpy(navRef: React.RefObject<HTMLElement | null>, ids: SectionKey[]): SectionId {
   const scroller = useShellScroller();
   const [active, setActive] = useState<SectionId>('summary');
+  const key = ids.join(',');
   useEffect(() => {
     if (!scroller) return undefined;
     let frame = 0;
+    const order = key ? (key.split(',') as SectionKey[]) : [];
     const measure = () => {
       frame = 0;
-      const items = document.getElementById('run-items');
       const nav = navRef.current;
-      if (!items || !nav) return;
+      if (!nav) return;
       const navBox = nav.getBoundingClientRect();
       // Stuck = the nav has reached the top of the scroller; before that the hero is still in view.
       const stuck = navBox.top <= scroller.getBoundingClientRect().top + 1 && scroller.scrollTop > 0;
-      setActive(stuck && items.getBoundingClientRect().top <= navBox.bottom + 24 ? 'items' : 'summary');
+      let current: SectionId = 'summary';
+      if (stuck)
+        for (const id of order) {
+          if (id === 'reviews') continue;
+          const el = document.getElementById(sectionDomId(id));
+          if (el && el.getBoundingClientRect().top <= navBox.bottom + 24) current = id;
+        }
+      setActive(current);
     };
     const onScroll = () => {
       if (!frame) frame = requestAnimationFrame(measure);
@@ -45,41 +49,93 @@ export function useScrollSpy(navRef: React.RefObject<HTMLElement | null>): Secti
       window.removeEventListener('resize', onScroll);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [scroller, navRef]);
+  }, [scroller, navRef, key]);
   return active;
 }
 
-export function SectionNav({ tab, panelOpen, onSection }: SectionNavProps) {
-  const { payload, items } = useRunPage();
-  const entries = usePanelEntries();
+export interface SectionNavProps {
+  onSection: (id: SectionId) => void;
+}
+
+function NavFilters() {
+  const { api } = useRunPage();
+  const { view, defs } = api;
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<FilterGroup | null>(null);
+  const count = countActiveFilters(view, defs);
+  return (
+    <>
+      <Popover
+        label="Filter rules"
+        placement="bottom end"
+        isOpen={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setDraft(null);
+        }}
+        trigger={
+          <Button
+            size="sm"
+            variant="neutral"
+            icon={<Icon name="list" size={12} />}
+            data-testid="nav-open-filters"
+          >
+            Filters{count ? ` (${count})` : ''}
+          </Button>
+        }
+      >
+        <RuleBuilder
+          rules={draft ?? view.filters.rules}
+          defs={defs}
+          onChange={(rules: FilterGroup) => {
+            setDraft(rules);
+            api.setFilters({ rules });
+          }}
+        />
+      </Popover>
+      {count > 0 ? (
+        <Button size="sm" variant="ghost" onPress={() => api.clearFilters()} data-testid="nav-clear-filters">
+          Clear ({count})
+        </Button>
+      ) : null}
+    </>
+  );
+}
+
+export function SectionNav({ onSection }: SectionNavProps) {
+  const { payload } = useRunPage();
+  const entries = useSectionEntries();
   const navRef = useRef<HTMLElement>(null);
-  const active = useScrollSpy(navRef);
+  const ids = entries.map((e) => e.id);
+  const active = useScrollSpy(navRef, ids);
   const run = payload.run;
   // The page's sticky offsets (filter bar, scroll margins) follow the nav's real height.
   useEffect(() => {
     const nav = navRef.current;
     const host = nav?.parentElement;
     if (!nav || !host || typeof ResizeObserver === 'undefined') return undefined;
-    const set = () => host.style.setProperty('--run-nav-h', `${nav.offsetHeight}px`);
+    const set = () => {
+      host.style.setProperty('--run-nav-h', `${nav.offsetHeight}px`);
+      host.style.setProperty('--report-nav-h', `${nav.offsetHeight}px`);
+    };
     set();
     const ro = new ResizeObserver(set);
     ro.observe(nav);
     return () => ro.disconnect();
   }, []);
   const status = String(run.status || '').toUpperCase();
-  const itemCount = payload.snapshot.rows.length;
 
-  const link = (id: string, label: string, opts: { current: boolean; count?: number; danger?: boolean }) => (
+  const link = (id: SectionId, label: string, opts: { count?: number; danger?: boolean }) => (
     <a
       key={id}
       href={`#run-section-${id}`}
       className={styles.link}
-      aria-current={opts.current ? 'location' : undefined}
+      aria-current={active === id ? 'location' : undefined}
       data-section={id}
       data-tone={opts.danger ? 'danger' : undefined}
       onClick={(e) => {
         e.preventDefault();
-        onSection(id as SectionId | PanelTab);
+        onSection(id);
       }}
     >
       {label}
@@ -93,26 +149,19 @@ export function SectionNav({ tab, panelOpen, onSection }: SectionNavProps) {
       className={styles.nav}
       aria-label="Run sections"
       data-run-nav=""
-      data-compact={active === 'items' ? '' : undefined}
+      data-compact={active !== 'summary' ? '' : undefined}
     >
       <span className={styles.identity} aria-hidden={active === 'summary' ? true : undefined}>
         <span className={styles.name}>{run.run_name || run.run_id}</span>
         <RunStatusBadge status={status} label={String(run.status || '').toLowerCase()} />
       </span>
       <span className={styles.links}>
-        {link('summary', 'Summary', { current: active === 'summary' })}
-        {link('items', 'Items', {
-          current: active === 'items',
-          count: items.length === itemCount ? itemCount : items.length,
-        })}
+        {link('summary', 'Summary', {})}
         <span className={styles.sep} aria-hidden="true" />
-        {entries.map((e) =>
-          link(e.id, String(e.label), {
-            current: panelOpen && tab === e.id,
-            count: e.count,
-            danger: e.tone === 'danger' && !!e.count,
-          }),
-        )}
+        {entries.map((e) => link(e.id, e.label, { count: e.count, danger: e.danger }))}
+      </span>
+      <span className={styles.actions}>
+        <NavFilters />
       </span>
     </nav>
   );

@@ -57,7 +57,7 @@ test.describe('Display popover submenus', () => {
     const fields = page.getByRole('button', { name: /Item fields/ });
     await fields.click();
     await expect(fields).toHaveAttribute('aria-expanded', 'true');
-    await page.getByText('domain', { exact: true }).click();
+    await page.getByRole('dialog').getByText('domain', { exact: true }).click();
     await expect.poll(() => new URL(page.url()).searchParams.getAll('hide_field')).toEqual(['domain']);
     await expect(page.getByRole('dialog')).toHaveCount(1);
     await page.keyboard.press('Escape');
@@ -90,35 +90,48 @@ test.describe('sticky section nav and filter bar', () => {
     const nav = page.getByRole('navigation', { name: 'Run sections' });
     const filters = page.getByRole('search', { name: 'Filter items' });
     await expect(nav.getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'location');
-    await page.evaluate(() => document.getElementById('shell-content')?.scrollTo(0, 400));
+    await nav.getByRole('link', { name: /^Items/ }).click();
+    // the jump lands the Items head under the nav (re-aligning while lazy sections settle) ...
+    const navBottom = (await nav.boundingBox())!.y + (await nav.boundingBox())!.height;
+    await expect
+      .poll(async () => Math.abs((await page.locator('#run-items').boundingBox())!.y - navBottom))
+      .toBeLessThan(80);
+    // ... then a real wheel scroll (which also ends the re-alignment) sticks the filter bar below the nav
+    await page.mouse.move(600, 500);
+    await page.mouse.wheel(0, 300);
     await expect.poll(() => scrollTop(page)).toBeGreaterThan(300);
     const scroller = await page.locator('#shell-content').boundingBox();
     const navBox = await nav.boundingBox();
     const filterBox = await filters.boundingBox();
     expect(Math.abs(navBox!.y - scroller!.y)).toBeLessThan(2);
     expect(filterBox!.y).toBeGreaterThanOrEqual(navBox!.y + navBox!.height - 2);
-    expect(filterBox!.y).toBeLessThan(navBox!.y + navBox!.height + 40);
+    // the jump re-aligns for a moment while lazy sections above settle; wait for the bar to stick
+    await expect
+      .poll(async () => ((await filters.boundingBox())?.y ?? 9999) - (navBox!.y + navBox!.height), {
+        timeout: 4000,
+      })
+      .toBeLessThan(40);
     await expect(nav.getByRole('link', { name: /^Items/ })).toHaveAttribute('aria-current', 'location');
     await nav.getByRole('link', { name: 'Summary' }).click();
     await expect.poll(() => scrollTop(page)).toBeLessThan(5);
   });
 
-  test('old #run-section-* anchors select the panel tab and scroll to the table', async ({ page }) => {
+  test('old #run-section-* anchors scroll to the section and to the table', async ({ page }) => {
     await page.goto(`/projects/${s.slug}/runs/${classic}#run-section-errors`);
     await expect(page.getByTestId('items-count')).toBeVisible();
-    await expect(page.getByRole('tab', { name: /Errors/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#run-section-errors')).toBeInViewport();
     await page.goto(`/projects/${s.slug}/runs/${classic}#run-section-items`);
     await expect(page.getByTestId('items-count')).toBeVisible();
     await expect.poll(() => scrollTop(page)).toBeGreaterThan(0);
   });
 
-  test('nav links open the analysis tabs', async ({ page }) => {
+  test('nav links scroll to the analysis sections', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await page
       .getByRole('navigation', { name: 'Run sections' })
       .getByRole('link', { name: /Latency/ })
       .click();
-    await expect(page.getByRole('tab', { name: 'Latency' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#run-section-latency')).toBeInViewport();
   });
 });
 

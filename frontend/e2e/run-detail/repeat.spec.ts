@@ -25,11 +25,11 @@ async function qualityByItem(page: Page): Promise<Record<string, string>> {
 }
 
 test.describe('repeat analysis (J4)', () => {
-  test('the Repeat tab shows pass@k stats, per-pass table, curve and distribution', async ({ page }) => {
+  test('the Repeat section shows pass@k stats, per-pass table, curve and distribution', async ({ page }) => {
     await openRun(page, s.slug, repeat, 'panel=repeat');
     const panel = page.getByTestId('repeat-analysis');
     await expect(panel).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Repeat' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#run-section-repeat')).toBeInViewport();
     await expect(panel).toContainText('Pass@3');
     await expect(panel).toContainText('Consistency');
     const passes = panel.getByRole('table', { name: 'Passes' });
@@ -58,9 +58,9 @@ test.describe('repeat analysis (J4)', () => {
     await expect.poll(() => itemsCount(page)).toEqual([60, 60]);
   });
 
-  test('the Repeat tab is absent on a single-pass view', async ({ page }) => {
+  test('the Repeat section is absent on a single-pass view', async ({ page }) => {
     await openRun(page, s.slug, repeat, 'pass=2');
-    await expect(page.getByRole('tab', { name: 'Repeat' })).toHaveCount(0);
+    await expect(page.locator('#run-section-repeat')).toHaveCount(0);
   });
 });
 
@@ -100,7 +100,7 @@ test.describe('?pass=N (scenario 10)', () => {
     await expect(pill).toHaveAttribute('title', /Return to all passes/);
     await pill.click();
     await expect.poll(() => params(page).get('pass')).toBeNull();
-    await expect(page.getByRole('tab', { name: 'Repeat' })).toBeVisible();
+    await expect(page.locator('#run-section-repeat')).toBeAttached();
     await expect(page).not.toHaveTitle(/Pass 2/);
   });
 });

@@ -1,0 +1,65 @@
+/* Report page grid: report column + sticky quick-filter column that exists only while a scope is active. */
+.layout {
+  --report-sidebar-width: 300px;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-lg);
+  align-items: start;
+  min-width: 0;
+}
+
+.layout[data-sidebar='open'] {
+  grid-template-columns: minmax(0, 1fr) var(--report-sidebar-width);
+}
+
+@media (min-width: 1920px) {
+  .layout {
+    --report-sidebar-width: 320px;
+  }
+}
+
+.main {
+  min-width: 0;
+}
+
+.aside {
+  position: sticky;
+  top: calc(var(--report-nav-h, 0px) + var(--space-md));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+  max-height: calc(100vh - var(--topbar-h) - var(--report-nav-h, 0px) - 2 * var(--space-md));
+  overflow-y: auto;
+  padding: var(--space-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  animation: aside-in var(--transition-fast);
+}
+
+.drawerBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+@keyframes aside-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--space-md));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aside {
+    animation: none;
+  }
+}

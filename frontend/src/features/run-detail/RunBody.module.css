@@ -1,19 +1,15 @@
-/* Items-first split: table left, sticky analysis column right (UX_DECISION variant C). */
+/* Report page: hero and notices, the sticky nav, then the stacked report (ReportLayout). */
 .page {
-  --run-panel-width: 380px;
-
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
 }
 
-.split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-lg);
-  align-items: start;
+/* Review history is a card under the notices; when the run was never submitted it renders nothing. */
+.reviews:empty {
+  display: none;
 }
 
-.split[data-panel='open'] {
-  grid-template-columns: minmax(0, 1fr) var(--run-panel-width);
+.reviews {
+  scroll-margin-top: calc(var(--report-nav-h, 0px) + var(--space-sm));
 }

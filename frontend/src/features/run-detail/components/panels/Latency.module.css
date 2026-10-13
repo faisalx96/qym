@@ -62,7 +62,9 @@
   display: flex;
   align-items: stretch;
   gap: 2px;
+  flex: 1 1 auto;
   height: 100px;
+  min-height: 100px;
 }
 
 .bin {
@@ -123,7 +125,8 @@
 .failPill {
   padding: 0 var(--space-xs);
   border-radius: var(--radius-pill);
-  background: var(--bg-elevated);
+  border: 1px solid var(--error);
+  background: transparent;
   color: var(--error);
 }
 

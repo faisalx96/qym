@@ -36,16 +36,16 @@ async function audit(page: Page, label: string, context: string): Promise<void> 
 }
 
 test.describe('axe', () => {
-  test('default run page (table, filter bar, analysis panel)', async ({ page }) => {
+  test('default run page (table, filter bar, report sections)', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await expect(page.locator('[data-testid=metric-card]').first()).toBeVisible();
     await audit(page, 'default page', '#shell-content');
   });
 
-  test('analysis tabs: errors, categories, latency, deep', async ({ page }) => {
+  test('report sections: errors, categories, latency, deep', async ({ page }) => {
     for (const panel of ['errors', 'categories', 'latency', 'deep']) {
       await openRun(page, s.slug, classic, `panel=${panel}`);
-      await expect(page.getByRole('tabpanel')).toBeVisible();
+      await expect(page.locator(`#run-section-${panel}`)).toBeInViewport();
       await audit(page, `panel ${panel}`, '#shell-content');
     }
   });

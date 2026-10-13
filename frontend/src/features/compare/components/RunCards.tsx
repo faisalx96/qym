@@ -9,9 +9,15 @@ import { differingContext, ownerLabel, runCounts } from '../lib/runInfo';
 import { RunDot } from './common';
 import styles from './RunCards.module.css';
 
+/** Beyond this many runs the cards collapse behind a "Run details" toggle. */
+const MAX_VISIBLE_CARDS = 4;
+
 export function RunCards() {
   const { model, c, slug } = useCompare();
-  const [open, setOpen] = useState(false);
+  // Up to four runs the cards are the section; beyond that they collapse behind a toggle.
+  const [expanded, setExpanded] = useState(false);
+  const collapsible = model.bases.length > MAX_VISIBLE_CARDS;
+  const open = !collapsible || expanded;
   const payloads = new Map((c.query.data?.runs ?? []).map((p) => [p.run.file_path || p.run.run_id, p]));
   const cards = model.bases
     .map((base) => {
@@ -26,18 +32,20 @@ export function RunCards() {
     ['RUNNING', 'PENDING', 'STOPPING'].includes(String(x.payload.run.status).toUpperCase()),
   ).length;
   return (
-    <section className={styles.wrap} aria-label="Run details">
+    <div className={styles.wrap} data-testid="run-details">
       <div className={styles.head}>
-        <Button
-          size="sm"
-          variant="neutral"
-          aria-expanded={open}
-          aria-controls="compare-run-cards"
-          icon={<Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />}
-          onPress={() => setOpen(!open)}
-        >
-          Run details
-        </Button>
+        {collapsible ? (
+          <Button
+            size="sm"
+            variant="neutral"
+            aria-expanded={open}
+            aria-controls="compare-run-cards"
+            icon={<Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />}
+            onPress={() => setExpanded(!expanded)}
+          >
+            Run details
+          </Button>
+        ) : null}
         {live ? (
           <Text variant="sm" tone="muted">
             {live} run{live === 1 ? ' is' : 's are'} still in progress; its numbers are partial.
@@ -133,7 +141,7 @@ export function RunCards() {
           ) : null}
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }
 

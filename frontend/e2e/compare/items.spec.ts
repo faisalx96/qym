@@ -1,6 +1,6 @@
 /** Scenarios 5 and 6: expanded items (lazy bodies, trace, copy, score edit) and root-cause issues. */
 import { expect, test, type Page } from '@playwright/test';
-import { compareUrl, client, seedScenario, urlParams, waitLoaded } from './support';
+import { compareUrl, client, seedScenario, urlParams, waitLoaded, goSection } from './support';
 import { createApiKey, seedCompareRun, seedTracedRun, type CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -230,7 +230,7 @@ test('root-cause issues: validation, add, show on the card, edit, delete, and fi
   await expect(c).not.toContainText('No root-cause issues assigned.');
 
   // Root cause tab now lists the category; pressing it filters the items
-  await page.getByRole('tab', { name: 'Root cause' }).click();
+  await goSection(page, 'Root cause');
   const cat = page.getByRole('button', { name: /^Hallucination \d+$/ });
   await expect(cat).toBeVisible();
   await cat.click();

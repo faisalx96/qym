@@ -90,3 +90,17 @@
   height: 16px;
   background: var(--border-subtle);
 }
+
+/* Page-wide Filters and Clear sit at the end of the bar; a phone keeps only the scrolling link row. */
+.actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+@media (max-width: 767px) {
+  .actions {
+    display: none;
+  }
+}

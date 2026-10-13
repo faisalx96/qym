@@ -17,6 +17,19 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.chrome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* Short viewports (laptops): only the section nav stays stuck; the chips and delta line scroll away. */
+@media (max-height: 999px) {
+  .sticky {
+    top: calc(-1 * var(--compare-chrome-h, 0px) - 2 * var(--space-sm));
+  }
+}
+
 /* The run chips plus the delta rows stack to about a quarter of a phone screen: let them scroll away. */
 @media (max-width: 640px) {
   .sticky {

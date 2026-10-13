@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import { seedCustomRun, type CustomItem } from '../run-detail/cutover-support';
 import { seedProject, type Seeded } from '../run-detail/support';
-import { compareUrl, waitLoaded } from './support';
+import { compareUrl, waitLoaded, goSection } from './support';
 
 let s: Seeded;
 test.beforeAll(async () => {
@@ -26,7 +26,7 @@ test('without a direction Compare is neutral and says why', async ({ page }) => 
   const b = await seedCustomRun(s, { name: 'neutral-b', specs: { accuracy: spec }, items: items(0.9) });
   await page.goto(compareUrl([a, b]));
   await waitLoaded(page);
-  await page.getByRole('tab', { name: /^Overview/ }).click();
+  await goSection(page, 'Overview');
   await expect(
     page.getByText('Winners, passes and Max@K need a declared direction on this metric.'),
   ).toBeVisible();
