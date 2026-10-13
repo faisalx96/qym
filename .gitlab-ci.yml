@@ -46,6 +46,7 @@ package:
     - >
       podman build \
         --build-arg BASE_IMAGE=$CUSTOM_BASE_IMAGE \
+        --build-arg FRONTEND_BASE_IMAGE=$CUSTOM_FRONTEND_BASE_IMAGE \
         --build-arg PIP_INDEX_URL=$CUSTOM_PIP_INDEX_URL \
         --build-arg PIP_TRUSTED_HOST=$CUSTOM_PIP_TRUSTED_HOST \
         --build-arg PIP_SEARCH_INDEX=$CUSTOM_PIP_SEARCH_INDEX \
