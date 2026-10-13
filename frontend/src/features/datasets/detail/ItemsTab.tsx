@@ -393,7 +393,7 @@ export function ItemsTab({
           rowKey={(i) => i.item_id}
           columns={columns}
           sort={sort}
-          onSortChange={(s) => setQuery({ sort: itemSortKey(s.key, s.direction), page: null })}
+          onSortChange={(s) => setQuery({ sort: s ? itemSortKey(s.key, s.direction) : null, page: null })}
           onRowAction={(_k, item) => (onOpenItem ?? ((i: DatasetItem) => navigate(itemHref(i))))(item)}
           selection={selection}
           dimmed={query.isFetching && query.isPlaceholderData}

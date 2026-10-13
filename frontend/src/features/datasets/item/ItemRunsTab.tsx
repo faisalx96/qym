@@ -105,7 +105,7 @@ export function ItemRunsTab({
         rows={rows}
         rowKey={(r) => r.run_id}
         sort={sort}
-        onSortChange={setSort}
+        onSortChange={(s) => s && setSort(s)}
         columns={[
           {
             id: 'name',

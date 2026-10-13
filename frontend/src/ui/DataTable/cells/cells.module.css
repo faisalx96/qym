@@ -1,0 +1,217 @@
+/* DataTable cell kit: score bars, deltas, two-line, ids, tags, progress (DESIGN_LANGUAGE §3 "Data table"). */
+.scoreBar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.scoreBar[data-band='1'] {
+  --bar: var(--score-1);
+}
+.scoreBar[data-band='2'] {
+  --bar: var(--score-2);
+}
+.scoreBar[data-band='3'] {
+  --bar: var(--score-3);
+}
+.scoreBar[data-band='4'] {
+  --bar: var(--score-4);
+}
+.scoreBar[data-band='5'] {
+  --bar: var(--score-5);
+}
+
+.scoreBar[data-band] .scoreText {
+  color: var(--bar);
+}
+
+.scoreBar[data-error] {
+  color: var(--text-muted);
+}
+
+.errGlyph {
+  color: var(--metric-error);
+}
+
+.scoreBar[data-error='task'] .errGlyph {
+  color: var(--error);
+}
+
+.track {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 48px;
+  inline-size: 48px;
+  block-size: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  block-size: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--bar, var(--text-muted));
+}
+
+.fill[data-plain] {
+  background: var(--accent-primary);
+}
+
+.scoreText {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.scoreBar[data-empty] .scoreText {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.delta[data-verdict='good'] {
+  color: var(--score-5);
+}
+.delta[data-verdict='bad'] {
+  color: var(--score-1);
+}
+.delta[data-verdict='flat'] {
+  color: var(--text-muted);
+}
+
+.deltaEmpty {
+  color: var(--text-muted);
+}
+
+.twoLine {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.primary,
+.secondary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.primary {
+  color: var(--text-primary);
+}
+
+.secondary {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.id {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  max-width: 100%;
+  font-family: var(--font-mono);
+}
+
+.idText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.idCopy {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+tr:hover .idCopy,
+tr:focus-within .idCopy,
+.idCopy:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .idCopy {
+    opacity: 1;
+  }
+}
+
+.tags {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.more {
+  border: 0;
+  background: transparent;
+  padding: 0 var(--space-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  border-radius: var(--control-radius);
+}
+
+.more[data-hovered] {
+  color: var(--text-primary);
+}
+
+.more[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.tagPop {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  max-width: 260px;
+  padding: var(--space-sm);
+}
+
+.user {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.userName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idCopy {
+    transition: none;
+  }
+}
