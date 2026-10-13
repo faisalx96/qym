@@ -63,6 +63,17 @@
   height: 12px;
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-dim) var(--bg-surface);
+}
+
+.rail::-webkit-scrollbar {
+  height: 8px;
+}
+
+.rail::-webkit-scrollbar-thumb {
+  background: var(--text-dim); /* decorative scroll thumb */
+  border-radius: var(--radius-pill);
 }
 
 .railInner {
@@ -419,14 +430,14 @@
 .scroller[data-scrolled-x] .td[data-pin-edge='start'],
 .scroller[data-scrolled-x] .th[data-pin-edge='start'] {
   box-shadow:
-    inset -1px 0 0 var(--border-default),
-    6px 0 8px -6px var(--bg-void);
+    inset -1px 0 0 var(--border-strong),
+    8px 0 10px -6px var(--bg-void);
 }
 .scroller[data-scrolled-end] .td[data-pin-edge='end'],
 .scroller[data-scrolled-end] .th[data-pin-edge='end'] {
   box-shadow:
-    inset 1px 0 0 var(--border-default),
-    -6px 0 8px -6px var(--bg-void);
+    inset 1px 0 0 var(--border-strong),
+    -8px 0 10px -6px var(--bg-void);
 }
 
 .tr {
