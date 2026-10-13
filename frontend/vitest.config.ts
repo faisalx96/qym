@@ -13,5 +13,9 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     css: true,
+    // Bound the worker pool: the default (one per CPU, 28 here) runs jsdom workers of
+    // 300-500 MB each and has OOM-killed the machine when several suites ran at once.
+    // Override with VITEST_MAX_WORKERS.
+    maxWorkers: Number(process.env.VITEST_MAX_WORKERS ?? 4),
   },
 });
