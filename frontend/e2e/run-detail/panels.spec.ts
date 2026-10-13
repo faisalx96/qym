@@ -57,7 +57,7 @@ test.describe('report sections', () => {
   test('#items scrolls to the table', async ({ page }) => {
     await page.goto(`/projects/${s.slug}/runs/${classic}#items`);
     await expect(page.getByTestId('items-count')).toBeVisible();
-    await expect(page.getByRole('table', { name: 'Items' })).toBeInViewport();
+    await expect(page.getByRole('treegrid', { name: 'Items' })).toBeInViewport();
   });
 
   test('lazy sections mount once they near the viewport', async ({ page }) => {

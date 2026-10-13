@@ -70,7 +70,11 @@ export async function openRun(page: Page, slug: string, runId: string, query = '
   await page.goto(runUrl(slug, runId, query));
   await expect(page.getByTestId('items-count')).toBeVisible();
   await expect(
-    page.getByRole('table', { name: 'Items' }).or(page.getByRole('grid', { name: /by item and pass/ })),
+    page
+      .getByRole('treegrid', { name: 'Items' })
+      .or(page.getByRole('grid', { name: /by item and pass/ }))
+      // below 640 px the rows are cards
+      .or(page.getByRole('list', { name: 'Items' })),
   ).toBeVisible();
 }
 

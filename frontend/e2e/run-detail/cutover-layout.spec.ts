@@ -99,7 +99,7 @@ test('many metrics never scroll the page sideways', async ({ page }) => {
     // the displayed (first) metric stays among the shown columns and the input stays readable
     await expect(page.getByRole('columnheader', { name: new RegExp(names[0]!) }).first()).toBeVisible();
     const input = await page
-      .getByRole('cell', { name: /^question 0 about/ })
+      .getByRole('gridcell', { name: /^question 0 about/ })
       .first()
       .boundingBox();
     expect(input?.width ?? 0).toBeGreaterThanOrEqual(130);

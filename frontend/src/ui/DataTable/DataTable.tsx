@@ -107,6 +107,8 @@ export interface DataTableProps<R> {
   rowActions?: (row: R) => RowAction<R>[];
   /** Extra attributes for a row (test ids, data attributes). */
   rowProps?: (row: R) => Record<string, string | undefined>;
+  /** Extra class on a row (feature highlights); keep it to outlines and rails. */
+  rowClassName?: (row: R) => string | undefined;
 
   selection?: SelectionConfig<R>;
   bulkActions?: ReactNode;
@@ -260,6 +262,7 @@ function DataTableInner<R>({
   rowState,
   rowActions,
   rowProps,
+  rowClassName,
   selection,
   bulkActions,
   bulkOwnSummary,
@@ -574,10 +577,10 @@ function DataTableInner<R>({
     const idx = display.findIndex((d) => d.kind === 'row' && d.key === scrollToKey);
     if (idx < 0) return undefined;
     const go = () => {
-      if (virtual) virtualizer.scrollToIndex(idx, { align: 'start' });
+      if (virtual && bodyRef.current) virtualizer.scrollToIndex(idx, { align: 'start' });
       else
-        bodyRef.current
-          ?.querySelector<HTMLElement>(`tr[data-row-key="${CSS.escape(String(scrollToKey))}"]`)
+        cardRef.current
+          ?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(String(scrollToKey))}"]`)
           ?.scrollIntoView({ block: 'start' });
     };
     go();
@@ -641,6 +644,7 @@ function DataTableInner<R>({
   const openable = Boolean(rowHref || onRowOpen);
 
   /* keyboard */
+  const pendingNav = useRef<number | null>(null);
   const rowEls = () => Array.from(bodyRef.current?.querySelectorAll<HTMLElement>('tr[data-row-id]') ?? []);
   const onBodyKeyDown = (e: ReactKeyboardEvent<HTMLTableSectionElement>) => {
     const tr = (e.target as HTMLElement).closest<HTMLElement>('tr[data-row-id]');
@@ -665,12 +669,23 @@ function DataTableInner<R>({
         const di = rowDisplayIdx[target];
         if (di === undefined) return;
         e.preventDefault();
+        const mounted = bodyRef.current?.querySelector<HTMLElement>(`tr[data-index="${di}"]`);
+        if (mounted) {
+          // already in the window: focus it at once (the browser scrolls it into view)
+          mounted.focus();
+          pendingNav.current = null;
+          return;
+        }
+        pendingNav.current = target;
         virtualizer.scrollToIndex(di, { align: 'auto' });
         let tries = 0;
         const focusIt = () => {
           const el = bodyRef.current?.querySelector<HTMLElement>(`tr[data-index="${di}"]`);
-          if (el) el.focus({ preventScroll: true });
-          else if (++tries < 20) requestAnimationFrame(focusIt);
+          if (el) {
+            el.focus({ preventScroll: true });
+            if (pendingNav.current === target) pendingNav.current = null;
+          } else if (++tries < 20) requestAnimationFrame(focusIt);
+          else pendingNav.current = null;
         };
         requestAnimationFrame(focusIt);
         return;
@@ -1287,7 +1302,7 @@ function DataTableInner<R>({
       <tr
         key={d.id}
         role="row"
-        className={styles.tr}
+        className={[styles.tr, rowClassName?.(r)].filter(Boolean).join(' ')}
         data-row-id={rid}
         data-row-key={String(d.key)}
         data-zebra={zebraOn && d.index % 2 === 1 ? '' : undefined}

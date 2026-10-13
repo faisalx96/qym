@@ -441,6 +441,7 @@
 }
 
 .tr {
+  scroll-margin-top: var(--table-header-height);
   --row-base: var(--bg-base);
   outline: none;
 }
