@@ -4,3 +4,16 @@
   gap: var(--space-md);
   min-width: 0;
 }
+
+/* The toolbar stays under the sticky compare chrome while the list scrolls (tall viewports only). */
+@media (min-width: 761px) and (min-height: 640px) {
+  .sticky {
+    position: sticky;
+    top: var(--report-nav-h, 0px);
+    z-index: 4;
+    max-height: 45vh;
+    overflow-y: auto;
+    padding-bottom: var(--space-xs);
+    background: var(--bg-base);
+  }
+}

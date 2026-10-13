@@ -175,7 +175,7 @@ export function SelectionBar() {
   const showReset = !sweep;
   return (
     <div className={styles.bar}>
-      {cohorts ? <CohortBanner /> : <RunChips />}
+      {cohorts ? null : <RunChips />}
       {hasPasses || showReset ? (
         <div className={styles.tools}>
           <PassToggle />

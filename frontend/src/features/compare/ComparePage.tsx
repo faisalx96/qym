@@ -4,7 +4,7 @@
  * analytics live in a side panel that follows the filter. `/compare` and
  * `/projects/:slug/compare` share this page; the URL is the whole state.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
 import { useDocumentTitle, useOptionalProject } from '@/features/shell';
@@ -15,12 +15,11 @@ import { KEYS, readLocal } from '@/lib/storage';
 import { EmptyState, ErrorState, LinkButton, PageHeader, SegmentedControl, Skeleton, useToast } from '@/ui';
 import { CompareCtx, type CompareValue } from './CompareContext';
 import { DeltaLine } from './components/DeltaLine';
-import { ItemsSection } from './components/items/ItemsSection';
+import { CompareBody } from './components/CompareBody';
 import { ItemsUiHost } from './components/items/ItemsUi';
 import { Notices } from './components/Notices';
-import { AnalyticsPanel } from './components/panel/AnalyticsPanel';
-import { RunCards } from './components/RunCards';
-import { SelectionBar } from './components/SelectionBar';
+import { ReportNav } from './components/ReportSections';
+import { CohortBanner, SelectionBar } from './components/SelectionBar';
 import { SweepView } from './components/sweep/SweepView';
 import { DetailsProvider, useNewDetailsStore } from './hooks/useDetails';
 import { useCompareController, type CompareController } from './hooks/useCompareController';
@@ -172,7 +171,23 @@ function CompareLoaded({
     () => (c.ctx ? computeComparisonStats(model, c.ctx, itemIds) : null),
     [model, c.ctx, itemIds],
   );
-  const [panel, setPanel] = useState(true);
+  const stickyRef = useRef<HTMLDivElement>(null);
+  // Sections and the sticky toolbar offset themselves by the real height of the sticky chrome.
+  const stuck =
+    !!info && !!metric && !!c.ctx && !!result && !!stats && !(c.view.tab === 'sweep' && !!c.cohorts);
+  useEffect(() => {
+    const el = stickyRef.current;
+    const host = el?.parentElement;
+    if (!el || !host || typeof ResizeObserver === 'undefined') return undefined;
+    const set = () => host.style.setProperty('--report-nav-h', `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      host.style.removeProperty('--report-nav-h');
+    };
+  }, [stuck]);
   if (!info || !metric || !c.ctx || !result || !stats)
     return (
       <ErrorState
@@ -238,25 +253,15 @@ function CompareLoaded({
         }
       />
       <Notices />
-      <div className={styles.sticky}>
-        <SelectionBar />
-        {sweep ? null : (
-          <DeltaLine info={info} analyticsOpen={panel} onToggleAnalytics={() => setPanel((p) => !p)} />
-        )}
-      </div>
-      <RunCards />
-      <ItemsUiHost>
-        {sweep ? (
-          <SweepView />
-        ) : (
-          <div className={styles.body} data-panel={panel ? '' : undefined}>
-            <section className={styles.main} aria-label="Items">
-              <ItemsSection />
-            </section>
-            {panel ? <AnalyticsPanel /> : null}
-          </div>
-        )}
-      </ItemsUiHost>
+      {c.cohorts ? <CohortBanner /> : null}
+      {sweep ? null : (
+        <div ref={stickyRef} className={styles.sticky} data-compare-sticky="">
+          <SelectionBar />
+          <DeltaLine info={info} />
+          <ReportNav />
+        </div>
+      )}
+      <ItemsUiHost>{sweep ? <SweepView /> : <CompareBody />}</ItemsUiHost>
     </CompareCtx.Provider>
   );
 }

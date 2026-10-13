@@ -8,12 +8,17 @@ import {
   Dialog,
   EmptyState,
   HelpMarker,
+  IconButton,
   MultiSelect,
+  QuickFilterGroup,
+  ReportLayout,
+  ScopeBar,
   SearchField,
   Select,
   Tag,
   Text,
 } from '@/ui';
+import { useMediaQuery } from '@/features/shell';
 import { useSearchParamsState } from '@/lib/url-state';
 import { getMetadataCategoryValues } from '@/features/run-detail/lib/rowMeta';
 import { useCompare } from '../../CompareContext';
@@ -36,7 +41,9 @@ import {
 } from '../../lib/cohort';
 import type { NoiseStat } from '../../lib/noise';
 import { ItemDetail } from '../items/ItemDetail';
+import { sweepScopeChips } from '../../lib/scope';
 import { ScrollRegion } from '../ScrollRegion';
+import { WIDE_QUERY, useSidebarHidden } from '../CompareBody';
 import styles from './SweepView.module.css';
 
 const pct = (v: number | null | undefined, d = 1) =>
@@ -150,6 +157,9 @@ export function SweepView() {
   const { model, cohorts, ctx, items: filteredCompareItems, c } = useCompare();
   const [f, reverse, setF] = useSweepFilters();
   const [open, setOpen] = useState<string | null>(null);
+  const wide = useMediaQuery(WIDE_QUERY);
+  const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
+  const [drawer, setDrawer] = useState(false);
   const [sort, setSort] = useState<{
     key: 'default' | 'issue' | 'left' | 'right' | 'move';
     dir: 'asc' | 'desc';
@@ -268,395 +278,497 @@ export function SweepView() {
     };
   });
   const sweepOpenItem = open ? displayed.find((i) => i.itemId === open) : null;
-  return (
-    <div className={styles.sweep} data-testid="sweep-view">
-      <header className={styles.head}>
-        <div>
-          <Text variant="xl" as="h2">
-            Sweep
-          </Text>
-          <Text variant="sm" tone="muted">
-            {left} vs {right} across {k} runs per cohort {'·'} {ctx.metric} {'·'} {shown.length}/
-            {displayed.length} items shown
-          </Text>
-        </div>
-        <Button
-          size="sm"
-          variant="neutral"
-          aria-pressed={reverse}
-          onPress={() => setF({ reverse: !reverse })}
-        >
-          Reverse sides
+  const chips = sweepScopeChips(effective, left, right);
+  const scoped = chips.length > 0;
+  const viewItems = () => {
+    setDrawer(false);
+    document.getElementById('sweep-items')?.scrollIntoView({ block: 'start' });
+  };
+  const sidebar = (
+    <div className={styles.quick} data-testid="quick-filters">
+      <div className={styles.quickHead}>
+        <Text variant="md" weight={650} tone="primary">
+          Quick filters
+        </Text>
+        {wide ? (
+          <IconButton label="Hide quick filters" icon="close" onPress={() => setSidebarHidden(true)} />
+        ) : null}
+      </div>
+      <Text variant="sm" tone="muted" role="status">
+        {shown.length.toLocaleString('en-US')} of {displayed.length.toLocaleString('en-US')} items
+      </Text>
+      <div className={styles.quickActions}>
+        <Button size="sm" variant="ghost" onPress={() => setF({ ...DEFAULT_SWEEP_FILTERS })}>
+          Clear all
         </Button>
-      </header>
-
-      {basis ? (
-        <div className={styles.verdict} data-verdict={basis.stat.verdict} role="status">
-          <Badge
-            tone={
-              basis.stat.verdict === 'improved'
-                ? 'success'
-                : basis.stat.verdict === 'regressed'
-                  ? 'danger'
-                  : 'neutral'
-            }
-          >
-            {basis.stat.verdict === 'improved'
-              ? 'IMPROVED'
-              : basis.stat.verdict === 'regressed'
-                ? 'REGRESSED'
-                : 'WITHIN NOISE'}
-          </Badge>
+        <Button size="sm" variant="neutral" onPress={viewItems}>
+          View {shown.length.toLocaleString('en-US')} items
+        </Button>
+      </div>
+      <SearchField
+        label="Search sweep items"
+        hideLabel
+        placeholder="Item id, domain, complexity"
+        value={f.q}
+        onChange={(q) => setF({ q })}
+        onClear={() => setF({ q: '' })}
+      />
+      <QuickFilterGroup
+        label="Move"
+        mode="single"
+        options={[
+          { id: 'improved', label: 'Improved', tone: 'success' },
+          { id: 'regressed', label: 'Regressed', tone: 'danger' },
+          { id: 'unchanged', label: 'Unchanged' },
+        ]}
+        selected={f.move === 'all' ? [] : [f.move]}
+        onToggle={(id) => setF({ move: f.move === id ? 'all' : (id as SweepMove) })}
+      />
+      <QuickFilterGroup
+        label="Outcome"
+        mode="single"
+        options={[
+          { id: 'left_sweeps_right', label: `${left} sweeps ${right}` },
+          { id: 'right_sweeps_left', label: `${right} sweeps ${left}` },
+          { id: 'both_pass', label: 'Both pass', tone: 'success' },
+          { id: 'both_fail', label: 'Both fail', tone: 'danger' },
+          { id: 'mixed', label: 'Mixed' },
+        ]}
+        selected={f.outcome === 'all' ? [] : [f.outcome]}
+        onToggle={(id) => setF({ outcome: f.outcome === id ? 'all' : (id as SweepOutcome) })}
+      />
+      {key !== 'all' ? (
+        <QuickFilterGroup
+          label={key}
+          mode="multi"
+          options={values.map((v) => ({ id: v, label: v }))}
+          selected={f.values ?? []}
+          onToggle={(id) => {
+            const cur = f.values ?? [];
+            const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+            setF({ values: next.length && next.length < values.length ? next : null, only: [] });
+          }}
+          onOnly={(id) => only(id)}
+        />
+      ) : null}
+      <Checkbox
+        isSelected={f.only.length > 0}
+        isDisabled={key === 'all' || !sweepKeySupportsOnly(displayed, key) || !f.values?.length}
+        onChange={(on) => setF({ only: on && f.values ? f.values : [] })}
+      >
+        Exclusive only
+      </Checkbox>
+    </div>
+  );
+  return (
+    <ReportLayout
+      wide={wide}
+      sidebarOpen={scoped && !sidebarHidden}
+      drawerOpen={drawer && scoped}
+      onDrawerOpenChange={setDrawer}
+      sidebar={scoped ? sidebar : undefined}
+    >
+      {scoped ? (
+        <ScopeBar
+          shown={shown.length}
+          total={displayed.length}
+          chips={chips.map((chip) => ({ key: chip.key, label: chip.label, onClear: () => setF(chip.patch) }))}
+          onClearAll={() => setF({ ...DEFAULT_SWEEP_FILTERS })}
+          onJumpToItems={viewItems}
+          sidebarOpen={wide ? !sidebarHidden : drawer}
+          narrow={!wide}
+          onToggleSidebar={() => (wide ? setSidebarHidden(!sidebarHidden) : setDrawer(true))}
+        />
+      ) : null}
+      <div className={styles.sweep} data-testid="sweep-view">
+        <header className={styles.head}>
           <div>
-            <Text variant="md" weight={600}>
-              {basis.label} {signed(basis.stat.delta)} {'—'}{' '}
-              {basis.stat.verdict === 'within_noise' ? 'not distinguishable from run luck' : 'beyond noise'}
+            <Text variant="xl" as="h2">
+              Sweep
             </Text>
             <Text variant="sm" tone="muted">
-              {ctx.metric}
-              {direction === 'minimize' ? ' · lower is better' : ''} {'·'} noise {'±'}
-              {(basis.stat.halfWidth * 100).toFixed(1)}% at 95% {'·'}{' '}
-              {basis.stat.pValue < 0.001 ? 'p < 0.001' : `p = ${basis.stat.pValue.toFixed(3)}`} {'·'}{' '}
-              {basis.stat.items} paired items {'·'} {metricRole} {'—'} other metrics below are context
+              {left} vs {right} across {k} runs per cohort {'·'} {ctx.metric} {'·'} {shown.length}/
+              {displayed.length} items shown
             </Text>
           </div>
-        </div>
-      ) : null}
-      <Text variant="sm" tone="muted">
-        {metricDirectionLabel(direction)}
-      </Text>
+          <Button
+            size="sm"
+            variant="neutral"
+            aria-pressed={reverse}
+            onPress={() => setF({ reverse: !reverse })}
+          >
+            Reverse sides
+          </Button>
+        </header>
 
-      <div className={styles.filters} role="group" aria-label="Sweep filters">
-        <Select
-          label="Move"
-          value={f.move}
-          onChange={(v) => v && setF({ move: String(v) as SweepMove })}
-          items={[
-            { key: 'all', label: 'All items' },
-            { key: 'improved', label: 'Improved' },
-            { key: 'regressed', label: 'Regressed' },
-            { key: 'unchanged', label: 'Unchanged' },
-          ]}
-          width={150}
-        />
-        <Select
-          label="Outcome"
-          value={f.outcome}
-          onChange={(v) => v && setF({ outcome: String(v) as SweepOutcome })}
-          items={[
-            { key: 'all', label: 'All outcomes' },
-            { key: 'left_sweeps_right', label: `${left} sweeps ${right}` },
-            { key: 'right_sweeps_left', label: `${right} sweeps ${left}` },
-            { key: 'both_pass', label: 'Both pass' },
-            { key: 'both_fail', label: 'Both fail' },
-            { key: 'mixed', label: 'Mixed' },
-          ]}
-          width={200}
-        />
-        <SearchField
-          label="Search sweep items"
-          placeholder="Item id, domain, complexity"
-          value={f.q}
-          onChange={(q) => setF({ q })}
-          onClear={() => setF({ q: '' })}
-          width="14rem"
-        />
-        <Select
-          label="Metadata"
-          value={key}
-          onChange={(v) => v && setF({ key: String(v), values: null, only: [], mode: 'include' })}
-          items={[{ key: 'all', label: 'All categories' }, ...keys.map((x) => ({ key: x, label: x }))]}
-          width={170}
-        />
-        <MultiSelect
-          label="Values"
-          items={values.map((v) => ({ key: v, label: v }))}
-          value={new Set(f.values ?? values)}
-          isDisabled={key === 'all'}
-          onChange={(set) =>
-            setF({ values: set.size >= values.length ? null : Array.from(set).map(String), only: [] })
-          }
-          onlyAction
-          selectAll
-        />
-        <Checkbox
-          isSelected={f.only.length > 0}
-          isDisabled={key === 'all' || !sweepKeySupportsOnly(displayed, key) || !f.values?.length}
-          onChange={(on) => setF({ only: on && f.values ? f.values : [] })}
-        >
-          Exclusive only
-        </Checkbox>
-      </div>
-
-      {shown.length === 0 ? (
-        <EmptyState
-          compact
-          title="No items match these filters"
-          action={
-            <Button variant="neutral" onPress={() => setF({ ...DEFAULT_SWEEP_FILTERS })}>
-              Reset sweep filters
-            </Button>
-          }
-        />
-      ) : (
-        <>
-          <section aria-label="Cohort metrics">
-            <Text variant="md" weight={600}>
-              Cohort metrics
-            </Text>
-            <div className={styles.stats}>
-              <StatCard
-                label={estimated ? `Pass@${estimated}` : `Pass@${k}`}
-                from={summary.left.passAtK}
-                to={summary.right.passAtK}
-                delta={summary.deltas.passAtK}
-                noise={noise?.passAtK ?? null}
-                help={
-                  estimated
-                    ? `pass@${estimated} estimated from all ${k} passes`
-                    : 'Share of items on which at least one run passes.'
-                }
-              />
-              <StatCard
-                label={`Avg@${k}`}
-                from={summary.left.avgAtK}
-                to={summary.right.avgAtK}
-                delta={summary.deltas.avgAtK}
-                noise={noise?.avgAtK ?? null}
-                help="Average score across every execution."
-              />
-              <StatCard
-                label="Consistency"
-                from={summary.left.consistency}
-                to={summary.right.consistency}
-                delta={summary.deltas.consistency}
-                noise={noise?.consistency ?? null}
-                help="Do executions of a cohort agree on pass or fail?"
-              />
-              <StatCard
-                label="Reliability"
-                from={summary.left.reliability}
-                to={summary.right.reliability}
-                delta={summary.deltas.reliability}
-                noise={null}
-                help="Share of executions that pass on items a cohort can solve. Not banded: its exclusion rule makes the aggregate nonlinear."
-              />
-              <StatCard
-                label={estimated ? `Pass^${estimated}` : `Pass^${k}`}
-                from={summary.left.passHatK}
-                to={summary.right.passHatK}
-                delta={summary.deltas.passHatK}
-                noise={noise?.passHatK ?? null}
-                help="Share of items on which every execution passes."
-              />
-            </div>
-          </section>
-
-          {brows.length ? (
-            <section aria-label={`Cohort metrics by ${bk}`}>
+        {basis ? (
+          <div className={styles.verdict} data-verdict={basis.stat.verdict} role="status">
+            <Badge
+              tone={
+                basis.stat.verdict === 'improved'
+                  ? 'success'
+                  : basis.stat.verdict === 'regressed'
+                    ? 'danger'
+                    : 'neutral'
+              }
+            >
+              {basis.stat.verdict === 'improved'
+                ? 'IMPROVED'
+                : basis.stat.verdict === 'regressed'
+                  ? 'REGRESSED'
+                  : 'WITHIN NOISE'}
+            </Badge>
+            <div>
               <Text variant="md" weight={600}>
-                Cohort metrics by {bk}
+                {basis.label} {signed(basis.stat.delta)} {'—'}{' '}
+                {basis.stat.verdict === 'within_noise' ? 'not distinguishable from run luck' : 'beyond noise'}
               </Text>
-              <ScrollRegion className={styles.scroll} label={`${bk} breakdown`}>
+              <Text variant="sm" tone="muted">
+                {ctx.metric}
+                {direction === 'minimize' ? ' · lower is better' : ''} {'·'} noise {'±'}
+                {(basis.stat.halfWidth * 100).toFixed(1)}% at 95% {'·'}{' '}
+                {basis.stat.pValue < 0.001 ? 'p < 0.001' : `p = ${basis.stat.pValue.toFixed(3)}`} {'·'}{' '}
+                {basis.stat.items} paired items {'·'} {metricRole} {'—'} other metrics below are context
+              </Text>
+            </div>
+          </div>
+        ) : null}
+        <Text variant="sm" tone="muted">
+          {metricDirectionLabel(direction)}
+        </Text>
+
+        <div className={styles.filters} role="group" aria-label="Sweep filters">
+          <Select
+            label="Move"
+            value={f.move}
+            onChange={(v) => v && setF({ move: String(v) as SweepMove })}
+            items={[
+              { key: 'all', label: 'All items' },
+              { key: 'improved', label: 'Improved' },
+              { key: 'regressed', label: 'Regressed' },
+              { key: 'unchanged', label: 'Unchanged' },
+            ]}
+            width={150}
+          />
+          <Select
+            label="Outcome"
+            value={f.outcome}
+            onChange={(v) => v && setF({ outcome: String(v) as SweepOutcome })}
+            items={[
+              { key: 'all', label: 'All outcomes' },
+              { key: 'left_sweeps_right', label: `${left} sweeps ${right}` },
+              { key: 'right_sweeps_left', label: `${right} sweeps ${left}` },
+              { key: 'both_pass', label: 'Both pass' },
+              { key: 'both_fail', label: 'Both fail' },
+              { key: 'mixed', label: 'Mixed' },
+            ]}
+            width={200}
+          />
+          <SearchField
+            label="Search sweep items"
+            placeholder="Item id, domain, complexity"
+            value={f.q}
+            onChange={(q) => setF({ q })}
+            onClear={() => setF({ q: '' })}
+            width="14rem"
+          />
+          <Select
+            label="Metadata"
+            value={key}
+            onChange={(v) => v && setF({ key: String(v), values: null, only: [], mode: 'include' })}
+            items={[{ key: 'all', label: 'All categories' }, ...keys.map((x) => ({ key: x, label: x }))]}
+            width={170}
+          />
+          <MultiSelect
+            label="Values"
+            items={values.map((v) => ({ key: v, label: v }))}
+            value={new Set(f.values ?? values)}
+            isDisabled={key === 'all'}
+            onChange={(set) =>
+              setF({ values: set.size >= values.length ? null : Array.from(set).map(String), only: [] })
+            }
+            onlyAction
+            selectAll
+          />
+          <Checkbox
+            isSelected={f.only.length > 0}
+            isDisabled={key === 'all' || !sweepKeySupportsOnly(displayed, key) || !f.values?.length}
+            onChange={(on) => setF({ only: on && f.values ? f.values : [] })}
+          >
+            Exclusive only
+          </Checkbox>
+        </div>
+
+        {shown.length === 0 ? (
+          <EmptyState
+            compact
+            title="No items match these filters"
+            action={
+              <Button variant="neutral" onPress={() => setF({ ...DEFAULT_SWEEP_FILTERS })}>
+                Reset sweep filters
+              </Button>
+            }
+          />
+        ) : (
+          <>
+            <section aria-label="Cohort metrics">
+              <Text variant="md" weight={600}>
+                Cohort metrics
+              </Text>
+              <div className={styles.stats}>
+                <StatCard
+                  label={estimated ? `Pass@${estimated}` : `Pass@${k}`}
+                  from={summary.left.passAtK}
+                  to={summary.right.passAtK}
+                  delta={summary.deltas.passAtK}
+                  noise={noise?.passAtK ?? null}
+                  help={
+                    estimated
+                      ? `pass@${estimated} estimated from all ${k} passes`
+                      : 'Share of items on which at least one run passes.'
+                  }
+                />
+                <StatCard
+                  label={`Avg@${k}`}
+                  from={summary.left.avgAtK}
+                  to={summary.right.avgAtK}
+                  delta={summary.deltas.avgAtK}
+                  noise={noise?.avgAtK ?? null}
+                  help="Average score across every execution."
+                />
+                <StatCard
+                  label="Consistency"
+                  from={summary.left.consistency}
+                  to={summary.right.consistency}
+                  delta={summary.deltas.consistency}
+                  noise={noise?.consistency ?? null}
+                  help="Do executions of a cohort agree on pass or fail?"
+                />
+                <StatCard
+                  label="Reliability"
+                  from={summary.left.reliability}
+                  to={summary.right.reliability}
+                  delta={summary.deltas.reliability}
+                  noise={null}
+                  help="Share of executions that pass on items a cohort can solve. Not banded: its exclusion rule makes the aggregate nonlinear."
+                />
+                <StatCard
+                  label={estimated ? `Pass^${estimated}` : `Pass^${k}`}
+                  from={summary.left.passHatK}
+                  to={summary.right.passHatK}
+                  delta={summary.deltas.passHatK}
+                  noise={noise?.passHatK ?? null}
+                  help="Share of items on which every execution passes."
+                />
+              </div>
+            </section>
+
+            {brows.length ? (
+              <section aria-label={`Cohort metrics by ${bk}`}>
+                <Text variant="md" weight={600}>
+                  Cohort metrics by {bk}
+                </Text>
+                <ScrollRegion className={styles.scroll} label={`${bk} breakdown`}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th scope="col">{bk}</th>
+                        <th scope="col">N</th>
+                        <th scope="col">Pass@{k}</th>
+                        <th scope="col">Avg@{k}</th>
+                        <th scope="col">Consistency</th>
+                        <th scope="col">Reliability</th>
+                        <th scope="col">Pass^{k}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {brows.map((r) => (
+                        <tr
+                          key={r.value}
+                          data-active={(f.key === bk && f.values?.includes(r.value)) || undefined}
+                        >
+                          <th scope="row">
+                            <button
+                              type="button"
+                              className={styles.link}
+                              aria-pressed={f.key === bk && !!f.values?.includes(r.value)}
+                              onClick={() =>
+                                f.key === bk && f.values?.length === 1 && f.values[0] === r.value
+                                  ? sweepKeySupportsOnly(displayed, bk) && !f.only.includes(r.value)
+                                    ? only(r.value)
+                                    : setF({ key: 'all', values: null, only: [] })
+                                  : setF({ key: bk, values: [r.value], only: [], mode: 'include' })
+                              }
+                            >
+                              {r.value}
+                            </button>
+                          </th>
+                          <td>{r.n}</td>
+                          {(
+                            [['passAtK'], ['avgAtK'], ['consistency'], ['reliability'], ['passHatK']] as const
+                          ).map(([m]) => {
+                            // Avg@k is the metric's own value: on a minimize metric a drop is the improvement.
+                            const good = breakdownDeltaGood(m, r.s.deltas[m] ?? 0, direction);
+                            return (
+                              <td key={m}>
+                                <span className={styles.mono}>
+                                  {pct(r.s.left[m] as number | null, 0)} {'→'}{' '}
+                                  <strong>{pct(r.s.right[m] as number | null, 0)}</strong>
+                                </span>{' '}
+                                <Tag
+                                  kind="data"
+                                  tone={good > 0.0005 ? 'success' : good < -0.0005 ? 'danger' : undefined}
+                                >
+                                  {signed(r.s.deltas[m] ?? 0, 0)}
+                                </Tag>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </ScrollRegion>
+              </section>
+            ) : null}
+
+            <section aria-label="Outcome summary">
+              <Text variant="md" weight={600}>
+                Outcome summary
+              </Text>
+              <div className={styles.outcomes}>
+                {[
+                  ['Total items', shown.length, null, undefined],
+                  ['Improved', summary.counts.improved, 'improved', 'move'],
+                  ['Regressed', summary.counts.regressed, 'regressed', 'move'],
+                  ['Unchanged', summary.counts.unchanged, 'unchanged', 'move'],
+                  ['Decisively fixed', summary.counts.decisivelyFixed, 'right_sweeps_left', 'outcome'],
+                  ['Decisively broken', summary.counts.decisivelyBroken, 'left_sweeps_right', 'outcome'],
+                ].map(([label, n, value, kind]) => {
+                  const active =
+                    kind === 'move' ? f.move === value : kind === 'outcome' ? f.outcome === value : false;
+                  return (
+                    <button
+                      key={String(label)}
+                      type="button"
+                      className={styles.outcome}
+                      aria-pressed={kind ? active : undefined}
+                      disabled={!kind}
+                      onClick={() =>
+                        kind === 'move'
+                          ? setF({ move: active ? 'all' : (value as SweepMove) })
+                          : setF({ outcome: active ? 'all' : (value as SweepOutcome) })
+                      }
+                    >
+                      <span className={styles.outcomeValue}>{String(n)}</span>
+                      <span className={styles.outcomeLabel}>{String(label)}</span>
+                    </button>
+                  );
+                })}
+                <div className={styles.outcome}>
+                  <span className={styles.outcomeValue}>{summary.counts.avgAttemptsDelta.toFixed(2)}</span>
+                  <span className={styles.outcomeLabel}>Avg {'Δ'} attempts / item</span>
+                </div>
+              </div>
+            </section>
+
+            <section aria-label="Items" id="sweep-items">
+              <ScrollRegion className={styles.scroll} label="Sweep items">
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th scope="col">{bk}</th>
-                      <th scope="col">N</th>
-                      <th scope="col">Pass@{k}</th>
-                      <th scope="col">Avg@{k}</th>
-                      <th scope="col">Consistency</th>
-                      <th scope="col">Reliability</th>
-                      <th scope="col">Pass^{k}</th>
+                      {(
+                        [
+                          ['issue', 'Item'],
+                          [null, 'Metadata'],
+                          ['left', left],
+                          ['right', right],
+                          ['move', 'Move'],
+                        ] as const
+                      ).map(([kk, label]) => (
+                        <th
+                          scope="col"
+                          key={label}
+                          aria-sort={
+                            kk && sort.key === kk
+                              ? sort.dir === 'asc'
+                                ? 'ascending'
+                                : 'descending'
+                              : undefined
+                          }
+                        >
+                          {kk ? (
+                            <button type="button" className={styles.link} onClick={() => sortBy(kk)}>
+                              {label} {sort.key === kk ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}
+                            </button>
+                          ) : (
+                            label
+                          )}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {brows.map((r) => (
-                      <tr
-                        key={r.value}
-                        data-active={(f.key === bk && f.values?.includes(r.value)) || undefined}
-                      >
+                    {shown.map((item) => (
+                      <tr key={item.itemId} className={styles.itemRow} data-outcome={sweepOutcomeOf(item)}>
                         <th scope="row">
                           <button
                             type="button"
                             className={styles.link}
-                            aria-pressed={f.key === bk && !!f.values?.includes(r.value)}
-                            onClick={() =>
-                              f.key === bk && f.values?.length === 1 && f.values[0] === r.value
-                                ? sweepKeySupportsOnly(displayed, bk) && !f.only.includes(r.value)
-                                  ? only(r.value)
-                                  : setF({ key: 'all', values: null, only: [] })
-                                : setF({ key: bk, values: [r.value], only: [], mode: 'include' })
-                            }
+                            onClick={() => setOpen(item.itemId)}
+                            aria-label={`Open item ${item.itemId}`}
                           >
-                            {r.value}
+                            {item.itemId}
                           </button>
                         </th>
-                        <td>{r.n}</td>
-                        {(
-                          [['passAtK'], ['avgAtK'], ['consistency'], ['reliability'], ['passHatK']] as const
-                        ).map(([m]) => {
-                          // Avg@k is the metric's own value: on a minimize metric a drop is the improvement.
-                          const good = breakdownDeltaGood(m, r.s.deltas[m] ?? 0, direction);
-                          return (
-                            <td key={m}>
-                              <span className={styles.mono}>
-                                {pct(r.s.left[m] as number | null, 0)} {'→'}{' '}
-                                <strong>{pct(r.s.right[m] as number | null, 0)}</strong>
-                              </span>{' '}
-                              <Tag
-                                kind="data"
-                                tone={good > 0.0005 ? 'success' : good < -0.0005 ? 'danger' : undefined}
-                              >
-                                {signed(r.s.deltas[m] ?? 0, 0)}
+                        <td>
+                          {['domain', 'complexity']
+                            .flatMap((m) => getMetadataCategoryValues(item.metadata, m))
+                            .slice(0, 4)
+                            .map((v) => (
+                              <Tag key={v} kind="data">
+                                {v}
                               </Tag>
-                            </td>
-                          );
-                        })}
+                            ))}
+                        </td>
+                        <td>
+                          <PassTrack passes={item.leftPasses} />
+                        </td>
+                        <td>
+                          <PassTrack passes={item.rightPasses} />
+                        </td>
+                        <td>
+                          <Tag
+                            kind="data"
+                            tone={item.move > 0 ? 'success' : item.move < 0 ? 'danger' : undefined}
+                          >
+                            {item.move > 0 ? `+${item.move}` : item.move}
+                          </Tag>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </ScrollRegion>
             </section>
-          ) : null}
-
-          <section aria-label="Outcome summary">
-            <Text variant="md" weight={600}>
-              Outcome summary
-            </Text>
-            <div className={styles.outcomes}>
-              {[
-                ['Total items', shown.length, null, undefined],
-                ['Improved', summary.counts.improved, 'improved', 'move'],
-                ['Regressed', summary.counts.regressed, 'regressed', 'move'],
-                ['Unchanged', summary.counts.unchanged, 'unchanged', 'move'],
-                ['Decisively fixed', summary.counts.decisivelyFixed, 'right_sweeps_left', 'outcome'],
-                ['Decisively broken', summary.counts.decisivelyBroken, 'left_sweeps_right', 'outcome'],
-              ].map(([label, n, value, kind]) => {
-                const active =
-                  kind === 'move' ? f.move === value : kind === 'outcome' ? f.outcome === value : false;
-                return (
-                  <button
-                    key={String(label)}
-                    type="button"
-                    className={styles.outcome}
-                    aria-pressed={kind ? active : undefined}
-                    disabled={!kind}
-                    onClick={() =>
-                      kind === 'move'
-                        ? setF({ move: active ? 'all' : (value as SweepMove) })
-                        : setF({ outcome: active ? 'all' : (value as SweepOutcome) })
-                    }
-                  >
-                    <span className={styles.outcomeValue}>{String(n)}</span>
-                    <span className={styles.outcomeLabel}>{String(label)}</span>
-                  </button>
-                );
-              })}
-              <div className={styles.outcome}>
-                <span className={styles.outcomeValue}>{summary.counts.avgAttemptsDelta.toFixed(2)}</span>
-                <span className={styles.outcomeLabel}>Avg {'Δ'} attempts / item</span>
-              </div>
-            </div>
-          </section>
-
-          <section aria-label="Items">
-            <ScrollRegion className={styles.scroll} label="Sweep items">
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    {(
-                      [
-                        ['issue', 'Item'],
-                        [null, 'Metadata'],
-                        ['left', left],
-                        ['right', right],
-                        ['move', 'Move'],
-                      ] as const
-                    ).map(([kk, label]) => (
-                      <th
-                        scope="col"
-                        key={label}
-                        aria-sort={
-                          kk && sort.key === kk
-                            ? sort.dir === 'asc'
-                              ? 'ascending'
-                              : 'descending'
-                            : undefined
-                        }
-                      >
-                        {kk ? (
-                          <button type="button" className={styles.link} onClick={() => sortBy(kk)}>
-                            {label} {sort.key === kk ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}
-                          </button>
-                        ) : (
-                          label
-                        )}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {shown.map((item) => (
-                    <tr key={item.itemId} className={styles.itemRow} data-outcome={sweepOutcomeOf(item)}>
-                      <th scope="row">
-                        <button
-                          type="button"
-                          className={styles.link}
-                          onClick={() => setOpen(item.itemId)}
-                          aria-label={`Open item ${item.itemId}`}
-                        >
-                          {item.itemId}
-                        </button>
-                      </th>
-                      <td>
-                        {['domain', 'complexity']
-                          .flatMap((m) => getMetadataCategoryValues(item.metadata, m))
-                          .slice(0, 4)
-                          .map((v) => (
-                            <Tag key={v} kind="data">
-                              {v}
-                            </Tag>
-                          ))}
-                      </td>
-                      <td>
-                        <PassTrack passes={item.leftPasses} />
-                      </td>
-                      <td>
-                        <PassTrack passes={item.rightPasses} />
-                      </td>
-                      <td>
-                        <Tag
-                          kind="data"
-                          tone={item.move > 0 ? 'success' : item.move < 0 ? 'danger' : undefined}
-                        >
-                          {item.move > 0 ? `+${item.move}` : item.move}
-                        </Tag>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </ScrollRegion>
-          </section>
-        </>
-      )}
-      {open ? (
-        <Dialog
-          open
-          onOpenChange={(o) => !o && setOpen(null)}
-          size="data"
-          title={`Item ${open}`}
-          description={
-            sweepOpenItem
-              ? `${left}: ${sweepOpenItem.leftPassCount}/${sweepOpenItem.leftPasses.length} pass · ${right}: ${sweepOpenItem.rightPassCount}/${sweepOpenItem.rightPasses.length} pass`
-              : undefined
-          }
-        >
-          <ItemDetail itemId={open} />
-        </Dialog>
-      ) : null}
-    </div>
+          </>
+        )}
+        {open ? (
+          <Dialog
+            open
+            onOpenChange={(o) => !o && setOpen(null)}
+            size="data"
+            title={`Item ${open}`}
+            description={
+              sweepOpenItem
+                ? `${left}: ${sweepOpenItem.leftPassCount}/${sweepOpenItem.leftPasses.length} pass · ${right}: ${sweepOpenItem.rightPassCount}/${sweepOpenItem.rightPasses.length} pass`
+                : undefined
+            }
+          >
+            <ItemDetail itemId={open} />
+          </Dialog>
+        ) : null}
+      </div>
+    </ReportLayout>
   );
 }

@@ -215,3 +215,23 @@ button.outcome {
   overflow: hidden;
   clip-path: inset(50%);
 }
+
+/* Quick-filter sidebar body for the sweep filters. */
+.quick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.quickHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quickActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
