@@ -200,7 +200,10 @@ The recipes, by intent:
   scope). The `ScopeBar` above the report lists "N of M items" with removable
   chips, Clear all, View N items and the Hide / Show toggle (stored in
   `localStorage qym:report-sidebar-hidden`). Under 1200px the sidebar is a
-  `Drawer` (360px) opened from the ScopeBar. Sidebar and ScopeBar fade with
+  `Drawer` (360px) opened from the ScopeBar. The sidebar's first group lists the active
+  chips (the ScopeBar then shows only the count and actions; below 1200px the sticky
+  ScopeBar carries the chips). Lazy section bodies are not in the DOM until they near the
+  viewport, so browser find-in-page cannot see them and the scrollbar thumb grows as they mount. Sidebar and ScopeBar fade with
   `--transition-fast` and not at all under `prefers-reduced-motion`.
 - **Badge** (`Badge`, `RunStatusBadge`): status and outcome labels, 20px minimum
   (`--badge-height`), fully rounded, tinted 1px outline, sans `--font-xs` / 650.
