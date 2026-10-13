@@ -123,9 +123,7 @@ test.describe('Runs list history', () => {
     await page.waitForTimeout(500);
     const target = await top(page, sel);
     expect(target).toBeGreaterThan(300);
-    await page
-      .getByRole('button', { name: 'Show run details' })
-      .evaluate((b) => (b as HTMLButtonElement).click());
+    // the run details are expanded by default on the report page
     await page
       .locator('a[href*="?model="]')
       .first()

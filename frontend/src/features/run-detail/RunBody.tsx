@@ -72,7 +72,7 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
   const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
   const [drawerOpen, setDrawerOpen] = useState(false);
   if (!scope.active && drawerOpen) setDrawerOpen(false);
-  const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current), []);
+  const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current), [pageRef]);
 
   // Links from before the report layout: `#overview`, `#run-section-errors`, `?panel=latency`.
   const hash = location.hash.replace(/^#(run-section-|section-)?/, '');
@@ -82,7 +82,7 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
       ? hash
       : (HASH_ALIASES[hash] ?? (isSectionKey(panelParam) ? panelParam : null));
     if (target) scrollToSection(target, pageRef.current);
-  }, [hash, panelParam]);
+  }, [hash, panelParam, pageRef]);
 
   const jumpToItems = () => {
     setDrawerOpen(false);
