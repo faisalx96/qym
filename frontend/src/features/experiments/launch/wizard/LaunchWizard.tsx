@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useMediaQuery } from '@/features/shell';
 import { Skeleton, Stepper } from '@/ui';
 import { plural } from '../../lib/format';
@@ -22,6 +22,14 @@ import { StepPanel } from './StepPanel';
 import { stepLabel, stepOfItem, WIZARD_STEPS, type WizardStepId } from './steps';
 import wizard from './wizard.module.css';
 
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
+    const overflow = getComputedStyle(node).overflowY;
+    if (overflow === 'auto' || overflow === 'scroll') return node;
+  }
+  return null;
+}
+
 interface Props {
   step: WizardStepId;
   next: WizardStepId | null;
@@ -40,6 +48,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
   );
   const hasEnv = doc.environmentIds.length > 0;
   const heading = useRef<HTMLHeadingElement>(null);
+  const [badgeSlot, setBadgeSlot] = useState<HTMLElement | null>(null);
   const rail = useRef<HTMLDivElement>(null);
   const announce = useMemo(() => {
     const index = WIZARD_STEPS.findIndex((s) => s.id === step) + 1;
@@ -77,8 +86,17 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
         smooth ? 700 : 50,
       );
     }
+    const wasFirst = firstStep.current;
     firstStep.current = false;
-    rail.current?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
+    // The shell scrolls its content area to the top on every pushed location, after this effect.
+    // Read the offset now and put it back in a microtask, then glide to the rail from where the
+    // user was (no flash to the top first).
+    const scroller = scrollParent(rail.current);
+    const before = scroller?.scrollTop ?? 0;
+    queueMicrotask(() => {
+      if (scroller && !wasFirst) scroller.scrollTop = before;
+      rail.current?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
+    });
     heading.current?.focus({ preventScroll: true });
     return () => {
       if (timer) clearTimeout(timer);
@@ -165,13 +183,14 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
     default: {
       const title = stepLabel(step);
       body = (
-        <StepPanel key={step} ref={heading} stepId={step} title={title}>
+        <StepPanel key={step} ref={heading} stepId={step} title={title} onBadgeSlot={setBadgeSlot}>
           {!hasEnv ? (
             <p className={styles.hint}>Pick an environment first (step 1) to configure this step.</p>
           ) : loading ? (
             <Skeleton kind="cards" count={3} label="Loading the environments’ settings" />
           ) : (
             <StaticSections
+              badgeSlot={badgeSlot}
               untitled={step === 'models' ? ['models'] : step === 'settings' ? ['settings'] : ['evaluation']}
             >
               {step === 'models' ? <ModelsSection /> : null}

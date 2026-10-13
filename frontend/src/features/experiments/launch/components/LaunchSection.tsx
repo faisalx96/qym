@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Collapse, Icon, Tag } from '@/ui';
 import { plural } from '../../lib/format';
 import { sectionBodyId, sectionHeadingId, SECTION_TITLES, useLaunch, type SectionId } from '../LaunchContext';
@@ -14,6 +15,8 @@ export type LaunchSectionVariant = 'collapsible' | 'static';
 interface StaticFrame {
   /** Sections whose title the step heading already shows (rendered without their own title). */
   untitled: readonly SectionId[];
+  /** Element beside the step heading that receives the badges of an untitled section. */
+  badgeSlot: HTMLElement | null;
 }
 
 const StaticFrameCtx = createContext<StaticFrame | null>(null);
@@ -21,12 +24,14 @@ const StaticFrameCtx = createContext<StaticFrame | null>(null);
 /** Wraps sections of a wizard step: they render `variant="static"`. */
 export function StaticSections({
   untitled = [],
+  badgeSlot = null,
   children,
 }: {
   untitled?: readonly SectionId[];
+  badgeSlot?: HTMLElement | null;
   children: ReactNode;
 }) {
-  return <StaticFrameCtx.Provider value={{ untitled }}>{children}</StaticFrameCtx.Provider>;
+  return <StaticFrameCtx.Provider value={{ untitled, badgeSlot }}>{children}</StaticFrameCtx.Provider>;
 }
 
 export interface LaunchSectionProps {
@@ -89,7 +94,7 @@ export function LaunchSection({
               {title}
             </h3>
           ) : null}
-          {badges}
+          {titled || !frame?.badgeSlot ? badges : createPortal(badges, frame.badgeSlot)}
           {description ? <p className={styles.staticDesc}>{description}</p> : null}
         </div>
         <div id={sectionBodyId(id)} className={styles.staticBody}>

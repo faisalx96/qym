@@ -16,6 +16,19 @@
   gap: var(--space-xs);
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.titleBadges {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .panelTitle {
   margin: 0;
   font-size: var(--font-xl);

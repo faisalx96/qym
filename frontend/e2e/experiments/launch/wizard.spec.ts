@@ -232,8 +232,11 @@ test.describe('polish', () => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'settings');
     await expect(page.getByRole('heading', { name: 'LLM routing', level: 4 })).toBeVisible();
     await page.getByRole('heading', { name: 'LLM routing', level: 4 }).getByRole('button').click();
-    await page.getByRole('button', { name: /Continue to evaluation/ }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole('textbox', { name: 'Max Attempts' })).toBeVisible();
     const scroller = await page.evaluateHandle(() => document.querySelector('main')!);
+    await scroller.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
     const before = await scroller.evaluate((el) => el.scrollTop);
     expect(before).toBeGreaterThan(100);
     await scroller.evaluate((el) => {
@@ -257,7 +260,7 @@ test.describe('polish', () => {
     const tops = await page.evaluate(() => (window as unknown as { __tops: number[] }).__tops);
     const lowest = Math.min(...tops.slice(1));
     // It scrolls up towards the rail without first collapsing to the very top of the page.
-    expect(lowest).toBeGreaterThan(0);
+    expect(lowest, tops.slice(0, 60).join(',')).toBeGreaterThan(0);
   });
 
   test('390px: step navigation is one row and the launch bar is one compact row', async ({ page }) => {
