@@ -32,17 +32,25 @@ export function useStickyShift({
       el.style.setProperty('--head-shift', `${shift}px`);
       el.toggleAttribute('data-stuck', shift > 0);
     };
+    // Measure/resize changes may wait for a frame; scrolling writes synchronously so the header never trails it.
     const on = () => {
       if (!raf) raf = requestAnimationFrame(update);
     };
+    const onScroll = () => {
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+      update();
+    };
     update();
-    parent.addEventListener('scroll', on, { passive: true });
+    parent.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', on);
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(on);
     ro?.observe(el);
     ro?.observe(parent);
     return () => {
-      parent.removeEventListener('scroll', on);
+      parent.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', on);
       ro?.disconnect();
       if (raf) cancelAnimationFrame(raf);
