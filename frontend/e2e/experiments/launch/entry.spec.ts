@@ -91,7 +91,7 @@ test.describe('home', () => {
   }) => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
     await nameBox(page).fill('x');
-    await page.getByRole('button', { name: /Start/ }).click();
+    await page.getByRole('button', { name: '← Start' }).click();
     await expect(page).not.toHaveURL(/step=/);
     await nameBox(page).fill('');
     await page.getByRole('button', { name: 'Show' }).click();

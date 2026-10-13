@@ -9,6 +9,7 @@ import {
   expectReady,
   launchButton,
   nameBox,
+  goStep,
   openLaunch,
   rail,
   openSection,
@@ -72,11 +73,8 @@ test.describe('evaluation inputs and run metadata', () => {
     await expect(problem).toBeVisible();
     await expect(launchButton(page)).toBeDisabled();
 
-    // Collapse the section, click the problem: it opens again and focuses the key field.
-    await page
-      .getByRole('heading', { level: 3, name: /^Evaluation configurations/ })
-      .getByRole('button')
-      .click();
+    // Leave the step, click the problem: it brings the step back and focuses the key field.
+    await goStep(page, 'review');
     await expect(page.getByRole('textbox', { name: 'Metadata key 1' })).toBeHidden();
     await problem.click();
     await expect(page.getByRole('textbox', { name: 'Metadata key 1' })).toBeFocused();
@@ -127,6 +125,7 @@ test.describe('Raw JSON', () => {
     // The form did not change while typing.
     await openSection(page, 'Evaluation configurations');
     await expect(page.getByRole('textbox', { name: 'Samples' })).toHaveValue('2');
+    await openSection(page, 'Raw JSON');
     await raw.getByRole('button', { name: 'Revert to form' }).click();
     await expect(raw.getByRole('status')).toContainText('In sync with the form');
     await expect(raw.locator('.cm-content')).toContainText('"samples": 2');

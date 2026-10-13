@@ -13,6 +13,7 @@ import {
   captureExperimentPosts,
   ensureOpen,
   nameBox,
+  goStep,
   openLaunch,
   rail,
   openSection,
@@ -54,10 +55,11 @@ const presetDoc = (connectionId: string) => ({
 async function openSavedPreset(page: Page, request: any, name: string): Promise<void> {
   await saveSavedPreset(request, f.project.id, f.env.id, name, presetDoc(f.connectionId));
   const saved = (await listPresets(request, f.project.id, f.env.id)).find((p) => p.name === name)!;
-  await openLaunch(page, f.project.slug, `?env=${f.env.id}&base=saved&preset=${saved.id}`);
+  await openLaunch(page, f.project.slug, `?env=${f.env.id}&base=saved&preset=${saved.id}`, 'start');
   await expect(page.getByRole('status').filter({ hasText: 'Based on' })).toContainText(
     `Saved preset “${name}”`,
   );
+  await goStep(page, 'where');
 }
 
 test('a saved preset fills every field of the configuration sections and what is shown is sent', async ({

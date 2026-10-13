@@ -7,6 +7,7 @@ import { axeSeriousViolations, describeViolations, resetFakes, test } from '../s
 import {
   expectReady,
   goStep,
+  settled,
   launchButton,
   maxAttempts,
   nameBox,
@@ -116,7 +117,7 @@ test.describe('wizard', () => {
       .getByRole('button', { name: /Edit: Environment configurations/ })
       .click();
     await expect(page).toHaveURL(/step=settings/);
-    await page.getByRole('button', { name: /Start/ }).click();
+    await page.getByRole('button', { name: '← Start' }).click();
     await expect(page).not.toHaveURL(/step=/);
     await expect(nameBox(page)).toHaveValue('edit run');
   });
@@ -139,18 +140,14 @@ test.describe('layout', () => {
       await nameBox(page).fill('layout run');
       await expectNoOverflow(page);
       await expect(page.getByRole('button', { name: /Customize/ })).toBeInViewport();
+      await settled(page);
       let v = await axeSeriousViolations(page);
       expect(v, `home\n${describeViolations(v)}`).toEqual([]);
       await page.getByRole('button', { name: /Customize/ }).click();
       for (const step of STEPS) {
-        if (width < 760) {
-          await expect(page.getByText(/^Step \d of 6:/).first()).toBeVisible();
-          await page.getByRole('button', { name: /Go to step/ }).click();
-          await page.getByRole('option', { name: new RegExp(`${STEP_LABELS[step]}`) }).click();
-        } else {
-          await goStep(page, step);
-        }
-        await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible();
+        if (width < 760) await expect(page.getByText(/^Step \d of 6:/).first()).toBeVisible();
+        await goStep(page, step);
+        await settled(page);
         await expectNoOverflow(page);
         v = await axeSeriousViolations(page);
         expect(v, `${step}\n${describeViolations(v)}`).toEqual([]);
@@ -181,15 +178,10 @@ test.describe('layout', () => {
     await expect(next).toBeInViewport();
     const [nb, bb] = [await next.boundingBox(), await bar.boundingBox()];
     expect(nb!.y + nb!.height).toBeLessThanOrEqual(bb!.y + 1);
-    await goStepNarrow(page, 'review');
+    await goStep(page, 'review');
     await expect(page.getByRole('region', { name: 'Launch' })).toHaveCount(0);
   });
 });
-
-async function goStepNarrow(page: import('@playwright/test').Page, step: StepId) {
-  await page.getByRole('button', { name: /Go to step/ }).click();
-  await page.getByRole('option', { name: new RegExp(STEP_LABELS[step]) }).click();
-}
 
 test.describe('motion', () => {
   test('the step panel enters with the 180ms animation; reduced motion turns it off', async ({ page }) => {

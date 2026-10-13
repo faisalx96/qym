@@ -68,9 +68,14 @@ function LaunchBody({
           : []),
       ]}
       actions={
-        <Button variant="ghost" onPress={() => goToStep(null)}>
-          ← Start
-        </Button>
+        <>
+          <Button variant="ghost" onPress={() => goToStep(null)}>
+            ← Start
+          </Button>
+          <LinkButton to={experimentsPath(slug)} variant="ghost">
+            All experiments
+          </LinkButton>
+        </>
       }
     />
   ) : (

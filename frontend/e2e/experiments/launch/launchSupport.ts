@@ -138,6 +138,16 @@ export const rail = (page: Page): Locator => page.getByRole('navigation', { name
 
 /** Clicks a step on the rail (no-op when it is the current one). */
 export async function goStep(page: Page, step: StepId): Promise<void> {
+  const jump = page.getByRole('button', { name: /Go to step/ });
+  if (await jump.isVisible()) {
+    // Narrow screens: the compact rail jumps through a select.
+    if (!(await page.getByRole('heading', { name: STEP_LABELS[step], level: 2 }).isVisible())) {
+      await jump.click();
+      await page.getByRole('option', { name: new RegExp(STEP_LABELS[step]) }).click();
+    }
+    await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible();
+    return;
+  }
   const button = rail(page).getByRole('button', { name: new RegExp(`^\\d\\s*${STEP_LABELS[step]}`) });
   if ((await button.getAttribute('aria-current')) !== 'step') await button.click();
   await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible();
@@ -164,8 +174,22 @@ const SECTION_STEP: Record<string, StepId> = {
 
 /** Goes to the step that holds a section and returns its region (sections are always open in Customize). */
 export async function openSection(page: Page, title: string): Promise<Locator> {
+  const region = page.getByRole('region', { name: new RegExp(`^${title}`) });
+  if (
+    (await rail(page).count()) === 0 &&
+    (await page.getByRole('button', { name: /Go to step/ }).count()) === 0
+  ) {
+    // The default-preset editor still stacks collapsible sections.
+    await ensureOpen(region.getByRole('heading', { level: 3 }).getByRole('button'));
+    return region;
+  }
   await goStep(page, SECTION_STEP[title] ?? 'where');
-  return page.getByRole('region', { name: new RegExp(`^${title}`) });
+  return region;
+}
+
+/** Waits for running CSS animations (a step enter) so axe does not read half-faded colours. */
+export async function settled(page: Page): Promise<void> {
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => null))));
 }
 
 export async function openGroup(page: Page, title: string): Promise<void> {

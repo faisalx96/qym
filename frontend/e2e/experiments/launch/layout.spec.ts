@@ -7,6 +7,7 @@ import {
   nameBox,
   openGroup,
   openLaunch,
+  settled,
   openSection,
   pickRadio,
   seedLaunch,
@@ -62,6 +63,7 @@ test.describe('390px', () => {
 
 test.describe('axe-core', () => {
   async function expectClean(page: Parameters<typeof axeSeriousViolations>[0], what: string) {
+    await settled(page);
     const v = await axeSeriousViolations(page);
     expect(v, `${what}\n${describeViolations(v)}`).toEqual([]);
   }
