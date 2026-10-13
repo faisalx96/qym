@@ -1,8 +1,7 @@
-import { useEffect, useRef } from 'react';
 import type { AnalysisJob } from '@/api/analysis';
 import { runPath } from '@/app/routes';
-import { Badge, Button, LinkButton, Tag, Text } from '@/ui';
-import type { RunnerState } from '../useAnalysisRunner';
+import { Badge, Tag, Text } from '@/ui';
+import type { PhaseView } from '../useAnalysisPhase';
 import s from './blocks.module.css';
 
 const PHASE: Record<string, string> = {
@@ -29,14 +28,6 @@ export function ProgressBar({ value, max, label }: { value: number; max: number;
       <div className={s.progressFill} style={{ width: `${pct}%` }} />
     </div>
   );
-}
-
-function retryNote(job: AnalysisJob): string | null {
-  const p = job.progress;
-  if (p.phase !== 'retrying') return null;
-  const attempt =
-    p.retry_attempt && p.retry_max_attempts ? ` (attempt ${p.retry_attempt} of ${p.retry_max_attempts})` : '';
-  return `Retrying ${p.metric_name ?? 'item'}${p.item_id ? ` on ${p.item_id}` : ''}${attempt}${p.retry_reason ? `: ${p.retry_reason}` : ''}`;
 }
 
 const count = (v: unknown): number => {
@@ -92,133 +83,55 @@ export function summarize(job: AnalysisJob) {
   };
 }
 
-/** One sentence for the bar, the Review card and the toast. */
+/** One sentence for the results card and the toast. */
 export function outcomeText(sum: ReturnType<typeof summarize>): string {
   const base = `${sum.analyzed} of ${sum.attempted} metric analyses succeeded`;
   return sum.failed ? `${base}, ${sum.failed} failed` : base;
 }
 
-/**
- * Job status. `bar` = single-line persistent bar (status + progress + Cancel);
- * `card` = full card with the completion summary (error-code groups, View run).
- */
-export function JobStatus({
-  runner,
-  slug,
-  runId,
-  mode,
-  onReview,
-}: {
-  runner: RunnerState;
-  slug: string;
-  runId: string;
-  mode: 'bar' | 'card';
-  onReview?: () => void;
-}) {
-  const job = runner.job;
-  const region = useRef<HTMLDivElement>(null);
-  const jobId = job?.job_id;
-  // Move focus to the status region when a job starts (the Analyze button just got disabled).
-  useEffect(() => {
-    if (jobId && mode === 'bar') region.current?.focus();
-  }, [jobId, mode]);
-  const cancelling = runner.cancelling;
-  useEffect(() => {
-    if (cancelling) region.current?.focus();
-  }, [cancelling]);
-  if (!job) return null;
-  const live = job.status === 'queued' || job.status === 'running' || job.status === 'cancelling';
+/** Short outcome for the action rail ("34 of 34 succeeded"). */
+export function shortOutcome(sum: ReturnType<typeof summarize>): string {
+  const base = `${sum.analyzed} of ${sum.attempted} succeeded`;
+  return sum.failed ? `${base}, ${sum.failed} failed` : base;
+}
+
+export function statusLabel(job: AnalysisJob): { text: string; tone: 'success' | 'warning' | 'danger' | 'neutral' | 'info' } {
   const sum = summarize(job);
-  const note = runner.reconnecting ? 'Reconnecting to the background analysis…' : retryNote(job);
-  const completedLabel = sum.allFailed
-    ? 'Analysis failed'
-    : sum.failed
-      ? 'Completed with errors'
-      : 'Completed';
-  const statusText =
-    job.status === 'completed'
-      ? completedLabel
-      : job.status === 'cancelling'
-        ? 'Cancelling'
-        : job.status === 'cancelled'
-          ? 'Cancelled'
-          : job.status === 'failed'
-            ? 'Failed'
-            : (PHASE[job.progress.phase] ?? 'Running');
-  const tone =
-    job.status === 'completed'
-      ? sum.allFailed
-        ? 'danger'
-        : sum.failed
-          ? 'warning'
-          : 'success'
-      : job.status === 'failed'
-        ? 'danger'
-        : job.status === 'cancelled'
-          ? 'neutral'
-          : job.progress.phase === 'retrying'
-            ? 'warning'
-            : 'info';
-  const done = job.progress.completed;
-  const total = job.progress.total;
-
-  if (mode === 'bar') {
-    return (
-      <div
-        ref={region}
-        tabIndex={-1}
-        className={s.jobBar}
-        role="region"
-        aria-label="Analysis job"
-        data-status={job.status}
-      >
-        <Badge tone={tone} dot>
-          {statusText}
-        </Badge>
-        <Text variant="base" tone="secondary" as="span" className={s.jobText} role="status">
-          {live
-            ? `${done} / ${total} targets${note ? ` · ${note}` : ''}`
-            : job.status === 'completed'
-              ? outcomeText(sum)
-              : job.status === 'failed'
-                ? (job.error ?? 'The job failed.')
-                : `Stopped at ${done} / ${total}; analyzed items were kept.`}
-        </Text>
-        {live ? (
-          <ProgressBar value={done} max={total} label="Analysis progress" />
-        ) : (
-          <span className={s.spacer} />
-        )}
-        {live ? (
-          <Button size="sm" variant="danger" onPress={runner.cancel} isDisabled={runner.cancelling}>
-            {runner.cancelling ? 'Cancelling…' : 'Cancel analysis'}
-          </Button>
-        ) : (
-          <>
-            {onReview ? (
-              <Button size="sm" variant="accent" onPress={onReview}>
-                Review results
-              </Button>
-            ) : null}
-            <LinkButton to={viewRunTo(slug, runId, job.pass_number)} size="sm">
-              View run
-            </LinkButton>
-            <Button size="sm" onPress={runner.dismiss}>
-              Dismiss
-            </Button>
-          </>
-        )}
-      </div>
-    );
+  if (job.status === 'completed') {
+    return sum.allFailed
+      ? { text: 'Analysis failed', tone: 'danger' }
+      : sum.failed
+        ? { text: 'Completed with errors', tone: 'warning' }
+        : { text: 'Completed', tone: 'success' };
   }
+  if (job.status === 'cancelling') return { text: 'Cancelling', tone: 'info' };
+  if (job.status === 'cancelled') return { text: 'Cancelled', tone: 'neutral' };
+  if (job.status === 'failed') return { text: 'Failed', tone: 'danger' };
+  return {
+    text: PHASE[job.progress.phase] ?? 'Running',
+    tone: job.progress.phase === 'retrying' ? 'warning' : 'info',
+  };
+}
 
+/**
+ * Job card for the results slot: status, progress and counts while it runs, the
+ * completion summary (error-code groups, categories) when it is over. The
+ * actions (Cancel, View run, Analyze again) live in the action rail.
+ */
+export function JobCard({ job, phase }: { job: AnalysisJob; phase: PhaseView }) {
+  const live = phase.live;
+  const sum = summarize(job);
+  const note = phase.reconnecting ? 'Reconnecting to the background analysis…' : phase.retryNote;
+  const label = statusLabel(job);
+  const done = phase.completed;
+  const total = phase.total;
   return (
     <div className={s.jobCard} data-status={job.status} role="region" aria-label="Analysis job">
       <div className={s.jobHead}>
-        <Badge tone={tone} dot>
-          {statusText}
+        <Badge tone={label.tone} dot>
+          {label.text}
         </Badge>
-        <Text variant="md" weight={600} as="span">
+        <Text variant="md" weight={600} as="span" className={s.jobTitle}>
           {live
             ? `Running ${done} / ${total}`
             : job.status === 'completed'
@@ -231,12 +144,6 @@ export function JobStatus({
                 ? 'Analysis failed'
                 : 'Analysis cancelled'}
         </Text>
-        <span className={s.spacer} />
-        {live ? (
-          <Button size="sm" variant="danger" onPress={runner.cancel} isDisabled={runner.cancelling}>
-            {runner.cancelling ? 'Cancelling…' : 'Cancel analysis'}
-          </Button>
-        ) : null}
       </div>
       {live ? (
         <>
@@ -286,18 +193,15 @@ export function JobStatus({
           ) : null}
         </div>
       ) : null}
-      {job.status === 'failed' && job.error ? (
-        <Text variant="base" tone="danger" as="p" role="alert">
-          {job.error}
+      {job.status === 'cancelled' ? (
+        <Text variant="base" tone="secondary" as="p">
+          {`Stopped at ${done} / ${total}; analyzed items were kept.`}
         </Text>
       ) : null}
-      {!live ? (
-        <div className={s.inline}>
-          <LinkButton to={viewRunTo(slug, runId, job.pass_number)} variant="accent">
-            View run
-          </LinkButton>
-          <Button onPress={runner.dismiss}>Dismiss</Button>
-        </div>
+      {job.status === 'failed' ? (
+        <Text variant="base" tone="danger" as="p" role="alert">
+          {job.error ?? 'The job failed.'}
+        </Text>
       ) : null}
     </div>
   );

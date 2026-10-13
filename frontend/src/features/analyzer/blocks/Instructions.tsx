@@ -13,7 +13,7 @@ export function Instructions({ ws, bodiesLoading }: { ws: RunWorkspace; bodiesLo
       <Textarea
         label="Additional instructions"
         hideLabel
-        rows={4}
+        rows={3}
         maxLength={MAX}
         value={settings.instructions}
         onChange={(v) => update({ instructions: v })}

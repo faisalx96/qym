@@ -1,20 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
-import { Button, CopyButton, EmptyState, ErrorState, Eyebrow, Skeleton, Switch, Tag, Text } from '@/ui';
+import { useState } from 'react';
+import { Button, CopyButton, EmptyState, ErrorState, Eyebrow, Skeleton, Tag, Text } from '@/ui';
 import { fieldsSent } from '../model/settings';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
 import s from './blocks.module.css';
 
-/** Role-labelled messages, copy, char count, context toggles, fields sent. No LLM call is made. */
+/**
+ * Role-labelled messages, copy, char count and fields sent (the context switches live in the
+ * drawer header). No LLM call is made. The text never auto-scrolls: while an update is
+ * pending it is dimmed in place instead of being swapped.
+ */
 export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxHeight?: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  const chars = ws.preview.characters;
-  // The item data (where a mapping edit shows up) is in the last message: keep it in view after each update.
-  useEffect(() => {
-    const el = box.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [chars]);
-  const { preview, settings, update, focus } = ws;
+  const { preview, focus } = ws;
   const fields = fieldsSent(ws.cfg);
   return (
     <div className={s.stack}>
@@ -25,24 +22,16 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
             <span className={s.mono}>{focus.metric}</span>
           </Text>
         ) : null}
-        {preview.characters != null ? (
-          <Tag kind="count" aria-label={`${preview.characters} characters`}>
-            {`${preview.characters.toLocaleString()} chars`}
-          </Tag>
-        ) : null}
-        <Text variant="sm" tone="muted" as="span" role="status" aria-live="polite">
+        <span className={s.charsSlot}>
+          {preview.characters != null ? (
+            <Tag kind="count" aria-label={`${preview.characters} characters`}>
+              {`${preview.characters.toLocaleString()} chars`}
+            </Tag>
+          ) : null}
+        </span>
+        <Text variant="sm" tone="muted" as="span" role="status" aria-live="polite" className={s.updating}>
           {preview.pending ? 'Updating…' : ''}
         </Text>
-        <span className={s.spacer} />
-        <Switch isSelected={settings.useRules} onChange={(v) => update({ useRules: v })}>
-          Production rules
-        </Switch>
-        <Switch isSelected={settings.useDocuments} onChange={(v) => update({ useDocuments: v })}>
-          Project documents
-        </Switch>
-        <Switch isSelected={settings.useTrace} onChange={(v) => update({ useTrace: v })}>
-          Trace evidence
-        </Switch>
       </div>
       {!preview.hasTarget ? (
         <EmptyState
@@ -63,8 +52,8 @@ export function PromptPreview({ ws, maxHeight = true }: { ws: RunWorkspace; maxH
         <>
           {/* Scrollable region: focusable so keyboard users can scroll it. */}
           <div
-            ref={box}
             className={s.messages}
+            data-pending={preview.pending ? '' : undefined}
             data-expanded={expanded || !maxHeight ? '' : undefined}
             // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
             tabIndex={0}

@@ -1,4 +1,4 @@
-import { Badge, EmptyState, Tag, Text } from '@/ui';
+import { Badge, EmptyState, Skeleton, Tag, Text } from '@/ui';
 import type { AnalysisResultPayload } from '@/api/analysis';
 import { rootCauseIssues } from '../model/rootCause';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
@@ -107,13 +107,17 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
 }
 
 /** Test result cards: issues with category / subcategory / finding / confidence, fields sent. */
-export function TestResults({ ws }: { ws: RunWorkspace }) {
+export function TestResults({ ws, quiet }: { ws: RunWorkspace; quiet?: boolean }) {
   const { test } = ws;
   if (test.testing) {
+    const rows = Math.min(3, Math.max(1, ws.testKeys.length));
     return (
-      <Text variant="base" tone="muted" as="p" role="status">
-        Testing against the connection… Nothing is saved and no job is created.
-      </Text>
+      <div className={s.stack}>
+        <Text variant="base" tone="muted" as="p" role="status">
+          Testing against the connection… Nothing is saved and no job is created.
+        </Text>
+        <Skeleton kind="rows" rows={rows} rowHeight={96} label="Testing targets" />
+      </div>
     );
   }
   if (test.error) {
@@ -124,11 +128,12 @@ export function TestResults({ ws }: { ws: RunWorkspace }) {
     );
   }
   if (!test.outcome) {
+    if (quiet) return null;
     return (
       <EmptyState
         compact
-        title="No test run yet"
-        body="Test up to 3 items to see the diagnosis before analyzing everything."
+        title="Test or analyze to see results here"
+        body="Test up to 3 targets to see the diagnosis first; a test saves nothing."
       />
     );
   }

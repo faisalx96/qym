@@ -190,3 +190,28 @@ export function analyzeRequest(
 }
 
 export type { SourceField };
+
+/** One-line summary of the Input mapping disclosure: "Default fields", "Custom fields", "2 variables". */
+export function mappingSummary(
+  settings: Pick<
+    AnalyzerSettings,
+    'std' | 'includeError' | 'includeScores' | 'includeMetadata' | 'metaDeselected'
+  >,
+  variableCount: number,
+): string {
+  const customStd =
+    !settings.includeError ||
+    !settings.includeScores ||
+    !settings.includeMetadata ||
+    settings.metaDeselected.length > 0 ||
+    (Object.keys(settings.std) as StdVariable[]).some((k) => {
+      const d = defaultSlot(k);
+      const cur = settings.std[k];
+      return cur.field !== d.field || !cur.full || cur.selected.length > 0;
+    });
+  const parts = [
+    customStd ? 'Custom fields' : null,
+    variableCount ? `${variableCount} ${variableCount === 1 ? 'variable' : 'variables'}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'Default fields';
+}

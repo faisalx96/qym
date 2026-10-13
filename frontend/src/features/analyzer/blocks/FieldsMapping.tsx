@@ -43,11 +43,14 @@ export function FieldsMapping({
   ws,
   bodiesLoading,
   onlyCustom,
+  onlyStandard,
 }: {
   ws: RunWorkspace;
   bodiesLoading?: boolean;
   /** Render only the `{variable}` rows (next to the instructions). */
   onlyCustom?: boolean;
+  /** Render only INPUT / EXPECTED / OUTPUT and the include toggles (`{variable}` rows sit by the instructions). */
+  onlyStandard?: boolean;
 }) {
   const { settings, update, trees, customVars } = ws;
   const [open, setOpen] = useState<string | null>(null);
@@ -65,7 +68,7 @@ export function FieldsMapping({
           set: (slot: FieldSlot) => update({ std: { ...settings.std, [v.key]: slot } }),
           clearable: false,
         }))),
-    ...customVars.map((name) => ({
+    ...(onlyStandard ? [] : customVars).map((name) => ({
       id: `var:${name}`,
       label: `{${name}}`,
       mono: true,

@@ -1,19 +1,20 @@
 import type { AnalysisScope } from '@/api/analysis';
 import { Navigate, useLocation } from 'react-router-dom';
-import { isJobTerminal, useAnalysisConfig, useRunSummary, type AnalysisJob } from '@/api/analysis';
+import { useAnalysisConfig, useRunSummary, type AnalysisJob } from '@/api/analysis';
 import { projectPath } from '@/app/routes';
-import { useSearchParamsState } from '@/lib/url-state';
-import { Badge, ErrorState, LinkButton, PageHeader, SegmentedControl, useToast } from '@/ui';
+import { ErrorState, LinkButton, useToast } from '@/ui';
 import { fullWidth } from '@/features/shell/layout';
+import { AnalyzerFrame } from './AnalyzerFrame';
+import { CompactJobRail } from './blocks/ActionRail';
+import { outcomeText, summarize } from './blocks/JobStatus';
 import { GuidanceArea } from './GuidanceArea';
-import { JobStatus, outcomeText, summarize } from './blocks/JobStatus';
 import { RunAnalyze } from './RunAnalyze';
-import { STEP_IDS, type StepId } from './steps';
+import { useAnalysisPhase } from './useAnalysisPhase';
 import { useAnalysisRunner } from './useAnalysisRunner';
 import type { useAnalyzerRoute } from './useAnalyzerRoute';
 import s from './analyzer.module.css';
 
-/** Run scope: header, area switch, the sticky job bar (visible on every area) and the two areas. */
+/** Run scope: the page frame (one tab row), the run workspace (kept mounted) and the guidance tabs. */
 export function RunShell({
   slug,
   runId,
@@ -31,21 +32,19 @@ export function RunShell({
   const config = useAnalysisConfig(scope);
   const summary = useRunSummary(runId);
   const location = useLocation();
-  const { params, pushUrlQuery } = useSearchParamsState();
-  const stepParam = params.get('step');
-  const step: StepId = (STEP_IDS as string[]).includes(stepParam ?? '') ? (stepParam as StepId) : 'configure';
-  // A step is a place in a wizard: Back returns to the previous step instead of leaving the workspace.
-  const setStep = (next: StepId) => pushUrlQuery({ step: next === 'configure' ? null : next });
 
+  // Success is announced by the action rail and the Results section; a toast is only for trouble.
   const runner = useAnalysisRunner(runId, route.pass, (job: AnalysisJob) => {
     const sum = summarize(job);
     if (job.status === 'completed') {
       if (sum.allFailed) toast.show(`Analysis failed: ${outcomeText(sum)}`, { tone: 'error' });
-      else toast.show(`Analysis finished: ${outcomeText(sum)}`, { tone: sum.failed ? 'warning' : 'success' });
+      else if (sum.failed)
+        toast.show(`Analysis finished with errors: ${outcomeText(sum)}`, { tone: 'warning' });
     } else if (job.status === 'cancelled')
       toast.show('Analysis cancelled. Items already analyzed were kept.', { tone: 'info' });
     else toast.show(job.error || 'The analysis failed', { tone: 'error' });
   });
+  const phase = useAnalysisPhase(runner, false);
 
   // A run opened under another project's slug lands under its own project (as run detail does).
   const ownSlug = summary.data?.run?.project?.slug;
@@ -69,53 +68,19 @@ export function RunShell({
     );
   }
 
-  const area = route.scope === 'run' ? 'run' : 'guidance';
-  const job = runner.job;
-  const live = Boolean(job && !isJobTerminal(job.status));
-  const showBar = Boolean(job) && !(area === 'run' && step === 'review');
-  const guidanceTab = route.scope === 'run' ? 'categories' : route.scope;
-
+  const onRun = route.scope === 'run';
+  const run = summary.data?.run;
   return (
-    <div className={`${fullWidth} ${s.page}`}>
-      <PageHeader
-        title="Auto-analysis"
-        description="Configure, preview, run and review an analysis; keep project guidance up to date."
-        meta={[`Project ${slug}`]}
-      />
-      <div className={s.areaRow}>
-        <SegmentedControl
-          label="Workspace area"
-          value={area}
-          onChange={(v) => route.setScope(v === 'run' ? 'run' : 'categories')}
-          options={[
-            { value: 'run', label: 'Analyze run' },
-            { value: 'guidance', label: 'Project guidance' },
-          ]}
-        />
-        {live && area === 'guidance' ? (
-          <Badge tone="info" dot>
-            {`Analysis ${job?.progress.completed}/${job?.progress.total}`}
-          </Badge>
-        ) : null}
-      </div>
-      {showBar ? (
-        <div className={s.stickyBar}>
-          <JobStatus
-            runner={runner}
-            slug={slug}
-            runId={runId}
-            mode="bar"
-            onReview={
-              area === 'run'
-                ? () => setStep('review')
-                : // one URL write: two router updates in a row would drop the first (scope stayed on guidance)
-                  () => pushUrlQuery({ scope: null, step: 'review' })
-            }
-          />
-        </div>
-      ) : null}
-
-      <div hidden={area !== 'run'}>
+    <AnalyzerFrame
+      slug={slug}
+      scope={scope}
+      tab={route.scope}
+      onTab={route.setScope}
+      description="Diagnose the failed metric targets of one run."
+      meta={run ? [run.run_name || run.run_id] : undefined}
+      live={phase.live}
+    >
+      <div hidden={!onRun}>
         {config.isError && !config.data ? (
           <ErrorState
             error={config.error}
@@ -123,26 +88,21 @@ export function RunShell({
             onRetry={() => config.refetch()}
           />
         ) : config.data ? (
-          <RunAnalyze
-            slug={slug}
-            runId={runId}
-            config={config.data}
-            route={route}
-            runner={runner}
-            step={step}
-            onStep={setStep}
-          />
+          <RunAnalyze slug={slug} runId={runId} config={config.data} route={route} runner={runner} />
         ) : null}
       </div>
-      {area === 'guidance' ? (
-        <GuidanceArea
-          scope={scope}
-          slug={slug}
-          canManage={canManage}
-          tab={guidanceTab}
-          onTab={route.setScope}
-        />
+      {route.scope !== 'run' ? (
+        <>
+          <GuidanceArea scope={scope} slug={slug} canManage={canManage} tab={route.scope} />
+          <CompactJobRail
+            runner={runner}
+            phase={phase}
+            slug={slug}
+            runId={runId}
+            onOpen={() => route.setScope('run')}
+          />
+        </>
       ) : null}
-    </div>
+    </AnalyzerFrame>
   );
 }
