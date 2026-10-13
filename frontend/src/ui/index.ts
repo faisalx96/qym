@@ -38,6 +38,7 @@ export * from './Pagination';
 export * from './Dialog';
 export * from './ConfirmDialog';
 export * from './FormDialog';
+export * from './Disclosure';
 export * from './Drawer';
 export * from './Popover';
 export * from './DropdownMenu';

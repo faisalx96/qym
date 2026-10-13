@@ -1,10 +1,12 @@
 import styles from './Skeleton.module.css';
 
 export interface SkeletonProps {
-  kind?: 'value' | 'lines' | 'chart' | 'cards' | 'table' | 'list';
+  kind?: 'value' | 'lines' | 'chart' | 'cards' | 'table' | 'list' | 'rows';
   width?: number | string;
   height?: number | string;
   rows?: number;
+  /** `rows` kind: height of each block row in px (shaped like the real list). */
+  rowHeight?: number;
   count?: number;
   label?: string;
   className?: string;
@@ -16,6 +18,7 @@ export function Skeleton({
   width,
   height,
   rows = 3,
+  rowHeight = 40,
   count = 3,
   label = 'Loading',
   className,
@@ -36,6 +39,15 @@ export function Skeleton({
       <div {...common}>
         {Array.from({ length: count }, (_, i) => (
           <div key={i} className={styles.card} />
+        ))}
+      </div>
+    );
+  }
+  if (kind === 'rows') {
+    return (
+      <div {...common} style={style}>
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className={styles.blockRow} style={{ height: rowHeight }} />
         ))}
       </div>
     );

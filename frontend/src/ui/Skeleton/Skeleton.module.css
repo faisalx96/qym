@@ -22,6 +22,19 @@
   animation: shimmer 1.4s linear infinite;
 }
 
+.skeleton[data-kind='rows'] {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.blockRow {
+  border-radius: var(--control-radius);
+  background: var(--bone);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
 .skeleton[data-kind='lines'],
 .skeleton[data-kind='list'] {
   display: flex;
@@ -83,6 +96,7 @@
 @media (prefers-reduced-motion: reduce) {
   .bone,
   .row,
+  .blockRow,
   .card,
   .skeleton[data-kind='value'],
   .skeleton[data-kind='chart'] {

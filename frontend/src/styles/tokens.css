@@ -92,6 +92,12 @@
   --info-marker-size: 12px;
   --help-tooltip-width: 240px;
   --status-bar-height: 38px;
+  /* Auto-analysis action rail and reserved results slot (nothing may resize them on state change). */
+  --action-rail-height: 56px;
+  --action-primary-width: 168px;
+  --results-slot-min-height: 160px;
+  --chars-tag-width: 96px;
+  --analysis-content-width: 1440px;
 
   /* Auto-analysis extensions to the upstream component geometry. */
   --dropdown-width: 240px;

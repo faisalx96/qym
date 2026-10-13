@@ -265,6 +265,8 @@
 .content {
   flex: 1;
   overflow: auto;
+  /* The scrollbar appearing or disappearing with page height must not change the content width. */
+  scrollbar-gutter: stable;
   background: var(--bg-void);
   outline: none;
 }
