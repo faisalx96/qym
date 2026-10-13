@@ -146,6 +146,28 @@ const COLUMNS: Column<Run>[] = [
   },
 ];
 
+const MANY: Run[] = Array.from({ length: 5000 }, (_, i) => ({
+  ...RUNS[i % RUNS.length]!,
+  id: `many-${i}`,
+  name: `run-${String(i).padStart(4, '0')}`,
+}));
+
+/** 5,000 rows in a 320px card: only the visible window is mounted. */
+function VirtualDemo() {
+  return (
+    <div style={{ maxHeight: 320, display: 'flex', flexDirection: 'column' }}>
+      <DataTable<Run>
+        aria-label="Virtualized runs"
+        columns={COLUMNS.filter((c) => ['name', 'status', 'acc', 'at'].includes(c.id))}
+        rows={MANY}
+        rowKey={(r) => r.id}
+        virtualize={{ estimateRowHeight: 52 }}
+        densityLocked
+      />
+    </div>
+  );
+}
+
 export function DataTableGallery() {
   const [selected, setSelected] = useState<Set<Key>>(new Set());
   const [q, setQ] = useState('');
@@ -225,6 +247,7 @@ export function DataTableGallery() {
         groupBy={{ key: (r) => r.model, label: (k) => k, collapsible: true }}
         zebra={false}
       />
+      <VirtualDemo />
       <DataTable<Run>
         aria-label="Embedded"
         variant="embedded"

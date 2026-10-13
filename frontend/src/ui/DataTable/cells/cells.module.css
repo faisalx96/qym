@@ -44,8 +44,8 @@
 .track {
   position: relative;
   display: inline-block;
-  flex: 0 0 48px;
-  inline-size: 48px;
+  flex: 0 0 var(--track-w, 48px);
+  inline-size: var(--track-w, 48px);
   block-size: 6px;
   border-radius: var(--radius-pill);
   background: var(--bg-elevated);

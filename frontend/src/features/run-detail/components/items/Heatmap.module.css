@@ -17,6 +17,18 @@
   padding: 0 var(--space-sm);
 }
 
+.grid {
+  --head-shift: 0px;
+}
+
+.row[data-heat-head] {
+  position: relative;
+  z-index: 2;
+  transform: translateY(var(--head-shift));
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 .th {
   font-size: var(--font-sm);
   font-weight: 650;

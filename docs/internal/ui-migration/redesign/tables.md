@@ -476,3 +476,29 @@ inside `DataTable.Toolbar/Footer`, `RowAction.hint` (tooltip and menu descriptio
 - **Queue filters at 390 px** stack as three full-width selects above the cards; a compact Filters popover would be tidier.
 - Other raw tables stay on the allow-list in `design-language.test.ts` (compare, run-detail, matrices, prose, dialogs).
 - The `test.fail` spec in `e2e/runs-list/cutover-navigation.spec.ts` belongs to run-detail and was left as it was.
+
+## Pass 2
+
+Run-detail items, the compare matrix and the review leftovers.
+
+- **Run-detail items (A2)** on `DataTable`: `#` (pinned), Status, Input (`wrap: 2`), Reason (`secondary` text from the existing
+  reason picker, hidden under 760 px as before), one `ScoreBar` column per metric under a "Metrics" band (the analysis
+  metric leads and is the sortable one), Latency (sortable), a pinned trace button. Expansion (`expandOnRowClick`, button
+  named "Open/Close item #n"), `?item=` deep link, highlight, error rail, pagination in the footer, cards below 640 px.
+- **Virtualization (T7)** lives in the primitive: `virtualize` (on by default above 200 display rows) windows `<tr>` rows
+  with spacer rows, measured heights (expanded detail rows are their own items) and either the table's own scroller or a
+  `scrollParent` (the shell scroller for run items, with `scrollPaddingStart` for the sticky bars). `scrollToKey` lands deep
+  links; arrow keys, Home/End and PageUp/Down walk rows across the window (a row already mounted is focused at once,
+  otherwise the window scrolls and focus follows). Measured on the 5,200-item run, 500 rows per page: first item row
+  about 1.0 s after navigation (page load plus tab), 9 rows mounted at first paint, 23 after scrolling 28,000 px, scroll
+  frames p50 22 ms / p95 28 ms in headless Chromium. A 500-row page is never fully mounted.
+- **Compare matrix (A3)**: see commits `d4acb223`, `92e382d4`, `6e7f40dd` (a column per run with the baseline star, score
+  bars or Pass/Fail chips, improved/regressed glyphs, `rowState` warn/error, the output cards on expand).
+- **Leftovers**: trash fits at 1440 and shows an edge cue beside the pinned Restore column plus a visible rail when it
+  scrolls; Charts is cards at 390 px (group aggregates in the group card header), its Runs/Grouped controls wrap, bars are
+  wider (`ScoreBar width`), group collapse is controlled (`groupCollapsed`/`onGroupCollapsedChange`), `ScoreBar color`.
+- **Deferred / known**: the table header sticks inside the table's own scroller, not the shell scroller, so run items and
+  compare keep a non-sticky header (needs a `scrollParent`-relative sticky option, about 3 h); card mode labels fields by
+  `headerText`, which falls back to the column id for ReactNode headers, so the compare matrix scrolls horizontally on
+  phones (needs `Column.label`, about 1 h); the `?` shortcut sheet, `Ctrl+A`, dataset preview and experiments search stay
+  deferred as before.

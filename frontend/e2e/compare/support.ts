@@ -63,3 +63,7 @@ export async function goSection(page: Page, name: string): Promise<void> {
     .getByRole('link', { name: new RegExp(`^${name}`) })
     .click();
 }
+
+/** The expanded detail of one item (a sibling row of the item-row, so it is found by item id). */
+export const itemDetail = (page: Page, id: string) =>
+  page.locator(`[data-testid="item-detail"][data-item-id="${id}"]`);

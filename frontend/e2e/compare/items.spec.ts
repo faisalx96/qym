@@ -1,6 +1,6 @@
 /** Scenarios 5 and 6: expanded items (lazy bodies, trace, copy, score edit) and root-cause issues. */
 import { expect, test, type Page } from '@playwright/test';
-import { compareUrl, client, seedScenario, urlParams, waitLoaded, goSection } from './support';
+import { compareUrl, client, seedScenario, urlParams, waitLoaded, goSection, itemDetail } from './support';
 import { createApiKey, seedCompareRun, seedTracedRun, type CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -42,10 +42,10 @@ test('expanding an item lazily loads bodies (POST /items/details) and shows a ca
   expect(details).toHaveLength(0); // the compact snapshot carries no bodies
   const req = page.waitForRequest((r) => r.method() === 'POST' && /\/items\/details/.test(r.url()));
   await row(page, 'cmp-001')
-    .getByRole('button', { name: /^Item 1:/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 1$/ })
     .click();
   await req;
-  const detail = row(page, 'cmp-001').getByTestId('item-detail');
+  const detail = itemDetail(page, 'cmp-001');
   await expect(detail).toBeVisible();
   await expect(detail.getByTestId('output-card')).toHaveCount(4);
   for (const r of [base, a, b, c]) await expect(card(page, r)).toBeVisible();
@@ -57,14 +57,14 @@ test('expanding an item lazily loads bodies (POST /items/details) and shows a ca
   await expect(card(page, base).getByRole('link')).toHaveAttribute('href', /\/runs\/.+\?item=cmp-001/);
   // collapse again
   await row(page, 'cmp-001')
-    .getByRole('button', { name: /^Item 1:/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 1$/ })
     .click();
   await expect(detail).toHaveCount(0);
 
   // copy button puts the output on the clipboard
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await row(page, 'cmp-001')
-    .getByRole('button', { name: /^Item 1:/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 1$/ })
     .click();
   await card(page, a)
     .getByRole('button', { name: /^Copy output of/ })
@@ -79,7 +79,7 @@ test('a task error shows ERROR and the message on the output card', async ({ pag
   await page.goto(compareUrl([base, a, seed.runs.c]));
   await waitLoaded(page);
   await row(page, 'cmp-005')
-    .getByRole('button', { name: /^Item 5:/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 5$/ })
     .click();
   await expect(card(page, base)).toContainText('ERROR');
   await expect(card(page, base)).toContainText('TimeoutError');
@@ -90,7 +90,7 @@ test('Trace opens the drawer for a traced item and Escape closes it', async ({ p
   await page.goto(compareUrl([traced, base]));
   await waitLoaded(page);
   await row(page, 'cmp-010')
-    .getByRole('button', { name: /^Item 10:/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 10$/ })
     .click();
   await expect(card(page, traced)).toBeVisible();
   await expect(card(page, base)).toBeVisible();
@@ -118,7 +118,7 @@ test('edit a score: pencil, Enter saves via POST /api/runs/update_metric and the
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
   await row(page, 'cmp-002')
-    .getByRole('button', { name: /^Item 2:/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 2$/ })
     .click();
   const chip = card(page, base).locator('[data-metric="quality"]');
   const before = (await chip.innerText()).replace(/\s+/g, ' ');
@@ -153,7 +153,7 @@ test('a 422 on save keeps the editor open with the message; Escape cancels', asy
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
   await row(page, 'cmp-003')
-    .getByRole('button', { name: /^Item 3:/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 3$/ })
     .click();
   const chip = card(page, base).locator('[data-metric="quality"]');
   await chip.getByRole('button', { name: /^Edit quality score of/ }).click();
@@ -176,7 +176,7 @@ test('a locked (submitted) run shows no edit pencil and no Add issue', async ({ 
   await page.goto(compareUrl([base, locked!]));
   await waitLoaded(page);
   await row(page, 'cmp-002')
-    .getByRole('button', { name: /^Item 2:/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 2$/ })
     .click();
   await expect(card(page, locked!)).toBeVisible();
   await expect(card(page, locked!).getByRole('button', { name: /^Edit .* score of/ })).toHaveCount(0);
@@ -195,7 +195,7 @@ test('root-cause issues: validation, add, show on the card, edit, delete, and fi
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
   await row(page, 'cmp-004')
-    .getByRole('button', { name: /^Item 4:/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 4$/ })
     .click();
   const c = card(page, base);
   await expect(c).toContainText('No root-cause issues assigned.');
@@ -265,13 +265,13 @@ test('collapsing an item while its bodies are still loading removes the detail',
   });
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
-  const btn = row(page, 'cmp-006').getByRole('button', { name: /^Item 6:/ });
+  const btn = row(page, 'cmp-006').getByRole('button', { name: /^(Expand|Collapse) item 6$/ });
   await btn.click();
-  await expect(row(page, 'cmp-006').getByTestId('item-detail')).toBeVisible();
+  await expect(itemDetail(page, 'cmp-006')).toBeVisible();
   await btn.click(); // collapse while "Loading item details…" is shown
   await expect(btn).toHaveAttribute('aria-expanded', 'false');
-  await expect(row(page, 'cmp-006').getByTestId('item-detail')).toHaveCount(0);
+  await expect(itemDetail(page, 'cmp-006')).toHaveCount(0);
   await page.waitForTimeout(1200); // let the delayed response land; it must not bring the detail back
-  await expect(row(page, 'cmp-006').getByTestId('item-detail')).toHaveCount(0);
+  await expect(itemDetail(page, 'cmp-006')).toHaveCount(0);
   expect(urlParams(page).get('item')).toBeNull();
 });

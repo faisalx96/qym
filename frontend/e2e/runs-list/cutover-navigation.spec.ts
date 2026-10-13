@@ -111,9 +111,9 @@ test.describe('Runs list history', () => {
     held.forEach((release) => release());
   });
 
-  // FINDING: Back to a run URL that still names ?item= scrolls to that item again after restoring the reader's place
-  // (352 px off, every run). Expected to fail until the page leaves the reader where Back puts them.
-  test.fail('Back to a run restores its scroll instead of jumping to the open item', async ({ page }) => {
+  // Back to a run URL that still names ?item= leaves the reader where Back puts them (this was a known failure
+  // until the items table moved onto the windowed DataTable and landed deep links once).
+  test('Back to a run restores its scroll instead of jumping to the open item', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 640 });
     const p = await seedProject('nav-back-run');
     const runId = await seedClassic(p);

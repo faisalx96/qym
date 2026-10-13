@@ -169,7 +169,7 @@ export function TrashPage() {
       priority: 1,
       header: 'Run',
       flex: true,
-      minWidth: 240,
+      minWidth: 190,
       cell: (r) => (
         <span className={styles.runCell}>
           <Text as="span" variant="md" weight={600} truncate>
@@ -185,7 +185,7 @@ export function TrashPage() {
       id: 'project',
       priority: 2,
       header: 'Project',
-      width: 140,
+      width: 120,
       cell: (r) => (
         <span className={styles.stack}>
           <span>{r.project_name}</span>
@@ -197,7 +197,7 @@ export function TrashPage() {
       id: 'purges',
       priority: 1,
       header: 'Purges',
-      width: 140,
+      width: 120,
       cell: (r) => {
         const p = purgeInfo(r);
         return (
@@ -213,7 +213,7 @@ export function TrashPage() {
       type: 'date',
       priority: 2,
       header: 'Deleted',
-      width: 140,
+      width: 130,
       cell: (r) => (
         <span className={styles.stack}>
           <span className={styles.mono}>{fmtDate(r.deleted_at)}</span>
@@ -233,7 +233,7 @@ export function TrashPage() {
       id: 'model',
       priority: 3,
       header: 'Model',
-      width: 140,
+      width: 130,
       cell: (r) => (
         <span className={styles.stack}>
           <span>{r.model ?? '—'}</span>

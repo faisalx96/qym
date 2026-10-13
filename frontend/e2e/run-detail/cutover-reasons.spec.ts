@@ -75,7 +75,7 @@ test('every failing row shows its reason and where it came from; passing rows le
   // the reasons the index cannot hold (long text, explanations) are fetched by the page
   for (const [n, text, source] of expected) {
     const cell = row(page, n + 1)
-      .locator('[role=cell][title]')
+      .locator('td[data-col="reason"] [title]')
       .filter({ hasText: source });
     await expect(cell, `item-${n}`).toBeVisible();
     await expect(cell).toHaveAttribute('title', text);
@@ -83,7 +83,7 @@ test('every failing row shows its reason and where it came from; passing rows le
   }
   for (const n of [1, 3, 5, 7]) {
     const hit = row(page, n + 1)
-      .locator('[role=cell][title]')
+      .locator('td[data-col="reason"] [title]')
       .filter({ hasText: /reason|scorer error|explanation|label|task error|no reason recorded/ });
     await expect(hit, `item-${n}`).toHaveCount(0);
   }
@@ -100,7 +100,9 @@ test('only rows whose reason the index cannot hold are fetched, once, for the di
       asked.push(r.postDataJSON() as { item_ids: string[]; metric: string });
   });
   await openRun(page, s.slug, runId);
-  await expect(row(page, 7).locator('[role=cell][title]').filter({ hasText: 'explanation' })).toBeVisible();
+  await expect(
+    row(page, 7).locator('td[data-col="reason"] [title]').filter({ hasText: 'explanation' }),
+  ).toBeVisible();
   const ids = new Set(asked.flatMap((a) => a.item_ids));
   // the long reason and the explanation live on the server only; a task error, a scorer error and
   // short reasons come with the index, and passing rows have none
@@ -178,7 +180,7 @@ test('compare: structured item metadata never renders as [object Object]', async
   await page.goto(compareUrl([a, b]));
   await waitLoaded(page);
   await page
-    .getByRole('button', { name: /^Item 1:/ })
+    .getByRole('button', { name: /^Expand item 1$/ })
     .first()
     .click();
   // scalars and lists show as badges; the structured value shows as nothing wrong, never as [object Object]

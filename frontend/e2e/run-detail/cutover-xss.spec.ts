@@ -94,7 +94,7 @@ test('Compare renders run names and outputs as text', async ({ page }) => {
   await page.goto(compareUrl([runA, runB]));
   await waitLoaded(page);
   await page
-    .getByRole('button', { name: /^Item 1:/ })
+    .getByRole('button', { name: /^Expand item 1$/ })
     .first()
     .click();
   await expect(page.locator('body')).toContainText(payload('model'));

@@ -46,24 +46,18 @@ for (const width of [1440, 1024]) {
     await page.evaluate(() => window.scrollTo(500, 0));
     expect(await page.evaluate(() => window.scrollX)).toBe(0);
 
-    // heat strip: header letters A..T and 20 pills per row
-    const head = await page
-      .getByTestId('item-list')
-      .locator('[title]')
+    // matrix: header letters A..T and one score cell per run in every row (the table scrolls inside its own region)
+    const list = page.getByTestId('item-list');
+    const head = await list
+      .getByRole('columnheader')
       .evaluateAll((els) =>
-        els.map((e) => (e.textContent ?? '').replace(/[★\s]/g, '')).filter((t) => /^[A-T]$/.test(t)),
+        els
+          .map((e) => (e.getAttribute('aria-label') ?? '').replace(' (baseline)', '').trim())
+          .filter((t) => /^[A-T]$/.test(t)),
       );
     expect(head).toEqual(LETTERS);
-    await expect(page.getByTestId('item-row').first().locator('[data-state]')).toHaveCount(20);
-    // every pill of the strip is inside the viewport horizontally
-    const clipped = await page
-      .getByTestId('item-row')
-      .first()
-      .locator('[data-state]')
-      .evaluateAll(
-        (els) => els.filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).length,
-      );
-    expect(clipped).toBe(0);
+    await expect(page.getByTestId('item-row').first().locator('td span[title]')).toHaveCount(20);
+    await expect(list.getByRole('region', { name: /scrollable/ })).toBeVisible();
     // the delta line holds 19 candidates (scrolls inside its own region) and the section nav stays reachable
     await expect(page.locator('[aria-label="Change against the baseline"] li[data-column]')).toHaveCount(19);
     expect((await overflow()).sw).toBeLessThanOrEqual(width);
@@ -76,7 +70,7 @@ test('20 runs: an expanded item shows 8 cards and "Show all 20 runs" reveals the
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(compareUrl(ids));
   await waitLoaded(page);
-  await page.getByRole('button', { name: /^Item 1:/ }).click();
+  await page.getByRole('button', { name: /^(Expand|Collapse) item 1$/ }).click();
   await expect(page.getByTestId('output-card')).toHaveCount(8);
   await page.getByRole('button', { name: 'Show all 20 runs' }).click();
   await expect(page.getByTestId('output-card')).toHaveCount(20);

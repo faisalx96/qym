@@ -27,6 +27,7 @@ export function headerOf<R>(col: Column<R>) {
 }
 
 export function headerText<R>(col: Column<R>): string {
+  if (col.label) return col.label;
   const h = headerOf(col);
   return typeof h === 'string' || typeof h === 'number' ? String(h) : col.id;
 }
