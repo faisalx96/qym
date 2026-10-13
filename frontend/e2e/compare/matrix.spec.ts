@@ -74,3 +74,35 @@ test('axe: the matrix with an expanded row has no serious violations', async ({ 
   await expect(itemDetail(page, 'cmp-001').getByTestId('output-card')).toHaveCount(4);
   expect(await axeSeriousViolations(page, '[data-testid="compare-page"]')).toEqual([]);
 });
+
+test('the run legend stays visible, under the sticky bars, after scrolling the page (1440)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open4(page);
+  const grid = table(page);
+  await expect(grid).toBeVisible();
+  await page.evaluate(() => {
+    const host = document.getElementById('shell-content')!;
+    const g = document.querySelector('[role=treegrid]')!;
+    host.scrollTop += g.getBoundingClientRect().top - host.getBoundingClientRect().top + 400;
+  });
+  const letter = grid.getByRole('columnheader').filter({ hasText: /^B/ });
+  await expect(letter).toBeInViewport();
+  const covered = await letter.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !(hit && el.contains(hit));
+  });
+  expect(covered, 'run legend covered by the sticky chrome').toBe(false);
+});
+
+test('at 390px the matrix is cards with the run scores labelled', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open4(page);
+  const list = page.getByRole('list', { name: 'Items across the compared runs' });
+  await expect(list).toBeVisible();
+  await expect(list.getByRole('listitem').first()).toContainText('A');
+  await expect(list.getByRole('listitem').first()).toContainText('B');
+  await expect(page.getByRole('treegrid', { name: 'Items across the compared runs' })).toHaveCount(0);
+});

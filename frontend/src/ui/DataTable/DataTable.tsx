@@ -51,6 +51,7 @@ import { Footer, SelectionBar, Toolbar } from './parts';
 import { ScoreBar } from './cells';
 import { RelativeTime, DurationCell, NumberCell } from './cells';
 import { useDataTableModel, type DataTableModel } from './useDataTableModel';
+import { useStickyShift } from './useStickyShift';
 import type {
   CellCtx,
   Column,
@@ -81,6 +82,12 @@ export interface DataTableProps<R> {
   zebra?: boolean | 'auto';
   variant?: 'card' | 'embedded';
   stickyHeader?: boolean;
+  /**
+   * The page scroller the header should stick to (a table that is not height-capped). The header cells
+   * are translated to stay below `stickyTop` (px, or a function measuring the bars above the table).
+   */
+  stickyParent?: HTMLElement | null;
+  stickyTop?: number | (() => number);
   scrollCues?: boolean;
   minWidth?: number;
   /** Header kebab menu (sort, pin, hide, autosize). Default on, off for embedded. */
@@ -243,6 +250,8 @@ function DataTableInner<R>({
   zebra = 'auto',
   variant = 'card',
   stickyHeader = true,
+  stickyParent,
+  stickyTop,
   scrollCues = true,
   minWidth,
   columnMenu,
@@ -557,6 +566,16 @@ function DataTableInner<R>({
     );
     if (el && !el.contains(document.activeElement)) el.focus();
   }, [focusedProp, uid]);
+
+  // Page-scroller sticky header: translate the header cells so they stay under the bars above the table.
+  const headParent = stickyParent ?? vcfg?.scrollParent ?? null;
+  useStickyShift({
+    container: tableRef,
+    head: (t) => (t as HTMLTableElement).tHead,
+    parent: headParent,
+    top: stickyTop ?? vcfg?.scrollPaddingStart ?? 0,
+    enabled: stickyHeader && !embedded,
+  });
 
   // Where the first body row starts inside the scrolling ancestor (react-virtual scrollMargin).
   useEffect(() => {
@@ -1355,7 +1374,8 @@ function DataTableInner<R>({
       aria-label={tableLabel}
       aria-rowcount={display.length + 1}
       aria-busy={loading ? true : undefined}
-      data-sticky={stickyHeader && !embedded ? '' : undefined}
+      data-sticky={stickyHeader && !embedded && !headParent ? '' : undefined}
+      data-shift={stickyHeader && !embedded && headParent ? '' : undefined}
       data-tall={tall ? '' : undefined}
       style={{ minWidth: Math.max(minWidth ?? 0, minTotal) || undefined }}
     >
@@ -1474,6 +1494,7 @@ function DataTableInner<R>({
               rowLabel={rowLabel}
               rowProps={rowProps}
               expandLabel={expandLabel}
+              expandOnRowClick={expandOnRowClick}
               groupBy={groupBy}
               toggleGroupKey={toggleGroupKey}
             />
@@ -1548,6 +1569,7 @@ function CardList<R>({
   rowLabel,
   rowProps,
   expandLabel,
+  expandOnRowClick,
   groupBy,
   toggleGroupKey,
 }: {
@@ -1574,6 +1596,7 @@ function CardList<R>({
   rowLabel?: (r: R) => string;
   rowProps?: (r: R) => Record<string, string | undefined>;
   expandLabel?: (r: R, open: boolean) => string;
+  expandOnRowClick?: boolean;
   groupBy?: GroupByConfig<R>;
   toggleGroupKey?: (key: string) => void;
 }) {
@@ -1677,6 +1700,7 @@ function CardList<R>({
               onClick={(e) => {
                 if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
                 if (openable) onOpen(r, e);
+                else if (expandOnRowClick) toggleExpanded(r);
               }}
             >
               <div className={styles.cardHead}>

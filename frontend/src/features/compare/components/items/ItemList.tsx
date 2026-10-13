@@ -1,11 +1,12 @@
 /** The aligned item matrix (DataTable): `#`, input, one score column per run, expansion, pager and the ?item= deep link. */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Badge, DataTable, ScoreBar, type Column, type Key } from '@/ui';
 import type { Row } from '@/features/run-detail/types';
 import { letterOf, useCompare } from '../../CompareContext';
 import { metricCellFor, pillState } from '../../lib/rowCells';
 import { deltaKind } from '../../lib/baseline';
 import type { FilteredItem } from '../../lib/filters';
+import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
 import { RunDot } from '../common';
 import { ItemDetail } from './ItemDetail';
 import { useItemsUi } from './ItemsUi';
@@ -84,6 +85,18 @@ function RunCell({ item, runIdx, numericMax }: { item: FilteredItem; runIdx: num
 export function ItemList() {
   const { model, items, c, baseline, ctx } = useCompare();
   const ui = useItemsUi();
+  const shell = useShellScroller();
+  // The header sticks under whatever compare chrome is currently stuck above the list.
+  const measureStickyTop = useCallback(() => {
+    if (!shell) return 0;
+    const top = shell.getBoundingClientRect().top;
+    let max = 0;
+    document.querySelectorAll<HTMLElement>('[data-compare-sticky], [data-compare-toolbar]').forEach((el) => {
+      if (getComputedStyle(el).position === 'sticky')
+        max = Math.max(max, el.getBoundingClientRect().bottom - top);
+    });
+    return max;
+  }, [shell]);
   const page = c.view.page;
   const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const clamped = Math.min(page, pageCount);
@@ -154,6 +167,7 @@ export function ItemList() {
     {
       id: 'index',
       header: '#',
+      priority: 2,
       type: 'number',
       align: 'start',
       mono: true,
@@ -176,6 +190,8 @@ export function ItemList() {
     {
       id: 'input',
       header: 'Input',
+      cardTitle: true,
+      priority: 1,
       flex: true,
       minWidth: 220,
       wrap: 2,
@@ -191,6 +207,8 @@ export function ItemList() {
           {baseline.runIdxs.includes(i) ? <span aria-label="baseline"> ★</span> : null}
         </span>
       ),
+      label: `${letterOf(i)}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}`,
+      priority: 2,
       hint: `${run.label}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}`,
       width: dense ? 76 : 148,
       resizable: false,
@@ -232,7 +250,8 @@ export function ItemList() {
         density="regular"
         densityLocked
         columnMenu={false}
-        responsive="scroll"
+        stickyParent={shell}
+        stickyTop={measureStickyTop}
         zebra={false}
         rowState={stateOf}
         rowProps={(it) => ({ id: `item-${it.itemId}`, 'data-testid': 'item-row', 'data-item-id': it.itemId })}

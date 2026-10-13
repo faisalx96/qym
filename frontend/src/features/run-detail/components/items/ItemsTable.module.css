@@ -35,3 +35,7 @@
     inset 0 2px 0 var(--accent-primary),
     inset 0 -2px 0 var(--accent-primary);
 }
+
+.noTrace {
+  color: var(--text-dim); /* decorative placeholder: this item has no trace */
+}

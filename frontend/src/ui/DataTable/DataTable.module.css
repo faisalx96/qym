@@ -143,6 +143,18 @@
   top: 0;
 }
 
+/* Page-scroller sticky header: cells are translated by --head-shift (set from the scroll handler). */
+.table[data-shift] .thead th {
+  transform: translateY(var(--head-shift, 0px));
+  z-index: 3;
+}
+.table[data-shift] .thead th[data-pin] {
+  z-index: 4;
+}
+.table[data-stuck] .thead th {
+  border-bottom-color: var(--border-default);
+}
+
 .th[data-align='end'] {
   text-align: end;
 }
@@ -532,7 +544,19 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 .detailCell {
-  box-shadow: inset 2px 0 0 var(--accent-primary);
+  position: relative;
+}
+
+/* One continuous rail above the nested cards (an inset shadow is painted under their backgrounds). */
+.detailCell::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 2px;
+  background: var(--accent-primary);
+  z-index: 1;
+  pointer-events: none;
 }
 
 .groupRow td {

@@ -51,7 +51,9 @@ for (const width of [1440, 1024]) {
     const head = await list
       .getByRole('columnheader')
       .evaluateAll((els) =>
-        els.map((e) => (e.getAttribute('aria-label') ?? '').trim()).filter((t) => /^[A-T]$/.test(t)),
+        els
+          .map((e) => (e.getAttribute('aria-label') ?? '').replace(' (baseline)', '').trim())
+          .filter((t) => /^[A-T]$/.test(t)),
       );
     expect(head).toEqual(LETTERS);
     await expect(page.getByTestId('item-row').first().locator('td span[title]')).toHaveCount(20);

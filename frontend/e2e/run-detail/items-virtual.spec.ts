@@ -82,3 +82,24 @@ test('390px: items are cards and a card opens its item', async ({ page }) => {
   const violations = await axeSeriousViolations(page, '#shell-content');
   expect(violations, describeViolations(violations)).toEqual([]);
 });
+
+test('metric names stay visible under the sticky bars after scrolling 20 screens (1440, sidebar open)', async ({
+  page,
+}) => {
+  await bigPage(page, 'show=failed');
+  await expect(rows(page).first()).toBeVisible();
+  await page.evaluate(() => {
+    const host = document.getElementById('shell-content')!;
+    const grid = document.querySelector('[role=treegrid][aria-label=Items]')!;
+    const r = grid.getBoundingClientRect();
+    host.scrollTop += r.top - host.getBoundingClientRect().top + Math.min(20 * 900, r.height - 800);
+  });
+  const head = page.getByRole('treegrid', { name: 'Items' }).getByRole('columnheader', { name: 'quality' });
+  await expect(head).toBeInViewport();
+  const covered = await head.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !(hit && el.contains(hit));
+  });
+  expect(covered, 'header covered by the sticky bars').toBe(false);
+});

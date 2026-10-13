@@ -1,6 +1,7 @@
 /** Item × pass heatmap of the analysis metric for repeat runs, virtualized (brief 04 J4). */
 import { useMemo, useRef } from 'react';
-import { useScrollMargin, useShellScroller } from '../../hooks/useScrollMargin';
+import { useStickyShift } from '@/ui';
+import { useScrollMargin, useShellScroller, useStickyOffset } from '../../hooks/useScrollMargin';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { metricBand } from '@/lib/metrics';
 import { scopeRowToPass } from '../../lib/passScope';
@@ -24,6 +25,14 @@ export function Heatmap({
   const scroller = useShellScroller();
   const listRef = useRef<HTMLDivElement>(null);
   const margin = useScrollMargin(listRef, scroller);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const stickyOffset = useStickyOffset();
+  useStickyShift({
+    container: gridRef,
+    head: (g) => g.querySelector<HTMLElement>('[data-heat-head]'),
+    parent: scroller,
+    top: stickyOffset,
+  });
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -39,6 +48,7 @@ export function Heatmap({
     <div className={styles.wrap}>
       <div className={styles.scroll}>
         <div
+          ref={gridRef}
           className={styles.grid}
           role="grid"
           aria-label={`${metric} by item and pass`}
@@ -46,7 +56,7 @@ export function Heatmap({
           aria-colcount={passes.length + 1}
           style={{ minWidth: 364 + 72 * passes.length }}
         >
-          <div className={styles.row} role="row" style={{ gridTemplateColumns: cols }}>
+          <div className={styles.row} data-heat-head="" role="row" style={{ gridTemplateColumns: cols }}>
             <span role="columnheader" className={styles.th}>
               Item
             </span>

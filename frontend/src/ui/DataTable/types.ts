@@ -30,6 +30,8 @@ export interface CellCtx {
 export interface Column<R> {
   id: string;
   header?: ReactNode;
+  /** Plain-text name (card-mode keys, header aria-label, column menu) when `header` is not a string. */
+  label?: string;
   /** HelpMarker-style hint rendered after the header text (title attribute). */
   hint?: string;
   /** Header band, e.g. 'Metrics'. Adjacent columns of one group share the band. */

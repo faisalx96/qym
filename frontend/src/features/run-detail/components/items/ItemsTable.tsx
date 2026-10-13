@@ -128,6 +128,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
     (a, b) => Number(b === selectedMetric) - Number(a === selectedMetric),
   );
 
+  const hasTraces = pageItems.some((it) => it.row.trace_id);
   const columns: Column<FilteredItem>[] = [
     {
       id: 'index',
@@ -253,24 +254,32 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
         );
       },
     },
-    {
-      id: 'trace',
-      header: 'Trace',
-      hideLabel: true,
-      width: 48,
-      pin: 'end',
-      resizable: false,
-      hideable: false,
-      cell: ({ row }) =>
-        row.trace_id ? (
-          <IconButton
-            label={`Open trace of item #${row.index + 1}`}
-            icon="list"
-            onPress={() => ui.openTrace(row.item_id, ctx.model.viewPass)}
-            data-trace-button
-          />
-        ) : null,
-    },
+    ...(hasTraces
+      ? [
+          {
+            id: 'trace',
+            header: 'Trace',
+            hideLabel: true,
+            width: 48,
+            pin: 'end',
+            resizable: false,
+            hideable: false,
+            cell: ({ row }) =>
+              row.trace_id ? (
+                <IconButton
+                  label={`Open trace of item #${row.index + 1}`}
+                  icon="list"
+                  onPress={() => ui.openTrace(row.item_id, ctx.model.viewPass)}
+                  data-trace-button
+                />
+              ) : (
+                <span className={styles.noTrace} aria-hidden="true">
+                  –
+                </span>
+              ),
+          } satisfies Column<FilteredItem>,
+        ]
+      : []),
   ];
 
   return (
@@ -283,7 +292,6 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
         rowKey={(it) => it.row.item_id}
         density="regular"
         densityLocked
-        stickyHeader={false}
         zebra={false}
         responsive="cards"
         empty="No items match the current filters."
