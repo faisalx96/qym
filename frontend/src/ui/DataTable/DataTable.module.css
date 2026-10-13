@@ -288,6 +288,11 @@
   outline: none;
 }
 
+/* The last header cell has no neighbour to straddle: keep its handle inside the table so it never adds scroll width. */
+.th:last-child .resizer {
+  inset-inline-end: 0;
+}
+
 .resizer::after {
   content: '';
   position: absolute;
