@@ -57,9 +57,7 @@ test('a range 0.1 to 0.5 step 0.1 makes 5 chips and "5 runs to launch"', async (
   await startSweep(page, 'Connect Timeout', '0.1');
   const sweeps = page.getByRole('region', { name: /^Sweeps/ });
   await expect(sweeps).toBeVisible();
-  await expect(
-    page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: /^Sweeps/ }),
-  ).toBeVisible();
+  await expect(page.getByRole('region', { name: /^Sweeps/ })).toBeVisible();
   const label = 'Endpoints › primary › Connect Timeout';
   await addRange(page, label, '0.1', '0.5', '0.1');
   const chips = sweeps.getByRole('list', { name: `${label} values` }).getByRole('listitem');
@@ -125,9 +123,7 @@ test('exceeding the run cap disables Launch and shows the over-cap callout', asy
   await expect(sweeps.getByText(/81 runs is over the limit of 64/)).toBeVisible();
   await expect(review(page)).toContainText(/81\s*runs/);
   await expect(launchButton(page)).toBeDisabled();
-  await expect(
-    page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: /^Sweeps/ }),
-  ).toBeVisible();
+  await expect(page.getByRole('region', { name: /^Sweeps/ })).toBeVisible();
   // Linking brings it back under the cap.
   await tick(
     page,

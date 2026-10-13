@@ -9,7 +9,9 @@ import {
   expectReady,
   launchButton,
   nameBox,
+  goStep,
   openLaunch,
+  rail,
   openSection,
   review,
   seedLaunch,
@@ -46,11 +48,9 @@ test.describe('evaluation inputs and run metadata', () => {
     await nameBox(page).fill('eval run');
     const ev = await openSection(page, 'Evaluation configurations');
     await ev.getByRole('textbox', { name: 'Samples' }).fill('5');
-    await expect(
-      page
-        .getByRole('navigation', { name: 'Sections' })
-        .getByRole('button', { name: /^Evaluation configurations/ }),
-    ).toContainText('1');
+    await expect(rail(page).getByRole('button', { name: /\d\s*Evaluation configurations/ })).toContainText(
+      '1',
+    );
     await expect(review(page)).toContainText('Evaluation configurations: 1 change');
     await expectReady(page);
     const raw = await openSection(page, 'Raw JSON');
@@ -73,11 +73,8 @@ test.describe('evaluation inputs and run metadata', () => {
     await expect(problem).toBeVisible();
     await expect(launchButton(page)).toBeDisabled();
 
-    // Collapse the section, click the problem: it opens again and focuses the key field.
-    await page
-      .getByRole('heading', { level: 3, name: /^Evaluation configurations/ })
-      .getByRole('button')
-      .click();
+    // Leave the step, click the problem: it brings the step back and focuses the key field.
+    await goStep(page, 'review');
     await expect(page.getByRole('textbox', { name: 'Metadata key 1' })).toBeHidden();
     await problem.click();
     await expect(page.getByRole('textbox', { name: 'Metadata key 1' })).toBeFocused();
@@ -128,6 +125,7 @@ test.describe('Raw JSON', () => {
     // The form did not change while typing.
     await openSection(page, 'Evaluation configurations');
     await expect(page.getByRole('textbox', { name: 'Samples' })).toHaveValue('2');
+    await openSection(page, 'Raw JSON');
     await raw.getByRole('button', { name: 'Revert to form' }).click();
     await expect(raw.getByRole('status')).toContainText('In sync with the form');
     await expect(raw.locator('.cm-content')).toContainText('"samples": 2');

@@ -1,91 +1,111 @@
-import { Link } from 'react-router-dom';
 import { useLatestExperiment } from '@/api/launch';
-import { Select, Tag } from '@/ui';
+import { Select } from '@/ui';
 import { launchPath } from '../../paths';
 import { useLaunch, type BaseChoice } from '../LaunchContext';
 import { BestRunPicker } from '../sections/BestRunPicker';
 import { BaseStatus } from './BaseStatus';
+import { StartCard } from './StartCard';
 import styles from './entry.module.css';
 
-interface Card {
-  kind: BaseChoice;
-  title: string;
-  hint: string;
-  recommended?: boolean;
-}
-
-/** The "Start from" cards, the preset selects and the base status line. */
+/** The "Start from" cards (three big, then saved presets and scratch), the preset selects and the base status. */
 export function StartFrom() {
   const { doc, baseState, chooseBase, selectedEnvs, projectId, slug, readOnly } = useLaunch();
   const baseRecord = selectedEnvs.find((e) => e.id === baseState.envId);
   const hasEnv = selectedEnvs.length > 0;
   const latest = useLatestExperiment(projectId, !doc.clone && hasEnv);
   const version = baseRecord?.official_preset_version;
-  const cards: Card[] = [
-    {
-      kind: 'default',
-      title: version != null ? `Default preset v${version}` : 'Default preset',
-      hint: 'The environment’s published configuration',
-      recommended: true,
-    },
-    { kind: 'best_run', title: 'Best run', hint: 'The top-scoring past run' },
-    {
-      kind: 'saved',
-      title: 'Saved preset',
-      hint: baseState.savedPresets.length
-        ? `${baseState.savedPresets.length} saved`
-        : 'A configuration saved earlier',
-    },
-  ];
-  if (doc.clone) {
-    cards.push({
-      kind: 'clone',
-      title: 'Copy of experiment',
-      hint: doc.clone.sourceName ? `“${doc.clone.sourceName}”` : 'Its configuration, ready to change',
-    });
-  }
-  cards.push({ kind: 'scratch', title: 'From scratch', hint: 'Only the environment defaults' });
   const kind = doc.base.kind;
+  const defaultAvail = baseState.available('default');
+  const bestAvail = baseState.available('best_run');
   const showEnvSelect =
     selectedEnvs.length > 1 && (kind === 'default' || kind === 'saved' || kind === 'best_run');
+  const envNames = (ids: string[]) =>
+    ids.map((id) => selectedEnvs.find((e) => e.id === id)?.name).filter(Boolean);
+  const pick = (k: BaseChoice) => void chooseBase(k);
+  const savedChecked = (id: string) =>
+    kind === 'saved' && (doc.base.presetId ?? baseState.savedPresets[0]?.id) === id;
   return (
     <div className={styles.stack}>
       <div className={styles.legend} id="launch-start-label">
         Start from
       </div>
-      <div className={styles.cards}>
-        <div role="radiogroup" aria-labelledby="launch-start-label" className={styles.group}>
-          {cards.map((card) => {
-            const availability = card.kind === 'clone' ? { ok: true } : baseState.available(card.kind);
-            const disabled = readOnly || !availability.ok;
-            return (
-              <button
-                key={card.kind}
-                type="button"
-                role="radio"
-                aria-checked={kind === card.kind}
-                aria-disabled={disabled || undefined}
-                title={!availability.ok ? availability.reason : undefined}
-                className={styles.card}
-                onClick={() => {
-                  if (!disabled) void chooseBase(card.kind);
-                }}
-              >
-                <span className={styles.cardTitle}>
-                  {card.title}
-                  {card.recommended && availability.ok ? <Tag tone="success">Recommended</Tag> : null}
-                </span>
-                <span className={styles.cardHint}>{availability.ok ? card.hint : availability.reason}</span>
-              </button>
-            );
-          })}
+      <div role="radiogroup" aria-labelledby="launch-start-label" className={styles.startStack}>
+        <div className={styles.startGrid}>
+          <StartCard
+            eyebrow={defaultAvail.ok ? 'Recommended' : undefined}
+            title={version != null ? `Default preset v${version}` : 'Default preset'}
+            body={
+              defaultAvail.ok
+                ? 'What this environment’s managers published.'
+                : (defaultAvail.reason ?? 'Not available.')
+            }
+            meta={kind === 'default' ? doc.base.releaseNotes || undefined : undefined}
+            checked={kind === 'default'}
+            disabled={readOnly || !defaultAvail.ok}
+            titleAttr={!defaultAvail.ok ? defaultAvail.reason : undefined}
+            onSelect={() => pick('default')}
+          />
+          <StartCard
+            eyebrow="Best past run"
+            title="Top-scoring run"
+            body={
+              bestAvail.ok
+                ? `The configuration of a top-scoring official run${doc.dataset.name ? ` on ${doc.dataset.name}` : ''}.`
+                : (bestAvail.reason ?? 'Not available.')
+            }
+            meta={bestAvail.ok ? 'Choose what “best” means after picking it.' : undefined}
+            checked={kind === 'best_run'}
+            disabled={readOnly || !bestAvail.ok}
+            titleAttr={!bestAvail.ok ? bestAvail.reason : undefined}
+            onSelect={() => pick('best_run')}
+          />
+          {doc.clone ? (
+            <StartCard
+              eyebrow="Copy an experiment"
+              title={doc.clone.sourceName ? `“${doc.clone.sourceName}”` : 'Copy of experiment'}
+              body="Its configuration, ready to change."
+              checked={kind === 'clone'}
+              onSelect={() => pick('clone')}
+            />
+          ) : latest.data ? (
+            <StartCard
+              eyebrow="Copy an experiment"
+              title={latest.data.name}
+              body="Your most recent experiment."
+              meta={envNames(latest.data.environment_ids).join(', ') || undefined}
+              to={launchPath(slug, { clone: latest.data.id })}
+            />
+          ) : null}
         </div>
-        {!doc.clone && latest.data ? (
-          <Link className={styles.card} to={launchPath(slug, { clone: latest.data.id })}>
-            <span className={styles.cardTitle}>Copy an experiment</span>
-            <span className={styles.cardHint}>The most recent: “{latest.data.name}”</span>
-          </Link>
+        {baseState.savedPresets.length ? (
+          <>
+            <div className={styles.startSub}>Saved presets</div>
+            <div className={styles.startGridCompact}>
+              {baseState.savedPresets.map((p) => (
+                <StartCard
+                  key={p.id}
+                  compact
+                  title={p.name}
+                  body={`v${p.current_version?.version ?? 1}${p.created_by?.name ? ` · by ${p.created_by.name}` : ''}`}
+                  checked={savedChecked(p.id)}
+                  disabled={readOnly}
+                  onSelect={() => void chooseBase('saved', { presetId: p.id })}
+                />
+              ))}
+            </div>
+          </>
         ) : null}
+        <div className={styles.startSub}>Other</div>
+        <div className={styles.startGridCompact}>
+          <StartCard
+            compact
+            title="From scratch"
+            body="The environment’s own settings."
+            checked={kind === 'scratch'}
+            disabled={readOnly}
+            onSelect={() => pick('scratch')}
+          />
+        </div>
       </div>
       {showEnvSelect ? (
         <Select
@@ -93,17 +113,6 @@ export function StartFrom() {
           items={selectedEnvs.map((e) => ({ key: e.id, label: e.name }))}
           value={baseState.envId}
           onChange={(key) => key != null && void chooseBase(kind as BaseChoice, { envId: String(key) })}
-        />
-      ) : null}
-      {kind === 'saved' && baseState.savedPresets.length ? (
-        <Select
-          label="Saved preset"
-          items={baseState.savedPresets.map((p) => ({
-            key: p.id,
-            label: `${p.name} · v${p.current_version?.version ?? 1}`,
-          }))}
-          value={doc.base.presetId ?? baseState.savedPresets[0]?.id ?? null}
-          onChange={(key) => key != null && void chooseBase('saved', { presetId: String(key) })}
         />
       ) : null}
       {kind === 'best_run' ? <BestRunPicker /> : null}

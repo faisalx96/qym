@@ -111,9 +111,46 @@ export async function listPresets(
 
 import type { Locator } from '@playwright/test';
 
-export async function openLaunch(page: Page, slug: string, q = ''): Promise<void> {
+export type StepId = 'where' | 'start' | 'models' | 'settings' | 'evaluation' | 'review';
+export const STEP_LABELS: Record<StepId, string> = {
+  where: 'Where it runs',
+  start: 'Starting point',
+  models: 'Models',
+  settings: 'Environment configurations',
+  evaluation: 'Evaluation configurations',
+  review: 'Review and launch',
+};
+
+/** The home view (`/experiments/new` without `?step=`): environments, start cards, name, Launch as is. */
+export async function openHome(page: Page, slug: string, q = ''): Promise<void> {
   await page.goto(APP_BASE + launchUrl(slug, q));
   await expect(page.getByRole('textbox', { name: 'Experiment name' })).toBeVisible();
+}
+
+/** Customize at a step (default: step 1 "Where it runs", where the name, priority and versioning live). */
+export async function openLaunch(page: Page, slug: string, q = '', step: StepId = 'where'): Promise<void> {
+  const sep = q.includes('?') ? '&' : '?';
+  await page.goto(APP_BASE + launchUrl(slug, `${q}${sep}step=${step}`));
+  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible();
+}
+
+export const rail = (page: Page): Locator => page.getByRole('navigation', { name: 'Steps' });
+
+/** Clicks a step on the rail (no-op when it is the current one). */
+export async function goStep(page: Page, step: StepId): Promise<void> {
+  const jump = page.getByRole('button', { name: /Go to step/ });
+  if (await jump.isVisible()) {
+    // Narrow screens: the compact rail jumps through a select.
+    if (!(await page.getByRole('heading', { name: STEP_LABELS[step], level: 2 }).isVisible())) {
+      await jump.click();
+      await page.getByRole('option', { name: new RegExp(STEP_LABELS[step]) }).click();
+    }
+    await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible();
+    return;
+  }
+  const button = rail(page).getByRole('button', { name: new RegExp(`^\\d\\s*${STEP_LABELS[step]}`) });
+  if ((await button.getAttribute('aria-current')) !== 'step') await button.click();
+  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible();
 }
 
 export const nameBox = (page: Page): Locator => page.getByRole('textbox', { name: 'Experiment name' });
@@ -127,10 +164,32 @@ export async function ensureOpen(button: Locator): Promise<void> {
   if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
 }
 
+const SECTION_STEP: Record<string, StepId> = {
+  Models: 'models',
+  'Environment configurations': 'settings',
+  Sweeps: 'settings',
+  'Evaluation configurations': 'evaluation',
+  'Raw JSON': 'review',
+};
+
+/** Goes to the step that holds a section and returns its region (sections are always open in Customize). */
 export async function openSection(page: Page, title: string): Promise<Locator> {
   const region = page.getByRole('region', { name: new RegExp(`^${title}`) });
-  await ensureOpen(region.getByRole('heading', { level: 3 }).getByRole('button'));
+  if (
+    (await rail(page).count()) === 0 &&
+    (await page.getByRole('button', { name: /Go to step/ }).count()) === 0
+  ) {
+    // The default-preset editor still stacks collapsible sections.
+    await ensureOpen(region.getByRole('heading', { level: 3 }).getByRole('button'));
+    return region;
+  }
+  await goStep(page, SECTION_STEP[title] ?? 'where');
   return region;
+}
+
+/** Waits for running CSS animations (a step enter) so axe does not read half-faded colours. */
+export async function settled(page: Page): Promise<void> {
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => null))));
 }
 
 export async function openGroup(page: Page, title: string): Promise<void> {

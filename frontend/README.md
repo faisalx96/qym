@@ -132,6 +132,15 @@ only registered when `import.meta.env.DEV` and are deleted once implemented.
 - Design language: `npm run test:design` (also part of `npm run check`); `tests/platform/test_design_language.py` runs the same test from pytest.
 - Browser journeys: Playwright, below. Backend serving tests: `tests/platform/test_spa_serving.py`.
 
+## Experiment creation (`/projects/:slug/experiments/new`)
+
+Two views of one form: the home view (environments, dataset, starting point, a name, **Launch as is** / **Customize**) and the six-step
+Customize wizard at `?step=where|start|models|settings|evaluation|review`. The step is only a view: `LaunchPage` keys the
+`LaunchProvider` on the form-defining params (`state/useStep.ts` `entryKey`), never on `step`, and the unsaved-changes guard ignores it.
+Problem clicks, "Edit" links and the Raw JSON button reach their step through `revealStep` (`LaunchProvider` prop). e2e helpers:
+`openHome`, `openLaunch(page, slug, q, step)`, `goStep`, `openSection` in `e2e/experiments/launch/launchSupport.ts`. The default-preset
+editor still uses the stacked page (`Outline`, collapsible `LaunchSection`).
+
 ## Writing an e2e test
 
 ```ts

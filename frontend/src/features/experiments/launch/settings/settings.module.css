@@ -64,6 +64,17 @@
 .chevron {
   display: inline-flex;
   color: var(--text-dim); /* decorative glyph */
+  transition: transform var(--transition-fast);
+}
+
+.chevron[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
 }
 
 .groupBody {
@@ -93,8 +104,25 @@
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  flex-wrap: wrap;
   min-block-size: var(--control-height);
+}
+
+/* The label side wraps inside itself; the actions never drop to a second line, so a first edit
+   (changed dot, Reset) does not move the Sweep button under the pointer. */
+.headMain {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.headActions {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-xs);
 }
 
 .label {

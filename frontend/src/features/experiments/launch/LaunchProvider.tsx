@@ -91,6 +91,7 @@ import { loadEnvDataNow, useEnvData } from './state/useEnvData';
 import { useDryRun } from './state/useDryRun';
 import { useLaunchView } from './state/useLaunchView';
 import type { BaseRef, LaunchMode, SchemaStatus } from './types';
+import type { RevealStep } from './wizard/steps';
 
 export interface LaunchProviderProps {
   mode?: LaunchMode;
@@ -104,6 +105,8 @@ export interface LaunchProviderProps {
   onLaunched?: (experimentId: string) => void;
   /** `mode="editor"`: which environment's default preset is edited, and what is laid on the current version. */
   editor?: EditorSetup;
+  /** Wizard: bring the step holding a field on screen (a clicked problem, an Edit link). */
+  revealStep?: RevealStep;
   children: ReactNode;
 }
 
@@ -189,6 +192,7 @@ export function LaunchProvider({
   initialParams,
   onLaunched,
   editor: editorSetup,
+  revealStep,
   children,
 }: LaunchProviderProps) {
   const qc = useQueryClient();
@@ -304,6 +308,7 @@ export function LaunchProvider({
     launchErrors: launchErrors.length ? launchErrors : null,
     launching,
     editor: editorView,
+    revealStep,
   });
   const latest = useRef({ view, preview, dryKey });
   useEffect(() => {
@@ -997,6 +1002,7 @@ export function LaunchProvider({
     registerField: view.registerField,
     focusField: view.focusField,
     focusIssue: view.focusIssue,
+    revealStep: view.revealStep,
     baseState: {
       envId: baseEnvId,
       presets: presets ?? [],

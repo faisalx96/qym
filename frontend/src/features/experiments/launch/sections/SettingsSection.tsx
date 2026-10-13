@@ -5,7 +5,7 @@
  * render nothing, so a 300-field schema stays responsive.
  */
 import { useId, useMemo } from 'react';
-import { Button, Checkbox, Icon, SearchField, Skeleton, Tag } from '@/ui';
+import { Button, Checkbox, Collapse, Icon, SearchField, Skeleton, Tag } from '@/ui';
 import { plural } from '../../lib/format';
 import { LaunchSection } from '../components/LaunchSection';
 import { useLaunch } from '../LaunchContext';
@@ -43,8 +43,8 @@ function GroupCard({
           aria-controls={bodyId}
           onClick={() => onToggle(group.id, !group.open)}
         >
-          <span className={styles.chevron}>
-            <Icon name={group.open ? 'chevron-down' : 'chevron-right'} size={12} />
+          <span className={styles.chevron} data-open={group.open}>
+            <Icon name="chevron-right" size={12} />
           </span>
           <span>{group.label}</span>
           {tree.filtering ? (
@@ -57,11 +57,11 @@ function GroupCard({
           ) : null}
         </button>
       </h4>
-      {group.open ? (
-        <div id={bodyId} className={styles.groupBody}>
+      <Collapse open={group.open} id={bodyId}>
+        <div className={styles.groupBody}>
           <NodeList nodes={group.nodes} removeList={group.id === UNMATCHED_GROUP ? '' : null} {...tree} />
         </div>
-      ) : null}
+      </Collapse>
     </div>
   );
 }

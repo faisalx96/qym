@@ -81,15 +81,32 @@
   color: var(--text-muted);
 }
 
-/* Start-from cards */
-.cards {
+/* Start-from cards: three big choices, then compact saved presets and scratch. */
+.startStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.startGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.startGridCompact {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-sm);
 }
 
-.group {
-  display: contents;
+.startSub {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
 }
 
 .card {
@@ -97,8 +114,8 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
+  padding: var(--space-md) var(--space-lg);
+  border: 2px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--bg-base);
   color: var(--text-primary);
@@ -107,6 +124,13 @@
   text-decoration: none;
   cursor: pointer;
   min-width: 0;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.cardCompact {
+  padding: var(--space-sm) var(--space-md);
 }
 
 .card:hover:not([aria-disabled='true']) {
@@ -129,18 +153,47 @@
   border-color: var(--accent-primary);
 }
 
+.cardEyebrow {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.card[aria-checked='true'] .cardEyebrow {
+  color: var(--accent-primary);
+}
+
 .cardTitle {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
   flex-wrap: wrap;
-  font-size: var(--font-md);
+  font-size: var(--font-lg);
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cardCompact .cardTitle {
+  font-size: var(--font-md);
 }
 
 .cardHint {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.cardMeta {
   font-size: var(--font-sm);
   color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
 }
 
 .status {
@@ -175,9 +228,173 @@
   align-items: start;
 }
 
+@media (max-width: 960px) {
+  .startGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .startGridCompact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 760px) {
   .two,
   .row {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-base);
+  cursor: pointer;
+}
+
+.disclosure:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.chevron {
+  display: inline-flex;
+  color: var(--text-dim); /* decorative glyph */
+  transition: transform var(--transition-fast);
+}
+
+.chevron[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+/* Home view */
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+  padding-bottom: var(--space-md);
+}
+
+.where {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+}
+
+.homeBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+}
+
+.homeName {
+  flex: 0 1 320px;
+  min-width: 12rem;
+}
+
+.homeStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.homeStatusText {
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.homeStatusText[data-tone='problem'] {
+  /* --error alone is 4.15:1 on the elevated bar; lift it to clear AA at this size */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
+}
+
+.homeShow {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-primary);
+  font: inherit;
+  font-size: var(--font-base);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.homeShow:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.homeRuns {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.homeActions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-inline-start: auto;
+}
+
+@media (max-width: 960px) {
+  .where {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .homeName {
+    flex: 1 1 100%;
+  }
+
+  .homeActions {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+  }
+
+  .homeActions > * {
+    flex: 1 1 0;
+  }
+
+  .homeRuns {
+    display: none;
+  }
+
+  .homeBar {
+    gap: var(--space-xs) var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+  }
+}
+
+.homeIssue {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }

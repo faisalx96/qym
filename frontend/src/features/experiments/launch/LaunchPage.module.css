@@ -28,7 +28,7 @@
 }
 
 @media (min-width: 1200px) {
-  .layout {
+  .layout:not(.layoutSingle) {
     grid-template-columns: minmax(0, 1fr) 22rem;
   }
 }

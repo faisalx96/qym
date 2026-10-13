@@ -39,6 +39,8 @@ import {
   SearchField,
   SectionHeader,
   SegmentedControl,
+  Stepper,
+  Collapse,
   Select,
   Skeleton,
   Slider,
@@ -331,6 +333,12 @@ export default function UiGalleryPage() {
             onChange={setMulti}
             emptyOption={{ key: '__none__', label: '(no model)' }}
           />
+        </Case>
+        <Case label="Stepper (always-clickable rail; compact below 760px)">
+          <GalleryStepper />
+        </Case>
+        <Case label="Collapse (grid-rows disclosure, inert when closed)">
+          <GalleryCollapse />
         </Case>
         <Case label="SegmentedControl (one tab stop, arrows)">
           <SegmentedControl
@@ -766,5 +774,30 @@ function ReportGalleryDemo() {
         <Text variant="base">Section body.</Text>
       </ReportSection>
     </ReportLayout>
+  );
+}
+
+const GALLERY_STEPS = [
+  { id: 'where', label: 'Where it runs' },
+  { id: 'models', label: 'Models', changes: 2 },
+  { id: 'review', label: 'Review and launch', problems: 1 },
+];
+
+function GalleryStepper() {
+  const [current, setCurrent] = useState('models');
+  return <Stepper aria-label="Gallery steps" steps={GALLERY_STEPS} current={current} onSelect={setCurrent} />;
+}
+
+function GalleryCollapse() {
+  const [open, setOpen] = useState(false);
+  return (
+    <Stack gap="sm">
+      <Button variant="neutral" onPress={() => setOpen((v) => !v)}>
+        {open ? 'Close' : 'Open'}
+      </Button>
+      <Collapse open={open}>
+        <Text variant="base">Content that animates open and closed.</Text>
+      </Collapse>
+    </Stack>
   );
 }

@@ -1,4 +1,5 @@
-import { Button, Tag } from '@/ui';
+import { useId, useState } from 'react';
+import { Button, Collapse, Icon, Tag } from '@/ui';
 import { diffCount, diffText, driftLines } from '../model';
 import { useLaunch } from '../LaunchContext';
 import { Callout } from '../components/Callout';
@@ -16,7 +17,9 @@ function List({ items }: { items: string[] }) {
 
 /** "Based on …", "N changes on top", "Undo all changes", hints, release notes, remap callouts. */
 export function BaseStatus() {
-  const { doc, baseState, resetAll, launch, flags, isLaunching, readOnly } = useLaunch();
+  const { doc, baseState, resetAll, readOnly } = useLaunch();
+  const notesId = useId();
+  const [notesOpen, setNotesOpen] = useState(false);
   const base = doc.base;
   const total = diffCount(doc).total;
   const drift = driftLines(base.drift);
@@ -45,17 +48,6 @@ export function BaseStatus() {
           <Button size="sm" variant="ghost" isDisabled={total === 0 || readOnly} onPress={resetAll}>
             Undo all changes
           </Button>
-          {flags.canLaunchAsIs ? (
-            <Button
-              size="sm"
-              variant="accent"
-              loading={isLaunching}
-              isDisabled={readOnly}
-              onPress={() => void launch()}
-            >
-              Launch as is
-            </Button>
-          ) : null}
         </span>
       </div>
       {baseState.note ? <Callout tone="warning">{baseState.note}</Callout> : null}
@@ -96,10 +88,23 @@ export function BaseStatus() {
         </Callout>
       ) : null}
       {base.releaseNotes ? (
-        <details>
-          <summary>Release notes</summary>
-          <p className={styles.notes}>{base.releaseNotes}</p>
-        </details>
+        <div className={styles.stack}>
+          <button
+            type="button"
+            className={styles.disclosure}
+            aria-expanded={notesOpen}
+            aria-controls={notesId}
+            onClick={() => setNotesOpen((v) => !v)}
+          >
+            <span className={styles.chevron} data-open={notesOpen}>
+              <Icon name="chevron-right" size={12} />
+            </span>
+            Release notes
+          </button>
+          <Collapse open={notesOpen} id={notesId}>
+            <p className={styles.notes}>{base.releaseNotes}</p>
+          </Collapse>
+        </div>
       ) : null}
     </div>
   );

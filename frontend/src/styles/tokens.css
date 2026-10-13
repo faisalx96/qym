@@ -106,6 +106,9 @@
   --radius-md: 8px;
   --radius-pill: 999px;
   --transition-fast: 150ms ease;
+  --motion-step: 180ms;
+  --motion-step-out: 140ms;
+  --ease-standard: ease;
   --page-constrained-width: 1120px;
   --settings-prompt-rail-width: 200px;
   --settings-prompt-tab-width: 240px;

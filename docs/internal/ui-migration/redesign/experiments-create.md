@@ -368,3 +368,9 @@ Risks:
 8. Parallel groups: {Collapse, Stepper, StartFrom, useStep/URL, docs} -> {HomeBar/LaunchHome, LaunchWizard} -> {error routing, mobile/motion polish, spec updates}.
 9. Defaults for open questions: pre-tick a sole environment (Q1 yes); wizard plus animated reveal (Q2); name stays required (Q3); editor wizard in phase 2 (Q4); priority/versioning only in step 1 (Q5); no step gating (Q6); compact mobile header with dropdown (Q7); Copy-an-experiment unchanged (Q8).
 10. Test impact: update launch e2e specs and unit tests for the two-view structure (about 5 h), add `wizard.spec.ts` and Stepper/Collapse unit tests.
+
+## Deferred
+
+- T10 (phase 2): the default-preset editor on the wizard (steps Dataset, Compared with, Models, Environment configurations, Evaluation
+  configurations, Review and publish). Out of scope for this pass by the orchestrator (Q4 default); the editor keeps the stacked page,
+  `Outline` and the collapsible `LaunchSection`. Estimate about 6 h (`DefaultPresetEditorPage.tsx`, `wizard/steps.ts`, `preset-editor.spec.ts`).

@@ -110,6 +110,51 @@
 .chevron {
   display: inline-flex;
   color: var(--text-dim); /* decorative glyph */
+  transition: transform var(--transition-fast);
+}
+
+.chevron[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+/* Wizard step: the frame is a plain heading and the body is always shown. */
+.staticSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+  scroll-margin-block: var(--space-xl);
+}
+
+.staticHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.staticHead[data-titled='true'] .staticDesc {
+  flex: 1 1 100%;
+}
+
+.staticDesc {
+  flex: 0 1 auto;
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.staticBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
 }
 
 .badges {

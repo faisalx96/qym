@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ValidationItem } from '../model';
+import { heldOnHome, stepOfItem, stepOfSection, type RevealStep } from '../wizard/steps';
 import {
   sectionHeadingId,
   sectionOfItem,
@@ -25,15 +26,31 @@ const FOCUSABLE = 'input, textarea, select, button, [tabindex]:not([tabindex="-1
 const RETRY_MS = 30;
 const MAX_TRIES = 12;
 
-/** Scrolls the element into view and focuses it (or its first control). */
-export function revealElement(el: HTMLElement): void {
-  el.style.scrollMarginBlock = 'var(--space-xl)';
-  el.scrollIntoView({ block: 'center' });
-  const target = el.matches(FOCUSABLE) ? el : el.querySelector<HTMLElement>(FOCUSABLE);
-  (target ?? el).focus({ preventScroll: true });
+const FLASH_MS = 1200;
+
+export function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export function useSections() {
+/**
+ * Scrolls the element into view (smooth unless the user prefers reduced motion), focuses it (or its
+ * first control) and flashes an outline for 1.2s (`data-flash`, a static outline, not an animation).
+ */
+export function revealElement(el: HTMLElement): void {
+  el.style.scrollMarginBlock = 'var(--space-xl)';
+  el.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  const target = el.matches(FOCUSABLE) ? el : el.querySelector<HTMLElement>(FOCUSABLE);
+  (target ?? el).focus({ preventScroll: true });
+  el.setAttribute('data-flash', 'true');
+  setTimeout(() => el.removeAttribute('data-flash'), FLASH_MS);
+}
+
+/** `reveal` brings the step that holds a field on screen (the wizard); absent in the editor page. */
+export function useSections(reveal?: RevealStep) {
+  const revealRef = useRef(reveal);
+  useEffect(() => {
+    revealRef.current = reveal;
+  });
   const [open, setOpenMap] = useState<Record<SectionId, boolean>>(DEFAULT_OPEN);
   const [settingsUi, setSettingsUiState] = useState<SettingsUi>({
     search: '',
@@ -53,7 +70,13 @@ export function useSections() {
     [],
   );
   const toggle = useCallback((id: SectionId) => setOpenMap((p) => ({ ...p, [id]: !p[id] })), []);
-  const openSection = useCallback((id: SectionId) => setOpen(id, true), [setOpen]);
+  const openSection = useCallback(
+    (id: SectionId) => {
+      setOpen(id, true);
+      revealRef.current?.(stepOfSection(id));
+    },
+    [setOpen],
+  );
   const setSettingsUi = useCallback(
     (updater: (ui: SettingsUi) => SettingsUi) => setSettingsUiState(updater),
     [],
@@ -66,6 +89,7 @@ export function useSections() {
 
   /** Focus a registered field, retrying while its section renders; falls back to a section heading. */
   const focusField = useCallback((name: string, fallback: SectionId | null = null) => {
+    if (fallback) revealRef.current?.(stepOfSection(fallback));
     let tries = 0;
     const attempt = () => {
       const el = fields.current.get(name);
@@ -89,6 +113,7 @@ export function useSections() {
   const focusIssue = useCallback(
     (item: ValidationItem) => {
       const section = sectionOfItem(item);
+      revealRef.current?.(stepOfItem(item), { home: heldOnHome(item) });
       if (section) {
         setOpen(section, true);
         if (section === 'settings') {
@@ -104,6 +129,16 @@ export function useSections() {
     [focusField, setOpen],
   );
 
+  const revealStep = useCallback<RevealStep>((step, opts) => revealRef.current?.(step, opts), []);
   const sectionState: SectionState = { open, setOpen, toggle };
-  return { sectionState, openSection, settingsUi, setSettingsUi, registerField, focusField, focusIssue };
+  return {
+    sectionState,
+    openSection,
+    settingsUi,
+    setSettingsUi,
+    registerField,
+    focusField,
+    focusIssue,
+    revealStep,
+  };
 }

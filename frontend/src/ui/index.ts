@@ -38,6 +38,8 @@ export * from './Select';
 export * from './MultiSelect';
 export * from './SegmentedControl';
 export * from './Tabs';
+export * from './Stepper';
+export * from './Collapse';
 export * from './Pagination';
 export * from './Dialog';
 export * from './ConfirmDialog';

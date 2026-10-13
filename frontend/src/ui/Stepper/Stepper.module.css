@@ -1,0 +1,147 @@
+/* Step rail: one 4px bar per step (accent when done or current, scaleX fill), label and count tags under it. */
+.rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--step-count), minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color var(--transition-fast);
+}
+
+.step:hover {
+  color: var(--text-primary);
+}
+
+.step:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--control-radius);
+}
+
+.step[data-state='done'] {
+  color: var(--text-secondary);
+}
+
+.step[data-state='current'] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.bar {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--border-default);
+  overflow: hidden;
+}
+
+.fill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent-primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--motion-step) var(--ease-standard);
+}
+
+[dir='rtl'] .fill {
+  transform-origin: right;
+}
+
+.step[data-state='done'] .fill,
+.step[data-state='current'] .fill {
+  transform: scaleX(1);
+}
+
+.text {
+  display: block;
+  font-size: var(--font-base);
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.counts {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  /* always reserved, so the first edit does not shift the page */
+  min-height: var(--badge-height);
+}
+
+.index {
+  margin-inline-end: var(--space-xs);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Compact (narrow) form: "Step n of N: label", progress bar, jump select. */
+.compact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.compactTitle {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--step-count), minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
+.dot {
+  display: block;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--border-default);
+  position: relative;
+  overflow: hidden;
+}
+
+.dot[data-state='done'] .fill,
+.dot[data-state='current'] .fill {
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill,
+  .step {
+    transition: none;
+  }
+}

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EntryBlock } from '../entry/EntryBlock';
+import { StartFrom } from '../entry/StartFrom';
 import { LaunchSection } from '../components/LaunchSection';
 import { ReviewPane } from '../review/ReviewPane';
 import { LaunchTestProvider, useLaunch } from '../LaunchContext';
@@ -49,7 +50,7 @@ describe('entry block', () => {
     const chooseBase = vi.fn(async () => true);
     const doc = createDocument({ environmentIds: ['e1'] });
     renderWith(
-      <EntryBlock />,
+      <StartFrom />,
       {
         chooseBase,
         selectedEnvs: [envRecord()],

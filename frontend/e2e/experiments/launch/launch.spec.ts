@@ -196,7 +196,6 @@ test('keyboard only: pick the environment, name the run, launch', async ({ page,
   await alpha.focus();
   await page.keyboard.press('Space');
   await expect(alpha).toBeChecked();
-  await expect(page.getByRole('radio', { name: /^Default preset v1/ })).toBeChecked();
   await nameBox(page).focus();
   await page.keyboard.type('keyboard run');
   await expectReady(page);

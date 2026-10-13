@@ -1,0 +1,108 @@
+.rail {
+  padding-block: var(--space-xs);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+  animation: stepIn var(--motion-step) var(--ease-standard) both;
+}
+
+.panelHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.titleBadges {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: var(--font-xl);
+  font-weight: 650;
+  color: var(--text-primary);
+  scroll-margin-block: var(--space-xl);
+}
+
+.panelTitle:focus-visible {
+  outline: none;
+}
+
+@keyframes stepIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.nav {
+  position: sticky;
+  bottom: var(--launch-bar-height, 0);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.navNext {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-inline-start: auto;
+}
+
+.live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+}
+
+/* Narrow: one row (Back left, Skip and Continue right); the long label parts drop out. */
+@media (max-width: 760px) {
+  .nav {
+    flex-wrap: nowrap;
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .navNext {
+    flex-wrap: nowrap;
+  }
+
+  .long {
+    display: none;
+  }
+}

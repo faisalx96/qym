@@ -128,3 +128,19 @@
   font-size: var(--font-sm);
   color: var(--success);
 }
+
+/* Phones: the bar is one compact row; Cancel is the header link, Raw JSON lives on the review step. */
+@media (max-width: 760px) {
+  .barSecondary {
+    display: none;
+  }
+
+  .bar {
+    flex-wrap: nowrap;
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .barText {
+    flex: 1 1 0;
+  }
+}
