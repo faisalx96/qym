@@ -2,7 +2,18 @@
 /** Analyzer scenarios 10-13 and 15: Rules, Documents, Diagnosis, read-only member view, project landing. */
 import { test, expect } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { analysisUrl, patchJson, seedAnalyzer, step, toggleBox, trackErrors, waitWorkspace } from './helpers';
+import {
+  analysisUrl,
+  analyzeButton,
+  openPreview,
+  patchJson,
+  rail,
+  seedAnalyzer,
+  toggleBox,
+  trackErrors,
+  viewTabs,
+  waitWorkspace,
+} from './helpers';
 
 const guidanceUrl = (slug: string, tab: 'rules' | 'documents' | 'categories') =>
   `/projects/${slug}/analysis?scope=${tab}`;
@@ -356,31 +367,25 @@ test.describe('read-only view (13)', () => {
     await expect(page.getByTestId('document-input')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Choose files' })).toHaveCount(0);
 
-    // the run workspace explains that running needs member access and disables Test / Analyze
+    // the run workspace explains in the rail that running needs member access and disables Test / Analyze
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await expect(
-      page.getByText(
-        'You can view this analysis setup. Only project managers and the run’s owner can upload documents or run analysis, and only managers can change rules.',
-      ),
-    ).toBeVisible();
-    await step(page, 'Run').click();
-    await expect(page.getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeDisabled();
-    await expect(page.getByRole('button', { name: /^Test Selected/ })).toBeDisabled();
+    await expect(rail(page)).toContainText('View only: project managers and the run’s owner can run analysis.');
+    await expect(analyzeButton(page)).toBeDisabled();
+    await expect(rail(page).getByRole('button', { name: /^Test selected/ })).toBeDisabled();
   });
 
-  test('no LLM connection: banner and disabled Test / Analyze; Preview still works', async ({
+  test('no LLM connection: the rail says so and disables Test / Analyze; Preview still works', async ({
     page,
     request,
   }) => {
     const seed = await seedAnalyzer(request, { model: '' });
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await expect(page.getByText(/No LLM connection is set up for this project/)).toBeVisible();
-    await step(page, 'Preview').click();
-    await expect(page.getByRole('region', { name: 'Prompt messages' })).toBeVisible();
-    await step(page, 'Run').click();
-    await expect(page.getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeDisabled();
+    await expect(rail(page)).toContainText('No LLM connection: add one in project settings');
+    await expect(page.getByText(/No LLM connection is set up for this project/)).toHaveCount(0);
+    await expect(analyzeButton(page)).toBeDisabled();
+    await openPreview(page);
   });
 });
 
@@ -395,7 +400,7 @@ test.describe('project scope (15)', () => {
     );
     await page.getByRole('button', { name: 'Open project guidance' }).click();
     await expect(page).toHaveURL(/scope=categories/);
-    const tabs = page.getByRole('tablist', { name: 'Project guidance' });
+    const tabs = viewTabs(page);
     await expect(tabs.getByRole('tab', { name: /^Diagnosis categories/ })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -406,7 +411,7 @@ test.describe('project scope (15)', () => {
     await tabs.getByRole('tab', { name: /^Documents/ }).click();
     await expect(page).toHaveURL(/scope=documents/);
     await expect(page.getByRole('heading', { name: 'Reference documents' })).toBeVisible();
-    await page.getByRole('radiogroup', { name: 'Workspace area' }).getByText('Analyze run').click();
+    await tabs.getByRole('tab', { name: /^Analyze run/ }).click();
     await expect(page.getByText('Select a run to analyze')).toBeVisible();
     // legacy scope aliases
     await gotoApp(page, `/projects/${seed.slug}/analysis?scope=diagnosis`);
@@ -428,11 +433,11 @@ test.describe('project scope (15)', () => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await page.getByRole('radiogroup', { name: 'Workspace area' }).getByText('Project guidance').click();
+    await viewTabs(page).getByRole('tab', { name: /^Diagnosis categories/ }).click();
     await expect(page).toHaveURL(new RegExp(`run=${seed.runId}`));
     await expect(page).toHaveURL(/scope=categories/);
     await expect(page.getByRole('tab', { name: /^Production rules/ })).toBeVisible();
-    await page.getByRole('radiogroup', { name: 'Workspace area' }).getByText('Analyze run').click();
+    await viewTabs(page).getByRole('tab', { name: /^Analyze run/ }).click();
     await waitWorkspace(page);
   });
 });

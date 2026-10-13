@@ -3,7 +3,20 @@
 import { test, expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
 import { axeSeriousViolations, describeViolations } from '../shell/support';
-import { analysisUrl, seedAnalyzer, step, toggleBox, trackErrors, waitWorkspace } from './helpers';
+import {
+  analysisUrl,
+  analyzeButton,
+  analyzeToCompletion,
+  jobCard,
+  openPreview,
+  previewDrawer,
+  rail,
+  seedAnalyzer,
+  toggleBox,
+  trackErrors,
+  viewTabs,
+  waitWorkspace,
+} from './helpers';
 
 async function expectNoSerious(page: Page, label: string): Promise<void> {
   // dialogs fade in: axe must not sample half-transparent text
@@ -14,53 +27,42 @@ async function expectNoSerious(page: Page, label: string): Promise<void> {
   expect(v, `${label}\n${describeViolations(v)}`).toEqual([]);
 }
 
-/** Runs the stub analysis to completion on the Run step. */
-async function analyzeToCompletion(page: Page): Promise<void> {
-  await step(page, 'Run').click();
-  await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
-  await expect(page.getByRole('region', { name: 'Analysis job' })).toContainText(
-    'metric analyses succeeded',
-    { timeout: 30_000 },
-  );
-}
-
 test.describe('axe (14)', () => {
-  test('Configure, Preview, Run (with a test result), Review', async ({ page, request }) => {
+  test('the page, the Input mapping disclosure, the preview drawer, a test result and a finished job', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
     await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
-    await expectNoSerious(page, 'configure');
+    await expectNoSerious(page, 'page');
 
-    // detected variable row + open path picker on Configure
+    // detected variable row + open path picker
     await page.getByRole('textbox', { name: 'Additional instructions' }).fill('Use {rubric}');
-    await page
-      .getByLabel('Detected variables')
-      .getByRole('button', { name: /\{rubric\} source/ })
-      .click();
+    const vars = page.getByLabel('Detected variables');
+    await vars.getByRole('button', { name: /\{rubric\} source/ }).click();
     await page.getByRole('option', { name: 'input', exact: true }).click();
-    await expectNoSerious(page, 'configure with a variable');
-
-    await step(page, 'Preview').click();
-    await expect(page.getByRole('region', { name: 'Prompt messages' })).toBeVisible();
-    await page.getByRole('button', { name: 'Full value' }).nth(3).click();
+    await vars.getByRole('button', { name: 'Full value' }).click();
     await expect(page.getByRole('group', { name: '{rubric} fields' })).toBeVisible();
-    await expectNoSerious(page, 'preview');
+    await expectNoSerious(page, 'page with a variable and its picker');
 
-    await step(page, 'Run').click();
-    await page.getByRole('button', { name: /^Test Selected/ }).click();
+    await page.getByRole('button', { name: /^Input mapping/ }).click();
+    await expect(page.getByRole('button', { name: /Input source/ })).toBeVisible();
+    await page.getByRole('button', { name: /^More options/ }).click();
+    await expectNoSerious(page, 'disclosures open');
+
+    await openPreview(page);
+    await expectNoSerious(page, 'preview drawer');
+    await page.keyboard.press('Escape');
+    await expect(previewDrawer(page)).toBeHidden();
+
+    await rail(page).getByRole('button', { name: /^Test selected/ }).click();
     await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
-    await expectNoSerious(page, 'run with a test result');
+    await expectNoSerious(page, 'with a test result');
 
-    await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
-    await expect(page.getByRole('region', { name: 'Analysis job' })).toContainText(
-      'metric analyses succeeded',
-      { timeout: 30_000 },
-    );
-    await expectNoSerious(page, 'run with the job bar');
-    await step(page, 'Review').click();
-    await expect(page.getByText('Analysis complete')).toBeVisible();
-    await expectNoSerious(page, 'review');
+    await analyzeToCompletion(page);
+    await expectNoSerious(page, 'finished job');
   });
 
   test('the three guidance tabs, a populated rule editor and the version dialogs', async ({
@@ -69,7 +71,8 @@ test.describe('axe (14)', () => {
   }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, `/projects/${seed.slug}/analysis?scope=categories`);
-    await expect(page.getByRole('tabpanel', { name: /^Diagnosis categories/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Diagnosis categories/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tablist', { name: 'Categories' })).toBeVisible();
     for (const label of ['Guidance', 'Subcategories', 'Examples']) {
       await page.getByRole('tab', { name: new RegExp(`^${label}`) }).click();
       await expectNoSerious(page, `categories / ${label}`);
@@ -111,50 +114,37 @@ test.describe('axe (14)', () => {
 });
 
 test.describe('keyboard (14)', () => {
-  test('Tab reaches the steps with a visible focus ring; Enter activates a step', async ({
+  test('Tab reaches the tabs and the rail with a visible focus ring; Enter opens the drawer', async ({
     page,
     request,
   }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    const steps = page.getByRole('list', { name: 'Analysis steps' }).getByRole('button');
-    await expect(steps).toHaveCount(4);
-    // walk forward from the area switch until the first step takes focus
-    await page.getByRole('radiogroup', { name: 'Workspace area' }).getByRole('radio').first().focus();
-    let reached = false;
-    for (let i = 0; i < 6 && !reached; i += 1) {
-      await page.keyboard.press('Tab');
-      reached = await steps.first().evaluate((el) => el === document.activeElement);
-    }
-    expect(reached, 'Configure step is reachable by Tab').toBe(true);
-    const ring = await steps.first().evaluate((el) => {
+    await expect(viewTabs(page).getByRole('tab')).toHaveCount(4);
+    const previewBtn = rail(page).getByRole('button', { name: /^Prompt preview/ });
+    await previewBtn.focus();
+    const ring = await previewBtn.evaluate((el) => {
       const cs = getComputedStyle(el);
-      return {
-        outline: cs.outlineStyle,
-        width: cs.outlineWidth,
-        shadow: cs.boxShadow,
-        matches: el.matches(':focus-visible'),
-      };
+      return { outline: cs.outlineStyle, shadow: cs.boxShadow, matches: el.matches(':focus-visible') };
     });
     expect(ring.matches).toBe(true);
     expect(ring.outline !== 'none' || ring.shadow !== 'none', JSON.stringify(ring)).toBe(true);
-
-    await page.keyboard.press('Tab');
-    await expect(steps.nth(1)).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/step=preview/);
-    await expect(steps.nth(1)).toHaveAttribute('aria-current', 'step');
-    await page.keyboard.press('Tab');
-    await expect(steps.nth(2)).toBeFocused();
+    await expect(previewDrawer(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(previewBtn).toBeFocused();
+    // the Input mapping disclosure toggles with Space
+    const mapping = page.getByRole('button', { name: /^Input mapping/ });
+    await mapping.focus();
     await page.keyboard.press('Space');
-    await expect(page).toHaveURL(/step=run/);
+    await expect(mapping).toHaveAttribute('aria-expanded', 'true');
   });
 
   test('arrow keys move between the guidance tabs; Escape closes dialogs', async ({ page, request }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, `/projects/${seed.slug}/analysis?scope=categories`);
-    const tabs = page.getByRole('tablist', { name: 'Project guidance' });
+    const tabs = viewTabs(page);
     const first = tabs.getByRole('tab', { name: /^Diagnosis categories/ });
     await first.focus();
     await page.keyboard.press('ArrowRight');
@@ -172,6 +162,9 @@ test.describe('keyboard (14)', () => {
       'true',
     );
     await page.keyboard.press('Home');
+    await expect(tabs.getByRole('tab', { name: /^Analyze run/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(page).not.toHaveURL(/scope=/);
+    await first.click();
     await expect(first).toHaveAttribute('aria-selected', 'true');
     await expect(page).toHaveURL(/scope=categories/);
 
@@ -205,10 +198,9 @@ test.describe('keyboard (14)', () => {
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
     await toggleBox(page.getByRole('switch', { name: 'Re-analyze human labels' }));
-    await step(page, 'Run').click();
     let posted = 0;
     page.on('request', (r) => r.method() === 'POST' && r.url().endsWith('/analysis-jobs') && (posted += 1));
-    await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
+    await analyzeButton(page).click();
     const dialog = page.getByRole('alertdialog').or(page.getByRole('dialog'));
     await expect(dialog.getByText('Overwrite human diagnoses?')).toBeVisible();
     await expectNoSerious(page, 'human-label confirm');
@@ -216,7 +208,7 @@ test.describe('keyboard (14)', () => {
     await expect(dialog).toBeHidden();
     await page.waitForTimeout(300);
     expect(posted).toBe(0);
-    await expect(page.getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeFocused();
+    await expect(analyzeButton(page)).toBeFocused();
   });
 });
 
@@ -230,13 +222,13 @@ test.describe('layout', () => {
     await expect(text).toHaveCount(1);
     await expect(text).toHaveCSS('direction', 'rtl');
     // the preview body keeps dir=auto so the same text reads right-to-left there too
-    await step(page, 'Preview').click();
-    const body = page.getByRole('region', { name: 'Prompt messages' }).locator('pre').first();
+    await openPreview(page);
+    const body = previewDrawer(page).getByRole('region', { name: 'Prompt messages' }).locator('pre').first();
     await expect(body).toHaveAttribute('dir', 'auto');
     await expect(body).toContainText('اعرض');
   });
 
-  test('800x900: no horizontal page scroll on any step or guidance tab', async ({ page, request }) => {
+  test('800x900: no horizontal page scroll on the page, its states or a guidance tab', async ({ page, request }) => {
     const seed = await seedAnalyzer(request);
     await page.setViewportSize({ width: 800, height: 900 });
     const overflow = () =>
@@ -252,28 +244,22 @@ test.describe('layout', () => {
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
     await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
-    await expectFits('configure');
+    await expectFits('page');
     await page.getByRole('textbox', { name: 'Additional instructions' }).fill('Use {rubric}');
-    await expectFits('configure with a variable');
-    await step(page, 'Preview').click();
-    await expect(page.getByRole('region', { name: 'Prompt messages' })).toBeVisible();
-    await expectFits('preview');
-    await step(page, 'Run').click();
-    await page.getByRole('button', { name: /^Test Selected/ }).click();
+    await expectFits('with a variable');
+    await page.getByRole('button', { name: /^Input mapping/ }).click();
+    await expectFits('input mapping open');
+    await openPreview(page);
+    await expectFits('preview drawer');
+    await page.keyboard.press('Escape');
+    await rail(page).getByRole('button', { name: /^Test selected/ }).click();
     await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
-    await expectFits('run with a result');
-    await page.getByRole('button', { name: /^Analyze \d+ items?$/ }).click();
-    await expect(page.getByRole('region', { name: 'Analysis job' })).toContainText(
-      'metric analyses succeeded',
-      { timeout: 30_000 },
-    );
-    await expectFits('run with the job bar');
-    await step(page, 'Review').click();
-    await expect(page.getByText('Analysis complete')).toBeVisible();
-    await expectFits('review');
+    await expectFits('with a result');
+    await analyzeToCompletion(page);
+    await expectFits('finished job');
     for (const tab of ['categories', 'rules', 'documents']) {
       await gotoApp(page, `/projects/${seed.slug}/analysis?scope=${tab}`);
-      await expect(page.getByRole('tablist', { name: 'Project guidance' })).toBeVisible();
+      await expect(viewTabs(page)).toBeVisible();
       await page.waitForTimeout(300);
       await expectFits(`guidance ${tab}`);
     }
@@ -285,17 +271,15 @@ test.describe('layout', () => {
     await gotoApp(page, analysisUrl(seed.slug, seed.repeatId!));
     await page.getByRole('button', { name: 'Analyze sample 1' }).click();
     await waitWorkspace(page);
-    await step(page, 'Preview').click();
-    await expect(page.getByRole('region', { name: 'Prompt messages' })).toBeVisible();
-    await step(page, 'Run').click();
-    await page.getByRole('button', { name: /^Test Selected/ }).click();
+    await openPreview(page);
+    await page.keyboard.press('Escape');
+    await rail(page).getByRole('button', { name: /^Test selected/ }).click();
     await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
     await analyzeToCompletion(page);
-    await step(page, 'Review').click();
-    await expect(page.getByText('Analysis complete')).toBeVisible();
+    await expect(jobCard(page)).toContainText('Analysis complete');
     for (const tab of ['categories', 'rules', 'documents']) {
       await gotoApp(page, `/projects/${seed.slug}/analysis?run=${seed.repeatId}&pass=1&scope=${tab}`);
-      await expect(page.getByRole('tablist', { name: 'Project guidance' })).toBeVisible();
+      await expect(viewTabs(page)).toBeVisible();
       await page.waitForTimeout(400);
     }
     expect(t.errors, t.errors.join('\n')).toEqual([]);

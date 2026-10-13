@@ -64,9 +64,11 @@ export function AnalyzerFrame({
             ]}
           >
             {/* The view itself is the panel's content; an empty panel keeps aria-controls resolvable. */}
-            <TabPanel id={tab} className={s.tabPanel}>
-              {null}
-            </TabPanel>
+            {(['run', 'categories', 'rules', 'documents'] as const).map((id) => (
+              <TabPanel key={id} id={id} className={s.tabPanel} forceMount>
+                {null}
+              </TabPanel>
+            ))}
           </Tabs>
         }
       />
