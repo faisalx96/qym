@@ -63,10 +63,73 @@ function scrollToSection(id: SectionId, host: HTMLElement | null) {
   );
 }
 
+/** Everything below the hero: nav, scope bar, sidebar, sections and items (needs the run context). */
+function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null> }) {
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const wide = useMediaQuery(WIDE_QUERY);
+  const scope = useScope();
+  const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  if (!scope.active && drawerOpen) setDrawerOpen(false);
+  const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current), []);
+
+  // Links from before the report layout: `#overview`, `#run-section-errors`, `?panel=latency`.
+  const hash = location.hash.replace(/^#(run-section-|section-)?/, '');
+  const panelParam = params.get('panel');
+  useEffect(() => {
+    const target: SectionId | null = isSectionKey(hash)
+      ? hash
+      : (HASH_ALIASES[hash] ?? (isSectionKey(panelParam) ? panelParam : null));
+    if (target) scrollToSection(target, pageRef.current);
+  }, [hash, panelParam]);
+
+  const jumpToItems = () => {
+    setDrawerOpen(false);
+    onSection('items');
+  };
+  const scopeNote = scope.active
+    ? `over ${scope.shown.toLocaleString('en-US')} of ${scope.total.toLocaleString('en-US')} items`
+    : undefined;
+  return (
+    <>
+      <SectionNav onSection={onSection} />
+      <ReportLayout
+        wide={wide}
+        sidebarOpen={scope.active && !sidebarHidden}
+        drawerOpen={drawerOpen && scope.active}
+        onDrawerOpenChange={setDrawerOpen}
+        sidebar={
+          scope.active ? (
+            <QuickFilters onHide={wide ? () => setSidebarHidden(true) : undefined} onJump={jumpToItems} />
+          ) : undefined
+        }
+      >
+        {scope.active ? (
+          <ScopeBar
+            shown={scope.shown}
+            total={scope.total}
+            chips={scope.chips}
+            onClearAll={() => {
+              setDrawerOpen(false);
+              scope.clearAll();
+            }}
+            onJumpToItems={jumpToItems}
+            narrow={!wide}
+            sidebarOpen={wide ? !sidebarHidden : drawerOpen}
+            onToggleSidebar={() => (wide ? setSidebarHidden(!sidebarHidden) : setDrawerOpen(true))}
+          />
+        ) : null}
+        <ReportSections scopeNote={scopeNote} />
+        <ItemsSection />
+      </ReportLayout>
+    </>
+  );
+}
+
 export function RunBody({ runId, payload }: { runId: string; payload: RunPayload }) {
   const { slug, readOnly } = useProjectContext();
   const [params] = useSearchParams();
-  const location = useLocation();
   const passParam = readPassParam(params);
   const model = useMemo(() => buildRunModel(payload, passParam), [payload, passParam]);
   const api = useRunView(model);
@@ -106,24 +169,6 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
     });
   }, []);
 
-  const wide = useMediaQuery(WIDE_QUERY);
-  const pageRef = useRef<HTMLDivElement>(null);
-  const scope = useScope();
-  const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  if (!scope.active && drawerOpen) setDrawerOpen(false);
-  const onSection = useCallback((id: SectionId) => scrollToSection(id, pageRef.current), []);
-
-  // Links from before the report layout: `#overview`, `#run-section-errors`, `?panel=latency`.
-  const hash = location.hash.replace(/^#(run-section-|section-)?/, '');
-  const panelParam = params.get('panel');
-  useEffect(() => {
-    const target: SectionId | null = isSectionKey(hash)
-      ? hash
-      : (HASH_ALIASES[hash] ?? (isSectionKey(panelParam) ? panelParam : null));
-    if (target) scrollToSection(target, pageRef.current);
-  }, [hash, panelParam]);
-
   const basePath = runPath(slug, runId);
   const value: RunPageValue = {
     slug,
@@ -139,13 +184,7 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
     basePath,
   };
   const run = payload.run;
-  const jumpToItems = () => {
-    setDrawerOpen(false);
-    onSection('items');
-  };
-  const scopeNote = scope.active
-    ? `over ${scope.shown.toLocaleString('en-US')} of ${scope.total.toLocaleString('en-US')} items`
-    : undefined;
+  const pageRef = useRef<HTMLDivElement>(null);
   return (
     <RunContext.Provider value={value}>
       <div ref={pageRef} className={`${fullWidth} ${styles.page}`}>
@@ -172,36 +211,7 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
             <ReviewHistory runId={runId} status={run.status} />
           </div>
         </Stack>
-        <SectionNav onSection={onSection} />
-        <ReportLayout
-          wide={wide}
-          sidebarOpen={scope.active && !sidebarHidden}
-          drawerOpen={drawerOpen && scope.active}
-          onDrawerOpenChange={setDrawerOpen}
-          sidebar={
-            scope.active ? (
-              <QuickFilters onHide={wide ? () => setSidebarHidden(true) : undefined} onJump={jumpToItems} />
-            ) : undefined
-          }
-        >
-          {scope.active ? (
-            <ScopeBar
-              shown={scope.shown}
-              total={scope.total}
-              chips={scope.chips}
-              onClearAll={() => {
-                setDrawerOpen(false);
-                scope.clearAll();
-              }}
-              onJumpToItems={jumpToItems}
-              narrow={!wide}
-              sidebarOpen={wide ? !sidebarHidden : drawerOpen}
-              onToggleSidebar={() => (wide ? setSidebarHidden(!sidebarHidden) : setDrawerOpen(true))}
-            />
-          ) : null}
-          <ReportSections scopeNote={scopeNote} />
-          <ItemsSection />
-        </ReportLayout>
+        <RunReport pageRef={pageRef} />
       </div>
       <TraceHost />
     </RunContext.Provider>

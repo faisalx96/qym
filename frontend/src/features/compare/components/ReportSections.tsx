@@ -138,7 +138,7 @@ export function useSectionAnchor(): void {
 }
 
 export function CompareReport() {
-  const { model, metric } = useCompare();
+  const { metric } = useCompare();
   const scope = useScope();
   const sections = useSectionList();
   const has = (k: SectionKey) => sections.some((s) => s.key === k);
@@ -215,7 +215,7 @@ export function CompareReport() {
       <ReportSection
         id={sectionDomId('items')}
         title="Item-by-item comparison"
-        description={`${model.itemIds.length} aligned items, one score per run. Filters apply to every section above.`}
+        description="One score per run for each aligned item. Filters apply to every section above."
       >
         <ItemsSection />
       </ReportSection>

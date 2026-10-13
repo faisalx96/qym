@@ -115,7 +115,7 @@ describe('ScopeBar', () => {
       />,
     );
     expect(screen.getByText('Scope: 12 of 40 items')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Remove filter Failing' }));
+    await user.click(screen.getByRole('button', { name: 'Remove Failing from scope' }));
     expect(onClear).toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Clear all' }));
     expect(onClearAll).toHaveBeenCalled();

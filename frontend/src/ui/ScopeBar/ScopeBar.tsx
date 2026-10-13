@@ -52,7 +52,7 @@ export function ScopeBar({
           <Chip
             key={chip.key}
             isSelected
-            removeLabel={`Remove filter ${chip.label}`}
+            removeLabel={`Remove ${chip.label} from scope`}
             onRemove={chip.onClear}
             onChange={chip.onClear}
           >
