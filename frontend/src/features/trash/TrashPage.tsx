@@ -31,6 +31,7 @@ import {
   Skeleton,
   Tag,
   Text,
+  Tooltip,
   useToast,
   type RunStatus,
   type Column,
@@ -242,6 +243,38 @@ export function TrashPage() {
     },
     { id: 'task', header: 'Task', priority: 3, width: 120, cell: (r) => r.task ?? '—' },
     { id: 'dataset', header: 'Dataset', priority: 3, width: 120, cell: (r) => r.dataset ?? '—' },
+    {
+      id: 'actions',
+      header: 'Restore',
+      type: 'actions',
+      hideLabel: true,
+      width: 96,
+      pin: 'end',
+      hideable: false,
+      cell: (r) =>
+        r.project_archived ? (
+          <Tooltip content="Unarchive the project to restore this run.">
+            <Button
+              variant="neutral"
+              size="sm"
+              aria-disabled="true"
+              onPress={() => toast.show('Unarchive the project to restore this run.', { tone: 'info' })}
+            >
+              Restore
+            </Button>
+          </Tooltip>
+        ) : (
+          <Button
+            variant="accent"
+            size="sm"
+            onPress={() => void doRestore([r.id])}
+            isDisabled={restore.isPending}
+            data-testid={`restore-${r.id}`}
+          >
+            Restore
+          </Button>
+        ),
+    },
   ];
 
   return (
@@ -306,7 +339,19 @@ export function TrashPage() {
           }
         />
       ) : list.data ? (
-        <>
+        <div
+          onKeyDown={(e) => {
+            // Ctrl/Cmd+A on a focused row selects every run that can be restored.
+            if (
+              e.key.toLowerCase() === 'a' &&
+              (e.ctrlKey || e.metaKey) &&
+              (e.target as HTMLElement).closest('tr')
+            ) {
+              e.preventDefault();
+              setSelected(new Set(rows.filter((r) => !r.project_archived).map((r) => r.id)));
+            }
+          }}
+        >
           <DataTable<TrashRun>
             aria-label="Deleted runs"
             className={styles.table}
@@ -325,6 +370,7 @@ export function TrashPage() {
             refreshing={list.isFetching && list.isPlaceholderData}
             columns={columns}
             density="regular"
+            selectOnRowClick
             bulkActions={
               <Button
                 variant="accent"
@@ -336,25 +382,6 @@ export function TrashPage() {
                 Restore {restorableSelected.length} selected
               </Button>
             }
-            rowActions={(r) => [
-              r.project_archived
-                ? {
-                    id: 'restore',
-                    label: 'Unarchive the project to restore this run.',
-                    icon: 'retry',
-                    primary: true,
-                    disabled: true,
-                    onPress: () => undefined,
-                  }
-                : {
-                    id: 'restore',
-                    label: `Restore ${r.run_name}`,
-                    icon: 'retry',
-                    primary: true,
-                    disabled: restore.isPending,
-                    onPress: () => void doRestore([r.id]),
-                  },
-            ]}
             rowState={(r) => (purgeInfo(r).soon ? 'warn' : undefined)}
           >
             <DataTable.Footer
@@ -371,7 +398,7 @@ export function TrashPage() {
               }}
             />
           </DataTable>
-        </>
+        </div>
       ) : null}
     </div>
   );

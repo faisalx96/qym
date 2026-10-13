@@ -51,7 +51,7 @@ test.describe('trash', () => {
     const a = await seedTrash(request, tag(), 3);
     const b = await seedTrash(request, tag(), 2);
     await gotoApp(page, '/trash');
-    await pickSelect(page, /Project/, new RegExp(`${a.project.name} · 3`));
+    await pickSelect(page, /^(?!.*column menu).*Project/, new RegExp(`${a.project.name} · 3`));
     await expect.poll(() => query(page).get('project')).toBe(a.project.id);
     await expect(dataRows(page)).toHaveCount(3);
     await expect(page.getByText('3 matching')).toBeVisible();
@@ -60,9 +60,9 @@ test.describe('trash', () => {
     await expect(row(page, a.prefix)).toHaveCount(3);
     await expect(row(page, b.prefix)).toHaveCount(0);
 
-    await pickSelect(page, /Project/, new RegExp(`${b.project.name} · 2`));
+    await pickSelect(page, /^(?!.*column menu).*Project/, new RegExp(`${b.project.name} · 2`));
     await expect(dataRows(page)).toHaveCount(2);
-    await pickSelect(page, /Project/, 'All projects');
+    await pickSelect(page, /^(?!.*column menu).*Project/, 'All projects');
     await expect.poll(() => query(page).get('project')).toBeNull();
   });
 
@@ -98,11 +98,12 @@ test.describe('trash', () => {
     const s = await seedTrash(request, tag(), 3);
     await gotoApp(page, `/trash?q=${s.prefix}`);
     await expect(dataRows(page)).toHaveCount(3);
-    await expect(page.getByTestId('restore-selected')).toBeDisabled();
+    // the selection bar (with Restore selected) only exists while rows are selected
+    await expect(page.getByTestId('restore-selected')).toHaveCount(0);
     // rows toggle on click (no row action)
     await row(page, `${s.prefix}-0`).click();
     await row(page, `${s.prefix}-1`).click();
-    await expect(page.getByText('2 selected', { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Selection actions' })).toContainText('2 selected');
     await expect(page.getByTestId('restore-selected')).toHaveText(/Restore 2 selected/);
     await page.getByTestId('restore-selected').click();
     await expect(page.getByText('2 runs restored')).toBeVisible();
@@ -133,7 +134,7 @@ test.describe('trash', () => {
 
     await row(page, `${live.prefix}-0`).focus();
     await page.keyboard.press('Control+a');
-    await expect(page.getByText('3 selected', { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Selection actions' })).toContainText('3 selected');
     await expect(page.getByTestId('restore-selected')).toHaveText(/Restore 3 selected/);
     // clicking a disabled row action only explains, it restores nothing
     await archivedRow.getByRole('button', { name: 'Restore' }).click({ force: true });
@@ -146,7 +147,7 @@ test.describe('trash', () => {
     // archived-only view: nothing can be selected
     await row(page, `${arch.prefix}-0`).focus();
     await page.keyboard.press('Control+a');
-    await expect(page.getByTestId('restore-selected')).toBeDisabled();
+    await expect(page.getByTestId('restore-selected')).toHaveCount(0);
   });
 
   test('[BUG] the table has a select-all header checkbox and per-row checkboxes', async ({
