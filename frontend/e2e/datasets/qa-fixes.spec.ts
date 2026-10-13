@@ -31,7 +31,7 @@ test.describe('catalog', () => {
     await expect(page.getByTestId('new-dataset')).toBeVisible();
     await page.getByRole('link', { name: 'Deleted datasets' }).click();
     await expect(page).toHaveURL(/view=deleted/);
-    await expect(page.getByRole('button', { name: 'Restore' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Restore', exact: true })).toBeVisible();
   });
 
   test('a dataset with one run reads "1 run", not "1 runs"', async ({ page, request }) => {

@@ -44,8 +44,8 @@ export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, 
       {selecting ? (
         <div
           className={styles.selectionCluster}
-          role="group"
-          aria-label="Selection actions"
+          role={bulkOwnSummary ? undefined : 'region'}
+          aria-label={bulkOwnSummary ? undefined : 'Selection actions'}
           data-selection-bar=""
         >
           {bulkOwnSummary ? null : (

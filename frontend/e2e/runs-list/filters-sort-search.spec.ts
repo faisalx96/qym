@@ -352,8 +352,13 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText(
       'search: “summarize”',
     );
-    for (const name of await dataRows(page).locator('td[data-col="run"] a').allInnerTexts())
-      expect(name).toContain('summarize');
+    // the previous page of rows stays up (not faded) until the filtered rows arrive
+    await expect
+      .poll(async () => {
+        const names = await dataRows(page).locator('td[data-col="run"] a').allInnerTexts();
+        return names.length > 0 && names.every((n) => n.includes('summarize'));
+      })
+      .toBe(true);
     // Escape blurs the field first; a second Escape (outside the field) does not clear; the clear button does
     await search.fill('');
     await expect.poll(() => urlParams(page).has('q')).toBe(false);

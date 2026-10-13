@@ -382,7 +382,7 @@ test.describe('detail: items table', () => {
     await expect(page.locator('[data-item-link]')).toHaveCount(6);
     await page.getByRole('searchbox', { name: 'Search items' }).fill('order #3');
     await expect(page.locator('[data-item-link]')).toHaveCount(1);
-    // the selection bar replaces the toolbar while rows are selected
+    // the selection cluster sits beside the toolbar: the search stays
     await page
       .locator('label')
       .filter({ has: page.getByRole('checkbox', { name: 'Select all rows' }) })
@@ -390,7 +390,7 @@ test.describe('detail: items table', () => {
     const bulk = page.getByRole('region', { name: 'Selection actions' });
     await expect(bulk).toContainText('1 selected');
     await expect(bulk.getByTestId('bulk-delete-items')).toHaveText('Delete 1');
-    await expect(page.getByRole('searchbox', { name: 'Search items' })).toHaveCount(0);
+    await expect(page.getByRole('searchbox', { name: 'Search items' })).toBeVisible();
     await bulk.getByRole('button', { name: 'Clear selection' }).click();
     await expect(bulk).toHaveCount(0);
     await expect(page.getByRole('searchbox', { name: 'Search items' })).toBeVisible();

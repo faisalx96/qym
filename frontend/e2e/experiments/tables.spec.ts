@@ -43,10 +43,7 @@ test('queue: the Columns menu reveals the hidden "Created by" column', async ({ 
   await expect(jobsGrid(page).getByRole('columnheader', { name: /Created by/ })).toHaveCount(1);
 });
 
-test('queue: selecting jobs swaps the toolbar for the selection bar with Cancel selected', async ({
-  page,
-  request,
-}) => {
+test('queue: selecting jobs adds the selection actions and keeps the filters', async ({ page, request }) => {
   const project = await seed(request);
   await gotoApp(page, expPath(project.slug, '/queue'));
   await expect(jobsGrid(page).getByRole('row')).not.toHaveCount(1);
@@ -55,7 +52,7 @@ test('queue: selecting jobs swaps the toolbar for the selection bar with Cancel 
   const bar = page.getByRole('region', { name: 'Selection actions' });
   await expect(bar).toContainText('1 selected');
   await expect(bar.getByRole('button', { name: 'Cancel selected (1)' })).toBeEnabled();
-  await expect(page.getByRole('button', { name: /Select all I can cancel/ })).toHaveCount(0);
+  await expect(page.getByText('Environment', { exact: true }).first()).toBeVisible();
   await bar.getByRole('button', { name: 'Clear selection' }).click();
   await expect(bar).toHaveCount(0);
 });
