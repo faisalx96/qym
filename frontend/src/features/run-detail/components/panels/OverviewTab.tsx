@@ -85,7 +85,7 @@ export function OverviewTab() {
   );
   if (!cards.length) return <p className={styles.note}>No scored items for the current filters.</p>;
   return (
-    <div className={styles.stack}>
+    <div className={styles.cards}>
       {cards.map((c) => (
         <MetricCard key={c.metric} card={c} />
       ))}

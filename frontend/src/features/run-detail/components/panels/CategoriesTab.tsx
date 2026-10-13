@@ -63,48 +63,54 @@ export function CategoriesTab() {
               {metric} · overall {fmt(b.overallAverage)}
             </span>
           </h3>
-          {b.groups.map((g) => {
-            const current =
-              b.key === 'complexity'
-                ? filters.complexity
-                : b.key === 'domain'
-                  ? filters.domain
-                  : (filters.categories[b.key] ?? null);
-            const on = current?.length === 1 && current[0]!.toLowerCase() === g.value.toLowerCase();
-            return (
-              <button
-                key={g.value}
-                type="button"
-                className={styles.cardButton}
-                aria-pressed={on}
-                data-testid="category-row"
-                onClick={() => {
-                  if (b.key === 'complexity') api.setFilters({ complexity: on ? null : [g.value] });
-                  else if (b.key === 'domain')
-                    api.setFilters({ domain: on ? null : [g.value], domainMode: 'include', domainOnly: [] });
-                  else {
-                    const categories = { ...filters.categories };
-                    if (on) delete categories[b.key];
-                    else categories[b.key] = [g.value];
-                    api.setFilters({ categories });
-                  }
-                }}
-              >
-                <span className={styles.rowHead}>
-                  <span className={styles.label}>{g.value}</span>
-                  <span className={styles.stat}>{fmt(g.avgScore)}</span>
-                </span>
-                <RateBar
-                  value={numeric ? null : g.avgScore}
-                  label={`${g.value}: average ${fmt(g.avgScore)}`}
-                />
-                <span className={styles.detail}>
-                  {g.itemCount} items{g.avgLatency ? ` · ${formatLatency(g.avgLatency)}` : ''}
-                  {g.passRate !== null ? ` · ${formatPercent(g.passRate, 0)} pass` : ''}
-                </span>
-              </button>
-            );
-          })}
+          <div className={styles.cardsDense}>
+            {b.groups.map((g) => {
+              const current =
+                b.key === 'complexity'
+                  ? filters.complexity
+                  : b.key === 'domain'
+                    ? filters.domain
+                    : (filters.categories[b.key] ?? null);
+              const on = current?.length === 1 && current[0]!.toLowerCase() === g.value.toLowerCase();
+              return (
+                <button
+                  key={g.value}
+                  type="button"
+                  className={styles.cardButton}
+                  aria-pressed={on}
+                  data-testid="category-row"
+                  onClick={() => {
+                    if (b.key === 'complexity') api.setFilters({ complexity: on ? null : [g.value] });
+                    else if (b.key === 'domain')
+                      api.setFilters({
+                        domain: on ? null : [g.value],
+                        domainMode: 'include',
+                        domainOnly: [],
+                      });
+                    else {
+                      const categories = { ...filters.categories };
+                      if (on) delete categories[b.key];
+                      else categories[b.key] = [g.value];
+                      api.setFilters({ categories });
+                    }
+                  }}
+                >
+                  <span className={styles.rowHead}>
+                    <span className={styles.label}>{g.value}</span>
+                    <span className={styles.stat}>{fmt(g.avgScore)}</span>
+                  </span>
+                  <RateBar
+                    value={numeric ? null : g.avgScore}
+                    label={`${g.value}: average ${fmt(g.avgScore)}`}
+                  />
+                  <span className={styles.detail}>
+                    {g.itemCount} items{g.avgLatency ? ` · ${formatLatency(g.avgLatency)}` : ''}
+                    {g.passRate !== null ? ` · ${formatPercent(g.passRate, 0)} pass` : ''}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </section>
       ))}
     </div>

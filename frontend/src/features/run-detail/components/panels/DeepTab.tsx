@@ -33,7 +33,7 @@ export function DeepTab() {
   const opts = names.map((n, i) => ({ key: String(i), label: n }));
   void model;
   return (
-    <div className={styles.stack}>
+    <div className={styles.twoUp}>
       <section className={styles.stack} aria-label="Metric correlation">
         <h3 className={styles.groupTitle}>Metric correlation</h3>
         <p className={styles.note}>

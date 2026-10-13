@@ -83,35 +83,37 @@ export function RootCauseTab() {
           No root causes recorded yet. Run Auto-Analyze, or add issues from an item’s failing metric.
         </p>
       ) : null}
-      {categories.map(([cat, entry]) => {
-        const on = active.some((a) => a.toLowerCase() === cat.toLowerCase());
-        return (
-          <button
-            key={cat}
-            type="button"
-            className={styles.cardButton}
-            aria-pressed={on}
-            data-testid="root-cause-card"
-            style={{ borderInlineStartWidth: 3, borderInlineStartColor: toneFor(cat) }}
-            onClick={() => {
-              if (on) api.setFilters({ rootCause: null, rootCauseMetric: 'all' });
-              else api.setFilters({ rootCause: [cat], rootCauseMetric: metric });
-            }}
-          >
-            <span className={styles.rowHead}>
-              <span className={styles.label}>{cat}</span>
-              <Tag kind="count">{entry.items.size}</Tag>
-            </span>
-            {entry.subs.size ? (
-              <span className={styles.detail}>
-                {Array.from(entry.subs.entries())
-                  .map(([s, n]) => `${s} (${n})`)
-                  .join(' · ')}
+      <div className={styles.cards}>
+        {categories.map(([cat, entry]) => {
+          const on = active.some((a) => a.toLowerCase() === cat.toLowerCase());
+          return (
+            <button
+              key={cat}
+              type="button"
+              className={styles.cardButton}
+              aria-pressed={on}
+              data-testid="root-cause-card"
+              style={{ borderInlineStartWidth: 3, borderInlineStartColor: toneFor(cat) }}
+              onClick={() => {
+                if (on) api.setFilters({ rootCause: null, rootCauseMetric: 'all' });
+                else api.setFilters({ rootCause: [cat], rootCauseMetric: metric });
+              }}
+            >
+              <span className={styles.rowHead}>
+                <span className={styles.label}>{cat}</span>
+                <Tag kind="count">{entry.items.size}</Tag>
               </span>
-            ) : null}
-          </button>
-        );
-      })}
+              {entry.subs.size ? (
+                <span className={styles.detail}>
+                  {Array.from(entry.subs.entries())
+                    .map(([s, n]) => `${s} (${n})`)
+                    .join(' · ')}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
