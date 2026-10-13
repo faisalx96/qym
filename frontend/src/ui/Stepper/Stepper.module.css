@@ -79,9 +79,15 @@
   gap: var(--space-xs);
   font-size: var(--font-base);
   line-height: 1.3;
-  /* reserve the count tags' height so the first edit does not shift the page */
-  min-height: var(--badge-height);
   min-width: 0;
+}
+
+.counts {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  /* always reserved, so the first edit does not shift the page */
+  min-height: var(--badge-height);
 }
 
 .index {

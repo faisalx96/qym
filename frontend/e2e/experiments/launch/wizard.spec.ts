@@ -172,14 +172,14 @@ test.describe('layout', () => {
   }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
-    const bar = page.getByRole('region', { name: 'Launch' });
+    const bar = page.getByRole('region', { name: 'Launch', exact: true });
     await expect(bar).toBeVisible();
     const next = page.getByRole('button', { name: /Continue to environment configurations/ });
     await expect(next).toBeInViewport();
     const [nb, bb] = [await next.boundingBox(), await bar.boundingBox()];
     expect(nb!.y + nb!.height).toBeLessThanOrEqual(bb!.y + 1);
     await goStep(page, 'review');
-    await expect(page.getByRole('region', { name: 'Launch' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Launch', exact: true })).toHaveCount(0);
   });
 });
 

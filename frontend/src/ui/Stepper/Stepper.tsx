@@ -133,6 +133,8 @@ export function Stepper({
                 <span className={styles.text}>
                   <span className={styles.index}>{i + 1}</span>
                   <span>{s.label}</span>
+                </span>
+                <span className={styles.counts}>
                   <Counts step={s} />
                 </span>
               </button>

@@ -18,7 +18,7 @@ export const StepPanel = forwardRef<
   }
 >(function StepPanel({ stepId, title, description, children }, headingRef) {
   return (
-    <section className={styles.panel} aria-labelledby={stepHeadingId(stepId)} data-step={stepId}>
+    <div className={styles.panel} data-step={stepId}>
       <header className={styles.panelHead}>
         <h2 ref={headingRef} id={stepHeadingId(stepId)} tabIndex={-1} className={styles.panelTitle}>
           {title}
@@ -30,6 +30,6 @@ export const StepPanel = forwardRef<
         ) : null}
       </header>
       {children}
-    </section>
+    </div>
   );
 });

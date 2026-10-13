@@ -34,9 +34,12 @@ test.describe('390px', () => {
     for (const s of ['Models', 'Environment configurations', 'Evaluation configurations', 'Raw JSON']) {
       await openSection(page, s);
       await expectNoPageOverflow(page);
+      if (s === 'Environment configurations') {
+        await openGroup(page, 'LLM routing');
+        await expectNoPageOverflow(page);
+      }
     }
-    await openGroup(page, 'LLM routing');
-    await expectNoPageOverflow(page);
+    await openSection(page, 'Models'); // the sticky launch bar is hidden on the review step
     // Scroll to the very bottom: the sticky bar is still in the viewport with an enabled Launch.
     await page.mouse.move(200, 300);
     await page.mouse.wheel(0, 100000);
