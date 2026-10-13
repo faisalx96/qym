@@ -131,9 +131,11 @@ export function JobCard({ job, phase }: { job: AnalysisJob; phase: PhaseView }) 
   return (
     <div className={s.jobCard} data-status={job.status} role="region" aria-label="Analysis job">
       <div className={s.jobHead}>
-        <Badge tone={label.tone} dot>
-          {label.text}
-        </Badge>
+        <span className={s.jobBadge}>
+          <Badge tone={label.tone} dot>
+            {label.text}
+          </Badge>
+        </span>
         <Text variant="md" weight={600} as="span" className={s.jobTitle}>
           {live
             ? `Running ${done} / ${total}`

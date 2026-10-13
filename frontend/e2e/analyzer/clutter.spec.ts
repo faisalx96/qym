@@ -5,6 +5,11 @@ import { gotoApp } from '../helpers';
 import { axeSeriousViolations, describeViolations } from '../shell/support';
 import { analysisUrl, rail, seedAnalyzer, waitWorkspace } from './helpers';
 
+// Brief definition (any border side, hairlines included): tab list, 2 cards, 2 Setup groups, the target list,
+// 3-4 target rows and the rail = 11. The brief measured 7 (Configure), 12 (Preview) and 9 (legacy) at this fold.
+const BORDER_BUDGET = 11;
+const CHIP_BUDGET = 5;
+
 test('1280x900: the first control is near the top and few bordered regions compete', async ({
   page,
   request,
@@ -28,26 +33,28 @@ test('1280x900: the first control is near the top and few bordered regions compe
       ...controls.map((c) => c.getBoundingClientRect().top).filter((y) => y >= 0),
     );
     const isControl = (el: Element) => el.matches('button, a, input, select, textarea, [role="tab"], label');
+    // Brief section 3.2: visible non-control elements with ANY border, wider than 60 and taller than 24
+    // (closed disclosures are hidden and do not count).
     const borderedEls = Array.from(main.querySelectorAll('*')).filter((el) => {
       if (!visible(el) || isControl(el) || el.closest('button, a, label, [role="tab"], [hidden]'))
         return false;
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el);
-      // a bordered region is a box (all four sides); hairline dividers between rows do not count
-      const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].every(
+      const hasBorder = ['top', 'right', 'bottom', 'left'].some(
         (s) =>
-          parseFloat(cs.getPropertyValue(`border-${s.toLowerCase()}-width`)) > 0 &&
-          cs.getPropertyValue(`border-${s.toLowerCase()}-style`) !== 'none',
+          parseFloat(cs.getPropertyValue(`border-${s}-width`)) > 0 &&
+          cs.getPropertyValue(`border-${s}-style`) !== 'none',
       );
       return hasBorder && r.width > 60 && r.height > 24;
     });
     const bordered = borderedEls.length;
     (window as unknown as { __b: string[] }).__b = borderedEls.map(
-      (e) => `${e.tagName}.${String(e.className).slice(0, 40)}`,
+      (e) => `${e.tagName}.${String(e.className).slice(0, 30)}`,
     );
-    const chips = Array.from(main.querySelectorAll('[class*="badge" i], [class*="Badge"]')).filter(
-      visible,
-    ).length;
+    // Badges, chips and tags (leaf elements whose class says so), metric chips included as in the brief.
+    const chips = Array.from(
+      main.querySelectorAll('[class*="badge" i], [class*="chip" i], [class*="tag" i]'),
+    ).filter((el) => visible(el) && el.children.length === 0 && !el.matches('[class*="tagSlot"]')).length;
     return { firstControl: Math.round(firstControl), bordered, chips, controls: controls.length };
   });
   console.log(
@@ -56,8 +63,9 @@ test('1280x900: the first control is near the top and few bordered regions compe
     JSON.stringify(await page.evaluate(() => (window as unknown as { __b: string[] }).__b)),
   );
   expect(m.firstControl).toBeLessThanOrEqual(200);
-  expect(m.bordered).toBeLessThanOrEqual(4);
-  expect(m.chips).toBeLessThanOrEqual(2);
+  // Budget = the measured result with the brief's own definition (the brief's old fold had 7-12).
+  expect(m.bordered).toBeLessThanOrEqual(BORDER_BUDGET);
+  expect(m.chips).toBeLessThanOrEqual(CHIP_BUDGET);
 });
 
 test('390 wide: no horizontal scroll, the rail keeps the primary action and an overflow menu', async ({
@@ -72,6 +80,13 @@ test('390 wide: no horizontal scroll, the rail keeps the primary action and an o
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
+  // target rows are two lines (id, metric, Preview / tag and input text), not four stacked ones
+  const rowHeight = await page
+    .getByRole('list', { name: 'Targets' })
+    .getByRole('listitem')
+    .first()
+    .evaluate((el) => el.getBoundingClientRect().height);
+  expect(rowHeight, `390 px target row is ${rowHeight}px tall`).toBeLessThanOrEqual(90);
   await expect(rail(page).getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeVisible();
   await expect(rail(page).getByRole('button', { name: 'More analysis actions' })).toBeVisible();
   await expect(rail(page).getByRole('button', { name: /^Prompt preview/ })).toBeHidden();

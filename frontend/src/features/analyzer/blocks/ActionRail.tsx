@@ -63,16 +63,17 @@ export function ActionRail({
   else if (blocked) {
     status = blocked;
     tone = 'warning';
-  } else if (ws.sessionAnalyzed.size) status = `${ws.sessionAnalyzed.size} analyzed this session`;
+  } else if (ws.sessionAnalyzed.size)
+    status = `${ws.sessionAnalyzed.size} ${ws.sessionAnalyzed.size === 1 ? 'target' : 'targets'} analyzed this session`;
   else status = '';
 
   const testButton = test.testing ? (
-    <Button size="md" onPress={test.cancel} className={s.railSecondary}>
+    <Button size="sm" onPress={test.cancel} className={s.railSecondary}>
       Cancel test
     </Button>
   ) : (
     <Button
-      size="md"
+      size="sm"
       onPress={() => void test.run()}
       isDisabled={locked || !ws.llmReady || noTargets}
       className={s.railSecondary}
@@ -86,7 +87,7 @@ export function ActionRail({
   if (phase.phase === 'running' || phase.phase === 'cancelling') {
     primary = (
       <Button
-        size="md"
+        size="sm"
         variant="danger"
         onPress={runner.cancel}
         isDisabled={phase.phase === 'cancelling'}
@@ -98,11 +99,11 @@ export function ActionRail({
   } else if (phase.phase === 'done' || phase.phase === 'cancelled') {
     primary = (
       <>
-        <Button size="md" onPress={runner.dismiss} className={s.railSecondary}>
+        <Button size="sm" onPress={runner.dismiss} className={s.railSecondary}>
           Analyze again
         </Button>
         <LinkButton
-          size="md"
+          size="sm"
           variant="accent"
           to={viewRunTo(slug, runId, job?.pass_number)}
           className={s.railPrimary}
@@ -114,10 +115,10 @@ export function ActionRail({
   } else if (phase.phase === 'failed') {
     primary = (
       <>
-        <LinkButton size="md" to={viewRunTo(slug, runId, job?.pass_number)} className={s.railSecondary}>
+        <LinkButton size="sm" to={viewRunTo(slug, runId, job?.pass_number)} className={s.railSecondary}>
           View run
         </LinkButton>
-        <Button size="md" variant="accent" onPress={runner.dismiss} className={s.railPrimary}>
+        <Button size="sm" variant="accent" onPress={runner.dismiss} className={s.railPrimary}>
           Analyze again
         </Button>
       </>
@@ -127,7 +128,7 @@ export function ActionRail({
       <>
         <span className={s.railTest}>{testButton}</span>
         <Button
-          size="md"
+          size="sm"
           variant="accent"
           onPress={() => void ws.analyze()}
           isDisabled={locked || !ws.llmReady || noTargets}
@@ -160,7 +161,7 @@ export function ActionRail({
           searchable={false}
           placeholder="No connection"
         />
-        <Button size="md" onPress={onPreview} isDisabled={!preview.hasTarget} className={s.railPreview}>
+        <Button size="sm" onPress={onPreview} isDisabled={!preview.hasTarget} className={s.railPreview}>
           {preview.characters != null
             ? `Prompt preview · ${preview.characters.toLocaleString()} chars`
             : 'Prompt preview'}
@@ -262,7 +263,7 @@ export function CompactJobRail({
       <div className={s.railActions}>
         {phase.live ? (
           <Button
-            size="md"
+            size="sm"
             variant="danger"
             onPress={runner.cancel}
             isDisabled={phase.phase === 'cancelling'}
@@ -272,14 +273,14 @@ export function CompactJobRail({
           </Button>
         ) : (
           <>
-            <Button size="md" onPress={runner.dismiss} className={s.railSecondary}>
+            <Button size="sm" onPress={runner.dismiss} className={s.railSecondary}>
               Dismiss
             </Button>
-            <Button size="md" onPress={onOpen} className={s.railSecondary}>
+            <Button size="sm" onPress={onOpen} className={s.railSecondary}>
               Open results
             </Button>
             <LinkButton
-              size="md"
+              size="sm"
               variant="accent"
               to={viewRunTo(slug, runId, job.pass_number)}
               className={s.railPrimary}

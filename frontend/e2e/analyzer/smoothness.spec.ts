@@ -6,7 +6,17 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { analysisUrl, analyzeButton, jobCard, rail, seedAnalyzer, viewTabs, waitWorkspace } from './helpers';
+import {
+  analysisUrl,
+  analyzeButton,
+  failingItems,
+  jobCard,
+  pushRun,
+  rail,
+  seedAnalyzer,
+  viewTabs,
+  waitWorkspace,
+} from './helpers';
 
 interface Probe {
   tabs: number;
@@ -147,4 +157,33 @@ test('reduced motion removes the Disclosure and progress transitions', async ({ 
         .every((x) => parseFloat(x) <= 0.001),
       durations.join(' | '),
     ).toBe(true);
+});
+
+test('Test then Analyze on a 20-item run stays under the layout-shift budget', async ({ page, request }) => {
+  const seed = await seedAnalyzer(request);
+  const items = Array.from({ length: 5 }, (_, k) => failingItems(`b${k}`).slice(0, 4)).flat();
+  const bigRun = await pushRun(request, seed.token, { name: `big-${seed.slug}`, items });
+  await page.addInitScript(() => {
+    const w = window as unknown as { __cls: number };
+    w.__cls = 0;
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean }>)
+        if (!e.hadRecentInput) w.__cls += e.value;
+    }).observe({ type: 'layout-shift', buffered: true });
+  });
+  await gotoApp(page, analysisUrl(seed.slug, bigRun));
+  await waitWorkspace(page);
+  await expect(page.getByRole('list', { name: 'Targets' })).toBeVisible();
+  await page.waitForTimeout(500);
+  const start = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
+  await rail(page)
+    .getByRole('button', { name: /^Test selected/ })
+    .click();
+  await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
+  await analyzeButton(page).click();
+  await expect(jobCard(page)).toContainText('metric analyses succeeded', { timeout: 60_000 });
+  await expect(page.getByText('analyzed', { exact: true }).first()).toBeVisible();
+  await page.waitForTimeout(500);
+  const end = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
+  expect(end - start, `layout-shift during Test + Analyze: ${end - start}`).toBeLessThan(0.01);
 });

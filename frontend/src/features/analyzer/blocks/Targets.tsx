@@ -174,8 +174,8 @@ export function TargetList({
   return (
     <div className={s.stack}>
       <div className={s.listHead}>
-        <Text variant="sm" tone="muted" as="p" role="status">
-          {`${items} ${items === 1 ? 'item' : 'items'} with failed metric targets${ws.settings.limit ? ` · limit ${ws.settings.limit}` : ''}${ws.sessionAnalyzed.size ? ` · ${ws.sessionAnalyzed.size} analyzed this session` : ''}`}
+        <Text variant="sm" tone="muted" as="p" role="status" className={s.listCaption}>
+          {`${items} ${items === 1 ? 'item' : 'items'} with failed metric targets${ws.settings.limit ? ` · limit ${ws.settings.limit}` : ''}${ws.sessionAnalyzed.size ? ` · ${ws.sessionAnalyzed.size} ${ws.sessionAnalyzed.size === 1 ? 'target' : 'targets'} analyzed this session` : ''}`}
         </Text>
         {ws.frozen && !ws.runner.busy ? (
           <Button size="sm" onPress={ws.refreshTargets}>
@@ -210,26 +210,30 @@ export function TargetList({
               >
                 {`${metric}${score != null ? ` ${score.toFixed(2)}` : ''}`}
               </Chip>
-              {analysis || justNow ? (
-                <Tag kind="data" tone={human ? 'success' : 'info'}>
-                  {human ? 'human' : 'analyzed'}
-                </Tag>
-              ) : null}
-              {causes.slice(0, 2).map((c) => (
-                <Tag key={c} kind="role">
-                  {c}
-                </Tag>
-              ))}
-              <Text
-                variant="base"
-                tone="secondary"
-                as="span"
-                dir={direction(text)}
-                className={s.targetText}
-                truncate
-              >
-                {text}
-              </Text>
+              <span className={s.targetDetail}>
+                <span className={s.tagSlot}>
+                  {analysis || justNow ? (
+                    <Tag kind="data" tone={human ? 'success' : 'info'}>
+                      {human ? 'human' : 'analyzed'}
+                    </Tag>
+                  ) : null}
+                </span>
+                {causes.slice(0, 2).map((c) => (
+                  <Tag key={c} kind="role">
+                    {c}
+                  </Tag>
+                ))}
+                <Text
+                  variant="base"
+                  tone="secondary"
+                  as="span"
+                  dir={direction(text)}
+                  className={s.targetText}
+                  truncate
+                >
+                  {text}
+                </Text>
+              </span>
               {onPreview ? (
                 <Button
                   size="sm"

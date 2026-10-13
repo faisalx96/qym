@@ -76,7 +76,11 @@ export function RunShell({
       scope={scope}
       tab={route.scope}
       onTab={route.setScope}
-      description="Diagnose the failed metric targets of one run."
+      description={
+        route.scope === 'run'
+          ? 'Diagnose the failed metric targets of one run.'
+          : 'Project guidance the analyzer uses for every run: categories, rules and reference documents.'
+      }
       meta={run ? [run.run_name || run.run_id] : undefined}
       live={phase.live}
     >

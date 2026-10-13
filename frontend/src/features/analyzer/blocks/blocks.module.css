@@ -45,8 +45,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-md) var(--space-lg) 0;
 }
 
 .cardTitles {
@@ -243,12 +242,25 @@
   min-width: 0;
 }
 
-.switchRow,
-.numberRow {
+.switchRow {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: var(--space-sm) var(--space-lg);
+}
+
+.numberRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-sm) var(--space-lg);
+}
+
+.listCaption {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .listHead {
@@ -289,18 +301,41 @@
   min-width: 56px;
 }
 
+.targetDetail {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* Reserved so the "analyzed" / "human" tag appearing after a job moves nothing. */
+.tagSlot {
+  display: inline-flex;
+  flex: none;
+  min-width: 64px;
+}
+
 .targetText {
   min-width: 0;
-  flex: 1 1 160px;
+  flex: 1;
 }
 
 .targetList[data-frozen] .targetRow {
   transition: none;
 }
 
-/* Phones: the input preview takes the second line of the row. */
+.targetRow > :last-child:not(.targetDetail) {
+  margin-inline-start: auto;
+}
+
+/* Phones: two lines per row. Line 1: check, id, metric, Preview. Line 2: tag and input preview. */
 @media (max-width: 640px) {
-  .targetText {
+  .targetId {
+    min-width: 0;
+  }
+
+  .targetDetail {
     flex-basis: 100%;
     order: 9;
   }
@@ -403,6 +438,11 @@
   background: var(--bg-void);
 }
 
+.railActions {
+  min-width: calc(var(--action-primary-width) + 148px);
+  justify-content: flex-end;
+}
+
 .railLead,
 .railActions {
   display: flex;
@@ -450,6 +490,7 @@
 .railPrimary {
   min-width: var(--action-primary-width);
   justify-content: center;
+  text-decoration: none;
 }
 
 .railSecondary {
@@ -523,6 +564,11 @@
   height: 100%;
   background: var(--accent-primary);
   transition: width 150ms linear;
+}
+
+.jobBadge {
+  display: inline-flex;
+  min-width: 148px;
 }
 
 .jobTitle {

@@ -131,13 +131,13 @@ export function useRunWorkspace(
   /** Live matches: what "Analyze N" would send if started now. */
   const liveMatched: MatchedTarget[] = useMemo(
     () => matchTargets(data.rows, matchOptions),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- matchOptions is rebuilt every render; its fields are listed explicitly
     [data.rows, settings.selectedMetrics, settings.maxScorePct, settings.skipAnalyzed, settings.allowHuman],
   );
   /** What the list shows: the frozen snapshot while a job ran, otherwise the live matches. */
   const matched: MatchedTarget[] = useMemo(
     () => (frozen ? matchTargets(frozen, matchOptions) : liveMatched),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- matchOptions is rebuilt every render; its fields are listed explicitly
     [
       frozen,
       liveMatched,
@@ -204,7 +204,7 @@ export function useRunWorkspace(
   const doAnalyze = useCallback(async () => {
     setHumanConfirm(null);
     await runner.start(analyzeRequest(cfg, settings, guard));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the request body is built from the listed settings; callbacks are stable
   }, [runner, cfg, settings, connectionId, data.pass, data.passRevision]);
 
   const analyze = useCallback(async () => {
@@ -253,7 +253,7 @@ export function useRunWorkspace(
       setTesting(false);
       testAbort.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the request body is built from the listed settings; callbacks are stable
   }, [liveTestKeys, effectiveFocus, cfg, settings, connectionId, data.pass, data.passRevision, testMutation]);
 
   const cancelTest = useCallback(() => testAbort.current?.abort(), []);
