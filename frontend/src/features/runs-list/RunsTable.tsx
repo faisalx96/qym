@@ -1,13 +1,11 @@
 /**
- * Hand-rolled runs table. DataTable (React Aria Table) cannot host an expanded
- * passes panel row, so this keeps the .qdt header/cell recipe, th[aria-sort],
- * roving row focus (j/k, arrows, Tab), a CSS-sticky Run column and a sticky
- * Actions column in plain <table> markup.
+ * The runs list table: columns, cells and runs-specific selection rules on the
+ * shared DataTable (pinned Run and Actions columns, header bands, zebra rows,
+ * passes panel as the expanded row, select mode as `selection`).
  */
-import { useEffect, useRef, type ReactNode } from 'react';
-import { Button as AriaButton } from 'react-aria-components';
+import { useMemo, type ReactNode } from 'react';
 import type { RunRow } from '@/api/dashboardTypes';
-import { Checkbox, EmptyState, Skeleton } from '@/ui';
+import { DataTable, EmptyState, type Column, type Key } from '@/ui';
 import { formatNumericValue } from '@/lib/format';
 import {
   AnalysisCell,
@@ -30,14 +28,14 @@ import {
 import type { ColumnDef } from './columns';
 import { PassesPanel } from './PassesPanel';
 import { passRef, passRefBase, PASS_REF_SEP } from './selection';
-import type { SortSpec } from './urlState';
+import { defaultDirection, type SortSpec } from './urlState';
 import styles from './RunsTable.module.css';
 
 export interface RunsTableProps {
   rows: RunRow[];
   columns: ColumnDef[];
   sort: SortSpec;
-  onSort: (sortKey: string) => void;
+  onSort: (sortKey: string, direction?: 'asc' | 'desc') => void;
   selectMode: boolean;
   selected: Set<string>;
   onToggleSelect: (ref: string) => void;
@@ -113,13 +111,26 @@ function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
   }
 }
 
+const GROUP_LABEL: Record<string, string> = {
+  run: 'Run',
+  metrics: 'Scores',
+  system: 'System',
+  trace: 'Trace',
+  group: 'Repeat runs',
+};
+
+/** Card layout (< 640 px): Run + Status + actions up top, model/date/first scores below, the rest behind More. */
+function priorityOf(col: ColumnDef, metricRank: number): 1 | 2 | 3 {
+  if (col.id === 'run' || col.id === 'status' || col.id === 'actions') return 1;
+  if (col.id === 'model' || col.id === 'time') return 2;
+  if (col.id.startsWith('metric-')) return metricRank < 2 ? 2 : 3;
+  return 3;
+}
+
 export function RunsTable(p: RunsTableProps) {
-  const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
-  const cols = p.columns;
-  const ids = p.rows.map((r) => r.run_id);
-  // An expanded repeat run is checked through its passes: all ticked = checked, some = indeterminate.
   const passRefsOf = (row: RunRow) =>
     Array.from({ length: row.samples }, (_, i) => passRef(row.run_id, i + 1));
+  // An expanded repeat run is checked through its passes: all ticked = checked, some = indeterminate.
   const viaPasses = (row: RunRow) => row.samples > 1 && p.expanded.has(row.run_id);
   const rowChecked = (row: RunRow) =>
     p.selected.has(row.run_id) || (viaPasses(row) && passRefsOf(row).every((ref) => p.selected.has(ref)));
@@ -128,187 +139,108 @@ export function RunsTable(p: RunsTableProps) {
     p.onSelectPage(passRefsOf(row), !rowChecked(row));
     if (p.selected.has(row.run_id)) p.onSelectPage([row.run_id], false);
   };
-  const allOnPage = p.rows.length > 0 && p.rows.every(rowChecked);
-  const someOnPage = ids.some((id) => p.selected.has(id) || hasPassSelected(p.selected, id));
 
-  useEffect(() => {
-    const el = rowRefs.current[p.focusedIndex];
-    if (el && document.activeElement !== el && !el.contains(document.activeElement))
-      el.focus({ preventScroll: false });
-  }, [p.focusedIndex]);
+  const columns = useMemo<Column<RunRow>[]>(() => {
+    let metricRank = 0;
+    return p.columns.map((def) => {
+      const rank = def.id.startsWith('metric-') ? metricRank++ : 0;
+      return {
+        id: def.id,
+        header: def.label,
+        hint: def.label,
+        group: GROUP_LABEL[def.group],
+        sort: def.sortKey ? { key: def.sortKey, first: defaultDirection(def.sortKey) } : undefined,
+        width: def.width,
+        align: def.align,
+        pin: def.id === 'run' ? 'start' : def.id === 'actions' ? 'end' : undefined,
+        hideable: false,
+        resizable: def.id !== 'actions',
+        hideLabel: def.id === 'actions',
+        priority: priorityOf(def, rank),
+        cell: (row: RunRow) => cellFor(def, row, p),
+      } satisfies Column<RunRow>;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cells read the live props through `p`
+  }, [p.columns, p.expanded, p.perm, p.onAction, p.onSignalDetails, p.onToggleExpand]);
 
-  if (p.loading) {
-    return (
-      <div className={styles.container} data-density="compact" aria-busy="true">
-        <Skeleton kind="table" rows={12} label="Loading runs" />
-      </div>
-    );
-  }
-
-  const totalWidth = cols.reduce((n, c) => n + c.width, 0) + (p.selectMode ? 36 : 0);
+  const selected = useMemo(() => {
+    const out = new Set<Key>();
+    for (const row of p.rows) if (rowChecked(row)) out.add(row.run_id);
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- derived from the selection and expansion sets
+  }, [p.rows, p.selected, p.expanded]);
 
   return (
-    <div
-      className={[styles.container, p.className].filter(Boolean).join(' ')}
-      data-density="compact"
-      data-sticky-first=""
-      data-testid="runs-table"
-    >
-      <table
-        className={styles.table}
-        data-dimmed={p.dimmed ? '' : undefined}
-        style={{ minWidth: totalWidth }}
+    <div className={[styles.host, p.className].filter(Boolean).join(' ')} data-testid="runs-table">
+      <DataTable<RunRow>
         aria-label="Runs"
-      >
-        <colgroup>
-          {p.selectMode ? <col style={{ width: 36 }} /> : null}
-          {cols.map((c) => (
-            <col key={c.id} style={{ width: c.width }} />
-          ))}
-        </colgroup>
-        <thead className={styles.thead}>
-          <tr>
-            {p.selectMode ? (
-              <th scope="col" className={styles.th} data-select>
-                <Checkbox
-                  aria-label="Select all runs on this page"
-                  isSelected={allOnPage}
-                  isIndeterminate={!allOnPage && someOnPage}
-                  onChange={(on) => p.onSelectPage(ids, on)}
-                />
-              </th>
-            ) : null}
-            {cols.map((def, i) => {
-              const sortable = Boolean(def.sortKey);
-              const active = sortable && p.sort.field === def.sortKey;
-              const ariaSort = active
-                ? p.sort.direction === 'asc'
-                  ? 'ascending'
-                  : 'descending'
-                : sortable
-                  ? 'none'
-                  : undefined;
-              return (
-                <th
-                  key={def.id}
-                  scope="col"
-                  className={styles.th}
-                  data-align={def.align}
-                  data-first={i === 0 ? '' : undefined}
-                  data-last={i === cols.length - 1 ? '' : undefined}
-                  data-sorted={active ? p.sort.direction : undefined}
-                  aria-sort={ariaSort}
-                >
-                  {sortable ? (
-                    <AriaButton className={styles.sortButton} onPress={() => p.onSort(def.sortKey!)}>
-                      <span className={styles.thLabel}>{def.label}</span>
-                      <span
-                        className={styles.sortGlyph}
-                        data-active={active ? '' : undefined}
-                        aria-hidden="true"
-                      >
-                        {active ? (p.sort.direction === 'asc' ? '↑' : '↓') : '↕'}
-                      </span>
-                    </AriaButton>
-                  ) : (
-                    <span className={styles.thLabel}>{def.label}</span>
-                  )}
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-        <tbody className={styles.tbody}>
-          {p.rows.map((row, i) => {
-            const isFocused = p.focusedIndex === i;
-            const isSelected = rowChecked(row);
-            const partial = !isSelected && hasPassSelected(p.selected, row.run_id);
-            const isExpanded = p.expanded.has(row.run_id);
-            const name = row.external_run_id || row.run_name;
-            return [
-              <tr
-                key={row.run_id}
-                ref={(el) => {
-                  rowRefs.current[i] = el;
-                }}
-                className={styles.tr}
-                tabIndex={isFocused || (p.focusedIndex < 0 && i === 0) ? 0 : -1}
-                data-focused={isFocused ? '' : undefined}
-                data-selected={isSelected ? '' : undefined}
-                data-live={row.status === 'RUNNING' ? '' : undefined}
-                data-status={row.status}
-                data-run-id={row.run_id}
-                aria-selected={p.selectMode ? isSelected : undefined}
-                onFocus={(e) => {
-                  if (e.target === e.currentTarget && !isFocused) p.onFocusIndex(i);
-                }}
-                onClick={(e) => {
-                  if ((e.target as HTMLElement).closest('a, button, input, label, [role="button"]')) return;
-                  p.onFocusIndex(i);
-                  if (p.selectMode) toggleRow(row);
-                }}
-                onDoubleClick={(e) => {
-                  if ((e.target as HTMLElement).closest('a, button, input, label, [role="button"]')) return;
-                  p.onOpen(row);
-                }}
-              >
-                {p.selectMode ? (
-                  <td className={styles.td} data-select>
-                    <Checkbox
-                      aria-label={`Select ${name}`}
-                      isSelected={isSelected}
-                      isIndeterminate={partial}
-                      onChange={() => toggleRow(row)}
-                    />
-                  </td>
-                ) : null}
-                {cols.map((def, ci) => (
-                  <td
-                    key={def.id}
-                    className={styles.td}
-                    data-align={def.align}
-                    data-first={ci === 0 ? '' : undefined}
-                    data-last={ci === cols.length - 1 ? '' : undefined}
-                    data-col={def.id}
-                  >
-                    {cellFor(def, row, p)}
-                  </td>
-                ))}
-              </tr>,
-              isExpanded && row.samples > 1 ? (
-                <tr key={`${row.run_id}-passes`} className={styles.panelRow}>
-                  <td colSpan={cols.length + (p.selectMode ? 1 : 0)} className={styles.panelCell}>
-                    <PassesPanel
-                      row={row}
-                      slug={p.slug}
-                      selectMode={p.selectMode}
-                      selected={p.selected}
-                      onToggle={p.onToggleSelect}
-                      onNotePassRevision={p.onNotePassRevision}
-                      onPassesDeleted={p.onPassesDeleted}
-                      canDelete={
-                        !p.perm.readOnly &&
-                        (p.perm.isAdmin || p.perm.canManage || row.owner?.id === p.perm.meId)
-                      }
-                    />
-                  </td>
-                </tr>
-              ) : null,
-            ];
-          })}
-        </tbody>
-      </table>
-      {p.rows.length === 0 ? (
-        <div className={styles.emptyHost}>
-          {p.emptyState ?? (
+        storageKey="runs.v2"
+        density="compact"
+        densityLocked
+        columns={columns}
+        rows={p.rows}
+        rowKey={(r) => r.run_id}
+        loading={p.loading}
+        refreshing={p.dimmed}
+        empty={
+          p.emptyState ?? (
             <EmptyState
               compact
               title="No runs match current filters"
               body="Clear a filter or widen the time range."
             />
-          )}
-        </div>
-      ) : null}
+          )
+        }
+        sort={{ key: p.sort.field, direction: p.sort.direction }}
+        onSortChange={(s) => s && p.onSort(s.key, s.direction)}
+        onRowOpen={p.onOpen}
+        rowState={(r) => (r.status === 'RUNNING' ? 'live' : undefined)}
+        rowProps={(r) => ({
+          'data-run-id': r.run_id,
+          'data-status': r.status,
+          'data-live': r.status === 'RUNNING' ? '' : undefined,
+        })}
+        selection={
+          p.selectMode
+            ? {
+                selected,
+                onChange: (next) => {
+                  for (const row of p.rows)
+                    if (next.has(row.run_id) !== selected.has(row.run_id)) toggleRow(row);
+                },
+                isIndeterminate: (row) => !rowChecked(row) && hasPassSelected(p.selected, row.run_id),
+              }
+            : undefined
+        }
+        rowLabel={(r) => `Select ${r.external_run_id || r.run_name}`}
+        selectAllLabel="Select all runs on this page"
+        selectOnRowClick={p.selectMode}
+        expandColumn={false}
+        canExpand={(r) => r.samples > 1}
+        expanded={p.expanded}
+        onExpandedChange={(next) => {
+          for (const row of p.rows)
+            if (next.has(row.run_id) !== p.expanded.has(row.run_id)) p.onToggleExpand(row.run_id);
+        }}
+        renderExpanded={(row) => (
+          <PassesPanel
+            row={row}
+            slug={p.slug}
+            selectMode={p.selectMode}
+            selected={p.selected}
+            onToggle={p.onToggleSelect}
+            onNotePassRevision={p.onNotePassRevision}
+            onPassesDeleted={p.onPassesDeleted}
+            canDelete={
+              !p.perm.readOnly && (p.perm.isAdmin || p.perm.canManage || row.owner?.id === p.perm.meId)
+            }
+          />
+        )}
+        focusedKey={p.focusedIndex >= 0 ? (p.rows[p.focusedIndex]?.run_id ?? null) : null}
+        onFocusedKeyChange={(key) =>
+          p.onFocusIndex(key === null ? -1 : p.rows.findIndex((r) => r.run_id === key))
+        }
+      />
     </div>
   );
 }

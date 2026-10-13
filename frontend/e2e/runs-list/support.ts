@@ -43,7 +43,11 @@ export const runsUrl = (slug: string, qs = '') =>
   `${APP}/projects/${slug}${qs ? (qs.startsWith('?') ? qs : `?${qs}`) : ''}`;
 
 export const table = (page: Page) => page.getByTestId('runs-table');
-export const dataRows = (page: Page) => page.locator('[data-testid="runs-table"] tbody tr[data-run-id]');
+/** Table rows; below 640 px the same rows render as cards (`li[data-run-id]`). */
+export const dataRows = (page: Page) =>
+  page.locator(
+    '[data-testid="runs-table"] tbody tr[data-run-id], [data-testid="runs-table"] li[data-run-id]',
+  );
 
 export async function openRuns(page: Page, slug: string, qs = ''): Promise<void> {
   await page.goto(runsUrl(slug, qs));

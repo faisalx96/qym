@@ -111,6 +111,10 @@ export interface DataTableProps<R> {
 
   selection?: SelectionConfig<R>;
   bulkActions?: ReactNode;
+  /** Accessible name of a row's checkbox (default "Select row"). */
+  rowLabel?: (row: R) => string;
+  /** Accessible name of the header checkbox (default "Select all rows"). */
+  selectAllLabel?: string;
   /** A row click toggles selection (select mode on the runs list). */
   selectOnRowClick?: boolean;
 
@@ -118,6 +122,8 @@ export interface DataTableProps<R> {
   expanded?: Set<Key>;
   onExpandedChange?: (keys: Set<Key>) => void;
   expandOnRowClick?: boolean;
+  /** Render the leading chevron column (default true); false when a cell hosts its own toggle. */
+  expandColumn?: boolean;
   /** Rows that cannot expand (no chevron). */
   canExpand?: (row: R) => boolean;
 
@@ -231,11 +237,14 @@ function DataTableInner<R>({
   rowProps,
   selection,
   bulkActions,
+  rowLabel,
+  selectAllLabel = 'Select all rows',
   selectOnRowClick,
   renderExpanded,
   expanded: expandedProp,
   onExpandedChange,
   expandOnRowClick,
+  expandColumn = true,
   canExpand,
   groupBy,
   responsive = 'cards',
@@ -327,7 +336,7 @@ function DataTableInner<R>({
       pin: 'start',
       resizable: false,
     } as PseudoColumn);
-  if (renderExpanded)
+  if (renderExpanded && expandColumn)
     leading.push({
       id: '__expand',
       pseudo: 'expand',
@@ -349,7 +358,7 @@ function DataTableInner<R>({
       ]
     : [];
   const visible = model.visible;
-  const hasExpander = Boolean(renderExpanded);
+  const hasExpander = Boolean(renderExpanded) && expandColumn;
   const hasActions = Boolean(actionsOf);
   const renderCols = useMemo(
     () => [...(leading as unknown as Column<R>[]), ...visible, ...(trailing as unknown as Column<R>[])],
@@ -464,6 +473,15 @@ function DataTableInner<R>({
     if (focusedProp === undefined) setOwnFocus(k);
   };
 
+  // A controlled focus cursor moves DOM focus to its row (the page drives j/k across pages).
+  useEffect(() => {
+    if (focusedProp === undefined || focusedProp === null) return;
+    const el = bodyRef.current?.querySelector<HTMLElement>(
+      `tr[data-row-id="${CSS.escape(`${uid}:${String(focusedProp)}`)}"]`,
+    );
+    if (el && !el.contains(document.activeElement)) el.focus();
+  }, [focusedProp, uid]);
+
   /* selection */
   const selected = selection?.selected ?? new Set<Key>();
   const selectable = (r: R) => !selection?.isDisabled?.(r);
@@ -534,7 +552,9 @@ function DataTableInner<R>({
     }
     const els = rowEls();
     const i = els.indexOf(tr);
-    const goto = (n: number) => {
+    const goto = (n: number, edge = false) => {
+      // Stepping past either end is left to the page (paged tables move to the next page).
+      if (!edge && (n < 0 || n >= els.length)) return;
       const el = els[Math.max(0, Math.min(els.length - 1, n))];
       if (el) {
         el.focus();
@@ -546,10 +566,10 @@ function DataTableInner<R>({
     const entry = dataRows.find((d) => `${uid}:${String(d.key)}` === tr.dataset.rowId);
     if (k === 'ArrowDown' || (vim && k === 'j')) goto(i + 1);
     else if (k === 'ArrowUp' || (vim && k === 'k')) goto(i - 1);
-    else if (k === 'Home') goto(0);
-    else if (k === 'End') goto(els.length - 1);
-    else if (k === 'PageDown') goto(i + 10);
-    else if (k === 'PageUp') goto(i - 10);
+    else if (k === 'Home') goto(0, true);
+    else if (k === 'End') goto(els.length - 1, true);
+    else if (k === 'PageDown') goto(i + 10, true);
+    else if (k === 'PageUp') goto(i - 10, true);
     else if (entry && k === 'Enter') {
       if (open(entry.row, e)) e.preventDefault();
       else if (rowCanExpand(entry.row)) {
@@ -781,6 +801,7 @@ function DataTableInner<R>({
         data-pseudo={pseudo ?? undefined}
         data-band={hasBands ? '' : undefined}
         aria-sort={ariaSort}
+        aria-label={pseudo === 'select' ? undefined : text}
         style={style}
         onContextMenu={
           menuEnabled && !pseudo
@@ -793,7 +814,7 @@ function DataTableInner<R>({
       >
         {pseudo === 'select' ? (
           <Checkbox
-            aria-label="Select all rows"
+            aria-label={selectAllLabel}
             hideLabel
             isSelected={allSelected}
             isIndeterminate={someSelected}
@@ -807,7 +828,6 @@ function DataTableInner<R>({
               <AriaButton
                 className={styles.sortButton}
                 onPress={() => setSort(nextSort(sort, col, unsortedOk))}
-                aria-label={`Sort by ${text}`}
               >
                 <span
                   className={styles.thLabel}
@@ -887,9 +907,10 @@ function DataTableInner<R>({
           onClickCapture={(e) => (shiftRef.current = e.shiftKey)}
         >
           <Checkbox
-            aria-label="Select row"
+            aria-label={rowLabel?.(r) ?? 'Select row'}
             hideLabel
             isSelected={selected.has(entry.key)}
+            isIndeterminate={!selected.has(entry.key) && Boolean(selection?.isIndeterminate?.(r))}
             isDisabled={!selectable(r)}
             onChange={(on) => toggleSelect(r, on)}
           />
@@ -1055,6 +1076,7 @@ function DataTableInner<R>({
         data-row-key={String(d.key)}
         data-zebra={zebraOn && d.index % 2 === 1 ? '' : undefined}
         data-selected={isSel ? '' : undefined}
+        data-focused={focusedKey === d.key ? '' : undefined}
         data-state={st}
         data-href={rowHref?.(r) ? '' : undefined}
         data-clickable={openable || selectOnRowClick || expandOnRowClick ? '' : undefined}
@@ -1187,10 +1209,13 @@ function DataTableInner<R>({
               loading={loading}
               ariaLabel={tableLabel}
               rowState={rowState}
+              rowLabel={rowLabel}
+              rowProps={rowProps}
             />
           ) : (
             <div
               ref={scrollerRef}
+              data-dt-scroller=""
               className={styles.scroller}
               data-rail={scrollX.overflow && scrollCues ? '' : undefined}
               data-scrolled-x={scrollX.start ? '' : undefined}
@@ -1248,6 +1273,8 @@ function CardList<R>({
   loading,
   ariaLabel,
   rowState,
+  rowLabel,
+  rowProps,
 }: {
   display: DisplayRow<R>[];
   columns: Column<R>[];
@@ -1269,6 +1296,8 @@ function CardList<R>({
   loading?: boolean;
   ariaLabel: string;
   rowState?: (r: R) => RowStateKind | undefined;
+  rowLabel?: (r: R) => string;
+  rowProps?: (r: R) => Record<string, string | undefined>;
 }) {
   const [more, setMore] = useState<Set<Key>>(new Set());
   const sortCols = columns.filter((c) => sortKeyOf(c) && sortable(c));
@@ -1341,6 +1370,7 @@ function CardList<R>({
               data-selected={selected.has(d.key) ? '' : undefined}
               data-state={rowState?.(r)}
               data-row-key={String(d.key)}
+              {...(rowProps?.(r) ?? {})}
               data-clickable={openable ? '' : undefined}
               onClick={(e) => {
                 if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
@@ -1350,7 +1380,7 @@ function CardList<R>({
               <div className={styles.cardHead}>
                 {selection && (selection.mode ?? 'multiple') === 'multiple' ? (
                   <Checkbox
-                    aria-label="Select row"
+                    aria-label={rowLabel?.(r) ?? 'Select row'}
                     hideLabel
                     isSelected={selected.has(d.key)}
                     isDisabled={selection.isDisabled?.(r)}

@@ -91,6 +91,8 @@ export interface SelectionConfig<R> {
   mode?: 'multiple' | 'single';
   /** Rows that cannot be selected (the checkbox is disabled, the row stays otherwise usable). */
   isDisabled?: (row: R) => boolean;
+  /** Partly selected (e.g. some passes of a repeat run): indeterminate checkbox. */
+  isIndeterminate?: (row: R) => boolean;
   /** Server-paged tables: "Select all N matching" banner after a page is selected. */
   selectAllMatching?: { total: number; onSelectAll: () => void; noun?: string };
 }

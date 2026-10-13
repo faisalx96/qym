@@ -134,11 +134,12 @@ export function RunsPage() {
 
   useTableScrollRestoration(pageRef, Boolean(d.data) && rows.length > 0);
   const sortSpec = parseSort(d.sort);
-  const onSort = (field: string) =>
+  const onSort = (field: string, forced?: 'asc' | 'desc') =>
     setView((v) => {
       const cur = parseSort(v.sort);
       const direction =
-        cur.field === field ? (cur.direction === 'asc' ? 'desc' : 'asc') : defaultDirection(field);
+        forced ??
+        (cur.field === field ? (cur.direction === 'asc' ? 'desc' : 'asc') : defaultDirection(field));
       return { ...v, sort: sortString({ field, direction }) };
     });
 

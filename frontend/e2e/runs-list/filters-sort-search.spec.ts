@@ -263,31 +263,31 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await openRuns(page, s.project.slug);
     const head = (name: string) =>
       page.locator('[data-testid="runs-table"] thead th', { hasText: new RegExp(`^${name}`, 'i') });
-    await head('Task').getByRole('button').click();
+    await head('Task').getByRole('button').first().click();
     await expect.poll(() => urlParams(page).get('sort')).toBe('task-asc');
     await expect(head('Task')).toHaveAttribute('aria-sort', 'ascending');
     await expect.poll(() => listRequests(cap).at(-1)!.body.sort).toBe('task-asc');
     const textReq = listRequests(cap).at(-1)!.body;
     expect(Array.isArray(textReq.collation) && textReq.collation.length).toBeTruthy();
-    await head('Task').getByRole('button').click();
+    await head('Task').getByRole('button').first().click();
     await expect.poll(() => urlParams(page).get('sort')).toBe('task-desc');
     // numeric metric: desc first
-    await head('Accuracy').getByRole('button').click();
+    await head('Accuracy').getByRole('button').first().click();
     await expect.poll(() => urlParams(page).get('sort')).toBe('metric-accuracy-desc');
     await expect(head('Accuracy')).toHaveAttribute('aria-sort', 'descending');
     const numReq = listRequests(cap).at(-1)!.body;
     expect(numReq.sort).toBe('metric-accuracy-desc');
     expect(numReq.collation ?? null).toBeNull();
-    await head('Accuracy').getByRole('button').click();
+    await head('Accuracy').getByRole('button').first().click();
     await expect(head('Accuracy')).toHaveAttribute('aria-sort', 'ascending');
     // the default sort is not written: Date is time-desc, clicking it flips to asc
-    await head('Date').getByRole('button').click();
+    await head('Date').getByRole('button').first().click();
     await expect.poll(() => urlParams(page).has('sort')).toBe(false); // time-desc is the default: not written
     await expect(head('Date')).toHaveAttribute('aria-sort', 'descending');
-    await head('Date').getByRole('button').click();
+    await head('Date').getByRole('button').first().click();
     await expect.poll(() => urlParams(page).get('sort')).toBe('time-asc');
     // status is a "desc first" key
-    await head('Status').getByRole('button').click();
+    await head('Status').getByRole('button').first().click();
     await expect.poll(() => urlParams(page).get('sort')).toBe('status-desc');
     // only one column carries an active sort
     await expect(page.locator('th[aria-sort="descending"], th[aria-sort="ascending"]')).toHaveCount(1);

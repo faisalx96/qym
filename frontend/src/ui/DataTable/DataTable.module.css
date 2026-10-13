@@ -208,6 +208,12 @@
   border-radius: 2px;
 }
 
+.sortButton::after {
+  content: '';
+  position: absolute;
+  inset: 0; /* the whole header cell sorts, not only the label */
+}
+
 .sortButton[data-focus-visible] {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
@@ -251,6 +257,8 @@
 }
 
 .kebab {
+  position: relative;
+  z-index: 1;
   flex: none;
   margin-inline-start: auto;
   opacity: 0;
@@ -426,6 +434,10 @@
 }
 
 .tr:hover {
+  --row-base: var(--bg-hover);
+}
+
+.tr[data-focused] {
   --row-base: var(--bg-hover);
 }
 

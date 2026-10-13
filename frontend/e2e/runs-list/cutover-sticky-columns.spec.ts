@@ -7,7 +7,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { dataRows, openRuns, sharedProject } from './support';
 
-const scroller = (page: Page) => page.getByTestId('runs-table');
+const scroller = (page: Page) => page.getByTestId('runs-table').locator('[data-dt-scroller]');
 
 /** True when the centre of `selector`'s first match is hit by itself (not covered by a pinned cell). */
 async function reachable(page: Page, handle: ReturnType<Page['locator']>): Promise<boolean> {
@@ -33,8 +33,8 @@ test.describe('runs list: pinned columns', () => {
     expect(geometry.scrollable).toBe(true);
     await scroller(page).evaluate((el) => (el.scrollLeft = el.scrollWidth));
     const row = dataRows(page).first();
-    const run = row.locator('td[data-first]');
-    const actions = row.locator('td[data-last]');
+    const run = row.locator('td[data-col="run"]');
+    const actions = row.locator('td[data-col="actions"]');
     const view = (await scroller(page).boundingBox())!;
     const runBox = (await run.boundingBox())!;
     const actionsBox = (await actions.boundingBox())!;
@@ -52,7 +52,7 @@ test.describe('runs list: pinned columns', () => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
     await scroller(page).evaluate((el) => (el.scrollLeft = el.scrollWidth));
-    await dataRows(page).first().locator('td[data-first] a').first().focus();
+    await dataRows(page).first().locator('td[data-col="run"] a').first().focus();
     const seen: string[] = [];
     for (let i = 0; i < 6; i++) {
       const inTable = await page.evaluate(

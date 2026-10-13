@@ -42,12 +42,14 @@ test.describe('Runs list history', () => {
     const s = await sharedProject(request, 55, 'big');
     await openRuns(page, s.project.slug);
     const loads = trackPageLoads(page);
-    await page.locator('th', { hasText: 'Model' }).getByRole('button').focus();
+    await page.locator('th', { hasText: 'Model' }).getByRole('button').first().focus();
     await page.keyboard.press('Enter');
     await expect.poll(() => new URL(page.url()).searchParams.get('sort')).toBe('model-asc');
     await expect(page.locator('th', { hasText: 'Model' })).toHaveAttribute('aria-sort', 'ascending');
     // Page 1: a run opened, Back. (Wait for the sorted rows: the old order stays dimmed while they load.)
-    await expect(page.getByRole('table', { name: 'Runs' })).not.toHaveAttribute('data-dimmed', '');
+    await expect(page.getByTestId('runs-table').getByRole('progressbar', { name: 'Refreshing' })).toHaveCount(
+      0,
+    );
     await expect(dataRows(page).first()).toBeVisible();
     const first = await firstRunName(page);
     await dataRows(page).nth(12).locator('td[data-col="run"] a').click();

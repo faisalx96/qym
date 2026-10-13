@@ -49,11 +49,11 @@ describe('DataTable v2', () => {
         .getAllByRole('row')
         .slice(1)
         .map((r) => r.textContent);
-    await user.click(screen.getByRole('button', { name: 'Sort by Score' }));
+    await user.click(screen.getByRole('button', { name: 'Score' }));
     expect(names()[0]).toContain('bravo');
-    await user.click(screen.getByRole('button', { name: 'Sort by Score' }));
+    await user.click(screen.getByRole('button', { name: 'Score' }));
     expect(names()[0]).toContain('alpha');
-    await user.click(screen.getByRole('button', { name: 'Sort by Score' }));
+    await user.click(screen.getByRole('button', { name: 'Score' }));
     expect(names()[0]).toContain('alpha');
     expect(screen.getAllByRole('columnheader')[1]).toHaveAttribute('aria-sort', 'none');
   });

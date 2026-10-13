@@ -171,9 +171,13 @@ export function buildColumns(
     ACTIONS_COLUMN,
   ];
   // Table order: base (through version), metrics, latency, trace, duration, actions.
+  // The first two metric columns follow Status so a score is visible on first paint.
+  const metricCols = metrics.map(metricColumn);
   const ordered = [
-    ...BASE_COLUMNS.filter((c) => c.id !== 'duration'),
-    ...metrics.map(metricColumn),
+    ...BASE_COLUMNS.slice(0, 2),
+    ...metricCols.slice(0, 2),
+    ...BASE_COLUMNS.slice(2).filter((c) => c.id !== 'duration'),
+    ...metricCols.slice(2),
     ...SYSTEM_COLUMNS,
     ...TRACE_COLUMNS,
     DURATION_COLUMN,
