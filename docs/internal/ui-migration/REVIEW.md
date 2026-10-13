@@ -86,6 +86,41 @@ seconds), and the experiments a11y spec seeds its world under the fake-services 
 | `npm run e2e:sdk` | 33 passed (single worker; it shares one fixture server) |
 | `pytest -q -n 4 tests/platform tests/sdk tests/test_restructure.py` | 4229 passed, 742 skipped, 2 failed: `test_spa_navigation_leaves_no_listeners_or_stale_handlers` (pre-existing, fails on `UI-redesign`) and `test_source_api_preserves_repeated_offpage_details_search_edit_and_csv[run]` (timing flake under `-n 4`, passes alone) |
 
+## Redesign cycle (2026-10-13/14, `ui/redesign-*`)
+
+Product QA on the React app returned four points: tables too simplistic; run detail, compare and cohort
+pages should be report-style with a quick-filter sidebar only when items are chosen; the experiments
+creation flow lost its simple home page and the per-section wizard; the analysis page felt cluttered
+and not smooth. Each point got an investigation brief grounded in the legacy pages
+(`redesign/<area>.md`), an implementation branch, an independent review (`redesign/review-<area>.md`)
+with a MEETS / DOES NOT MEET verdict, and fix passes until it met the standard.
+
+| Area | Branch and merge | Review rounds | Outcome |
+|---|---|---|---|
+| Analysis workspace | `ui/redesign-analysis`, acedfcdc | review + 2 polish passes | single page, sticky action rail, Disclosure primitive, stable layout (layout shift 0.0034 over Test + Analyze) |
+| Report pages | `ui/redesign-report-pages`, 48e20ba1 | review + 1 fix pass | stacked legacy-ordered sections, ScopeBar + quick-filter sidebar on scope, width-sized charts, ReportSection/ReportLayout primitives |
+| Experiments creation | `ui/redesign-experiments-create`, 858db445 | review + 1 polish pass | three-action home page, six-step wizard with Stepper and Collapse, 180 ms step transitions, off under reduced motion |
+| Tables | `ui/redesign-tables`, 1692c526 | review (DOES NOT MEET) + re-implementation + re-review | DataTable v2 (own markup, density, zebra, bands, pinning, column menu, roving header focus, expansion, grouping, Toolbar/Footer, cell kit, card mode) adopted on every table incl. Charts |
+| Tables pass 2 | `ui/redesign-tables-pass2`, 3fcad9b8 | review + fix pass + re-check | run-detail items (virtualized, page-scroller sticky header) and compare matrix on DataTable v2 |
+
+Deferred from the redesign (each listed in the area's brief under "## Deferred" / "## Pass 2"): default-preset
+editor wizard (~6 h), `?` shortcut sheet and Ctrl+A in DataTable, dataset item preview, experiments search, the
+queue filters stacking at 390 px, the sticky home bar covering part of the Start-from cards at 390 px.
+
+Process note: the first implementation round OOM-killed the Claude session (four agents running full Vitest and
+Playwright at once on a 15 GB machine). Vitest is now capped at 4 workers (`VITEST_MAX_WORKERS`) and heavy test
+runs are serialized through a lock when several agents share the machine.
+
+### Final gate on `UI-redesign` 3fcad9b8
+
+| Suite | Result |
+|---|---|
+| `npm run check` | clean; Vitest 1148 tests, design-language 36 |
+| `npm run build`, `npm run build:sdk` | ok |
+| Full Playwright `--workers 2` | 959 passed, 11 skipped, 1 failed (`runs-list/cutover-columns.spec.ts:124`, load flake: 18/18 when run alone 3 times) |
+| `npm run e2e:sdk` | 42 passed |
+| `pytest -q -n 4 tests/platform tests/sdk tests/test_restructure.py` | 3338 passed, 744 skipped, 0 failed |
+
 ## Known gaps to decide on
 
 Collected from every area's `decisions/<area>/OPEN_QUESTIONS.md`; read those for the full lists.
