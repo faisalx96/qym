@@ -24,7 +24,7 @@ for (const scheme of ['dark', 'light'] as const) {
     for (const query of ['', 'panel=errors', 'panel=latency']) {
       test(`run page ${query || 'overview'}: no serious violations`, async ({ page }) => {
         await openRun(page, s.slug, classic, query);
-        await expect(page.getByRole('tabpanel')).toBeVisible();
+        await expect(page.getByTestId('metric-card').first()).toBeVisible();
         const violations = await axeSeriousViolations(page, '#shell-content');
         expect(violations, describeViolations(violations)).toEqual([]);
       });

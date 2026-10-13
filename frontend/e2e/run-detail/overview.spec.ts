@@ -1,6 +1,7 @@
 /** J1 + scenarios 1 and 12: open a run, hero, metric cards, counts, error states, legacy URL, virtualization. */
 import { test, expect } from '@playwright/test';
 import {
+  showItems,
   itemRow,
   itemsCount,
   metricCard,
@@ -40,6 +41,7 @@ test.describe('open a run (J1, scenario 1)', () => {
     }
     // default 20 per page
     await expect(page.getByText('1–20 of 240 items')).toBeVisible();
+    await showItems(page);
     // the table is virtualized: only the rows in view (up to the page of 20) are in the DOM
     const rows = await page.getByRole('button', { name: /^Open item #\d+$/ }).count();
     expect(rows).toBeGreaterThanOrEqual(10);
@@ -50,13 +52,14 @@ test.describe('open a run (J1, scenario 1)', () => {
     page,
   }) => {
     await openRun(page, s.slug, classic);
-    const toggle = page.getByRole('button', { name: 'Show run details' });
-    await expect(page.getByTestId('versioning-details')).toBeHidden();
-    await toggle.click();
+    // the report opens with the details expanded; the chevron folds them (a stored preference)
     await expect(page.getByRole('button', { name: 'Hide run details' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
+    await page.getByRole('button', { name: 'Hide run details' }).click();
+    await expect(page.getByTestId('versioning-details')).toBeHidden();
+    await page.getByRole('button', { name: 'Show run details' }).click();
     const hero = page.getByRole('region', { name: 'Run summary' });
     await expect(hero.getByRole('link', { name: 'rag_answer' })).toHaveAttribute('href', /task=rag_answer/);
     await expect(hero.getByRole('link', { name: 'qa-arabic-v3' })).toBeVisible();
@@ -67,6 +70,8 @@ test.describe('open a run (J1, scenario 1)', () => {
     await expect(page.getByTestId('hero-runtime')).toBeVisible();
     await page.getByRole('button', { name: 'Hide run details' }).click();
     await expect(page.getByTestId('versioning-details')).toBeHidden();
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Show run details' })).toBeVisible();
   });
 
   test('J10: Export HTML points at the legacy export endpoint', async ({ page }) => {

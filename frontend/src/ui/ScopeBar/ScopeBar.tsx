@@ -44,7 +44,7 @@ export function ScopeBar({
   const more = chips.length - visible.length;
   return (
     <div className={styles.bar} role="region" aria-label="Scope of this report" data-testid="scope-bar">
-      <Text variant="base" tone="primary" weight={650} role="status" className={styles.count}>
+      <Text variant="base" tone="primary" weight={650} className={styles.count}>
         Scope: {shown.toLocaleString('en-US')} of {total.toLocaleString('en-US')} {noun}
       </Text>
       <div className={styles.chips}>

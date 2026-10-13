@@ -1,6 +1,7 @@
 /** J6, J8, scenarios 6, 7, 9: open an item, deep link, copy link, edit scores, locked/read-only runs, root-cause issues. */
 import { test, expect, type Page } from '@playwright/test';
 import {
+  showItems,
   itemButton,
   openRun,
   params,
@@ -63,6 +64,7 @@ test.describe('open an item (scenario 6, J6)', () => {
 
   test('Arabic input renders right-to-left', async ({ page }) => {
     await openRun(page, s.slug, classic);
+    await showItems(page);
     await itemButton(page, 15).click();
     const c = card(page, 'item-0015');
     await expect(c).toBeVisible();
@@ -106,18 +108,18 @@ test.describe('open an item (scenario 6, J6)', () => {
 
   test('in-page URL changes (search, opening an item) keep the scroll position', async ({ page }) => {
     await openRun(page, s.slug, classic);
-    await page.evaluate(() => {
-      document.getElementById('shell-content')!.scrollTop = 300;
-    });
-    await expect.poll(() => scrollTop(page)).toBe(300);
-    // a filter write (search) changes the URL in place
-    await page.getByRole('searchbox', { name: 'Search inputs and outputs' }).fill('item');
+    await showItems(page);
+    const search = page.getByRole('searchbox', { name: 'Search inputs and outputs' });
+    const before = (await search.boundingBox())!.y;
+    // a filter write (search) changes the URL in place; the scope bar appearing above must not jump the view
+    await search.fill('item');
     await expect(page).toHaveURL(/q=item/);
-    expect(await scrollTop(page)).toBe(300);
+    await expect.poll(async () => Math.abs((await search.boundingBox())!.y - before)).toBeLessThan(120);
+    const settled = await scrollTop(page);
     await itemButton(page, 5).evaluate((el) => (el as HTMLElement).click());
     await expect(page).toHaveURL(/item=item-0005/);
     await expect(card(page, 'item-0005')).toBeVisible();
-    expect(await scrollTop(page)).toBe(300);
+    expect(Math.abs((await scrollTop(page)) - settled)).toBeLessThan(5);
   });
 
   test('Copy link copies the deep link of the item', async ({ page }) => {

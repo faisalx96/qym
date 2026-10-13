@@ -74,6 +74,13 @@ export async function openRun(page: Page, slug: string, runId: string, query = '
   ).toBeVisible();
 }
 
+/** The table sits below the report sections; its rows are virtualized, so bring it into view before reading them. */
+export async function showItems(page: Page): Promise<void> {
+  await page.locator('#run-items').scrollIntoViewIfNeeded();
+  await page.evaluate(() => document.getElementById('run-items')?.scrollIntoView({ block: 'start' }));
+  await expect(page.getByRole('button', { name: /^Open item #\d+$/ }).first()).toBeVisible();
+}
+
 export function itemRow(page: Page, n: number): Locator {
   return page.getByRole('row', { name: new RegExp(`^Open item #${n} `) });
 }

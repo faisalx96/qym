@@ -7,7 +7,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { PERCENT, seedCustomRun, type CustomItem } from './cutover-support';
-import { itemsCount, openRun, seedProject, seedClassic, type Seeded } from './support';
+import { itemsCount, openRun, seedProject, seedClassic, showItems, type Seeded } from './support';
 
 let s: Seeded;
 
@@ -25,6 +25,7 @@ test('typing in the search box never empties the list or moves the box', async (
     traced: 0,
   });
   await openRun(page, s.slug, id);
+  await showItems(page);
   const search = page.getByRole('searchbox', { name: 'Search inputs and outputs' });
   const before = await search.boundingBox();
   // count the moments at which the table body holds no row while the search answers

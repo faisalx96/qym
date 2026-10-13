@@ -17,7 +17,7 @@ test('four runs: summary, delta line against the baseline and the Metrics table'
   await waitLoaded(page);
   await expect(page.getByRole('heading', { name: 'Compare runs', level: 1 })).toBeVisible();
   await expect(page.getByText('4 columns')).toBeVisible();
-  await expect(page.getByText('cmp-qa-v1')).toBeVisible();
+  await expect(page.getByText('cmp-qa-v1').first()).toBeVisible();
   await expect(page.getByText('40 aligned items')).toBeVisible();
   await expect(chips(page).getByRole('button', { name: /^[A-D] .*(baseline|set as baseline)$/ })).toHaveCount(
     4,

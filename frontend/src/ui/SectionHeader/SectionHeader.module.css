@@ -33,3 +33,17 @@
   gap: var(--space-sm);
   flex: none;
 }
+
+/* Phone: the controls drop under the title instead of widening the page. */
+@media (max-width: 640px) {
+  .head {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+
+  .aside {
+    flex: initial;
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+}

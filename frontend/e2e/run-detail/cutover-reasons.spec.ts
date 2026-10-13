@@ -7,7 +7,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { compareUrl, waitLoaded } from '../compare/support';
 import { PERCENT, seedCustomRun, type CustomItem } from './cutover-support';
-import { openRun, seedProject, type Seeded } from './support';
+import { openRun, seedProject, showItems, type Seeded } from './support';
 
 let s: Seeded;
 let runId: string;
@@ -61,6 +61,7 @@ test('every failing row shows its reason and where it came from; passing rows le
   // the Reason column needs a table wider than 760px
   await page.setViewportSize({ width: 1900, height: 1000 });
   await openRun(page, s.slug, runId);
+  await showItems(page);
   const expected: Array<[number, string, string]> = [
     [0, 'Expected 12 rows, got 9', 'reason'],
     [2, 'Empty output', 'reason'],

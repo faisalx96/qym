@@ -57,7 +57,7 @@ test.describe('Display popover submenus', () => {
     const fields = page.getByRole('button', { name: /Item fields/ });
     await fields.click();
     await expect(fields).toHaveAttribute('aria-expanded', 'true');
-    await page.getByText('domain', { exact: true }).click();
+    await page.getByRole('dialog').getByText('domain', { exact: true }).click();
     await expect.poll(() => new URL(page.url()).searchParams.getAll('hide_field')).toEqual(['domain']);
     await expect(page.getByRole('dialog')).toHaveCount(1);
     await page.keyboard.press('Escape');
@@ -98,7 +98,12 @@ test.describe('sticky section nav and filter bar', () => {
     const filterBox = await filters.boundingBox();
     expect(Math.abs(navBox!.y - scroller!.y)).toBeLessThan(2);
     expect(filterBox!.y).toBeGreaterThanOrEqual(navBox!.y + navBox!.height - 2);
-    expect(filterBox!.y).toBeLessThan(navBox!.y + navBox!.height + 40);
+    // the jump re-aligns for a moment while lazy sections above settle; wait for the bar to stick
+    await expect
+      .poll(async () => ((await filters.boundingBox())?.y ?? 9999) - (navBox!.y + navBox!.height), {
+        timeout: 4000,
+      })
+      .toBeLessThan(40);
     await expect(nav.getByRole('link', { name: /^Items/ })).toHaveAttribute('aria-current', 'location');
     await nav.getByRole('link', { name: 'Summary' }).click();
     await expect.poll(() => scrollTop(page)).toBeLessThan(5);

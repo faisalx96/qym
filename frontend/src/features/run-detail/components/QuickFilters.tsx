@@ -74,7 +74,7 @@ export function QuickFilters({ onHide, onJump }: { onHide?: () => void; onJump: 
         </Text>
         {onHide ? <IconButton label="Hide quick filters" icon="chevron-right" onPress={onHide} /> : null}
       </div>
-      <Text variant="sm" tone="muted" role="status" data-testid="quick-count">
+      <Text variant="sm" tone="muted">
         {scope.shown.toLocaleString('en-US')} of {scope.total.toLocaleString('en-US')} items
       </Text>
       <Button size="sm" variant="ghost" onPress={scope.clearAll} className={styles.clear}>
@@ -156,7 +156,7 @@ export function QuickFilters({ onHide, onJump }: { onHide?: () => void; onJump: 
       ) : null}
 
       <Select
-        label="Sort by"
+        label="Order by"
         items={(['index', ...SORT_VALUES] as SortBy[]).map((v) => ({ key: v, label: SORT_LABELS[v] }))}
         value={view.sort}
         onChange={(k) => k && api.setView({ sort: String(k) as SortBy })}

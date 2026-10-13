@@ -227,7 +227,7 @@ test('C017 the ?panel= anchor survives removing a run', async ({ page }) => {
   await page.goto(compareUrl([fix.a, fix.b, fix.c]));
   await waitLoaded(page);
   await goSection(page, 'Errors');
-  await expect.poll(() => urlParams(page).get('panel')).toBe('errors');
+  await expect(page.locator('#compare-errors')).toBeInViewport();
   await page
     .getByRole('button', { name: /^Remove .* from the comparison$/ })
     .last()

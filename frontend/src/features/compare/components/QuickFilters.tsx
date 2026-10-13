@@ -126,7 +126,7 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
         </Text>
         {onHide ? <IconButton label="Hide quick filters" icon="close" onPress={onHide} /> : null}
       </div>
-      <Text variant="sm" tone="muted" role="status">
+      <Text variant="sm" tone="muted">
         {scope.shown.toLocaleString('en-US')} of {scope.total.toLocaleString('en-US')} items
       </Text>
       <div className={styles.actions}>
@@ -138,7 +138,7 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
         </Button>
       </div>
       <SearchField
-        label="Search items"
+        label="Filter by text"
         hideLabel
         placeholder="Search id, input, outputs…"
         value={c.view.q}
@@ -184,7 +184,7 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
         onToggle={toggleError}
       />
       <Select
-        label="Sort"
+        label="Order by"
         value={c.view.sort}
         onChange={(k) => k && c.setView({ sort: String(k) as SortBy })}
         items={(['index', ...SORT_VALUES] as SortBy[]).map((s) => ({ key: s, label: SORT[s] }))}
