@@ -211,13 +211,15 @@ test.describe('detail: items table', () => {
     await expect(page.locator('[data-item-link]').first()).toHaveText('25');
     expect(query(page).get('size')).toBe('25');
 
-    await page.getByRole('button', { name: 'Sort by Input' }).click();
+    await page.getByRole('button', { name: 'Input', exact: true }).click();
     await expect.poll(() => query(page).get('sort')).toMatch(/^input_(asc|desc)$/);
     const sortParam = query(page).get('sort');
     await page.reload();
     expect(query(page).get('sort')).toBe(sortParam);
     await expect(
-      page.getByRole('columnheader').filter({ has: page.getByRole('button', { name: 'Sort by Input' }) }),
+      page
+        .getByRole('columnheader')
+        .filter({ has: page.getByRole('button', { name: 'Input', exact: true }) }),
     ).toHaveAttribute('aria-sort', /ascending|descending/);
 
     const search = page.getByRole('searchbox', { name: 'Search items' });
