@@ -99,6 +99,7 @@ import {
   type ValidationItem,
 } from './model';
 import { useLaunchView } from './state/useLaunchView';
+import type { RevealStep } from './wizard/steps';
 import type {
   BaseRef,
   LaunchMode,
@@ -194,6 +195,8 @@ export interface LaunchContextValue {
   registerField: (name: string, el: HTMLElement | null) => void;
   focusField: (name: string, fallback?: SectionId | null) => void;
   focusIssue: (item: ValidationItem) => void;
+  /** Wizard: bring a step on screen (no-op outside the launch wizard, e.g. in the preset editor). */
+  revealStep: RevealStep;
 
   baseState: BaseStateView;
   chooseBase: (kind: BaseChoice, ref?: BaseRef) => Promise<boolean>;
@@ -297,6 +300,7 @@ export function LaunchTestProvider({
     registerField: view.registerField,
     focusField: view.focusField,
     focusIssue: view.focusIssue,
+    revealStep: view.revealStep,
     baseState: {
       envId: envs[0]?.id ?? null,
       presets: [],

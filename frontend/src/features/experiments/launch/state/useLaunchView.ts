@@ -19,6 +19,7 @@ import {
 } from '../model';
 import type { PreviewState, SectionId, SectionSummary } from '../types';
 import { sectionOfItem } from '../types';
+import type { RevealStep } from '../wizard/steps';
 import { useRawJson } from './useRawJson';
 import { useSections } from './useSections';
 
@@ -32,10 +33,12 @@ export function useLaunchView(args: {
   launching: boolean;
   /** Default-preset editor: launch-only checks are replaced by the editor's (see model/editor.ts). */
   editor?: { rebind: readonly RebindItem[] } | null;
+  /** Wizard: bring the step that holds a field on screen. */
+  revealStep?: RevealStep;
 }) {
-  const { doc, setDoc, ctx, secrets, preview, launchErrors, launching, editor } = args;
+  const { doc, setDoc, ctx, secrets, preview, launchErrors, launching, editor, revealStep } = args;
   const raw = useRawJson(doc, setDoc, ctx, secrets);
-  const sections = useSections();
+  const sections = useSections(revealStep);
   const review: ReviewState = useMemo(() => {
     const base = reviewState({
       doc,

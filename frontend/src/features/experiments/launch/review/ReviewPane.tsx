@@ -26,7 +26,7 @@ function priorityText(p: Priority | ''): string {
 
 /** "Changes by step": real counts per section with an Edit link each. */
 function ChangesByStep() {
-  const { doc, ctx, sectionSummary, focusField } = useLaunch();
+  const { doc, ctx, sectionSummary, focusField, revealStep } = useLaunch();
   const goTo = useGoToSection();
   const sweepAxes = useMemo(
     () => axesOf(buildSpec(doc, ctx.evaluatorPanel)).axes.length,
@@ -37,7 +37,10 @@ function ChangesByStep() {
     rows.push({
       key: 'dataset',
       label: 'Dataset changed',
-      onEdit: () => focusField(pointerToFieldName('/evaluator/dataset')),
+      onEdit: () => {
+        revealStep('where');
+        focusField(pointerToFieldName('/evaluator/dataset'));
+      },
     });
   }
   for (const id of SECTION_IDS as readonly SectionId[]) {

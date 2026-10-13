@@ -1,6 +1,6 @@
 /** Recursive rendering of the settings tree: leaves, objects (with extra keys), collections, role tables. */
 import { useId, useState, type ReactNode } from 'react';
-import { Icon, Tag } from '@/ui';
+import { Collapse, Icon, Tag } from '@/ui';
 import { plural } from '../../lib/format';
 import {
   addKey,
@@ -190,7 +190,9 @@ function CollectionBlock({ node, ...tree }: { node: CollectionNode } & TreeProps
                 aria-label={`${open ? 'Collapse' : 'Expand'} ${node.keyParam} ${item.key}`}
                 onClick={() => setClosed((c) => ({ ...c, [item.key]: open }))}
               >
-                <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />
+                <span className={styles.chevron} data-open={open}>
+                  <Icon name="chevron-right" size={12} />
+                </span>
               </button>
               <h6 className={[styles.blockTitle, styles.blockTitleMono].join(' ')}>{item.key}</h6>
               {item.required ? <Tag kind="role">required</Tag> : null}
@@ -206,11 +208,11 @@ function CollectionBlock({ node, ...tree }: { node: CollectionNode } & TreeProps
                 </button>
               ) : null}
             </div>
-            {open ? (
-              <div id={bodyId} className={styles.groupBodyInner}>
+            <Collapse open={open} id={bodyId}>
+              <div className={styles.groupBodyInner}>
                 <NodeList nodes={item.children} {...tree} />
               </div>
-            ) : null}
+            </Collapse>
           </div>
         );
       })}
