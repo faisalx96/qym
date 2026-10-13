@@ -264,6 +264,28 @@ describe('primitive module contracts', () => {
     expect(td).toContain('font-family: var(--font-sans)');
   });
 
+  it('DataTable v2 density, header and selection tokens are defined and used', () => {
+    const tokens = read(join(SRC, 'styles/tokens.css'));
+    for (const t of [
+      '--row-compact: 32px',
+      '--row-regular: 40px',
+      '--row-comfortable: 52px',
+      '--table-header-height: 34px',
+      '--bg-selected:',
+    ])
+      expect(tokens, t).toContain(t);
+    const css = ui('DataTable');
+    for (const d of [
+      'height: var(--table-header-height)',
+      'height: var(--row-h)',
+      'var(--bg-selected)',
+      '--row-h: var(--row-compact)',
+      'prefers-reduced-motion',
+    ])
+      expect(css, `DataTable: '${d}'`).toContain(d);
+    expect(css).not.toMatch(/rgba\(0, 212, 170/);
+  });
+
   it('features compose primitives instead of restyling them', () => {
     const featureCss = cssFiles.filter((f) => rel(f).startsWith('features/'));
     const problems: string[] = [];

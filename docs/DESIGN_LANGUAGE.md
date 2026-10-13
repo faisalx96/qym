@@ -217,13 +217,21 @@ The recipes, by intent:
 - **Explanations** (`HelpMarker`, `Tooltip`): the focusable 12px
   `--info-marker-size` marker with a tooltip (`role="tooltip"`). Hover/focus
   opens it, click/touch pins it, outside click and Escape close it.
-- **Data table** (`DataTable`, `.qdt-table`): sticky header in `--font-sm`,
-  `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650;
-  body cells `--font-base`, `--text-secondary`, sans. Numeric/ID columns add
-  mono and `tabular-nums` per column, not per table; scalar numeric columns are
-  right-aligned; a column whose primary content is a chart, bar or score track
-  aligns its header to the visualisation's left edge. Wide tables expose only
-  the persistent mirrored horizontal scrollbar (never both native and mirror).
+- **Data table** (`DataTable`, own `<table>` markup, `role="grid"`; `treegrid` when rows expand): sticky header
+  `--table-header-height` in `--font-sm`, `--text-muted`, `--bg-elevated`, uppercase, `letter-spacing: 0.05em`, 650;
+  body cells `--font-base`, `--text-secondary`, sans (this header/cell recipe is locked in `.thead th` / `.tbody td`).
+  Row height comes from the density tokens `--row-compact` 32 / `--row-regular` 40 / `--row-comfortable` 52 (two-line
+  and wrapped cells raise the minimum to comfortable); zebra alternates `--bg-base` and `--bg-surface` by logical row;
+  hover `--bg-hover`; selected `--bg-selected` plus a 2px accent bar; `rowState` draws a 3px rail (error, warn, live,
+  new). Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are right-aligned; a column
+  whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
+  `--table-group-height` band above the header. Sort glyph, header menu and resize divider show on hover/focus only;
+  pinned columns (start/end) are opaque, with an edge shadow while content scrolls under them. Wide tables expose only
+  the persistent mirrored horizontal scrollbar rail (never both native and mirror). Below 640px tables that declare
+  column `priority` become stacked cards. Chrome parts (`DataTable.Toolbar`, `DataTable.Footer`, selection bar, Columns
+  and Density menus) sit inside the card on `--bg-surface`. Cell kit (`ScoreBar`, `DeltaCell`, `TwoLine`, `IdCell`,
+  `RelativeTime`, `TagsCell`, `UserCell`, `ProgressCell`, `StatusCell`, `NumberCell`) lives in `ui/DataTable/cells`.
+  Pages never restyle table cells; they supply columns.
 - **Scores** (`ScoreValue`): score-bearing values use the five-band
   `--score-1..5` ramp, direction-aware via `src/lib/metrics.ts`. Lower-is-better
   metrics read the ramp inverted; a metric that declares no direction stays
