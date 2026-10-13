@@ -63,3 +63,35 @@ this ships to the product owner.
 - Windowing lives in the primitive (`DataTable.tsx:143-151, 371-378, 565-577`) and is on by default above 200 rows; a 500-row page is never fully
   mounted, `aria-rowcount`/`aria-rowindex` kept.
 - `test.fail` removal is justified by the new deep-link landing; the new spec asserts the restored scroll position.
+
+## Re-review (branch at b21e04fd)
+
+Measured on a fresh stack (8866/5866) with the 5,200-item run, the repeat run and the compare scenario.
+Screenshots: `shots/r2-deep-open.png`, `r2-deep-closed.png`, `r2-sort.png`, `r2-heatmap.png`, `r2-cmp-1440x1100.png`,
+`r2-cmp-1440x640.png`, `r2-cmp-390x844.png`.
+
+| Item | Status | Evidence |
+|---|---|---|
+| M1 sticky header, run items | FIXED with one residual (see R1) | Scrolled 9,000 px deep, header band and column row pinned under the sticky bars with the sidebar open and closed (`top` 155/179 px); each header cell has the same left and width as its body cell (e.g. 213:32, 245:64, 309:110, 419:220, 639:260, 899:150 ... identical in header and row; shifted by 136 px with the sidebar closed). Still aligned after resizing a column (the horizontal scroll moves header and body together) and after sorting by Latency (`r2-sort.png`). |
+| M1 sticky header, compare | FIXED | Tall viewport: the run legend and the matrix header (A star / B / C) are both pinned; short viewport (640 px): the big legend scrolls away and the matrix header with A/B/C stays, so the columns are always named (`r2-cmp-1440x1100.png`, `r2-cmp-1440x640.png`). |
+| Heatmap pass headers | FIXED | "ITEM | PASS 1 | PASS 2 | PASS 3" pinned while scrolled to row 41 (`r2-heatmap.png`). |
+| M2 compare cards at 390 | FIXED | Each row is a card: question as title, `#`, "A (baseline)", "B", "C" as labelled key/value rows with bars, deltas and ERROR chips (`r2-cmp-390x844.png`). |
+| Minor 1 rail fragments, minor 4 trace placeholder | FIXED | No teal fragments in the expanded item; trace column shows a faint dash (`r2-deep-open.png`). |
+
+### New finding
+- **R1 (minor, fix before a demo) Header trails the scroll by one frame.** The shift is applied in a `requestAnimationFrame` after the scroll
+  event (`useStickyShift.ts:36-40`), so while the page scrolls the header sits one scroll step away from its pinned spot: sampling its
+  top every frame during wheel scrolling alternates between the pinned position and pinned minus that frame's scroll delta (179/159 px at
+  20 px per frame, 179/79 px at 100 px per frame). At rest it is exactly still (179 px for 60 frames). On a flick it will visibly bob.
+  Cheapest fix: apply the transform synchronously in the scroll listener (drop the rAF throttle; it only writes one CSS variable), or
+  avoid JS entirely by letting the table scroller not be a vertical scroll container (`overflow-x: clip` plus sticky). Not blocking.
+
+### Gate
+- `npm run check`: PASS, 1148 Vitest, design-language 36.
+- `e2e/run-detail` + `e2e/compare`: 306 passed, 0 failed (6.7 min).
+- `environments.spec` and `cutover-passes.spec`: run 3 times together, 19 passed each time (43 s), 0 failures, so the implementer's single
+  failure in the full run is load flake, not a race.
+- Servers stopped, ports clear.
+
+### Verdict: MEETS THE STANDARD
+Both pass-2 majors are fixed and verified; only the one-frame header lag (R1) remains, a short polish item.
