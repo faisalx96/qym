@@ -340,6 +340,7 @@ export function TrashPage() {
         />
       ) : list.data ? (
         <div
+          role="presentation"
           onKeyDown={(e) => {
             // Ctrl/Cmd+A on a focused row selects every run that can be restored.
             if (
