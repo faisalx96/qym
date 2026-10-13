@@ -7,6 +7,8 @@
 }
 
 .body {
+  /* The containing block for visually hidden (absolute) text, which must never widen the page. */
+  position: relative;
   container-type: inline-size;
   min-width: 0;
 }
