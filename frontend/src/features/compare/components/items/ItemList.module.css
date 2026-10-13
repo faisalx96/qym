@@ -1,120 +1,35 @@
 .list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
   min-width: 0;
 }
 
-.head {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  display: grid;
-  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-xs) var(--space-md);
-  background: var(--bg-base);
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-  font-weight: 600;
+/* a deep-linked row lands below the sticky selection + delta header, not under it */
+.list tr[data-item-id] {
+  scroll-margin-top: 7rem;
 }
 
-.hPills,
-.pills {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.hPills[data-dense],
-.pills[data-dense] {
-  gap: var(--space-xs);
-}
-
-.hCol {
+.runHead {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: var(--space-xs);
-  min-width: 4rem;
   font-family: var(--font-mono);
-  color: var(--text-secondary);
 }
 
-.hPills[data-dense] .hCol {
-  min-width: 1.75rem;
-}
-
-.rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.item {
-  /* a deep-linked row lands below the sticky selection + delta header, not under it */
-  scroll-margin-top: 7rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-}
-
-.item[data-open] {
-  border-color: var(--border-default);
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+.cell {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-md);
-  width: 100%;
-  padding: var(--space-sm) var(--space-md);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--text-secondary);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.row:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: -2px;
-}
-
-.index {
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-.preview {
-  overflow: hidden;
-  color: var(--text-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  gap: var(--space-xs);
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 4rem;
+  min-width: 1.75rem;
   padding: 0 var(--space-xs);
   border-inline-start: 2px solid var(--text-muted);
   font-family: var(--font-mono);
   font-size: var(--font-sm);
   white-space: nowrap;
-}
-
-.pills[data-dense] .pill {
-  min-width: 1.75rem;
 }
 
 .pill[data-state='pass'] {
@@ -147,20 +62,4 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-/* Phone: the pills drop under the preview (and wrap) instead of widening the page; the column header no longer aligns, so it goes. */
-@media (max-width: 640px) {
-  .head {
-    display: none;
-  }
-
-  .row {
-    grid-template-columns: 2rem minmax(0, 1fr);
-  }
-
-  .row .pills {
-    grid-column: 2;
-    flex-wrap: wrap;
-  }
 }

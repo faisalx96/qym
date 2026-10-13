@@ -1,10 +1,11 @@
-/** The aligned item list: sticky column header, one collapsed row per item, expansion, pager and the ?item= deep link. */
+/** The aligned item matrix (DataTable): `#`, input, one score column per run, expansion, pager and the ?item= deep link. */
 import { useEffect, useMemo, useRef } from 'react';
-import { Pagination } from '@/ui';
+import { Badge, DataTable, ScoreBar, type Column, type Key } from '@/ui';
 import type { Row } from '@/features/run-detail/types';
 import { letterOf, useCompare } from '../../CompareContext';
 import { metricCellFor, pillState } from '../../lib/rowCells';
 import { deltaKind } from '../../lib/baseline';
+import type { FilteredItem } from '../../lib/filters';
 import { RunDot } from '../common';
 import { ItemDetail } from './ItemDetail';
 import { useItemsUi } from './ItemsUi';
@@ -13,90 +14,91 @@ import styles from './ItemList.module.css';
 export const PAGE_SIZE = 20;
 const HEAT_FROM = 5;
 
-function Pills({
-  itemId,
-  scores,
-  rows,
-}: {
-  itemId: string;
-  scores: Array<number | null>;
-  rows: Array<Row | null>;
-}) {
+const WORD = { pass: 'Pass', fail: 'Fail', error: 'Error', none: 'No score' } as const;
+const GLYPH = { pass: '✓', fail: '✗', error: '⚠', none: '—' } as const;
+
+/** One run's score for one item: bar (percentage/numeric), Pass/Fail/Error chip (boolean), a compact pill when dense. */
+function RunCell({ item, runIdx, numericMax }: { item: FilteredItem; runIdx: number; numericMax: number }) {
   const { model, ctx, baseline } = useCompare();
   const dense = model.runs.length > HEAT_FROM;
-  const baseIdx = baseline.runIdxs[0] ?? 0;
-  const baseScore = scores[baseIdx] ?? null;
+  const run = model.runs[runIdx]!;
+  const row: Row | null = item.rows[runIdx] ?? null;
+  const p = pillState(run, row, ctx);
+  const baseScore = item.scores[baseline.runIdxs[0] ?? 0] ?? null;
+  const s = item.scores[runIdx] ?? null;
+  const isBase = baseline.runIdxs.includes(runIdx);
+  const move = !isBase && s !== null && baseScore !== null ? deltaKind(s - baseScore, ctx.direction) : 'same';
+  const view =
+    !ctx.isBoolean && row && p.score !== null && p.state !== 'error'
+      ? metricCellFor(model, run, row, ctx.metric)
+      : null;
+  const word = WORD[p.state];
+  const moveWord =
+    move === 'improved' ? ', better than baseline' : move === 'regressed' ? ', worse than baseline' : '';
+  const spoken = `${letterOf(runIdx)} ${view ? `${view.text} ` : ''}${word}${moveWord}`;
+  const cue =
+    move === 'improved' ? (
+      <span aria-hidden className={styles.up}>
+        {'▲'}
+      </span>
+    ) : move === 'regressed' ? (
+      <span aria-hidden className={styles.down}>
+        {'▼'}
+      </span>
+    ) : null;
+  let body;
+  if (dense || p.state === 'none') {
+    body = (
+      <span className={styles.pill} data-state={p.state} aria-hidden>
+        {GLYPH[p.state]}
+        {dense && view ? ` ${view.text}` : null}
+      </span>
+    );
+  } else if (ctx.isBoolean || p.state === 'error') {
+    body = (
+      <Badge tone={p.state === 'pass' ? 'success' : p.state === 'fail' ? 'danger' : 'warning'} aria-hidden>
+        {GLYPH[p.state]} {word}
+      </Badge>
+    );
+  } else {
+    const numeric = model.types[ctx.metric] === 'numeric';
+    body = (
+      <ScoreBar
+        value={view?.value ?? null}
+        type={view?.type}
+        direction={view?.direction}
+        max={numeric ? numericMax : undefined}
+        text={view?.text}
+      />
+    );
+  }
   return (
-    <span className={styles.pills} data-dense={dense || undefined}>
-      {model.runs.map((run, i) => {
-        const p = pillState(run, rows[i] ?? null, ctx);
-        const isBase = baseline.runIdxs.includes(i);
-        const s = scores[i] ?? null;
-        const move =
-          !isBase && s !== null && baseScore !== null ? deltaKind(s - baseScore, ctx.direction) : 'same';
-        const glyph = p.state === 'pass' ? '✓' : p.state === 'fail' ? '✗' : p.state === 'error' ? '⚠' : '—';
-        const row = rows[i] ?? null;
-        // Percentage and numeric metrics show their value: "Fail" alone hides 67.7% vs 69.9%.
-        const valueText =
-          !ctx.isBoolean && row && p.score !== null && p.state !== 'error'
-            ? metricCellFor(model, run, row, ctx.metric).text
-            : null;
-        const word =
-          p.state === 'pass'
-            ? 'Pass'
-            : p.state === 'fail'
-              ? 'Fail'
-              : p.state === 'error'
-                ? 'Error'
-                : 'No score';
-        return (
-          <span
-            key={run.ref}
-            className={styles.pill}
-            data-state={p.state}
-            title={`${letterOf(i)} ${run.label}: ${valueText ? `${valueText} ` : ''}${word}${move === 'improved' ? ', better than baseline' : move === 'regressed' ? ', worse than baseline' : ''}`}
-          >
-            <span aria-hidden>{glyph}</span>
-            {dense ? null : <span> {valueText ?? word}</span>}
-            {move === 'improved' ? (
-              <span aria-hidden className={styles.up}>
-                {' '}
-                {'▲'}
-              </span>
-            ) : move === 'regressed' ? (
-              <span aria-hidden className={styles.down}>
-                {' '}
-                {'▼'}
-              </span>
-            ) : null}
-            <span className={styles.srOnly}>
-              {letterOf(i)} {valueText ? `${valueText} ` : ''}
-              {word}
-              {move === 'improved'
-                ? ', better than baseline'
-                : move === 'regressed'
-                  ? ', worse than baseline'
-                  : ''}
-            </span>
-          </span>
-        );
-      })}
-      <span className={styles.srOnly}>{itemId}</span>
+    <span className={styles.cell} data-state={p.state} title={`${run.label}: ${spoken.slice(2)}`}>
+      <span aria-hidden={dense ? undefined : true}>{body}</span>
+      {cue}
+      <span className={styles.srOnly}>{spoken}</span>
     </span>
   );
 }
 
 export function ItemList() {
-  const { model, items, c, baseline } = useCompare();
+  const { model, items, c, baseline, ctx } = useCompare();
   const ui = useItemsUi();
   const page = c.view.page;
   const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const clamped = Math.min(page, pageCount);
   const slice = useMemo(() => items.slice((clamped - 1) * PAGE_SIZE, clamped * PAGE_SIZE), [items, clamped]);
   const numberOf = useMemo(() => new Map(model.itemIds.map((id, i) => [id, i + 1])), [model.itemIds]);
-  const top = useRef<HTMLDivElement>(null);
+  const positionOf = useMemo(
+    () => new Map(slice.map((it, n) => [it.itemId, (clamped - 1) * PAGE_SIZE + n + 1])),
+    [slice, clamped],
+  );
   const dense = model.runs.length > HEAT_FROM;
-
+  const numericMax = useMemo(() => {
+    let m = 0;
+    for (const it of items) for (const s of it.scores) if (s !== null && s > m) m = s;
+    return m || 1;
+  }, [items]);
   // A shared ?item= link lands on its page, then scrolls to the row once.
   const target = c.view.item;
   const scrolled = useRef<string | null>(null);
@@ -126,75 +128,113 @@ export function ItemList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, items, clamped]);
 
+  // A row the reader opened is not a deep link to scroll to when the URL catches up.
+  const onToggle = (id: string) => {
+    scrolled.current = id;
+    ui.toggleExpanded(id);
+  };
+
   if (!items.length) return null;
-  return (
-    <div ref={top} className={styles.list} data-testid="item-list">
-      <div className={styles.head} role="presentation">
-        <span className={styles.hIndex}>#</span>
-        <span className={styles.hInput}>Input</span>
-        <span className={styles.hPills} data-dense={dense || undefined}>
-          {model.runs.map((run, i) => (
-            <span
-              key={run.ref}
-              className={styles.hCol}
-              title={`${run.label}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}`}
-            >
-              <RunDot index={i} />
-              {letterOf(i)}
-              {baseline.runIdxs.includes(i) ? ' ★' : ''}
+
+  const columns: Column<FilteredItem>[] = [
+    {
+      id: 'index',
+      header: '#',
+      type: 'number',
+      align: 'start',
+      mono: true,
+      width: 56,
+      resizable: false,
+      cell: (it) => {
+        const index = numberOf.get(it.itemId) ?? positionOf.get(it.itemId) ?? 0;
+        const position = positionOf.get(it.itemId) ?? index;
+        return (
+          <>
+            <span className={styles.srOnly}>
+              Item {index}
+              {position !== index ? ` (row ${position})` : ''}:{' '}
             </span>
-          ))}
+            <span aria-hidden>{index}</span>
+          </>
+        );
+      },
+    },
+    {
+      id: 'input',
+      header: 'Input',
+      flex: true,
+      minWidth: 220,
+      wrap: 2,
+      resizable: false,
+      cell: (it) => it.rows.find((r) => r)?.input_preview || it.itemId,
+    },
+    ...model.runs.map((run, i): Column<FilteredItem> => ({
+      id: letterOf(i),
+      header: (
+        <span className={styles.runHead}>
+          <RunDot index={i} />
+          {letterOf(i)}
+          {baseline.runIdxs.includes(i) ? <span aria-label="baseline"> ★</span> : null}
         </span>
-      </div>
-      <ul className={styles.rows}>
-        {slice.map((item, n) => {
-          const open = ui.expanded.has(item.itemId);
-          const first = item.rows.find((r) => r);
-          const position = (clamped - 1) * PAGE_SIZE + n + 1;
-          // Under a sort the list position moves; the item keeps its own number.
-          const index = numberOf.get(item.itemId) ?? position;
-          return (
-            <li
-              key={item.itemId}
-              id={`item-${item.itemId}`}
-              className={styles.item}
-              data-open={open || undefined}
-              data-testid="item-row"
-              data-item-id={item.itemId}
-            >
-              <button
-                type="button"
-                className={styles.row}
-                aria-expanded={open}
-                onClick={() => {
-                  // A row the reader opened is not a deep link to scroll to when the URL catches up.
-                  scrolled.current = item.itemId;
-                  ui.toggleExpanded(item.itemId);
-                }}
-              >
-                <span className={styles.srOnly}>
-                  Item {index}
-                  {position !== index ? ` (row ${position})` : ''}:{' '}
-                </span>
-                <span className={styles.index} aria-hidden>
-                  {index}
-                </span>
-                <span className={styles.preview}>{first?.input_preview || item.itemId}</span>
-                <Pills itemId={item.itemId} scores={item.scores} rows={item.rows} />
-              </button>
-              {open ? <ItemDetail itemId={item.itemId} /> : null}
-            </li>
-          );
-        })}
-      </ul>
-      <Pagination
-        total={items.length}
-        page={clamped}
-        pageSize={PAGE_SIZE}
-        noun="items"
-        scrollTarget={top}
-        onPageChange={(p) => c.setView({ page: p }, { keepPage: true })}
-      />
+      ),
+      hint: `${run.label}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}`,
+      width: dense ? 76 : 148,
+      resizable: false,
+      cell: (it) => <RunCell item={it} runIdx={i} numericMax={numericMax} />,
+    })),
+  ];
+
+  const stateOf = (it: FilteredItem) => {
+    let warn = false;
+    const baseScore = it.scores[baseline.runIdxs[0] ?? 0] ?? null;
+    for (let i = 0; i < model.runs.length; i++) {
+      const p = pillState(model.runs[i]!, it.rows[i] ?? null, ctx);
+      if (p.state === 'error') return 'error' as const;
+      const s = it.scores[i] ?? null;
+      if (
+        !baseline.runIdxs.includes(i) &&
+        s !== null &&
+        baseScore !== null &&
+        deltaKind(s - baseScore, ctx.direction) === 'regressed'
+      )
+        warn = true;
+    }
+    return warn ? ('warn' as const) : undefined;
+  };
+
+  return (
+    <div className={styles.list} data-testid="item-list" data-dense={dense || undefined}>
+      <DataTable<FilteredItem>
+        aria-label="Items across the compared runs"
+        columns={columns}
+        rows={slice}
+        rowKey={(it) => it.itemId}
+        density="regular"
+        densityLocked
+        columnMenu={false}
+        responsive="scroll"
+        zebra={false}
+        rowState={stateOf}
+        rowProps={(it) => ({ id: `item-${it.itemId}`, 'data-testid': 'item-row', 'data-item-id': it.itemId })}
+        renderExpanded={(it) => <ItemDetail itemId={it.itemId} />}
+        expandOnRowClick
+        expandLabel={(it, open) => `${open ? 'Collapse' : 'Expand'} item ${numberOf.get(it.itemId) ?? ''}`}
+        expanded={ui.expanded as Set<Key>}
+        onExpandedChange={(next) => {
+          for (const id of next) if (!ui.expanded.has(String(id))) onToggle(String(id));
+          for (const id of ui.expanded) if (!next.has(id)) onToggle(id);
+        }}
+      >
+        <DataTable.Footer
+          pagination={{
+            total: items.length,
+            page: clamped,
+            pageSize: PAGE_SIZE,
+            noun: 'items',
+            onPageChange: (p) => c.setView({ page: p }, { keepPage: true }),
+          }}
+        />
+      </DataTable>
     </div>
   );
 }
