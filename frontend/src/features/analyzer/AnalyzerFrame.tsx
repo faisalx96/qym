@@ -48,9 +48,7 @@ export function AnalyzerFrame({
                 label: (
                   <>
                     Analyze run
-                    {live ? (
-                      <span role="img" aria-label="Analysis running" className={s.liveDot} />
-                    ) : null}
+                    {live ? <span role="img" aria-label="Analysis running" className={s.liveDot} /> : null}
                   </>
                 ),
               },

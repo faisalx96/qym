@@ -171,7 +171,10 @@ test.describe('prompt preview (4)', () => {
     await drawer.getByRole('button', { name: 'Copy prompt' }).click();
     await expect(drawer.getByRole('button', { name: 'Copied' }).first()).toBeVisible();
     const clip = await page.evaluate(() => navigator.clipboard.readText());
-    const shown = await drawer.getByRole('region', { name: 'Prompt messages' }).locator('pre').allInnerTexts();
+    const shown = await drawer
+      .getByRole('region', { name: 'Prompt messages' })
+      .locator('pre')
+      .allInnerTexts();
     expect(clip).toContain('[system]');
     for (const part of shown) expect(clip).toContain(part.trim().slice(0, 40));
     // Escape closes the drawer and focus returns to the rail button

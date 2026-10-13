@@ -57,7 +57,9 @@ test.describe('axe (14)', () => {
     await page.keyboard.press('Escape');
     await expect(previewDrawer(page)).toBeHidden();
 
-    await rail(page).getByRole('button', { name: /^Test selected/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /^Test selected/ })
+      .click();
     await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
     await expectNoSerious(page, 'with a test result');
 
@@ -71,7 +73,10 @@ test.describe('axe (14)', () => {
   }) => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, `/projects/${seed.slug}/analysis?scope=categories`);
-    await expect(page.getByRole('tab', { name: /^Diagnosis categories/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: /^Diagnosis categories/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await expect(page.getByRole('tablist', { name: 'Categories' })).toBeVisible();
     for (const label of ['Guidance', 'Subcategories', 'Examples']) {
       await page.getByRole('tab', { name: new RegExp(`^${label}`) }).click();
@@ -228,7 +233,10 @@ test.describe('layout', () => {
     await expect(body).toContainText('اعرض');
   });
 
-  test('800x900: no horizontal page scroll on the page, its states or a guidance tab', async ({ page, request }) => {
+  test('800x900: no horizontal page scroll on the page, its states or a guidance tab', async ({
+    page,
+    request,
+  }) => {
     const seed = await seedAnalyzer(request);
     await page.setViewportSize({ width: 800, height: 900 });
     const overflow = () =>
@@ -252,7 +260,9 @@ test.describe('layout', () => {
     await openPreview(page);
     await expectFits('preview drawer');
     await page.keyboard.press('Escape');
-    await rail(page).getByRole('button', { name: /^Test selected/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /^Test selected/ })
+      .click();
     await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
     await expectFits('with a result');
     await analyzeToCompletion(page);
@@ -273,7 +283,9 @@ test.describe('layout', () => {
     await waitWorkspace(page);
     await openPreview(page);
     await page.keyboard.press('Escape');
-    await rail(page).getByRole('button', { name: /^Test selected/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /^Test selected/ })
+      .click();
     await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
     await analyzeToCompletion(page);
     await expect(jobCard(page)).toContainText('Analysis complete');

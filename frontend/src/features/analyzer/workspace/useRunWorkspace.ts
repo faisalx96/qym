@@ -138,7 +138,14 @@ export function useRunWorkspace(
   const matched: MatchedTarget[] = useMemo(
     () => (frozen ? matchTargets(frozen, matchOptions) : liveMatched),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [frozen, liveMatched, settings.selectedMetrics, settings.maxScorePct, settings.skipAnalyzed, settings.allowHuman],
+    [
+      frozen,
+      liveMatched,
+      settings.selectedMetrics,
+      settings.maxScorePct,
+      settings.skipAnalyzed,
+      settings.allowHuman,
+    ],
   );
   const targetCount = effectiveCount(liveMatched, settings.limit);
   const rowById = useMemo(

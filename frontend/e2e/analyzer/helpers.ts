@@ -302,7 +302,9 @@ export const previewDrawer = (page: Page) => page.getByRole('dialog', { name: 'P
 
 /** Open the prompt preview drawer from the rail and wait for the messages. */
 export async function openPreview(page: Page): Promise<void> {
-  await rail(page).getByRole('button', { name: /^Prompt preview/ }).click();
+  await rail(page)
+    .getByRole('button', { name: /^Prompt preview/ })
+    .click();
   await expect(previewDrawer(page)).toBeVisible();
   await expect(previewDrawer(page).getByRole('region', { name: 'Prompt messages' })).toBeVisible();
 }

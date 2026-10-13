@@ -370,7 +370,9 @@ test.describe('read-only view (13)', () => {
     // the run workspace explains in the rail that running needs member access and disables Test / Analyze
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await expect(rail(page)).toContainText('View only: project managers and the run’s owner can run analysis.');
+    await expect(rail(page)).toContainText(
+      'View only: project managers and the run’s owner can run analysis.',
+    );
     await expect(analyzeButton(page)).toBeDisabled();
     await expect(rail(page).getByRole('button', { name: /^Test selected/ })).toBeDisabled();
   });
@@ -433,11 +435,15 @@ test.describe('project scope (15)', () => {
     const seed = await seedAnalyzer(request);
     await gotoApp(page, analysisUrl(seed.slug, seed.runId));
     await waitWorkspace(page);
-    await viewTabs(page).getByRole('tab', { name: /^Diagnosis categories/ }).click();
+    await viewTabs(page)
+      .getByRole('tab', { name: /^Diagnosis categories/ })
+      .click();
     await expect(page).toHaveURL(new RegExp(`run=${seed.runId}`));
     await expect(page).toHaveURL(/scope=categories/);
     await expect(page.getByRole('tab', { name: /^Production rules/ })).toBeVisible();
-    await viewTabs(page).getByRole('tab', { name: /^Analyze run/ }).click();
+    await viewTabs(page)
+      .getByRole('tab', { name: /^Analyze run/ })
+      .click();
     await waitWorkspace(page);
   });
 });

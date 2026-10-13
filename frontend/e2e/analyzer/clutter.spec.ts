@@ -21,27 +21,40 @@ test('1280x900: the first control is near the top and few bordered regions compe
       const r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0 && r.top < vh && r.bottom > 0;
     };
-    const controls = [...main.querySelectorAll('button, a[href], input, select, textarea, [role="tab"]')].filter(
-      visible,
+    const controls = Array.from(
+      main.querySelectorAll('button, a[href], input, select, textarea, [role="tab"]'),
+    ).filter(visible);
+    const firstControl = Math.min(
+      ...controls.map((c) => c.getBoundingClientRect().top).filter((y) => y >= 0),
     );
-    const firstControl = Math.min(...controls.map((c) => c.getBoundingClientRect().top).filter((y) => y >= 0));
     const isControl = (el: Element) => el.matches('button, a, input, select, textarea, [role="tab"], label');
-    const borderedEls = [...main.querySelectorAll('*')].filter((el) => {
-      if (!visible(el) || isControl(el) || el.closest('button, a, label, [role="tab"], [hidden]')) return false;
+    const borderedEls = Array.from(main.querySelectorAll('*')).filter((el) => {
+      if (!visible(el) || isControl(el) || el.closest('button, a, label, [role="tab"], [hidden]'))
+        return false;
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el);
       // a bordered region is a box (all four sides); hairline dividers between rows do not count
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].every(
-        (s) => parseFloat(cs.getPropertyValue(`border-${s.toLowerCase()}-width`)) > 0 && cs.getPropertyValue(`border-${s.toLowerCase()}-style`) !== 'none',
+        (s) =>
+          parseFloat(cs.getPropertyValue(`border-${s.toLowerCase()}-width`)) > 0 &&
+          cs.getPropertyValue(`border-${s.toLowerCase()}-style`) !== 'none',
       );
       return hasBorder && r.width > 60 && r.height > 24;
     });
     const bordered = borderedEls.length;
-    (window as unknown as { __b: string[] }).__b = borderedEls.map((e) => `${e.tagName}.${String(e.className).slice(0, 40)}`);
-    const chips = [...main.querySelectorAll('[class*="badge" i], [class*="Badge"]')].filter(visible).length;
+    (window as unknown as { __b: string[] }).__b = borderedEls.map(
+      (e) => `${e.tagName}.${String(e.className).slice(0, 40)}`,
+    );
+    const chips = Array.from(main.querySelectorAll('[class*="badge" i], [class*="Badge"]')).filter(
+      visible,
+    ).length;
     return { firstControl: Math.round(firstControl), bordered, chips, controls: controls.length };
   });
-  console.log('clutter 1280x900', JSON.stringify(m), JSON.stringify(await page.evaluate(() => (window as unknown as { __b: string[] }).__b)));
+  console.log(
+    'clutter 1280x900',
+    JSON.stringify(m),
+    JSON.stringify(await page.evaluate(() => (window as unknown as { __b: string[] }).__b)),
+  );
   expect(m.firstControl).toBeLessThanOrEqual(200);
   expect(m.bordered).toBeLessThanOrEqual(4);
   expect(m.chips).toBeLessThanOrEqual(2);
@@ -75,6 +88,9 @@ test('1920: content is capped and centred', async ({ page, request }) => {
   await page.setViewportSize({ width: 1920, height: 1000 });
   await gotoApp(page, analysisUrl(seed.slug, seed.runId));
   await waitWorkspace(page);
-  const box = await page.getByRole('heading', { name: 'Setup', exact: true }).locator('xpath=ancestor::section[1]').boundingBox();
+  const box = await page
+    .getByRole('heading', { name: 'Setup', exact: true })
+    .locator('xpath=ancestor::section[1]')
+    .boundingBox();
   expect(box!.width).toBeLessThanOrEqual(1440);
 });

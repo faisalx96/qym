@@ -8,14 +8,7 @@ import { isJobTerminal, type AnalysisJob } from '@/api/analysis';
 import type { RunnerState } from './useAnalysisRunner';
 
 export type AnalysisPhase =
-  | 'idle'
-  | 'testing'
-  | 'starting'
-  | 'running'
-  | 'cancelling'
-  | 'done'
-  | 'failed'
-  | 'cancelled';
+  'idle' | 'testing' | 'starting' | 'running' | 'cancelling' | 'done' | 'failed' | 'cancelled';
 
 export interface PhaseInput {
   job: AnalysisJob | null;
@@ -57,7 +50,14 @@ export function derivePhase(input: PhaseInput): PhaseView {
   const base = { completed, total, pct, reconnecting: input.reconnecting };
   if (!job) {
     const phase: AnalysisPhase = input.starting ? 'starting' : input.testing ? 'testing' : 'idle';
-    return { ...base, phase, live: phase === 'starting', finished: false, retryNote: null, reconnecting: false };
+    return {
+      ...base,
+      phase,
+      live: phase === 'starting',
+      finished: false,
+      retryNote: null,
+      reconnecting: false,
+    };
   }
   const terminal = isJobTerminal(job.status);
   let phase: AnalysisPhase;

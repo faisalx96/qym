@@ -28,7 +28,14 @@ describe('derivePhase', () => {
       reconnecting: true,
       job: job('running', { phase: 'retrying', item_id: 'item-2', metric_name: 'm', retry_reason: 'slow' }),
     });
-    expect(v).toMatchObject({ phase: 'running', live: true, completed: 3, total: 10, pct: 30, reconnecting: true });
+    expect(v).toMatchObject({
+      phase: 'running',
+      live: true,
+      completed: 3,
+      total: 10,
+      pct: 30,
+      reconnecting: true,
+    });
     expect(v.retryNote).toBe('Retrying m on item-2: slow');
   });
   it('cancelling, then terminal states', () => {

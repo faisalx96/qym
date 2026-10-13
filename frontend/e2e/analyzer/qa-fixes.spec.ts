@@ -202,7 +202,9 @@ test.describe('connection without a key (11)', () => {
       };
     });
     await openRun(page, seed.slug, seed.runId);
-    await rail(page).getByRole('button', { name: /LLM connection/ }).click();
+    await rail(page)
+      .getByRole('button', { name: /LLM connection/ })
+      .click();
     const option = page.getByRole('option', { name: /key missing/ });
     await expect(option).toHaveAttribute('aria-disabled', 'true');
     await option.click({ force: true });

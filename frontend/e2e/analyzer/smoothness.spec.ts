@@ -27,7 +27,9 @@ async function installProbe(page: Page): Promise<void> {
     const top = (el: Element | null) =>
       el ? Math.round((el.getBoundingClientRect().top + main.scrollTop) * 10) / 10 : -1;
     const heading = (name: string) =>
-      [...document.querySelectorAll('h3')].find((h) => h.textContent === name)?.closest('section') ?? null;
+      Array.from(document.querySelectorAll('h3'))
+        .find((h) => h.textContent === name)
+        ?.closest('section') ?? null;
     w.__pi = window.setInterval(() => {
       const r = document.querySelector('section[aria-label="Analysis actions"]');
       w.__probe.push({
@@ -94,7 +96,9 @@ test('a test run fills the reserved Results section without moving the page abov
   await gotoApp(page, analysisUrl(seed.slug, seed.runId));
   await waitWorkspace(page);
   await installProbe(page);
-  await rail(page).getByRole('button', { name: /^Test selected/ }).click();
+  await rail(page)
+    .getByRole('button', { name: /^Test selected/ })
+    .click();
   await expect(page.getByRole('article', { name: /Test result for item/ })).toBeVisible();
   await page.waitForTimeout(300);
   const probe = await readProbe(page);
@@ -114,7 +118,9 @@ test('the content width is the same on a short and a long page (scrollbar gutter
   await waitWorkspace(page);
   const width = () => page.evaluate(() => (document.querySelector('main') as HTMLElement).clientWidth);
   const tall = await width();
-  await viewTabs(page).getByRole('tab', { name: /^Documents/ }).click();
+  await viewTabs(page)
+    .getByRole('tab', { name: /^Documents/ })
+    .click();
   await expect(page.getByRole('heading', { name: 'Reference documents' })).toBeVisible();
   expect(await width()).toBe(tall);
 });
@@ -128,14 +134,17 @@ test('reduced motion removes the Disclosure and progress transitions', async ({ 
   const panel = page.getByRole('button', { name: /^More options/ }).locator('xpath=ancestor::*[2]');
   await expect(panel.getByRole('textbox', { name: 'Timeout (s)' })).toBeVisible();
   const durations = await page.evaluate(() =>
-    [...document.querySelectorAll('[role="group"][class*="panel"]')].map(
+    Array.from(document.querySelectorAll('[role="group"][class*="panel"]')).map(
       (el) => `${el.className}:${getComputedStyle(el).transitionDuration}`,
     ),
   );
   expect(durations.length).toBeGreaterThan(0);
   for (const d of durations)
     expect(
-      d.split(':')[1]!.split(',').every((x) => parseFloat(x) <= 0.001),
+      d
+        .split(':')[1]!
+        .split(',')
+        .every((x) => parseFloat(x) <= 0.001),
       durations.join(' | '),
     ).toBe(true);
 });

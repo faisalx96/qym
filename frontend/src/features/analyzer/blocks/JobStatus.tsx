@@ -95,7 +95,10 @@ export function shortOutcome(sum: ReturnType<typeof summarize>): string {
   return sum.failed ? `${base}, ${sum.failed} failed` : base;
 }
 
-export function statusLabel(job: AnalysisJob): { text: string; tone: 'success' | 'warning' | 'danger' | 'neutral' | 'info' } {
+export function statusLabel(job: AnalysisJob): {
+  text: string;
+  tone: 'success' | 'warning' | 'danger' | 'neutral' | 'info';
+} {
   const sum = summarize(job);
   if (job.status === 'completed') {
     return sum.allFailed

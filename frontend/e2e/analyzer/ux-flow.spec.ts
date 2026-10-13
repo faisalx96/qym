@@ -20,7 +20,9 @@ test('the preview drawer is a deep link and Escape closes it without a history e
   const seed = await seedAnalyzer(request);
   await gotoApp(page, analysisUrl(seed.slug, seed.runId));
   await waitWorkspace(page);
-  await rail(page).getByRole('button', { name: /^Prompt preview/ }).click();
+  await rail(page)
+    .getByRole('button', { name: /^Prompt preview/ })
+    .click();
   await expect(page).toHaveURL(/preview=1/);
   await expect(previewDrawer(page)).toBeVisible();
   await page.keyboard.press('Escape');
@@ -32,7 +34,9 @@ test('Back leaves Project guidance for the run workspace', async ({ page, reques
   const seed = await seedAnalyzer(request);
   await gotoApp(page, analysisUrl(seed.slug, seed.runId));
   await waitWorkspace(page);
-  await viewTabs(page).getByRole('tab', { name: /^Diagnosis categories/ }).click();
+  await viewTabs(page)
+    .getByRole('tab', { name: /^Diagnosis categories/ })
+    .click();
   await expect(page).toHaveURL(/scope=categories/);
   await page.goBack();
   await expect(page).not.toHaveURL(/scope=/);
@@ -85,7 +89,9 @@ test('a running job is visible from the guidance tabs (dot, compact rail) and fi
   await waitWorkspace(page);
   await analyzeButton(page).click();
   await expect(rail(page).getByRole('button', { name: /Cancel analysis|Analyze again/ })).toBeVisible();
-  await viewTabs(page).getByRole('tab', { name: /^Diagnosis categories/ }).click();
+  await viewTabs(page)
+    .getByRole('tab', { name: /^Diagnosis categories/ })
+    .click();
   await expect(page).toHaveURL(/scope=categories/);
   const compact = page.getByRole('region', { name: 'Analysis job status' });
   await expect(compact).toBeVisible();
