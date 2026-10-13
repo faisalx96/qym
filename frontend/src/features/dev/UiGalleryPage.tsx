@@ -28,6 +28,10 @@ import {
   NumberField,
   PageHeader,
   Pagination,
+  QuickFilterGroup,
+  ReportLayout,
+  ReportSection,
+  ScopeBar,
   Popover,
   RunStatusBadge,
   ScoreValue,
@@ -704,6 +708,55 @@ export default function UiGalleryPage() {
           </Drawer>
         </Case>
       </Section>
+      <Section id="report" title="Report page">
+        <Case label="ReportSection + ScopeBar + QuickFilterGroup">
+          <ReportGalleryDemo />
+        </Case>
+      </Section>
     </div>
+  );
+}
+
+function ReportGalleryDemo() {
+  const [status, setStatus] = useState<string[]>(['fail']);
+  const [open, setOpen] = useState(true);
+  return (
+    <ReportLayout
+      wide
+      sidebarOpen={open}
+      sidebar={
+        <QuickFilterGroup
+          label="Status"
+          mode="single"
+          options={[
+            { id: 'pass', label: 'Pass', count: 18 },
+            { id: 'fail', label: 'Fail', count: 6, tone: 'danger' },
+          ]}
+          selected={status}
+          onToggle={(id) => setStatus((s) => (s.includes(id) ? [] : [id]))}
+          onOnly={(id) => setStatus([id])}
+        />
+      }
+    >
+      {status.length ? (
+        <ScopeBar
+          shown={6}
+          total={24}
+          chips={status.map((s) => ({ key: s, label: `Status: ${s}`, onClear: () => setStatus([]) }))}
+          onClearAll={() => setStatus([])}
+          onJumpToItems={() => {}}
+          sidebarOpen={open}
+          onToggleSidebar={() => setOpen((o) => !o)}
+        />
+      ) : null}
+      <ReportSection
+        id="gallery-overview"
+        title="Overview"
+        description="Score distributions per metric."
+        scopeNote={status.length ? 'over 6 of 24 items' : undefined}
+      >
+        <Text variant="base">Section body.</Text>
+      </ReportSection>
+    </ReportLayout>
   );
 }

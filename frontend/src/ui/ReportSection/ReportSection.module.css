@@ -1,0 +1,12 @@
+/* Run section header recipe + report body: container-query host so cards respond to the column width. */
+.section {
+  display: flow-root;
+  min-width: 0;
+  /* The header owns the 48px lead-in; a jump lands with its hairline just under the sticky nav. */
+  scroll-margin-top: calc(var(--report-nav-h, 0px) - var(--space-xl) * 1.5 + var(--space-sm));
+}
+
+.body {
+  container-type: inline-size;
+  min-width: 0;
+}
