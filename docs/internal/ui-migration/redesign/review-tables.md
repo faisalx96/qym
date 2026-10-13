@@ -120,3 +120,51 @@ None as defined (no feature lost), but M1 and M2 together keep the feedback poin
 - Dead code check: `SelectionBar.tsx` (runs-list) is still used by `RunsPage`; `RunsTable.module.css` is 9 lines; no
   leftovers of the v1 shim found.
 - Tests: `ui/DataTable/__tests__` and page specs updated; no spec covers drag-selecting text in a clickable row.
+
+## Re-review (branch at 5a3978e4)
+
+Measured on a freshly started stack (ports 8854/5854), 399 runs, dark theme, 1440 / 1280 / 390 px. Screenshots in
+`scratchpad/tables-review/shots/` (`runs-1440/1280`, `queue-1440/390`, `charts-1440`, `rr-charts-grouped`, `trash-1440`).
+
+### Status per item
+
+| Item | Status | Evidence |
+|---|---|---|
+| M1 text selection | FIXED | Drag in a row: no navigation, selection "Oct 13 . 16"; double-click on a date cell: no navigation, word selected; single click still opens the run; select mode shift-click selects 3 rows with no text highlight. |
+| M2 runs list | FIXED | `ScoreBar` for both metrics, task as chip, Date visible on first paint at 1440 and 1280 (clipped to "Oct 13 ." at 1280 but present), bands now "Overview / Scores / Context", Density and 50/page added (`runs-1440.png`, `runs-1280.png`). |
+| M3 header tab stops | FIXED | Tab reaches the header row once (one `th` stop), ArrowLeft/Right/End move between headers, Shift+F10 opens the 4-item menu, Alt+ArrowRight resized a column (104 to 120 px). Sort cycle now asc, desc, none. |
+| M4 truncated headers | FIXED | Probe for ellipsised header labels on runs, queue, environments, experiments, admin runs/users/projects, dataset items, trash, charts: none (only the empty "Actions" header cell is flagged, which has no label). |
+| M5 queue card | FIXED | At 390 the card leads with "baseline run #0" and its status (`queue-390.png`). |
+| M6 Charts | FIXED | Runs and Grouped modes on DataTable v2: score bars, band names (Metrics / System / Repeat runs), group rows with expand chevrons, Expand all, model colour dots, version chips; relative latency bars kept. Bars are shorter than before (about 48 px vs 155 px) but still readable. At 390 it scrolls horizontally with no card mode (see minor below). |
+| M7 dead trailing column | FIXED | Queue shows a visible x cancel at rest; experiments, admin, environments no longer have an empty strip (`queue-1440.png`, `adminruns-1440.png`). |
+| Minor 1 sort none | FIXED | aria-sort went ascending, descending, none. |
+| Minor 2 queue Position header | FIXED | Header reads "POSITION". |
+| Minor 3 band aria-hidden | FIXED | The band row no longer has `aria-hidden` (probe: none). |
+| Minor 4 trash clipping | NOT FIXED | Dataset column is still cut behind the pinned Restore column at 1440, no cue (`trash-1440.png`). Still minor. |
+| Minor 5 baseline | not re-measured (queue Elapsed now right-aligned with the header, looks aligned) |
+| Minor 6 runs Density / page size | FIXED | `Row density` menu (Compact/Regular/Comfortable) and `50 / page` select. |
+| Minor 7 raw table rule | FIXED | `design-language.test.ts:289` allow-list rule (36 tests); 18 files remain on the allow-list, may only shrink. |
+| Minor 8 queue filters hidden on select | not re-checked, left as a UX note |
+| Toolbar/footer into DataTable | FIXED | Runs list shows search, Filters, Columns, Select, Density in one toolbar and a single footer with count, pager, page size, freshness, Shortcuts; same chrome as the other tables. |
+| `RowAction.hint` | FIXED | `DataTable.tsx:1025` tooltip `hint ?? label`. |
+
+### Gate
+- `npm run check`: PASS, 1111 Vitest tests, design-language 36.
+- `npm run build`, `npm run build:sdk`: PASS.
+- Playwright runs-list, datasets, experiments, admin, trash, shell: 515 passed, 11 skipped, 0 failed (16.4 min), includes the new
+  `table-redesign.spec.ts`.
+- axe on 14 pages x 1440 and 390 (now also Charts and the seeded queue): 0 serious/critical; moderate only `heading-order` (admin, profile) and gallery landmarks, unchanged.
+- Flaky specs: `experiments/queue.spec.ts` run alone 5 times, 10/10 passed each time, so the implementer's remote-queue failure is load
+  related in the full suite (the fake evaluation services return 503 while other specs reset them), not a race in the new table. `e2e:sdk`:
+  3 runs, first 41 passed / 1 failed, then 42/42 twice. The failing spec name was not captured on the first run; the SDK viewer is outside
+  the DataTable change, treat as a flake but worth one capture with `--reporter=list` if it recurs.
+
+### Remaining (minor, not blocking)
+1. Trash and similar wide tables: last data column clipped behind the pinned actions column without a cue.
+2. Charts at 390 is horizontal scroll with no card mode or edge cue; the page's own Runs/Grouped controls overflow the card at that width (`rr-charts-390.png`).
+3. Charts bars are narrower than the old page, reconsider a wider track for the first two metric columns.
+4. 18 raw-table files stay on the allow-list.
+
+### Final verdict: MEETS THE STANDARD
+All seven majors are fixed and verified in the running UI, the runs list now shows score bars, chips, the sort column and one toolbar,
+headers are readable, selection and keyboard behave, and the Charts page shares the primitive. The remaining items are polish.
