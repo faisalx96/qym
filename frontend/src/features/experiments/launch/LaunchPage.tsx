@@ -13,16 +13,7 @@ import { useBlocker, useLocation, useNavigate, useSearchParams } from 'react-rou
 import { useEvalEnvironments } from '@/api/evalCommon';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import {
-  Button,
-  ConfirmDialog,
-  EmptyState,
-  ErrorState,
-  LinkButton,
-  PageHeader,
-  Skeleton,
-  Tag,
-} from '@/ui';
+import { Button, ConfirmDialog, EmptyState, ErrorState, LinkButton, PageHeader, Skeleton, Tag } from '@/ui';
 import { environmentsPath, experimentPath, experimentsPath } from '../paths';
 import { LaunchHome } from './home/LaunchHome';
 import { useLaunch } from './LaunchContext';
@@ -68,7 +59,13 @@ function LaunchBody({
       title="Customize experiment"
       meta={[
         `${projectName} · Starting point: ${doc.environmentIds.length ? baseState.label : 'none yet'}`,
-        ...(drifted ? [<Tag key="drift" tone="warning">Versions changed since this run</Tag>] : []),
+        ...(drifted
+          ? [
+              <Tag key="drift" tone="warning">
+                Versions changed since this run
+              </Tag>,
+            ]
+          : []),
       ]}
       actions={
         <Button variant="ghost" onPress={() => goToStep(null)}>
@@ -191,11 +188,7 @@ export function LaunchPage() {
         revealStep={revealStep}
         onLaunched={(id) => navigate(experimentPath(slug, id))}
       >
-        <LaunchBody
-          projectName={project.name}
-          slug={slug}
-          onCancel={() => navigate(experimentsPath(slug))}
-        />
+        <LaunchBody projectName={project.name} slug={slug} onCancel={() => navigate(experimentsPath(slug))} />
       </LaunchProvider>
     );
   const ready = !envs.isPending && !envs.isError && envs.data.length > 0;

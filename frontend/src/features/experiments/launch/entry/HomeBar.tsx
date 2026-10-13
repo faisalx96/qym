@@ -81,6 +81,7 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
         <span role="status" className={styles.homeStatusText} data-tone={showProblems ? 'problem' : 'ok'}>
           {status}
         </span>
+        {showProblems && first ? <span className={styles.homeIssue}>{first.message}</span> : null}
         {showProblems && first ? (
           <button type="button" className={styles.homeShow} onClick={() => focusIssue(first)}>
             Show

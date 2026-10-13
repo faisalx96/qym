@@ -19,7 +19,8 @@ export function StartFrom() {
   const bestAvail = baseState.available('best_run');
   const showEnvSelect =
     selectedEnvs.length > 1 && (kind === 'default' || kind === 'saved' || kind === 'best_run');
-  const envNames = (ids: string[]) => ids.map((id) => selectedEnvs.find((e) => e.id === id)?.name).filter(Boolean);
+  const envNames = (ids: string[]) =>
+    ids.map((id) => selectedEnvs.find((e) => e.id === id)?.name).filter(Boolean);
   const pick = (k: BaseChoice) => void chooseBase(k);
   const savedChecked = (id: string) =>
     kind === 'saved' && (doc.base.presetId ?? baseState.savedPresets[0]?.id) === id;

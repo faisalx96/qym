@@ -96,7 +96,7 @@ describe('LaunchPage', () => {
       expect(screen.getByText('Default preset v1', { selector: 'strong' })).toBeInTheDocument(),
     );
     await userEvent.type(screen.getByLabelText('Experiment name'), 'my run');
-    const launch = await screen.findByRole('button', { name: 'Launch' }, { timeout: 4000 });
+    const launch = await screen.findByRole('button', { name: 'Launch as is' }, { timeout: 4000 });
     await waitFor(() => expect(launch).toBeEnabled(), { timeout: 4000 });
     await userEvent.click(launch);
     const dialog = await screen.findByRole('alertdialog');
@@ -121,11 +121,30 @@ describe('LaunchPage', () => {
       expect(screen.getByText('Default preset v1', { selector: 'strong' })).toBeInTheDocument(),
     );
     await userEvent.type(screen.getByLabelText('Experiment name'), 'dup');
-    const launch = await screen.findByRole('button', { name: 'Launch' }, { timeout: 4000 });
+    const launch = await screen.findByRole('button', { name: 'Launch as is' }, { timeout: 4000 });
     await waitFor(() => expect(launch).toBeEnabled(), { timeout: 4000 });
     await userEvent.click(launch);
     expect(await screen.findByText('Name already used.')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('Experiment name')).toHaveFocus());
+  });
+
+  it('keeps the form when Customize opens a step, and unknown steps open step 1', async () => {
+    const { router } = mount('/projects/proj/experiments/new?env=e1');
+    await waitFor(() =>
+      expect(screen.getByText('Default preset v1', { selector: 'strong' })).toBeInTheDocument(),
+    );
+    await userEvent.type(screen.getByLabelText('Experiment name'), 'kept');
+    await userEvent.click(screen.getByRole('button', { name: /Customize/ }));
+    expect(await screen.findByRole('heading', { name: 'Where it runs', level: 2 })).toBeInTheDocument();
+    expect(router.state.location.search).toContain('step=where');
+    expect(screen.getByLabelText('Experiment name')).toHaveValue('kept');
+    await userEvent.click(screen.getByRole('button', { name: /Continue to starting point/ }));
+    expect(await screen.findByRole('heading', { name: 'Starting point', level: 2 })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Back/ }));
+    expect(screen.getByLabelText('Experiment name')).toHaveValue('kept');
+    await router.navigate('/projects/proj/experiments/new?env=e1&step=nonsense');
+    expect(await screen.findByRole('heading', { name: 'Where it runs', level: 2 })).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
   it('refreshes the schema once per visit and environment and announces a change', async () => {

@@ -83,7 +83,11 @@ export function Stepper({
   if (narrow) {
     const step = steps[currentIndex]!;
     return (
-      <nav aria-label={ariaLabel} className={[styles.compact, className].filter(Boolean).join(' ')} style={vars}>
+      <nav
+        aria-label={ariaLabel}
+        className={[styles.compact, className].filter(Boolean).join(' ')}
+        style={vars}
+      >
         <p className={styles.compactTitle} aria-live="polite">
           Step {currentIndex + 1} of {steps.length}: {step.label}
         </p>

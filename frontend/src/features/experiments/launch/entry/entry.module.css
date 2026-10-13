@@ -383,3 +383,9 @@
     flex: 1 1 0;
   }
 }
+
+.homeIssue {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}

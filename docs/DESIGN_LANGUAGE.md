@@ -183,6 +183,16 @@ The recipes, by intent:
   run detail page's sticky section nav (jump links, `aria-current` on the section
   in view, sliding green underline, page-wide Filters + Clear, back-to-top) is
   the one jump-link variant; no percentages or progress bars in it.
+- **Steppers and disclosure motion** (`Stepper`, `Collapse`): a wizard's progress rail is
+  `Stepper`: an ordered list of always-clickable buttons (`aria-current="step"`), a 4px
+  bar per step that fills with a `scaleX` transition (logical origin, flips in RTL), a
+  `--accent-primary` bar for done and current steps, info and danger count tags, and a
+  compact "Step n of N" form with a jump select below 760px. Disclosures animate with
+  `Collapse` (`grid-template-rows` 0fr to 1fr, never a px height; closed content is `inert`
+  and `visibility: hidden`). Motion tokens: `--motion-step` (180ms), `--motion-step-out`
+  (140ms), `--ease-standard`, `--transition-fast` for hover; every animation is off under
+  `prefers-reduced-motion`. A wizard step panel enters with a 180ms opacity and 8px rise;
+  pages never add other selection animations.
 - **Run section header**: every top-level run-page section opens with a
   `--font-xl` / 650 primary title, one muted `--font-base` description line,
   the section controls on the right, a `--border-subtle` hairline above and

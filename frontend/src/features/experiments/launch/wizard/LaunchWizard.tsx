@@ -69,8 +69,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
   const steps = WIZARD_STEPS.map((s) => {
     let changes = 0;
     if (s.id === 'where')
-      changes =
-        (datasetChanged(doc) ? 1 : 0) + (doc.priority ? 1 : 0) + (doc.versioningText.trim() ? 1 : 0);
+      changes = (datasetChanged(doc) ? 1 : 0) + (doc.priority ? 1 : 0) + (doc.versioningText.trim() ? 1 : 0);
     else if (s.id === 'models') changes = sectionSummary('models').changes;
     else if (s.id === 'settings') changes = sectionSummary('settings').changes + swept;
     else if (s.id === 'evaluation') changes = sectionSummary('evaluation').changes;
@@ -137,7 +136,9 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
           {!hasEnv ? (
             <p className={styles.hint}>Pick an environment first (step 1) to configure this step.</p>
           ) : loading ? null : (
-            <StaticSections untitled={step === 'models' ? ['models'] : step === 'settings' ? ['settings'] : ['evaluation']}>
+            <StaticSections
+              untitled={step === 'models' ? ['models'] : step === 'settings' ? ['settings'] : ['evaluation']}
+            >
               {step === 'models' ? <ModelsSection /> : null}
               {step === 'settings' ? (
                 <>
