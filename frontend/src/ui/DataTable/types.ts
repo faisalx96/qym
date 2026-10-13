@@ -73,7 +73,8 @@ export interface Column<R> {
 export interface RowAction<R> {
   id: string;
   label: string;
-  icon?: ReactNode;
+  /** An Icon name or a node. */
+  icon?: string | ReactNode;
   /** Primary actions render as icon buttons; the rest go to the overflow menu. */
   primary?: boolean;
   danger?: boolean;

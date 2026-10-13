@@ -24,7 +24,7 @@ import { Checkbox } from '../Checkbox';
 import { DropdownMenu, type MenuItemSpec } from '../DropdownMenu';
 import { EmptyState } from '../EmptyState';
 import { ErrorState } from '../ErrorState';
-import { Icon } from '../Icon';
+import { Icon, type IconName } from '../Icon';
 import { IconButton } from '../IconButton';
 import { Button } from '../Button';
 import { DataTableContext } from './context';
@@ -871,7 +871,6 @@ function DataTableInner<R>({
       insetInlineEnd: pin === 'end' ? offsets[col.id] : undefined,
     };
     const common = {
-      key: col.id,
       className: styles.td,
       'data-col': col.id,
       'data-pin': pin ?? undefined,
@@ -900,7 +899,7 @@ function DataTableInner<R>({
       const can = rowCanExpand(r);
       const isOpen = expanded.has(entry.key);
       return (
-        <td {...common} role="gridcell" data-pseudo="expand">
+        <td key={col.id} {...common} role="gridcell" data-pseudo="expand">
           {can ? (
             <IconButton
               label={isOpen ? 'Collapse row' : 'Expand row'}
@@ -917,13 +916,13 @@ function DataTableInner<R>({
       const primary = acts.filter((a) => a.primary).slice(0, 2);
       const more = acts.filter((a) => !primary.includes(a));
       return (
-        <td {...common} role="gridcell" data-pseudo="actions">
+        <td key={col.id} {...common} role="gridcell" data-pseudo="actions">
           <span className={styles.rowActions}>
             {primary.map((a) => (
               <IconButton
                 key={a.id}
                 label={a.label}
-                icon={a.icon ?? a.label}
+                icon={a.icon ?? 'more'}
                 tone={a.danger ? 'danger' : 'default'}
                 isDisabled={a.disabled}
                 onPress={() => a.onPress(r)}
@@ -936,7 +935,7 @@ function DataTableInner<R>({
                 items={more.map((a) => ({
                   id: a.id,
                   label: a.label,
-                  icon: a.icon,
+                  icon: typeof a.icon === 'string' ? <Icon name={a.icon as IconName} size={12} /> : a.icon,
                   tone: a.danger ? ('danger' as const) : undefined,
                   disabled: a.disabled,
                 }))}
@@ -1078,7 +1077,7 @@ function DataTableInner<R>({
     <table
       ref={tableRef}
       className={styles.table}
-      role="grid"
+      role={renderExpanded ? 'treegrid' : 'grid'}
       aria-label={tableLabel}
       aria-rowcount={display.length + 1}
       aria-busy={loading || undefined}

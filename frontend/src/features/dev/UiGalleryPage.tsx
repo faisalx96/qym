@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
+import { DataTableGallery } from './DataTableGallery';
 import type { Key } from 'react-aria-components';
 import {
   Badge,
@@ -527,6 +528,9 @@ export default function UiGalleryPage() {
             sort={sort}
             onSortChange={setSort}
           />
+        </Case>
+        <Case label="v2: toolbar, footer, selection + bulk bar, row actions, expansion, bands, pins, states (resize below 640px for cards)">
+          <DataTableGallery />
         </Case>
         <Case label="Empty">
           <DataTable
