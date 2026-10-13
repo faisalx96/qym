@@ -224,6 +224,13 @@ Regressions: none found. Spot-checked OK rows, all unchanged: stats strip and th
 
 Counts: verified fixed 15 of 18 rows (counting C078 as fixed with the caveat), still broken 3 (C020, C096, C108), regressions 0.
 
+## Report-page redesign mapping (2026-10-13)
+
+The Analytics side panel and its tabs (Metrics, Overview, Categories, Errors, Root cause, Steps) are now stacked
+sections (`#compare-averages|overview|categories|steps|errors|root-cause|items`) under a "Comparison sections" nav;
+`?panel=` and hashes scroll to them. Run cards are always visible (collapsed behind "Run details" above 4 runs). A
+quick-filter sidebar appears only while a scope is active. The deferred list below is unchanged.
+
 ## Deferred
 
 Fix list items 1-18 are all addressed; two are deliberately narrower than the old page.

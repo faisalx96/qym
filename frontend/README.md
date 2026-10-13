@@ -99,6 +99,15 @@ Aria exposes `data-hovered`, `data-selected`, `data-focus-visible`, …).
    `<EmptyState/>` only for a successful empty result.
 7. URL view state: `const { params, replaceUrlQuery } = useSearchParamsState()`.
 
+## Report pages (run detail, compare)
+
+Both pages are stacked reports: `ReportSection`s (`@/ui`) in page order, a sticky
+section nav with scroll-spy, and `ReportLayout` + `ScopeBar` for the quick-filter
+sidebar that appears only while a scope is active (`features/run-detail/hooks/useScope.ts`,
+`features/compare/hooks/useScope.ts`). Old `?panel=` values and `#overview`-style
+hashes scroll to the matching section. Lazy sections mount when they near the
+viewport, so an e2e test jumps to a section through the nav before asserting on it.
+
 ## Adding a mock route (design step)
 
 Design variants live in `src/features/<area>/__mocks__/<variant>/` and are

@@ -265,6 +265,15 @@ Headline: the data layer, URL contract, filters, charts, live updates, item deta
    Repro: n/a  
    Hint: Low priority; confirm intent.
 
+## Report-page redesign mapping (2026-10-13)
+
+The analysis side panel and its tabs are gone: each tab is now a full-width section of the page (ids
+`run-section-overview|repeat|latency|deep|categories|errors|root-cause`, Items last), reached from the sticky
+nav; `?panel=` and the legacy hashes scroll to the section. Rows above marked CHANGED for the panel (74 Overview
+section, 27 Reviews tab, 10 hero details collapsed, 52 sticky nav) are superseded: Reviews is a card under the hero,
+the hero details default to expanded, the nav links every section with scroll-spy and carries Filters and Clear.
+The deferred list below is unchanged.
+
 ## Deferred
 
 Product decision taken for this pass: the sticky section nav and sticky filter bar come back (FIXED above). The deliberate drops were each checked against the ~1 day bar; only the pager peek card fit.
