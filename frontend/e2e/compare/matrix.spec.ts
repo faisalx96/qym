@@ -62,6 +62,9 @@ for (const width of [390, 1280, 1920]) {
     await expect(itemDetail(page, 'cmp-001').getByTestId('output-card')).toHaveCount(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await expect(page.getByTestId('item-row').first()).toBeVisible();
+    // the expanded item reads at the visible width, not the width of the scrolling score columns
+    const box = await itemDetail(page, 'cmp-001').boundingBox();
+    expect(box!.width).toBeLessThanOrEqual(width);
   });
 }
 

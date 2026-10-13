@@ -1,5 +1,5 @@
 /** The aligned item matrix (DataTable): `#`, input, one score column per run, expansion, pager and the ?item= deep link. */
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Badge, DataTable, ScoreBar, type Column, type Key } from '@/ui';
 import type { Row } from '@/features/run-detail/types';
 import { letterOf, useCompare } from '../../CompareContext';
@@ -94,6 +94,20 @@ export function ItemList() {
     [slice, clamped],
   );
   const dense = model.runs.length > HEAT_FROM;
+  // The detail row spans the whole (scrollable) table; its content stays as wide as the visible list.
+  const hasItems = items.length > 0;
+  const listRef = useRef<HTMLDivElement>(null);
+  const [listWidth, setListWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return undefined;
+    const measure = () => setListWidth(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasItems]);
   const numericMax = useMemo(() => {
     let m = 0;
     for (const it of items) for (const s of it.scores) if (s !== null && s > m) m = s;
@@ -203,7 +217,13 @@ export function ItemList() {
   };
 
   return (
-    <div className={styles.list} data-testid="item-list" data-dense={dense || undefined}>
+    <div
+      ref={listRef}
+      className={styles.list}
+      style={listWidth ? ({ '--list-w': `${listWidth}px` } as React.CSSProperties) : undefined}
+      data-testid="item-list"
+      data-dense={dense || undefined}
+    >
       <DataTable<FilteredItem>
         aria-label="Items across the compared runs"
         columns={columns}
@@ -216,7 +236,11 @@ export function ItemList() {
         zebra={false}
         rowState={stateOf}
         rowProps={(it) => ({ id: `item-${it.itemId}`, 'data-testid': 'item-row', 'data-item-id': it.itemId })}
-        renderExpanded={(it) => <ItemDetail itemId={it.itemId} />}
+        renderExpanded={(it) => (
+          <div className={styles.detailHold}>
+            <ItemDetail itemId={it.itemId} />
+          </div>
+        )}
         expandOnRowClick
         expandLabel={(it, open) => `${open ? 'Collapse' : 'Expand'} item ${numberOf.get(it.itemId) ?? ''}`}
         expanded={ui.expanded as Set<Key>}

@@ -68,3 +68,12 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* the expanded item keeps the visible width and stays put while the score columns scroll sideways */
+.detailHold {
+  position: sticky;
+  inset-inline-start: 0;
+  inline-size: var(--list-w, 100%);
+  max-inline-size: 100%;
+  box-sizing: border-box;
+}
