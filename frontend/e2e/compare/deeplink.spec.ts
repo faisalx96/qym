@@ -1,6 +1,6 @@
 /** J2: every URL param restores its control; stale params are ignored. */
 import { expect, test, type Page } from '@playwright/test';
-import { compareUrl, expectShown, seedScenario, urlParams, waitLoaded } from './support';
+import { compareUrl, expectShown, seedScenario, urlParams, waitLoaded, itemDetail } from './support';
 import type { CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -47,7 +47,7 @@ test('a full deep link restores metric, filters, search, sort, page and the open
   const row = page.locator('[data-testid="item-row"][data-item-id="cmp-040"]');
   await expect(row).toBeVisible();
   await expect(row.getByRole('button', { expanded: true }).first()).toBeVisible();
-  await expect(row.getByTestId('item-detail')).toBeVisible();
+  await expect(itemDetail(page, 'cmp-040')).toBeVisible();
   // the page param follows the item (score_desc moves cmp-040 off page 2); the rest of the link is kept
   expect(urlParams(page).get('item')).toBe('cmp-040');
   expect(urlParams(page).get('sort')).toBe('score_desc');
@@ -57,9 +57,7 @@ test('a full deep link restores metric, filters, search, sort, page and the open
   await page.reload();
   await waitLoaded(page);
   await expectShown(page, 27);
-  await expect(
-    page.locator('[data-testid="item-row"][data-item-id="cmp-040"]').getByTestId('item-detail'),
-  ).toBeVisible();
+  await expect(itemDetail(page, 'cmp-040')).toBeVisible();
   await expect(page.getByRole('searchbox', { name: 'Search items' })).toHaveValue('policy');
   expect(urlParams(page).get('item')).toBe('cmp-040');
 });
@@ -69,9 +67,7 @@ test("?item= lands on the item's page, expands it and scrolls it into view once"
   await page.goto(compareUrl([base, a, b, c], { page: '2', item: 'cmp-040' }));
   await waitLoaded(page);
   expect(urlParams(page).get('page')).toBe('2');
-  await expect(
-    page.locator('[data-testid="item-row"][data-item-id="cmp-040"]').getByTestId('item-detail'),
-  ).toBeVisible();
+  await expect(itemDetail(page, 'cmp-040')).toBeVisible();
   // The late layout-shift correction must not re-scroll a reader who moved away.
   await expect.poll(() => inViewport(page, '#item-cmp-040'), { timeout: 4000 }).toBe(true);
   // once: scrolling away is not undone

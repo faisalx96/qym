@@ -9,6 +9,7 @@ import {
   urlParams,
   waitLoaded,
   goSection,
+  itemDetail,
 } from './support';
 import { createApiKey, createRun, ensureProject, EventStream, seedTracedRun, type CompareSeed } from './seed';
 import { uniqueSlug } from '../helpers';
@@ -128,7 +129,7 @@ test('C065 collapsed rows show the score, not only Pass/Fail; C063 keeps the ite
   const id = (await first.getAttribute('data-item-id'))!;
   expect(id).not.toBe('fix-001'); // the sort moved a different item to the top
   await expect(
-    first.getByRole('button', { name: new RegExp(`^Item ${Number(id.slice(-3))}\\b`) }),
+    first.getByRole('button', { name: new RegExp(`^(Expand|Collapse) item ${Number(id.slice(-3))}$`) }),
   ).toBeVisible();
 });
 
@@ -190,9 +191,9 @@ test('C078 Add issue targets the metric the page is on, with a metric picker', a
   await page.goto(compareUrl([fix.a, fix.c], { metric: 'quality' }));
   await waitLoaded(page);
   await row(page, 'fix-003')
-    .getByRole('button', { name: /^Item 3/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 3$/ })
     .click();
-  await row(page, 'fix-003').getByRole('button', { name: 'Add issue' }).first().click();
+  await itemDetail(page, 'fix-003').getByRole('button', { name: 'Add issue' }).first().click();
   const dialog = page.getByTestId('issue-dialog');
   await expect(dialog).toContainText('Add issue · quality');
   await expect(dialog.getByRole('button', { name: /Metric/ })).toBeVisible();
@@ -204,15 +205,15 @@ test('C069 a long expected output collapses; C073 a 0 ms item shows its latency;
   await page.goto(compareUrl([fix.a, fix.c]));
   await waitLoaded(page);
   await row(page, 'fix-001')
-    .getByRole('button', { name: /^Item 1/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 1$/ })
     .click();
-  const expected = row(page, 'fix-001').locator('[data-kind="expected"]');
+  const expected = itemDetail(page, 'fix-001').locator('[data-kind="expected"]');
   await expect(expected.getByRole('button', { name: 'Show more' })).toBeVisible();
   expect((await expected.boundingBox())!.height).toBeLessThan(500);
   await row(page, 'fix-002')
-    .getByRole('button', { name: /^Item 2/ })
+    .getByRole('button', { name: /^(Expand|Collapse) item 2$/ })
     .click();
-  await expect(row(page, 'fix-002').getByTestId('output-card').first()).toContainText('0ms');
+  await expect(itemDetail(page, 'fix-002').getByTestId('output-card').first()).toContainText('0ms');
 });
 
 test('C012 the not-found panel names the missing run and links back; the toast lists ids', async ({

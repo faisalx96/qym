@@ -7,6 +7,11 @@
   scroll-margin-top: 7rem;
 }
 
+.list tr[data-item-id]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
 .runHead {
   display: inline-flex;
   align-items: center;

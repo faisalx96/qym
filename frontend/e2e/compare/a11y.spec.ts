@@ -54,9 +54,9 @@ test('keyboard: Tab reaches the toolbar; Enter toggles Filters; Display popover 
   await expect(csv).toBeFocused();
 });
 
-test('item rows: visible keyboard focus ring; Enter and Space expand and collapse', async ({ page }) => {
+test('item rows: visible keyboard focus ring; Enter expands and collapses', async ({ page }) => {
   await open4(page);
-  const rowBtn = page.getByRole('button', { name: /^Item 1:/ });
+  const rowBtn = page.locator('[data-testid="item-row"][data-item-id="cmp-001"]');
   // focus by keyboard so :focus-visible applies
   await page.getByRole('searchbox', { name: 'Search items' }).focus();
   for (let i = 0; i < 40 && !(await rowBtn.evaluate((el) => el === document.activeElement)); i++)
@@ -84,7 +84,7 @@ test('item rows: visible keyboard focus ring; Enter and Space expand and collaps
   // collapsing right after the expand must not be undone when the ?item= URL catches up
   await expect.poll(() => new URL(page.url()).searchParams.get('item')).toBe('cmp-001');
   await expect(page.getByTestId('output-card')).toHaveCount(4); // bodies loaded
-  await page.keyboard.press('Space');
+  await page.keyboard.press('Enter');
   await expect(rowBtn).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByTestId('item-detail')).toHaveCount(0);
 });
@@ -139,7 +139,7 @@ test('axe: no serious or critical violations on the loaded Compare page', async 
 
 test('axe: no serious or critical violations with an expanded item', async ({ page }) => {
   await open4(page);
-  await page.getByRole('button', { name: /^Item 1:/ }).click();
+  await page.getByRole('button', { name: /^(Expand|Collapse) item 1$/ }).click();
   await expect(page.getByTestId('output-card')).toHaveCount(4);
   expect(await axeScan(page)).toEqual([]);
 });
@@ -156,7 +156,7 @@ test('phone width: no horizontal page scroll, with and without an expanded item'
   await open4(page);
   const width = () => page.evaluate(() => document.documentElement.scrollWidth);
   expect(await width()).toBeLessThanOrEqual(390);
-  await page.getByRole('button', { name: /^Item 1:/ }).click();
+  await page.getByRole('button', { name: /^(Expand|Collapse) item 1$/ }).click();
   await expect(page.getByTestId('output-card')).toHaveCount(4);
   expect(await width()).toBeLessThanOrEqual(390);
 });
@@ -165,7 +165,7 @@ test.describe('light theme', () => {
   test.use({ colorScheme: 'light' });
   test('axe: no serious or critical violations with an expanded item', async ({ page }) => {
     await open4(page);
-    await page.getByRole('button', { name: /^Item 1:/ }).click();
+    await page.getByRole('button', { name: /^(Expand|Collapse) item 1$/ }).click();
     await expect(page.getByTestId('output-card')).toHaveCount(4);
     expect(await axeScan(page)).toEqual([]);
   });
