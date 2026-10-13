@@ -19,6 +19,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Button as AriaButton } from 'react-aria-components';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { Checkbox } from '../Checkbox';
 import { DropdownMenu, type MenuItemSpec } from '../DropdownMenu';
@@ -135,6 +136,28 @@ export interface DataTableProps<R> {
 
   responsive?: 'scroll' | 'cards';
 
+  /**
+   * Window the rows (spacer rows above and below). `true` or an object turns it on; by default it is on
+   * above 200 display rows. `scrollParent` = an ancestor that scrolls the page (e.g. the shell content)
+   * instead of the table's own scroller.
+   */
+  virtualize?:
+    | boolean
+    | {
+        estimateRowHeight?: number;
+        overscan?: number;
+        scrollParent?: HTMLElement | null;
+        /** Height that sticks above the table (bars) so scrolled-to rows land below it. */
+        scrollPaddingStart?: number;
+      };
+  /** Bring this row into view (deep links); `onScrolledToKey` fires once it has landed. */
+  scrollToKey?: Key | null;
+  onScrolledToKey?: () => void;
+
+  /** Group collapse driven from outside (Expand all / Collapse all). */
+  groupCollapsed?: Set<string>;
+  onGroupCollapsedChange?: (keys: Set<string>) => void;
+
   /** Roving focus, controlled (runs list keeps its own cursor). */
   focusedKey?: Key | null;
   onFocusedKeyChange?: (key: Key | null) => void;
@@ -166,6 +189,9 @@ function useMedia(query: string): boolean {
   }, [query]);
   return m;
 }
+
+const VIRTUAL_AFTER = 200;
+const VIRTUAL_FALLBACK = 30;
 
 const INTERACTIVE =
   'a, button, input, label, select, textarea, [role="button"], [role="checkbox"], [role="menuitem"]';
@@ -250,6 +276,11 @@ function DataTableInner<R>({
   canExpand,
   groupBy,
   responsive = 'cards',
+  virtualize,
+  scrollToKey,
+  onScrolledToKey,
+  groupCollapsed,
+  onGroupCollapsedChange,
   focusedKey: focusedProp,
   onFocusedKeyChange,
   children,
@@ -304,6 +335,7 @@ function DataTableInner<R>({
 
   /* display rows */
   const collapsedGroups = useMemo(() => {
+    if (groupCollapsed) return groupCollapsed;
     if (!groupBy?.defaultCollapsed) return model.collapsed;
     const all = new Set(sortedRows.map((r) => groupBy.key(r)));
     for (const k of model.collapsed) {
@@ -311,7 +343,15 @@ function DataTableInner<R>({
       else all.add(k);
     }
     return all;
-  }, [groupBy, model.collapsed, sortedRows]);
+  }, [groupBy, groupCollapsed, model.collapsed, sortedRows]);
+  const toggleGroupKey = (key: string) => {
+    if (groupCollapsed && onGroupCollapsedChange) {
+      const next = new Set(groupCollapsed);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      onGroupCollapsedChange(next);
+    } else model.toggleGroup(key);
+  };
   const display = useMemo(
     () =>
       buildDisplayRows(sortedRows, rowKey, {
@@ -322,7 +362,22 @@ function DataTableInner<R>({
       }),
     [sortedRows, rowKey, groupBy, collapsedGroups, expanded, renderExpanded],
   );
+  const vcfg = typeof virtualize === 'object' ? virtualize : null;
+  const virtual =
+    virtualize === true || vcfg !== null || (virtualize === undefined && display.length > VIRTUAL_AFTER);
+  const scrollParent = vcfg?.scrollParent ?? null;
+  const [scrollMargin, setScrollMargin] = useState(0);
   const dataRows = display.filter((d): d is Extract<DisplayRow<R>, { kind: 'row' }> => d.kind === 'row');
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: virtual ? display.length : 0,
+    getScrollElement: () => scrollParent ?? scrollerRef.current,
+    estimateSize: () => vcfg?.estimateRowHeight ?? 40,
+    overscan: vcfg?.overscan ?? 8,
+    scrollMargin,
+    scrollPaddingStart: vcfg?.scrollPaddingStart ?? 0,
+    getItemKey: (i) => display[i]?.id ?? i,
+  });
 
   /* columns incl. pseudo columns */
   const multi = Boolean(selection) && (selection?.mode ?? 'multiple') === 'multiple';
@@ -495,6 +550,45 @@ function DataTableInner<R>({
     if (el && !el.contains(document.activeElement)) el.focus();
   }, [focusedProp, uid]);
 
+  // Where the first body row starts inside the scrolling ancestor (react-virtual scrollMargin).
+  useEffect(() => {
+    if (!virtual) return undefined;
+    const body = bodyRef.current;
+    const parent = scrollParent ?? scrollerRef.current;
+    if (!body || !parent) return undefined;
+    const measure = () => {
+      const top = body.getBoundingClientRect().top - parent.getBoundingClientRect().top + parent.scrollTop;
+      setScrollMargin((prev) => (Math.abs(prev - top) > 1 ? top : prev));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(parent);
+    for (let n: HTMLElement | null = body; n && n !== parent; n = n.parentElement) ro.observe(n);
+    return () => ro.disconnect();
+  }, [virtual, scrollParent]);
+
+  // A requested row (deep link) is brought into view once; measured heights settle, so align twice.
+  useEffect(() => {
+    if (scrollToKey === null || scrollToKey === undefined) return undefined;
+    const idx = display.findIndex((d) => d.kind === 'row' && d.key === scrollToKey);
+    if (idx < 0) return undefined;
+    const go = () => {
+      if (virtual) virtualizer.scrollToIndex(idx, { align: 'start' });
+      else
+        bodyRef.current
+          ?.querySelector<HTMLElement>(`tr[data-row-key="${CSS.escape(String(scrollToKey))}"]`)
+          ?.scrollIntoView({ block: 'start' });
+    };
+    go();
+    const t = setTimeout(() => {
+      go();
+      onScrolledToKey?.();
+    }, 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the requested key (or the row set) changes
+  }, [scrollToKey, display.length]);
+
   /* selection */
   const selected = selection?.selected ?? new Set<Key>();
   const selectable = (r: R) => !selection?.isDisabled?.(r);
@@ -560,11 +654,28 @@ function DataTableInner<R>({
       return;
     }
     const els = rowEls();
-    const i = els.indexOf(tr);
+    const rowDisplayIdx = display.flatMap((d, ix) => (d.kind === 'row' ? [ix] : []));
+    const i = virtual ? rowDisplayIdx.indexOf(Number(tr.dataset.index)) : els.indexOf(tr);
+    const total = virtual ? rowDisplayIdx.length : els.length;
     const goto = (n: number, edge = false) => {
       // Stepping past either end is left to the page (paged tables move to the next page).
-      if (!edge && (n < 0 || n >= els.length)) return;
-      const el = els[Math.max(0, Math.min(els.length - 1, n))];
+      if (!edge && (n < 0 || n >= total)) return;
+      const target = Math.max(0, Math.min(total - 1, n));
+      if (virtual) {
+        const di = rowDisplayIdx[target];
+        if (di === undefined) return;
+        e.preventDefault();
+        virtualizer.scrollToIndex(di, { align: 'auto' });
+        let tries = 0;
+        const focusIt = () => {
+          const el = bodyRef.current?.querySelector<HTMLElement>(`tr[data-index="${di}"]`);
+          if (el) el.focus({ preventScroll: true });
+          else if (++tries < 20) requestAnimationFrame(focusIt);
+        };
+        requestAnimationFrame(focusIt);
+        return;
+      }
+      const el = els[target];
       if (el) {
         el.focus();
         e.preventDefault();
@@ -576,7 +687,7 @@ function DataTableInner<R>({
     if (k === 'ArrowDown' || (vim && k === 'j')) goto(i + 1);
     else if (k === 'ArrowUp' || (vim && k === 'k')) goto(i - 1);
     else if (k === 'Home') goto(0, true);
-    else if (k === 'End') goto(els.length - 1, true);
+    else if (k === 'End') goto(total - 1, true);
     else if (k === 'PageDown') goto(i + 10, true);
     else if (k === 'PageUp') goto(i - 10, true);
     else if (entry && k === 'Enter') {
@@ -842,7 +953,6 @@ function DataTableInner<R>({
 
   const tableLabel = rest['aria-label'];
   const colCount = renderCols.length;
-  const rowIndexOf = (id: string) => display.findIndex((d) => d.id === id);
 
   const thFor = (col: Column<R>) => {
     const pseudo = (col as unknown as PseudoColumn).pseudo;
@@ -1087,12 +1197,33 @@ function DataTableInner<R>({
     );
   };
 
+  const vItems = virtual ? virtualizer.getVirtualItems() : [];
+  const winFrom = virtual ? (vItems[0]?.index ?? 0) : 0;
+  const winTo = virtual
+    ? vItems.length
+      ? vItems[vItems.length - 1]!.index
+      : Math.min(display.length, VIRTUAL_FALLBACK) - 1
+    : display.length - 1;
+  const padTop = virtual && vItems.length ? Math.max(0, vItems[0]!.start - scrollMargin) : 0;
+  const padBottom = virtual
+    ? vItems.length
+      ? Math.max(0, virtualizer.getTotalSize() - (vItems[vItems.length - 1]!.end - scrollMargin))
+      : Math.max(0, display.length - 1 - winTo) * (vcfg?.estimateRowHeight ?? 40)
+    : 0;
+  const renderedKeys = new Set<Key>();
+  for (let i = winFrom; i <= winTo; i += 1) {
+    const d = display[i];
+    if (d?.kind === 'row') renderedKeys.add(d.key);
+  }
+  const firstRenderedKey = [...renderedKeys][0];
   const bodyRows: ReactNode[] = [];
   const rowStyleMeta = (d: Extract<DisplayRow<R>, { kind: 'row' }>) => {
     const st = rowState?.(d.row);
     return st;
   };
-  display.forEach((d) => {
+  display.forEach((d, di) => {
+    if (virtual && (di < winFrom || di > winTo)) return;
+    const measure = virtual ? { ref: virtualizer.measureElement, 'data-index': di } : {};
     if (d.kind === 'group') {
       const hasSummary = visible.some((c) => c.summary);
       const lead = leading.length + 1; // pseudo columns + the first data column carry the label
@@ -1103,7 +1234,7 @@ function DataTableInner<R>({
               className={styles.groupToggle}
               aria-expanded={!d.collapsed}
               aria-label={`${d.collapsed ? 'Expand' : 'Collapse'} group ${d.groupKey}`}
-              onPress={() => model.toggleGroup(d.groupKey)}
+              onPress={() => toggleGroupKey(d.groupKey)}
             >
               <Icon name={d.collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
             </AriaButton>
@@ -1113,7 +1244,7 @@ function DataTableInner<R>({
         </div>
       );
       bodyRows.push(
-        <tr key={d.id} className={styles.groupRow} data-group-row="" role="row">
+        <tr key={d.id} className={styles.groupRow} data-group-row="" role="row" {...measure}>
           <td colSpan={hasSummary ? lead : colCount} role="gridcell" className={styles.groupCell}>
             {label}
           </td>
@@ -1136,7 +1267,7 @@ function DataTableInner<R>({
     }
     if (d.kind === 'detail') {
       bodyRows.push(
-        <tr key={d.id} className={styles.detailRow} data-detail-row="">
+        <tr key={d.id} className={styles.detailRow} data-detail-row="" {...measure}>
           <td colSpan={colCount} role="gridcell" className={styles.detailCell}>
             {renderExpanded?.(d.row)}
           </td>
@@ -1151,8 +1282,7 @@ function DataTableInner<R>({
     const rid = `${uid}:${String(d.key)}`;
     const isFocusStop =
       focusedKey === d.key ||
-      (focusedKey === null && d.index === 0) ||
-      (focusedKey !== null && !dataRows.some((x) => x.key === focusedKey) && d.index === 0);
+      ((focusedKey === null || !renderedKeys.has(focusedKey)) && d.key === firstRenderedKey);
     bodyRows.push(
       <tr
         key={d.id}
@@ -1168,7 +1298,8 @@ function DataTableInner<R>({
         data-clickable={openable || selectOnRowClick || expandOnRowClick ? '' : undefined}
         aria-selected={selection ? isSel : undefined}
         aria-expanded={renderExpanded && rowCanExpand(r) ? isOpen : undefined}
-        aria-rowindex={rowIndexOf(d.id) + 2}
+        aria-rowindex={di + 2}
+        {...measure}
         tabIndex={isFocusStop ? 0 : -1}
         onFocus={(e) => {
           if (e.target === e.currentTarget && focusedKey !== d.key) setFocusedKey(d.key);
@@ -1189,6 +1320,12 @@ function DataTableInner<R>({
   });
 
   const progress = refreshing;
+
+  const spacer = (key: string, height: number) => (
+    <tr key={`spacer-${key}`} className={styles.spacer} aria-hidden="true" data-spacer={key}>
+      <td colSpan={colCount} style={{ height }} />
+    </tr>
+  );
 
   const tableEl = (
     <table
@@ -1231,7 +1368,11 @@ function DataTableInner<R>({
                   ))}
                 </tr>
               ))
-            : bodyRows}
+            : [
+                padTop > 0 ? spacer('top', padTop) : null,
+                ...bodyRows,
+                padBottom > 0 ? spacer('bottom', padBottom) : null,
+              ]}
       </tbody>
       {visible.some((c) => c.summary) && !groupBy && !loading && rows.length > 0 ? (
         <tfoot className={styles.tfoot}>

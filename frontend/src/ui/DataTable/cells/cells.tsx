@@ -22,6 +22,8 @@ export interface ScoreBarProps {
   /** Displayed text override (defaults to a percent, or a number with `max`). */
   text?: string;
   error?: 'task' | 'metric' | null;
+  /** Fixed bar colour (a CSS colour or token) for series that are not score bands, e.g. a model colour. */
+  color?: string;
 }
 
 function normDirection(d: ScoreBarProps['direction']): MetricDirection {
@@ -31,7 +33,7 @@ function normDirection(d: ScoreBarProps['direction']): MetricDirection {
 }
 
 /** Track + fill + value. Errors show the warning glyph, never a bar. */
-export function ScoreBar({ value, type, direction, max, text, error }: ScoreBarProps) {
+export function ScoreBar({ value, type, direction, max, text, error, color }: ScoreBarProps) {
   if (error) {
     return (
       <span className={styles.scoreBar} data-error={error}>
@@ -58,7 +60,11 @@ export function ScoreBar({ value, type, direction, max, text, error }: ScoreBarP
   const pct = Math.max(0, Math.min(1, ratio)) * 100;
   const label = text ?? (max === undefined ? `${Math.round(value * 100)}%` : formatNumericValue(value));
   return (
-    <span className={styles.scoreBar} data-band={band ?? undefined}>
+    <span
+      className={styles.scoreBar}
+      data-band={band ?? undefined}
+      style={color ? ({ '--bar': color } as React.CSSProperties) : undefined}
+    >
       <span className={styles.track} aria-hidden="true">
         <span className={styles.fill} style={{ inlineSize: `${pct}%` }} />
       </span>

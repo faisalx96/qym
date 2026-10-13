@@ -892,3 +892,11 @@
   outline: 2px solid var(--accent-primary);
   outline-offset: -2px;
 }
+
+/* Virtualization spacer rows carry the height of the rows that are not mounted. */
+.tbody .spacer td {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
