@@ -25,16 +25,15 @@ import {
   ErrorState,
   Icon,
   PageHeader,
-  Pagination,
   RunStatusBadge,
   SearchField,
   Select,
   Skeleton,
   Tag,
   Text,
-  Tooltip,
   useToast,
   type RunStatus,
+  type Column,
 } from '@/ui';
 import styles from './TrashPage.module.css';
 
@@ -161,6 +160,90 @@ export function TrashPage() {
   const total = list.data?.total ?? 0;
   const grace = list.data?.graceDays;
   const filtered = Boolean(q || projectId);
+  const columns: Column<TrashRun>[] = [
+    {
+      id: 'run',
+      pin: 'start',
+      hideable: false,
+      priority: 1,
+      header: 'Run',
+      flex: true,
+      minWidth: 240,
+      cell: (r) => (
+        <span className={styles.runCell}>
+          <Text as="span" variant="md" weight={600} truncate>
+            {r.run_name}
+          </Text>
+          <span className={styles.runId} title={`Created ${new Date(r.created_at).toLocaleString()}`}>
+            {r.id}
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: 'project',
+      priority: 2,
+      header: 'Project',
+      width: 140,
+      cell: (r) => (
+        <span className={styles.stack}>
+          <span>{r.project_name}</span>
+          {r.project_archived ? <Tag tone="warning">Project archived</Tag> : null}
+        </span>
+      ),
+    },
+    {
+      id: 'purges',
+      priority: 1,
+      header: 'Purges',
+      width: 140,
+      cell: (r) => {
+        const p = purgeInfo(r);
+        return (
+          <span className={styles.stack} data-soon={p.soon ? '' : undefined}>
+            {p.tone ? <Badge tone={p.tone}>{p.text}</Badge> : <span>{p.text}</span>}
+            {p.sub ? <span className={styles.sub}>{p.sub}</span> : null}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'deleted',
+      type: 'date',
+      priority: 2,
+      header: 'Deleted',
+      width: 140,
+      cell: (r) => (
+        <span className={styles.stack}>
+          <span className={styles.mono}>{fmtDate(r.deleted_at)}</span>
+          {r.deleted_by_name ? <span className={styles.sub}>by {r.deleted_by_name}</span> : null}
+        </span>
+      ),
+    },
+    {
+      id: 'status',
+      type: 'status',
+      priority: 1,
+      header: 'Status',
+      width: 110,
+      cell: (r) => <RunStatusBadge status={r.status as RunStatus} />,
+    },
+    {
+      id: 'model',
+      priority: 3,
+      header: 'Model',
+      width: 140,
+      cell: (r) => (
+        <span className={styles.stack}>
+          <span>{r.model ?? '—'}</span>
+          {r.trace_stats?.has_reasoning ? <Tag tone="info">reasoning</Tag> : null}
+        </span>
+      ),
+    },
+    { id: 'task', header: 'Task', priority: 3, width: 120, cell: (r) => r.task ?? '—' },
+    { id: 'dataset', header: 'Dataset', priority: 3, width: 120, cell: (r) => r.dataset ?? '—' },
+  ];
+
   return (
     <div className={fullWidth} data-trash-page>
       <PageHeader
@@ -206,18 +289,6 @@ export function TrashPage() {
           width={260}
         />
         <span className={styles.grow} />
-        <Text as="span" variant="sm" tone="muted" aria-live="polite">
-          {restorableSelected.length ? `${restorableSelected.length} selected` : ''}
-        </Text>
-        <Button
-          variant="accent"
-          isDisabled={!restorableSelected.length || restorableSelected.length > RESTORE_MAX}
-          loading={restore.isPending}
-          onPress={() => void doRestore(restorableSelected)}
-          data-testid="restore-selected"
-        >
-          Restore {restorableSelected.length ? restorableSelected.length : ''} selected
-        </Button>
       </div>
       {showSkeleton ? (
         <Skeleton kind="table" rows={6} label="Loading deleted runs" />
@@ -251,126 +322,55 @@ export function TrashPage() {
                   ),
                 ),
             }}
-            dimmed={list.isFetching && list.isPlaceholderData}
-            columns={[
-              {
-                id: 'run',
-                label: 'Run',
-                flex: true,
-                minWidth: 240,
-                cell: (r) => (
-                  <span className={styles.runCell}>
-                    <Text as="span" variant="md" weight={600} truncate>
-                      {r.run_name}
-                    </Text>
-                    <span
-                      className={styles.runId}
-                      title={`Created ${new Date(r.created_at).toLocaleString()}`}
-                    >
-                      {r.id}
-                    </span>
-                  </span>
-                ),
-              },
-              {
-                id: 'project',
-                label: 'Project',
-                width: 140,
-                cell: (r) => (
-                  <span className={styles.stack}>
-                    <span>{r.project_name}</span>
-                    {r.project_archived ? <Tag tone="warning">Project archived</Tag> : null}
-                  </span>
-                ),
-              },
-              {
-                id: 'purges',
-                label: 'Purges',
-                width: 140,
-                cell: (r) => {
-                  const p = purgeInfo(r);
-                  return (
-                    <span className={styles.stack} data-soon={p.soon ? '' : undefined}>
-                      {p.tone ? <Badge tone={p.tone}>{p.text}</Badge> : <span>{p.text}</span>}
-                      {p.sub ? <span className={styles.sub}>{p.sub}</span> : null}
-                    </span>
-                  );
-                },
-              },
-              {
-                id: 'deleted',
-                label: 'Deleted',
-                width: 140,
-                cell: (r) => (
-                  <span className={styles.stack}>
-                    <span className={styles.mono}>{fmtDate(r.deleted_at)}</span>
-                    {r.deleted_by_name ? <span className={styles.sub}>by {r.deleted_by_name}</span> : null}
-                  </span>
-                ),
-              },
-              {
-                id: 'status',
-                label: 'Status',
-                width: 110,
-                cell: (r) => <RunStatusBadge status={r.status as RunStatus} />,
-              },
-              {
-                id: 'model',
-                label: 'Model',
-                width: 140,
-                cell: (r) => (
-                  <span className={styles.stack}>
-                    <span>{r.model ?? '—'}</span>
-                    {r.trace_stats?.has_reasoning ? <Tag tone="info">reasoning</Tag> : null}
-                  </span>
-                ),
-              },
-              { id: 'task', label: 'Task', width: 120, cell: (r) => r.task ?? '—' },
-              { id: 'dataset', label: 'Dataset', width: 120, cell: (r) => r.dataset ?? '—' },
-              {
-                id: 'actions',
-                label: 'Restore',
-                hideLabel: true,
-                width: 96,
-                align: 'end',
-                cell: (r) =>
-                  r.project_archived ? (
-                    <Tooltip content="Unarchive the project to restore this run.">
-                      <Button
-                        variant="neutral"
-                        size="sm"
-                        aria-disabled="true"
-                        onPress={() =>
-                          toast.show('Unarchive the project to restore this run.', { tone: 'info' })
-                        }
-                      >
-                        Restore
-                      </Button>
-                    </Tooltip>
-                  ) : (
-                    <Button
-                      variant="accent"
-                      size="sm"
-                      onPress={() => void doRestore([r.id])}
-                      isDisabled={restore.isPending}
-                      data-testid={`restore-${r.id}`}
-                    >
-                      Restore
-                    </Button>
-                  ),
-              },
+            refreshing={list.isFetching && list.isPlaceholderData}
+            columns={columns}
+            density="regular"
+            bulkActions={
+              <Button
+                variant="accent"
+                isDisabled={restorableSelected.length > RESTORE_MAX}
+                loading={restore.isPending}
+                onPress={() => void doRestore(restorableSelected)}
+                data-testid="restore-selected"
+              >
+                Restore {restorableSelected.length} selected
+              </Button>
+            }
+            rowActions={(r) => [
+              r.project_archived
+                ? {
+                    id: 'restore',
+                    label: 'Unarchive the project to restore this run.',
+                    icon: 'retry',
+                    primary: true,
+                    disabled: true,
+                    onPress: () => undefined,
+                  }
+                : {
+                    id: 'restore',
+                    label: `Restore ${r.run_name}`,
+                    icon: 'retry',
+                    primary: true,
+                    disabled: restore.isPending,
+                    onPress: () => void doRestore([r.id]),
+                  },
             ]}
-          />
-          <Pagination
-            total={total}
-            page={page}
-            pageSize={TRASH_PAGE}
-            noun="deleted runs"
-            onPageChange={(p) => {
-              setQuery({ page: p <= 1 ? null : String(p) });
-              setSelected(new Set());
-            }}
-          />
+            rowState={(r) => (purgeInfo(r).soon ? 'warn' : undefined)}
+          >
+            <DataTable.Footer
+              summary={`${total} deleted run${total === 1 ? '' : 's'}`}
+              pagination={{
+                total,
+                page,
+                pageSize: TRASH_PAGE,
+                noun: 'deleted runs',
+                onPageChange: (p) => {
+                  setQuery({ page: p <= 1 ? null : String(p) });
+                  setSelected(new Set());
+                },
+              }}
+            />
+          </DataTable>
         </>
       ) : null}
     </div>

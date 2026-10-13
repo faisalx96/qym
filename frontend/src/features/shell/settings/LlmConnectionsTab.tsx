@@ -21,6 +21,7 @@ import {
   TextField,
   useToast,
   type Column,
+  type RowAction,
 } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
@@ -66,9 +67,12 @@ export function LlmConnectionsTab() {
   const columns: Column<LlmConnection>[] = [
     {
       id: 'name',
-      label: 'Name',
+      header: 'Name',
       flex: true,
       minWidth: 160,
+      pin: 'start',
+      hideable: false,
+      priority: 1,
       cell: (c) => (
         <span className={styles.inlineActions}>
           <span>{c.name}</span>
@@ -77,32 +81,45 @@ export function LlmConnectionsTab() {
         </span>
       ),
     },
-    { id: 'model', label: 'Model', width: 160, mono: true, cell: (c) => c.llm_model },
-    { id: 'endpoint', label: 'Endpoint', width: 240, mono: true, cell: (c) => c.llm_base_url },
+    { id: 'model', header: 'Model', type: 'id', width: 160, priority: 1, cell: (c) => c.llm_model },
+    { id: 'endpoint', header: 'Endpoint', type: 'id', width: 240, priority: 2, cell: (c) => c.llm_base_url },
     {
       id: 'key',
-      label: 'Key',
+      header: 'Key',
+      type: 'id',
       width: 110,
-      mono: true,
+      priority: 3,
       cell: (c) => (c.llm_api_key_set ? c.llm_api_key_hint || '••••' : '—'),
     },
+  ];
+
+  const rowActions = (c: LlmConnection): RowAction<LlmConnection>[] => [
     {
-      id: 'actions',
-      label: 'Actions',
-      hideLabel: true,
-      width: canEdit ? 300 : 90,
-      resizable: false,
-      cell: (c) => (
-        <span className={styles.inlineActions}>
-          <Button variant="neutral" loading={testing === c.id} onPress={() => test(c)}>
-            Test
-          </Button>
-          {canEdit ? (
-            <>
-              {!c.is_default ? (
-                <Button
-                  variant="neutral"
-                  onPress={() =>
+      id: 'test',
+      label: testing === c.id ? `Testing ${c.name}` : `Test ${c.name}`,
+      icon: 'play',
+      primary: true,
+      disabled: testing === c.id,
+      onPress: test,
+    },
+    ...(canEdit
+      ? [
+          {
+            id: 'edit',
+            label: `Edit ${c.name}`,
+            icon: 'edit',
+            primary: true,
+            onPress: () => {
+              setEditing(c);
+              setShowForm(true);
+            },
+          },
+          ...(!c.is_default
+            ? [
+                {
+                  id: 'set-default',
+                  label: `Set ${c.name} as default`,
+                  onPress: () =>
                     action
                       .mutateAsync({ id: c.id, action: 'set-default' })
                       .then(() => toast.show('Default connection updated', { tone: 'success' }))
@@ -113,29 +130,13 @@ export function LlmConnectionsTab() {
                             : 'Could not set the default',
                           { tone: 'error' },
                         ),
-                      )
-                  }
-                >
-                  Set default
-                </Button>
-              ) : null}
-              <Button
-                variant="neutral"
-                onPress={() => {
-                  setEditing(c);
-                  setShowForm(true);
-                }}
-              >
-                Edit
-              </Button>
-              <Button variant="danger" onPress={() => setDeleting(c)}>
-                Delete
-              </Button>
-            </>
-          ) : null}
-        </span>
-      ),
-    },
+                      ),
+                },
+              ]
+            : []),
+          { id: 'delete', label: `Delete ${c.name}`, danger: true, onPress: () => setDeleting(c) },
+        ]
+      : []),
   ];
 
   return (
@@ -152,13 +153,15 @@ export function LlmConnectionsTab() {
           <Skeleton kind="table" rows={2} />
         ) : null
       ) : (
-        <DataTable
+        <DataTable<LlmConnection>
+          density="regular"
+          rowActions={rowActions}
           aria-label="LLM connections"
           columns={columns}
           rows={list.data}
           rowKey={(c) => c.id}
           storageKey="settings-llm"
-          emptyState="No LLM connections yet. Add one to run auto-analysis and experiments."
+          empty="No LLM connections yet. Add one to run auto-analysis and experiments."
         />
       )}
       {canEdit && !showForm ? (

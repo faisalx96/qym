@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '../AuthContext';
 import { useDocumentTitle } from '../hooks';
@@ -26,9 +26,12 @@ import styles from './ProfilePage.module.css';
 const COLUMNS: Column<Project>[] = [
   {
     id: 'name',
-    label: 'Project',
+    header: 'Project',
     flex: true,
     minWidth: 160,
+    pin: 'start',
+    hideable: false,
+    priority: 1,
     cell: (p) => (
       <span className={styles.projectCell}>
         <Identicon seed={p.slug} cell={5} gap={2} chip />
@@ -36,26 +39,20 @@ const COLUMNS: Column<Project>[] = [
       </span>
     ),
   },
-  { id: 'slug', label: 'Slug', width: 160, mono: true, cell: (p) => p.slug },
-  { id: 'role', label: 'Role', width: 110, cell: (p) => <Tag kind="role">{p.role || 'member'}</Tag> },
-  { id: 'runs', label: 'Runs', width: 80, align: 'end', mono: true, cell: (p) => p.run_count },
+  { id: 'slug', header: 'Slug', type: 'id', width: 160, priority: 2, cell: (p) => p.slug },
   {
-    id: 'actions',
-    label: 'Actions',
-    hideLabel: true,
-    width: 140,
-    resizable: false,
-    cell: (p) => (
-      <span className={styles.actions}>
-        <Link to={projectPath(p.slug)}>Open</Link>
-        <Link to={projectPath(p.slug, 'settings')}>Settings</Link>
-      </span>
-    ),
+    id: 'role',
+    header: 'Role',
+    width: 110,
+    priority: 1,
+    cell: (p) => <Tag kind="role">{p.role || 'member'}</Tag>,
   },
+  { id: 'runs', header: 'Runs', type: 'number', width: 80, priority: 2, cell: (p) => p.run_count },
 ];
 
 export function ProfilePage() {
   const { me, isAdmin, refetch } = useAuth();
+  const navigate = useNavigate();
   useDocumentTitle('Profile');
   return (
     <div className={constrained} data-profile-page>
@@ -91,13 +88,31 @@ export function ProfilePage() {
             title="Projects"
             description={`${me.projects.length} project${me.projects.length === 1 ? '' : 's'}`}
           />
-          <DataTable
+          <DataTable<Project>
+            density="regular"
+            onRowOpen={(p) => navigate(projectPath(p.slug))}
+            rowActions={(p) => [
+              {
+                id: 'open',
+                label: `Open ${p.name}`,
+                icon: 'external',
+                primary: true,
+                onPress: () => navigate(projectPath(p.slug)),
+              },
+              {
+                id: 'settings',
+                label: `Settings for ${p.name}`,
+                icon: 'settings',
+                primary: true,
+                onPress: () => navigate(projectPath(p.slug, 'settings')),
+              },
+            ]}
             aria-label="Your projects"
             columns={COLUMNS}
             rows={me.projects}
             rowKey={(p) => p.id}
             storageKey="profile-projects"
-            emptyState="You are not a member of any project yet."
+            empty="You are not a member of any project yet."
           />
         </section>
       </Stack>
