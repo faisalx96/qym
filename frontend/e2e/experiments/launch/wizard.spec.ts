@@ -207,6 +207,14 @@ test.describe('motion', () => {
 });
 
 test.describe('polish', () => {
+  test('the Models step keeps its "no changes" tag beside the heading', async ({ page }) => {
+    await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
+    const h = await page.getByRole('heading', { name: 'Models', level: 2 }).boundingBox();
+    const tag = await page.locator('[data-step] >> text=no changes').first().boundingBox();
+    expect(Math.abs(tag!.y + tag!.height / 2 - (h!.y + h!.height / 2))).toBeLessThan(12);
+    expect(tag!.x).toBeGreaterThan(h!.x + h!.width - 1);
+  });
+
   test('a deep link to a settings step shows a skeleton, never a heading alone', async ({ page }) => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
     const panel = page.locator('[data-step]');
