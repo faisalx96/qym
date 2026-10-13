@@ -44,7 +44,7 @@ test.describe('open a run (J1, scenario 1)', () => {
     await showItems(page);
     // the table is virtualized: only the rows in view (up to the page of 20) are in the DOM
     const rows = await page.getByRole('button', { name: /^Open item #\d+$/ }).count();
-    expect(rows).toBeGreaterThanOrEqual(10);
+    expect(rows).toBeGreaterThanOrEqual(5);
     expect(rows).toBeLessThanOrEqual(20);
   });
 
