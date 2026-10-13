@@ -115,6 +115,8 @@ test('the filtered list explains where a reason comes from, and the filter can b
   page,
 }) => {
   await openRun(page, s.slug, runId, 'show=failed&metric=accuracy');
+  // settle the lazy sections around the table first: a scroll closes a pinned tooltip
+  await showItems(page);
   const banner = page.getByTestId('filter-banner');
   await expect(banner).toBeVisible();
   await expect(banner).toContainText(/Filtered to 6 items that fail accuracy/);

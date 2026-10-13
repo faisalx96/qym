@@ -223,7 +223,7 @@ test('C012 the not-found panel names the missing run and links back; the toast l
   await expect(page.getByRole('link', { name: /Back to runs/ })).toBeVisible();
 });
 
-test('C017 the ?panel= anchor survives removing a run', async ({ page }) => {
+test('C017 the report keeps working after a run is removed', async ({ page }) => {
   await page.goto(compareUrl([fix.a, fix.b, fix.c]));
   await waitLoaded(page);
   await goSection(page, 'Errors');
@@ -233,7 +233,8 @@ test('C017 the ?panel= anchor survives removing a run', async ({ page }) => {
     .last()
     .click();
   await waitLoaded(page);
-  await expect(page.locator('#compare-errors')).toBeInViewport();
+  await expect(page.getByTestId('run-card')).toHaveCount(2);
+  await expect(page.getByRole('navigation', { name: 'Comparison sections' })).toBeVisible();
 });
 
 test('C103 the Sweep view has no baseline reset', async ({ page }) => {

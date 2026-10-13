@@ -91,7 +91,14 @@ test.describe('sticky section nav and filter bar', () => {
     const filters = page.getByRole('search', { name: 'Filter items' });
     await expect(nav.getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'location');
     await nav.getByRole('link', { name: /^Items/ }).click();
-    await page.evaluate(() => document.getElementById('shell-content')?.scrollBy(0, 200));
+    // the jump lands the Items head under the nav (re-aligning while lazy sections settle) ...
+    const navBottom = (await nav.boundingBox())!.y + (await nav.boundingBox())!.height;
+    await expect
+      .poll(async () => Math.abs((await page.locator('#run-items').boundingBox())!.y - navBottom))
+      .toBeLessThan(80);
+    // ... then a real wheel scroll (which also ends the re-alignment) sticks the filter bar below the nav
+    await page.mouse.move(600, 500);
+    await page.mouse.wheel(0, 300);
     await expect.poll(() => scrollTop(page)).toBeGreaterThan(300);
     const scroller = await page.locator('#shell-content').boundingBox();
     const navBox = await nav.boundingBox();

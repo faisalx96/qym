@@ -41,7 +41,7 @@ test('a full deep link restores metric, filters, search, sort, page and the open
   await expect(page.locator('[aria-label="Change against the baseline"]')).toContainText('+17.5 pts');
   // sort in the Display popover
   await page.getByRole('button', { name: 'Display' }).click();
-  await expect(page.getByRole('button', { name: /Score, high to low/ })).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('button', { name: /Score, high to low/ })).toBeVisible();
   await page.keyboard.press('Escape');
   // the item: on its page, expanded, scrolled into view
   const row = page.locator('[data-testid="item-row"][data-item-id="cmp-040"]');
