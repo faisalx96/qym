@@ -237,6 +237,7 @@ export function QueuePage() {
                     {paramsSummary(j.params)}
                   </Text>
                 ) : null}
+                {paramsSummary(j.params) && (j.wait_reason || j.error) ? ' · ' : null}
                 {j.wait_reason || j.error ? (
                   <Text variant="sm" tone="warning">
                     {j.wait_reason || j.error}

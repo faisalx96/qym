@@ -76,7 +76,7 @@ test.describe('runs list: UX layout regressions', () => {
     const th = page.locator('[data-testid="runs-table"] thead th', { hasText: /^Task/i });
     const box = (await th.boundingBox())!;
     // 0.45: the right edge holds the column menu button, which appears on hover
-    await page.mouse.click(box.x + box.width * 0.45, box.y + box.height / 2);
+    await th.click({ position: { x: box.width * 0.45, y: box.height / 2 } });
     await expect.poll(() => urlParams(page).get('sort')).toBe('task-asc');
     await expect(dataRows(page).first()).toBeVisible();
   });

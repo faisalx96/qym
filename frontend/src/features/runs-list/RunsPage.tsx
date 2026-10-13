@@ -430,7 +430,6 @@ export function RunsPage() {
           page,
           pageSize,
           noun: 'runs',
-          showSummary: false,
           pageSizeOptions: PAGE_SIZE_OPTIONS,
           onPageSizeChange: setPageSize,
           onPageChange: setPage,

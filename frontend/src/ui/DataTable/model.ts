@@ -215,5 +215,5 @@ export function headerMinWidth<R>(col: Column<R>, sortable: boolean): number {
   const text = headerText(col);
   const label = typeof headerOf(col) === 'string' || typeof headerOf(col) === 'number' ? text.length : 0;
   if (!label) return DEFAULT_MIN_WIDTH;
-  return Math.ceil(label * 7.6) + 16 + (sortable ? 16 : 0);
+  return Math.ceil(label * 8.6) + 16 + (sortable ? 16 : 0);
 }

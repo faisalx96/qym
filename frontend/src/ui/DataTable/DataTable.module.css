@@ -348,6 +348,7 @@
 }
 
 .cell {
+  line-height: 1.35; /* one line box for sans and mono cells so values share a baseline */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -635,6 +636,12 @@
 }
 
 /* Toolbar and footer sit inside the card on --bg-surface with 1px separators. */
+.toolbar,
+.footer,
+.banner {
+  flex: none;
+}
+
 .toolbar,
 .footer {
   display: flex;

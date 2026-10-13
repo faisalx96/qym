@@ -130,7 +130,7 @@ export function Footer({ summary, pagination, trailing, testId, ariaLabel }: Foo
         {summary ? <span className={styles.count}>{summary}</span> : null}
         {selectedCount > 0 ? <span className={styles.count}>{selectedCount} selected</span> : null}
       </div>
-      {pagination ? <Pagination showSummary={!summary} {...pagination} /> : <span />}
+      {pagination ? <Pagination {...pagination} /> : <span />}
       <div className={styles.footerEnd}>{trailing}</div>
     </footer>
   );
