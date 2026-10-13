@@ -2,7 +2,7 @@
  * Experiment creation redesign: the home view and the six-step Customize wizard (rail, Back /
  * Continue / Skip, review placement, error routing across steps, narrow layout, motion, axe).
  */
-import { expect } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { axeSeriousViolations, describeViolations, resetFakes, test } from '../support';
 import {
   expectReady,
@@ -32,7 +32,7 @@ test.beforeEach(async ({ request }) => {
 
 const STEPS: StepId[] = ['where', 'start', 'models', 'settings', 'evaluation', 'review'];
 
-async function expectNoOverflow(page: import('@playwright/test').Page) {
+async function expectNoOverflow(page: Page) {
   const overflow = await page.evaluate(() => {
     const doc = document.documentElement;
     const scroller = document.querySelector('main') ?? doc;
