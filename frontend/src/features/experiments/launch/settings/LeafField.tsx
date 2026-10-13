@@ -403,19 +403,22 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
   return (
     <div className={styles.field} data-field={node.fieldName} data-changed={node.changed ? '' : undefined}>
       <div className={styles.fieldHead}>
-        {labelEl}
-        {node.entry.name && node.entry.name !== node.title ? (
-          <span className={styles.keyName} title="Setting key">
-            {node.entry.name}
-          </span>
-        ) : null}
-        {dot}
-        {tags}
-        <span className={styles.spacer} />
-        {editAsFields}
-        {reset}
-        {sweepBtn}
-        {removeBtn}
+        <span className={styles.headMain}>
+          {labelEl}
+          {node.entry.name && node.entry.name !== node.title ? (
+            <span className={styles.keyName} title="Setting key">
+              {node.entry.name}
+            </span>
+          ) : null}
+          {dot}
+          {tags}
+        </span>
+        <span className={styles.headActions}>
+          {editAsFields}
+          {reset}
+          {sweepBtn}
+          {removeBtn}
+        </span>
       </div>
       {control}
       {hint ? (

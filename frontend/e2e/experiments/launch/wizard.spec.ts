@@ -186,7 +186,7 @@ test.describe('layout', () => {
 test.describe('motion', () => {
   test('the step panel enters with the 180ms animation; reduced motion turns it off', async ({ page }) => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
-    const panel = () => page.locator('section[data-step]');
+    const panel = () => page.locator('[data-step]');
     await goStep(page, 'models');
     expect(await panel().evaluate((e) => getComputedStyle(e).animationName)).toContain('stepIn');
     expect(await panel().evaluate((e) => getComputedStyle(e).animationDuration)).toBe('0.18s');
