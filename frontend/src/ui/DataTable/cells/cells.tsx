@@ -24,6 +24,8 @@ export interface ScoreBarProps {
   error?: 'task' | 'metric' | null;
   /** Fixed bar colour (a CSS colour or token) for series that are not score bands, e.g. a model colour. */
   color?: string;
+  /** Track width in px (default 48). */
+  width?: number;
 }
 
 function normDirection(d: ScoreBarProps['direction']): MetricDirection {
@@ -33,7 +35,7 @@ function normDirection(d: ScoreBarProps['direction']): MetricDirection {
 }
 
 /** Track + fill + value. Errors show the warning glyph, never a bar. */
-export function ScoreBar({ value, type, direction, max, text, error, color }: ScoreBarProps) {
+export function ScoreBar({ value, type, direction, max, text, error, color, width }: ScoreBarProps) {
   if (error) {
     return (
       <span className={styles.scoreBar} data-error={error}>
@@ -63,7 +65,14 @@ export function ScoreBar({ value, type, direction, max, text, error, color }: Sc
     <span
       className={styles.scoreBar}
       data-band={band ?? undefined}
-      style={color ? ({ '--bar': color } as React.CSSProperties) : undefined}
+      style={
+        color || width
+          ? ({
+              ...(color ? { '--bar': color } : {}),
+              ...(width ? { '--track-w': `${width}px` } : {}),
+            } as React.CSSProperties)
+          : undefined
+      }
     >
       <span className={styles.track} aria-hidden="true">
         <span className={styles.fill} style={{ inlineSize: `${pct}%` }} />

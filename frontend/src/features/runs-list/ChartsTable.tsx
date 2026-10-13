@@ -197,6 +197,8 @@ export function ChartsTable(p: ChartsTableProps) {
       sort: firstSortable ? { key: 'model', first: 'asc' } : undefined,
       width: 280,
       minWidth: 200,
+      priority: 1,
+      cardTitle: true,
       hideable: false,
       resizable: true,
       mono: false,
@@ -245,6 +247,7 @@ export function ChartsTable(p: ChartsTableProps) {
       const aggBar = (g: ChartGroup) => (
         <Series modelKey={modelOf(g)} muted={g.kind !== 'model'}>
           <ScoreBar
+            width={72}
             value={g.agg.metricAverages[m]}
             max={p.scaleMax[m] ?? 1}
             text={metricText(m, g.agg.metricAverages[m])}
@@ -257,12 +260,14 @@ export function ChartsTable(p: ChartsTableProps) {
         group: 'Metrics',
         type: 'score',
         sort: { key: m, first: 'desc' },
-        width: 160,
+        width: 190,
         minWidth: 120,
+        priority: m === p.barMetrics[0] || m === p.barMetrics[1] ? 2 : 3,
         cell: (row) =>
           pick(row, aggBar, (r) => (
             <Series modelKey={r.model}>
               <ScoreBar
+                width={72}
                 value={r.metric_averages[m]}
                 max={p.scaleMax[m] ?? 1}
                 text={metricText(m, r.metric_averages[m])}
@@ -282,6 +287,7 @@ export function ChartsTable(p: ChartsTableProps) {
         sort: { key: m, first: 'desc' },
         width: 110,
         minWidth: 90,
+        priority: 3,
         cell: (row) => pick(row, agg, (r) => <NumberCell value={r.metric_averages[m]} decimals={2} />),
         summary: summary(agg),
       });
@@ -303,6 +309,7 @@ export function ChartsTable(p: ChartsTableProps) {
         sort: { key: id, first: 'desc' },
         width: 150,
         minWidth: 120,
+        priority: 2,
         cell: (row) =>
           pick(row, agg, (r) => (
             <Series modelKey={r.model}>
@@ -340,6 +347,7 @@ export function ChartsTable(p: ChartsTableProps) {
         sort: { key: t.key, first: 'desc' },
         width: 150,
         minWidth: 120,
+        priority: 3,
         cell: (row) =>
           pick(row, agg, (r) => {
             const v = r.trace_stats?.[t.key] as number | undefined;
@@ -375,6 +383,7 @@ export function ChartsTable(p: ChartsTableProps) {
           sort: { key: c.key, first: 'desc' },
           width: 120,
           minWidth: 100,
+          priority: 3,
           cell: (row) => (row.kind === 'group' ? stat(row.g) : null),
           summary: summary(stat),
         });
@@ -402,7 +411,6 @@ export function ChartsTable(p: ChartsTableProps) {
               );
             },
             collapsible: true,
-            defaultCollapsed: !p.defaultOpen,
           }
         : undefined,
     [grouped, nested, groupById, p.defaultOpen],
@@ -413,7 +421,6 @@ export function ChartsTable(p: ChartsTableProps) {
       <DataTable<Row>
         aria-label={`${p.task} · ${p.dataset} runs`}
         variant="embedded"
-        responsive="scroll"
         zebra={false}
         columnMenu={false}
         columns={columns}
@@ -422,6 +429,17 @@ export function ChartsTable(p: ChartsTableProps) {
         sort={{ key: p.sort.key, direction: p.sort.dir }}
         onSortChange={(s) => s && p.onSort(s.key, s.direction)}
         groupBy={groupBy}
+        groupCollapsed={
+          groupBy
+            ? new Set(groups.filter((g) => p.defaultOpen === toggled.has(g.id)).map((g) => g.id))
+            : undefined
+        }
+        onGroupCollapsedChange={(next) => {
+          for (const g of groups) {
+            const was = p.defaultOpen === toggled.has(g.id);
+            if (next.has(g.id) !== was) toggle(g.id);
+          }
+        }}
         empty={`No runs for ${p.dataset} match the current filters.`}
         rowProps={(row) =>
           row.kind === 'group' ? { 'data-chart-group': String(row.level) } : { 'data-chart-run': '' }

@@ -474,6 +474,10 @@ function DataTableInner<R>({
       ),
     [renderCols, measured, model.widths, model.pins],
   );
+  const pinSum = (side: 'start' | 'end') =>
+    renderCols
+      .filter((c) => effectivePin(c, model.pins) === side)
+      .reduce((n, c) => n + (measured[c.id] ?? 0), 0);
   const lastStart = [...renderCols].reverse().find((c) => effectivePin(c, model.pins) === 'start')?.id;
   const firstEnd = renderCols.find((c) => effectivePin(c, model.pins) === 'end')?.id;
 
@@ -1436,6 +1440,12 @@ function DataTableInner<R>({
           data-scroll-start={scrollX.start ? '' : undefined}
           data-scroll-end={scrollX.end ? '' : undefined}
           data-cues={scrollCues ? '' : undefined}
+          style={
+            {
+              '--pin-start': `${pinSum('start')}px`,
+              '--pin-end': `${pinSum('end')}px`,
+            } as React.CSSProperties
+          }
         >
           {progress ? <div className={styles.progress} role="progressbar" aria-label="Refreshing" /> : null}
           {cardMode ? (
@@ -1463,6 +1473,8 @@ function DataTableInner<R>({
               rowLabel={rowLabel}
               rowProps={rowProps}
               expandLabel={expandLabel}
+              groupBy={groupBy}
+              toggleGroupKey={toggleGroupKey}
             />
           ) : (
             <div
@@ -1535,6 +1547,8 @@ function CardList<R>({
   rowLabel,
   rowProps,
   expandLabel,
+  groupBy,
+  toggleGroupKey,
 }: {
   display: DisplayRow<R>[];
   columns: Column<R>[];
@@ -1559,6 +1573,8 @@ function CardList<R>({
   rowLabel?: (r: R) => string;
   rowProps?: (r: R) => Record<string, string | undefined>;
   expandLabel?: (r: R, open: boolean) => string;
+  groupBy?: GroupByConfig<R>;
+  toggleGroupKey?: (key: string) => void;
 }) {
   const [more, setMore] = useState<Set<Key>>(new Set());
   const sortCols = columns.filter((c) => sortKeyOf(c) && sortable(c));
@@ -1607,12 +1623,36 @@ function CardList<R>({
       ) : null}
       <ul className={styles.cards} aria-label={ariaLabel}>
         {display.map((d) => {
-          if (d.kind === 'group')
+          if (d.kind === 'group') {
+            const sums = columns.filter((c) => c.summary && c.priority && c.priority <= 2);
             return (
               <li key={d.id} className={styles.cardGroup}>
-                {d.groupKey}
+                <span className={styles.cardGroupHead}>
+                  {groupBy?.collapsible ? (
+                    <AriaButton
+                      className={styles.groupToggle}
+                      aria-expanded={!d.collapsed}
+                      aria-label={`${d.collapsed ? 'Expand' : 'Collapse'} group ${d.groupKey}`}
+                      onPress={() => toggleGroupKey?.(d.groupKey)}
+                    >
+                      <Icon name={d.collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
+                    </AriaButton>
+                  ) : null}
+                  {groupBy ? groupBy.label(d.groupKey, d.rows) : d.groupKey}
+                </span>
+                {sums.length ? (
+                  <span className={styles.cardGroupSums}>
+                    {sums.map((c) => (
+                      <span key={c.id}>
+                        <span className={styles.cardGroupSumLabel}>{headerText(c)}</span>{' '}
+                        {typeof c.summary === 'function' ? c.summary(d.rows) : c.summary}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
               </li>
             );
+          }
           if (d.kind === 'detail')
             return (
               <li key={d.id} className={styles.cardDetail}>

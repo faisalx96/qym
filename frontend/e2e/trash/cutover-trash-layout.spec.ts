@@ -74,3 +74,20 @@ test('a deleted reasoning-model run carries the reasoning badge and Task/Dataset
   });
   expect(fits).toBe(true);
 });
+
+test('the table fits at 1440 and shows scroll cues (rail, end fade) where it cannot, at 1024', async ({
+  page,
+  request,
+}) => {
+  const prefix = `cue_${Date.now().toString(36)}`;
+  await seedTrash(request, prefix, 3);
+  const scroller = page.locator('[data-dt-scroller]');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await gotoApp(page, `/trash?q=${prefix}`);
+  await expect(page.getByRole('grid', { name: 'Deleted runs' })).toBeVisible();
+  const fit = await scroller.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(fit, 'no sideways scroll at 1440').toBeLessThanOrEqual(1);
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(page.getByTestId('table-scroll-rail')).toBeVisible();
+  await expect(page.locator('[data-scroll-end]')).toHaveCount(1);
+});
