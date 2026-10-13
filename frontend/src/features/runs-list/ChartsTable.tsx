@@ -413,7 +413,7 @@ export function ChartsTable(p: ChartsTableProps) {
             collapsible: true,
           }
         : undefined,
-    [grouped, nested, groupById, p.defaultOpen],
+    [grouped, nested, groupById],
   );
 
   return (
