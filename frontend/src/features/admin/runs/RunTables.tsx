@@ -2,7 +2,15 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { AdminRunSummary } from '@/api/admin';
 import { runPath } from '@/app/routes';
-import { Badge, Button, DataTable, RunStatusBadge, type Column, type RunStatus } from '@/ui';
+import {
+  Badge,
+  DataTable,
+  RunStatusBadge,
+  TwoLine,
+  type Column,
+  type PaginationProps,
+  type RunStatus,
+} from '@/ui';
 import { ownerLabel, progressLabel, projectLabel, relativeTime, runName } from '../format';
 import styles from './runs.module.css';
 
@@ -12,12 +20,14 @@ function runHref(run: AdminRunSummary): string {
 
 function RunCell({ run }: { run: AdminRunSummary }) {
   return (
-    <span className={styles.runCell}>
-      <Link to={runHref(run)} className={styles.runLink}>
-        {runName(run)}
-      </Link>
-      {run.task_name ? <span className={styles.meta}>{run.task_name}</span> : null}
-    </span>
+    <TwoLine
+      primary={
+        <Link to={runHref(run)} className={styles.runLink}>
+          {runName(run)}
+        </Link>
+      }
+      secondary={run.task_name || undefined}
+    />
   );
 }
 
@@ -29,33 +39,10 @@ export interface RunTableProps {
   emptyState: string;
   storageKey: string;
   'aria-label': string;
+  footerSummary?: string;
+  pagination?: PaginationProps;
   /** Live table: pulsing status + progress; recent: status badge + items. */
   variant: 'live' | 'recent';
-}
-
-function ForceStopCell({
-  run,
-  stopping,
-  onForceStop,
-}: {
-  run: AdminRunSummary;
-  stopping: boolean;
-  onForceStop?: (r: AdminRunSummary) => void;
-}) {
-  if (!run.can_force_stop || !onForceStop || /^(STOPPED|COMPLETED|FAILED)$/i.test(run.status)) return null;
-  return (
-    <Button
-      variant="ghost"
-      onPress={() => onForceStop(run)}
-      isDisabled={stopping}
-      loading={stopping}
-      aria-label={`Force stop ${runName(run)}`}
-      className={styles.stopButton}
-      data-force-stop={run.run_id}
-    >
-      {stopping ? 'Stopping…' : 'Force stop'}
-    </Button>
-  );
 }
 
 export function RunTable({
@@ -65,22 +52,36 @@ export function RunTable({
   emptyState,
   storageKey,
   variant,
+  footerSummary,
+  pagination,
   'aria-label': label,
 }: RunTableProps) {
   const columns = useMemo<Column<AdminRunSummary>[]>(
     () => [
       {
         id: 'project',
-        label: 'Project',
+        header: 'Project',
         width: 170,
+        priority: 2,
         cell: (r) => <span className={styles.project}>{projectLabel(r)}</span>,
       },
-      { id: 'run', label: 'Run', flex: true, minWidth: 160, cell: (r) => <RunCell run={r} /> },
-      { id: 'owner', label: 'Owner', width: 140, cell: (r) => ownerLabel(r) },
+      {
+        id: 'run',
+        header: 'Run',
+        flex: true,
+        minWidth: 160,
+        pin: 'start',
+        hideable: false,
+        priority: 1,
+        cell: (r) => <RunCell run={r} />,
+      },
+      { id: 'owner', header: 'Owner', width: 140, priority: 3, cell: (r) => ownerLabel(r) },
       {
         id: 'status',
-        label: 'Status',
+        header: 'Status',
+        type: 'status',
         width: 130,
+        priority: 1,
         cell: (r) =>
           variant === 'live' ? (
             <Badge tone="info" dot>
@@ -92,16 +93,18 @@ export function RunTable({
       },
       {
         id: 'progress',
-        label: variant === 'live' ? 'Progress' : 'Items',
+        header: variant === 'live' ? 'Progress' : 'Items',
+        type: 'number',
         width: 90,
-        mono: true,
-        align: 'end',
+        priority: 2,
         cell: (r) => progressLabel(r, variant),
       },
       {
         id: 'updated',
-        label: variant === 'live' ? 'Updated' : 'Created',
+        header: variant === 'live' ? 'Updated' : 'Created',
+        type: 'date',
         width: 100,
+        priority: 2,
         cell: (r) => (
           <span className={styles.meta}>
             {relativeTime(
@@ -110,28 +113,36 @@ export function RunTable({
           </span>
         ),
       },
-      {
-        id: 'actions',
-        label: 'Actions',
-        hideLabel: true,
-        width: 110,
-        resizable: false,
-        align: 'end',
-        cell: (r) => (
-          <ForceStopCell run={r} stopping={Boolean(stoppingIds?.has(r.run_id))} onForceStop={onForceStop} />
-        ),
-      },
     ],
-    [variant, stoppingIds, onForceStop],
+    [variant],
   );
   return (
-    <DataTable
+    <DataTable<AdminRunSummary>
       aria-label={label}
       columns={columns}
       rows={runs}
       rowKey={(r) => r.run_id}
       storageKey={storageKey}
-      emptyState={emptyState}
-    />
+      density="comfortable"
+      empty={emptyState}
+      rowActions={(r) =>
+        !r.can_force_stop || !onForceStop || /^(STOPPED|COMPLETED|FAILED)$/i.test(r.status)
+          ? []
+          : [
+              {
+                id: 'force-stop',
+                label: stoppingIds?.has(r.run_id) ? `Stopping ${runName(r)}` : `Force stop ${runName(r)}`,
+                icon: 'stop',
+                primary: true,
+                danger: true,
+                disabled: Boolean(stoppingIds?.has(r.run_id)),
+                onPress: onForceStop,
+              },
+            ]
+      }
+      rowState={(r) => (variant === 'live' ? 'live' : /^FAILED$/i.test(r.status) ? 'error' : undefined)}
+    >
+      <DataTable.Footer summary={footerSummary} pagination={pagination} />
+    </DataTable>
   );
 }

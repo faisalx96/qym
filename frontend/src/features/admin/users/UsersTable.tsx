@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Focusable } from 'react-aria-components';
 import { useUpdateUser, type AdminUser } from '@/api/admin';
 import { ApiError } from '@/lib/http';
-import { Badge, Button, ConfirmDialog, DataTable, Tag, Tooltip, useToast, type Column } from '@/ui';
+import { Badge, ConfirmDialog, DataTable, SearchField, Tag, Text, useToast, type Column } from '@/ui';
 import styles from './users.module.css';
 
 export interface UsersTableProps {
@@ -56,13 +55,26 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
     }
   }
 
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const shown = useMemo(
+    () =>
+      users.filter(
+        (u) => !q || u.email.toLowerCase().includes(q) || u.display_name.toLowerCase().includes(q),
+      ),
+    [users, q],
+  );
   const columns = useMemo<Column<AdminUser>[]>(
     () => [
       {
         id: 'user',
-        label: 'User',
+        header: 'User',
         flex: true,
         minWidth: 180,
+        pin: 'start',
+        hideable: false,
+        priority: 1,
+        sort: { key: 'user', compare: (a, b) => label(a).localeCompare(label(b)) },
         cell: (u) => (
           <span data-user-row={u.id} data-highlight={highlightId === u.id || undefined}>
             {label(u)}
@@ -74,11 +86,20 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
           </span>
         ),
       },
-      { id: 'email', label: 'Email', width: 240, mono: true, cell: (u) => u.email },
+      {
+        id: 'email',
+        header: 'Email',
+        type: 'id',
+        width: 240,
+        priority: 2,
+        sort: { key: 'email', compare: (a, b) => a.email.localeCompare(b.email) },
+        cell: (u) => u.email,
+      },
       {
         id: 'role',
-        label: 'Role',
+        header: 'Role',
         width: 110,
+        priority: 2,
         cell: (u) => (
           <Tag kind="role" tone={u.role === 'ADMIN' ? 'success' : undefined}>
             {u.role === 'ADMIN' ? 'admin' : 'member'}
@@ -87,89 +108,83 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
       },
       {
         id: 'status',
-        label: 'Status',
+        header: 'Status',
+        type: 'status',
         width: 110,
+        priority: 1,
         cell: (u) =>
           u.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="neutral">Disabled</Badge>,
       },
-      {
-        id: 'actions',
-        label: 'Actions',
-        hideLabel: true,
-        width: 170,
-        resizable: false,
-        align: 'end',
-        cell: (u) => {
-          const self = u.id === meId;
-          const busy = pendingId === u.id;
-          return (
-            <span className={styles.rowActions}>
-              <Button
-                variant="neutral"
-                onPress={() => onEdit(u)}
-                aria-label={`Edit ${label(u)}`}
-                data-user-edit={u.id}
-              >
-                Edit
-              </Button>
-              {self ? (
-                <Tooltip content="You cannot disable your own account">
-                  {/* A plain focusable stand-in for the disabled button: a disabled button cannot take focus or hover */}
-                  <Focusable>
-                    <span
-                      role="button"
-                      aria-disabled="true"
-                      aria-label="You cannot disable your own account"
-                      className={styles.disabledTrigger}
-                      data-user-self-disable
-                      data-user-self-disable-wrap
-                    >
-                      Disable
-                    </span>
-                  </Focusable>
-                </Tooltip>
-              ) : u.is_active ? (
-                <Button
-                  variant="ghost"
-                  onPress={() => setDisabling(u)}
-                  isDisabled={busy}
-                  loading={busy}
-                  aria-label={`Disable ${label(u)}`}
-                  data-user-disable={u.id}
-                >
-                  Disable
-                </Button>
-              ) : (
-                <Button
-                  variant="neutral"
-                  onPress={() => void setActive(u, true)}
-                  isDisabled={busy}
-                  loading={busy}
-                  aria-label={`Enable ${label(u)}`}
-                  data-user-enable={u.id}
-                >
-                  Enable
-                </Button>
-              )}
-            </span>
-          );
-        },
-      },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [meId, onEdit, pendingId, highlightId],
+    [meId, highlightId],
   );
 
   return (
     <>
-      <DataTable
+      <DataTable<AdminUser>
         aria-label="Users"
         columns={columns}
-        rows={users}
+        rows={shown}
         rowKey={(u) => u.id}
         storageKey="admin-users"
-        emptyState="No users yet."
-      />
+        density="regular"
+        empty="No users yet."
+        isFiltered={q !== ''}
+        filteredEmpty={<Text variant="sm">No users match “{query.trim()}”.</Text>}
+        rowActions={(u) => {
+          const self = u.id === meId;
+          const busy = pendingId === u.id;
+          return [
+            { id: 'edit', label: `Edit ${label(u)}`, icon: 'edit', primary: true, onPress: onEdit },
+            self
+              ? {
+                  id: 'disable',
+                  label: 'You cannot disable your own account',
+                  icon: 'stop',
+                  primary: true,
+                  danger: true,
+                  disabled: true,
+                  onPress: () => undefined,
+                }
+              : u.is_active
+                ? {
+                    id: 'disable',
+                    label: `Disable ${label(u)}`,
+                    icon: 'stop',
+                    primary: true,
+                    danger: true,
+                    disabled: busy,
+                    onPress: setDisabling,
+                  }
+                : {
+                    id: 'enable',
+                    label: `Enable ${label(u)}`,
+                    icon: 'play',
+                    primary: true,
+                    disabled: busy,
+                    onPress: (user: AdminUser) => void setActive(user, true),
+                  },
+          ];
+        }}
+      >
+        <DataTable.Toolbar
+          columnsMenu={false}
+          densityMenu={false}
+          search={
+            <SearchField
+              label="Filter users"
+              placeholder="Filter by name or email"
+              value={query}
+              onChange={setQuery}
+              onClear={() => setQuery('')}
+              width={320}
+            />
+          }
+        />
+        <DataTable.Footer
+          summary={q ? `${shown.length} of ${users.length} users` : `${users.length} users`}
+        />
+      </DataTable>
       <ConfirmDialog
         open={disabling !== null}
         onOpenChange={(o) => !o && setDisabling(null)}

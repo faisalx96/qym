@@ -1,17 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useJobAction, ACTIVE_JOB_STATUSES, type JobStatus, type MaintenanceJob } from '@/api/admin';
 import { ApiError } from '@/lib/http';
-import {
-  Badge,
-  Button,
-  DataTable,
-  Drawer,
-  KeyValueGrid,
-  Text,
-  useToast,
-  type BadgeTone,
-  type Column,
-} from '@/ui';
+import { Badge, DataTable, Drawer, KeyValueGrid, Text, useToast, type BadgeTone, type Column } from '@/ui';
 import { formatDateTime } from '../format';
 import styles from './maintenance.module.css';
 
@@ -58,73 +48,95 @@ export function JobsTable({ jobs }: JobsTableProps) {
 
   const columns = useMemo<Column<MaintenanceJob>[]>(
     () => [
-      { id: 'kind', label: 'Kind', width: 220, mono: true, cell: (j) => j.kind },
-      { id: 'status', label: 'Status', width: 140, cell: (j) => <JobStatusBadge status={j.status} /> },
+      {
+        id: 'kind',
+        header: 'Kind',
+        type: 'id',
+        width: 220,
+        pin: 'start',
+        hideable: false,
+        priority: 1,
+        cell: (j) => j.kind,
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        type: 'status',
+        width: 140,
+        priority: 1,
+        cell: (j) => <JobStatusBadge status={j.status} />,
+      },
       {
         id: 'progress',
-        label: 'Progress',
+        header: 'Progress',
         flex: true,
         minWidth: 160,
+        priority: 2,
         cell: (j) =>
           j.error ? <span className={styles.errorText}>{j.error}</span> : (j.progress?.message ?? '—'),
       },
-      { id: 'created', label: 'Created', width: 160, cell: (j) => formatDateTime(j.created_at) },
-      { id: 'finished', label: 'Finished', width: 160, cell: (j) => formatDateTime(j.finished_at) },
       {
-        id: 'actions',
-        label: 'Actions',
-        hideLabel: true,
-        width: 190,
-        resizable: false,
-        align: 'end',
-        cell: (j) => (
-          <span className={styles.rowActions}>
-            <Button
-              variant="neutral"
-              onPress={() => setLogJob(j)}
-              aria-label={`Log for ${j.kind}`}
-              data-job-log={j.id}
-            >
-              Log
-            </Button>
-            {j.status === 'paused' ? (
-              <Button
-                variant="accent"
-                onPress={() => void run(j, 'start')}
-                isDisabled={act.isPending}
-                data-job-start={j.id}
-              >
-                Start
-              </Button>
-            ) : null}
-            {ACTIVE_JOB_STATUSES.includes(j.status) || j.status === 'paused' ? (
-              <Button
-                variant="ghost"
-                onPress={() => void run(j, 'cancel')}
-                isDisabled={act.isPending || j.status === 'cancel_requested'}
-                data-job-cancel={j.id}
-              >
-                Cancel
-              </Button>
-            ) : null}
-          </span>
-        ),
+        id: 'created',
+        header: 'Created',
+        type: 'date',
+        width: 160,
+        priority: 3,
+        cell: (j) => formatDateTime(j.created_at),
+      },
+      {
+        id: 'finished',
+        header: 'Finished',
+        type: 'date',
+        width: 160,
+        priority: 3,
+        cell: (j) => formatDateTime(j.finished_at),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [act.isPending],
+    [],
   );
 
   return (
     <>
-      <DataTable
+      <DataTable<MaintenanceJob>
         aria-label="Maintenance jobs"
         columns={columns}
         rows={jobs}
         rowKey={(j) => j.id}
         storageKey="admin-jobs"
-        emptyState="No jobs yet."
-      />
+        density="regular"
+        empty="No jobs yet."
+        refreshing={jobs.some((j) => ACTIVE_JOB_STATUSES.includes(j.status))}
+        rowState={(j) => (j.status === 'failed' ? 'error' : j.status === 'running' ? 'live' : undefined)}
+        rowActions={(j) => [
+          { id: 'log', label: `Log for ${j.kind}`, icon: 'eye', primary: true, onPress: setLogJob },
+          ...(j.status === 'paused'
+            ? [
+                {
+                  id: 'start',
+                  label: `Start ${j.kind}`,
+                  icon: 'play',
+                  primary: true,
+                  disabled: act.isPending,
+                  onPress: (job: MaintenanceJob) => void run(job, 'start'),
+                },
+              ]
+            : []),
+          ...(ACTIVE_JOB_STATUSES.includes(j.status) || j.status === 'paused'
+            ? [
+                {
+                  id: 'cancel',
+                  label: `Cancel ${j.kind}`,
+                  icon: 'close',
+                  danger: true,
+                  disabled: act.isPending || j.status === 'cancel_requested',
+                  onPress: (job: MaintenanceJob) => void run(job, 'cancel'),
+                },
+              ]
+            : []),
+        ]}
+      >
+        <DataTable.Footer summary={`${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'}`} />
+      </DataTable>
       <Drawer
         open={shown !== null}
         onOpenChange={(o) => !o && setLogJob(null)}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { RECENT_PAGE_SIZE, useLiveRuns, useRecentRuns, type AdminRunSummary } from '@/api/admin';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Badge, ErrorState, Pagination, SectionHeader, Skeleton, Stack, useToast } from '@/ui';
+import { Badge, ErrorState, SectionHeader, Skeleton, Stack, useToast } from '@/ui';
 import { ForceStopDialog } from './ForceStopDialog';
 import { RunTable } from './RunTables';
 
@@ -53,6 +53,7 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
             runs={live.data.runs}
             onForceStop={setTarget}
             emptyState="No live runs"
+            footerSummary={`${live.data.runs.length} live`}
           />
         )}
       </section>
@@ -82,13 +83,13 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
               runs={recent.data.runs}
               onForceStop={setTarget}
               emptyState="No recent eval runs"
-            />
-            <Pagination
-              total={recent.data.total_count}
-              page={page}
-              pageSize={RECENT_PAGE_SIZE}
-              noun="runs"
-              onPageChange={(p) => replaceUrlQuery({ page: p === 1 ? null : p })}
+              pagination={{
+                total: recent.data.total_count,
+                page,
+                pageSize: RECENT_PAGE_SIZE,
+                noun: 'runs',
+                onPageChange: (p) => replaceUrlQuery({ page: p === 1 ? null : p }),
+              }}
             />
           </>
         )}

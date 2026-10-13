@@ -22,58 +22,52 @@ type TableRow = NonNullable<DbStats['tables']>[number];
 type EventRow = NonNullable<DbStats['run_events_by_type']>[number];
 
 const TABLE_COLS: Column<TableRow>[] = [
-  { id: 'table', label: 'Table', flex: true, minWidth: 140, mono: true, cell: (r) => r.table },
+  { id: 'table', header: 'Table', flex: true, minWidth: 140, type: 'id', cell: (r) => r.table },
   {
     id: 'total',
-    label: 'Total',
+    header: 'Total',
     width: 80,
-    align: 'end',
-    mono: true,
+    type: 'number',
     cell: (r) => formatBytes(r.total_bytes),
   },
-  { id: 'heap', label: 'Heap', width: 80, align: 'end', mono: true, cell: (r) => formatBytes(r.heap_bytes) },
+  { id: 'heap', header: 'Heap', width: 80, type: 'number', cell: (r) => formatBytes(r.heap_bytes) },
   {
     id: 'toast',
-    label: 'TOAST',
+    header: 'TOAST',
     width: 80,
-    align: 'end',
-    mono: true,
+    type: 'number',
     cell: (r) => formatBytes(r.toast_bytes),
   },
   {
     id: 'index',
-    label: 'Indexes',
+    header: 'Indexes',
     width: 80,
-    align: 'end',
-    mono: true,
+    type: 'number',
     cell: (r) => formatBytes(r.index_bytes),
   },
   {
     id: 'live',
-    label: 'Live rows',
+    header: 'Live rows',
     width: 90,
-    align: 'end',
-    mono: true,
+    type: 'number',
     cell: (r) => formatCount(r.live_rows),
   },
   {
     id: 'dead',
-    label: 'Dead rows',
+    header: 'Dead rows',
     width: 90,
-    align: 'end',
-    mono: true,
+    type: 'number',
     cell: (r) => formatCount(r.dead_rows),
   },
 ];
 const EVENT_COLS: Column<EventRow>[] = [
-  { id: 'type', label: 'Event type', flex: true, minWidth: 120, mono: true, cell: (r) => r.type },
-  { id: 'rows', label: 'Rows', width: 90, align: 'end', mono: true, cell: (r) => formatCount(r.rows) },
+  { id: 'type', header: 'Event type', flex: true, minWidth: 120, type: 'id', cell: (r) => r.type },
+  { id: 'rows', header: 'Rows', width: 90, type: 'number', cell: (r) => formatCount(r.rows) },
   {
     id: 'payload',
-    label: 'Payload',
+    header: 'Payload',
     width: 90,
-    align: 'end',
-    mono: true,
+    type: 'number',
     cell: (r) => formatBytes(r.payload_bytes),
   },
 ];
@@ -117,20 +111,24 @@ export function MaintenanceTab() {
         ) : (
           <div className={styles.tables}>
             <DataTable
+              density="compact"
+              densityLocked
               aria-label="Largest tables"
               columns={TABLE_COLS}
               rows={stats.tables ?? []}
               rowKey={(r) => r.table}
               storageKey="admin-db-tables"
-              emptyState="No table statistics."
+              empty="No table statistics."
             />
             <DataTable
+              density="compact"
+              densityLocked
               aria-label="Run events by type"
               columns={EVENT_COLS}
               rows={stats.run_events_by_type ?? []}
               rowKey={(r) => r.type}
               storageKey="admin-db-events"
-              emptyState="No run events."
+              empty="No run events."
             />
           </div>
         )}

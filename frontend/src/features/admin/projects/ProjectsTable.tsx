@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { adminKeys } from '@/api/admin';
 import type { Project } from '@/api/types';
 import { projectPath } from '@/app/routes';
 import { ArchiveProjectDialog, UnarchiveProjectDialog } from '@/features/shell/dialogs';
-import { Badge, Button, DataTable, Identicon, type Column } from '@/ui';
+import { Badge, DataTable, Identicon, SearchField, Text, type Column } from '@/ui';
 import styles from './projects.module.css';
 
 export interface ProjectsTableProps {
@@ -17,15 +17,27 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
   const [archiving, setArchiving] = useState<Project | null>(null);
   const [unarchiving, setUnarchiving] = useState<Project | null>(null);
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const refresh = () => void qc.invalidateQueries({ queryKey: adminKeys.projects });
 
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const shown = useMemo(
+    () => projects.filter((p) => !q || p.name.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q)),
+    [projects, q],
+  );
   const columns = useMemo<Column<Project>[]>(
     () => [
       {
         id: 'name',
-        label: 'Project',
+        header: 'Project',
         flex: true,
         minWidth: 180,
+        sort: { key: 'name', compare: (a, b) => a.name.localeCompare(b.name) },
+        accessor: (p) => p.name,
+        pin: 'start',
+        hideable: false,
+        priority: 1,
         cell: (p) => (
           <span className={styles.nameCell}>
             <Identicon seed={p.slug} cell={5} gap={2} chip />
@@ -33,47 +45,35 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
           </span>
         ),
       },
-      { id: 'slug', label: 'Slug', width: 160, mono: true, cell: (p) => p.slug },
+      { id: 'slug', header: 'Slug', type: 'id', width: 160, priority: 2, cell: (p) => p.slug },
       {
         id: 'status',
-        label: 'Status',
+        header: 'Status',
+        type: 'status',
         width: 110,
+        priority: 1,
         cell: (p) =>
           p.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="warning">Archived</Badge>,
       },
-      { id: 'members', label: 'Members', width: 90, align: 'end', mono: true, cell: (p) => p.member_count },
-      { id: 'runs', label: 'Runs', width: 80, align: 'end', mono: true, cell: (p) => p.run_count },
       {
-        id: 'actions',
-        label: 'Actions',
-        hideLabel: true,
-        width: 230,
-        resizable: false,
-        align: 'end',
-        cell: (p) => (
-          <span className={styles.rowActions}>
-            <Link to={projectPath(p.slug, 'settings')}>Settings</Link>
-            {p.is_active ? (
-              <Button
-                variant="ghost"
-                onPress={() => setArchiving(p)}
-                aria-label={`Archive ${p.name}`}
-                data-project-archive={p.id}
-              >
-                Archive
-              </Button>
-            ) : (
-              <Button
-                variant="neutral"
-                onPress={() => setUnarchiving(p)}
-                aria-label={`Unarchive ${p.name}`}
-                data-project-unarchive={p.id}
-              >
-                Unarchive
-              </Button>
-            )}
-          </span>
-        ),
+        id: 'members',
+        header: 'Members',
+        type: 'number',
+        sort: 'members',
+        accessor: (p) => p.member_count,
+        width: 90,
+        priority: 2,
+        cell: (p) => p.member_count,
+      },
+      {
+        id: 'runs',
+        header: 'Runs',
+        type: 'number',
+        sort: 'runs',
+        accessor: (p) => p.run_count,
+        width: 80,
+        priority: 2,
+        cell: (p) => p.run_count,
       },
     ],
     [],
@@ -81,14 +81,60 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
 
   return (
     <>
-      <DataTable
+      <DataTable<Project>
         aria-label="Projects"
         columns={columns}
-        rows={projects}
+        rows={shown}
         rowKey={(p) => p.id}
         storageKey="admin-projects"
-        emptyState="No projects yet."
-      />
+        density="regular"
+        empty="No projects yet."
+        isFiltered={q !== ''}
+        filteredEmpty={<Text variant="sm">No projects match “{query.trim()}”.</Text>}
+        rowActions={(p) => [
+          {
+            id: 'settings',
+            label: `Settings for ${p.name}`,
+            icon: 'settings',
+            primary: true,
+            onPress: () => navigate(projectPath(p.slug, 'settings')),
+          },
+          p.is_active
+            ? {
+                id: 'archive',
+                label: `Archive ${p.name}`,
+                icon: 'archive',
+                primary: true,
+                danger: true,
+                onPress: () => setArchiving(p),
+              }
+            : {
+                id: 'unarchive',
+                label: `Unarchive ${p.name}`,
+                icon: 'retry',
+                primary: true,
+                onPress: () => setUnarchiving(p),
+              },
+        ]}
+      >
+        <DataTable.Toolbar
+          columnsMenu={false}
+          densityMenu={false}
+          search={
+            <SearchField
+              label="Filter projects"
+              placeholder="Filter by name or slug"
+              value={query}
+              onChange={setQuery}
+              onClear={() => setQuery('')}
+              width={320}
+            />
+          }
+        />
+        <DataTable.Footer
+          summary={q ? `${shown.length} of ${projects.length} projects` : `${projects.length} projects`}
+        />
+      </DataTable>
       {archiving ? (
         <ArchiveProjectDialog
           project={archiving}
