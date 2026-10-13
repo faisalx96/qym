@@ -31,3 +31,19 @@ None found other than the deferred editor wizard (T10, documented under "Deferre
 
 ## Not run
 Full 888-spec Playwright suite and the build (queued behind another agent's lock at report time). Areas outside experiments, shell and runs-list/cutover-navigation were not re-run.
+
+## Re-review (commits 79e2f19d, 7a1521d7, c9d95778)
+
+Verdict: MEETS THE STANDARD. Six of seven minors verified closed; one remains partly open (home bar at 390 px). Nothing new blocking.
+
+| Point | Result |
+|---|---|
+| 1 Skeleton on deep link | Closed. Deep link to `?step=models` shows a Skeleton panel (135 px) until content, no bare heading; content then replaces it (801 px). |
+| 2 Scroll jump | Closed. Trace from the bottom of a tall step: 491, 489, 479, 457 ... 95, one monotonic glide to the rail, no clamp to 0. Reduced motion: 491 then 95 instantly. |
+| 3 390 px bars | Closed. Wizard step nav 34 px (one row: Back / Skip / Continue), launch bar 46 px (was about 190 px combined, now 80). Fresh shots: rv/r-wiz-models-m.png. Small nit: a sliver of the next card shows between the nav and the bar. |
+| 4 Rail labels | Closed (numbers inline). |
+| 5 "no changes" tag | Closed. Badge sits on the H2 row, right of the title (rv/r-wiz-models-m.png). |
+| 6 Launch as is accent | Closed (accent when ready, Customize neutral; rv/r-home-d.png, r-home-m.png). "Other" label now separates From scratch from Saved presets. |
+| 7 Home 390 px | Partly open, accepted as minor: the sticky bar (102 px) still covers the lower part of the Start-from cards at the fold, but when scrolled to the end the last content clears the bar (rv/r-home-m-bottom.png), so nothing is unreachable. |
+
+Gate: `npm run check` 119 files, 1101 tests passed, design-language 34 passed. Playwright `e2e/experiments e2e/shell`: 218 passed, 8 skipped, 0 failed (7.8 min); this includes `experiments/a11y.spec` (no failure, no beforeAll timeout at 1 worker) and the fixed scroll e2e. Full 888-spec suite and `npm run build` not run by me.
