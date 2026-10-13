@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import styles from './Collapse.module.css';
 
 export interface CollapseProps {
@@ -26,26 +26,16 @@ function reducedMotion(): boolean {
 export function Collapse({ open, id, keepMounted = false, className, children }: CollapseProps) {
   const [present, setPresent] = useState(open);
   const [settled, setSettled] = useState(open);
-  const first = useRef(true);
+  // Adjusting state while rendering: content stays mounted from the moment it opens.
+  if (open && !present) setPresent(true);
+  if (open && !settled && reducedMotion()) setSettled(true);
+  if (!open && settled) setSettled(false);
+  if (!open && present && reducedMotion()) setPresent(false);
   useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return undefined;
-    }
-    const instant = reducedMotion();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    if (open) {
-      setPresent(true);
-      if (instant) setSettled(true);
-      else timer = setTimeout(() => setSettled(true), OPEN_MS + 30);
-    } else {
-      setSettled(false);
-      if (instant) setPresent(false);
-      else timer = setTimeout(() => setPresent(false), CLOSE_MS + 30);
-    }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
+    const timer = open
+      ? setTimeout(() => setSettled(true), OPEN_MS + 30)
+      : setTimeout(() => setPresent(false), CLOSE_MS + 30);
+    return () => clearTimeout(timer);
   }, [open]);
   const mounted = keepMounted || open || present;
   return (

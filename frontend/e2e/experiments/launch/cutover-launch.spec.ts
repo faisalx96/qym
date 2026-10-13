@@ -14,6 +14,7 @@ import {
   ensureOpen,
   nameBox,
   openLaunch,
+  rail,
   openSection,
   expectReady,
   seedLaunch,
@@ -69,11 +70,9 @@ test('a saved preset fills every field of the configuration sections and what is
 
   const env = await openSection(page, 'Environment configurations');
   // the preset's values are the starting point, not changes
-  await expect(
-    page
-      .getByRole('navigation', { name: 'Sections' })
-      .getByRole('button', { name: /^Environment configurations/ }),
-  ).not.toContainText('1');
+  await expect(rail(page).getByRole('button', { name: /\d\s*Environment configurations/ })).not.toContainText(
+    '1',
+  );
   const groupButtons = env.getByRole('heading', { level: 4 }).getByRole('button');
   for (let i = 0; i < (await groupButtons.count()); i++) await ensureOpen(groupButtons.nth(i));
   await expect(env.getByRole('textbox', { name: 'Timeout', exact: true })).toHaveValue('60');

@@ -21,6 +21,7 @@ import {
   launchButton,
   nameBox,
   openLaunch,
+  rail,
   openSection,
   pickRadio,
   scanForSecret,
@@ -138,9 +139,7 @@ test.describe('models', () => {
     await expect(global).toContainText('gpt-4o-mini');
     await expect(primary(page)).toContainText('follows global');
     expect(await scanForSecret(page, KEY)).toEqual([]);
-    await expect(
-      page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: /^Models/ }),
-    ).toContainText('1');
+    await expect(rail(page).getByRole('button', { name: /\d\s*Models/ })).toContainText('1');
   });
 
   test('add an LLM endpoint to this experiment, then remove it', async ({ page }) => {
