@@ -56,7 +56,10 @@ test.describe('force stop', () => {
 
     await gotoApp(page, '/admin/runs');
     const live = page.getByRole('grid', { name: 'Live runs' });
-    const stopBtn = page.locator(`[data-force-stop="${run.run_id}"]`);
+    const stopBtn = live
+      .getByRole('row')
+      .filter({ hasText: name })
+      .getByRole('button', { name: /^Force stop / });
     await expect(stopBtn).toBeVisible();
     await expect(live).toContainText(name);
 
@@ -74,7 +77,12 @@ test.describe('force stop', () => {
     await dialog.getByRole('button', { name: 'Force stop' }).click();
     await expect(dialog).toHaveCount(0);
 
-    await expect(page.locator(`[data-force-stop="${run.run_id}"]`)).toHaveCount(0);
+    await expect(
+      live
+        .getByRole('row')
+        .filter({ hasText: name })
+        .getByRole('button', { name: /^Force stop / }),
+    ).toHaveCount(0);
     await expect(live).not.toContainText(name);
     await expect(page.getByText(/was force stopped/).first()).toBeVisible();
     await expect(page.locator('[data-status-line]')).toContainText('force stopped');

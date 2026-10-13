@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import { useLocation, useNavigationType } from 'react-router-dom';
 
 const offsets = new Map<string, number>();
-const TABLE = '[data-testid="runs-table"]';
+const TABLE = '[data-testid="runs-table"] [data-dt-scroller]';
 
 export function useTableScrollRestoration(host: RefObject<HTMLElement | null>, ready: boolean): void {
   const location = useLocation();

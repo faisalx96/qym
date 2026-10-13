@@ -32,7 +32,7 @@ test('archive previews in-progress runs, then the project is Archived and gone f
 
   await gotoApp(page, '/admin/projects');
   const row = page.getByRole('grid', { name: 'Projects' }).getByRole('row').filter({ hasText: slug });
-  await row.locator(`[data-project-archive="${project.id}"]`).click();
+  await row.getByRole('button', { name: /^Archive / }).click();
   const dialog = page.getByRole('alertdialog', { name: /Archive “Archive Me”\?/ });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('1 run is still running');
@@ -41,7 +41,7 @@ test('archive previews in-progress runs, then the project is Archived and gone f
   await expect(dialog).toHaveCount(0);
   await expect(page).toHaveURL(/\/admin\/projects$/);
   await expect(row).toContainText('Archived');
-  await expect(row.locator(`[data-project-unarchive="${project.id}"]`)).toBeVisible();
+  await expect(row.getByRole('button', { name: /^Unarchive / })).toBeVisible();
 
   // The sidebar switcher no longer lists it.
   const other = await createProject(request, 'Switcher Host', uniqueSlug('host'));
@@ -65,7 +65,7 @@ test('unarchive previews active keys; "Revoke keys first" opens settings?tab=api
 
   await gotoApp(page, '/admin/projects');
   const row = page.getByRole('grid', { name: 'Projects' }).getByRole('row').filter({ hasText: slug });
-  await row.locator(`[data-project-unarchive="${project.id}"]`).click();
+  await row.getByRole('button', { name: /^Unarchive / }).click();
   const dialog = page.getByRole('alertdialog', { name: /Unarchive “Unarchive Me”\?/ });
   await expect(dialog).toBeVisible();
   const alt = dialog.getByRole('button', { name: 'Revoke keys first' });
@@ -82,7 +82,7 @@ test('unarchive confirm makes the project Active again', async ({ page, request 
   expect((await request.post(`/v1/admin/projects/${project.id}/archive`)).ok()).toBeTruthy();
   await gotoApp(page, '/admin/projects');
   const row = page.getByRole('grid', { name: 'Projects' }).getByRole('row').filter({ hasText: slug });
-  await row.locator(`[data-project-unarchive="${project.id}"]`).click();
+  await row.getByRole('button', { name: /^Unarchive / }).click();
   const dialog = page.getByRole('dialog', { name: /Unarchive/ });
   await expect(dialog.getByRole('button', { name: 'Revoke keys first' })).toHaveCount(0);
   await dialog.getByRole('button', { name: /^Unarchive( anyway)?$/ }).click();

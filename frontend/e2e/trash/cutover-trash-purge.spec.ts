@@ -86,7 +86,7 @@ test.describe('trash purge countdown', () => {
       ),
     ).toEqual([0, 1, 2, 3]);
     const purges = await dataRows(page).evaluateAll((rows) =>
-      rows.map((r) => r.querySelectorAll('[role=gridcell]')[2]?.textContent ?? ''),
+      rows.map((r) => r.querySelector('[data-col="purges"]')?.textContent ?? ''),
     );
     expect(purges.map((t) => t.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}.*$/, '').trim())).toEqual([
       'Due now',

@@ -234,7 +234,10 @@ test.describe('LLM connection form (E31, E29)', () => {
       route.fulfill({ status: 400, json: { detail: 'Cannot set default right now' } }),
     );
     await gotoApp(page, `/projects/${p.slug}/settings?tab=llm`);
-    await page.getByRole('button', { name: 'Set default' }).first().click();
+    // Set default lives in the row's overflow menu (only non-default rows offer it).
+    const second = page.getByRole('row').filter({ hasText: 'two' });
+    await second.getByRole('button', { name: 'Row actions' }).click();
+    await page.getByRole('menuitem', { name: /^Set two as default/ }).click();
     await expect(page.getByRole('alert').filter({ hasText: 'Cannot set default right now' })).toBeVisible();
   });
 });

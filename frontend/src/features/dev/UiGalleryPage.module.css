@@ -27,6 +27,10 @@
   min-width: 0;
 }
 
+.case[data-wide] {
+  grid-column: 1 / -1;
+}
+
 .caseBody {
   min-width: 0;
 }

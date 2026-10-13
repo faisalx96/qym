@@ -116,7 +116,7 @@ test.describe('runs list: load (J1)', () => {
     await page.route('**/api/dashboard/runs', (route) =>
       route.fulfill({ status: 500, json: { detail: 'down' } }),
     );
-    await page.getByRole('button', { name: /^Date/ }).click();
+    await page.getByRole('button', { name: /^Date/ }).first().click();
     const banner = page.getByRole('status').filter({ hasText: /Showing data from/ });
     await expect(banner).toBeVisible({ timeout: 15_000 });
     await expect(banner).toContainText('not applied');
@@ -136,12 +136,12 @@ test.describe('runs list: load (J1)', () => {
     await expect(banner).toBeVisible({ timeout: 15_000 });
     await expect(banner).not.toContainText('not applied'); // same view: only the refresh failed
     await expect(dataRows(page)).toHaveCount(before);
-    await expect(table(page).locator('table')).toHaveAttribute('data-dimmed', '');
+    await expect(table(page).getByRole('progressbar', { name: 'Refreshing' })).toBeVisible();
     await expect(page.getByTestId('status-bar')).toContainText('refresh failed');
     // Retry from the banner recovers
     await page.unroute('**/api/dashboard/runs');
     await banner.getByRole('button', { name: /Retry/ }).click();
     await expect(banner).toHaveCount(0);
-    await expect(table(page).locator('table')).not.toHaveAttribute('data-dimmed', '');
+    await expect(table(page).getByRole('progressbar', { name: 'Refreshing' })).toHaveCount(0);
   });
 });

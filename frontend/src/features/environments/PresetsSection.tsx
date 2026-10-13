@@ -11,7 +11,17 @@ import {
   type Preset,
 } from '@/api/evalEnvironments';
 import type { EvalEnvironment } from '@/api/evalCommon';
-import { Button, DataTable, ErrorState, JsonTree, Skeleton, Tag, type Column } from '@/ui';
+import {
+  Button,
+  DataTable,
+  ErrorState,
+  JsonTree,
+  RelativeTime,
+  Skeleton,
+  Tag,
+  type Column,
+  type RowAction,
+} from '@/ui';
 import { defaultPresetEditPath, launchPath } from '@/features/experiments/paths';
 import { absTime, relTime, shortHash } from './format';
 import styles from './EnvironmentPage.module.css';
@@ -241,52 +251,51 @@ export function PresetsSection({
   const savedColumns: Column<Preset>[] = [
     {
       id: 'name',
-      label: 'Name',
+      header: 'Name',
       flex: true,
       minWidth: 160,
+      pin: 'start',
+      hideable: false,
+      priority: 1,
       cell: (p) => (
         <span>
           {p.name} {p.current_version ? <Tag kind="version">v{p.current_version.version}</Tag> : null}
         </span>
       ),
     },
-    { id: 'author', label: 'Author', width: 140, cell: (p) => p.created_by?.name || 'Unknown' },
+    { id: 'author', header: 'Author', width: 140, priority: 2, cell: (p) => p.created_by?.name || 'Unknown' },
     {
       id: 'updated',
-      label: 'Updated',
+      header: 'Updated',
+      type: 'date',
       width: 110,
-      mono: true,
-      cell: (p) => <span title={absTime(p.updated_at)}>{relTime(p.updated_at) || '—'}</span>,
+      priority: 2,
+      cell: (p) => <RelativeTime iso={p.updated_at} />,
     },
-    {
-      id: 'actions',
-      label: 'Actions',
-      hideLabel: true,
-      width: 330,
-      resizable: false,
-      cell: (p) => (
-        <span className={styles.sectionActions}>
-          {env.is_active !== false && p.current_version ? (
-            <Button
-              variant="neutral"
-              aria-label={`Open ${p.name} in the launch form`}
-              onPress={() => navigate(launchPath(slug, { env: env.id, base: 'saved', preset: p.id }))}
-            >
-              Open in launch form
-            </Button>
-          ) : null}
-          {writable && p.current_version ? (
-            <Button
-              variant="neutral"
-              aria-label={`Promote ${p.name} to default preset; nothing is published until you publish`}
-              onPress={() => edit({ promote: 'saved', id: p.id })}
-            >
-              Promote to default preset
-            </Button>
-          ) : null}
-        </span>
-      ),
-    },
+  ];
+  const savedActions = (p: Preset): RowAction<Preset>[] => [
+    ...(env.is_active !== false && p.current_version
+      ? [
+          {
+            id: 'open',
+            label: `Open ${p.name} in the launch form`,
+            icon: 'external',
+            primary: true,
+            onPress: () => navigate(launchPath(slug, { env: env.id, base: 'saved', preset: p.id })),
+          },
+        ]
+      : []),
+    ...(writable && p.current_version
+      ? [
+          {
+            id: 'promote',
+            label: `Promote ${p.name} to default preset; nothing is published until you publish`,
+            icon: 'upload',
+            primary: true,
+            onPress: () => edit({ promote: 'saved', id: p.id }),
+          },
+        ]
+      : []),
   ];
 
   const officialBody: ReactNode = (
@@ -371,7 +380,9 @@ export function PresetsSection({
         description="Named starting points saved on this environment. Open one in the launch form to start from it."
       >
         {saved.length ? (
-          <DataTable
+          <DataTable<Preset>
+            density="regular"
+            rowActions={savedActions}
             aria-label="Saved presets"
             columns={savedColumns}
             rows={saved}

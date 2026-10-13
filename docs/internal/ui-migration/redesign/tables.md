@@ -430,3 +430,49 @@ Risks:
 8. Defaults (cont.): "select all matching" for server-paged tables; single-click row open; inline cell editing out of scope.
 9. Dependencies: compare adoption (A3) should follow the report-style compare redesign; run-detail items (A2) should follow the run-detail report restructure.
 10. Evidence and screenshots: scratchpad `tables/` folder; servers on 8821/8822/5822 stopped.
+
+## Decisions
+
+### T0 spike: React Aria `Table` replaced by our own `<table>` (decided, implemented)
+Spike (scratch Vitest, RAC 1.22.1, deleted afterwards): a RAC `Table` can host a synthetic detail row as a `Row` with a
+`colSpan` `Cell` plus `disabledKeys`, and ArrowDown skips it. It still loses on four points that matter to this redesign:
+(1) the detail row (and every group header row) is announced as `aria-disabled="true"` with `aria-selected="false"`,
+so a content row reads as a disabled, unselected data row, and its interactive content (the passes panel) sits inside a
+disabled row; (2) arrow keys cannot land in or expand it, and RAC offers no `aria-expanded` row or tree-grid semantics, so
+Right/Left expansion needs a parallel key model anyway; (3) a second header band row (column groups) is not expressible
+in `TableHeader`, and sticky pinned columns, zebra by logical index, and row state rails all need cell/row level control
+that RAC's collection renderer owns; (4) the runs list was already hand-rolled for exactly these reasons. Decision: own
+markup (`role="grid"`, `role="treegrid"` when rows expand so `aria-expanded` is valid), headless state in
+`useDataTableModel`/`model.ts`, RAC kept for `Checkbox`, `Button`, `Menu`/`Popover`. Roles stay `grid`/`row`/`gridcell`/
+`columnheader`/`rowheader`, so the existing specs that query those roles keep working.
+
+### Implementation notes
+- Back-compat shim: v1 column props (`label`, `sortKey`, `align`, `mono`), `emptyState`, `dimmed` (now the 2 px refresh
+  line, rows are no longer faded), `onRowAction` keep working until the last adoption lands.
+- Persistence: one key `qym:data-table:v2:<storageKey>` (widths, hidden, pins, density, collapsed groups); the v1
+  `qym:data-table:widths:<key>` widths are still read as a fallback.
+- Row click opens when `rowHref`/`onRowOpen` is set (single click, brief Q9); the runs list in select mode keeps
+  click-toggles-selection (`selectOnRowClick`).
+- Runs list: its filter toolbar, Columns menu (legacy `qym_visible_metrics` keys) and pinned status bar stay page-level
+  (they carry runs-specific rules); the table, header bands, pins, cards, expansion and selection are the shared primitive.
+  The header kebab omits "Hide column" there (columns are hidden from the page Columns menu so the two cannot disagree).
+
+## Deferred
+
+Review pass (review-tables.md) closed M1-M7 and the eight minors: row click vs text selection, runs list score bars/chips/
+Date on first paint/band names, roving header focus, header-fit widths, queue card title and Position header, Charts on
+DataTable, auto-sized resting row actions, three-state sort, exposed header bands, stronger scroll cues, Density and page
+size on the runs list, the raw-table allow-list rule, selection cluster inside the toolbar, runs toolbar and status bar
+inside `DataTable.Toolbar/Footer`, `RowAction.hint` (tooltip and menu description). Still deferred:
+
+- **A2 run-detail items table and A3 compare matrix**: second pass (other agent restructures those pages).
+- **T7 virtualization** (`virtualize`, spacer rows, `scrollParent`): ships with A2. Estimate 4 h.
+- **`?` shortcut sheet** scoped to a table and `Ctrl+A` in the primitive. Estimate 2 h.
+- **Dataset items read-only row preview**, experiments-list Cancel row action (needs the detail page's cancel flow),
+  search on the experiments list (no API param). Estimate 3 h.
+- **Primitive gaps found by the Charts adoption**: multi-level `groupBy` (version then model is rendered by hand), external
+  control of group collapse, custom group count, a `color`/`series` prop on `ScoreBar`, group summaries in card mode.
+  Estimate 4 h.
+- **Queue filters at 390 px** stack as three full-width selects above the cards; a compact Filters popover would be tidier.
+- Other raw tables stay on the allow-list in `design-language.test.ts` (compare, run-detail, matrices, prose, dialogs).
+- The `test.fail` spec in `e2e/runs-list/cutover-navigation.spec.ts` belongs to run-detail and was left as it was.

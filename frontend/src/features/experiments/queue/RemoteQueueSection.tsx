@@ -13,9 +13,21 @@ import {
   type RemoteItem,
 } from '@/api/evalQueue';
 import { useProjectContext } from '@/features/shell';
-import { Button, DataTable, ErrorState, Icon, Skeleton, Tag, Text, useToast, type Column } from '@/ui';
+import {
+  Button,
+  DataTable,
+  ErrorState,
+  Icon,
+  RelativeTime,
+  Skeleton,
+  Tag,
+  Text,
+  TwoLine,
+  useToast,
+  type Column,
+} from '@/ui';
 import { experimentPath } from '../paths';
-import { relTime, absTime } from '../lib/format';
+import { relTime } from '../lib/format';
 import { CancelSplitDialog } from './CancelSplitDialog';
 import { plural, remoteSections, titleCase } from './lib';
 import styles from './RemoteQueueSection.module.css';
@@ -101,50 +113,66 @@ function RemoteEnv({
   const columns: Column<RemoteItem>[] = [
     {
       id: 'job',
-      label: 'Remote job',
+      header: 'Remote job',
       flex: true,
       minWidth: 220,
-      mono: true,
+      pin: 'start',
+      hideable: false,
+      priority: 1,
       cell: (i) => (
-        <div className={styles.cell}>
-          <span>{i.remote_job_id}</span>
-          {i.run_name ? (
-            <Text variant="sm" tone="muted">
-              {i.run_name}
-            </Text>
-          ) : null}
-        </div>
+        <TwoLine
+          primary={<span className={styles.mono}>{i.remote_job_id}</span>}
+          secondary={i.run_name || undefined}
+        />
       ),
     },
-    { id: 'status', label: 'Status', width: 110, cell: (i) => titleCase(i.status) },
-    { id: 'priority', label: 'Priority', width: 90, cell: (i) => (i.priority ? titleCase(i.priority) : '—') },
+    {
+      id: 'status',
+      header: 'Status',
+      type: 'status',
+      width: 110,
+      priority: 1,
+      cell: (i) => titleCase(i.status),
+    },
+    {
+      id: 'priority',
+      header: 'Priority',
+      width: 90,
+      priority: 3,
+      cell: (i) => (i.priority ? titleCase(i.priority) : '—'),
+    },
     {
       id: 'match',
-      label: 'Matches',
+      header: 'Matches',
       width: 260,
+      priority: 2,
       cell: (i) =>
         i.match ? (
-          <div className={styles.cell}>
-            <Link to={experimentPath(slug, i.match.experiment_id)}>{i.match.experiment_name}</Link>
-            <span className={styles.meta}>
-              Local status {titleCase(i.match.status)}{' '}
-              {i.stale ? (
-                <Tag tone="warning" title="The local job already finished, but the service still runs it.">
-                  Stale
-                </Tag>
-              ) : null}
-            </span>
-          </div>
+          <TwoLine
+            primary={<Link to={experimentPath(slug, i.match.experiment_id)}>{i.match.experiment_name}</Link>}
+            secondary={
+              <>
+                Local status {titleCase(i.match.status)}{' '}
+                {i.stale ? (
+                  <Tag tone="warning" title="The local job already finished, but the service still runs it.">
+                    Stale
+                  </Tag>
+                ) : null}
+              </>
+            }
+          />
         ) : (
           <Tag tone="warning">Orphan</Tag>
         ),
     },
-    { id: 'user', label: 'Service user', width: 140, cell: (i) => i.user_id ?? '—' },
+    { id: 'user', header: 'Service user', width: 140, priority: 3, cell: (i) => i.user_id ?? '—' },
     {
       id: 'age',
-      label: 'Age',
+      header: 'Age',
+      type: 'date',
       width: 90,
-      cell: (i) => <span title={absTime(i.created_at)}>{relTime(i.created_at)}</span>,
+      priority: 2,
+      cell: (i) => <RelativeTime iso={i.created_at} />,
     },
   ];
   const stale = env.items.some((i) => i.stale);
@@ -163,11 +191,6 @@ function RemoteEnv({
           {env.stale ? ' · refreshing' : ''} · {plural(env.orphan_count, 'orphan')} · {env.stale_count} stale
         </span>
         {env.fetch_error ? <span className={styles.err}>Last refresh failed: {env.fetch_error}</span> : null}
-        {canCancel && cancellable ? (
-          <Button size="sm" variant="danger" isDisabled={!ids.length} onPress={() => setConfirm(true)}>
-            Cancel selected {stale ? 'remote jobs' : 'orphans'} ({ids.length})
-          </Button>
-        ) : null}
       </div>
       <DataTable
         storageKey="eval-queue.remote.v1"
@@ -175,14 +198,22 @@ function RemoteEnv({
         rows={env.items}
         rowKey={(i) => i.remote_job_id}
         minWidth={860}
+        density="regular"
+        bulkActions={
+          <Button size="sm" variant="danger" isDisabled={!ids.length} onPress={() => setConfirm(true)}>
+            Cancel selected {stale ? 'remote jobs' : 'orphans'} ({ids.length})
+          </Button>
+        }
         selection={
           canCancel && cancellable
             ? { selected, onChange: setSelected, isDisabled: (i) => !(i.orphan || i.stale) }
             : undefined
         }
         aria-label={`Remote jobs on ${env.environment_name}`}
-        emptyState={<Text tone="secondary">The service holds no queued or running jobs.</Text>}
-      />
+        empty={<Text tone="secondary">The service holds no queued or running jobs.</Text>}
+      >
+        <DataTable.Footer summary={plural(env.items.length, 'remote job')} />
+      </DataTable>
       {!canCancel ? (
         <Text variant="sm" tone="muted">
           Only a project manager can cancel orphan and stale jobs.

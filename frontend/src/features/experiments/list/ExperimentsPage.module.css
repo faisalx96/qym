@@ -1,36 +1,8 @@
-.toolbar {
+.filters {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: var(--space-md);
-  margin-bottom: var(--space-md);
-}
-
-.note {
-  margin-inline-start: auto;
-  align-self: center;
-}
-
-.nameCell {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.name {
-  color: var(--text-primary);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sub {
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .truncate {
@@ -44,10 +16,6 @@
   display: inline-flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
-}
-
-.age {
-  color: var(--text-secondary);
 }
 
 .linkButton {

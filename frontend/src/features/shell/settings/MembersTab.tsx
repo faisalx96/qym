@@ -22,7 +22,9 @@ import {
   Tag,
   Text,
   useToast,
+  RelativeTime,
   type Column,
+  type RowAction,
 } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
@@ -49,19 +51,30 @@ export function MembersTab() {
   const [transferTo, setTransferTo] = useState<string | null>(null);
 
   const columns: Column<Member>[] = [
-    { id: 'name', label: 'Member', flex: true, minWidth: 160, cell: (m) => m.display_name || m.email },
-    { id: 'email', label: 'Email', width: 220, mono: true, cell: (m) => m.email },
+    {
+      id: 'name',
+      header: 'Member',
+      flex: true,
+      minWidth: 160,
+      pin: 'start',
+      hideable: false,
+      priority: 1,
+      cell: (m) => m.display_name || m.email,
+    },
+    { id: 'email', header: 'Email', type: 'id', width: 220, priority: 2, cell: (m) => m.email },
     {
       id: 'added',
-      label: 'Added',
+      header: 'Added',
+      type: 'date',
       width: 130,
-      mono: true,
-      cell: (m) => (m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'),
+      priority: 3,
+      cell: (m) => <RelativeTime iso={m.created_at} />,
     },
     {
       id: 'role',
-      label: 'Role',
+      header: 'Role',
       width: 200,
+      priority: 1,
       cell: (m) =>
         canManage && !readOnly ? (
           <span className={styles.inlineActions}>
@@ -102,17 +115,18 @@ export function MembersTab() {
           <Tag kind="role">{m.role}</Tag>
         ),
     },
-    {
-      id: 'actions',
-      label: 'Actions',
-      hideLabel: true,
-      width: 110,
-      resizable: false,
-      cell: (m) =>
-        canManage && m.user_id !== me.id ? (
-          <Button
-            variant="danger"
-            onPress={async () => {
+  ];
+
+  const rowActions = (m: Member): RowAction<Member>[] =>
+    canManage && m.user_id !== me.id
+      ? [
+          {
+            id: 'remove',
+            label: `Remove ${m.display_name || m.email}`,
+            icon: 'trash',
+            primary: true,
+            danger: true,
+            onPress: async () => {
               setTransferTo(null);
               setRemoving({ member: m, preview: null });
               try {
@@ -128,13 +142,10 @@ export function MembersTab() {
                   },
                 });
               }
-            }}
-          >
-            Remove
-          </Button>
-        ) : null,
-    },
-  ];
+            },
+          },
+        ]
+      : [];
 
   const others = transferCandidates(members.data ?? [], removing?.member.user_id);
   const keys = useApiKeys(project.id);
@@ -163,13 +174,15 @@ export function MembersTab() {
           <Skeleton kind="table" rows={3} />
         ) : null
       ) : (
-        <DataTable
+        <DataTable<Member>
+          density="regular"
+          rowActions={rowActions}
           aria-label="Members"
           columns={columns}
           rows={members.data}
           rowKey={(m) => m.user_id}
           storageKey="settings-members"
-          emptyState="No members yet."
+          empty="No members yet."
         />
       )}
       {removing ? (

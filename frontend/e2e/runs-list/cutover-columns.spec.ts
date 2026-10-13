@@ -21,7 +21,7 @@ const RUN_COLUMNS = [
 
 const headers = (page: Page) =>
   table(page)
-    .locator('thead th')
+    .locator('thead tr:last-child th')
     .evaluateAll((ths) => ths.map((th) => (th.textContent ?? '').trim()));
 const header = (page: Page, name: string) => table(page).getByRole('columnheader', { name, exact: true });
 const menu = (page: Page) => page.getByRole('dialog', { name: 'Columns' });

@@ -16,6 +16,7 @@ import {
   ConfirmDialog,
   DataTable,
   ErrorState,
+  RelativeTime,
   Skeleton,
   Stack,
   Text,
@@ -27,10 +28,6 @@ import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
 import { SecretRevealDialog } from '../dialogs';
 import styles from './settings.module.css';
-
-function fmt(iso: string | null | undefined): string {
-  return iso ? new Date(iso).toLocaleString() : '—';
-}
 
 export function ApiKeysTab() {
   const { project, readOnly, isAdmin, canManage } = useProjectContext();
@@ -62,34 +59,40 @@ function KeysCard({
   const [secret, setSecret] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<ApiKey | null>(null);
   const columns: Column<ApiKey>[] = [
-    { id: 'name', label: 'Name', flex: true, minWidth: 140, cell: (k) => k.name || 'Unnamed key' },
-    { id: 'prefix', label: 'Prefix', width: 140, mono: true, cell: (k) => `${k.prefix}…` },
+    {
+      id: 'name',
+      header: 'Name',
+      flex: true,
+      minWidth: 140,
+      pin: 'start',
+      hideable: false,
+      priority: 1,
+      cell: (k) => k.name || 'Unnamed key',
+    },
+    { id: 'prefix', header: 'Prefix', type: 'id', width: 140, priority: 3, cell: (k) => `${k.prefix}…` },
     {
       id: 'creator',
-      label: 'Created by',
+      header: 'Created by',
       width: 180,
+      priority: 2,
       cell: (k) => k.creator?.display_name || k.creator?.email || '—',
     },
-    { id: 'created', label: 'Created', width: 170, mono: true, cell: (k) => fmt(k.created_at) },
     {
-      id: 'status',
-      label: 'Status',
-      width: 100,
-      cell: (k) =>
-        k.revoked_at ? <Badge tone="neutral">revoked</Badge> : <Badge tone="success">active</Badge>,
+      id: 'created',
+      header: 'Created',
+      type: 'date',
+      width: 130,
+      priority: 2,
+      cell: (k) => <RelativeTime iso={k.created_at} />,
     },
     {
-      id: 'actions',
-      label: 'Actions',
-      hideLabel: true,
+      id: 'status',
+      header: 'Status',
+      type: 'status',
       width: 100,
-      resizable: false,
+      priority: 1,
       cell: (k) =>
-        !k.revoked_at && (canManage || k.creator?.id === me.id) ? (
-          <Button variant="danger" onPress={() => setRevoking(k)}>
-            Revoke
-          </Button>
-        ) : null,
+        k.revoked_at ? <Badge tone="neutral">revoked</Badge> : <Badge tone="success">active</Badge>,
     },
   ];
   return (
@@ -146,13 +149,28 @@ function KeysCard({
             <Skeleton kind="table" rows={2} />
           ) : null
         ) : (
-          <DataTable
+          <DataTable<ApiKey>
+            density="regular"
+            rowActions={(k) =>
+              !k.revoked_at && (canManage || k.creator?.id === me.id)
+                ? [
+                    {
+                      id: 'revoke',
+                      label: `Revoke ${k.name || 'key'}`,
+                      icon: 'close',
+                      primary: true,
+                      danger: true,
+                      onPress: setRevoking,
+                    },
+                  ]
+                : []
+            }
             aria-label="API keys"
             columns={columns}
             rows={keys.data}
             rowKey={(k) => k.id}
             storageKey="settings-api-keys"
-            emptyState="No API keys yet."
+            empty="No API keys yet."
           />
         )}
       </div>
@@ -196,34 +214,47 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
   const [secret, setSecret] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<DatasetReadToken | null>(null);
   const columns: Column<DatasetReadToken>[] = [
-    { id: 'name', label: 'Name', flex: true, minWidth: 140, cell: (t) => t.name || 'Unnamed token' },
-    { id: 'prefix', label: 'Prefix', width: 140, mono: true, cell: (t) => (t.prefix ? `${t.prefix}…` : '—') },
+    {
+      id: 'name',
+      header: 'Name',
+      flex: true,
+      minWidth: 140,
+      pin: 'start',
+      hideable: false,
+      priority: 1,
+      cell: (t) => t.name || 'Unnamed token',
+    },
+    {
+      id: 'prefix',
+      header: 'Prefix',
+      type: 'id',
+      width: 140,
+      priority: 3,
+      cell: (t) => (t.prefix ? `${t.prefix}…` : '—'),
+    },
     {
       id: 'creator',
-      label: 'Created by',
+      header: 'Created by',
       width: 180,
+      priority: 2,
       cell: (t) => t.creator?.display_name || t.creator?.email || '—',
     },
-    { id: 'created', label: 'Created', width: 170, mono: true, cell: (t) => fmt(t.created_at) },
     {
-      id: 'status',
-      label: 'Status',
-      width: 100,
-      cell: (t) =>
-        t.revoked_at ? <Badge tone="neutral">revoked</Badge> : <Badge tone="success">active</Badge>,
+      id: 'created',
+      header: 'Created',
+      type: 'date',
+      width: 130,
+      priority: 2,
+      cell: (t) => <RelativeTime iso={t.created_at} />,
     },
     {
-      id: 'actions',
-      label: 'Actions',
-      hideLabel: true,
+      id: 'status',
+      header: 'Status',
+      type: 'status',
       width: 100,
-      resizable: false,
+      priority: 1,
       cell: (t) =>
-        !t.revoked_at ? (
-          <Button variant="danger" onPress={() => setRevoking(t)}>
-            Revoke
-          </Button>
-        ) : null,
+        t.revoked_at ? <Badge tone="neutral">revoked</Badge> : <Badge tone="success">active</Badge>,
     },
   ];
   return (
@@ -281,12 +312,27 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
             compact
           />
         ) : tokens.isPending ? null : (
-          <DataTable
+          <DataTable<DatasetReadToken>
+            density="regular"
+            rowActions={(t) =>
+              !t.revoked_at
+                ? [
+                    {
+                      id: 'revoke',
+                      label: `Revoke ${t.name || 'token'}`,
+                      icon: 'close',
+                      primary: true,
+                      danger: true,
+                      onPress: setRevoking,
+                    },
+                  ]
+                : []
+            }
             aria-label="Dataset read tokens"
             columns={columns}
             rows={tokens.data}
             rowKey={(t) => t.id}
-            emptyState="No read tokens."
+            empty="No read tokens."
           />
         )}
       </div>

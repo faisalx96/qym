@@ -15,7 +15,7 @@ import {
 } from '@/api/datasets';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/http';
-import { Button, ConfirmDialog, Text, useToast } from '@/ui';
+import { Button, ConfirmDialog, useToast } from '@/ui';
 import { ItemPane } from './ItemPane';
 import { ItemsTab } from './ItemsTab';
 import styles from './ItemsWorkspace.module.css';
@@ -70,18 +70,19 @@ export function ItemsWorkspace({
   });
   useEffect(() => {
     if (!paneId) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return;
-      if (e.key === 'Escape') {
-        if (
-          document.querySelector(
-            '[role="dialog"][aria-modal="true"], [role="alertdialog"], [role="listbox"], [role="menu"]',
-          )
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.key !== 'Escape') return;
+      if (
+        document.querySelector(
+          '[role="dialog"][aria-modal="true"], [role="alertdialog"], [role="listbox"], [role="menu"]',
         )
-          return;
-        attempt(() => setPaneId(null));
+      )
         return;
-      }
+      attempt(() => setPaneId(null));
+    };
+    // Capture phase: the table also maps j / k to row focus; the pane stepping wins while it is open.
+    const onStep = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if ((e.key === 'j' || e.key === 'k') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         const t = e.target as HTMLElement | null;
         if (
@@ -96,12 +97,17 @@ export function ItemsWorkspace({
         const nextRow = list[at + (e.key === 'j' ? 1 : -1)];
         if (nextRow) {
           e.preventDefault();
+          e.stopPropagation();
           attempt(() => setPaneId(nextRow.item_id));
         }
       }
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onEscape);
+    document.addEventListener('keydown', onStep, true);
+    return () => {
+      document.removeEventListener('keydown', onEscape);
+      document.removeEventListener('keydown', onStep, true);
+    };
   }, [paneId, attempt]);
 
   // Leaving the Items tab / version / dataset with unsaved edits asks first; sorting, paging and
@@ -157,24 +163,6 @@ export function ItemsWorkspace({
   return (
     <div className={styles.layout} data-has-pane={paneId ? '' : undefined}>
       <div className={styles.table}>
-        {editable && selected.size ? (
-          <div className={styles.bulk} role="region" aria-label="Bulk actions">
-            <Text as="span" variant="md" weight={600}>
-              {selected.size} selected
-            </Text>
-            <Button
-              variant="danger"
-              size="sm"
-              onPress={() => setConfirmBulk(true)}
-              data-testid="bulk-delete-items"
-            >
-              Delete {selected.size}
-            </Button>
-            <Button variant="ghost" size="sm" onPress={() => setSelected(new Set())}>
-              Clear
-            </Button>
-          </div>
-        ) : null}
         <ItemsTab
           slug={slug}
           dataset={dataset}
@@ -184,6 +172,16 @@ export function ItemsWorkspace({
           onImport={onImport}
           onRows={setRows}
           selection={editable ? { selected, onChange: setSelected } : undefined}
+          bulkActions={
+            <Button
+              variant="danger"
+              size="sm"
+              onPress={() => setConfirmBulk(true)}
+              data-testid="bulk-delete-items"
+            >
+              Delete {selected.size}
+            </Button>
+          }
           onOpenItem={open}
           onFilterChange={clearSelection}
           onDeleted={(id) => {

@@ -130,7 +130,6 @@
   --font-stat: 26px;
 
   /* Shared width for the charts view label/control column */
-  --chart-first-col-width: 320px;
 
   /* Mono font for data. 'Qym Arabic' leads both stacks: its unicode-range
      limits it to Arabic glyphs, so Latin falls through untouched while any
@@ -182,6 +181,15 @@
   --skeleton-wait: 300ms;
   --skeleton-min: 400ms;
   --arrive-fade: 200ms;
+  /* Data table v2 (DESIGN_LANGUAGE §3 "Data table"): row heights per density,
+     header/group-band heights, selected-row tint. */
+  --row-compact: 32px;
+  --row-regular: 40px;
+  --row-comfortable: 52px;
+  --table-header-height: 34px;
+  --table-group-height: 24px;
+  --table-footer-height: 40px;
+  --bg-selected: rgba(0, 212, 170, 0.08);
 }
 
 /* ── Docs prose scale (DESIGN_LANGUAGE.md §5, sanctioned exception) ─────────

@@ -88,11 +88,13 @@ for (const width of [1280, 1440, 1024]) {
         const r = el.getBoundingClientRect();
         return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
       };
-      const bar = document.querySelector('[data-testid="status-bar"]');
+      const bar = document.querySelector('[data-dt-toolbar]');
+      const status = document.querySelector('[data-testid="status-bar"]');
       const actions = document.querySelector('[data-testid="selection-bar"]');
       const pager = document.querySelector('[data-testid="status-bar"] nav, [aria-label="Pagination"]');
       return {
         bar: box(bar),
+        status: box(status),
         actions: box(actions),
         pager: box(pager),
         overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -106,7 +108,7 @@ for (const width of [1280, 1440, 1024]) {
       a.bottom <= o.bottom + 0.5;
     expect(geometry.bar && geometry.actions && geometry.pager).toBeTruthy();
     expect(inside(geometry.actions!, geometry.bar!)).toBe(true);
-    expect(inside(geometry.pager!, geometry.bar!)).toBe(true);
+    expect(inside(geometry.pager!, geometry.status!)).toBe(true);
     const apart =
       geometry.actions!.right <= geometry.pager!.left + 0.5 ||
       geometry.pager!.right <= geometry.actions!.left + 0.5 ||

@@ -3,7 +3,18 @@ import { useState } from 'react';
 import { useTestEnvironment } from '@/api/evalEnvironments';
 import { errorMessage, useEvalEnvironments, type EvalEnvironment } from '@/api/evalCommon';
 import { useDelayedPending } from '@/lib/pending';
-import { Button, DataTable, EmptyState, ErrorState, Icon, Skeleton, Tag, useToast, type Column } from '@/ui';
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  Icon,
+  Skeleton,
+  Tag,
+  useToast,
+  type Column,
+  type RowAction,
+} from '@/ui';
 import { DefaultPresetTag, HealthCell, SchemaCell, SlotsStatusTag } from './cells';
 import styles from './EnvironmentsTable.module.css';
 import { canRunDefaultPreset, useRunDefaultPreset } from './runDefaultPreset';
@@ -84,9 +95,12 @@ export function EnvironmentsList({
   const columns: Column<EvalEnvironment>[] = [
     {
       id: 'name',
-      label: 'Environment',
+      header: 'Environment',
       flex: true,
       minWidth: 180,
+      pin: 'start',
+      hideable: false,
+      priority: 1,
       cell: (env) => (
         <div className={styles.name}>
           <span className={styles.nameRow}>
@@ -105,69 +119,86 @@ export function EnvironmentsList({
     },
     {
       id: 'url',
-      label: 'URL',
+      header: 'URL',
       width: 230,
       minWidth: 140,
+      priority: 3,
       cell: (env) => (
         <span className={styles.url} title={env.base_url}>
           {env.base_url}
         </span>
       ),
     },
-    { id: 'health', label: 'Health', width: 110, cell: (env) => <HealthCell env={env} /> },
-    { id: 'schema', label: 'Schema', width: 130, cell: (env) => <SchemaCell env={env} /> },
-    { id: 'groups', label: 'LLM groups', width: 130, cell: (env) => <SlotsStatusTag env={env} /> },
-    { id: 'default', label: 'Default preset', width: 140, cell: (env) => <DefaultPresetTag env={env} /> },
+    {
+      id: 'health',
+      header: 'Health',
+      type: 'status',
+      width: 110,
+      priority: 1,
+      cell: (env) => <HealthCell env={env} />,
+    },
+    { id: 'schema', header: 'Schema', width: 130, priority: 2, cell: (env) => <SchemaCell env={env} /> },
+    {
+      id: 'groups',
+      header: 'LLM groups',
+      width: 130,
+      priority: 3,
+      cell: (env) => <SlotsStatusTag env={env} />,
+    },
+    {
+      id: 'default',
+      header: 'Default preset',
+      width: 140,
+      priority: 2,
+      cell: (env) => <DefaultPresetTag env={env} />,
+    },
     {
       id: 'cap',
-      label: 'Priority cap',
+      header: 'Priority cap',
       width: 125,
+      priority: 3,
       cell: (env) => <Tag kind="data">{env.max_priority || '—'}</Tag>,
     },
+  ];
+
+  const rowActions = (env: EvalEnvironment): RowAction<EvalEnvironment>[] => [
+    ...(canRunDefaultPreset(env) && !readOnly
+      ? [
+          {
+            id: 'run-default',
+            label: `Run default preset v${env.official_preset_version} on ${env.name}`,
+            icon: 'play',
+            primary: true,
+            disabled: defaults.busyId === env.id,
+            onPress: () => void defaults.run(env),
+          },
+        ]
+      : []),
     {
-      id: 'actions',
-      label: 'Actions',
-      hideLabel: true,
-      width: 330,
-      resizable: false,
-      cell: (env) => (
-        <span className={styles.actions}>
-          {canRunDefaultPreset(env) && !readOnly ? (
-            <Button
-              variant="neutral"
-              loading={defaults.busyId === env.id}
-              onPress={() => void defaults.run(env)}
-              aria-label={`Run default preset v${env.official_preset_version} on ${env.name}`}
-            >
-              Run default preset
-            </Button>
-          ) : null}
-          <Button
-            variant="neutral"
-            onPress={() => onOpen(env)}
-            aria-label={`${canManage ? 'Manage' : 'View'} ${env.name}`}
-          >
-            {canManage ? 'Manage' : 'View'}
-          </Button>
-          {canEdit ? (
-            <Button
-              variant="neutral"
-              loading={testingId === env.id}
-              onPress={() => void runTest(env)}
-              aria-label={`Test ${env.name}`}
-            >
-              Test
-            </Button>
-          ) : null}
-        </span>
-      ),
+      id: 'manage',
+      label: `${canManage ? 'Manage' : 'View'} ${env.name}`,
+      icon: 'external',
+      primary: true,
+      onPress: onOpen,
     },
+    ...(canEdit
+      ? [
+          {
+            id: 'test',
+            label: `Test ${env.name}`,
+            disabled: testingId === env.id,
+            onPress: () => void runTest(env),
+          },
+        ]
+      : []),
   ];
 
   return (
     <>
-      <DataTable
+      <DataTable<EvalEnvironment>
         aria-label="Environments"
+        density="regular"
+        rowActions={rowActions}
         columns={columns}
         rows={envs}
         rowKey={(env) => env.id}

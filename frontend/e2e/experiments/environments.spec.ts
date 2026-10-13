@@ -60,10 +60,13 @@ test.describe('environments list', () => {
     ).toBeVisible();
     await expect(row('ungrouped').getByRole('button', { name: /Run default preset/ })).toHaveCount(0);
 
-    await row('staging').getByRole('button', { name: 'Test staging' }).click();
+    // Test lives in the row's overflow menu
+    await row('staging').getByRole('button', { name: 'Row actions' }).click();
+    await page.getByRole('menuitem', { name: 'Test staging' }).click();
     await expectToast(page, '“staging” is healthy');
     await setFakeHealth(request, true, FAKE_A);
-    await row('ungrouped').getByRole('button', { name: 'Test ungrouped' }).click();
+    await row('ungrouped').getByRole('button', { name: 'Row actions' }).click();
+    await page.getByRole('menuitem', { name: 'Test ungrouped' }).click();
     await expectToast(page, /“ungrouped” failed/);
     await expect(row('ungrouped').getByText('Error')).toBeVisible();
 

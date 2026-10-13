@@ -17,9 +17,9 @@ test('admin users: filter by email and name, empty message', async ({ page, requ
   await expect(grid.getByRole('row').filter({ hasText: `${tag}-4@e2e.test` })).toHaveCount(1);
   await filter.fill('no-such-user-zzz');
   await expect(page.getByText('No users match “no-such-user-zzz”.')).toBeVisible();
-  await expect(grid).toHaveCount(0);
+  await expect(grid.getByRole('row')).toHaveCount(1); // header only, the toolbar keeps the filter
   await filter.fill('');
-  await expect(grid).toBeVisible();
+  await expect(grid.getByRole('row').nth(1)).toBeVisible();
 });
 
 test('admin projects: filter by name or slug', async ({ page, request }) => {

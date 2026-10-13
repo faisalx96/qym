@@ -1,0 +1,117 @@
+/* Charts table cell content (the table itself is the shared DataTable). */
+.head {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.head[data-depth='1'] {
+  padding-inline-start: var(--space-lg);
+}
+
+.head[data-depth='2'] {
+  padding-inline-start: calc(var(--space-lg) * 2);
+}
+
+.head[data-level='2'] {
+  padding-inline-start: var(--space-lg);
+}
+
+.rowLink {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.rowLink:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
+.rowLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.rowDate {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toggle[data-hovered] {
+  color: var(--accent-primary);
+}
+
+.toggle[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+}
+
+.statButton {
+  padding: 0 var(--space-xs);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+  border-radius: 2px;
+}
+
+.statButton[data-focus-visible] {
+  outline: 2px solid var(--accent-primary);
+}
+
+/* ScoreBar fills take the model's series colour (the primitive paints --bar); group rows of
+   a version axis are muted. */
+.series {
+  display: inline-flex;
+  max-width: 100%;
+  --bar: var(--chart-1);
+}
+.series[data-series='2'] {
+  --bar: var(--chart-2);
+}
+.series[data-series='3'] {
+  --bar: var(--chart-3);
+}
+.series[data-series='4'] {
+  --bar: var(--chart-4);
+}
+.series[data-series='5'] {
+  --bar: var(--chart-5);
+}
+.series[data-series='6'] {
+  --bar: var(--chart-6);
+}
+.series[data-series='7'] {
+  --bar: var(--chart-7);
+}
+.series[data-series='8'] {
+  --bar: var(--chart-8);
+}
+.series[data-muted] {
+  --bar: var(--border-strong);
+}
+
+.wrap [data-chart-group] > td {
+  background: var(--bg-elevated);
+}

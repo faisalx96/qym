@@ -122,7 +122,12 @@ async function open(page: Page, p: { path: string; ready: string }) {
   await gotoApp(page, p.path);
   await expect(page.locator(p.ready)).toBeVisible();
   // let tables and cards render before measuring
-  await expect(page.getByRole('progressbar').or(page.locator('[aria-busy="true"]'))).toHaveCount(0, {
+  // (a table's ProgressCell is a labelled "Progress" bar and the polling line is "Refreshing": neither blocks measuring)
+  await expect(
+    page
+      .locator('[role="progressbar"]:not([aria-label="Progress"]):not([aria-label="Refreshing"])')
+      .or(page.locator('[aria-busy="true"]')),
+  ).toHaveCount(0, {
     timeout: 15_000,
   });
 }

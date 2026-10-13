@@ -3,12 +3,13 @@
  * with metric columns; private test sets show the locked state and never
  * request items.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Key } from 'react-aria-components';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useDatasetItems,
+  fetchMatchingItemIds,
   useDeleteItem,
   type Dataset,
   type DatasetItem,
@@ -23,17 +24,14 @@ import {
   Chip,
   ConfirmDialog,
   DataTable,
-  DropdownMenu,
   EmptyState,
-  ErrorState,
   Icon,
-  IconButton,
-  Pagination,
-  ScoreValue,
+  ScoreBar,
   SearchField,
-  Skeleton,
-  Text,
+  TagsCell,
   useToast,
+  type Column,
+  type RowAction,
 } from '@/ui';
 import { formatLatency, formatJson, previewValue } from '../lib/itemValue';
 import { metricDir } from '../lib/metricDir';
@@ -49,6 +47,8 @@ export interface ItemsTabProps {
   onImport: () => void;
   /** Optional multi-select (bulk actions) — provided by the editing model. */
   selection?: { selected: Set<Key>; onChange: (keys: Set<Key>) => void; mode?: 'multiple' | 'single' };
+  /** Content of the selection bar (bulk delete etc.). */
+  bulkActions?: ReactNode;
   /** Row activation (Enter / click on the row body). Defaults to opening the item page. */
   onOpenItem?: (item: DatasetItem) => void;
   /** Rows currently shown (for pane prev/next). */
@@ -67,6 +67,7 @@ export function ItemsTab({
   onAddItem,
   onImport,
   selection,
+  bulkActions,
   onOpenItem,
   onRows,
   onDeleted,
@@ -125,6 +126,22 @@ export function ItemsTab({
   const hasUserIds = useMemo(() => items.some((i) => i.item_id && !/^item-\d+$/.test(i.item_id)), [items]);
   const sort = parseItemSort(route.sort);
 
+  async function selectAll() {
+    if (!selection || !query.data) return;
+    try {
+      const ids = await fetchMatchingItemIds(
+        slug,
+        dataset.slug,
+        version.version,
+        { search: route.search || undefined, label: route.label || undefined },
+        query.data.total,
+      );
+      selection.onChange(new Set(ids));
+    } catch {
+      toast.show('Couldn’t select all matching items', { tone: 'error' });
+    }
+  }
+
   function setQuery(updates: Record<string, string | null>) {
     setParams(
       (prev) => {
@@ -157,66 +174,7 @@ export function ItemsTab({
     );
   }
 
-  const toolbar = (
-    <div className={styles.toolbar}>
-      <div className={styles.toolbarStart}>
-        <SearchField
-          label="Search items"
-          hideLabel
-          placeholder="Search items…"
-          value={search}
-          onChange={setSearch}
-          width={260}
-          data-testid="items-search"
-        />
-        {route.label ? (
-          <Chip
-            isSelected
-            onRemove={() => {
-              onFilterChange?.();
-              setQuery({ label: null, page: null });
-            }}
-            removeLabel="Clear label filter"
-          >
-            label: {route.label}
-          </Chip>
-        ) : null}
-        {query.data ? (
-          <Text as="span" variant="sm" tone="muted" aria-live="polite">
-            {query.data.total.toLocaleString()} {query.data.total === 1 ? 'item' : 'items'}
-            {route.search ? ` matching “${route.search}”` : ''}
-          </Text>
-        ) : null}
-      </div>
-      <div className={styles.toolbarEnd}>
-        {canEdit ? (
-          <Button variant="neutral" size="sm" icon={<Icon name="plus" size={12} />} onPress={onAddItem}>
-            Add item
-          </Button>
-        ) : null}
-      </div>
-    </div>
-  );
-
-  if (showSkeleton) {
-    return (
-      <div>
-        {toolbar}
-        <Skeleton kind="table" rows={8} label="Loading items" />
-      </div>
-    );
-  }
-  if (query.isError) {
-    return (
-      <div>
-        {toolbar}
-        <ErrorState error={query.error} title="Couldn’t load items" onRetry={() => void query.refetch()} />
-      </div>
-    );
-  }
-  if (!query.data) return toolbar;
-
-  if (query.data.total === 0 && !route.search && !route.label) {
+  if (query.data && query.data.total === 0 && !route.search && !route.label) {
     return (
       <div>
         {isDraft ? (
@@ -243,16 +201,31 @@ export function ItemsTab({
     );
   }
 
-  const columns = [
+  const openItem = (item: DatasetItem) => (onOpenItem ?? ((i: DatasetItem) => navigate(itemHref(i))))(item);
+
+  const columns: Column<DatasetItem>[] = [
     {
       id: 'index',
-      label: '#',
-      sortKey: 'index',
+      header: '#',
+      type: 'number',
+      sort: 'index',
       width: 64,
-      mono: true,
-      align: 'end' as const,
-      cell: (item: DatasetItem) => (
-        <Link to={itemHref(item)} className={styles.indexLink} data-item-link={item.item_id}>
+      pin: 'start',
+      hideable: false,
+      priority: 1,
+      cell: (item) => (
+        <Link
+          to={itemHref(item)}
+          className={styles.indexLink}
+          data-item-link={item.item_id}
+          onKeyDown={(e) => {
+            // Keyboard activation opens the docked pane; a click on the link opens the item page.
+            if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+              e.preventDefault();
+              openItem(item);
+            }
+          }}
+        >
           {item.index}
         </Link>
       ),
@@ -261,55 +234,71 @@ export function ItemsTab({
       ? [
           {
             id: 'item_id',
-            label: 'ID',
-            sortKey: 'item_id',
+            header: 'ID',
+            type: 'id',
+            sort: 'item_id',
             width: 140,
-            mono: true,
+            priority: 2,
             cell: (item: DatasetItem) => <span dir="ltr">{item.item_id}</span>,
-          },
+          } satisfies Column<DatasetItem>,
         ]
       : []),
     {
       id: 'input',
-      label: 'Input',
-      sortKey: 'input',
+      header: 'Input',
+      sort: 'input',
       flex: true,
       minWidth: 220,
-      cell: (item: DatasetItem) => <Preview value={item.input} />,
+      wrap: 2,
+      priority: 1,
+      cell: (item) => <Preview value={item.input} wrap />,
     },
     {
       id: 'expected',
-      label: 'Expected',
-      sortKey: 'expected',
+      header: 'Expected',
+      sort: 'expected',
       flex: true,
       minWidth: 180,
-      cell: (item: DatasetItem) => <Preview value={item.expected_output} />,
+      wrap: 2,
+      priority: 2,
+      cell: (item) => <Preview value={item.expected_output} wrap />,
     },
     {
       id: 'metadata',
-      label: 'Metadata',
-      sortKey: 'metadata',
+      header: 'Metadata',
+      sort: 'metadata',
       width: 180,
-      cell: (item: DatasetItem) => <Preview value={item.metadata} />,
+      priority: 3,
+      cell: (item) => <Preview value={item.metadata} />,
+    },
+    {
+      id: 'labels',
+      header: 'Labels',
+      type: 'tags',
+      width: 160,
+      priority: 3,
+      defaultHidden: true,
+      cell: (item) => <TagsCell tags={item.labels ?? []} />,
     },
     {
       id: 'runs',
-      label: 'Runs',
-      sortKey: 'runs',
+      header: 'Runs',
+      type: 'number',
+      sort: 'runs',
       width: 70,
-      align: 'end' as const,
-      mono: true,
-      cell: (item: DatasetItem) => item.run_count ?? item.result_summary?.run_count ?? 0,
+      priority: 3,
+      cell: (item) => item.run_count ?? item.result_summary?.run_count ?? 0,
     },
-    ...metrics.map((m) => ({
+    ...metrics.map((m): Column<DatasetItem> => ({
       id: `metric:${m}`,
-      label: m,
-      sortKey: `metric:${m}`,
-      width: 110,
-      align: 'end' as const,
-      mono: true,
-      cell: (item: DatasetItem) => (
-        <ScoreValue
+      header: m,
+      group: 'Metrics',
+      type: 'score',
+      sort: `metric:${m}`,
+      width: 130,
+      priority: 2,
+      cell: (item) => (
+        <ScoreBar
           value={item.result_summary?.metrics?.[m]?.avg ?? null}
           direction={metricDir(directions[m])}
         />
@@ -317,108 +306,163 @@ export function ItemsTab({
     })),
     {
       id: 'latency',
-      label: 'Latency',
-      sortKey: 'latency',
+      header: 'Latency',
+      type: 'duration',
+      sort: 'latency',
       width: 90,
-      align: 'end' as const,
-      mono: true,
-      cell: (item: DatasetItem) => formatLatency(item.result_summary?.avg_latency_ms),
+      priority: 3,
+      cell: (item) => formatLatency(item.result_summary?.avg_latency_ms),
     },
     {
       id: 'edits',
-      label: 'Edits',
-      sortKey: 'edits',
+      header: 'Edits',
+      type: 'number',
+      sort: 'edits',
       width: 70,
-      align: 'end' as const,
-      mono: true,
-      cell: (item: DatasetItem) => item.edit_count ?? 0,
-    },
-    {
-      id: 'actions',
-      label: 'Actions',
-      hideLabel: true,
-      width: 44,
-      align: 'end' as const,
-      cell: (item: DatasetItem) => (
-        <DropdownMenu
-          label={`Actions for item ${item.item_id}`}
-          trigger={<IconButton label={`Actions for item ${item.item_id}`} icon="more" />}
-          items={[
-            { id: 'open', label: 'Open item' },
-            { id: 'copy', label: 'Copy as JSON' },
-            ...(canEdit
-              ? [{ id: 'delete', label: 'Delete item', tone: 'danger' as const, separatorBefore: true }]
-              : []),
-          ]}
-          onAction={(id) => {
-            if (id === 'open') (onOpenItem ?? ((i: DatasetItem) => navigate(itemHref(i))))(item);
-            else if (id === 'copy') {
-              void copyText(
-                formatJson({
-                  item_id: item.item_id,
-                  input: item.input,
-                  expected_output: item.expected_output,
-                  metadata: item.metadata,
-                  labels: item.labels,
-                }),
-              ).then((ok) =>
-                toast.show(ok ? 'Copied item as JSON' : 'Copy failed', { tone: ok ? 'success' : 'error' }),
-              );
-            } else if (id === 'delete') setDeleting(item);
-          }}
-        />
-      ),
+      defaultHidden: true,
+      cell: (item) => item.edit_count ?? 0,
     },
   ];
 
-  const pageCount = Math.max(1, Math.ceil(query.data.total / route.pageSize));
+  const rowActions = (): RowAction<DatasetItem>[] => [
+    { id: 'open', label: 'Open item', icon: 'external', primary: true, onPress: openItem },
+    {
+      id: 'copy',
+      label: 'Copy as JSON',
+      onPress: (it) =>
+        void copyText(
+          formatJson({
+            item_id: it.item_id,
+            input: it.input,
+            expected_output: it.expected_output,
+            metadata: it.metadata,
+            labels: it.labels,
+          }),
+        ).then((ok) =>
+          toast.show(ok ? 'Copied item as JSON' : 'Copy failed', { tone: ok ? 'success' : 'error' }),
+        ),
+    },
+    ...(canEdit
+      ? [
+          {
+            id: 'delete',
+            label: 'Delete item',
+            danger: true,
+            onPress: (it: DatasetItem) => setDeleting(it),
+          },
+        ]
+      : []),
+  ];
+
+  const total = query.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / route.pageSize));
+  const filtered = Boolean(route.search || route.label);
   return (
     <div className={styles.wrap} data-items-tab aria-busy={query.isFetching || undefined}>
-      {toolbar}
-      {items.length === 0 ? (
-        <EmptyState
-          compact
-          title="No items match these filters"
-          action={
-            <Button variant="neutral" onPress={() => setSearch('')}>
-              Clear search
-            </Button>
+      <DataTable<DatasetItem>
+        aria-label={`Items in ${version.version}`}
+        storageKey="datasets.items.v3"
+        density="compact"
+        rows={items}
+        rowKey={(i) => i.item_id}
+        columns={columns}
+        sort={sort}
+        onSortChange={(s) => setQuery({ sort: s ? itemSortKey(s.key, s.direction) : null, page: null })}
+        onRowOpen={openItem}
+        rowActions={rowActions}
+        selection={
+          selection
+            ? {
+                ...selection,
+                selectAllMatching:
+                  total > items.length
+                    ? { total, noun: 'items', onSelectAll: () => void selectAll() }
+                    : undefined,
+              }
+            : undefined
+        }
+        bulkActions={bulkActions}
+        loading={showSkeleton}
+        refreshing={query.isFetching && query.isPlaceholderData}
+        error={query.isError ? query.error : undefined}
+        onRetry={() => void query.refetch()}
+        isFiltered={filtered}
+        empty={query.data ? <EmptyState compact title="No items" /> : undefined}
+        filteredEmpty={
+          <EmptyState
+            compact
+            title="No items match these filters"
+            action={
+              <Button variant="neutral" onPress={() => setSearch('')}>
+                Clear search
+              </Button>
+            }
+          />
+        }
+        className={styles.table}
+      >
+        <DataTable.Toolbar
+          search={
+            <SearchField
+              label="Search items"
+              hideLabel
+              placeholder="Search items…"
+              value={search}
+              onChange={setSearch}
+              width={260}
+              data-testid="items-search"
+            />
+          }
+          chips={
+            route.label ? (
+              <Chip
+                isSelected
+                onRemove={() => {
+                  onFilterChange?.();
+                  setQuery({ label: null, page: null });
+                }}
+                removeLabel="Clear label filter"
+              >
+                label: {route.label}
+              </Chip>
+            ) : null
+          }
+          count={
+            query.data ? (
+              <span aria-live="polite">
+                {query.data.total.toLocaleString()} {query.data.total === 1 ? 'item' : 'items'}
+                {route.search ? ` matching “${route.search}”` : ''}
+              </span>
+            ) : null
+          }
+          trailing={
+            canEdit ? (
+              <Button variant="neutral" size="sm" icon={<Icon name="plus" size={12} />} onPress={onAddItem}>
+                Add item
+              </Button>
+            ) : null
           }
         />
-      ) : (
-        <DataTable<DatasetItem>
-          aria-label={`Items in ${version.version}`}
-          storageKey="datasets.items.v2"
-          rows={items}
-          rowKey={(i) => i.item_id}
-          columns={columns}
-          sort={sort}
-          onSortChange={(s) => setQuery({ sort: itemSortKey(s.key, s.direction), page: null })}
-          onRowAction={(_k, item) => (onOpenItem ?? ((i: DatasetItem) => navigate(itemHref(i))))(item)}
-          selection={selection}
-          dimmed={query.isFetching && query.isPlaceholderData}
-          className={styles.table}
+        <DataTable.Footer
+          trailing={
+            canEdit ? (
+              <Button variant="ghost" size="sm" icon={<Icon name="plus" size={12} />} onPress={onAddItem}>
+                Add new item
+              </Button>
+            ) : null
+          }
+          pagination={{
+            total,
+            page: route.page + 1,
+            pageCount,
+            pageSize: route.pageSize,
+            pageSizeOptions: ITEM_PAGE_SIZES,
+            noun: 'items',
+            onPageChange: (p) => setQuery({ page: p <= 1 ? null : String(p - 1) }),
+            onPageSizeChange: (s) => setQuery({ size: s === 50 ? null : String(s), page: null }),
+          }}
         />
-      )}
-      <div className={styles.footer}>
-        {canEdit ? (
-          <Button variant="ghost" size="sm" icon={<Icon name="plus" size={12} />} onPress={onAddItem}>
-            Add new item
-          </Button>
-        ) : (
-          <span />
-        )}
-        <Pagination
-          total={query.data.total}
-          page={route.page + 1}
-          pageCount={pageCount}
-          pageSize={route.pageSize}
-          pageSizeOptions={ITEM_PAGE_SIZES}
-          noun="items"
-          onPageChange={(p) => setQuery({ page: p <= 1 ? null : String(p - 1) })}
-          onPageSizeChange={(s) => setQuery({ size: s === 50 ? null : String(s), page: null })}
-        />
-      </div>
+      </DataTable>
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}
@@ -444,7 +488,7 @@ export function ItemsTab({
 }
 
 /** Mono one-line preview; Arabic text flows RTL. Hovering for 700 ms shows the full value. */
-export function Preview({ value }: { value: unknown }) {
+export function Preview({ value, wrap }: { value: unknown; wrap?: boolean }) {
   const text = previewValue(value);
   const dir = textDirAttrs(typeof value === 'string' ? value : text);
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
@@ -456,7 +500,7 @@ export function Preview({ value }: { value: unknown }) {
   useEffect(() => () => window.clearTimeout(timer.current), []);
   return (
     <span
-      className={styles.preview}
+      className={wrap ? styles.previewWrap : styles.preview}
       {...dir}
       onMouseEnter={(e) => {
         if (!text) return;

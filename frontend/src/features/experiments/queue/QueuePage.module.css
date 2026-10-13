@@ -7,10 +7,6 @@
   margin-block: var(--space-md);
 }
 
-.note {
-  margin-inline-start: auto;
-}
-
 .envCards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
@@ -70,13 +66,6 @@
   flex-direction: column;
   gap: var(--space-sm);
   margin-bottom: var(--space-lg);
-}
-
-.bulk {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  align-items: center;
 }
 
 .cell {

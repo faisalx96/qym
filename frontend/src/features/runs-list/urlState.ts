@@ -24,6 +24,7 @@ export const NONE = '__none__';
 export const EMPTY = '__empty__';
 export const VERSIONING_PREFIX = 'v.';
 export const PAGE_SIZE = 50;
+export const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
 
 export interface RunsView {
   tasks: string[];

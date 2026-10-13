@@ -10,12 +10,12 @@ import {
   Icon,
   IconButton,
   RunStatusBadge,
-  ScoreValue,
+  ScoreBar,
   Tag,
   Tooltip,
 } from '@/ui';
 import { formatDateParts, formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
-import { errorsLeftOut, metricDirection } from '@/lib/metrics';
+import { errorsLeftOut, formatPercent, metricDirection } from '@/lib/metrics';
 import { projectPath, runPath } from '@/app/routes';
 import { runHref } from '@/lib/runs-order';
 import { textDirAttrs } from '@/lib/text';
@@ -77,7 +77,9 @@ export function OwnerCell({ row }: { row: RunRow }) {
 export function DatasetCell({ row }: { row: RunRow }) {
   return (
     <span className={styles.dataset}>
-      <span title={row.dataset_name}>{row.dataset_name}</span>
+      <Tag kind="data" title={row.dataset_name}>
+        {row.dataset_name}
+      </Tag>
       {row.dataset_version ? <Tag kind="version">{row.dataset_version}</Tag> : null}
       {row.dataset_aliases?.map((a) => (
         <Tag key={a}>{a}</Tag>
@@ -315,11 +317,11 @@ export function MetricCell({
           : undefined
       }
     >
-      <ScoreValue
+      <ScoreBar
         value={v}
         type={type}
         direction={dir}
-        digits={smartDigits(v, row.metric_neighbor_values?.[metric])}
+        text={formatPercent(v, smartDigits(v, row.metric_neighbor_values?.[metric]))}
         error={error}
       />
       {marker}

@@ -174,30 +174,48 @@ export function OverviewPage() {
                 aria-label="Live runs"
                 rows={liveRows}
                 rowKey={(r) => r.run_id}
-                stickyHeader={false}
+                variant="embedded"
+                density="compact"
+                densityLocked
                 columns={[
                   {
                     id: 'run',
-                    label: 'Run',
+                    header: 'Run',
+                    type: 'id',
                     flex: true,
                     minWidth: 160,
-                    mono: true,
+                    priority: 1,
                     cell: (r) => <RunLink slug={slug} row={r} withTask />,
                   },
-                  { id: 'owner', label: 'Owner', width: 150, cell: (r) => <OwnerCell row={r} /> },
-                  { id: 'status', label: 'Status', width: 230, cell: (r) => <StatusCell row={r} /> },
+                  {
+                    id: 'owner',
+                    header: 'Owner',
+                    width: 150,
+                    priority: 3,
+                    cell: (r) => <OwnerCell row={r} />,
+                  },
+                  {
+                    id: 'status',
+                    header: 'Status',
+                    type: 'status',
+                    width: 230,
+                    priority: 1,
+                    cell: (r) => <StatusCell row={r} />,
+                  },
                   {
                     id: 'progress',
-                    label: 'Items',
+                    header: 'Items',
+                    type: 'number',
                     width: 90,
-                    align: 'end',
+                    priority: 2,
                     cell: (r) => (r.samples > 1 ? <Mono>{itemProgress(r)}</Mono> : null),
                   },
                   {
                     id: 'updated',
-                    label: 'Updated',
+                    header: 'Updated',
+                    type: 'date',
                     width: 110,
-                    mono: true,
+                    priority: 2,
                     cell: (r) => formatRelative(r.last_event_at),
                   },
                 ]}
@@ -397,40 +415,46 @@ function MiniRuns({ slug, rows, hideStatus }: { slug: string; rows: RunRow[]; hi
       aria-label="Runs"
       rows={rows}
       rowKey={(r) => r.run_id}
-      stickyHeader={false}
+      variant="embedded"
+      density="compact"
+      densityLocked
       columns={[
         {
           id: 'run',
-          label: 'Run',
+          header: 'Run',
+          type: 'id',
           flex: true,
           minWidth: 120,
-          mono: true,
+          priority: 1,
           cell: (r) => <RunLink slug={slug} row={r} />,
         },
-        { id: 'owner', label: 'User', width: 96, cell: (r) => <OwnerCell row={r} /> },
+        { id: 'owner', header: 'User', width: 96, priority: 3, cell: (r) => <OwnerCell row={r} /> },
         ...(hideStatus
           ? []
           : [
               {
                 id: 'status',
-                label: 'Status',
+                header: 'Status',
+                type: 'status' as const,
                 width: 104,
+                priority: 1 as const,
                 cell: (r: RunRow) => <RunStatusBadge status={r.status} />,
               },
             ]),
         {
           id: 'items',
-          label: 'Items',
+          header: 'Items',
+          type: 'number' as const,
           width: 76,
-          align: 'end' as const,
+          priority: 2 as const,
           cell: (r: RunRow) => <Mono>{itemProgress(r)}</Mono>,
         },
         {
           id: 'date',
-          label: 'Date',
+          header: 'Date',
+          type: 'date' as const,
           width: 84,
-          align: 'end' as const,
-          mono: true,
+          priority: 2 as const,
           cell: (r: RunRow) => formatRelative(r.timestamp),
         },
       ]}

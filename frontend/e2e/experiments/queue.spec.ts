@@ -177,7 +177,7 @@ test.describe('queue page', () => {
     const { project } = await seedQueue(request);
     await gotoApp(page, queuePath(project.slug));
     await page.getByRole('button', { name: /Select all I can cancel \(4\)/ }).click();
-    await expect(page.getByText('4 selected')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Selection actions' })).toContainText('4 selected');
     await page.getByRole('button', { name: 'Cancel selected (4)' }).click();
     const dialog = page.getByTestId('cancel-split-dialog');
     await expect(dialog.locator('[data-split="here"]')).toContainText('3');
@@ -200,7 +200,7 @@ test.describe('queue page', () => {
         bodies.push(r.postDataJSON() as Record<string, unknown>);
     });
     await gotoApp(page, queuePath(project.slug));
-    await expect(page.getByRole('button', { name: /Cancel selected/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Select all I can cancel/ })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Cancel all queued in experiment' })).toHaveCount(0);
 
     await pickSelect(page, /Experiment$/, 'held sweep');
@@ -346,12 +346,11 @@ test.describe('queue page', () => {
     await expect(jobsGrid(page).getByRole('row')).toHaveCount(4);
     const row = jobsGrid(page).getByRole('row').nth(1);
     const cancel = row.getByRole('button', { name: 'Cancel' });
-    // the table is one tab stop: Tab lands on the first row, arrows walk its cells
-    await page.getByRole('button', { name: /Select all I can cancel/ }).focus();
-    await page.keyboard.press('Tab');
+    // rows are roving-focus stops: from the focused row, Tab walks through its controls
+    await row.focus();
     await expect(row).toBeFocused();
     for (let i = 0; i < 12 && !(await cancel.evaluate((el) => el === document.activeElement)); i++) {
-      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('Tab');
     }
     await expect(cancel).toBeFocused();
     await page.keyboard.press('Enter');

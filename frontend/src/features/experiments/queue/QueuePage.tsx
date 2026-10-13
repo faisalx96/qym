@@ -35,10 +35,14 @@ import {
   ErrorState,
   Icon,
   PageHeader,
+  ProgressCell,
+  RelativeTime,
   Select,
   Skeleton,
   Tag,
   Text,
+  TwoLine,
+  UserCell,
   useToast,
   type BadgeTone,
   type Column,
@@ -46,10 +50,9 @@ import {
 import { DataTable } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { experimentPath } from '../paths';
-import { relTime, absTime } from '../lib/format';
+import { relTime } from '../lib/format';
 import { CancelSplitDialog, type CancelSplitDialogProps } from './CancelSplitDialog';
 import { RemoteQueueSection } from './RemoteQueueSection';
-import { ProgressBar } from './ProgressBar';
 import {
   elapsedSeconds,
   formatElapsed,
@@ -58,7 +61,6 @@ import {
   outcomeSummary,
   paramsSummary,
   plural,
-  runProgress,
   splitJobs,
   CONTROL_HINT,
   titleCase,
@@ -200,42 +202,58 @@ export function QueuePage() {
   const columns: Column<QueueJob>[] = [
     {
       id: 'pos',
-      label: '#',
-      width: 48,
-      mono: true,
+      header: 'Position',
+      hint: 'Position in the queue (waiting jobs only)',
+      type: 'number',
+      width: 90,
+      pin: 'start',
+      hideable: false,
+      priority: 2,
       cell: (j) => (j.queue_position ? String(j.queue_position) : '—'),
     },
     {
       id: 'job',
-      label: 'Experiment',
+      header: 'Experiment',
       flex: true,
       minWidth: 200,
+      priority: 1,
+      cardTitle: true,
       cell: (j) => (
-        <div className={styles.cell}>
-          <span className={styles.jobTitle}>
-            <Link to={experimentPath(slug, j.experiment_id)} className={styles.link}>
-              {j.experiment_name || 'Experiment'} #{j.combo_index}
-            </Link>
-            {j.priority === 'HIGH' ? <Tag tone="warning">HIGH</Tag> : null}
-            {j.attempt > 0 ? <Tag kind="count">attempt {j.attempt + 1}</Tag> : null}
-          </span>
-          {paramsSummary(j.params) ? (
-            <Text variant="sm" tone="muted" mono truncate>
-              {paramsSummary(j.params)}
-            </Text>
-          ) : null}
-          {j.wait_reason || j.error ? (
-            <Text variant="sm" tone="warning">
-              {j.wait_reason || j.error}
-            </Text>
-          ) : null}
-        </div>
+        <TwoLine
+          primary={
+            <span className={styles.jobTitle}>
+              <Link to={experimentPath(slug, j.experiment_id)} className={styles.link}>
+                {j.experiment_name || 'Experiment'} #{j.combo_index}
+              </Link>
+              {j.priority === 'HIGH' ? <Tag tone="warning">HIGH</Tag> : null}
+              {j.attempt > 0 ? <Tag kind="count">attempt {j.attempt + 1}</Tag> : null}
+            </span>
+          }
+          secondary={
+            paramsSummary(j.params) || j.wait_reason || j.error ? (
+              <>
+                {paramsSummary(j.params) ? (
+                  <Text variant="sm" tone="muted" mono truncate>
+                    {paramsSummary(j.params)}
+                  </Text>
+                ) : null}
+                {paramsSummary(j.params) && (j.wait_reason || j.error) ? ' · ' : null}
+                {j.wait_reason || j.error ? (
+                  <Text variant="sm" tone="warning">
+                    {j.wait_reason || j.error}
+                  </Text>
+                ) : null}
+              </>
+            ) : undefined
+          }
+        />
       ),
     },
     {
       id: 'env',
-      label: 'Environment',
-      width: 120,
+      header: 'Environment',
+      width: 140,
+      priority: 2,
       cell: (j) => {
         const env = query.data?.environments.find((e) => e.id === j.environment_id);
         return (
@@ -250,38 +268,52 @@ export function QueuePage() {
     },
     {
       id: 'priority',
-      label: 'Priority',
+      header: 'Priority',
       width: 90,
+      priority: 3,
       cell: (j) => (j.priority ? titleCase(j.priority) : '—'),
     },
     {
       id: 'status',
-      label: 'Status',
+      header: 'Status',
+      type: 'status',
       width: 130,
+      priority: 1,
       cell: (j) => (
         <Badge tone={STATUS_TONE[j.status] ?? 'neutral'} dot>
           {j.status}
         </Badge>
       ),
     },
-    { id: 'creator', label: 'Created by', width: 120, cell: (j) => j.created_by_email ?? '—' },
+    {
+      id: 'creator',
+      header: 'Created by',
+      width: 140,
+      priority: 3,
+      defaultHidden: true,
+      cell: (j) => <UserCell name={j.created_by_email} />,
+    },
     {
       id: 'age',
-      label: 'Age',
-      width: 80,
-      cell: (j) => <span title={absTime(j.created_at)}>{relTime(j.created_at, now)}</span>,
+      header: 'Age',
+      type: 'date',
+      width: 90,
+      priority: 3,
+      cell: (j) => <RelativeTime iso={j.created_at} now={new Date(now)} />,
     },
     {
       id: 'elapsed',
-      label: 'Elapsed',
-      width: 80,
-      mono: true,
+      header: 'Elapsed',
+      type: 'duration',
+      width: 90,
+      priority: 2,
       cell: (j) => formatElapsed(elapsedSeconds(j, now)),
     },
     {
       id: 'progress',
-      label: 'Run progress',
-      width: 150,
+      header: 'Run progress',
+      width: 170,
+      priority: 2,
       cell: (j) => {
         if (!j.run)
           return (
@@ -295,45 +327,55 @@ export function QueuePage() {
               Run deleted
             </Text>
           );
-        const p = runProgress(j);
+        const runId = j.run.id;
         return (
           <div className={styles.cell}>
-            <ProgressBar value={p} label={`${jobLabel(j)} progress`} />
+            {j.run.items_total ? (
+              <ProgressCell done={j.run.items_done ?? 0} total={j.run.items_total} />
+            ) : (
+              <span className={styles.progressText}>{j.run.items_done ?? 0} items</span>
+            )}
             <span className={styles.progressText}>
-              {j.run.items_total
-                ? `${j.run.items_done ?? 0}/${j.run.items_total}`
-                : `${j.run.items_done ?? 0} items`}{' '}
-              ·{' '}
-              <Link to={runPath(slug, j.run.id)} className={styles.link}>
-                run
+              <Link to={runPath(slug, runId)} className={styles.link}>
+                {jobLabel(j)} run
               </Link>
             </span>
           </div>
         );
       },
     },
-    {
-      id: 'actions',
-      label: 'Actions',
-      hideLabel: true,
-      width: 110,
-      cell: (j) =>
-        j.status === 'CANCELLING' ? (
-          <Text variant="sm" tone="muted">
-            Stopping…
-          </Text>
-        ) : (
-          <Button
-            size="sm"
-            variant="danger"
-            isDisabled={!j.can_cancel || readOnly}
-            onPress={() => openCancel([j], `Cancel ${jobLabel(j)}?`)}
-          >
-            Cancel
-          </Button>
-        ),
-    },
   ];
+
+  const filterControls = (
+    <div className={styles.filters} role="group" aria-label="Queue filters">
+      <Select
+        label="Environment"
+        items={envItems}
+        value={filters.environment ?? ''}
+        onChange={(k) => replaceUrlQuery({ environment: k ? String(k) : null })}
+        searchable={false}
+        width={190}
+      />
+      <Select
+        label="Status"
+        items={statusItems}
+        value={filters.statuses?.[0] ?? ''}
+        onChange={(k) => replaceUrlQuery({ status: k ? String(k) : null })}
+        searchable={false}
+        width={160}
+      />
+      <Select
+        label="Experiment"
+        items={experimentItems}
+        value={filters.experiment ?? ''}
+        onChange={(k) => replaceUrlQuery({ experiment: k ? String(k) : null })}
+        width={240}
+      />
+      <Checkbox isSelected={filters.mine} onChange={(v) => replaceUrlQuery({ mine: v })}>
+        Only my jobs
+      </Checkbox>
+    </div>
+  );
 
   const filtered = Boolean(
     filters.environment || filters.statuses?.length || filters.mine || filters.experiment,
@@ -355,38 +397,7 @@ export function QueuePage() {
         ].filter(Boolean)}
         tabs={<ExperimentsTabs current="queue" />}
       />
-      <div className={styles.filters} role="group" aria-label="Queue filters">
-        <Select
-          label="Environment"
-          items={envItems}
-          value={filters.environment ?? ''}
-          onChange={(k) => replaceUrlQuery({ environment: k ? String(k) : null })}
-          searchable={false}
-          width={190}
-        />
-        <Select
-          label="Status"
-          items={statusItems}
-          value={filters.statuses?.[0] ?? ''}
-          onChange={(k) => replaceUrlQuery({ status: k ? String(k) : null })}
-          searchable={false}
-          width={160}
-        />
-        <Select
-          label="Experiment"
-          items={experimentItems}
-          value={filters.experiment ?? ''}
-          onChange={(k) => replaceUrlQuery({ experiment: k ? String(k) : null })}
-          width={240}
-        />
-        <Checkbox isSelected={filters.mine} onChange={(v) => replaceUrlQuery({ mine: v })}>
-          Only my jobs
-        </Checkbox>
-        <Text variant="sm" tone="secondary" className={styles.note}>
-          Refreshes automatically; paused while this tab is hidden
-        </Text>
-      </div>
-
+      {query.data ? null : filterControls}
       {showSkeleton ? (
         <Skeleton kind="table" count={6} label="Loading queue" />
       ) : query.isError && !query.data ? (
@@ -405,80 +416,108 @@ export function QueuePage() {
             ))}
           </ul>
           <section className={styles.jobs} aria-label="Our jobs">
-            <div className={styles.bulk} role="region" aria-label="Bulk actions">
-              <Text variant="md" weight={600}>
-                {selected.size ? `${selected.size} selected` : 'Our jobs'}
-              </Text>
-              <Button
-                size="sm"
-                variant="neutral"
-                isDisabled={!cancellableJobs.length}
-                onPress={() => setSelected(new Set(cancellableJobs.map((j) => j.id)))}
-              >
-                Select all I can cancel ({cancellableJobs.length})
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                isDisabled={!selected.size || readOnly}
-                onPress={() => openCancel(selectedJobs)}
-              >
-                Cancel selected ({selected.size})
-              </Button>
-              {filters.experiment ? (
-                <Button
-                  size="sm"
-                  variant="neutral"
-                  isDisabled={readOnly}
-                  onPress={() => void openCancelQueuedInExperiment()}
-                >
-                  Cancel all queued in experiment
-                </Button>
-              ) : null}
-              {selected.size ? (
-                <Button size="sm" variant="ghost" onPress={() => setSelected(new Set())}>
-                  Clear
-                </Button>
-              ) : null}
-            </div>
-            <DataTable
-              storageKey="eval-queue.jobs.v1"
+            <DataTable<QueueJob>
+              storageKey="eval-queue.jobs.v2"
               columns={columns}
               rows={jobs}
               rowKey={(j) => j.id}
               minWidth={1050}
+              density="regular"
               selection={{ selected, onChange: setSelected }}
+              bulkActions={
+                <Button
+                  size="sm"
+                  variant="danger"
+                  isDisabled={!selected.size || readOnly}
+                  onPress={() => openCancel(selectedJobs)}
+                >
+                  Cancel selected ({selected.size})
+                </Button>
+              }
+              rowActions={(j) => [
+                {
+                  id: 'cancel',
+                  label: j.status === 'CANCELLING' ? 'Stopping…' : 'Cancel',
+                  icon: 'close',
+                  primary: true,
+                  danger: true,
+                  disabled: !j.can_cancel || readOnly || j.status === 'CANCELLING',
+                  onPress: () => openCancel([j], `Cancel ${jobLabel(j)}?`),
+                },
+              ]}
+              rowState={(j) =>
+                j.error
+                  ? 'error'
+                  : j.status === 'BLOCKED'
+                    ? 'warn'
+                    : j.status === 'RUNNING'
+                      ? 'live'
+                      : undefined
+              }
               aria-label="Queued jobs in dispatch order"
-              emptyState={
+              refreshing={query.isFetching}
+              isFiltered={filtered}
+              empty={
                 <EmptyState
                   compact
                   icon={<Icon name="clock" />}
-                  title={filtered ? 'No jobs match these filters' : 'The queue is empty'}
-                  body={
-                    filtered
-                      ? 'Clear a filter to see more jobs.'
-                      : 'Launched experiments appear here until they finish.'
-                  }
+                  title="The queue is empty"
+                  body="Launched experiments appear here until they finish."
+                />
+              }
+              filteredEmpty={
+                <EmptyState
+                  compact
+                  icon={<Icon name="clock" />}
+                  title="No jobs match these filters"
+                  body="Clear a filter to see more jobs."
                   action={
-                    filtered ? (
-                      <Button
-                        variant="neutral"
-                        onPress={() =>
-                          replaceUrlQuery({ environment: null, status: null, mine: null, experiment: null })
-                        }
-                      >
-                        Clear filters
-                      </Button>
-                    ) : undefined
+                    <Button
+                      variant="neutral"
+                      onPress={() =>
+                        replaceUrlQuery({ environment: null, status: null, mine: null, experiment: null })
+                      }
+                    >
+                      Clear filters
+                    </Button>
                   }
                 />
               }
-            />
-            {query.data.total > jobs.length ? (
-              <Text variant="sm" tone="secondary">
-                Showing the first {jobs.length} of {query.data.total} jobs.
-              </Text>
-            ) : null}
+            >
+              <DataTable.Toolbar
+                filters={filterControls}
+                trailing={
+                  <>
+                    <Button
+                      size="sm"
+                      variant="neutral"
+                      isDisabled={!cancellableJobs.length}
+                      onPress={() => setSelected(new Set(cancellableJobs.map((j) => j.id)))}
+                    >
+                      Select all I can cancel ({cancellableJobs.length})
+                    </Button>
+                    {filters.experiment ? (
+                      <Button
+                        size="sm"
+                        variant="neutral"
+                        isDisabled={readOnly}
+                        onPress={() => void openCancelQueuedInExperiment()}
+                      >
+                        Cancel all queued in experiment
+                      </Button>
+                    ) : null}
+                  </>
+                }
+              />
+              <DataTable.Footer
+                summary={
+                  query.data.total > jobs.length
+                    ? `Showing the first ${jobs.length} of ${query.data.total} jobs`
+                    : plural(query.data.total, 'job')
+                }
+                trailing="Refreshes automatically; paused while this tab is hidden"
+              />
+            </DataTable>
             {!jobs.every((j) => j.can_cancel) && jobs.length ? (
               <Text variant="sm" tone="muted">
                 {CONTROL_HINT}.

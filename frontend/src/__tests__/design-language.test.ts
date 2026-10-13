@@ -264,6 +264,64 @@ describe('primitive module contracts', () => {
     expect(td).toContain('font-family: var(--font-sans)');
   });
 
+  it('DataTable v2 density, header and selection tokens are defined and used', () => {
+    const tokens = read(join(SRC, 'styles/tokens.css'));
+    for (const t of [
+      '--row-compact: 32px',
+      '--row-regular: 40px',
+      '--row-comfortable: 52px',
+      '--table-header-height: 34px',
+      '--bg-selected:',
+    ])
+      expect(tokens, t).toContain(t);
+    const css = ui('DataTable');
+    for (const d of [
+      'height: var(--table-header-height)',
+      'height: var(--row-h)',
+      'var(--bg-selected)',
+      '--row-h: var(--row-compact)',
+      'prefers-reduced-motion',
+    ])
+      expect(css, `DataTable: '${d}'`).toContain(d);
+    expect(css).not.toMatch(/rgba\(0, 212, 170/);
+  });
+
+  it('raw <table> markup lives in ui/DataTable (the allow-list may only shrink)', () => {
+    // Remaining raw tables, each with a reason. Compare/run-detail/report tables move in the second pass;
+    // the rest are specialised matrices, prose, a dialog key list or tiny form tables.
+    const ALLOWED = new Set([
+      'features/analyzer/guidance/ExamplePicker.tsx', // selectable example list in a popover
+      'features/compare/components/panel/CategoriesTab.tsx', // compare panels: second pass
+      'features/compare/components/panel/MetricsTab.tsx',
+      'features/compare/components/panel/RootCauseTab.tsx',
+      'features/compare/components/panel/StepsTab.tsx',
+      'features/compare/components/RunCards.tsx',
+      'features/compare/components/sweep/SweepView.tsx',
+      'features/datasets/wizard/UploadWizard.tsx', // preview grid of an uploaded file
+      'features/docs/DocsArticle.tsx', // docs prose tables
+      'features/experiments/detail/ChartCard.tsx', // chart legend table
+      'features/experiments/detail/MatrixCard.tsx', // heatmap matrix
+      'features/experiments/launch/settings/JsonFields.tsx', // key/value form rows
+      'features/experiments/launch/settings/RoleTable.tsx', // role form table
+      'features/run-detail/components/panels/RepeatTab.tsx', // run-detail: second pass
+      'features/runs-list/PassesPanel.tsx', // nested passes list with its own select/delete controls
+      'features/runs-list/ShortcutsDialog.tsx', // key list in a dialog
+      'sdk-viewer/components/RowList.tsx', // offline viewer, separate bundle
+    ]);
+    const found = tsxFiles
+      .filter((f) => /<table[\s>]/.test(read(f)) && !rel(f).startsWith('ui/DataTable/'))
+      .map(rel)
+      .filter((f) => !f.includes('__tests__'));
+    expect(
+      found.filter((f) => !ALLOWED.has(f)),
+      'Use DataTable (docs/DESIGN_LANGUAGE.md §3) instead of a raw <table>',
+    ).toEqual([]);
+    expect(
+      [...ALLOWED].filter((f) => !found.includes(f)),
+      'Remove migrated files from the allow-list',
+    ).toEqual([]);
+  });
+
   it('features compose primitives instead of restyling them', () => {
     const featureCss = cssFiles.filter((f) => rel(f).startsWith('features/'));
     const problems: string[] = [];

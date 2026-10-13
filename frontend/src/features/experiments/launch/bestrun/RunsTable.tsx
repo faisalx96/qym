@@ -1,6 +1,5 @@
 import type { BestRunRow } from '@/api/launch';
-import { DataTable, Tag, type Column } from '@/ui';
-import { Button } from '@/ui';
+import { DataTable, ScoreBar, Tag, TwoLine, type Column } from '@/ui';
 import { formatAge, formatScore, versionText } from '../model';
 import { shortId, sweepText } from './lib';
 import styles from './bestrun.module.css';
@@ -20,13 +19,35 @@ export function RunsTable({
   onUse: (run: BestRunRow) => void;
 }) {
   const columns: Column<BestRunRow>[] = [
-    { id: 'rank', label: '#', width: 40, minWidth: 36, mono: true, cell: (r) => r.rank, resizable: false },
-    { id: 'run', label: 'Run', width: 100, mono: true, cell: (r) => shortId(r.run_id) },
+    {
+      id: 'rank',
+      header: '#',
+      type: 'number',
+      width: 40,
+      minWidth: 36,
+      priority: 1,
+      cell: (r) => r.rank,
+      resizable: false,
+    },
+    {
+      id: 'run',
+      header: 'Run',
+      type: 'id',
+      width: 120,
+      priority: 1,
+      cell: (r) => (
+        <TwoLine
+          primary={shortId(r.run_id)}
+          secondary={r.run_id === selectedRunId ? <Tag tone="success">Current base</Tag> : undefined}
+        />
+      ),
+    },
     {
       id: 'dataset',
-      label: 'Dataset',
+      header: 'Dataset',
       width: 180,
       flex: true,
+      priority: 2,
       cell: (r) =>
         r.dataset
           ? r.dataset.name + (r.dataset_version ? ` ${r.dataset_version.version}` : '')
@@ -34,66 +55,69 @@ export function RunsTable({
     },
     {
       id: 'score',
-      label: metric || 'Score',
-      width: 90,
-      mono: true,
-      align: 'end',
-      cell: (r) => formatScore(r.score),
+      header: metric || 'Score',
+      type: 'score',
+      width: 120,
+      priority: 1,
+      cell: (r) => <ScoreBar value={r.score} text={formatScore(r.score)} direction="none" />,
     },
     {
       id: 'pass',
-      label: k ? `pass@${k}` : 'pass@k',
+      header: k ? `pass@${k}` : 'pass@k',
+      type: 'number',
       width: 80,
-      mono: true,
-      align: 'end',
+      priority: 2,
       cell: (r) => (r.pass_at_k_value == null ? '—' : formatScore(r.pass_at_k_value)),
     },
     {
       id: 'items',
-      label: 'Items',
+      header: 'Items',
+      type: 'number',
       width: 100,
-      mono: true,
-      align: 'end',
+      priority: 2,
       cell: (r) => `${r.item_count ?? 0}${r.error_item_count ? ` (${r.error_item_count} err)` : ''}`,
     },
     {
       id: 'versions',
-      label: 'Versions',
+      header: 'Versions',
       width: 200,
-      mono: true,
+      type: 'id',
+      priority: 3,
       cell: (r) => versionText(r.remote_versioning) || '—',
     },
-    { id: 'swept', label: 'Swept', width: 150, mono: true, cell: (r) => sweepText(r.params) || '—' },
-    { id: 'age', label: 'Age', width: 80, cell: (r) => formatAge(r.age_seconds) },
     {
-      id: 'action',
-      label: 'Use',
-      hideLabel: true,
-      width: 120,
-      resizable: false,
-      cell: (r) =>
-        r.run_id === selectedRunId ? (
-          <Tag tone="success">Current base</Tag>
-        ) : (
-          <Button
-            variant="neutral"
-            aria-label={`Start from run ${shortId(r.run_id)}`}
-            onPress={() => onUse(r)}
-          >
-            Use
-          </Button>
-        ),
+      id: 'swept',
+      header: 'Swept',
+      width: 150,
+      type: 'id',
+      priority: 3,
+      cell: (r) => sweepText(r.params) || '—',
     },
+    { id: 'age', header: 'Age', type: 'date', width: 80, priority: 3, cell: (r) => formatAge(r.age_seconds) },
   ];
   return (
     <div className={styles.tableWrap}>
-      <DataTable
+      <DataTable<BestRunRow>
         aria-label="Best runs"
         columns={columns}
         rows={runs}
         rowKey={(r) => r.run_id}
         minWidth={900}
         stickyHeader={false}
+        density="regular"
+        rowActions={(r) =>
+          r.run_id === selectedRunId
+            ? []
+            : [
+                {
+                  id: 'use',
+                  label: `Start from run ${shortId(r.run_id)}`,
+                  icon: 'check',
+                  primary: true,
+                  onPress: onUse,
+                },
+              ]
+        }
       />
     </div>
   );
