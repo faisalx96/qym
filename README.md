@@ -170,8 +170,11 @@ Run the platform with Docker:
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up --build
 ```
 
-The web UI is built from `frontend/` (Node 24) and is not committed. Docker
-builds it for you; for a local checkout run:
+The web UI is built from `frontend/` (Node 24) and is not committed. In Docker
+it comes from a separate assets image (`docker/Dockerfile.frontend`): build it
+once with `docker compose -f docker/docker-compose.yml build frontend` (or
+`docker/build.sh`, which builds both images), or set `QYM_FRONTEND_IMAGE` to a
+published one. For a local checkout run:
 
 ```bash
 cd frontend && npm ci && npm run build        # writes packages/platform/qym_platform/_static/app/

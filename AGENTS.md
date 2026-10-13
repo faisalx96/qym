@@ -23,7 +23,7 @@ This is a monorepo with two independently-buildable packages under `packages/`:
   - `export_templates/run/`: frozen self-contained HTML templates for `/api/runs/{id}/export-html` and `/api/compare/export-html` (not the app UI)
   - `_static/app/`: the built React UI (output of `frontend/`, gitignored; served by `api/spa.py`)
 - `frontend/`: the React + TypeScript + Vite app, which is THE platform UI (and the SDK-local viewer in `src/sdk-viewer/`); see `frontend/README.md`
-- `docker/`: Dockerfile, docker-compose, entrypoint
+- `docker/`: Dockerfile (platform), Dockerfile.frontend (UI assets image, `FRONTEND_IMAGE` build arg), build.sh, docker-compose, entrypoint
 - `tests/`: test suites
   - `sdk/`: SDK unit tests
   - `platform/`: platform unit tests
@@ -40,7 +40,7 @@ This is a monorepo with two independently-buildable packages under `packages/`:
 - Frontend (Node 24): `cd frontend && npm ci && npm run check && npm run build && npm run build:sdk` (`build` writes `packages/platform/qym_platform/_static/app/`, `build:sdk` writes `packages/sdk/qym/_static/ui/`; both gitignored). Dev: `npm run dev` (Vite on 5800, proxies the API to the platform on 8800; `frontend/README.md`). Browser tests: `npm run e2e` (platform UI), `npm run e2e:sdk` (SDK viewer); they boot their own servers
 - Build SDK wheel: `pip wheel packages/sdk/ --no-deps -w dist/` (run `npm run build:sdk` first so the viewer is in the wheel)
 - Build platform wheel: `pip wheel packages/platform/ --no-deps -w dist/` (requires the built `_static/app/`, so run `npm run build` first; the Docker image builds it in a Node stage)
-- Build platform Docker: `docker compose -f docker/docker-compose.yml build`
+- Build platform Docker: `docker/build.sh` (builds the UI assets image, then the platform image; set `FRONTEND_IMAGE` to reuse a published one), or `docker compose -f docker/docker-compose.yml build frontend` then `build`
 
 Example local run:
 ```

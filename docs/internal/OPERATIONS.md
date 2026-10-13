@@ -487,11 +487,19 @@ The web UI is the React app in `frontend/`. It is a build output, not source in
 the Python package:
 
 - **Where it lives.** `npm run build` (in `frontend/`, Node 24) writes it to
-  `packages/platform/qym_platform/_static/app/` (gitignored). The Docker image
-  builds it in a Node stage and copies it in. A wheel carries whatever is in
-  `_static/app/` when it is built, so build the frontend before
+  `packages/platform/qym_platform/_static/app/` (gitignored). A wheel carries
+  whatever is in `_static/app/` when it is built, so build the frontend before
   `pip wheel packages/platform`; without it the pages answer 404 "The app bundle
   is not built".
+- **Docker.** The platform image (`docker/Dockerfile`) has no Node. It copies
+  the bundles from an assets image built by `docker/Dockerfile.frontend`
+  (`/dist/app`, `/dist/ui`, a scratch image) named by the build arg
+  `FRONTEND_IMAGE` (default `qym-frontend:local`). Either build that image
+  first (`docker/build.sh` does both builds; compose: `build frontend` then
+  `up --build`, or set `QYM_FRONTEND_IMAGE`), or pass a published reference to
+  reuse one build across platform images. GitLab CI reads the CI/CD variable
+  `CUSTOM_FRONTEND_IMAGE`: set, it is reused; empty, the job builds and pushes
+  `<project>-frontend:<env>-<sha>` (and `<env>-latest`) and uses it.
 - **Which service.** Only the `all` and `main` services serve the UI. The
   ingestion and workers apps never do (any non-API path there is 404).
 - **URLs.** Pages are served at the canonical paths (`/`, `/login`,

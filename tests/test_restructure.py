@@ -171,6 +171,9 @@ class TestDirectoryStructure:
     def test_entrypoint_exists(self):
         assert (REPO / "docker" / "entrypoint.sh").exists()
 
+    def test_frontend_dockerfile_exists(self):
+        assert (REPO / "docker" / "Dockerfile.frontend").exists()
+
     def test_docker_compose_exists(self):
         assert (REPO / "docker" / "docker-compose.yml").exists()
 
@@ -581,6 +584,17 @@ class TestDockerFiles:
         assert "COPY setup.py" not in text
         assert "COPY qym " not in text
         assert "llm_eval_platform" not in text
+
+    def test_dockerfile_takes_the_frontend_from_the_assets_image(self):
+        text = (REPO / "docker" / "Dockerfile").read_text()
+        assert "ARG FRONTEND_IMAGE=" in text
+        assert "FROM ${FRONTEND_IMAGE} AS frontend-build" in text
+        assert "COPY --from=frontend-build /dist/app " in text
+        assert "COPY --from=frontend-build /dist/ui " in text
+        assert "npm " not in text  # Node lives only in Dockerfile.frontend
+        frontend = (REPO / "docker" / "Dockerfile.frontend").read_text()
+        assert "npm run build && npm run build:sdk" in frontend
+        assert "/dist/app" in frontend and "/dist/ui" in frontend
 
     def test_entrypoint_uses_new_paths(self):
         text = (REPO / "docker" / "entrypoint.sh").read_text()

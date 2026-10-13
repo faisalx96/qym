@@ -14,6 +14,11 @@ x-qym-image: &qym-image
   build:
     context: ..
     dockerfile: docker/Dockerfile
+    args:
+      # Assets image from docker/Dockerfile.frontend; build it first with
+      # `docker compose -f docker/docker-compose.yml build frontend` or point
+      # QYM_FRONTEND_IMAGE at a published one.
+      FRONTEND_IMAGE: ${QYM_FRONTEND_IMAGE:-qym-frontend:local}
   read_only: true
   tmpfs:
     - /tmp:size=512m,mode=1777

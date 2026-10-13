@@ -17,10 +17,22 @@ services:
       timeout: 5s
       retries: 20
 
+  # The UI assets image (docker/Dockerfile.frontend). Build it once before the
+  # platform image: `docker compose -f docker/docker-compose.yml build frontend`,
+  # or set QYM_FRONTEND_IMAGE to a published one and skip this. Never started.
+  frontend:
+    profiles: ["frontend-build"]
+    image: ${QYM_FRONTEND_IMAGE:-qym-frontend:local}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+
   api:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        FRONTEND_IMAGE: ${QYM_FRONTEND_IMAGE:-qym-frontend:local}
     environment:
       QYM_ENVIRONMENT: ${QYM_ENVIRONMENT}
       QYM_BASE_URL: ${QYM_BASE_URL}
@@ -115,6 +127,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        FRONTEND_IMAGE: ${QYM_FRONTEND_IMAGE:-qym-frontend:local}
     command: ["python", "-m", "qym_platform.worker"]
     environment:
       QYM_DATABASE_URL: ${QYM_DATABASE_URL}
