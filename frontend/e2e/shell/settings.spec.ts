@@ -231,7 +231,8 @@ test.describe('LLM connections', () => {
     await form.getByRole('button', { name: 'Cancel' }).click();
     await expect(form).toBeHidden();
 
-    await row.getByRole('button', { name: 'Delete' }).click();
+    await row.getByRole('button', { name: 'Row actions' }).click();
+    await page.getByRole('menuitem', { name: /^Delete / }).click();
     const confirm = page.getByRole('alertdialog', { name: 'Delete “OpenAI prod”?' });
     await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await confirm.getByRole('button', { name: 'Delete connection' }).click();

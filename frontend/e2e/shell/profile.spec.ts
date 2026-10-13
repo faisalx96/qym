@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 import { createProject, gotoApp, trackPageLoads, uniqueSlug } from '../helpers';
 
 test.describe('profile (J5)', () => {
-  test('account grid, projects table with Open/Settings links, no bootstrap panel for an admin', async ({
+  test('account grid, projects table with a project link and Open/Settings row actions, no bootstrap panel for an admin', async ({
     page,
     request,
   }) => {
@@ -25,12 +25,13 @@ test.describe('profile (J5)', () => {
 
     const row = page.getByRole('row').filter({ hasText: p.slug });
     await expect(row).toBeVisible();
-    await expect(row.getByRole('link', { name: 'Open' })).toHaveAttribute(
+    await expect(row.getByRole('link', { name: 'Profile Project' })).toHaveAttribute(
       'href',
       new RegExp(`/projects/${p.slug}$`),
     );
     const loads = trackPageLoads(page);
-    await row.getByRole('link', { name: 'Settings' }).click();
+    await expect(row.getByRole('button', { name: /^Open / })).toBeVisible();
+    await row.getByRole('button', { name: /^Settings for / }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${p.slug}/settings$`));
     await expect(page.locator('[data-settings-page]')).toBeVisible();
     expect(loads.count()).toBe(0);
