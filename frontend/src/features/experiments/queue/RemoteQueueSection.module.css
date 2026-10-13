@@ -72,3 +72,7 @@
   gap: var(--space-xs);
   min-width: 0;
 }
+
+.mono {
+  font-family: var(--font-mono);
+}

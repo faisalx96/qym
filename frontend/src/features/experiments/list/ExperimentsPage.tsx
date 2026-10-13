@@ -19,28 +19,21 @@ import {
   Checkbox,
   DataTable,
   EmptyState,
-  ErrorState,
   Icon,
   LinkButton,
   PageHeader,
-  Pagination,
+  ProgressCell,
+  RelativeTime,
   Select,
-  Skeleton,
   Tag,
   Text,
+  TwoLine,
+  UserCell,
   type Column,
 } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
-import {
-  absTime,
-  baseSourceLabel,
-  plural,
-  relTime,
-  tallyJobCounts,
-  versioningLabel,
-  versioningWords,
-} from '../lib/format';
+import { baseSourceLabel, plural, tallyJobCounts, versioningLabel, versioningWords } from '../lib/format';
 import { experimentPath, launchPath } from '../paths';
 import styles from './ExperimentsPage.module.css';
 
@@ -113,40 +106,58 @@ export function ExperimentsPage() {
   const columns: Column<Experiment>[] = [
     {
       id: 'name',
-      label: 'Name',
+      header: 'Name',
       flex: true,
       minWidth: 220,
-      cell: (x) => (
-        <div className={styles.nameCell}>
-          <span className={styles.name}>{x.name || x.id}</span>
-          {x.description ? <span className={styles.sub}>{x.description}</span> : null}
-        </div>
-      ),
+      pin: 'start',
+      hideable: false,
+      priority: 1,
+      cell: (x) => <TwoLine primary={x.name || x.id} secondary={x.description} />,
     },
-    { id: 'status', label: 'Status', width: 120, cell: (x) => <ExperimentStatusBadge status={x.status} /> },
+    {
+      id: 'status',
+      header: 'Status',
+      type: 'status',
+      width: 120,
+      priority: 1,
+      cell: (x) => <ExperimentStatusBadge status={x.status} />,
+    },
+    {
+      id: 'progress',
+      header: 'Progress',
+      width: 150,
+      priority: 2,
+      cell: (x) => {
+        const t = tallyJobCounts(x.job_counts);
+        return (
+          <ProgressCell done={t.ok + t.failed + t.cancelled} total={t.ok + t.failed + t.cancelled + t.live} />
+        );
+      },
+    },
     {
       id: 'environments',
-      label: 'Environments',
+      header: 'Environments',
       width: 200,
+      priority: 2,
       cell: (x) => <EnvironmentNames ids={x.environment_ids} envById={envById} />,
     },
-    { id: 'base', label: 'Base', width: 130, cell: (x) => baseSourceLabel(x.base_source) },
-    { id: 'jobs', label: 'Jobs', width: 190, cell: (x) => <JobTags counts={x.job_counts} /> },
+    { id: 'base', header: 'Base', width: 130, priority: 3, cell: (x) => baseSourceLabel(x.base_source) },
+    { id: 'jobs', header: 'Jobs', width: 190, priority: 3, cell: (x) => <JobTags counts={x.job_counts} /> },
     {
       id: 'creator',
-      label: 'Created by',
+      header: 'Created by',
+      type: 'text',
       width: 180,
-      cell: (x) => <span className={styles.truncate}>{x.created_by_email ?? '—'}</span>,
+      priority: 3,
+      cell: (x) => <UserCell name={x.created_by_email} />,
     },
     {
       id: 'age',
-      label: 'Created',
+      header: 'Created',
+      type: 'date',
       width: 120,
-      cell: (x) => (
-        <span title={absTime(x.created_at)} className={styles.age}>
-          {relTime(x.created_at)}
-        </span>
-      ),
+      priority: 2,
+      cell: (x) => <RelativeTime iso={x.created_at} />,
     },
   ];
 
@@ -156,56 +167,59 @@ export function ExperimentsPage() {
     </LinkButton>
   );
 
-  let body;
-  if (showSkeleton) body = <Skeleton kind="table" rows={6} label="Loading experiments" />;
-  else if (query.isError && !query.data)
-    body = (
-      <ErrorState
-        error={query.error}
-        title="Couldn’t load experiments"
-        onRetry={() => void query.refetch()}
-      />
-    );
-  else if (query.data && experiments.length === 0 && !filtered && total === 0)
-    body = (
-      <EmptyState
-        icon={<Icon name="flask" />}
-        title="No experiments yet"
-        body="An experiment launches the same evaluation across settings and environments so you can compare the results."
-        action={launch}
-      />
-    );
-  else if (query.data && experiments.length === 0)
-    body = (
-      <EmptyState
-        compact
-        title="No matching experiments"
-        body="Nothing matches these filters."
-        action={
-          <button
-            type="button"
-            className={styles.linkButton}
-            onClick={() => setParams({}, { replace: true })}
-          >
-            Clear filters
-          </button>
+  const emptyAll = Boolean(query.data) && !filtered && total === 0;
+  const filters = (
+    <div className={styles.filters} role="group" aria-label="Filter experiments">
+      <Select
+        label="Status"
+        items={[
+          { key: ALL, label: 'All statuses' },
+          ...EXPERIMENT_STATUSES.map((s) => ({ key: s, label: s.toLowerCase() })),
+        ]}
+        value={status || ALL}
+        onChange={(k) =>
+          update((next) => {
+            if (!k || k === ALL) next.delete('status');
+            else next.set('status', String(k));
+            resetPage(next);
+          })
         }
+        searchable={false}
+        width={150}
       />
-    );
-  else if (query.data)
-    body = (
-      <RouterProvider navigate={navigate} useHref={useHref}>
-        <DataTable
-          aria-label="Experiments"
-          storageKey="experiments.list.v1"
-          columns={columns}
-          rows={experiments}
-          rowKey={(x) => x.id}
-          rowHref={(x) => experimentPath(slug, x.id)}
-          minWidth={1000}
-        />
-      </RouterProvider>
-    );
+      {versioningKeys.map((key) => {
+        const selected = versioning[key];
+        const values = facets[key] ?? [];
+        const options = selected !== undefined && !values.includes(selected) ? [selected, ...values] : values;
+        return (
+          <span key={key} title={`Evaluation Service versioning: ${key}`} data-exp-versioning={key}>
+            <Select
+              label={versioningLabel(key)}
+              items={[
+                { key: ALL, label: `All ${versioningWords(key)}s` },
+                ...options.map((v) => ({ key: v, label: v })),
+              ]}
+              value={selected ?? ALL}
+              onChange={(k) => setVersioning(key, !k || k === ALL ? null : String(k))}
+              width={170}
+            />
+          </span>
+        );
+      })}
+      <Checkbox
+        isSelected={mine}
+        onChange={(on) =>
+          update((next) => {
+            if (on) next.set('mine', '1');
+            else next.delete('mine');
+            resetPage(next);
+          })
+        }
+      >
+        Created by me
+      </Checkbox>
+    </div>
+  );
 
   return (
     <div className={fullWidth} data-experiments-list>
@@ -216,72 +230,95 @@ export function ExperimentsPage() {
         actions={launch}
         tabs={<ExperimentsTabs current="experiments" />}
       />
-      <div className={styles.toolbar} role="group" aria-label="Filter experiments">
-        <Select
-          label="Status"
-          items={[
-            { key: ALL, label: 'All statuses' },
-            ...EXPERIMENT_STATUSES.map((s) => ({ key: s, label: s.toLowerCase() })),
+      <RouterProvider navigate={navigate} useHref={useHref}>
+        <DataTable<Experiment>
+          aria-label="Experiments"
+          storageKey="experiments.list.v2"
+          columns={columns}
+          rows={experiments}
+          rowKey={(x) => x.id}
+          rowHref={(x) => experimentPath(slug, x.id)}
+          rowActions={(x) => [
+            {
+              id: 'open',
+              label: 'Open',
+              icon: 'external',
+              primary: true,
+              onPress: () => navigate(experimentPath(slug, x.id)),
+            },
+            ...(readOnly
+              ? []
+              : [
+                  {
+                    id: 'duplicate',
+                    label: 'Duplicate',
+                    onPress: () => navigate(launchPath(slug, { clone: x.id })),
+                  },
+                ]),
           ]}
-          value={status || ALL}
-          onChange={(k) =>
-            update((next) => {
-              if (!k || k === ALL) next.delete('status');
-              else next.set('status', String(k));
-              resetPage(next);
-            })
-          }
-          searchable={false}
-          width={150}
-        />
-        {versioningKeys.map((key) => {
-          const selected = versioning[key];
-          const values = facets[key] ?? [];
-          const options =
-            selected !== undefined && !values.includes(selected) ? [selected, ...values] : values;
-          return (
-            <span key={key} title={`Evaluation Service versioning: ${key}`} data-exp-versioning={key}>
-              <Select
-                label={versioningLabel(key)}
-                items={[
-                  { key: ALL, label: `All ${versioningWords(key)}s` },
-                  ...options.map((v) => ({ key: v, label: v })),
-                ]}
-                value={selected ?? ALL}
-                onChange={(k) => setVersioning(key, !k || k === ALL ? null : String(k))}
-                width={170}
+          rowState={(x) => (LIVE_EXPERIMENT_STATUSES.includes(x.status) ? 'live' : undefined)}
+          minWidth={1000}
+          density="regular"
+          loading={showSkeleton}
+          refreshing={query.isFetching && !showSkeleton && live}
+          error={query.isError && !query.data ? query.error : undefined}
+          onRetry={() => void query.refetch()}
+          isFiltered={filtered}
+          empty={
+            emptyAll ? (
+              <EmptyState
+                icon={<Icon name="flask" />}
+                title="No experiments yet"
+                body="An experiment launches the same evaluation across settings and environments so you can compare the results."
+                action={launch}
               />
-            </span>
-          );
-        })}
-        <Checkbox
-          isSelected={mine}
-          onChange={(on) =>
-            update((next) => {
-              if (on) next.set('mine', '1');
-              else next.delete('mine');
-              resetPage(next);
-            })
+            ) : undefined
+          }
+          filteredEmpty={
+            <EmptyState
+              compact
+              title="No matching experiments"
+              body="Nothing matches these filters."
+              action={
+                <button
+                  type="button"
+                  className={styles.linkButton}
+                  onClick={() => setParams({}, { replace: true })}
+                >
+                  Clear filters
+                </button>
+              }
+            />
           }
         >
-          Created by me
-        </Checkbox>
-        {live ? (
-          <Text variant="sm" tone="muted" className={styles.note}>
-            Refreshes automatically while experiments run
-          </Text>
-        ) : null}
-      </div>
-      {body}
-      {query.data && total > PAGE_SIZE ? (
-        <Pagination
-          total={total}
-          page={page}
-          pageSize={PAGE_SIZE}
-          noun="experiments"
-          onPageChange={(p) => update((next) => (p > 1 ? next.set('page', String(p)) : next.delete('page')))}
-        />
-      ) : null}
+          <DataTable.Toolbar
+            filters={filters}
+            columnsMenu={false}
+            trailing={
+              live ? (
+                <Text variant="sm" tone="muted">
+                  Refreshes automatically while experiments run
+                </Text>
+              ) : null
+            }
+          />
+          <DataTable.Footer
+            summary={query.data ? plural(total, 'experiment') : undefined}
+            pagination={
+              query.data && total > PAGE_SIZE
+                ? {
+                    total,
+                    page,
+                    pageSize: PAGE_SIZE,
+                    noun: 'experiments',
+                    onPageChange: (p) =>
+                      update((next) => (p > 1 ? next.set('page', String(p)) : next.delete('page'))),
+                  }
+                : undefined
+            }
+          />
+        </DataTable>
+      </RouterProvider>
     </div>
   );
 }
