@@ -169,7 +169,6 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
       >
         <DataTable.Toolbar
           columnsMenu={false}
-          densityMenu={false}
           search={
             <SearchField
               label="Filter users"

@@ -108,7 +108,13 @@ export function JobsTable({ jobs }: JobsTableProps) {
         refreshing={jobs.some((j) => ACTIVE_JOB_STATUSES.includes(j.status))}
         rowState={(j) => (j.status === 'failed' ? 'error' : j.status === 'running' ? 'live' : undefined)}
         rowActions={(j) => [
-          { id: 'log', label: `Log for ${j.kind}`, icon: 'eye', primary: true, onPress: setLogJob },
+          {
+            id: 'log',
+            label: `Log for ${j.kind}`,
+            icon: 'eye',
+            primary: j.status !== 'paused',
+            onPress: setLogJob,
+          },
           ...(j.status === 'paused'
             ? [
                 {
@@ -127,6 +133,7 @@ export function JobsTable({ jobs }: JobsTableProps) {
                   id: 'cancel',
                   label: `Cancel ${j.kind}`,
                   icon: 'close',
+                  primary: true,
                   danger: true,
                   disabled: act.isPending || j.status === 'cancel_requested',
                   onPress: (job: MaintenanceJob) => void run(job, 'cancel'),
