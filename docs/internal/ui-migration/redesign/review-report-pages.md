@@ -82,3 +82,29 @@ None.
 - `npm run check`: typecheck, eslint, stylelint clean; Vitest 120 files / 1110 tests passed; design-language test 34 passed. `pytest tests/platform/test_design_language.py`: 1 passed.
 - `npm run build`: green.
 - Playwright `e2e/run-detail e2e/compare e2e/shell` (381 tests, 2 workers): 373 passed, 8 skipped, 0 failed (4.2 min). The specs cover scope open/close, Hide, drawer and the nav, but none asserts where a compare `#errors` deep link lands (M2), nor chart text size (M1).
+
+## Re-review (fix commit 40d120d4, docs 97b671f0)
+
+Measured again against the running UI at 1440, 1920, 1100 and 390 px.
+
+| Item | Status | Evidence |
+|---|---|---|
+| M1 charts balloon | Closed | Scatter, relationship scatter and time charts now draw at the measured width with fixed text and marker size; the latency histogram and scatter share a height (`rpr/shots/v2-run-t-1.png` 1440, `v2-1920-latency.png`, `v2-390-latency.png`) |
+| M2 compare deep links | Closed | `#errors` and `?panel=errors` now land at -31 px like the nav (was +477); `#items`, `?panel=categories|overview|metrics` unchanged; run links still -40 |
+| M3 scope visibility | Closed | Sidebar has an Active group with a removable chip (`v2-1440-scoped-cat.png`; removing it closes the sidebar); drawer shows it once with a single "Quick filters" title; ScopeBar is sticky at 1100 px (top 84, below the nav) and static at 390 px as specced; chip rendered once per viewport |
+| m1 dead band under nav | Closed | first section follows the nav directly |
+| m2 4th card / unequal cards | Closed (2x2 layout for four metrics) |
+| m3 390 px descriptions | Closed (wrap) |
+| m4 duplicate drawer title | Closed |
+| m5 Sweep ScopeBar flush on heading | Closed (not re-screenshotted at pixel level; layout spec added) |
+| m6 run removal to top | Closed in effect: removing a run keeps the reader in the same section (Overview before and after); exact offset differs because the section is re-aligned |
+| m7 compare sticky chrome | Closed: sticky bottom 84 px on 1100-high-or-shorter viewports (was 178 px); run chips scroll away, only the nav stays |
+| m8 lazy sections note | Documented |
+| m9 pre-existing run labels | Not in scope |
+| useSidebarHidden duplicate | Closed (`frontend/src/lib/useSidebarHidden.ts`) |
+
+Remaining observation (not charged): at 390 px the run page's shell scroller is 22 px wider than its viewport because of the Steps interval plot spans (pre-existing, same as before the fix).
+
+Gate (reviewer): `npm run check` clean, Vitest 120 files / 1110 tests, design-language 34; `npm run build` green; Playwright `e2e/run-detail e2e/compare e2e/shell` 392 tests: 384 passed, 8 skipped, 0 failed.
+
+**Final verdict: MEETS THE STANDARD.**
