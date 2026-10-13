@@ -322,7 +322,6 @@
   flex-wrap: wrap;
   flex: 1 1 12rem;
   min-width: 0;
-  min-height: var(--control-height);
 }
 
 .homeStatusText {
