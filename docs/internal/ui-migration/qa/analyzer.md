@@ -303,3 +303,10 @@ Not re-driven: re-analysing human labels, merge conflicts, Promote, real timeout
 - Analysis results inside run detail and compare were checked at API level only; rendering belongs to those areas' QA.
 - Compare's per-run Auto-Analyze links were read in code, not clicked.
 - RTL for the whole workspace and the 800 px layout: relied on `a11y.spec` (only the Arabic targets were re-checked, `dir=rtl`).
+
+## Redesign addendum (ui/redesign-analysis)
+
+The 4-step wizard is replaced by one page (see `frontend/src/features/analyzer/ANALYSIS.md`). Items above that
+mention steps map as follows: Review-step wording (rows 21, "Back to Configure") is moot (no steps); job outcome
+text lives in the Results job card and the rail; "Test Selected" is now "Test selected" in the rail; the key-less
+connection fix (row J1) is unchanged. Specs: `e2e/analyzer/smoothness.spec.ts` and `clutter.spec.ts` are new.
