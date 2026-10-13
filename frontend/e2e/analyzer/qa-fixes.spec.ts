@@ -93,6 +93,13 @@ test.describe('settings (4, 15, 16, 21)', () => {
     // the less common options sit in a closed disclosure with a one-line summary
     await page.getByRole('button', { name: /^More options/ }).click();
     const timeout = page.getByRole('textbox', { name: 'Timeout (s)' });
+    // Timeout and Analyze limit share a row and line up at the top (Max issues wraps under its help text)
+    const tops = await Promise.all(
+      ['Timeout (s)', 'Analyze limit'].map((n) =>
+        page.getByRole('textbox', { name: n }).evaluate((el) => Math.round(el.getBoundingClientRect().top)),
+      ),
+    );
+    expect(new Set(tops).size, `More options inputs at ${tops.join(', ')}`).toBe(1);
     const issues = page.getByRole('textbox', { name: 'Max issues per item' });
     await expect(
       page.getByText(/each retry doubles the previous timeout|retries are disabled/),

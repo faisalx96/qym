@@ -23,3 +23,11 @@ Production rules, Documents), then Setup, Targets, Results and a sticky action r
   the drawer, `step=run|review` scroll to Results; the param is then dropped.
 - **Guidance tabs** keep the run workspace mounted (hidden); a live job shows a dot on "Analyze run" and a
   compact rail (`CompactJobRail`) in the same fixed-height slot.
+
+## What the redesign does and does not claim
+
+The 1280x900 fold is not numerically lighter than the old Configure step (about 50 controls, 11 bordered elements
+with hairlines, versus 20 / 7). `e2e/analyzer/clutter.spec.ts` pins the measured numbers as a regression guard only.
+The gain is structural (one tab row, one accent action per state, prompt in a drawer, advanced fields in
+disclosures, no stepper, job bar or footer) and smoothness (nothing above Results moves; layout shift about 0.003
+over Test then Analyze).

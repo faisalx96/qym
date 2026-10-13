@@ -61,6 +61,8 @@
 }
 
 .cardAside {
+  flex: none;
+  white-space: nowrap;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -329,15 +331,55 @@
   margin-inline-start: auto;
 }
 
-/* Phones: two lines per row. Line 1: check, id, metric, Preview. Line 2: tag and input preview. */
+.chipSlot {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.chipSlot > * {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Phones: exactly two lines per row. Line 1: check, id, metric chip (ellipsised), Preview.
+   Line 2: tag slot and the input preview on one ellipsised line. */
 @media (max-width: 640px) {
+  .targetRow {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-xs) var(--space-sm);
+    min-height: 0;
+  }
+
   .targetId {
     min-width: 0;
   }
 
+  .chipSlot {
+    justify-self: start;
+    max-width: 100%;
+  }
+
   .targetDetail {
-    flex-basis: 100%;
-    order: 9;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex: none;
+  }
+
+  .targetRow > :last-child:not(.targetDetail) {
+    grid-column: 4;
+    grid-row: 1;
+  }
+
+  .targetDetail > [class*='role'] {
+    display: none;
+  }
+
+  .targetText {
+    white-space: nowrap;
   }
 }
 
@@ -541,6 +583,7 @@
 
   .railActions {
     flex: 1 1 100%;
+    min-width: 0;
     justify-content: flex-end;
   }
 
@@ -568,7 +611,12 @@
 
 .jobBadge {
   display: inline-flex;
-  min-width: 148px;
+}
+
+@media (min-width: 641px) {
+  .jobBadge {
+    min-width: 148px;
+  }
 }
 
 .jobTitle {

@@ -5,12 +5,15 @@ import { gotoApp } from '../helpers';
 import { axeSeriousViolations, describeViolations } from '../shell/support';
 import { analysisUrl, rail, seedAnalyzer, waitWorkspace } from './helpers';
 
-// Brief definition (any border side, hairlines included): tab list, 2 cards, 2 Setup groups, the target list,
-// 3-4 target rows and the rail = 11. The brief measured 7 (Configure), 12 (Preview) and 9 (legacy) at this fold.
+// REGRESSION GUARD, NOT A CLUTTER GOAL. With the brief's own definition (any border side, hairlines included)
+// the 1280x900 fold has 11 bordered elements, 2-6 chips and 50+ controls. That is NOT numerically lighter than the
+// old Configure step (20 controls / 7 boxes / 3 chips): Setup and the first Targets rows now share one screen. The
+// goal met is structural (one tab row, one accent action, the prompt in a drawer, advanced fields in disclosures,
+// no stepper / job bar / footer) plus smoothness (smoothness.spec.ts). These numbers only stop it getting worse.
 const BORDER_BUDGET = 11;
 const CHIP_BUDGET = 5;
 
-test('1280x900: the first control is near the top and few bordered regions compete', async ({
+test('1280x900 regression guard: first control near the top; fold counts do not grow', async ({
   page,
   request,
 }) => {
@@ -86,7 +89,7 @@ test('390 wide: no horizontal scroll, the rail keeps the primary action and an o
     .getByRole('listitem')
     .first()
     .evaluate((el) => el.getBoundingClientRect().height);
-  expect(rowHeight, `390 px target row is ${rowHeight}px tall`).toBeLessThanOrEqual(90);
+  expect(rowHeight, `390 px target row is ${rowHeight}px tall`).toBeLessThanOrEqual(64);
   await expect(rail(page).getByRole('button', { name: /^Analyze \d+ items?$/ })).toBeVisible();
   await expect(rail(page).getByRole('button', { name: 'More analysis actions' })).toBeVisible();
   await expect(rail(page).getByRole('button', { name: /^Prompt preview/ })).toBeHidden();

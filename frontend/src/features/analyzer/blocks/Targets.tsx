@@ -203,13 +203,15 @@ export function TargetList({
               <Text variant="sm" mono tone="muted" as="span" className={s.targetId}>
                 {row.item_id}
               </Text>
-              <Chip
-                isSelected={ws.focusKey === key}
-                onChange={() => ws.setFocusKey(key)}
-                aria-label={`${metric}${score != null ? ` ${score.toFixed(2)}` : ''}, preview target of ${row.item_id}`}
-              >
-                {`${metric}${score != null ? ` ${score.toFixed(2)}` : ''}`}
-              </Chip>
+              <span className={s.chipSlot}>
+                <Chip
+                  isSelected={ws.focusKey === key}
+                  onChange={() => ws.setFocusKey(key)}
+                  aria-label={`${metric}${score != null ? ` ${score.toFixed(2)}` : ''}, preview target of ${row.item_id}`}
+                >
+                  {`${metric}${score != null ? ` ${score.toFixed(2)}` : ''}`}
+                </Chip>
+              </span>
               <span className={s.targetDetail}>
                 <span className={s.tagSlot}>
                   {analysis || justNow ? (

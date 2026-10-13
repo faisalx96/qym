@@ -102,3 +102,18 @@ test('a running job is visible from the guidance tabs (dot, compact rail) and fi
   await expect(jobCard(page)).toContainText('metric analyses succeeded');
   await expect(page.getByRole('img', { name: 'Analysis running' })).toHaveCount(0);
 });
+
+test('the page description follows the tab: run wording on Analyze run, guidance wording elsewhere', async ({
+  page,
+  request,
+}) => {
+  const seed = await seedAnalyzer(request);
+  await gotoApp(page, analysisUrl(seed.slug, seed.runId));
+  await waitWorkspace(page);
+  await expect(page.getByText('Diagnose the failed metric targets of one run.')).toBeVisible();
+  await viewTabs(page)
+    .getByRole('tab', { name: /^Production rules/ })
+    .click();
+  await expect(page.getByText('Diagnose the failed metric targets of one run.')).toHaveCount(0);
+  await expect(page.getByText(/Project guidance the analyzer uses for every run/)).toBeVisible();
+});
