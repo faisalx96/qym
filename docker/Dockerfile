@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1.7
 ARG BASE_IMAGE=python:3.11-slim
-ARG BASE_IMAGE=python:3.11-slim
+ARG FRONTEND_BASE_IMAGE=node:24-slim
 
 # The React SPA (frontend/) is built once here and copied into the platform
 # package as _static/app/ (gitignored; the wheel and the image carry the build).
-FROM node:24-slim AS frontend-build
+FROM ${FRONTEND_BASE_IMAGE} AS frontend-build
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
