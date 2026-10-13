@@ -293,7 +293,6 @@ export function ExperimentsPage() {
         >
           <DataTable.Toolbar
             filters={filters}
-            columnsMenu={false}
             trailing={
               live ? (
                 <Text variant="sm" tone="muted">

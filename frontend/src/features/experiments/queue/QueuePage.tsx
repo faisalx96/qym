@@ -483,7 +483,6 @@ export function QueuePage() {
             >
               <DataTable.Toolbar
                 filters={filterControls}
-                columnsMenu={false}
                 trailing={
                   <>
                     <Button
