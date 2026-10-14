@@ -143,6 +143,14 @@ Enforced by `npm run test:design` (vitest), ESLint (TSX rules) and Stylelint.
     pill-shaped clickable chips of its own); `--docs-font-*` / `--docs-body`
     are only referenced from `features/docs/`.
 11. **`dangerouslySetInnerHTML` only inside `src/ui/TextBlock`.**
+12. **Tints come from the tone recipe.** No `rgba()` literal outside `tokens.css`
+    (tints are `color-mix(in srgb, var(--tone) var(--tint-soft), transparent)`,
+    scrims and scrollbars are tokens); `tones.css` maps every tone, band and series.
+13. **Pages do not declare their own `.card`.** Use `ui/Card` (see "Card").
+14. **Hover is colour, border and opacity only**: no `transform`, `translate` or
+    `scale` in a `:hover` / `[data-hovered]` rule.
+15. **`LinkButton` shares Button's states**: `a.button:hover`, `:active` and
+    `:focus-visible` exist in `Button.module.css`.
 
 ---
 
@@ -228,14 +236,20 @@ The recipes, by intent:
   (`--badge-height`), fully rounded, tinted 1px outline, sans `--font-xs` / 650.
   Tones: success (completed/approved/improved), info (running), danger
   (failed/rejected/regressed), warning (draft/stopped), neutral
-  (submitted/within-noise).
+  (submitted/within-noise). Built on `--tone`/`--tone-text` and `--tint-soft`; plus `accent` and `meta`.
+  `glyph` adds a decorative non-colour cue (Approved gets a check: same tone as Completed). A Badge is passive:
+  an actionable count is a `Chip`.
 - **Tag** (`Tag`): roles, provenance, versions, passive metadata and compact
   counts; 20px minimum, borderless, `--control-radius`, tinted or elevated
   fill. Roles, counts, data and versions are mono; other tags are sans. A tag
-  may grow vertically when its content wraps.
+  may grow vertically when its content wraps. `kind` says what the label is: `task`, `version` and `config` are
+  definition metadata and take the `meta` (purple) tone; `dataset` is neutral; `model` (+ `series`) renders the series
+  dot; `origin` is neutral (official is `tone="info"`). Passive: no hover.
 - **Chip** (`Chip`): interactive filters only; `--chip-height`, rounded outline,
   sans `--font-sm` / 600, counts mono. Passive metadata never uses the chip
-  recipe.
+  recipe. `tone` or `series` sets the colour of the selected state (a status
+  filter in its status tone, a category group in its series colour); hover on a
+  selected chip deepens to `--tint-strong`, pressed is `--bg-active`.
 - **Icon action** (`IconButton`, `CopyButton`): a single icon-only action, a
   24px borderless square with `--control-radius` and a transparent resting
   surface. Hover and keyboard focus change only the glyph colour (Qym green);
@@ -259,13 +273,14 @@ The recipes, by intent:
   Row height comes from the density tokens `--row-compact` 32 / `--row-regular` 40 / `--row-comfortable` 52 (two-line
   and wrapped cells raise the minimum to comfortable); zebra alternates `--bg-base` and `--bg-surface` by logical row;
   hover `--bg-hover`; selected `--bg-selected` plus a 2px accent bar; `rowState` draws a 3px rail (error, warn, live,
-  new). Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are right-aligned; a column
+  new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are right-aligned; a column
   whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
   `--table-group-height` band above the header. Sort glyph, header menu and resize divider show on hover/focus only;
   pinned columns (start/end) are opaque, with an edge shadow while content scrolls under them. Wide tables expose only
   the persistent mirrored horizontal scrollbar rail (never both native and mirror). Below 640px tables that declare
   column `priority` become stacked cards. Chrome parts (`DataTable.Toolbar`, `DataTable.Footer`, selection bar, Columns
-  and Density menus) sit inside the card on `--bg-surface`. Cell kit (`ScoreBar`, `DeltaCell`, `TwoLine`, `IdCell`,
+  and Density menus) sit inside the card on `--bg-surface`. `ScoreBar` takes `size='lg'` (14 to 16px track, value inside the bar), `series` and `index`; `DeltaCell emphasis`
+  renders the pill outside the noise band. Cell kit (`ScoreBar`, `DeltaCell`, `TwoLine`, `IdCell`,
   `RelativeTime`, `TagsCell`, `UserCell`, `ProgressCell`, `StatusCell`, `NumberCell`) lives in `ui/DataTable/cells`.
   Pages never restyle table cells; they supply columns.
 - **Scores** (`ScoreValue`): score-bearing values use the five-band
@@ -275,7 +290,9 @@ The recipes, by intent:
   metric leaves task and scorer errors out of its mean; an errored value shows
   "Error" or the warning glyph in `--metric-error`, never a coloured score, a
   "best" or a histogram bucket, and the error count sits beside the mean. Raw
-  numeric metrics stay neutral and confidence intervals stay muted.
+  numeric metrics stay neutral and confidence intervals stay muted. `variant="pill"`
+  shows the band as a `--tint-soft` fill (cards, stat strips, compare averages); the
+  number and the `Band n of 5` title stay the non-colour cue.
 - **Pagination** (`Pagination`): every paginated view uses it. Borderless
   rounded-square icon buttons for First, Previous, Next, Last around a direct
   page entry (28x24px, growing only with the digit count) and total, mono; no
@@ -313,7 +330,63 @@ The recipes, by intent:
   glyph icon in `--text-dim`, low opacity, title `--font-xl` / 650 / primary,
   body `--font-md` / muted, line-height 1.5 or more.
 - **Text blocks** (`TextBlock`, `JsonViewer`, `KeyValueGrid`): see Text
-  direction above; code and JSON are mono.
+  direction above; code and JSON are mono. `KeyValueGrid variant="tiles"` puts each pair on a `--bg-elevated`
+  tile (the run "Execution context"); an item `kind` of `config` or `metadata` adds a suffix and the `meta` tone,
+  `tone` adds a 3px start rail on a tile, `icon` a leading glyph.
+
+### Colour as information
+
+One colour, one meaning per page. A hue appears as data only in its own encoding; teal (`--accent-primary`) is
+interaction (selected, primary action, link, focus, sort), never data. Colour is never the only cue: bands keep the
+number and the `Band n of 5` title, deltas keep the arrow and sign, severities keep their glyph (task warning, metric
+cross, trace clock, analysis sparkle), series keep their letter or name.
+
+| Encoding | Meaning | Tokens | Applied through | Rule |
+|---|---|---|---|---|
+| Band | quality of a value | `--score-1..5` | `ScoreValue` (text, pill), `ScoreBar`, `RateBar`, histogram buckets, `Card band`, stat values | direction-aware (`lib/metrics.ts`); a metric with no direction or a raw number stays neutral; an errored value shows Error in `--error` / `--metric-error`, never a band |
+| Status | lifecycle of a run, job, review | `--success` completed/approved, `--accent-secondary` running, `--error` failed/rejected, `--warning` stopped/draft, neutral submitted/pending | `Badge`, `RunStatusBadge` | running has the pulsing dot; approved adds the check glyph |
+| Delta | change vs a baseline | good `--score-5`, bad `--score-1`, flat `--text-muted` | `DeltaCell`, `StatStrip trend` | colour only beyond the noise band; sign and arrow always; lower-is-better inverts |
+| Severity / kind | what failed | task `--error`, metric `--metric-error`, trace `--warning`, analysis `--info` | 3px rail, glyph, title colour | rail and glyph, never a filled card |
+| Series | which run, model, category group | `--chart-1..8` | marker dot and letter, `Card series`, chart marks, `Chip series`, `Tag kind=model` | never good or bad; always paired with letter or name; A is the baseline; series 1 is teal for parity, never relied on alone |
+| Definition metadata | what was run | `--accent-tertiary` (purple) | `Tag kind=task|version|config`, `KeyValueGrid kind` | purple is only this |
+
+**Tint recipe.** `tones.css` maps `data-tone` (success, info, warning, danger, accent, meta, neutral), `data-band` (1 to 5)
+and `data-series` (1 to 8) to `--tone` and `--tone-text` (the AA-safe text variant: `--error-text` for danger and band 1,
+`--accent-tertiary-soft` for meta). A primitive then writes one rule:
+`background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent); color: var(--tone-text);`. The tint steps are
+`--tint-faint` 6% (row or card wash for danger and live only), `--tint-soft` 12% (Badge, Tag, Chip selected, pill, icon
+tile), `--tint-strong` 20% (hover or pressed on a tinted fill, selected pill). No raw `rgba()` outside `tokens.css`
+(scrims and scrollbars are tokens). At most one tint fill per row-height region; never zebra-tint; a card inside a card
+is not allowed.
+
+- **Card** (`Card`): the one grouping surface. `--bg-surface`, 1px `--border-subtle`, `--radius-md`, padding
+  `--card-padding` (`compact`: `--card-padding-compact`), optional `header` / `footer` slots with a hairline. A 3px
+  inline-start rail (`--rail-width`, logical so RTL mirrors) carries the meaning: `tone`, `band` or `series`
+  (`rail="none"` drops it). `wash="danger"|"live"` adds the 6% tint and is the only wash. A passive card has no hover.
+  `onPress` (div `role="button"`, Enter and Space), `href` or `to` (anchors) make it interactive: hover raises the
+  border to `--border-default`, the fill to `--bg-elevated` and adds `--shadow-card-hover`; pressed is `--bg-active`;
+  `isSelected` draws the accent border and a soft accent fill while the rail keeps its tone; focus is the 2px accent
+  outline. An interactive card holds no other interactive element. Never restyle a card per page: pass layout via
+  `className`, meaning via props.
+- **Chart kit** (`ui/Chart`, `styles/marks.css`): every data mark is a `Mark` inside a `ChartTooltipHost`. A mark
+  carries `data-mark`; with `onPick` it is interactive (a `button`, or an SVG element with `role="button"`, Enter and
+  Space) and answers with `filter: brightness(var(--hover-brightness))` while its siblings dim to `--dim-opacity`
+  (`:has`, graceful where unsupported); selected draws a 2px `--text-primary` outline (stroke on SVG) and dims the rest;
+  focus is the 2px accent outline. Colour, outline and opacity only: no transform, scale or glow. `tip` opens a
+  `role="tooltip"` (markup allowed) on hover and keyboard focus, pinned by a touch tap, closed by Escape; it replaces the
+  native `<title>`. `SeriesHighlightRoot` + `useSeriesHighlight(n)` (compare) sets `data-series-active=n` so every
+  `[data-mark][data-series]` of another series dims. Encodings: scores take bands (`bucketTone`), outcomes pass = band 5,
+  fail = band 1, task error = an open `--error` ring on the axis, latency bulk is `--bg-active` and only the tail is
+  `--score-3` (p90) and `--score-2` (p95), series come from `--chart-1..8`. A scatter shows two faint quadrant washes
+  (fast and passing, slow and failing) and a legend with the same swatches. Hit areas are at least 24px.
+- **Motion** (`ui/motion`, tokens `--motion-fill` 360ms, `--ease-out`, `--motion-stagger` 24ms, `--motion-flash` 700ms):
+  M1 colour changes use `--transition-fast`; M2 data marks (bar fills, histogram bars, rings, scatter dots) grow in once
+  per mount (`data-enter` from `useEntrance`, which a container turns off for rows that scroll in later) with a stagger of
+  `--motion-stagger` per mark capped at 10; M3 a changed value morphs with the same transition and never replays the
+  entrance; M4 a lazy `ReportSection` body fades up once (`--arrive-fade`, 6px); M5 a live value flashes a
+  `--tint-soft` info tint (`data-changed`, `live`); M6 and M7 are unchanged. Never: a hover transform, glow, gradient, or
+  an infinite animation other than the skeleton shimmer and the running-status dot. `base.css` zeroes every duration and
+  delay under `prefers-reduced-motion`.
 
 ---
 
