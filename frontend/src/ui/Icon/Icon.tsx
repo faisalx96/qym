@@ -55,7 +55,14 @@ export type IconName =
   | 'wrench'
   | 'brain'
   | 'bot'
-  | 'target';
+  | 'target'
+  | 'agent'
+  | 'retriever'
+  | 'llm'
+  | 'tool'
+  | 'chain'
+  | 'guardrail'
+  | 'embedding';
 
 const PATHS: Record<IconName, string> = {
   'chevron-down': 'M6 9l6 6 6-6',
@@ -119,6 +126,14 @@ const PATHS: Record<IconName, string> = {
   bot: 'M12 8V4H8M5 8h14v12H5zM2 14h3M19 14h3M9 13v2M15 13v2',
   target:
     'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zM12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2z',
+  /* Span kinds (trace tree): outline glyphs, one per SpanKind. */
+  agent: 'M12 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM5 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2',
+  retriever: 'M14 3H6v18h6M14 3l4 4v3M17 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM21 22l-2-2',
+  llm: 'M4 5h16v11H9l-5 4zM8.5 10h.01M12 10h.01M15.5 10h.01',
+  tool: 'M14.5 4.5a4 4 0 0 0-4 5.5L4 16.5 7.5 20l6.500-6.500a4 4 0 0 0 5.500-4l-2.500 2.500-2.500-.5-.5-2.500z',
+  chain: 'M5 4h6v6H5zM13 14h6v6h-6zM8 10v2a2 2 0 0 0 2 2h3',
+  guardrail: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4',
+  embedding: 'M4 8l8-4 8 4-8 4zM4 12l8 4 8-4M4 16l8 4 8-4',
 };
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

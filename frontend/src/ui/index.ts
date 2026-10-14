@@ -49,6 +49,7 @@ export * from './ConfirmDialog';
 export * from './FormDialog';
 export * from './Disclosure';
 export * from './Drawer';
+export * from './SplitPane';
 export * from './Popover';
 export * from './DropdownMenu';
 export * from './HelpMarker';
