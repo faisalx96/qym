@@ -96,7 +96,7 @@ export function ItemCard({ row }: { row: Row }) {
 
   if (!loaded && state?.status === 'error') {
     return (
-      <div className={styles.card} role="alert">
+      <div className={styles.state} role="alert">
         Item details could not be loaded.{' '}
         <Button size="sm" variant="neutral" onPress={() => void ui.details.retry(row.item_id)}>
           Retry
@@ -106,7 +106,7 @@ export function ItemCard({ row }: { row: Row }) {
   }
   if (!loaded) {
     return (
-      <div className={styles.card} aria-busy="true">
+      <div className={styles.state} aria-busy="true">
         <span className={styles.muted}>Loading item details…</span>
       </div>
     );
@@ -134,7 +134,7 @@ export function ItemCard({ row }: { row: Row }) {
   const langfuse =
     row.trace_url || buildLangfuseTraceUrl(run.langfuse_host, run.langfuse_project_id, row.trace_id);
   return (
-    <div className={styles.card} data-testid="item-card" data-item-id={row.item_id}>
+    <div className={styles.state} data-testid="item-card" data-item-id={row.item_id}>
       {run.items_restricted ? (
         <p className={styles.muted}>Item bodies are visible to admins only on a private test set.</p>
       ) : null}

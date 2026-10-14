@@ -5,14 +5,10 @@
   gap: var(--space-md);
 }
 
-.card {
+.metricStack {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-base);
 }
 
 .cardHead {

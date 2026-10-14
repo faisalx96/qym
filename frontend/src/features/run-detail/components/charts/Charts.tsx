@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MetricDirection } from '@/lib/metrics';
 import { metricBand } from '@/lib/metrics';
+import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { staggerIndex, useEntrance } from '@/ui/motion';
 import { bucketTone, scoreTone, type BoolSegment, type ScoreBucket } from '../../lib/overviewModel';
 import styles from './Charts.module.css';
@@ -42,11 +43,13 @@ export function Gauge({ score, direction }: { score: number; direction: MetricDi
   const circ = 2 * Math.PI * r;
   const fill = score >= 1 ? circ : circ * Math.max(0, score - 0.03);
   const tone = direction ? scoreTone(score, direction) : 'var(--text-muted)';
+  const enter = useEntrance();
   return (
     <svg className={styles.gauge} viewBox="0 0 48 48" aria-hidden="true">
       <circle className={styles.gaugeTrack} cx="24" cy="24" r={r} />
       <circle
         className={styles.gaugeFill}
+        data-enter={enter ? '' : undefined}
         cx="24"
         cy="24"
         r={r}
@@ -70,37 +73,41 @@ export function SplitBar({
   const live = segments.filter((s) => s.count > 0);
   return (
     <div className={styles.split}>
-      <div className={styles.splitTrack} role="group" aria-label={`${metric} pass and fail split`}>
+      <ChartTooltipHost
+        className={styles.splitTrack}
+        role="group"
+        aria-label={`${metric} pass and fail split`}
+      >
         {live.map((s) => {
           const clickable = s.key === 'passed' || s.key === 'failed' || s.key === 'metric_errors';
           const label = `${s.label}: ${s.count} of ${total} items${clickable ? ', filter the table' : ''}`;
           return clickable ? (
-            <button
+            <Mark
               key={s.key}
-              type="button"
+              as="button"
               className={styles.seg}
               style={{ flexGrow: s.count, background: SEGMENT_TONE[s.tone] }}
-              title={s.title}
+              tip={s.title}
               aria-label={label}
-              onClick={() => onPick(s)}
+              onPick={() => onPick(s)}
               data-segment={s.key}
             >
               <span className={styles.segText}>{s.count > 1 ? s.count : ''}</span>
-            </button>
+            </Mark>
           ) : (
-            <span
+            <Mark
               key={s.key}
               className={styles.seg}
               style={{ flexGrow: s.count, background: SEGMENT_TONE[s.tone] }}
-              title={s.title}
+              tip={s.title}
               role="img"
               aria-label={label}
             >
               <span className={styles.segText}>{s.count > 1 ? s.count : ''}</span>
-            </span>
+            </Mark>
           );
         })}
-      </div>
+      </ChartTooltipHost>
       <ul className={styles.legend}>
         {segments.map((s) => (
           <li key={s.key}>
@@ -126,8 +133,9 @@ export function Histogram({
 }) {
   const max = Math.max(1, ...buckets.map((b) => b.count));
   const total = buckets.reduce((a, b) => a + b.count, 0);
+  const enter = useEntrance();
   return (
-    <div className={styles.hist} role="group" aria-label={`${metric} score distribution`}>
+    <ChartTooltipHost className={styles.hist} role="group" aria-label={`${metric} score distribution`}>
       {buckets.map((b) => {
         const h = b.count ? Math.max(3, Math.round((b.count / max) * 100)) : 0;
         const errH =
@@ -144,7 +152,14 @@ export function Histogram({
             <span className={styles.barArea}>
               <span
                 className={styles.bar}
-                style={{ height: `${h}%`, background: bucketTone(b.index, direction) }}
+                data-enter={enter ? '' : undefined}
+                style={
+                  {
+                    height: `${h}%`,
+                    background: bucketTone(b.index, direction),
+                    '--i': staggerIndex(b.index),
+                  } as React.CSSProperties
+                }
               >
                 {errH ? (
                   <span className={styles.barErr} style={{ height: `${(errH / Math.max(h, 1)) * 100}%` }} />
@@ -155,24 +170,24 @@ export function Histogram({
           </>
         );
         return b.count > 0 ? (
-          <button
+          <Mark
             key={b.index}
-            type="button"
+            as="button"
             className={styles.col}
-            title={`${title} — click to filter`}
+            tip={`${title} · click to filter`}
             aria-label={`${title}, filter the table`}
-            onClick={() => onPick(b)}
+            onPick={() => onPick(b)}
             data-bucket={b.index}
           >
             {bar}
-          </button>
+          </Mark>
         ) : (
-          <span key={b.index} className={styles.col} data-empty title={`${b.label}: no items`}>
+          <span key={b.index} className={styles.col} data-empty>
             {bar}
           </span>
         );
       })}
-    </div>
+    </ChartTooltipHost>
   );
 }
 
@@ -248,11 +263,27 @@ export function RateBar({
   );
 }
 
+export type ScatterOutcome = 'pass' | 'fail' | 'error';
+
 export interface ScatterPoint {
   id: string;
   x: number;
   y: number;
+  /** Colours the dot: pass = band 5, fail = band 1, error = an open ring on the x axis; none = neutral. */
+  outcome?: ScatterOutcome | null;
 }
+
+/** Split lines for the two faint quadrant washes (good = success tint, bad = danger tint). */
+export interface ScatterQuadrants {
+  x: number;
+  y: number;
+  /** Whether a higher y is better (maximize) or lower is (minimize). */
+  goodIsHighY: boolean;
+  goodLabel: string;
+  badLabel: string;
+}
+
+const OUTCOME_LABEL: Record<ScatterOutcome, string> = { pass: 'Pass', fail: 'Fail', error: 'Task error' };
 
 export function Scatter({
   points,
@@ -262,6 +293,7 @@ export function Scatter({
   fmt,
   fmtX,
   fmtY,
+  quadrants,
 }: {
   points: ScatterPoint[];
   xLabel: string;
@@ -270,10 +302,12 @@ export function Scatter({
   fmt: (v: number) => string;
   fmtX?: (v: number) => string;
   fmtY?: (v: number) => string;
+  quadrants?: ScatterQuadrants;
 }) {
   const [boxRef, W] = useMeasuredWidth<HTMLDivElement>(300);
   const H = 220;
   const pad = { l: 46, r: 8, t: 8, b: 28 };
+  const enter = useEntrance();
   const shown = useMemo(
     () =>
       points.length > 1500 ? points.filter((_, i) => i % Math.ceil(points.length / 1500) === 0) : points,
@@ -286,65 +320,138 @@ export function Scatter({
   const sx = (v: number) => pad.l + ((v - x0) / (x1 - x0 || 1)) * (W - pad.l - pad.r);
   const sy = (v: number) => H - pad.b - ((v - y0) / (y1 - y0 || 1)) * (H - pad.t - pad.b);
   const ticks = [0, 0.5, 1];
+  const outcomes = (['pass', 'fail', 'error'] as const).filter((o) => shown.some((p) => p.outcome === o));
+  const fx = fmtX ?? fmt;
+  const fy = fmtY ?? fmt;
+  const qx = quadrants ? Math.max(pad.l, Math.min(W - pad.r, sx(quadrants.x))) : 0;
+  const qy = quadrants ? Math.max(pad.t, Math.min(H - pad.b, sy(quadrants.y))) : 0;
+  const left = pad.l;
+  const right = W - pad.r;
+  const top = pad.t;
+  const bottom = H - pad.b;
   return (
-    <div ref={boxRef} className={styles.chartBox}>
-      <svg
-        className={styles.scatter}
-        width={W}
-        height={H}
-        viewBox={`0 0 ${W} ${H}`}
-        role="img"
-        aria-label={`${yLabel} versus ${xLabel}, ${points.length} items`}
-      >
-        {ticks.map((t) => (
-          <g key={t}>
-            <line
-              className={styles.grid}
-              x1={pad.l}
-              x2={W - pad.r}
-              y1={sy(y0 + t * (y1 - y0))}
-              y2={sy(y0 + t * (y1 - y0))}
-            />
-            <text
-              className={styles.tick}
-              x={pad.l - 4}
-              y={sy(y0 + t * (y1 - y0))}
-              textAnchor="end"
-              dominantBaseline="middle"
-            >
-              {(fmtY ?? fmt)(y0 + t * (y1 - y0))}
-            </text>
-            <text className={styles.tick} x={sx(x0 + t * (x1 - x0))} y={H - pad.b + 14} textAnchor="middle">
-              {(fmtX ?? fmt)(x0 + t * (x1 - x0))}
-            </text>
-          </g>
-        ))}
-        {shown.map((p) => (
-          <circle
-            key={p.id}
-            className={styles.dot2}
-            cx={sx(p.x)}
-            cy={sy(p.y)}
-            r={3.5}
-            onClick={() => onPick(p.id)}
-          >
-            <title>{`${p.id}: ${(fmtX ?? fmt)(p.x)}, ${(fmtY ?? fmt)(p.y)}`}</title>
-          </circle>
-        ))}
-        <text className={styles.axisTitle} x={(W + pad.l) / 2} y={H - 2} textAnchor="middle">
-          {xLabel}
-        </text>
-        <text
-          className={styles.axisTitle}
-          x={10}
-          y={H / 2}
-          textAnchor="middle"
-          transform={`rotate(-90 10 ${H / 2})`}
+    <ChartTooltipHost>
+      <div ref={boxRef} className={styles.chartBox}>
+        <svg
+          className={styles.scatter}
+          width={W}
+          height={H}
+          viewBox={`0 0 ${W} ${H}`}
+          role="img"
+          aria-label={`${yLabel} versus ${xLabel}, ${points.length} items`}
         >
-          {yLabel}
-        </text>
-      </svg>
-    </div>
+          {quadrants ? (
+            <g aria-hidden="true">
+              <rect
+                className={styles.quadGood}
+                x={left}
+                width={Math.max(0, qx - left)}
+                y={quadrants.goodIsHighY ? top : qy}
+                height={Math.max(0, quadrants.goodIsHighY ? qy - top : bottom - qy)}
+              />
+              <rect
+                className={styles.quadBad}
+                x={qx}
+                width={Math.max(0, right - qx)}
+                y={quadrants.goodIsHighY ? qy : top}
+                height={Math.max(0, quadrants.goodIsHighY ? bottom - qy : qy - top)}
+              />
+              <text
+                className={styles.quadLabel}
+                x={left + 6}
+                y={quadrants.goodIsHighY ? top + 12 : bottom - 6}
+              >
+                {quadrants.goodLabel}
+              </text>
+              <text
+                className={styles.quadLabel}
+                x={right - 6}
+                y={quadrants.goodIsHighY ? bottom - 6 : top + 12}
+                textAnchor="end"
+              >
+                {quadrants.badLabel}
+              </text>
+            </g>
+          ) : null}
+          {ticks.map((t) => (
+            <g key={t}>
+              <line
+                className={styles.grid}
+                x1={pad.l}
+                x2={W - pad.r}
+                y1={sy(y0 + t * (y1 - y0))}
+                y2={sy(y0 + t * (y1 - y0))}
+              />
+              <text
+                className={styles.tick}
+                x={pad.l - 4}
+                y={sy(y0 + t * (y1 - y0))}
+                textAnchor="end"
+                dominantBaseline="middle"
+              >
+                {fy(y0 + t * (y1 - y0))}
+              </text>
+              <text className={styles.tick} x={sx(x0 + t * (x1 - x0))} y={H - pad.b + 14} textAnchor="middle">
+                {fx(x0 + t * (x1 - x0))}
+              </text>
+            </g>
+          ))}
+          {shown.map((p) => (
+            // The dots are pointer marks (1500 tab stops would be a trap); the items table is the keyboard route.
+            <Mark
+              key={p.id}
+              as="g"
+              className={styles.dotMark}
+              tabIndex={-1}
+              tip={
+                <>
+                  <b>{p.id}</b>
+                  <br />
+                  {xLabel} {fx(p.x)}
+                  {p.outcome === 'error' ? ' · task error' : ` · ${yLabel} ${fy(p.y)}`}
+                  {p.outcome && p.outcome !== 'error' ? ` · ${OUTCOME_LABEL[p.outcome]}` : ''}
+                </>
+              }
+              onPick={() => onPick(p.id)}
+              aria-label={`${p.id}: ${xLabel} ${fx(p.x)}, ${p.outcome === 'error' ? 'task error' : `${yLabel} ${fy(p.y)}`}`}
+              data-outcome={p.outcome ?? undefined}
+            >
+              <circle className={styles.dotHit} cx={sx(p.x)} cy={sy(p.y)} r={10} />
+              <circle
+                className={styles.dot2}
+                data-enter={enter ? '' : undefined}
+                data-outcome={p.outcome ?? undefined}
+                cx={sx(p.x)}
+                cy={sy(p.y)}
+                r={3.5}
+              />
+            </Mark>
+          ))}
+          <text className={styles.axisTitle} x={(W + pad.l) / 2} y={H - 2} textAnchor="middle">
+            {xLabel}
+          </text>
+          <text
+            className={styles.axisTitle}
+            x={10}
+            y={H / 2}
+            textAnchor="middle"
+            transform={`rotate(-90 10 ${H / 2})`}
+          >
+            {yLabel}
+          </text>
+        </svg>
+        {outcomes.length ? (
+          <ul className={styles.legend} aria-label="Dot colours">
+            {outcomes.map((o) => (
+              <li key={o}>
+                <span className={styles.outcomeKey} data-outcome={o} aria-hidden="true" />
+                {OUTCOME_LABEL[o]}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </ChartTooltipHost>
   );
 }
 
@@ -382,76 +489,79 @@ export function Curve({
   const span = domain[1] - domain[0] || 1;
   const sy = (v: number) => H - pad.b - ((v - domain[0]) / span) * (H - pad.t - pad.b);
   return (
-    <figure ref={boxRef} className={styles.curve}>
-      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
-        {[0, 0.25, 0.5, 0.75, 1].map((f) => {
-          const t = domain[0] + f * span;
-          return (
-            <g key={f}>
-              <line className={styles.grid} x1={pad.l} x2={W - pad.r} y1={sy(t)} y2={sy(t)} />
-              <text
-                className={styles.tick}
-                x={pad.l - 4}
-                y={sy(t)}
-                textAnchor="end"
-                dominantBaseline="middle"
-              >
-                {domain[1] === 1 && domain[0] === 0 ? `${Math.round(t * 100)}%` : format(t)}
-              </text>
-            </g>
-          );
-        })}
-        {ks.map((k) => (
-          <text key={k} className={styles.tick} x={sx(k)} y={H - pad.b + 14} textAnchor="middle">
-            {xLabel}={k}
-          </text>
-        ))}
-        {series.map((s) => {
-          const pts = s.points.filter((p) => p.value !== null);
-          const band = pts.filter((p) => p.low !== undefined && p.high !== undefined);
-          return (
-            <g key={s.name}>
-              {band.length > 1 ? (
-                <path
-                  d={`M${band.map((p) => `${sx(p.k)},${sy(p.high!)}`).join('L')}L${[...band]
-                    .reverse()
-                    .map((p) => `${sx(p.k)},${sy(p.low!)}`)
-                    .join('L')}Z`}
-                  style={{ fill: s.tone }}
-                  className={styles.band}
-                />
-              ) : null}
-              <path
-                d={`M${pts.map((p) => `${sx(p.k)},${sy(p.value!)}`).join('L')}`}
-                className={styles.line}
-                style={{ stroke: s.tone }}
-                strokeDasharray={s.dash ? '5 4' : undefined}
-              />
-              {pts.map((p) => (
-                <circle
-                  key={p.k}
-                  cx={sx(p.k)}
-                  cy={sy(p.value!)}
-                  r={4}
-                  className={styles.marker}
-                  style={{ stroke: s.tone }}
+    <ChartTooltipHost>
+      <figure ref={boxRef} className={styles.curve}>
+        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
+          {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+            const t = domain[0] + f * span;
+            return (
+              <g key={f}>
+                <line className={styles.grid} x1={pad.l} x2={W - pad.r} y1={sy(t)} y2={sy(t)} />
+                <text
+                  className={styles.tick}
+                  x={pad.l - 4}
+                  y={sy(t)}
+                  textAnchor="end"
+                  dominantBaseline="middle"
                 >
-                  <title>{`${s.name} @${xLabel}=${p.k}: ${format(p.value!)}`}</title>
-                </circle>
-              ))}
-            </g>
-          );
-        })}
-      </svg>
-      <figcaption className={styles.legend}>
-        {series.map((s) => (
-          <span key={s.name} className={styles.legendItem}>
-            <span className={styles.swatch} style={{ background: s.tone }} aria-hidden="true" />
-            {s.name}
-          </span>
-        ))}
-      </figcaption>
-    </figure>
+                  {domain[1] === 1 && domain[0] === 0 ? `${Math.round(t * 100)}%` : format(t)}
+                </text>
+              </g>
+            );
+          })}
+          {ks.map((k) => (
+            <text key={k} className={styles.tick} x={sx(k)} y={H - pad.b + 14} textAnchor="middle">
+              {xLabel}={k}
+            </text>
+          ))}
+          {series.map((s) => {
+            const pts = s.points.filter((p) => p.value !== null);
+            const band = pts.filter((p) => p.low !== undefined && p.high !== undefined);
+            return (
+              <g key={s.name}>
+                {band.length > 1 ? (
+                  <path
+                    d={`M${band.map((p) => `${sx(p.k)},${sy(p.high!)}`).join('L')}L${[...band]
+                      .reverse()
+                      .map((p) => `${sx(p.k)},${sy(p.low!)}`)
+                      .join('L')}Z`}
+                    style={{ fill: s.tone }}
+                    className={styles.band}
+                  />
+                ) : null}
+                <path
+                  d={`M${pts.map((p) => `${sx(p.k)},${sy(p.value!)}`).join('L')}`}
+                  className={styles.line}
+                  style={{ stroke: s.tone }}
+                  strokeDasharray={s.dash ? '5 4' : undefined}
+                />
+                {pts.map((p) => (
+                  <Mark
+                    key={p.k}
+                    as="circle"
+                    cx={sx(p.k)}
+                    cy={sy(p.value!)}
+                    r={4}
+                    className={styles.marker}
+                    style={{ stroke: s.tone }}
+                    tip={`${s.name} @${xLabel}=${p.k}: ${format(p.value!)}`}
+                    aria-label={`${s.name} @${xLabel}=${p.k}: ${format(p.value!)}`}
+                  />
+                ))}
+              </g>
+            );
+          })}
+        </svg>
+        <figcaption className={styles.legend}>
+          {series.map((s) => (
+            <span key={s.name} className={styles.legendItem}>
+              <span className={styles.swatch} style={{ background: s.tone }} aria-hidden="true" />
+              {s.name}
+            </span>
+          ))}
+        </figcaption>
+      </figure>
+    </ChartTooltipHost>
   );
 }
 
@@ -468,16 +578,21 @@ export function PassCountBars({
 }) {
   const max = Math.max(1, ...counts);
   return (
-    <div className={styles.passBars} role="group" aria-label="Items by number of passes that passed">
+    <ChartTooltipHost
+      className={styles.passBars}
+      role="group"
+      aria-label="Items by number of passes that passed"
+    >
       {counts.map((c, i) => (
-        <button
+        <Mark
           key={i}
-          type="button"
+          as="button"
           className={styles.passCol}
-          disabled={c === 0}
-          aria-pressed={selected === i}
+          isDisabled={c === 0}
+          isSelected={selected === i}
+          tip={`${i} of ${total} passes passed: ${c} items`}
           aria-label={`${i} of ${total} passes passed: ${c} items, filter the table`}
-          onClick={() => onPick(i)}
+          onPick={() => onPick(i)}
         >
           <span className={styles.count}>{c}</span>
           <span className={styles.barArea}>
@@ -493,8 +608,8 @@ export function PassCountBars({
           <span className={styles.axis}>
             {i}/{total}
           </span>
-        </button>
+        </Mark>
       ))}
-    </div>
+    </ChartTooltipHost>
   );
 }

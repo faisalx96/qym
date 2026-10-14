@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { projectPath } from '@/app/routes';
 import { useReviewHistoryQuery } from '@/api/runs';
-import { Badge, JsonPreview, LinkButton, Tag } from '@/ui';
+import { Badge, JsonPreview, LinkButton, Tag, Card } from '@/ui';
 import { formatIsoDateTime, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
 import type { ReviewHistoryEvent, Run } from '../types';
 import styles from './RunPanels.module.css';
@@ -53,7 +53,7 @@ export function ReviewHistory({ runId, status }: { runId: string; status: string
   void status;
   if (!events.length) return null;
   return (
-    <section className={styles.card} aria-label="Review history" data-testid="review-history">
+    <Card as="section" aria-label="Review history" data-testid="review-history">
       <div className={styles.title}>Review history</div>
       <div className={styles.copy}>Every submission and review decision on this run, oldest first.</div>
       <ol className={styles.list}>
@@ -61,7 +61,7 @@ export function ReviewHistory({ runId, status }: { runId: string; status: string
           <HistoryEntry key={i} event={event} />
         ))}
       </ol>
-    </section>
+    </Card>
   );
 }
 
@@ -69,7 +69,7 @@ export function VersioningDetails({ run }: { run: Run }) {
   const entries = Object.entries(run.versioning_details ?? {}).sort(([a], [b]) => a.localeCompare(b));
   if (!entries.length) return null;
   return (
-    <section className={styles.card} aria-label="Versioning details" data-testid="versioning-details">
+    <Card as="section" aria-label="Versioning details" data-testid="versioning-details">
       <div className={styles.title}>Versioning details</div>
       <div className={styles.copy}>
         Keys set by whoever created this run, or by the experiment that launched it.
@@ -88,7 +88,7 @@ export function VersioningDetails({ run }: { run: Run }) {
           </div>
         ))}
       </dl>
-    </section>
+    </Card>
   );
 }
 
@@ -225,7 +225,7 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
   ];
   if (p.error) fields.push(['Job error', String(p.error), true]);
   return (
-    <section className={styles.card} aria-labelledby="rxp-title" data-testid="experiment-panel">
+    <Card as="section" aria-labelledby="rxp-title" data-testid="experiment-panel">
       <div className={styles.expHead}>
         <div>
           <div className={styles.titleRow}>
@@ -284,7 +284,7 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
           <pre className={styles.json}>{JSON.stringify(p.remote_result, null, 2)}</pre>
         </details>
       ) : null}
-    </section>
+    </Card>
   );
 }
 

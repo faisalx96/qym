@@ -1,5 +1,5 @@
 /* Expanded item card blocks. */
-.card {
+.state {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);

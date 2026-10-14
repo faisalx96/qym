@@ -16,6 +16,17 @@
   fill: none;
   stroke-width: 5;
   stroke-linecap: round;
+  transition: stroke-dasharray var(--motion-fill) var(--ease-out);
+}
+
+.gaugeFill[data-enter] {
+  animation: gauge-grow var(--motion-fill) var(--ease-out) backwards;
+}
+
+@keyframes gauge-grow {
+  from {
+    stroke-dasharray: 0 120;
+  }
 }
 
 .split {
@@ -41,17 +52,6 @@
   border-radius: 4px;
 }
 
-button.seg {
-  cursor: pointer;
-}
-
-button.seg:hover {
-  filter: brightness(1.12);
-}
-
-button.seg:focus-visible,
-.col:focus-visible,
-.passCol:focus-visible,
 .matrixCell:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 1px;
@@ -109,11 +109,6 @@ button.seg:focus-visible,
   color: inherit;
 }
 
-button.col,
-.passCol {
-  cursor: pointer;
-}
-
 .count::before,
 .axis::before {
   content: attr(data-text);
@@ -141,11 +136,20 @@ button.col,
   width: 100%;
   border-radius: 4px 4px 0 0;
   overflow: hidden;
+  transform-origin: bottom;
+  transition: height var(--motion-fill) var(--ease-out);
 }
 
-button.col:hover .bar,
-.passCol:hover:not(:disabled) .bar {
-  filter: brightness(1.15);
+/* M2: bars rise from the baseline once per mount, staggered by bucket (--i). */
+.bar[data-enter] {
+  animation: bar-rise var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+@keyframes bar-rise {
+  from {
+    transform: scaleY(0);
+  }
 }
 
 .barErr {
@@ -167,20 +171,8 @@ button.col:hover .bar,
   color: var(--text-primary);
 }
 
-.bandValue[data-band='1'] {
-  color: var(--score-1);
-}
-.bandValue[data-band='2'] {
-  color: var(--score-2);
-}
-.bandValue[data-band='3'] {
-  color: var(--score-3);
-}
-.bandValue[data-band='4'] {
-  color: var(--score-4);
-}
-.bandValue[data-band='5'] {
-  color: var(--score-5);
+.bandValue[data-band] {
+  color: var(--tone-text);
 }
 
 .rate {
@@ -237,16 +229,89 @@ button.col:hover .bar,
   fill: var(--text-secondary);
 }
 
+.dotMark {
+  outline: 0;
+}
+
+.dotHit {
+  fill: transparent;
+}
+
+/* Dots are coloured by outcome: pass = band 5, fail = band 1, task error = open ring; none = neutral. */
 .dot2 {
-  fill: var(--chart-2);
+  fill: var(--text-muted);
   fill-opacity: 0.7;
   stroke: var(--bg-surface);
   stroke-width: 1;
-  cursor: pointer;
+  transition:
+    fill-opacity var(--transition-fast),
+    r var(--transition-fast);
 }
 
-.dot2:hover {
+.dot2[data-outcome='pass'] {
+  fill: var(--score-5);
+}
+
+.dot2[data-outcome='fail'] {
+  fill: var(--score-1);
+}
+
+.dot2[data-outcome='error'] {
+  fill: none;
   fill-opacity: 1;
+  stroke: var(--error);
+  stroke-width: 1.5;
+}
+
+.dot2[data-enter] {
+  animation: dot-in var(--motion-fill) var(--ease-out) backwards;
+}
+
+@keyframes dot-in {
+  from {
+    fill-opacity: 0;
+  }
+}
+
+.dotMark[data-interactive]:hover .dot2,
+.dotMark:focus-visible .dot2 {
+  fill-opacity: 1;
+  r: 5;
+}
+
+.quadGood {
+  fill: color-mix(in srgb, var(--success) var(--tint-faint), transparent);
+}
+
+.quadBad {
+  fill: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
+}
+
+.quadLabel {
+  font-size: var(--font-sm);
+  fill: var(--text-muted);
+}
+
+.outcomeKey {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--text-muted);
+}
+
+.outcomeKey[data-outcome='pass'] {
+  background: var(--score-5);
+}
+
+.outcomeKey[data-outcome='fail'] {
+  background: var(--score-1);
+}
+
+.outcomeKey[data-outcome='error'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--error);
 }
 
 .curve {
@@ -273,11 +338,6 @@ button.col:hover .bar,
   display: flex;
   gap: 2px;
   height: 110px;
-}
-
-.passCol[aria-pressed='true'] {
-  box-shadow: 0 0 0 2px var(--accent-primary);
-  border-radius: 4px;
 }
 
 .passCol:disabled {

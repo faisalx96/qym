@@ -1,11 +1,4 @@
 /* Run-page cards: review history, experiment, versioning, lock notices. */
-.card {
-  padding: var(--space-md) var(--space-lg);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-}
-
 .title {
   margin: 0;
   font-size: var(--font-md);

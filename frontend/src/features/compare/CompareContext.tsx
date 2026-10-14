@@ -36,5 +36,7 @@ export function useCompare(): CompareValue {
 
 export const letterOf = (i: number) =>
   i < 26 ? String.fromCharCode(65 + i) : `${String.fromCharCode(65 + (i % 26))}${Math.floor(i / 26)}`;
-/** First five runs get a chart colour; the letter is the identity key, colour is never the only signal. */
-export const runColor = (i: number) => `var(--chart-${(i % 5) + 1})`;
+/** Series 1..8 (--chart-1..8); runs beyond 8 wrap. The letter is the identity key, colour is never the only signal. */
+export const runSeries = (i: number): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 =>
+  ((i % 8) + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export const runColor = (i: number) => `var(--chart-${runSeries(i)})`;
