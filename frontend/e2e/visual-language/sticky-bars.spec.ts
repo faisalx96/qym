@@ -1,5 +1,5 @@
 /** Sticky bars (final review F8): the report section bars share --bar-nav-h, the action bars --bar-action-h. */
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { compareUrl } from '../compare/support';
 import { gotoApp } from '../helpers';
 import { runUrl } from '../run-detail/support';
@@ -12,7 +12,7 @@ test.beforeAll(async () => {
 });
 test.use({ viewport: { width: 1440, height: 900 } });
 
-const token = (page: import('@playwright/test').Page, name: string) =>
+const token = (page: Page, name: string) =>
   page.evaluate((n) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(n)), name);
 
 test('run section nav and compare bar are the same height (--bar-nav-h)', async ({ page }) => {
