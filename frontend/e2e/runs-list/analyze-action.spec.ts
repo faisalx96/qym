@@ -16,7 +16,7 @@ test('finished runs show an Analyze button; live runs a dash; the button opens t
   const hovered = await action.evaluate((el) => getComputedStyle(el).color);
   expect(hovered).toBeTruthy();
   await action.click();
-  await expect(page).toHaveURL(/\/analyzer/);
+  await expect(page).toHaveURL(/\/analy/);
 });
 
 test('a run with an analysis in flight reads Analyzing', async ({ page, request }) => {

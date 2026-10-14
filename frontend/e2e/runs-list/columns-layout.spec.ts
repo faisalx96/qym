@@ -157,7 +157,7 @@ test.describe('runs columns layout (768)', () => {
     await page.keyboard.press('Escape');
     const scroller = table(page).locator('[data-dt-scroller]');
     const frozenWidth = await scroller.evaluate((el) => {
-      const cells = Array.from(el.querySelectorAll<HTMLElement>('thead th[data-pin="start"]'));
+      const cells = Array.from(el.querySelectorAll<HTMLElement>('thead th[data-pin="start"][data-col]'));
       return cells.reduce((n, c) => n + c.getBoundingClientRect().width, 0) / el.clientWidth;
     });
     expect(frozenWidth).toBeLessThan(0.75);

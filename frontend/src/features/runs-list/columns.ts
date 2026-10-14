@@ -27,8 +27,8 @@ const base = (id: string, label: string, width: number, sortKey?: string): Colum
 export const BASE_COLUMNS: ColumnDef[] = [
   { ...base('run', 'Run', 260, 'run') },
   base('status', 'Status', 150, 'status'),
-  { ...base('signals', 'Signals', 70), visKey: null },
-  base('task', 'Task', 92, 'task'),
+  { ...base('signals', 'Signals', 66), visKey: null },
+  base('task', 'Task', 90, 'task'),
   base('model', 'Model', 132, 'model'),
   base('dataset', 'Dataset', 112, 'dataset'),
   base('owner', 'Owner', 120, 'owner'),
