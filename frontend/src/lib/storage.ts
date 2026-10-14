@@ -4,8 +4,9 @@ export const KEYS = {
   lastProjectSlug: 'qym:last-project-slug',
   me: 'qym:me',
   dataTableWidths: (storageKey: string) => `qym:data-table:widths:${storageKey}`,
-  /** DataTable v2: widths, hidden, pins, density, collapsed groups. */
-  dataTableState: (storageKey: string) => `qym:data-table:v2:${storageKey}`,
+  /** DataTable v2: widths, hidden, pins, order, density, collapsed groups; `scope` (the user id) separates layouts. */
+  dataTableState: (storageKey: string, scope?: string) =>
+    scope ? `qym:data-table:v2:${storageKey}:${scope}` : `qym:data-table:v2:${storageKey}`,
   runsPageSize: 'qym:runs:page-size',
   textMode: 'qym.textMode',
   singleKeyShortcuts: 'qym:single-key-shortcuts',

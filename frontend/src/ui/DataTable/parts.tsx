@@ -33,8 +33,17 @@ const DENSITIES: { id: Density; label: string }[] = [
 
 /** Search, filters, chips, count, then the built-in Columns and Density menus. */
 export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, densityMenu }: ToolbarProps) {
-  const { model, columns, selectedCount, bulkActions, bulkOwnSummary, bulkAlways, clearSelection } =
-    useDataTableCtx();
+  const {
+    model,
+    columns,
+    reorderable,
+    suspended,
+    selectedCount,
+    bulkActions,
+    bulkOwnSummary,
+    bulkAlways,
+    clearSelection,
+  } = useDataTableCtx();
   const selecting = (selectedCount > 0 || bulkAlways) && Boolean(bulkActions);
   const hideable = columns.filter((c) => c.hideable !== false && !c.id.startsWith('__'));
   const showColumns = columnsMenu ?? hideable.length >= 5;
@@ -69,7 +78,9 @@ export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, 
       <div className={styles.toolbarEnd}>
         {count ? <span className={styles.count}>{count}</span> : null}
         {trailing}
-        {showColumns ? <ColumnsMenu columns={columns} model={model} /> : null}
+        {showColumns ? (
+          <ColumnsMenu columns={columns} model={model} reorderable={reorderable} suspended={suspended} />
+        ) : null}
         {showDensity ? (
           <DropdownMenu
             label="Row density"

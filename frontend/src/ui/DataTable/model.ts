@@ -1,5 +1,5 @@
 /** Pure DataTable logic (sort, order, pins, grouping, range selection, persisted state). Unit-tested. */
-import { KEYS, readJson } from '@/lib/storage';
+import { KEYS, readJson, writeJson } from '@/lib/storage';
 import type { CellType, Column, Density, DisplayRow, GroupByConfig, Key, SortState } from './types';
 
 export const NUMERIC_TYPES: ReadonlySet<CellType> = new Set(['number', 'delta', 'duration']);
@@ -71,17 +71,62 @@ export function sortRows<R>(rows: R[], columns: Column<R>[], sort: SortState | n
     .map((x) => x.r);
 }
 
-/** Pinned-start columns first, pinned-end last, the rest keep their order. */
+/**
+ * Applies a saved display order: ids in `order` sort by their index; columns missing from it (new metrics)
+ * keep their declared position, right after the nearest preceding declared column; unknown ids are dropped.
+ * Locked columns (`lockOrder`) never move.
+ */
+export function applyOrder<R>(cols: Column<R>[], order: string[] | null | undefined): Column<R>[] {
+  if (!order || order.length === 0) return cols;
+  const index = new Map(order.map((id, i) => [id, i]));
+  const movable = (c: Column<R>) => index.has(c.id) && !c.lockOrder;
+  const out = cols.filter(movable).sort((a, b) => index.get(a.id)! - index.get(b.id)!);
+  let front = 0;
+  cols.forEach((c, i) => {
+    if (movable(c)) return;
+    let at = -1;
+    for (let j = i - 1; j >= 0 && at < 0; j--) at = out.indexOf(cols[j]!);
+    if (at < 0) out.splice(front++, 0, c);
+    else out.splice(at + 1, 0, c);
+  });
+  return out;
+}
+
+/**
+ * Display order: the saved `order` first, then a stable partition (pinned-start, free, pinned-end) so pinning a
+ * column never reshuffles the order the user chose inside each block.
+ */
 export function orderColumns<R>(
   cols: Column<R>[],
   pins: Record<string, 'start' | 'end' | null>,
+  order?: string[] | null,
 ): Column<R>[] {
   const pinOf = (c: Column<R>) => (c.id in pins ? pins[c.id] : (c.pin ?? null));
+  const ordered = applyOrder(cols, order);
   return [
-    ...cols.filter((c) => pinOf(c) === 'start'),
-    ...cols.filter((c) => !pinOf(c)),
-    ...cols.filter((c) => pinOf(c) === 'end'),
+    ...ordered.filter((c) => pinOf(c) === 'start'),
+    ...ordered.filter((c) => !pinOf(c)),
+    ...ordered.filter((c) => pinOf(c) === 'end'),
   ];
+}
+
+/** Pinned-start columns that do not fit `share` of the scroller are suspended (rendered unpinned). The first stays. */
+export function suspendedPins(
+  startIds: string[],
+  widthOf: (id: string) => number,
+  scrollerWidth: number,
+  share: number,
+  leading = 0,
+): string[] {
+  if (!(scrollerWidth > 0) || startIds.length < 2) return [];
+  const cap = scrollerWidth * share;
+  let sum = leading + widthOf(startIds[0]!);
+  const out: string[] = [];
+  for (const id of startIds.slice(1)) {
+    sum += widthOf(id);
+    if (sum > cap) out.push(id);
+  }
+  return out;
 }
 
 export function effectivePin<R>(
@@ -178,6 +223,8 @@ export interface PersistedState {
   widths: Record<string, number>;
   hidden: string[] | null;
   pins: Record<string, 'start' | 'end' | null>;
+  /** Column ids in display order; null = declared order. */
+  order: string[] | null;
   density: Density | null;
   collapsed: string[];
 }
@@ -186,13 +233,19 @@ export const EMPTY_STATE: PersistedState = {
   widths: {},
   hidden: null,
   pins: {},
+  order: null,
   density: null,
   collapsed: [],
 };
 
-export function readPersisted(storageKey: string | undefined): PersistedState {
+export function readPersisted(storageKey: string | undefined, scope?: string): PersistedState {
   if (!storageKey) return EMPTY_STATE;
-  const v2 = readJson<Partial<PersistedState> | null>(KEYS.dataTableState(storageKey), null);
+  let v2 = readJson<Partial<PersistedState> | null>(KEYS.dataTableState(storageKey, scope), null);
+  if (!v2 && scope) {
+    // A layout saved before the table was scoped per user: adopt it once (the unscoped copy stays).
+    v2 = readJson<Partial<PersistedState> | null>(KEYS.dataTableState(storageKey), null);
+    if (v2) writeJson(KEYS.dataTableState(storageKey, scope), v2);
+  }
   // v1 stored only {id: px} widths; keep honouring them.
   const widths = v2?.widths ?? readJson<Record<string, number>>(KEYS.dataTableWidths(storageKey), {});
   return { ...EMPTY_STATE, ...v2, widths };

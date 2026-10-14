@@ -46,6 +46,7 @@ import {
   rangeKeys,
   sortKeyOf,
   sortRows,
+  suspendedPins,
   FLEX_MIN_WIDTH,
 } from './model';
 import { Footer, SelectionBar, Toolbar } from './parts';
@@ -75,6 +76,14 @@ export interface DataTableProps<R> {
   rows: R[];
   rowKey: (row: R) => Key;
   storageKey?: string;
+  /** Per-user layout: saved under `<storageKey>:<storageScope>` (the user id). */
+  storageScope?: string;
+  /** Columns menu lists drag handles and freeze toggles; header menu gains Freeze / Move. */
+  reorderable?: boolean;
+  /** Largest share of the scroller the frozen (pinned-start) block may take; the rest scroll. Default 0.5. */
+  maxPinShare?: number;
+  /** Called with the hidden column ids whenever they change (and once on mount). */
+  onHiddenChange?: (hidden: Set<string>) => void;
   className?: string;
 
   density?: Density;
@@ -245,6 +254,10 @@ function DataTableInner<R>({
   rows,
   rowKey,
   storageKey,
+  storageScope,
+  reorderable,
+  maxPinShare = 0.5,
+  onHiddenChange,
   className,
   density: densityProp,
   densityLocked,
@@ -303,6 +316,7 @@ function DataTableInner<R>({
   const model = useDataTableModel({
     columns,
     storageKey,
+    storageScope,
     density: densityProp ?? (embedded ? 'compact' : 'regular'),
     densityLocked: densityLocked || embedded,
   });
@@ -461,6 +475,8 @@ function DataTableInner<R>({
 
   /* pin offsets from measured header widths */
   const [measured, setMeasured] = useState<Record<string, number>>({});
+  const [suspended, setSuspended] = useState<string[]>([]);
+  const [scrollerWidth, setScrollerWidth] = useState(0);
   useLayoutEffect(() => {
     const table = tableRef.current;
     if (!table) return undefined;
@@ -469,6 +485,19 @@ function DataTableInner<R>({
       table.querySelectorAll<HTMLElement>('thead th[data-col]').forEach((th) => {
         next[th.dataset.col!] = th.getBoundingClientRect().width;
       });
+      // Freeze cap: trailing frozen columns that would take more than `maxPinShare` of the scroller scroll instead.
+      const sw = scrollerRef.current?.clientWidth ?? 0;
+      setScrollerWidth((p) => (p === sw ? p : sw));
+      const starts = renderCols.filter((c) => effectivePin(c, model.pins) === 'start');
+      const lead = starts.filter((c) => (c as unknown as PseudoColumn).pseudo);
+      const sus = suspendedPins(
+        starts.filter((c) => !(c as unknown as PseudoColumn).pseudo).map((c) => c.id),
+        (id) => next[id] ?? 0,
+        sw,
+        maxPinShare,
+        lead.reduce((n, c) => n + (next[c.id] ?? 0), 0),
+      );
+      setSuspended((p) => (p.length === sus.length && p.every((id, i) => id === sus[i]) ? p : sus));
       setMeasured((prev) => {
         const keys = Object.keys(next);
         if (
@@ -484,22 +513,27 @@ function DataTableInner<R>({
     const ro = new ResizeObserver(measure);
     ro.observe(table);
     return () => ro.disconnect();
-  }, [renderCols, model.widths, model.pins, model.density]);
+  }, [renderCols, model.widths, model.pins, model.density, maxPinShare]);
+  const pins = useMemo(
+    () =>
+      suspended.length
+        ? { ...model.pins, ...Object.fromEntries(suspended.map((id) => [id, null])) }
+        : model.pins,
+    [model.pins, suspended],
+  );
   const offsets = useMemo(
     () =>
       pinOffsets(
         renderCols,
         (id) => measured[id] ?? model.widths[id] ?? renderCols.find((c) => c.id === id)?.width ?? 120,
-        model.pins,
+        pins,
       ),
-    [renderCols, measured, model.widths, model.pins],
+    [renderCols, measured, model.widths, pins],
   );
   const pinSum = (side: 'start' | 'end') =>
-    renderCols
-      .filter((c) => effectivePin(c, model.pins) === side)
-      .reduce((n, c) => n + (measured[c.id] ?? 0), 0);
-  const lastStart = [...renderCols].reverse().find((c) => effectivePin(c, model.pins) === 'start')?.id;
-  const firstEnd = renderCols.find((c) => effectivePin(c, model.pins) === 'end')?.id;
+    renderCols.filter((c) => effectivePin(c, pins) === side).reduce((n, c) => n + (measured[c.id] ?? 0), 0);
+  const lastStart = [...renderCols].reverse().find((c) => effectivePin(c, pins) === 'start')?.id;
+  const firstEnd = renderCols.find((c) => effectivePin(c, pins) === 'end')?.id;
 
   /* scroll state */
   const [scrollX, setScrollX] = useState({ start: false, end: false, overflow: false });
@@ -871,6 +905,34 @@ function DataTableInner<R>({
     model.setWidth(col.id, max + 28, true);
   };
 
+  /* column order: the neighbour a column swaps with (same frozen block, never a locked column) */
+  const [announcement, setAnnouncement] = useState('');
+  const orderIds = model.ordered.map((c) => c.id);
+  const neighbourOf = (id: string, dir: -1 | 1): Column<R> | null => {
+    const vis = model.visible;
+    const i = vis.findIndex((c) => c.id === id);
+    const me = vis[i];
+    const other = vis[i + dir];
+    if (!me || !other || me.lockOrder || other.lockOrder) return null;
+    return effectivePin(me, model.pins) === effectivePin(other, model.pins) ? other : null;
+  };
+  const moveBy = (col: Column<R>, dir: number) => {
+    if (col.lockOrder) return;
+    const vis = model.visible;
+    const i = vis.findIndex((c) => c.id === col.id);
+    let target: Column<R> | null;
+    if (dir === -Infinity) {
+      const pin = effectivePin(col, model.pins);
+      target = vis.find((c) => !c.lockOrder && effectivePin(c, model.pins) === pin) ?? null;
+    } else target = neighbourOf(col.id, dir as -1 | 1);
+    if (!target || target.id === col.id || i < 0) return;
+    model.moveColumn(col.id, orderIds.indexOf(target.id));
+    const now = vis.filter((c) => c.id !== col.id);
+    const pos = now.findIndex((c) => c.id === target!.id) + (dir > 0 ? 1 : 0) + 1;
+    setAnnouncement(`${headerText(col)} moved to position ${Math.max(1, pos)} of ${vis.length}`);
+    requestAnimationFrame(() => focusHead(col.id));
+  };
+
   /* header roving focus: one tab stop for the header row (spec 5.7) */
   const [headFocus, setHeadFocus] = useState<string | null>(null);
   const headIds = renderCols.filter((c) => !pseudoOf(c)).map((c) => c.id);
@@ -887,7 +949,10 @@ function DataTableInner<R>({
     const i = headIds.indexOf(col.id);
     const rtl = getComputedStyle(e.currentTarget).direction === 'rtl';
     const key = e.key;
-    if (e.altKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+    if (reorderable && e.altKey && e.shiftKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+      e.preventDefault();
+      moveBy(col, (key === 'ArrowRight' ? 1 : -1) * (rtl ? -1 : 1));
+    } else if (e.altKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
       e.preventDefault();
       const w = e.currentTarget.getBoundingClientRect().width;
       const dir = (key === 'ArrowRight' ? 1 : -1) * (rtl ? -1 : 1);
@@ -926,10 +991,28 @@ function DataTableInner<R>({
         items.push({ id: 'sort-clear', label: 'Clear sort', disabled: !unsortedOk && !controlledSort });
     }
     const pin = effectivePin(col, model.pins);
-    items.push(
-      { id: 'pin-start', label: pin === 'start' ? 'Unpin' : 'Pin left', separatorBefore: items.length > 0 },
-      ...(pin === 'start' ? [] : [{ id: 'pin-end', label: pin === 'end' ? 'Unpin' : 'Pin right' }]),
-    );
+    if (reorderable) {
+      const locked = Boolean(col.lockOrder);
+      const nb = (dir: -1 | 1) => neighbourOf(col.id, dir);
+      items.push(
+        {
+          id: 'pin-start',
+          label: pin === 'start' ? 'Unfreeze' : 'Freeze column',
+          separatorBefore: items.length > 0,
+        },
+        ...(locked
+          ? []
+          : [
+              { id: 'move-left', label: 'Move left', disabled: !nb(-1) },
+              { id: 'move-right', label: 'Move right', disabled: !nb(1) },
+              { id: 'move-start', label: 'Move to start', disabled: !nb(-1) },
+            ]),
+      );
+    } else
+      items.push(
+        { id: 'pin-start', label: pin === 'start' ? 'Unpin' : 'Pin left', separatorBefore: items.length > 0 },
+        ...(pin === 'start' ? [] : [{ id: 'pin-end', label: pin === 'end' ? 'Unpin' : 'Pin right' }]),
+      );
     if (col.hideable !== false) items.push({ id: 'hide', label: 'Hide column', separatorBefore: true });
     items.push(
       { id: 'autosize', label: 'Autosize column', separatorBefore: col.hideable === false },
@@ -944,6 +1027,9 @@ function DataTableInner<R>({
     else if (id === 'sort-clear') setSort(null);
     else if (id === 'pin-start')
       model.setPin(col.id, effectivePin(col, model.pins) === 'start' ? null : 'start');
+    else if (id === 'move-left') moveBy(col, -1);
+    else if (id === 'move-right') moveBy(col, 1);
+    else if (id === 'move-start') moveBy(col, -Infinity as number);
     else if (id === 'pin-end') model.setPin(col.id, effectivePin(col, model.pins) === 'end' ? null : 'end');
     else if (id === 'hide') model.setHidden(col.id, true);
     else if (id === 'autosize') autosize(col);
@@ -976,6 +1062,12 @@ function DataTableInner<R>({
   const footerNode = kids.find((k) => isValidElement(k) && k.type === Footer);
   const otherKids = kids.filter((k) => k !== toolbarNode && k !== footerNode);
 
+  const hiddenKey = [...model.hidden].sort().join('\u0000');
+  useEffect(() => {
+    onHiddenChange?.(new Set(model.hidden));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires when the hidden set's content changes
+  }, [hiddenKey]);
+
   const ctxValue = {
     model: model as unknown as DataTableModel,
     columns: columns as unknown as Column<never>[],
@@ -985,6 +1077,9 @@ function DataTableInner<R>({
     bulkOwnSummary: Boolean(bulkOwnSummary),
     bulkAlways: Boolean(bulkAlways),
     isFiltered: Boolean(isFiltered),
+    reorderable: Boolean(reorderable),
+    suspended,
+    announce: setAnnouncement,
   };
 
   const banner =
@@ -1005,7 +1100,7 @@ function DataTableInner<R>({
 
   const thFor = (col: Column<R>) => {
     const pseudo = (col as unknown as PseudoColumn).pseudo;
-    const pin = effectivePin(col, model.pins);
+    const pin = effectivePin(col, pins);
     const key = sortKeyOf(col);
     const canSort = !pseudo && key && sortable(col);
     const active = canSort && sort?.key === key;
@@ -1128,7 +1223,7 @@ function DataTableInner<R>({
 
   const renderTd = (col: Column<R>, r: R, entry: Extract<DisplayRow<R>, { kind: 'row' }>, ci: number) => {
     const pseudo = (col as unknown as PseudoColumn).pseudo;
-    const pin = effectivePin(col, model.pins);
+    const pin = effectivePin(col, pins);
     const style = {
       insetInlineStart: pin === 'start' ? offsets[col.id] : undefined,
       insetInlineEnd: pin === 'end' ? offsets[col.id] : undefined,
@@ -1464,6 +1559,9 @@ function DataTableInner<R>({
         data-zebra={zebraOn ? '' : undefined}
         data-testid="data-table"
       >
+        <span className={styles.srOnly} role="status" aria-live="polite" data-dt-announce="">
+          {announcement}
+        </span>
         {toolbarNode ? null : <SelectionBar />}
         {toolbarNode}
         {otherKids}
@@ -1518,6 +1616,7 @@ function DataTableInner<R>({
               data-rail={scrollX.overflow && scrollCues ? '' : undefined}
               data-scrolled-x={scrollX.start ? '' : undefined}
               data-scrolled-end={scrollX.end ? '' : undefined}
+              style={{ '--dt-scroller-width': `${scrollerWidth}px` } as React.CSSProperties}
               tabIndex={scrollX.overflow ? 0 : undefined}
               role={scrollX.overflow ? 'region' : undefined}
               aria-label={scrollX.overflow ? `${tableLabel} (scrollable)` : undefined}
