@@ -99,7 +99,7 @@ function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
       return <Signals row={row} onDetails={(r) => p.onSignalDetails(r)} />;
     case 'task':
       return row.task_name ? (
-        <Tag kind="data" title={row.task_name}>
+        <Tag kind="task" title={row.task_name}>
           {row.task_name}
         </Tag>
       ) : (
@@ -246,7 +246,9 @@ export function RunsTable(p: RunsTableProps) {
         bulkOwnSummary
         bulkAlways={p.selectMode}
         onRowOpen={p.onOpen}
-        rowState={(r) => (r.status === 'RUNNING' ? 'live' : undefined)}
+        rowState={(r) =>
+          r.status === 'RUNNING' ? 'live' : r.status === 'FAILED' ? 'error' : undefined
+        }
         rowProps={(r) => ({
           'data-run-id': r.run_id,
           'data-status': r.status,

@@ -1,7 +1,7 @@
 /**
  * Columns menu of the Runs table (cutover of test_runs_column_visibility_browser.py).
- * React differences, decision §9.4: the Run column is always shown (not in the menu)
- * and the "Frozen columns" section is gone.
+ * Redesign 2: the menu lists every column in display order (Run is listed but cannot be hidden), with a
+ * freeze toggle and a drag handle per row; see columns-layout.spec.ts for order and freezing.
  */
 import { test, expect, type Page } from '@playwright/test';
 import { clickBox, openRuns, sharedProject, table } from './support';
@@ -33,23 +33,19 @@ async function openMenu(page: Page) {
 const box = (page: Page, name: string) => menu(page).getByRole('checkbox', { name, exact: true });
 
 test.describe('runs list: Display > Columns', () => {
-  test('every run column except the always-shown Run is offered and checked by default', async ({
+  test('every run column is offered and checked by default; Run cannot be hidden', async ({
     page,
     request,
   }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
     await openMenu(page);
-    const group = menu(page)
-      .locator('div')
-      .filter({ hasText: /^Run columns/ })
-      .first();
     for (const label of RUN_COLUMNS) {
       await expect(box(page, label), label).toBeChecked();
       await expect(box(page, label)).toBeEnabled();
     }
-    await expect(group).toBeVisible();
-    await expect(box(page, 'Run')).toHaveCount(0);
+    await expect(box(page, 'Run')).toBeChecked();
+    await expect(box(page, 'Run')).toBeDisabled();
     await expect(header(page, 'Run')).toBeVisible();
   });
 
@@ -97,10 +93,7 @@ test.describe('runs list: Display > Columns', () => {
     await expect(box(page, 'Model')).toBeChecked();
   });
 
-  test('a saved choice survives a reload; Reset to default restores every column', async ({
-    page,
-    request,
-  }) => {
+  test('a saved choice survives a reload; Reset layout restores every column', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
     await openMenu(page);
@@ -116,7 +109,7 @@ test.describe('runs list: Display > Columns', () => {
     await openMenu(page);
     await expect(box(page, 'Task')).not.toBeChecked();
     await expect(box(page, 'Model')).toBeChecked();
-    await menu(page).getByRole('button', { name: 'Reset to default' }).click();
+    await menu(page).getByRole('button', { name: 'Reset layout' }).click();
     await expect(box(page, 'Task')).toBeChecked();
     expect((await headers(page)).some((h) => h.startsWith('Task'))).toBe(true);
   });

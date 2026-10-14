@@ -56,6 +56,14 @@ export function ModelCell({ row }: { row: RunRow }) {
   );
 }
 
+/** Series hue 1..8 from the owner id: the same person is the same colour on every row. */
+export function ownerSeries(id: string | undefined): number | undefined {
+  if (!id) return undefined;
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return (h % 8) + 1;
+}
+
 export function OwnerCell({ row }: { row: RunRow }) {
   const name = row.owner?.display_name || row.owner?.email || '—';
   const initials = name
@@ -66,7 +74,7 @@ export function OwnerCell({ row }: { row: RunRow }) {
     .toUpperCase();
   return (
     <span className={styles.owner} title={row.owner?.email}>
-      <span className={styles.avatar} aria-hidden="true">
+      <span className={styles.avatar} data-series={ownerSeries(row.owner?.id)} aria-hidden="true">
         {initials}
       </span>
       <span className={styles.ownerName}>{name}</span>
@@ -77,7 +85,7 @@ export function OwnerCell({ row }: { row: RunRow }) {
 export function DatasetCell({ row }: { row: RunRow }) {
   return (
     <span className={styles.dataset}>
-      <Tag kind="data" title={row.dataset_name}>
+      <Tag kind="dataset" title={row.dataset_name}>
         {row.dataset_name}
       </Tag>
       {row.dataset_version ? <Tag kind="version">{row.dataset_version}</Tag> : null}
@@ -382,7 +390,7 @@ export function AnalysisCell({ row }: { row: RunRow }) {
   const to = `${runPath(slug, row.run_id)}/analyzer`;
   if (row.analysis_cause_count > 0)
     return (
-      <Link to={to} className={styles.analyze}>
+      <Link to={to} className={styles.analyze} data-tone="meta">
         <Icon name="sparkles" size={12} /> {row.analysis_cause_count} causes
       </Link>
     );
