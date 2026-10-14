@@ -603,3 +603,10 @@ button.chip:focus-visible,
   flex: 1 1 96px;
   min-width: 96px;
 }
+
+.globalSweep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}

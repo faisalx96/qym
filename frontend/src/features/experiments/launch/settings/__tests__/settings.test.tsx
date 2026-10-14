@@ -109,8 +109,9 @@ describe('SettingsSection', () => {
     expect(JSON.parse(screen.getByTestId('added').textContent ?? '{}')).toEqual({
       '/LLM_OVERRIDES/endpoints': ['fast'],
     });
-    expect(screen.getByRole('heading', { name: 'fast' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'All endpoints' })).toBeInTheDocument();
+    const table = screen.getByRole('table', { name: 'endpoint overrides' });
+    expect(within(table).getByRole('rowheader', { name: 'fast' })).toBeInTheDocument();
+    expect(within(table).getByRole('rowheader', { name: 'All endpoints' })).toBeInTheDocument();
     await user.type(screen.getByRole('textbox', { name: 'All endpoints · Timeout' }), '30{Enter}');
     expect(values()).toMatchObject({
       '/LLM_OVERRIDES/endpoints/primary/timeout': 30,
@@ -128,6 +129,25 @@ describe('SettingsSection', () => {
     expect(written.every(([, v]) => v === 512)).toBe(true);
     await user.click(screen.getByRole('button', { name: 'Reset roles' }));
     expect(values()).toEqual({});
+  });
+
+  it('sweeps the "All roles" row: chips of values, every role swept together', async () => {
+    const { user } = setup(<SettingsSection />);
+    await openGroup(user, /LLM routing/);
+    await user.click(screen.getByRole('button', { name: 'Sweep values: All roles · max_tokens' }));
+    const chips = document.querySelector('[data-global-sweep]') as HTMLElement;
+    expect(chips).toBeInTheDocument();
+    await user.type(within(chips).getByRole('textbox'), '256, 512{Enter}');
+    const swept = Object.entries(values()).filter(([p]) => p.endsWith('/max_tokens'));
+    expect(swept.length).toBeGreaterThanOrEqual(5);
+    expect(swept.every(([, v]) => JSON.stringify(v) === JSON.stringify({ sweep: [256, 512] }))).toBe(true);
+    expect(chips).toHaveTextContent('sweeps 2 runs');
+    await user.click(within(chips).getByRole('button', { name: /Single value/ }));
+    expect(
+      Object.entries(values())
+        .filter(([p]) => p.endsWith('/max_tokens'))
+        .every(([, v]) => v === 256),
+    ).toBe(true);
   });
 
   it('narrows role rows with the role search', async () => {
