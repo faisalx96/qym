@@ -96,7 +96,7 @@ test('compare: an edit from a page loaded before the deletion is refused with th
   await chip.getByRole('button', { name: /^Edit quality score of/ }).click();
   await chip.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
   const refused = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
-  await panel.getByRole('button', { name: 'Save' }).click();
+  await chip.getByRole('button', { name: 'Save' }).click();
   const response = await refused;
   expect(response.status()).toBe(409);
   expect((response.request().postDataJSON() as { expected_pass_version: number }).expected_pass_version).toBe(
