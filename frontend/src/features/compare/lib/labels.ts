@@ -78,3 +78,18 @@ export function computeRunLabels(inputs: LabelInput[], now?: Date): Record<strin
   });
   return out;
 }
+
+/**
+ * The name a run goes by in the report (legacy run cards, legend and banner): the run's own `run_name` when it has one
+ * that differs from the disambiguated label, else that label. A pass of a repeat run keeps its pass suffix.
+ */
+export function runShortName(run: {
+  label: string;
+  pass?: number | null;
+  run?: { run_name?: string | null } | null;
+}): string {
+  const own = (run.run?.run_name ?? '').trim().replace(/ · pass \d+$/, '');
+  const label = run.label.replace(/ · pass \d+$/, '');
+  const base = own && own !== label ? own : label;
+  return run.pass ? `${base} · pass ${run.pass}` : base;
+}

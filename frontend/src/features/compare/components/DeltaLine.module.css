@@ -5,16 +5,20 @@
   min-width: 0;
 }
 
+.title {
+  flex: none;
+}
+
 .deltas {
   flex: 1;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-md);
   min-width: 0;
   margin: 0;
   padding: var(--space-xs) 0;
   list-style: none;
-  overflow-x: auto;
-  /* containing block for the visually hidden labels inside, so they scroll here instead of widening the page */
+  /* containing block for the visually hidden labels inside */
   position: relative;
 }
 
@@ -30,12 +34,6 @@
   white-space: nowrap;
 }
 
-.letter {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
 .verdict {
   flex: 1;
   display: inline-flex;
@@ -49,6 +47,7 @@
 @media (max-width: 640px) {
   .line {
     flex-wrap: wrap;
+    align-items: flex-start;
   }
 
   .deltas,

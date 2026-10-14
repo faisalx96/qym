@@ -1,0 +1,64 @@
+/* The one sticky bar (44px): section nav on the left, the view controls on the right. */
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-height: var(--compare-bar-h);
+  padding: 0 var(--space-xs);
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+
+.nav {
+  flex: 1;
+  min-width: 0;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: none;
+}
+
+.label {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.pop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  min-width: 16rem;
+}
+
+/* Phones: the bar scrolls with the page; the nav and the controls take a row each. */
+@media (max-width: 640px) {
+  .bar {
+    position: static;
+    flex-wrap: wrap;
+    padding: var(--space-xs) 0;
+  }
+
+  .nav,
+  .controls {
+    flex: 1 1 100%;
+  }
+
+  .controls {
+    flex-wrap: wrap;
+  }
+}

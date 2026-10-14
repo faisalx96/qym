@@ -1,12 +1,13 @@
-/** The sticky one-line delta header: one chip per candidate column (verdict, band, improved / regressed filters). */
+/** "Changes vs baseline" strip at the top of the Items section: one pill per candidate column (verdict, band, improved / regressed filters). */
 import { useMemo } from 'react';
 import { Button, Tag, Text } from '@/ui';
-import { useCompare, letterOf } from '../CompareContext';
+import { useCompare } from '../CompareContext';
 import { useColumnStats, type ColumnsInfo } from '../hooks/useColumnStats';
 import type { DeltaKind } from '../lib/baseline';
 import { computeGroupedComparison, summarizeSweepItems } from '../lib/cohort';
-import { CountButtons, DeltaTag, RunDot } from './common';
-import { MetricSelect } from './SelectionBar';
+import { columnName } from '../lib/columnName';
+import { CountButtons, DeltaTag } from './common';
+import { RunTag } from './RunTag';
 import styles from './DeltaLine.module.css';
 
 function CohortVerdict() {
@@ -66,7 +67,11 @@ export function DeltaLine({ info }: { info: ColumnsInfo }) {
   };
   return (
     <div className={styles.line} aria-label="Change against the baseline">
-      <MetricSelect />
+      {cohorts ? null : (
+        <Text variant="sm" tone="muted" weight={650} className={styles.title}>
+          Changes vs baseline
+        </Text>
+      )}
       {cohorts ? (
         <CohortVerdict />
       ) : (
@@ -76,10 +81,12 @@ export function DeltaLine({ info }: { info: ColumnsInfo }) {
             const idx = col.runIdxs[0] ?? 0;
             return (
               <li key={col.key} className={styles.delta} data-column={col.key}>
-                <RunDot index={idx} />
-                <span className={styles.letter} title={col.title}>
-                  {letterOf(idx)}
-                </span>
+                <RunTag
+                  index={idx}
+                  compact
+                  name={columnName(model, col)}
+                  title={col.title}
+                />
                 {s ? (
                   <>
                     <DeltaTag stats={s} type={type} metric={metric} />
