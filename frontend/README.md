@@ -189,3 +189,25 @@ services only; the ingestion and workers apps never serve the UI):
 The Docker image builds the bundle in a Node 24 stage. A platform wheel must be
 built after `npm run build`, or it ships without the UI. Backend tests:
 `tests/platform/test_spa_serving.py`.
+
+## Heavy test runs on a shared machine
+
+Full Vitest, Playwright, builds and `pytest -n` are memory heavy, and several at
+once (other terminals, agents, CI-like loops) can push a host into swap thrash
+until the kernel or `systemd-oomd` kills the whole terminal session. Run them
+through `scripts/heavy.sh`:
+
+```bash
+scripts/heavy.sh -- npm run check                 # default budget 3 GB
+scripts/heavy.sh --cost 4 --name e2e -- npm run e2e
+scripts/heavy.sh --cost 2 -- npx vitest run src/features/compare
+```
+
+It waits until the machine has `cost` GB free above a reserve (2 GB or 20% of
+RAM) and memory pressure is low, takes one of N slots sized from RAM (shared by
+every caller on the machine), exports `VITEST_MAX_WORKERS` and `QYM_PW_WORKERS`
+from the budget (both configs read them; do not pass `--workers`), and on Linux
+with systemd runs the command in its own cgroup with `MemoryHigh`/`MemoryMax`
+so that, if memory does run short, the test run is what gets killed, not your
+shell. Without systemd it still gates and caps. Single test files and single
+specs are light enough to run directly.
