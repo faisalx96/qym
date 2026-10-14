@@ -1,0 +1,12 @@
+.body {
+  display: grid;
+  gap: var(--space-md);
+  inline-size: 260px;
+  max-inline-size: 100%;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}

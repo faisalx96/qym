@@ -262,20 +262,34 @@ function ReorderBody<R>({
     if (id === LINE) return !searching;
     return !needle || labelOf(id).toLowerCase().includes(needle);
   });
+  // All / None act on what the search lists (the whole table when the search is empty).
+  const setListed = (hide: boolean) => {
+    if (!needle) return model.setAllHidden(hide);
+    for (const id of visibleItems) {
+      const c = byId.get(id);
+      if (c && c.hideable !== false) model.setHidden(id, hide);
+    }
+  };
   const suspendedNames = suspended.map(labelOf);
   return (
     <div className={styles.colMenu} data-columns-reorder="">
       <SearchField label="Search columns" value={q} onChange={setQ} placeholder="Search columns" />
       <div className={styles.colMenuBulk}>
-        <Button variant="ghost" onPress={() => model.setAllHidden(false)}>
+        <Button variant="ghost" onPress={() => setListed(false)}>
           All
         </Button>
-        <Button variant="ghost" onPress={() => model.setAllHidden(true)}>
+        <Button variant="ghost" onPress={() => setListed(true)}>
           None
         </Button>
         <Button variant="ghost" onPress={model.resetColumns} className={styles.colMenuReset}>
           Reset layout
         </Button>
+      </div>
+      <div className={styles.colFrozenHead} data-col-frozen-head="">
+        <span>Frozen ({frozenCount})</span>
+        {suspendedNames.length ? (
+          <span className={styles.colLineNote}>Not frozen at this width: {suspendedNames.join(', ')}</span>
+        ) : null}
       </div>
       <div className={styles.colMenuList} ref={listRef} role="list" aria-label="Column order">
         {visibleItems.length === 0 ? <p className={styles.colMenuEmpty}>No matching columns</p> : null}
@@ -283,13 +297,7 @@ function ReorderBody<R>({
           if (id === LINE)
             return (
               <div key={LINE} className={styles.colLine} role="listitem" data-col-item="" data-col-line="">
-                <span>Frozen ({frozenCount})</span>
-                {suspendedNames.length ? (
-                  <span className={styles.colLineNote}>
-                    Not frozen at this width: {suspendedNames.join(', ')}
-                  </span>
-                ) : null}
-                <span className={styles.colLineRule}>Scrolling columns below</span>
+                <span className={styles.colLineRule}>Scrolling columns</span>
               </div>
             );
           const c = byId.get(id);

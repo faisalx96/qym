@@ -126,8 +126,11 @@ export function RunsPage() {
       metricTypes: d.overview?.metric_types ?? {},
       modelIndex: d.overview?.chart_data?.modelIndex ?? {},
       owners,
+      visibleMetrics: columnSet.visible
+        .filter((c) => c.id.startsWith('metric-'))
+        .map((c) => c.id.slice('metric-'.length)),
     }),
-    [slug, view, d.overview, owners],
+    [slug, view, d.overview, owners, columnSet.visible],
   );
 
   const perm = useMemo(

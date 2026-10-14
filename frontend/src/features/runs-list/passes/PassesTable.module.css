@@ -1,0 +1,55 @@
+.passLink {
+  color: var(--accent-tertiary-soft);
+  font-family: var(--font-mono);
+  text-decoration: none;
+}
+
+.passLink:hover {
+  text-decoration: underline;
+}
+
+.passLink:focus-visible,
+.analyze:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.none {
+  color: var(--text-muted);
+}
+
+.issues {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.issue {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-weight: 650;
+  color: var(--tone-text);
+}
+
+.analyze {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.analyze:hover {
+  color: var(--accent-tertiary-soft);
+}
