@@ -26,7 +26,8 @@ import { formatPercentValue, formatRelative } from '@/lib/format';
 import { useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Mono, OwnerCell, StatusCell } from './cells';
+import { DatasetCell, ModelCell, Mono, OwnerCell, StatusCell } from './cells';
+import { modelKeyOf } from './model';
 import { isActiveRun } from './polling';
 import { RunsCtx, type RunsCtxValue } from './context';
 import { useKpiTopbar } from './kpiTopbar';
@@ -94,9 +95,22 @@ export function OverviewPage() {
     refetchInterval: updating ? 2000 : 60_000,
   });
   const trend = trendQ.data;
+  // Model colours follow first appearance across the lists on this page (the overview has no frequency index).
+  const modelIndex = useMemo(() => {
+    const index: Record<string, number> = {};
+    for (const r of [
+      ...(live.data?.rows ?? []),
+      ...(recent.data?.rows ?? []),
+      ...(approved.data?.rows ?? []),
+    ]) {
+      const key = modelKeyOf(r);
+      if (!(key in index)) index[key] = Object.keys(index).length;
+    }
+    return index;
+  }, [live.data?.rows, recent.data?.rows, approved.data?.rows]);
   const ctx = useMemo<RunsCtxValue>(
-    () => ({ slug, listContext: '', metricTypes: {}, modelIndex: {}, owners: {} }),
-    [slug],
+    () => ({ slug, listContext: '', metricTypes: {}, modelIndex, owners: {} }),
+    [slug, modelIndex],
   );
   const scope = kpiScope(kpis);
   const approvedCount = approved.data?.total_runs;
@@ -398,7 +412,15 @@ function RunLink({ slug, row, withTask }: { slug: string; row: RunRow; withTask?
           </Tag>
         ) : null}
       </span>
-      {withTask && row.task_name ? <TaskTag name={row.task_name} /> : null}
+      {withTask ? (
+        <span className={styles.runTags} data-testid="run-tags">
+          {row.task_name ? <TaskTag name={row.task_name} /> : null}
+          <DatasetCell row={row} />
+          <span className={styles.runModel}>
+            <ModelCell row={row} />
+          </span>
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -429,7 +451,7 @@ function MiniRuns({ slug, rows, hideStatus }: { slug: string; rows: RunRow[]; hi
           flex: true,
           minWidth: 120,
           priority: 1,
-          cell: (r) => <RunLink slug={slug} row={r} />,
+          cell: (r) => <RunLink slug={slug} row={r} withTask />,
         },
         { id: 'owner', header: 'User', width: 96, priority: 3, cell: (r) => <OwnerCell row={r} /> },
         ...(hideStatus

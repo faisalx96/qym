@@ -115,9 +115,31 @@
 .runCell {
   display: inline-flex;
   flex-direction: column;
+  max-width: 100%;
   align-items: flex-start; /* the task tag hugs its text, never a wide block */
   gap: 2px;
   min-width: 0;
+}
+
+.runTags {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap; /* one tag line: the tags share the width and shorten with an ellipsis */
+  gap: var(--space-xs);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.runTags > * {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Narrow (card mode): the model tag goes; task and dataset stay. */
+@media (max-width: 639px) {
+  .runModel {
+    display: none;
+  }
 }
 
 .runLine {

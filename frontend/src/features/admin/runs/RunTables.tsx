@@ -7,7 +7,6 @@ import {
   RunName,
   RunStatusBadge,
   TaskTag,
-  TwoLine,
   type Column,
   type PaginationProps,
   type RunStatus,
@@ -21,12 +20,10 @@ function runHref(run: AdminRunSummary): string {
 
 function RunCell({ run }: { run: AdminRunSummary }) {
   return (
-    <TwoLine
-      primary={
-        <RunName to={runHref(run)} name={runName(run)} runId={run.run_id} />
-      }
-      secondary={run.task_name ? <TaskTag name={run.task_name} /> : undefined}
-    />
+    <span className={styles.runInline} data-testid="admin-run-cell">
+      <RunName to={runHref(run)} name={runName(run)} runId={run.run_id} />
+      {run.task_name ? <TaskTag name={run.task_name} /> : null}
+    </span>
   );
 }
 
