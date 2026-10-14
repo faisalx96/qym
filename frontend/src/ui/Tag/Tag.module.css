@@ -48,3 +48,9 @@
   border-radius: var(--radius-pill);
   background: var(--tone);
 }
+
+/* A model tag carries its series colour: tinted fill, primary text, the dot in the full hue. */
+.tag[data-kind='model'][data-series] {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+}

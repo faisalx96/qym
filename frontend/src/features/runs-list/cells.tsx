@@ -7,10 +7,11 @@ import {
   Badge,
   DropdownMenu,
   HelpMarker,
-  Icon,
   IconButton,
   RunStatusBadge,
   ScoreBar,
+  DatasetTag,
+  ModelTag,
   Tag,
   Tooltip,
 } from '@/ui';
@@ -19,6 +20,7 @@ import { errorsLeftOut, formatPercent, metricDirection } from '@/lib/metrics';
 import { projectPath, runPath } from '@/app/routes';
 import { runHref } from '@/lib/runs-order';
 import { textDirAttrs } from '@/lib/text';
+import { AnalyzeAction } from './AnalyzeAction';
 import { useRunsCtx } from './context';
 import { modelKeyOf, modelShape, modelSlot, plainModelName, smartDigits, STATUS_LABEL } from './model';
 import { isActiveRun, isStoppingRun } from './polling';
@@ -45,14 +47,15 @@ export function ModelMark({ modelKey, size = 'sm' }: { modelKey: string; size?: 
 export function ModelCell({ row }: { row: RunRow }) {
   const key = modelKeyOf(row);
   const reasoning = key.endsWith('|||reasoning');
+  const { modelIndex } = useRunsCtx();
   return (
-    <span className={styles.model}>
-      <ModelMark modelKey={key} />
-      <span className={styles.modelName} title={row.model_name}>
-        {plainModelName(key)}
-      </span>
-      {reasoning ? <Tag kind="data">reasoning</Tag> : null}
-    </span>
+    <ModelTag
+      name={plainModelName(key)}
+      title={row.model_name}
+      series={modelSlot(key, modelIndex) as 1}
+      mark={<ModelMark modelKey={key} />}
+      reasoning={reasoning}
+    />
   );
 }
 
@@ -83,17 +86,7 @@ export function OwnerCell({ row }: { row: RunRow }) {
 }
 
 export function DatasetCell({ row }: { row: RunRow }) {
-  return (
-    <span className={styles.dataset}>
-      <Tag kind="dataset" title={row.dataset_name}>
-        {row.dataset_name}
-      </Tag>
-      {row.dataset_version ? <Tag kind="version">{row.dataset_version}</Tag> : null}
-      {row.dataset_aliases?.map((a) => (
-        <Tag key={a}>{a}</Tag>
-      ))}
-    </span>
-  );
+  return <DatasetTag name={row.dataset_name} version={row.dataset_version} aliases={row.dataset_aliases} />;
 }
 
 export function VersionCell({ row }: { row: RunRow }) {
@@ -385,19 +378,15 @@ export function RunNameCell({
 }
 
 export function AnalysisCell({ row }: { row: RunRow }) {
-  const { slug } = useRunsCtx();
+  const { slug, analyzing } = useRunsCtx();
   if (isActiveRun(row)) return <span className={styles.empty}>—</span>;
-  const to = `${runPath(slug, row.run_id)}/analyzer`;
-  if (row.analysis_cause_count > 0)
-    return (
-      <Link to={to} className={styles.analyze} data-tone="meta">
-        <Icon name="sparkles" size={12} /> {row.analysis_cause_count} causes
-      </Link>
-    );
   return (
-    <Link to={to} className={styles.analyzeQuiet}>
-      Analyze
-    </Link>
+    <AnalyzeAction
+      to={`${runPath(slug, row.run_id)}/analyzer`}
+      causeCount={row.analysis_cause_count}
+      analyzing={analyzing?.has(row.run_id) ?? false}
+      subject={row.external_run_id || row.run_name}
+    />
   );
 }
 

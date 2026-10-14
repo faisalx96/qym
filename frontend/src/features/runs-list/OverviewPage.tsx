@@ -14,6 +14,7 @@ import {
   Skeleton,
   StatStrip,
   Tag,
+  TaskTag,
   Text,
   Card as UiCard,
 } from '@/ui';
@@ -392,11 +393,7 @@ function RunLink({ slug, row, withTask }: { slug: string; row: RunRow; withTask?
           </Tag>
         ) : null}
       </span>
-      {withTask && row.task_name ? (
-        <Text variant="sm" tone="muted" as="span">
-          {row.task_name}
-        </Text>
-      ) : null}
+      {withTask && row.task_name ? <TaskTag name={row.task_name} /> : null}
     </span>
   );
 }

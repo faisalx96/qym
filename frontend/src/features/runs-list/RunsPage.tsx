@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, EmptyState, StaleBanner, useToast } from '@/ui';
+import { useAnalyzingRuns } from '@/api/analysis';
 import { readPersisted } from '@/ui/DataTable/model';
 import { useAuth, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { ROUTES, runPath } from '@/app/routes';
@@ -80,6 +81,7 @@ export function RunsPage() {
   );
   const d = useRunsData(slug, view, legacyVisible, pinnedIds, pageSize, hiddenIds);
   const { rows, columnSet } = d;
+  const analyzingRuns = useAnalyzingRuns(rows.map((r) => r.run_id));
   useKpiTopbar(d.overview?.kpis);
 
   const known = useMemo(
@@ -126,11 +128,12 @@ export function RunsPage() {
       metricTypes: d.overview?.metric_types ?? {},
       modelIndex: d.overview?.chart_data?.modelIndex ?? {},
       owners,
+      analyzing: analyzingRuns.data,
       visibleMetrics: columnSet.visible
         .filter((c) => c.id.startsWith('metric-'))
         .map((c) => c.id.slice('metric-'.length)),
     }),
-    [slug, view, d.overview, owners, columnSet.visible],
+    [slug, view, d.overview, owners, columnSet.visible, analyzingRuns.data],
   );
 
   const perm = useMemo(

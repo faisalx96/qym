@@ -48,7 +48,7 @@ export function PassesPanel({
   /** Called after a pass delete so the run's pass picks (now renumbered) can be cleared. */
   onPassesDeleted?: (runId: string) => void;
 }) {
-  const { metricTypes, slug: ctxSlug, listContext, visibleMetrics } = useRunsCtx();
+  const { metricTypes, slug: ctxSlug, listContext, visibleMetrics, analyzing } = useRunsCtx();
   useEffect(() => {
     onNotePassRevision?.(row.run_id, row.pass_revision ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the callback is stable per selection; revision is what matters
@@ -187,6 +187,7 @@ export function PassesPanel({
         metricTypes={metricTypes}
         selectedMetric={activeMetric}
         passHref={passHref}
+        analyzing={analyzing?.has(row.run_id) ?? false}
         selectMode={selectMode}
         selected={selected}
         onToggle={onToggle}

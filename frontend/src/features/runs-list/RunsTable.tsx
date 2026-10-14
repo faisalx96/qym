@@ -5,7 +5,15 @@
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import type { RunRow } from '@/api/dashboardTypes';
-import { DataTable, EmptyState, Tag, type Column, type FooterProps, type Key, type ToolbarProps } from '@/ui';
+import {
+  DataTable,
+  EmptyState,
+  TaskTag,
+  type Column,
+  type FooterProps,
+  type Key,
+  type ToolbarProps,
+} from '@/ui';
 import { formatNumericValue } from '@/lib/format';
 import {
   AnalysisCell,
@@ -98,13 +106,7 @@ function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
     case 'signals':
       return <Signals row={row} onDetails={(r) => p.onSignalDetails(r)} />;
     case 'task':
-      return row.task_name ? (
-        <Tag kind="task" title={row.task_name}>
-          {row.task_name}
-        </Tag>
-      ) : (
-        <span>—</span>
-      );
+      return <TaskTag name={row.task_name} />;
     case 'model':
       return <ModelCell row={row} />;
     case 'dataset':
