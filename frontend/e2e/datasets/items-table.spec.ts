@@ -63,4 +63,25 @@ test.describe('items table (DataTable v2)', () => {
     await cards.first().locator('[data-item-link]').click();
     await expect(page).toHaveURL(/item=/);
   });
+
+  test('a JSON input reads as its prompt in the items table (Arabic included), not as raw JSON', async ({
+    page,
+    request,
+  }) => {
+    const p = await createProject(request, 'Items prompt', uniqueSlug('itprompt'));
+    const d = await createDataset(request, p.slug, 'Items prompt DS');
+    const v = await createVersion(request, p.slug, d.slug);
+    await bulkItems(request, p.slug, d.slug, v.version, [
+      { item_id: 'j-1', input: { prompt: 'ما هي سياسة الاسترجاع؟', lang: 'ar' }, expected_output: 'x' },
+      { item_id: 'j-2', input: { prompt: 'What is the refund policy?' }, expected_output: 'y' },
+    ] as never);
+    await gotoApp(page, `/projects/${p.slug}/datasets/${d.slug}`);
+    const grid = page.getByRole('grid', { name: /Items in v1/ });
+    await expect(grid).toBeVisible();
+    const arabic = grid.getByText('ما هي سياسة الاسترجاع؟');
+    await expect(arabic).toBeVisible();
+    await expect(arabic).toHaveAttribute('dir', /rtl|auto/);
+    await expect(grid.getByText('What is the refund policy?')).toBeVisible();
+    await expect(grid).not.toContainText('{"prompt"');
+  });
 });

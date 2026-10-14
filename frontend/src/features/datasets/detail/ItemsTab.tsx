@@ -26,6 +26,7 @@ import {
   DataTable,
   EmptyState,
   Icon,
+  promptPreview,
   ScoreBar,
   SearchField,
   TagsCell,
@@ -33,7 +34,7 @@ import {
   type Column,
   type RowAction,
 } from '@/ui';
-import { formatLatency, formatJson, previewValue } from '../lib/itemValue';
+import { formatLatency, formatJson } from '../lib/itemValue';
 import { metricDir } from '../lib/metricDir';
 import { ITEM_PAGE_SIZES, datasetPath, itemSortKey, parseDatasetRoute, parseItemSort } from '../lib/route';
 import styles from './ItemsTab.module.css';
@@ -489,8 +490,8 @@ export function ItemsTab({
 
 /** Mono one-line preview; Arabic text flows RTL. Hovering for 700 ms shows the full value. */
 export function Preview({ value, wrap }: { value: unknown; wrap?: boolean }) {
-  const text = previewValue(value);
-  const dir = textDirAttrs(typeof value === 'string' ? value : text);
+  const text = promptPreview(value);
+  const dir = textDirAttrs(text);
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const hide = () => {

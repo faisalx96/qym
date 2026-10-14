@@ -102,3 +102,53 @@ export function copyValue(value: unknown): string {
     return String(value);
   }
 }
+
+const PROMPT_KEYS = ['prompt', 'question', 'query', 'input', 'text', 'message', 'content', 'user'];
+
+const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim();
+
+function compact(value: unknown): string {
+  if (typeof value === 'string') return oneLine(value);
+  if (isScalar(value)) return scalarText(value);
+  try {
+    return oneLine(JSON.stringify(value) ?? '');
+  } catch {
+    return oneLine(String(value));
+  }
+}
+
+/**
+ * One line that reads like the prompt it is: a JSON body such as `{"prompt": "..."}` shows its text (the
+ * well-known prompt key, or a lone text field) with the other fields as `key: value`, chat messages as
+ * `role: content`, anything else as `key: value` pairs. Plain strings are returned as one line. Never a
+ * bare JSON string with braces and quotes.
+ */
+export function promptPreview(value: unknown, max = 160): string {
+  const parsed = parseStructured(value);
+  let text: string;
+  if (!parsed.structured) {
+    text = oneLine(parsed.text);
+  } else if (Array.isArray(parsed.data)) {
+    const chat = parsed.data.every((m) => isPlain(m) && typeof m.content === 'string');
+    text = chat
+      ? parsed.data
+          .map(
+            (m) =>
+              `${String((m as Record<string, unknown>).role ?? 'message')}: ${oneLine((m as { content: string }).content)}`,
+          )
+          .join(' · ')
+      : parsed.data.map(compact).join(' · ');
+  } else {
+    const entries = Object.entries(parsed.data);
+    const lone = entries.length === 1 && typeof entries[0]![1] === 'string' ? entries[0]! : null;
+    const main =
+      lone ??
+      PROMPT_KEYS.map((k) =>
+        entries.find(([key, v]) => key.toLowerCase() === k && typeof v === 'string'),
+      ).find(Boolean) ??
+      null;
+    const rest = entries.filter((e) => e !== main).map(([k, v]) => `${k}: ${compact(v)}`);
+    text = [main ? oneLine(main[1] as string) : null, ...rest].filter(Boolean).join(' · ');
+  }
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
