@@ -607,10 +607,19 @@ export interface ApplyResult {
   defs: FieldDef[];
 }
 
-function outputIdentity(row: Row | null): string {
+export function outputIdentity(row: Row | null): string {
   if (!row) return '';
   if (row.output_digest === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855') return '';
   return String(row.output_digest ?? (row.output_full || row.output || ''));
+}
+
+/**
+ * "Only differing outputs": per run, whether it stays visible. The baseline run always does; any other run is hidden
+ * when its output equals the baseline's (the identity the `different` filter uses). Missing rows stay as they are.
+ */
+export function visibleWhenOnlyDiffering(rows: ReadonlyArray<Row | null>, baselineIdx: number): boolean[] {
+  const base = outputIdentity(rows[baselineIdx] ?? null);
+  return rows.map((row, i) => i === baselineIdx || !row || outputIdentity(row) !== base);
 }
 
 export function rowText(row: Row | null): string {

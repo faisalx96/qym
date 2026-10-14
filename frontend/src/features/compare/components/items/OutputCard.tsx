@@ -23,13 +23,14 @@ import {
   rootCauseIssues,
 } from '@/features/run-detail/lib/rowMeta';
 import { buildLangfuseTraceUrl } from '@/features/run-detail/lib/traceTree';
-import { letterOf, useCompare } from '../../CompareContext';
+import { runSeries, useCompare } from '../../CompareContext';
 import { useRowPatch } from '../../hooks/useRowPatch';
 import { metricCellFor, pillState, runReadOnly, runScoresLocked } from '../../lib/rowCells';
+import { runShortName } from '../../lib/labels';
 import type { CompareRun } from '../../lib/model';
 import { CompareScoreEditor } from '../rd/CompareScoreEditor';
 import { IssueDialog } from '../rd/IssueDialog';
-import { RunDot } from '../common';
+import { RunTag } from '../RunTag';
 import { useItemsUi } from './ItemsUi';
 import styles from './OutputCard.module.css';
 
@@ -54,7 +55,7 @@ export function Collapsible({ text, lines = 12 }: { text: string; lines?: number
   );
 }
 
-function MetaList({ meta, hidden }: { meta: Record<string, unknown>; hidden: Set<string> }) {
+export function MetaList({ meta, hidden }: { meta: Record<string, unknown>; hidden: Set<string> }) {
   const entries = Object.entries(meta).filter(
     ([k, v]) => !isInternalMetaKey(k) && !hidden.has(k) && v !== null && v !== undefined && v !== '',
   );
@@ -77,11 +78,22 @@ function MetaList({ meta, hidden }: { meta: Record<string, unknown>; hidden: Set
   );
 }
 
-function MetricChips({ run, row, itemId }: { run: CompareRun; row: Row; itemId: string }) {
+function MetricChips({
+  run,
+  row,
+  itemId,
+  open,
+  onOpen,
+}: {
+  run: CompareRun;
+  row: Row;
+  itemId: string;
+  /** The metric whose details are open under every run (shared by the whole item). */
+  open: string | null;
+  onOpen: (metric: string | null) => void;
+}) {
   const { model, c } = useCompare();
-  const ui = useItemsUi();
   const patch = useRowPatch();
-  const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const canEdit =
     !runReadOnly(run) &&
@@ -105,11 +117,11 @@ function MetricChips({ run, row, itemId }: { run: CompareRun; row: Row; itemId: 
                 className={styles.caret}
                 aria-expanded={open === metric}
                 aria-label={`${open === metric ? 'Hide' : 'Show'} ${metric} details`}
-                onClick={() => setOpen(open === metric ? null : metric)}
+                onClick={() => onOpen(open === metric ? null : metric)}
               >
                 <Icon name={open === metric ? 'chevron-down' : 'chevron-right'} size={12} />
+                <span className={styles.metricName}>{metric}</span>
               </button>
-              <span className={styles.metricName}>{metric}</span>
               <ScoreValue
                 value={cell.value}
                 type={cell.type}
@@ -157,7 +169,6 @@ function MetricChips({ run, row, itemId }: { run: CompareRun; row: Row; itemId: 
                 }}
               />
             ) : null}
-            {open === metric ? <MetaList meta={meta} hidden={ui.hiddenFields} /> : null}
           </div>
         );
       })}
@@ -248,11 +259,18 @@ export function OutputCard({
   runIndex,
   row,
   itemId,
+  openMetric,
+  onOpenMetric,
+  best,
 }: {
   run: CompareRun;
   runIndex: number;
   row: Row;
   itemId: string;
+  openMetric: string | null;
+  onOpenMetric: (metric: string | null) => void;
+  /** This run has the unique best score on the item. */
+  best?: boolean;
 }) {
   const { ctx, model } = useCompare();
   const ui = useItemsUi();
@@ -275,33 +293,29 @@ export function OutputCard({
       data-testid="output-card"
       data-run={run.ref}
       data-state={pill.state}
-      tone={
-        pill.state === 'pass'
-          ? 'success'
-          : pill.state === 'fail'
-            ? 'danger'
-            : pill.state === 'error'
-              ? 'warning'
-              : 'neutral'
-      }
+      {...(pill.state === 'error' ? { tone: 'danger' as const } : { series: runSeries(runIndex) })}
     >
       <div className={styles.stack}>
         <header className={styles.head}>
-          <RunDot index={runIndex} />
-          <span className={styles.letter}>{letterOf(runIndex)}</span>
+          <RunTag index={runIndex} showName={false} bare />
           {slug ? (
             <Link
               className={styles.runLink}
               to={`${runPath(slug, run.base)}?item=${encodeURIComponent(row.item_id)}${run.pass ? `&pass=${run.pass}` : ''}`}
               title={run.title}
             >
-              {run.label}
+              {runShortName(run)}
             </Link>
           ) : (
             <span className={styles.runLink} title={run.title}>
-              {run.label}
+              {runShortName(run)}
             </span>
           )}
+          {best ? (
+            <Tag kind="data" tone="success" title="Highest score on this item">
+              ★ Best
+            </Tag>
+          ) : null}
           <Tag tone={pill.state === 'pass' ? 'success' : pill.state === 'none' ? undefined : 'danger'}>
             {pill.state === 'pass'
               ? '✓ PASS'
@@ -351,7 +365,7 @@ export function OutputCard({
         ) : (
           <Collapsible text={output} />
         )}
-        <MetricChips run={run} row={row} itemId={itemId} />
+        <MetricChips run={run} row={row} itemId={itemId} open={openMetric} onOpen={onOpenMetric} />
         <Issues run={run} row={row} />
       </div>
     </Card>
