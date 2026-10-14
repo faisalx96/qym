@@ -2,12 +2,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, EmptyState, StaleBanner, useToast } from '@/ui';
+import { readPersisted } from '@/ui/DataTable/model';
 import { useAuth, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { ROUTES, runPath } from '@/app/routes';
 import { useDelayedPending } from '@/lib/pending';
 import { KEYS, readLocal, writeLocal } from '@/lib/storage';
 import { runHref } from '@/lib/runs-order';
-import { ColumnsMenu } from './ColumnsMenu';
 import { RunDialogs, type DialogState } from './RunDialogs';
 import { RunsCtx, type RunsCtxValue } from './context';
 import { RunsTable } from './RunsTable';
@@ -30,7 +30,6 @@ import {
   readVisibleColumns,
   rememberRunFile,
   useRunsSelection,
-  writeVisibleColumns,
 } from './selection';
 import {
   contextForView,
@@ -53,7 +52,13 @@ export function RunsPage() {
   useDocumentTitle('Runs');
   const { view, setView, setPage } = useRunsView();
   const selection = useRunsSelection(slug);
-  const [visibleKeys, setVisibleKeys] = useState<Set<string> | null>(readVisibleColumns);
+  // Visibility lives in the table's saved layout (per user); the page mirrors it for the sort fallback.
+  const legacyVisible = useMemo(() => readVisibleColumns(), []);
+  const layoutScope = me.id;
+  const [hiddenIds, setHiddenIds] = useState<Set<string> | null>(() => {
+    const saved = readPersisted('runs.v2', layoutScope).hidden;
+    return saved ? new Set(saved) : null;
+  });
   const [selectMode, setSelectMode] = useState(
     () => selection.selected.size > 0 || selection.cohortA.length > 0,
   );
@@ -73,7 +78,7 @@ export function RunsPage() {
     () => [...new Set([...selection.selected, ...selection.cohortA].map(passRefBase))],
     [selection.selected, selection.cohortA],
   );
-  const d = useRunsData(slug, view, visibleKeys, pinnedIds, pageSize);
+  const d = useRunsData(slug, view, legacyVisible, pinnedIds, pageSize, hiddenIds);
   const { rows, columnSet } = d;
   useKpiTopbar(d.overview?.kpis);
 
@@ -364,7 +369,10 @@ export function RunsPage() {
     <RunsTable
       slug={slug}
       rows={rows}
-      columns={columnSet.visible}
+      columns={columnSet.ordered}
+      defaultHidden={d.defaultHidden}
+      storageScope={layoutScope}
+      onHiddenChange={setHiddenIds}
       sort={sortSpec}
       onSort={onSort}
       selectMode={selectMode}
@@ -400,14 +408,6 @@ export function RunsPage() {
         chips: toolbarParts.chips,
         trailing: (
           <>
-            <ColumnsMenu
-              all={columnSet.all}
-              visible={columnSet.visible}
-              onChange={(keys) => {
-                setVisibleKeys(keys);
-                writeVisibleColumns(keys);
-              }}
-            />
             <Button
               variant={selectMode ? 'accent' : 'neutral'}
               onPress={() => (selectMode ? clearSelection() : setSelectMode(true))}

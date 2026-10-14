@@ -13,6 +13,7 @@ export function useRunsData(
   visibleKeys: Set<string> | null,
   pinnedIds: string[],
   pageSize: number = PAGE_SIZE,
+  hidden: Set<string> | null = null,
 ) {
   const key = filterKey(view);
   const filters = useMemo(() => viewToFilters({ ...DEFAULT_VIEW, ...JSON.parse(key) } as RunsView), [key]);
@@ -31,9 +32,15 @@ export function useRunsData(
     [overview?.has_trace_stats],
   );
   const columnSet = useMemo(
-    () => buildColumns(overview?.all_metrics ?? [], traceWithData, visibleKeys),
-    [overview?.all_metrics, traceWithData, visibleKeys],
+    () => buildColumns(overview?.all_metrics ?? [], traceWithData, visibleKeys, hidden),
+    [overview?.all_metrics, traceWithData, visibleKeys, hidden],
   );
+  // What the table hides until the user chooses: the legacy session set, else trace stats without data.
+  const defaultHidden = useMemo(() => {
+    const set = buildColumns(overview?.all_metrics ?? [], traceWithData, visibleKeys);
+    const shown = new Set(set.visible.map((c) => c.id));
+    return new Set(set.all.filter((c) => !shown.has(c.id)).map((c) => c.id));
+  }, [overview?.all_metrics, traceWithData, visibleKeys]);
   // A metric/trace sort waits for the overview (the column set is empty until it lands): no flash of time-desc.
   const needsColumns = /^(metric-|trace-)/.test(view.sort);
   const columnsKnown = !needsColumns || Boolean(overview);
@@ -116,6 +123,7 @@ export function useRunsData(
     total: data?.total_runs ?? 0,
     projectTotal: data?.total_count ?? overview?.total_count ?? 0,
     columnSet,
+    defaultHidden,
     sort,
     pinnedRows,
     pinnedReady: offPage.length === 0 || pinnedQ.isSuccess,
