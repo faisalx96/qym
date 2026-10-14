@@ -76,3 +76,20 @@ Defects:
 4. Embedded passes table: Duration/Issues spacing, sticky `#` column.
 5. Threshold popover padding and readout clip.
 6. Optional: bottom sheet at 390, unticked-means-all hint in facet popovers.
+
+## Re-review (commit a0273a62)
+
+Fresh screenshots at 1440 and 1280 (table scrolled sideways, passes panel scrolled, Columns menu with a suspended frozen column).
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Frozen headers vanish on horizontal scroll | FIXED. RUN, STATUS and MODEL headers stay put over the scrolled headers at both widths. |
+| 2 | Scroll shadows painted over the passes panel | FIXED. No dark bands through the panel, scrolled or not. |
+| 3 | Freeze cap and count | FIXED. Cap 60%; menu shows "Frozen (3 of 4)" with "Not frozen at this width: Date" at 1440. At 1280 Run+Model+Date fit and read "Frozen (3)". (Note: at 1280 Status is not frozen by default, only at 1440; harmless.) |
+| 4 | Passes table Duration/Issues and sticky `#` | FIXED. Issues header intact, `#` and Status pinned while metrics scroll. Cosmetic leftover: the retry icon touches the Duration value ("43s↻"). |
+| 5 | Threshold popover padding and readout | FIXED. Padded, `0.8` readout no longer clipped. |
+| 6 | Facet empty-selection hint | DONE. Popover now says "Nothing ticked: every value is included." |
+
+Gates: prettier --check on the 10 changed files clean; `npm run check` green (129 files / 1199 tests, design-language 44); Playwright runs-list + datasets + admin 332 passed, 3 skipped, 0 failed. All servers stopped.
+
+Verdict: APPROVED. Remaining (non-blocking): bottom sheet at 390, retry icon spacing in the passes table.
