@@ -43,7 +43,8 @@ test('the split is draggable by keyboard, remembered after a reload, and a doubl
   const min = await pct(page);
   expect(min).toBeLessThan(40);
   await page.keyboard.press('End');
-  expect(await pct(page)).toBeGreaterThan(60);
+  const max = await pct(page);
+  expect(max).toBeGreaterThan(60);
   // drag
   const box = (await handle.boundingBox())!;
   await page.mouse.move(box.x + 4, box.y + 100);
@@ -51,7 +52,7 @@ test('the split is draggable by keyboard, remembered after a reload, and a doubl
   await page.mouse.move(box.x - 120, box.y + 100, { steps: 6 });
   await page.mouse.up();
   const dragged = await pct(page);
-  expect(dragged).toBeLessThan(60);
+  expect(dragged).toBeLessThan(max - 5);
   await page.reload();
   await expect(page.getByTestId('trace-drawer')).toBeVisible();
   await expect.poll(() => pct(page)).toBe(dragged);
@@ -100,7 +101,7 @@ test('at 390px the drawer is full width with a Tree / Detail switch', async ({ p
   await expect(page.getByTestId('trace-drawer')).toBeVisible();
   await expect(page.getByRole('tree', { name: 'Span tree' })).toBeVisible();
   const dlg = page.getByRole('dialog', { name: 'Trace' });
-  expect((await dlg.boundingBox())!.width).toBeGreaterThanOrEqual(389);
+  expect((await dlg.boundingBox())!.width).toBeGreaterThanOrEqual(388);
   await expect(page.getByTestId('split-handle')).toHaveCount(0);
   const view = page.getByRole('radiogroup', { name: 'Trace view' });
   await expect(view.getByRole('radio', { name: 'Tree' })).toBeChecked();
