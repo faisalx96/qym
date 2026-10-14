@@ -531,8 +531,25 @@
   box-shadow: inset 3px 0 0 var(--accent-primary);
 }
 
+/* A focused row reads as one framed band (2px top and bottom on every cell, the ends closed), also over a state rail. */
 .tr:focus-visible td {
-  box-shadow: inset 0 0 0 1px var(--accent-primary);
+  box-shadow:
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary);
+}
+
+.tr:focus-visible td:first-child {
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary);
+}
+
+.tr:focus-visible td:last-child {
+  box-shadow:
+    inset -2px 0 0 var(--accent-primary),
+    inset 0 2px 0 var(--accent-primary),
+    inset 0 -2px 0 var(--accent-primary);
 }
 
 .selectionCluster {

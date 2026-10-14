@@ -9,6 +9,7 @@ import { useRunPage } from '../RunContext';
 import { CsvExport } from './items/CsvExport';
 import { FilterBar } from './items/FilterBar';
 import { Heatmap } from './items/Heatmap';
+import { defaultPageSize } from '../lib/itemsPaging';
 import { ItemsTable, PAGE_SIZES } from './items/ItemsTable';
 import { ItemsUi, type ItemsUiValue } from './items/ItemsUi';
 import styles from './ItemsSection.module.css';
@@ -66,7 +67,7 @@ export function ItemsSection() {
       return;
     }
     handled.current = itemParam;
-    const pageSize = Number(localStorage.getItem('qym:run-page-size')) || 20;
+    const pageSize = Number(localStorage.getItem('qym:run-page-size')) || defaultPageSize(items.length);
     const page = Math.floor(idx / pageSize) + 1;
     if (page !== view.page) api.setView({ page });
     // eslint-disable-next-line react-hooks/set-state-in-effect

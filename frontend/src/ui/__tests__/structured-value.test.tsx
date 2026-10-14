@@ -8,6 +8,7 @@ import {
   entriesOf,
   isUniformObjectArray,
   parseStructured,
+  promptPreview,
   sectionSummary,
   startsOpen,
 } from '../StructuredValue/structured';
@@ -135,5 +136,29 @@ describe('FieldRow', () => {
       </FieldRow>,
     );
     expect(screen.getByRole('group', { name: 'Expected' })).toHaveAttribute('dir', 'ltr');
+  });
+});
+
+describe('promptPreview (one readable line for an input)', () => {
+  it('shows the prompt text of a JSON body, not braces and quotes', () => {
+    expect(promptPreview({ prompt: 'ما هي عاصمة السعودية؟' })).toBe('ما هي عاصمة السعودية؟');
+    expect(promptPreview('{"prompt":"What is 2+2?"}')).toBe('What is 2+2?');
+  });
+  it('keeps the other fields as key: value after the prompt', () => {
+    expect(promptPreview({ question: 'Why?', lang: 'en', k: 3 })).toBe('Why? · lang: en · k: 3');
+  });
+  it('reads chat messages as role: content and pairs without a prompt key as key: value', () => {
+    expect(
+      promptPreview([
+        { role: 'system', content: 'Be brief' },
+        { role: 'user', content: 'Hi' },
+      ]),
+    ).toBe('system: Be brief · user: Hi');
+    expect(promptPreview({ a: 1, b: 'x' })).toBe('a: 1 · b: x');
+  });
+  it('returns plain strings as one line and truncates', () => {
+    expect(promptPreview('two\n lines')).toBe('two lines');
+    expect(promptPreview('x'.repeat(300), 20)).toHaveLength(20);
+    expect(promptPreview(null)).toBe('');
   });
 });

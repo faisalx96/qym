@@ -284,3 +284,18 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* The last tile fills its row when the count does not divide the columns (no empty grey cell). */
+@media (max-width: 800px) {
+  .strip:not([data-grouped]):not([data-variant='compact']) > .item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .strip[data-variant='compact'] > .item:last-child:nth-child(3n + 1) {
+    grid-column: 1 / -1;
+  }
+
+  .strip[data-variant='compact'] > .item:last-child:nth-child(3n + 2) {
+    grid-column: span 2;
+  }
+}

@@ -77,6 +77,24 @@ test('an Arabic input row mirrors: the label is next to its text, not a table wi
   expect(text!.width).toBeLessThan(760);
 });
 
+test('an RTL value keeps its key header left-anchored in the same column as the LTR keys', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openRun(page, s.slug, arabic);
+  await expandFirst(page);
+  const expected = page.getByTestId('item-card').getByRole('group', { name: 'Expected output', exact: true });
+  const answer = expected.getByRole('group', { name: 'answer', exact: true });
+  const topics = expected.getByRole('group', { name: 'topics', exact: true });
+  await expect(answer).toBeVisible();
+  const a = await answer.getByRole('button').first().boundingBox();
+  const t = await topics.getByRole('button').first().boundingBox();
+  // same left edge for the RTL value's key and the LTR key: the header never jumps to the far edge
+  expect(Math.abs(a!.x - t!.x)).toBeLessThan(4);
+  // the section itself is not mirrored; only the value text runs right to left inside its column
+  await expect(answer).not.toHaveAttribute('dir', 'rtl');
+  const text = answer.locator('[dir="rtl"]').first();
+  await expect(text).toBeVisible();
+});
+
 test('JSON output is one section per key, collapsible, with a Raw view', async ({ page }) => {
   await openRun(page, s.slug, arabic, 'pass=1');
   await expandFirst(page);
@@ -146,7 +164,7 @@ for (const width of [390, 1280]) {
 }
 
 for (const width of [1280, 1440]) {
-  test(`an RTL value in a JSON section sits next to its key at ${width}px; tables fit their column`, async ({
+  test(`an RTL value in a JSON section keeps its key left-anchored at ${width}px; tables fit their column`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 });
@@ -154,7 +172,9 @@ for (const width of [1280, 1440]) {
     await expandFirst(page);
     const out = page.getByRole('group', { name: 'Output', exact: true }).first();
     const section = out.getByRole('group', { name: 'answer', exact: true });
-    await expect(section).toHaveAttribute('dir', 'rtl');
+    // the section is not mirrored (final review F5): the key header stays at the left like every LTR key
+    await expect(section).not.toHaveAttribute('dir', 'rtl');
+    const box = (await section.boundingBox())!;
     const key = (await section.locator('span[dir="ltr"]').first().boundingBox())!;
     // the rendered text, not its (wider) block
     const text = await section.locator('[data-text-mode]').evaluate((el) => {
@@ -163,8 +183,10 @@ for (const width of [1280, 1440]) {
       const b = r.getBoundingClientRect();
       return { left: b.left, right: b.right };
     });
-    // RTL: the key is at the inline start (right); the text starts under it
-    expect(Math.abs(key.x + key.width - text.right)).toBeLessThan(120);
+    expect(key.x - box.x).toBeLessThan(40);
+    // the value text reads right to left inside its own column, which is capped (never the full table width)
+    expect(text.right).toBeLessThanOrEqual(box.x + box.width + 1);
+    expect(text.right - box.x).toBeLessThan(760);
     // the citations table is not wider than the pass output it sits in
     const grid = out.getByRole('group', { name: 'citations', exact: true }).getByRole('grid');
     const fits = await grid.evaluate((el) => {

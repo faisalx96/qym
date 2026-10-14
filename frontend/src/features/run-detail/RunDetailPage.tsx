@@ -46,7 +46,7 @@ function RunLoader({ runId }: { runId: string }) {
           onRetry={() => void query.refetch()}
           action={
             <LinkButton to={projectPath(slug)} variant="neutral">
-              ← Back to Dashboard
+              ← Back to runs
             </LinkButton>
           }
         />

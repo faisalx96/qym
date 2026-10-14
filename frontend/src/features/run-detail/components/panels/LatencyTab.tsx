@@ -426,9 +426,9 @@ function Steps({ D }: { D: ReturnType<typeof normalizeLatency> }) {
                 )}
                 {node.model ? <small className={panel.note}>{node.model}</small> : null}
               </span>
-              <span role="cell" className={panel.stat}>
+              <span role="cell" className={`${panel.stat} ${styles.nowrap}`}>
                 {st.n + st.err}
-                {st.err ? <small className={styles.err}> {st.err} err</small> : null}
+                {st.err ? <small className={styles.err}> · {st.err} err</small> : null}
               </span>
               <span role="cell" className={panel.stat}>
                 {Number.isFinite(st.mean) && D.traces

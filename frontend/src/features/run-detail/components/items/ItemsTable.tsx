@@ -12,6 +12,7 @@ import type { FilteredItem, FilterContext, SortBy } from '../../lib/filterRules'
 import { latencyLabel, metricCell, rowFailureInput, rowStatus } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
 import type { Row } from '../../types';
+import { defaultPageSize } from '../../lib/itemsPaging';
 import { ItemCard } from './ItemCard';
 import { useItemsUi } from './ItemsUi';
 import styles from './ItemsTable.module.css';
@@ -20,16 +21,16 @@ const PAGE_SIZE_KEY = 'qym:run-page-size';
 const PAGE_SIZES = [20, 50, 100, 500];
 const REASON_MIN_WIDTH = 760;
 
-function usePageSize(): [number, (n: number) => void] {
-  const [size, setSize] = useState(() => {
+function usePageSize(total: number): [number, (n: number) => void] {
+  const [chosen, setChosen] = useState<number | null>(() => {
     const n = Number(readLocal(PAGE_SIZE_KEY));
-    return PAGE_SIZES.includes(n) ? n : 20;
+    return PAGE_SIZES.includes(n) ? n : null;
   });
   return [
-    size,
+    chosen ?? defaultPageSize(total),
     (n) => {
       writeLocal(PAGE_SIZE_KEY, String(n));
-      setSize(n);
+      setChosen(n);
     },
   ];
 }
@@ -108,7 +109,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
   const { api, model, runId, payload } = useRunPage();
   const ui = useItemsUi();
   const { ctx, selectedMetric } = api;
-  const [pageSize, setPageSize] = usePageSize();
+  const [pageSize, setPageSize] = usePageSize(items.length);
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
   const current = Math.min(Math.max(1, page), pageCount);
   const pageItems = useMemo(

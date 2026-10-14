@@ -135,3 +135,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.example summary:hover {
+  background: var(--bg-hover);
+}

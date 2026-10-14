@@ -53,6 +53,8 @@
 @media (min-width: 761px) and (min-height: 640px) {
   .sticky {
     position: sticky;
+    min-height: var(--bar-action-h);
+    box-sizing: border-box;
     top: var(--run-nav-h, 0px);
     z-index: 5;
     padding-bottom: var(--space-xs);

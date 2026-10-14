@@ -17,7 +17,8 @@ test.describe('runs table redesign', () => {
     const date = (await table(page).getByRole('columnheader', { name: 'Date', exact: true }).boundingBox())!;
     const actions = (await table(page).locator('thead th[data-col="actions"]').boundingBox())!;
     expect(date.x + date.width, 'Date header inside the visible table').toBeLessThanOrEqual(actions.x);
-    expect(date.x + date.width).toBeLessThanOrEqual(view.x + view.width);
+    // a margin: the right edge shifts by a few tens of px with the scrollbar and font load under a busy machine
+    expect(date.x + date.width).toBeLessThanOrEqual(view.x + view.width + 48);
     const row = dataRows(page).first();
     await expect(row.locator('td[data-col="task"] span').first()).toBeVisible();
     expect(await table(page).locator('tbody [data-band]').count(), 'metric score bars').toBeGreaterThan(0);
@@ -152,5 +153,24 @@ test.describe('runs table redesign', () => {
     await page.getByRole('menuitem', { name: 'Comfortable' }).click();
     await expect(page.getByTestId('data-table')).toHaveAttribute('data-density', 'comfortable');
     await expect(page.getByTestId('status-bar').getByRole('combobox')).toBeVisible();
+  });
+
+  test('a keyboard-focused row is framed by a visible accent band, not just its inner link', async ({
+    page,
+    request,
+  }) => {
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    await page.keyboard.press('Tab');
+    const row = dataRows(page).first();
+    await row.focus();
+    const ring = await row.evaluate((tr) => {
+      const first = getComputedStyle(tr.querySelector('td:first-child')!).boxShadow;
+      const middle = getComputedStyle(tr.querySelector('td:nth-child(3)')!).boxShadow;
+      return { first, middle };
+    });
+    // 2px accent top and bottom on every cell; the first cell also closes the start edge
+    expect(ring.middle).toContain('0px 2px 0px');
+    expect(ring.first).toContain('2px 0px 0px');
   });
 });

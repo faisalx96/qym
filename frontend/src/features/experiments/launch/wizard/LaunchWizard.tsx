@@ -202,9 +202,16 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
     }
   }
 
-  const showAside = wide && step !== 'review';
+  // The settings step holds wide override tables: it takes the full width and the review shrinks to the launch
+  // bar (plus the summary under the step), instead of a 22rem rail that clips the table's right columns.
+  const compactReview = step === 'settings';
+  const showAside = wide && step !== 'review' && !compactReview;
+  const reviewBelow = !showAside && step !== 'review';
   return (
-    <div className={`${styles.layout} ${showAside ? '' : styles.layoutSingle}`}>
+    <div
+      className={`${styles.layout} ${showAside ? '' : styles.layoutSingle}`}
+      data-compact-review={compactReview ? '' : undefined}
+    >
       <div className={styles.main}>
         <div ref={rail} className={wizard.rail}>
           <Stepper
@@ -220,8 +227,8 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
         </div>
         <div ref={stage}>{body}</div>
         <StepNav step={step} next={next} prev={prev} onGo={onGo} />
-        {wide || step === 'review' ? null : <ReviewPane onCancel={onCancel} hideActions />}
-        {wide || step === 'review' ? null : <MobileLaunchBar onCancel={onCancel} />}
+        {reviewBelow ? <ReviewPane onCancel={onCancel} hideActions /> : null}
+        {reviewBelow ? <MobileLaunchBar onCancel={onCancel} /> : null}
       </div>
       {showAside ? (
         <div className={styles.aside}>

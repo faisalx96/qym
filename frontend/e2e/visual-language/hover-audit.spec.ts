@@ -6,7 +6,7 @@
  * no longer appears is removed by hand: which samples are on screen depends on the seeded data).
  */
 import { expect, test, type Page } from '@playwright/test';
-import { compareUrl } from '../compare/support';
+import { cohortUrl, compareUrl } from '../compare/support';
 import { gotoApp } from '../helpers';
 import { runUrl } from '../run-detail/support';
 import { createLaunchAreas, seedTour, settled, type AreasWorld, type Tour } from './support';
@@ -124,6 +124,19 @@ test.describe('hover audit', () => {
     check('run', await audit(page, 'run', 8));
   });
 
+  test('sweep (outcome tiles, stat cards, item table)', async ({ page }) => {
+    const [a, b, c, d] = tour.compareIds as [string, string, string, string];
+    await gotoApp(page, cohortUrl([a, b], [c, d], { tab: 'sweep' }));
+    await expect(page.getByTestId('sweep-view')).toBeVisible({ timeout: 20_000 });
+    check('sweep', await audit(page, 'sweep', 8));
+  });
+
+  test('docs sidebar and page', async ({ page }) => {
+    await gotoApp(page, '/docs/get-started/what-is-qym');
+    await expect(page.getByRole('main')).toBeVisible();
+    check('docs', await audit(page, 'docs', 3));
+  });
+
   test('compare', async ({ page }) => {
     await gotoApp(page, compareUrl(tour.compareIds));
     await expect(page.getByTestId('item-list')).toBeVisible({ timeout: 20_000 });
@@ -145,6 +158,11 @@ test.describe('hover audit', () => {
       name: 'experiment-detail',
       path: () => `/projects/${areas.slug}/experiments/${areas.experimentId}`,
       ready: (p) => expect(p.locator('[data-exp-matrix]')).toBeVisible(),
+    },
+    {
+      name: 'queue',
+      path: () => `/projects/${areas.slug}/experiments/queue`,
+      ready: (p) => expect(p.getByRole('grid').first()).toBeVisible(),
     },
     {
       name: 'launch-home',
@@ -175,6 +193,7 @@ test.describe('hover audit', () => {
       name: 'analysis',
       path: () => `/projects/${areas.analysisSlug}/analysis?run=${areas.runId}`,
       ready: (p) => expect(p.getByRole('region', { name: 'Analysis actions' })).toBeVisible(),
+      steps: 6,
     },
     {
       name: 'reviews',
@@ -192,6 +211,36 @@ test.describe('hover audit', () => {
       await gotoApp(page, area.path());
       await area.ready(page);
       check(area.name, await audit(page, area.name, area.steps ?? 3));
+    });
+  }
+
+  // Clickable rows (final review F7): the experiments list and the dataset items table light up under the pointer.
+  for (const row of [
+    {
+      name: 'experiments list',
+      path: () => `/projects/${areas.slug}/experiments`,
+      ready: (p: Page) => expect(p.locator('[data-experiments-list]')).toBeVisible(),
+    },
+    {
+      name: 'dataset items',
+      path: () => `/projects/${areas.slug}/datasets/${areas.datasetSlug}?v=v1&tab=items`,
+      ready: (p: Page) => expect(p.getByRole('tab', { selected: true }).first()).toBeVisible(),
+    },
+  ]) {
+    test(`a clickable row answers hover: ${row.name}`, async ({ page }) => {
+      await gotoApp(page, row.path());
+      await row.ready(page);
+      const target = page.locator('tr[data-clickable], [role="row"][data-clickable]').first();
+      await expect(target).toBeVisible();
+      await settled(page);
+      await page.mouse.move(0, 0);
+      const box = (await target.boundingBox())!;
+      const clip = { x: box.x, y: box.y, width: box.width, height: box.height };
+      const before = await page.screenshot({ clip });
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await settled(page);
+      const after = await page.screenshot({ clip });
+      expect(Buffer.compare(before, after), `${row.name}: the row did not change under the pointer`).not.toBe(0);
     });
   }
 

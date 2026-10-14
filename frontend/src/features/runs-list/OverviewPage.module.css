@@ -8,7 +8,7 @@
 }
 
 .screen[data-constrained] {
-  max-width: var(--page-constrained-width);
+  max-width: var(--page-max-w);
   margin: 0 auto;
 }
 
@@ -115,6 +115,7 @@
 .runCell {
   display: inline-flex;
   flex-direction: column;
+  align-items: flex-start; /* the task tag hugs its text, never a wide block */
   gap: 2px;
   min-width: 0;
 }

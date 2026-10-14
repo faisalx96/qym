@@ -22,6 +22,7 @@ import { LeafField } from './LeafField';
 import { useSettingsActions } from './SettingsContext';
 import type { TreeProps } from './FieldNode';
 import styles from './settings.module.css';
+import { TableWrap } from './TableWrap';
 
 export function RoleTable({ node, errors }: { node: RoleTableNode } & TreeProps) {
   const titleId = useId();
@@ -92,7 +93,7 @@ export function RoleTable({ node, errors }: { node: RoleTableNode } & TreeProps)
           {`Reset ${noun}s`}
         </Button>
       </div>
-      <div className={styles.tableWrap}>
+      <TableWrap>
         <table className={styles.table}>
           <caption className={styles.sr}>{`${noun} overrides`}</caption>
           <thead>
@@ -166,7 +167,7 @@ export function RoleTable({ node, errors }: { node: RoleTableNode } & TreeProps)
             ) : null}
           </tbody>
         </table>
-      </div>
+      </TableWrap>
     </div>
   );
 }
@@ -206,7 +207,7 @@ export function CollectionTable({
         </h5>
         <Tag kind="count">{plural(node.items.length, noun)}</Tag>
       </div>
-      <div className={styles.tableWrap}>
+      <TableWrap>
         <table className={styles.table}>
           <caption className={styles.sr}>{`${noun} overrides`}</caption>
           <thead>
@@ -278,7 +279,7 @@ export function CollectionTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </TableWrap>
       <AddRow
         placeholder={`New ${noun} name`}
         buttonText={`+ Add ${noun}`}

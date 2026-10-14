@@ -156,8 +156,14 @@ export async function goStep(page: Page, step: StepId): Promise<void> {
 export const nameBox = (page: Page): Locator => page.getByRole('textbox', { name: 'Experiment name' });
 export const dialog = (page: Page): Locator => page.locator('[role="dialog"],[role="alertdialog"]').last();
 export const review = (page: Page): Locator => page.getByRole('complementary', { name: 'Review' });
-/** The Review pane's Launch button (the mobile bar has its own). */
-export const launchButton = (page: Page): Locator => review(page).getByRole('button', { name: /^Launch/ });
+/**
+ * The Launch button: the Review rail's, or the compact launch bar's where the rail gives way (the settings step
+ * and every narrow layout). Never both at once.
+ */
+export const launchButton = (page: Page): Locator =>
+  review(page)
+    .getByRole('button', { name: /^Launch/ })
+    .or(page.getByRole('region', { name: 'Launch', exact: true }).getByRole('button', { name: /^Launch/ }));
 
 /** Opens a collapsed section / settings group heading button (no-op when already open). */
 export async function ensureOpen(button: Locator): Promise<void> {

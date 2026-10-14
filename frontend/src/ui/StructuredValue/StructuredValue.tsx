@@ -8,7 +8,7 @@ import { JsonTree } from '../JsonViewer';
 import { SegmentedControl } from '../SegmentedControl';
 import { Tag } from '../Tag';
 import { TextBlock } from '../TextBlock';
-import { isRTL, type TextMode } from '@/lib/text';
+import { type TextMode } from '@/lib/text';
 import { ClampedText } from './ClampedText';
 import {
   classifySection,
@@ -167,7 +167,6 @@ function Section({ id, name, value, open, onToggle, textMode, lines }: SectionPr
       data-open={open}
       role="group"
       aria-label={name}
-      dir={kind === 'string' && isRTL(value) ? 'rtl' : undefined}
     >
       <div className={styles.head}>
         <button

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '../AuthContext';
 import { useDocumentTitle } from '../hooks';
-import { constrained } from '../layout';
+import { narrow } from '../layout';
 import { projectPath } from '@/app/routes';
 import { api, ApiError } from '@/lib/http';
 import {
@@ -56,7 +56,7 @@ export function ProfilePage() {
   const navigate = useNavigate();
   useDocumentTitle('Profile');
   return (
-    <div className={constrained} data-profile-page>
+    <div className={narrow} data-profile-page>
       <PageHeader title="Profile" description="Your account and the projects you belong to." />
       <Stack gap="xl">
         <section>

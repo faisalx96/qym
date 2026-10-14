@@ -374,9 +374,9 @@ describe('visual language (redesign round 2)', () => {
       '--tint-soft: 12%',
       '--tint-strong: 20%',
       '--error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary))',
-      '--chart-6: #60a5fa',
-      '--chart-7: #34d399',
-      '--chart-8: #fb923c',
+      '--chart-6: #ea580c',
+      '--chart-7: #6366f1',
+      '--chart-8: #a3e635',
       '--rail-width: 3px',
       '--ease-out: cubic-bezier(0.16, 1, 0.3, 1)',
       '--motion-fill: 360ms',
@@ -429,6 +429,26 @@ describe('visual language (redesign round 2)', () => {
       [...ALLOWED].filter((f) => !found.includes(f)),
       'Remove migrated files from the allow-list',
     ).toEqual([]);
+  });
+
+  it('gives sticky bars one of two heights: --bar-nav-h (report section bars) or --bar-action-h (action bars)', () => {
+    const tokens = read(join(SRC, 'styles/tokens.css'));
+    expect(tokens).toMatch(/--bar-nav-h:\s*44px/);
+    expect(tokens).toMatch(/--bar-action-h:\s*56px/);
+    const nav = [
+      'features/run-detail/components/SectionNav.module.css',
+      'features/compare/components/CompareBar.module.css',
+    ];
+    const action = [
+      'features/experiments/launch/entry/entry.module.css',
+      'features/analyzer/blocks/blocks.module.css',
+      'features/run-detail/components/ItemsSection.module.css',
+    ];
+    for (const f of nav) expect(read(join(SRC, f)), `${f} uses --bar-nav-h`).toContain('var(--bar-nav-h)');
+    for (const f of action)
+      expect(read(join(SRC, f)), `${f} uses --bar-action-h`).toContain('var(--bar-action-h)');
+    const legacy = cssFiles.filter((f) => /--compare-bar-h|--action-rail-height/.test(read(f)));
+    expect(legacy.map(rel), 'retired per-page bar heights').toEqual([]);
   });
 
   it('LinkButton reaches the Button hover and press states from an anchor', () => {

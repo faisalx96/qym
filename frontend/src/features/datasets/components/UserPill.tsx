@@ -1,4 +1,4 @@
-/** Creator / Published By pill: initials avatar + display name (shell owner-pill). */
+/** Creator / Published by pill: initials avatar + display name (shell owner-pill). */
 import type { DsUser } from '@/api/datasets';
 import styles from './UserPill.module.css';
 

@@ -74,4 +74,11 @@
   .titleBlock {
     flex: 1 1 100%;
   }
+
+  /* Several controls (search + primary button) wrap instead of running past the card edge. */
+  .actions {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
 }

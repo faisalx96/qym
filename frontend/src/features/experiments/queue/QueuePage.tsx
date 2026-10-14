@@ -46,6 +46,7 @@ import {
   useToast,
   type BadgeTone,
   type Column,
+  Card,
 } from '@/ui';
 import { DataTable } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
@@ -546,33 +547,41 @@ export function QueuePage() {
 function EnvCard({ env }: { env: QueueEnvironment }) {
   const healthy = env.health_status === 'ok';
   return (
-    <section className={styles.envCard} aria-label={env.name}>
-      <div className={styles.envHead}>
-        <Text variant="lg" as="span">
-          {env.name}
-        </Text>
-        {!env.is_active ? <Tag>Disabled</Tag> : null}
-        <Badge tone={healthy ? 'success' : env.health_status === 'unknown' ? 'neutral' : 'warning'} dot>
-          {healthy ? 'Healthy' : (env.health_status ?? 'Unknown')}
-        </Badge>
+    <Card
+      as="section"
+      compact
+      tone={healthy ? 'success' : env.health_status === 'unknown' ? 'neutral' : 'warning'}
+      className={styles.envCard}
+      aria-label={env.name}
+    >
+      <div className={styles.envBody}>
+        <div className={styles.envHead}>
+          <Text variant="lg" as="span">
+            {env.name}
+          </Text>
+          {!env.is_active ? <Tag>Disabled</Tag> : null}
+          <Badge tone={healthy ? 'success' : env.health_status === 'unknown' ? 'neutral' : 'warning'} dot>
+            {healthy ? 'Healthy' : (env.health_status ?? 'Unknown')}
+          </Badge>
+        </div>
+        <div className={styles.counts}>
+          <Stat label="In flight" value={env.inflight} />
+          <Stat label="Queued" value={env.queued} />
+          <Stat label="Blocked" value={env.blocked} warn />
+        </div>
+        {!healthy && env.health_error ? (
+          <p className={styles.note2}>Dispatch is paused until the health check passes: {env.health_error}</p>
+        ) : null}
+        {env.stale_remote ? (
+          <p className={styles.note2}>{env.stale_remote} stale jobs still running on the service.</p>
+        ) : null}
+        {env.high_active ? (
+          <p className={styles.high}>
+            A HIGH-priority job is active on {env.name}. Other jobs wait until it finishes.
+          </p>
+        ) : null}
       </div>
-      <div className={styles.counts}>
-        <Stat label="In flight" value={env.inflight} />
-        <Stat label="Queued" value={env.queued} />
-        <Stat label="Blocked" value={env.blocked} warn />
-      </div>
-      {!healthy && env.health_error ? (
-        <p className={styles.note2}>Dispatch is paused until the health check passes: {env.health_error}</p>
-      ) : null}
-      {env.stale_remote ? (
-        <p className={styles.note2}>{env.stale_remote} stale jobs still running on the service.</p>
-      ) : null}
-      {env.high_active ? (
-        <p className={styles.high}>
-          A HIGH-priority job is active on {env.name}. Other jobs wait until it finishes.
-        </p>
-      ) : null}
-    </section>
+    </Card>
   );
 }
 

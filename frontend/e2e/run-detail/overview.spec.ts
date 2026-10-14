@@ -48,30 +48,48 @@ test.describe('open a run (J1, scenario 1)', () => {
     expect(rows).toBeLessThanOrEqual(20);
   });
 
-  test('run details toggle shows the meta grid, execution context and versioning details', async ({
+  test('the primary strip is always visible; details fold behind the chevron (collapsed by default, remembered)', async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await openRun(page, s.slug, classic);
-    // the report opens with the details expanded; the chevron folds them (a stored preference)
-    await expect(page.getByRole('button', { name: 'Hide run details' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
-    await page.getByRole('button', { name: 'Hide run details' }).click();
-    await expect(page.getByTestId('versioning-details')).toBeHidden();
-    await page.getByRole('button', { name: 'Show run details' }).click();
     const hero = page.getByRole('region', { name: 'Run summary' });
+    // the strip: tags with their links, start time and runtime, with no click needed
     await expect(hero.getByRole('link', { name: 'rag_answer' })).toHaveAttribute('href', /task=rag_answer/);
     await expect(hero.getByRole('link', { name: 'qa-arabic-v3' })).toBeVisible();
     await expect(hero.getByRole('link', { name: 'gpt-5-mini' })).toBeVisible();
+    await expect(page.getByTestId('hero-runtime')).toBeVisible();
+    // about the legacy height, and the first data section starts on the first screen
+    expect((await hero.boundingBox())!.height).toBeLessThanOrEqual(200);
+    expect((await page.locator('#run-section-overview').boundingBox())!.y).toBeLessThan(450);
+    // secondary details are folded
+    await expect(page.getByRole('button', { name: 'Show run details' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await expect(page.getByTestId('versioning-details')).toBeHidden();
+    await expect(page.locator('#run-hero-details')).toBeHidden();
+    await page.getByRole('button', { name: 'Show run details' }).click();
     await expect(hero).toContainText('Execution context');
     await expect(hero).toContainText('Temperature');
+    await expect(hero).toContainText('Owner');
     await expect(page.getByTestId('versioning-details')).toContainText('retriever_index');
-    await expect(page.getByTestId('hero-runtime')).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Hide run details' })).toBeVisible();
     await page.getByRole('button', { name: 'Hide run details' }).click();
-    await expect(page.getByTestId('versioning-details')).toBeHidden();
     await page.reload();
     await expect(page.getByRole('button', { name: 'Show run details' })).toBeVisible();
+  });
+
+  test('390px: the primary strip fits and the first data section is on the first screen', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openRun(page, s.slug, classic);
+    const hero = page.getByRole('region', { name: 'Run summary' });
+    await expect(hero.getByRole('link', { name: 'rag_answer' })).toBeVisible();
+    const h = await hero.boundingBox();
+    expect(h!.y + h!.height).toBeLessThan(500);
+    const overview = (await page.locator('#run-section-overview').boundingBox())!;
+    expect(overview.y).toBeLessThan(844);
   });
 
   test('J10: Export HTML points at the legacy export endpoint', async ({ page }) => {

@@ -313,6 +313,11 @@
   color: var(--error);
 }
 
+/* "61 · 18 err" stays on one line, whatever the column width */
+.nowrap {
+  white-space: nowrap;
+}
+
 .interval {
   position: relative;
   height: 14px;

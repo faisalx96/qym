@@ -62,7 +62,7 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
             ) : null}
           </div>
           <div className={styles.cardSide}>
-            <UserPill user={v.published_by} label="Published By:" />
+            <UserPill user={v.published_by} label="Published by:" />
             <UserPill user={v.created_by} label="Drafted By:" />
             {v.parent_version_id && byId.has(v.parent_version_id) ? (
               <LinkButton

@@ -2,6 +2,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Select } from '@/ui';
 import { useRunPage } from '../../RunContext';
+import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import { correlationMatrix, strongestPair } from '../../lib/overviewModel';
 import { Scatter } from '../charts/Charts';
 import chart from '../charts/Charts.module.css';
@@ -21,12 +22,29 @@ export function DeepTab() {
   const relationRef = useRef<HTMLElement>(null);
   const names = matrix.metrics;
   const [xi, yi] = pair ?? strongestPair(matrix) ?? [0, 0];
+  // The dots carry the same pass / fail tone as the quality-versus-latency scatter: the analysis metric decides.
+  const metric = api.selectedMetric;
+  const outcomes = useMemo(() => {
+    const out = new Map<string, 'pass' | 'fail' | null>();
+    const idx = metric ? model.metricNames.indexOf(metric) : -1;
+    if (idx < 0 || !metric) return out;
+    for (const { row } of items) {
+      const passed = rowPassesFor(api.ctx, metric, rowScoreFor(api.ctx, row, idx, metric));
+      out.set(row.item_id, passed === null ? null : passed ? 'pass' : 'fail');
+    }
+    return out;
+  }, [items, metric, model.metricNames, api.ctx]);
   const points = useMemo(
     () =>
       matrix.points
         .filter((p) => p.scores[xi] != null && p.scores[yi] != null)
-        .map((p) => ({ id: p.itemId, x: p.scores[xi] as number, y: p.scores[yi] as number })),
-    [matrix, xi, yi],
+        .map((p) => ({
+          id: p.itemId,
+          x: p.scores[xi] as number,
+          y: p.scores[yi] as number,
+          outcome: outcomes.get(p.itemId) ?? null,
+        })),
+    [matrix, xi, yi, outcomes],
   );
   if (names.length < 2) return <p className={styles.note}>Correlation needs at least two metrics.</p>;
   const r = matrix.r[xi]?.[yi];
@@ -36,7 +54,6 @@ export function DeepTab() {
       ? `minmax(6rem, 10rem) repeat(${names.length}, minmax(0, 9rem))`
       : `minmax(0, 1fr) repeat(${names.length}, minmax(0, 1fr))`;
   const opts = names.map((n, i) => ({ key: String(i), label: n }));
-  void model;
   return (
     <div className={styles.single}>
       <section className={styles.stack} aria-label="Metric correlation">

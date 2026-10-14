@@ -8,6 +8,7 @@ import {
   LinkButton,
   NumberField,
   Pagination,
+  promptPreview,
   Slider,
   Switch,
   Tag,
@@ -106,11 +107,8 @@ export function TargetFilters({
   );
 }
 
-const preview = (value: unknown): string => {
-  if (value == null) return '';
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
-  return text.replace(/\s+/g, ' ').slice(0, 160);
-};
+/** The item's input as one readable line (the same prompt reading as the run detail), never raw JSON. */
+const preview = (value: unknown): string => promptPreview(value, 160);
 
 /** Failing targets, one compact row each, 10 per page. */
 export function TargetList({

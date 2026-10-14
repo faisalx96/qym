@@ -1,7 +1,7 @@
 /* Dev gallery layout. */
 .page {
   width: 100%;
-  max-width: var(--page-constrained-width);
+  max-width: var(--page-max-w);
   margin: 0 auto;
   padding: var(--space-lg) var(--space-lg) var(--space-xl);
 }

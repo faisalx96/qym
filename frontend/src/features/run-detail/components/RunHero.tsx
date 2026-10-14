@@ -1,18 +1,24 @@
-/** Run hero: identity, status, live indicator, actions, pager, banners, meta grid, execution context (brief 04 J1). */
+/**
+ * Run hero: one primary strip that is always visible (name, status, actions, then task / dataset / model tags with the
+ * start time and runtime) and, behind the chevron, the secondary details (owner, project, version, execution
+ * context, versioning details). The strip is about the legacy header's height; the report starts on the first screen.
+ */
 import { Link } from 'react-router-dom';
 import { exportHtmlUrl } from '@/api/runs';
 import { platformUrl } from '@/lib/runtime';
 import {
-  Badge,
   Card,
+  DatasetTag,
   Icon,
   IconButton,
-  Identicon,
+  isBareRunId,
   JsonPreview,
   KeyValueGrid,
   LinkButton,
+  ModelTag,
   RunStatusBadge,
   Tag,
+  TaskTag,
   Text,
   runStatusTone,
   type CardTone,
@@ -27,7 +33,6 @@ import {
   ingestWarning,
   isLiveStatus,
   runEntityLinks,
-  shortModelName,
 } from '../lib/heroModel';
 import type { RunModel } from '../lib/runModel';
 import type { PassSummary, Run } from '../types';
@@ -43,7 +48,7 @@ export interface RunHeroProps {
   listParam: string | null;
   /** Path of this run without the query, for the "all passes" link. */
   basePath: string;
-  /** Meta grid + execution context shown (the chevron toggles it). */
+  /** Secondary details (owner, project, version, execution context, versioning) shown; the chevron toggles it. */
   expanded: boolean;
   onToggleExpanded: () => void;
   /** Extra hero content under the execution context (versioning details). */
@@ -137,9 +142,12 @@ export function RunHero({
       <div className={styles.heroBody}>
         <div className={styles.top}>
           <div className={styles.identity}>
-            <div className={styles.eyebrow}>Run detail</div>
             <div className={styles.headline}>
-              <h1 className={styles.name} title={run.run_name || run.run_id}>
+              <h1
+                className={styles.name}
+                data-id={isBareRunId(run.run_name || run.run_id, run.run_id) ? '' : undefined}
+                title={run.run_name || run.run_id}
+              >
                 {run.run_name || run.run_id}
               </h1>
               {viewPass ? (
@@ -195,6 +203,39 @@ export function RunHero({
               onPress={onToggleExpanded}
             />
           </div>
+        </div>
+
+        <div className={styles.strip} data-testid="run-hero-strip">
+          <MetaLink to={links.task} title={`Runs of task ${run.task_name}`}>
+            <TaskTag name={run.task_name} />
+          </MetaLink>
+          <MetaLink to={links.dataset} title={links.datasetTitle}>
+            <DatasetTag
+              name={run.dataset_name}
+              version={run.dataset_version}
+              aliases={run.dataset_aliases}
+            />
+          </MetaLink>
+          {modelName ? (
+            <MetaLink to={links.model} title={`Runs of model ${modelName}`}>
+              <ModelTag
+                name={modelName}
+                title={modelName}
+                reasoning={!!(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning}
+              />
+            </MetaLink>
+          ) : null}
+          <span className={styles.facts}>
+            <span className={styles.fact}>
+              <span className={styles.factLabel}>Started</span> {formatIsoDateTime(timing.startedAt)}
+            </span>
+            <span className={styles.fact}>
+              <span className={styles.factLabel}>Runtime</span>{' '}
+              <span data-testid="hero-runtime" className={styles.mono}>
+                {runtimeMs != null ? formatDurationMs(runtimeMs) : '—'}
+              </span>
+            </span>
+          </span>
         </div>
 
         {warning ? (
@@ -254,37 +295,6 @@ export function RunHero({
 
         <div id="run-hero-details" hidden={!expanded} className={styles.details}>
           <dl className={styles.metaGrid}>
-            <Meta label="Task" title={run.task_name}>
-              <MetaLink to={links.task} title={`Runs of task ${run.task_name}`}>
-                {run.task_name ? <Tag kind="task">{run.task_name}</Tag> : '—'}
-              </MetaLink>
-            </Meta>
-            <Meta label="Dataset" title={run.dataset_name}>
-              <MetaLink to={links.dataset} title={links.datasetTitle}>
-                <span className={styles.datasetCell}>
-                  {run.dataset_name ? <Identicon seed={run.dataset_name} cell={2} gap={1} chip /> : null}
-                  {run.dataset_name ?? '—'}
-                  {run.dataset_version ? <Tag kind="version">v{run.dataset_version}</Tag> : null}
-                  {(run.dataset_aliases ?? []).map((a) => (
-                    <Tag key={a} kind="data">
-                      {a}
-                    </Tag>
-                  ))}
-                </span>
-              </MetaLink>
-            </Meta>
-            <Meta label="Model" title={modelName}>
-              <MetaLink to={links.model} title={`Runs of model ${modelName}`}>
-                <span className={styles.modelCell}>
-                  {shortModelName(modelName) || '—'}
-                  {(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning ? (
-                    <Badge tone="info" title="Reasoning model">
-                      reasoning
-                    </Badge>
-                  ) : null}
-                </span>
-              </MetaLink>
-            </Meta>
             <Meta label="Owner" title={ownerLabel}>
               <MetaLink to={links.owner} title={`Runs owned by ${ownerLabel}`}>
                 {ownerLabel}
@@ -294,12 +304,6 @@ export function RunHero({
               <MetaLink to={links.project} title={`Runs in ${projectName}`}>
                 {projectName}
               </MetaLink>
-            </Meta>
-            <Meta label="Started">{formatIsoDateTime(timing.startedAt)}</Meta>
-            <Meta label="Runtime">
-              <span data-testid="hero-runtime" className={styles.mono}>
-                {runtimeMs != null ? formatDurationMs(runtimeMs) : '—'}
-              </span>
             </Meta>
             <Meta label="Version">{version ? <span className={styles.mono}>{version}</span> : null}</Meta>
             {viewPass ? null : <Meta label="Stop reason">{run.status_reason_label ?? ''}</Meta>}

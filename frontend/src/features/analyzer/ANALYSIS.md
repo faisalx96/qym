@@ -9,7 +9,7 @@ Production rules, Documents), then Setup, Targets, Results and a sticky action r
   limit, max issues), compact one-row-per-target list (10 per page), per-row Preview.
 - **Results**: reserved slot (`--results-slot-min-height`); job card (progress, then summary) and test cards
   render into it. Nothing above it ever moves.
-- **Action rail** (`blocks/ActionRail.tsx`, `--action-rail-height`): connection, "Prompt preview . N chars"
+- **Action rail** (`blocks/ActionRail.tsx`, `--bar-action-h`): connection, "Prompt preview . N chars"
   (opens `PreviewDrawer`), Test selected, and exactly one primary per phase: Analyze N items (accent) /
   Cancel analysis (danger) / View run (accent) / Analyze again (accent after a failure). Notices (no connection,
   view only) are text in the rail. At 390 px Test and Preview move to an overflow menu.

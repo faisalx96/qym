@@ -101,8 +101,8 @@ export function StartFrom() {
             compact
             title="From scratch"
             body="The environment’s own settings."
-            checked={kind === 'scratch'}
-            disabled={readOnly}
+            checked={hasEnv && kind === 'scratch'}
+            disabled={readOnly || !hasEnv}
             onSelect={() => pick('scratch')}
           />
         </div>

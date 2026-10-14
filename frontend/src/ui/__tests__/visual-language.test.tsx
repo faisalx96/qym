@@ -56,6 +56,19 @@ describe('Card', () => {
     expect(screen.getByTestId('w')).not.toHaveAttribute('data-rail');
   });
 
+  it('rail picks the side: left (default, inline-start), bottom (a gauge tile) or none', () => {
+    render(
+      <>
+        <Card tone="info" data-testid="l" />
+        <Card tone="success" rail="bottom" data-testid="bt" />
+        <Card tone="warning" rail="left" data-testid="lf" />
+      </>,
+    );
+    expect(screen.getByTestId('l')).toHaveAttribute('data-rail', 'left');
+    expect(screen.getByTestId('bt')).toHaveAttribute('data-rail', 'bottom');
+    expect(screen.getByTestId('lf')).toHaveAttribute('data-rail', 'left');
+  });
+
   it('onPress makes it a keyboard-operable button with selected state', async () => {
     const user = userEvent.setup();
     const onPress = vi.fn();

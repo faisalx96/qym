@@ -266,3 +266,9 @@
     padding: var(--space-lg) var(--space-md) 60px;
   }
 }
+
+.navToggle:hover,
+.tocNarrow summary:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}

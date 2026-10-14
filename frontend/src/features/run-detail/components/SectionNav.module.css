@@ -7,6 +7,8 @@
   align-items: center;
   gap: var(--space-md);
   min-width: 0;
+  min-height: var(--bar-nav-h);
+  box-sizing: border-box;
   padding: var(--space-xs) 0;
   background: var(--bg-void);
   border-bottom: 1px solid var(--border-subtle);

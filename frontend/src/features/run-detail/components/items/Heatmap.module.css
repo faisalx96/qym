@@ -4,6 +4,8 @@
 }
 
 .scroll {
+  width: fit-content;
+  max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -47,6 +49,28 @@
   top: 0;
   left: 0;
   width: 100%;
+  border-radius: var(--control-radius);
+  transition: background-color var(--transition-fast);
+}
+
+/* the row guide: the hovered or focused row lights up across the item label and its cells */
+.body .row:hover,
+.body .row:focus-within {
+  background: var(--bg-hover);
+}
+
+.body .row:hover .label,
+.body .row:focus-within .label {
+  color: var(--text-primary);
+}
+
+.more {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
 }
 
 .label {
@@ -100,4 +124,8 @@
 
 .cell[data-error='metric'] {
   color: var(--metric-error);
+}
+
+.cell:hover {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }

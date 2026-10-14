@@ -4,6 +4,7 @@
   flex-direction: column;
   gap: var(--space-xs);
   min-width: 0;
+  max-width: 100%; /* a fixed control width never pushes a phone layout past its card */
 }
 
 .field[data-inline] {

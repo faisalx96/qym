@@ -60,3 +60,4 @@ export * from './DataTable';
 export * from './JsonViewer';
 export * from './FieldRow';
 export * from './StructuredValue';
+export * from './ScrollCue';

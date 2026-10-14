@@ -464,7 +464,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  min-height: var(--action-rail-height);
+  min-height: var(--bar-action-h);
   padding-block: var(--space-sm);
   border-top: 1px solid var(--border-default);
   background: var(--bg-void);
@@ -540,7 +540,7 @@
 @media (max-width: 1100px) {
   .rail {
     flex-wrap: wrap;
-    min-height: calc(2 * var(--action-rail-height) - var(--space-sm));
+    min-height: calc(2 * var(--bar-action-h) - var(--space-sm));
   }
 
   .railLead {
@@ -614,7 +614,7 @@
 }
 
 .resultsSlot {
-  scroll-margin-bottom: calc(var(--action-rail-height) + var(--space-md));
+  scroll-margin-bottom: calc(var(--bar-action-h) + var(--space-md));
 }
 
 .resultsCard {
@@ -763,4 +763,8 @@
 
 .collapsibleBody[hidden] {
   display: none;
+}
+
+.details summary:hover {
+  color: var(--text-primary);
 }

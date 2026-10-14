@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import type { AdminRunSummary } from '@/api/admin';
 import { runPath } from '@/app/routes';
 import {
   Badge,
   DataTable,
+  RunName,
   RunStatusBadge,
+  TaskTag,
   TwoLine,
   type Column,
   type PaginationProps,
@@ -22,11 +23,9 @@ function RunCell({ run }: { run: AdminRunSummary }) {
   return (
     <TwoLine
       primary={
-        <Link to={runHref(run)} className={styles.runLink}>
-          {runName(run)}
-        </Link>
+        <RunName to={runHref(run)} name={runName(run)} runId={run.run_id} />
       }
-      secondary={run.task_name || undefined}
+      secondary={run.task_name ? <TaskTag name={run.task_name} /> : undefined}
     />
   );
 }

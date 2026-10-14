@@ -92,8 +92,11 @@
   --info-marker-size: 12px;
   --help-tooltip-width: 240px;
   --status-bar-height: 38px;
+  /* Sticky bars, two heights across the app: the section/navigation bar of a report (run detail, compare) and the
+     action bar (launch bar, analysis action rail, items toolbar). */
+  --bar-nav-h: 44px;
+  --bar-action-h: 56px;
   /* Auto-analysis action rail and reserved results slot (nothing may resize them on state change). */
-  --action-rail-height: 56px;
   --action-primary-width: 168px;
   --results-slot-min-height: 160px;
   --chars-tag-width: 96px;
@@ -109,7 +112,8 @@
   --motion-step: 180ms;
   --motion-step-out: 140ms;
   --ease-standard: ease;
-  --page-constrained-width: 1120px;
+  --page-max-w: 1233px; /* every report and settings page; the one page width */
+  --page-narrow-w: 1120px; /* text-first pages (profile): an explicit `narrow` container */
   --settings-prompt-rail-width: 200px;
   --settings-prompt-tab-width: 240px;
   --settings-prompt-editor-min-height: 280px;
@@ -201,9 +205,11 @@
   --tint-strong: 20%; /* hover/pressed on a tinted fill, selected pill */
   --error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary)); /* 5.15:1 on a 12% error tint */
 
-  --chart-6: #60a5fa;
-  --chart-7: #34d399;
-  --chart-8: #fb923c;
+  /* 6-8 sit in the hue gaps of 1-5 (orange-red, indigo, lime): none repeats the teal, blue or amber of 1-5.
+     The one definition: the runs list no longer re-declares them. */
+  --chart-6: #ea580c;
+  --chart-7: #6366f1;
+  --chart-8: #a3e635;
 
   --rail-width: 3px;
   --field-label-width: 7.5rem; /* FieldRow label column */

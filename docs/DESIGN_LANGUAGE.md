@@ -56,7 +56,13 @@ Runs error indicators use the original ⚠ glyph: `--error` for task failures an
 | Meta / caption / label / **table header** | `--font-sm` | 11px / 400 (labels 600–650) | muted | Uppercase labels get `letter-spacing: 0.05em`. |
 | Badge / pill | `--font-xs` | 10px / 650 | semantic | Badges only — nothing else may be 10px. |
 
-Major analytical sections use a sentence-case `--font-lg` section title followed
+**One heading scale across pages** (enforced by `e2e/visual-language/heading-scale.spec.ts`): the page title is
+`--font-title` 22/650 (even the visually hidden `h1` of Runs and Charts), a section heading is `--font-xl` 18/650
+(`SectionHeader`'s default level; the run, compare, analysis, charts and admin sections), a panel or group heading is
+`--font-lg` 15/600 (Overview panels, per-task chart cards, run-detail group titles such as "Response time" and "By pass"),
+and a small label is `--font-md` 13/600 uppercase and tracked. No page writes its own heading size.
+
+Major analytical sections use a sentence-case section title (`--font-xl`) followed
 by a concise muted `--font-sm` description. Do not introduce a major section
 with an uppercase metadata-style label. The run detail page is the exception:
 its top-level sections are page sections reached from the sticky section nav
@@ -389,10 +395,25 @@ tile), `--tint-strong` 20% (hover or pressed on a tinted fill, selected pill). N
 (scrims and scrollbars are tokens). At most one tint fill per row-height region; never zebra-tint; a card inside a card
 is not allowed.
 
+- **Run name and entities**: a run is written by `RunName` (sans, a link when it has a target, mono only when the label is a
+  bare id) and the task, dataset and model by `TaskTag`, `DatasetTag` and `ModelTag`, on every surface (runs list,
+  overview, admin, run header, compare cards, analysis header). An input shows as `promptPreview` (its prompt line, never
+  raw JSON) wherever it is a table cell (dataset items, analysis targets).
+- **Scroll cue** (`useScrollCue` and `scrollCue`): a region that scrolls sideways fades the edge that still has content
+  (overrides tables in the wizard, the compare section tabs on a phone).
+- **Series 1 to 8** (`--chart-1..8`, defined once in `tokens.css`): 6 to 8 are orange-red, indigo and lime, in the hue
+  gaps of 1 to 5, so no run colour repeats another's hue.
+
+- **Sticky bars** (`--bar-nav-h` 44px, `--bar-action-h` 56px): two heights across the app. The navigation bar of a
+  report (run-detail `SectionNav`, the compare bar) is `--bar-nav-h`; an action bar (the experiment home launch bar,
+  the analysis action rail, the run items toolbar) is `--bar-action-h`. Pages set `min-height` from the token, never a
+  number. Enforced by `design-language.test.ts`.
+
 - **Card** (`Card`): the one grouping surface. `--bg-surface`, 1px `--border-subtle`, `--radius-md`, padding
   `--card-padding` (`compact`: `--card-padding-compact`), optional `header` / `footer` slots with a hairline. A 3px
   inline-start rail (`--rail-width`, logical so RTL mirrors) carries the meaning: `tone`, `band` or `series`
-  (`rail="none"` drops it). `wash="danger"|"live"` adds the 6% tint and is the only wash. A passive card has no hover.
+  (`rail="none"` drops it; `rail="bottom"` moves it under a tile that reads as a gauge, as the sweep stat tiles; `left` is
+  the default and the only other spelling). `wash="danger"|"live"` adds the 6% tint and is the only wash. A passive card has no hover.
   `onPress` (div `role="button"`, Enter and Space), `href` or `to` (anchors) make it interactive: hover raises the
   border to `--border-default`, the fill to `--bg-elevated` and adds `--shadow-card-hover`; pressed is `--bg-active`;
   `isSelected` draws the accent border and a soft accent fill while the rail keeps its tone; focus is the 2px accent
@@ -432,9 +453,11 @@ is not allowed.
 
 Every page presents, in order: **page title -> description -> meta line ->
 tabs (if any) -> content**, via `PageHeader`. Constrained pages (settings,
-admin, profile, projects, overview) use the `constrained` container (1120px)
-from `@/features/shell/layout`; data-dense pages (runs, charts, datasets,
-compare) use `fullWidth` with their own layout.
+admin, projects, overview, models) use the `constrained` container, capped at
+`--page-max-w` (1233px, the width the report pages fill at 1440), from
+`@/features/shell/layout`; a text-first page (profile) asks for `narrow`
+(`--page-narrow-w`). Data-dense pages (runs, charts, datasets, compare) use
+`fullWidth` with their own layout. `e2e/visual-language/page-width.spec.ts` checks the widths agree.
 
 Styles live in the page or component's CSS Module next to its `.tsx`, built from
 tokens and primitives. Class names are local (CSS Modules), so no prefixing is

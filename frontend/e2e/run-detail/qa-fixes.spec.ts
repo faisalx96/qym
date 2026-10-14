@@ -416,7 +416,7 @@ test('a 403 says "No access to this run" and links back to the Dashboard', async
   );
   await page.goto(`/projects/${s.slug}/runs/${classic}`);
   await expect(page.getByRole('heading', { name: 'No access to this run' })).toBeVisible();
-  const back = page.getByRole('link', { name: /Back to Dashboard/ });
+  const back = page.getByRole('link', { name: /Back to runs/ });
   await expect(back).toHaveAttribute('href', `/projects/${s.slug}`);
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
@@ -436,4 +436,14 @@ test.describe('live run', () => {
     const secs = Number(/updated (\d+)s ago/.exec((await indicator.textContent()) ?? '')?.[1]);
     expect(secs).toBeLessThanOrEqual(4);
   });
+});
+
+test('the latency steps table keeps "61 · 18 err" on one line', async ({ page }) => {
+  await openRun(page, s.slug, classic, 'panel=latency');
+  const cells = page.getByText(/\d+ err$/).locator('xpath=ancestor::*[@role="cell"][1]');
+  const n = await cells.count();
+  for (let i = 0; i < n; i += 1) {
+    const wraps = await cells.nth(i).evaluate((el) => el.getBoundingClientRect().height > 24);
+    expect(wraps, `step count cell ${i} wraps onto a second line`).toBe(false);
+  }
 });

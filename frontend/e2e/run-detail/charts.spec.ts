@@ -42,3 +42,23 @@ for (const width of [1440, 1920]) {
     expect(Math.abs(a.height - b.height)).toBeLessThan(3);
   });
 }
+
+test('the metric relationship scatter colours its dots pass / fail like the latency scatter', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await openRun(page, s.slug, classic, 'panel=deep');
+  const scatter = page
+    .getByRole('region', { name: 'Metric relationship' })
+    .getByRole('img', { name: /versus/ });
+  await expect(scatter).toBeVisible();
+  const outcomes = await scatter.evaluate((svg) =>
+    Array.from(
+      new Set(
+        Array.from(svg.querySelectorAll('circle[data-outcome]')).map((c) => c.getAttribute('data-outcome')),
+      ),
+    ),
+  );
+  expect(outcomes).toEqual(expect.arrayContaining(['pass', 'fail']));
+  await expect(page.getByRole('region', { name: 'Metric relationship' })).toContainText('Pass');
+});

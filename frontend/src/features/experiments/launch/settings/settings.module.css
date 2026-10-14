@@ -298,6 +298,15 @@ textarea.control {
   border-style: dashed;
 }
 
+/* A block that holds a table (or other blocks that do) is a heading over its content, not another box: the group
+   and the table frame are the only two borders (the review found four nested boxes). */
+.block:has(.tableWrap),
+.block .block:not(.allBlock) {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
 /* Role tables */
 .tableWrap {
   overflow-x: auto;

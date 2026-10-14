@@ -72,11 +72,56 @@ test('the global row sweeps several values: chips, "sweeps N runs", and one run 
   await expect(review(page)).toContainText(/1\s*run to launch/, { timeout: 15_000 });
 });
 
+test('the settings step uses the full width: the review rail gives way to the launch bar, tables read in full', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await routing(page);
+  // no 22rem rail beside the step; the compact launch bar carries the run count
+  await expect(page.getByRole('region', { name: 'Launch', exact: true })).toContainText(/runs? to launch/);
+  const frame = page.locator('[data-table-wrap]').first();
+  await expect(frame).toBeVisible();
+  const box = (await frame.boundingBox())!;
+  expect(box.width).toBeGreaterThan(1000);
+  // at most two bordered boxes around a table: the group and the table frame (no section > block > block > table)
+  const nested = await frame.evaluate((el) => {
+    let boxes = 0;
+    for (let n: Element | null = el; n && !n.matches('main'); n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (
+        parseFloat(cs.borderTopWidth) > 0 &&
+        cs.borderTopStyle !== 'none' &&
+        cs.borderTopColor !== 'rgba(0, 0, 0, 0)'
+      )
+        boxes += 1;
+    }
+    return boxes;
+  });
+  expect(nested).toBeLessThanOrEqual(3);
+});
+
+test('a table that still overflows shows a scroll cue (edge fade) and loses it at the end', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 800, height: 900 });
+  await routing(page);
+  const frame = page.locator('[data-table-wrap]').first();
+  await expect(frame).toHaveAttribute('data-cue-end', '');
+  await expect(frame).not.toHaveAttribute('data-cue-start', '');
+  await frame.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
+  await expect(frame).toHaveAttribute('data-cue-start', '');
+  await expect(frame).not.toHaveAttribute('data-cue-end', '');
+});
+
 test('390px: the global sweep keeps the run count in the launch bar', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await routing(page);
   const table = page.getByRole('table', { name: 'role overrides' });
-  await table.getByRole('button', { name: 'Sweep values: All roles · max_tokens' }).click();
+  const trigger = table.getByRole('button', { name: 'Sweep values: All roles · max_tokens' });
+  // the sticky launch bar covers the bottom of a phone viewport: put the target in the upper third first
+  await trigger.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.evaluate(() => window.scrollBy(0, -200));
+  await trigger.click();
   const chips = table.locator('[data-global-sweep]');
   await chips.getByRole('button', { name: /edit sweep/i }).click();
   const editor = page.getByRole('dialog', { name: /Sweep values of/ });

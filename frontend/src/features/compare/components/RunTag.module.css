@@ -40,3 +40,8 @@
   flex: none;
   color: var(--text-muted);
 }
+
+.name[data-id] {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}

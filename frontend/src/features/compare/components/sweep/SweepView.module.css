@@ -16,19 +16,6 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-md);
-  border: 1px solid var(--border-default);
-  border-inline-start: 3px solid var(--text-muted);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-}
-
-.verdict[data-verdict='improved'] {
-  border-inline-start-color: var(--success);
-}
-
-.verdict[data-verdict='regressed'] {
-  border-inline-start-color: var(--error);
 }
 
 .filters {
@@ -45,23 +32,10 @@
   margin-top: var(--space-xs);
 }
 
-.stat {
+.stat > div {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
-  border-bottom: 3px solid var(--text-muted);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-}
-
-.stat[data-verdict='improved'] {
-  border-bottom-color: var(--success);
-}
-
-.stat[data-verdict='regressed'] {
-  border-bottom-color: var(--error);
 }
 
 .statLabel {
@@ -144,8 +118,7 @@
   color: var(--accent-primary);
 }
 
-.link:focus-visible,
-.outcome:focus-visible {
+.link:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
@@ -162,25 +135,12 @@
   margin-top: var(--space-xs);
 }
 
-.outcome {
+.outcome > div {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
   color: var(--text-secondary);
-  text-align: start;
-}
-
-button.outcome {
-  cursor: pointer;
-}
-
-.outcome[aria-pressed='true'] {
-  border-color: var(--accent-primary);
 }
 
 .outcomeValue {
@@ -235,3 +195,4 @@ button.outcome {
   flex-wrap: wrap;
   gap: var(--space-xs);
 }
+
