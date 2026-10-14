@@ -6,11 +6,10 @@ import { EndpointControls } from '../models/EndpointControls';
 import { GlobalModelCard } from '../models/GlobalModelCard';
 import { GroupBanner } from '../models/GroupBanner';
 import { SlotCard } from '../models/SlotCard';
-import { VersionsBlock } from '../models/VersionsBlock';
 import styles from '../models/models.module.css';
 
 /**
- * Models: the group-settings banner, the environments' current versions, the global model and one
+ * Models: the group-settings banner, the global model and one
  * card per confirmed model slot (Follow global / Custom / Temporary, sweeps, re-entered keys).
  */
 export function ModelsSection() {
@@ -20,7 +19,6 @@ export function ModelsSection() {
     <LaunchSection id="models" description="Pick one model for every LLM endpoint, or a model per endpoint.">
       <div className={styles.stack}>
         <GroupBanner />
-        <VersionsBlock />
         {!selected ? (
           <p className={styles.hint}>Pick an environment to see its model slots.</p>
         ) : flags.envsLoading ? (

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Badge, Button, KeyValueGrid, Text } from '@/ui';
 import { plural } from '../../lib/format';
 import { Callout } from '../components/Callout';
+import { VersionsSummary } from '../entry/VersionsBlock';
 import { ProblemList } from '../components/ProblemList';
 import { useGoToSection } from '../components/goToSection';
 import panel from '../components/launch.module.css';
@@ -116,6 +117,9 @@ export function ReviewPane({ onCancel, hideActions }: { onCancel: () => void; hi
             value: envCount ? baseLabel(doc, (id) => selectedEnvs.find((e) => e.id === id)?.name ?? id) : '—',
           },
           { key: 'prio', label: 'Priority', value: priorityText(doc.priority) },
+          ...(selectedEnvs.length
+            ? [{ key: 'versions', label: 'Versions', value: <VersionsSummary /> }]
+            : []),
         ]}
       />
       <div>

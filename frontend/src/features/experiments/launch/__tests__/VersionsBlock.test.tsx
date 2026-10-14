@@ -2,11 +2,11 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LaunchTestProvider } from '../LaunchContext';
-import { VersionsBlock } from '../models/VersionsBlock';
+import { VersionsBlock } from '../entry/VersionsBlock';
 import { envRecord, newClient, Providers } from './helpers';
 
 /**
- * "Current versions" on the Models step: what a job started now would record as versioning_details,
+ * "Current versions" on the home view: what a job started now would record as versioning_details,
  * read once when the step is shown and again on Refresh (never on a re-render), with the service's
  * reason when it cannot be read and a notice for a service that predates the endpoint.
  */

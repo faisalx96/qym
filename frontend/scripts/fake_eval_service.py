@@ -9,6 +9,7 @@ next read, never finishing by itself) and exposes /__control to drive them:
     GET  /__control/jobs        every job it holds
     POST /__control/reset       forget jobs, restore health
     POST /__control/health      {"down": true}   next requests answer 503
+    POST /__control/versioning  {"agent_version": "..."}   what /evals/versioning-details/current answers (reset restores)
 Valid API key: any non-empty bearer token.
 """
 
@@ -32,7 +33,8 @@ EVALUATOR = json.loads((FIXTURES / "eval_evaluator_schema.json").read_text())
 
 app = FastAPI()
 JOBS: Dict[str, Dict[str, Any]] = {}
-STATE: Dict[str, Any] = {"down": False}
+DEFAULT_VERSIONING = {"agent_version": "agent-1.4.2", "image_version": "img-20261001", "kb_version": "kb-77"}
+STATE: Dict[str, Any] = {"down": False, "versioning": dict(DEFAULT_VERSIONING)}
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
 
 
@@ -69,7 +71,7 @@ def evaluator_schema() -> Any:
 
 @app.get("/evals/versioning-details/current")
 def versioning() -> Any:
-    return {"agent_version": "agent-1.4.2", "image_version": "img-20261001", "kb_version": "kb-77"}
+    return dict(STATE["versioning"])
 
 
 @app.get("/evals")
@@ -145,7 +147,14 @@ async def control_set(job_id: str, request: Request) -> Any:
 def control_reset() -> Any:
     JOBS.clear()
     STATE["down"] = False
+    STATE["versioning"] = dict(DEFAULT_VERSIONING)
     return {"ok": True}
+
+
+@app.post("/__control/versioning")
+async def control_versioning(request: Request) -> Any:
+    STATE["versioning"] = dict(await request.json())
+    return STATE["versioning"]
 
 
 @app.post("/__control/health")
