@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Collapse, Icon, Tag } from '@/ui';
+import { Button, Collapse, Icon, Tag } from '@/ui';
 import { plural } from '../../lib/format';
 import { sectionBodyId, sectionHeadingId, SECTION_TITLES, useLaunch, type SectionId } from '../LaunchContext';
 import { SectionProblems } from './SectionProblems';
@@ -37,6 +37,8 @@ export function StaticSections({
 export interface LaunchSectionProps {
   /** Overrides the frame set by `StaticSections`. */
   variant?: LaunchSectionVariant;
+  /** Static variant: hide the body behind a "Show <noun>" / "Hide <noun>" button (animated, closed by default). */
+  hideBehind?: string;
   id: SectionId;
   /** Defaults to the standard title of the section. */
   title?: string;
@@ -59,6 +61,7 @@ export function LaunchSection({
   description,
   badge,
   variant,
+  hideBehind,
   children,
 }: LaunchSectionProps) {
   const { sectionState, sectionSummary } = useLaunch();
@@ -97,10 +100,31 @@ export function LaunchSection({
           {titled || !frame?.badgeSlot ? badges : createPortal(badges, frame.badgeSlot)}
           {description ? <p className={styles.staticDesc}>{description}</p> : null}
         </div>
-        <div id={sectionBodyId(id)} className={styles.staticBody}>
-          <SectionProblems id={id} />
-          {children}
-        </div>
+        {hideBehind ? (
+          <>
+            <div>
+              <Button
+                variant="neutral"
+                aria-expanded={open}
+                aria-controls={sectionBodyId(id)}
+                onPress={() => sectionState.toggle(id)}
+              >
+                {open ? `Hide ${hideBehind}` : `Show ${hideBehind}`}
+              </Button>
+            </div>
+            <Collapse open={open} id={sectionBodyId(id)}>
+              <div className={styles.staticBody}>
+                <SectionProblems id={id} />
+                {children}
+              </div>
+            </Collapse>
+          </>
+        ) : (
+          <div id={sectionBodyId(id)} className={styles.staticBody}>
+            <SectionProblems id={id} />
+            {children}
+          </div>
+        )}
       </section>
     );
   }

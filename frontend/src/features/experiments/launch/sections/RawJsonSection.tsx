@@ -46,6 +46,7 @@ export function RawJsonSection() {
   return (
     <LaunchSection
       id="raw"
+      hideBehind="raw JSON"
       description="The whole configuration as JSON. Edit it here, then Apply to update the form."
       badge={badge}
     >

@@ -305,3 +305,24 @@ test.describe('polish', () => {
     expect(bar!.height).toBeLessThan(150);
   });
 });
+
+test.describe('raw JSON behind a button', () => {
+  test('hidden by default on the review step; Show / Hide toggles it; the Raw JSON action opens it', async ({
+    page,
+  }) => {
+    await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'review');
+    const raw = page.getByRole('region', { name: /^Raw JSON/ });
+    await expect(raw.locator('.cm-content')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Show raw JSON' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await page.getByRole('button', { name: 'Show raw JSON' }).click();
+    await expect(raw.locator('.cm-content')).toBeVisible();
+    await page.getByRole('button', { name: 'Hide raw JSON' }).click();
+    await expect(raw.locator('.cm-content')).toHaveCount(0);
+    await review(page).getByRole('button', { name: 'Raw JSON' }).click();
+    await expect(raw.locator('.cm-content')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Hide raw JSON' })).toBeVisible();
+  });
+});

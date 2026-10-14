@@ -184,6 +184,12 @@ export async function openSection(page: Page, title: string): Promise<Locator> {
     return region;
   }
   await goStep(page, SECTION_STEP[title] ?? 'where');
+  if (title === 'Raw JSON') {
+    // The raw JSON card is closed behind a button in Customize.
+    const show = page.getByRole('button', { name: 'Show raw JSON' });
+    if (await show.count()) await show.click();
+    await expect(page.getByRole('button', { name: 'Hide raw JSON' })).toBeVisible();
+  }
   return region;
 }
 
