@@ -48,14 +48,14 @@ for (const hash of ['#errors', '?panel=errors', '#categories', '#items']) {
 }
 
 test('removing a run keeps the reading position', async ({ page }) => {
-  // a tall viewport keeps the run chips stuck, so the chip can be pressed without scrolling up
+  // the run cards carry the remove buttons; the page keeps its position when the run set reloads
   await page.setViewportSize({ width: 1280, height: 1100 });
   await page.goto(compareUrl(four()));
   await waitLoaded(page);
-  await goSection(page, 'Categories');
-  await expect(page.locator('#compare-categories')).toBeInViewport();
+  await goSection(page, 'Runs');
+  await expect(page.locator('#compare-runs')).toBeInViewport();
   const before = await page.evaluate(() => document.getElementById('shell-content')!.scrollTop);
-  expect(before).toBeGreaterThan(300);
+  expect(before).toBeGreaterThan(50);
   await page
     .getByRole('button', { name: /^Remove .* from the comparison$/ })
     .last()
@@ -64,5 +64,5 @@ test('removing a run keeps the reading position', async ({ page }) => {
   await expect(page.getByTestId('run-card')).toHaveCount(3);
   await expect
     .poll(async () => page.evaluate(() => document.getElementById('shell-content')!.scrollTop))
-    .toBeGreaterThan(before - 400);
+    .toBeGreaterThan(before - 60);
 });

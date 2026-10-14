@@ -40,3 +40,26 @@
   padding: 0;
   border: 0;
 }
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.railWarn,
+.railError {
+  display: inline-block;
+  inline-size: 3px;
+  block-size: 0.875rem;
+  margin-inline-start: var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
+.railWarn {
+  background: var(--warning);
+}
+
+.railError {
+  background: var(--error);
+}

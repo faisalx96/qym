@@ -1,10 +1,13 @@
 /** Error distribution per kind and run, with change against the baseline; a card filters the items (brief 05 J5). */
 import { useMemo } from 'react';
 import { splitErrorLabel, errorBucketKey, type ErrorSlot } from '@/features/run-detail/lib/rowErrors';
-import { Tag, Text } from '@/ui';
+import { Card, Tag, Text } from '@/ui';
 import { errorDistribution } from '../../lib/breakdown';
-import { letterOf, useCompare } from '../../CompareContext';
-import { RunDot } from '../common';
+import { useCompare } from '../../CompareContext';
+import type { ErrorEntry } from '../../lib/breakdown';
+import type { MetricColumn } from '../../lib/baseline';
+import { columnName } from '../../lib/columnName';
+import { ErrorCardRow } from './ErrorCardRow';
 import styles from './Panel.module.css';
 
 const SLOT: Record<string, ErrorSlot> = {
@@ -50,42 +53,20 @@ export function ErrorsTab() {
             <Text variant="md" weight={600}>
               {kind}s <Tag kind="count">{list.reduce((s, e) => s + e.count, 0)}</Tag>
             </Text>
-            <ul className={styles.errorList}>
+            <ul className={styles.errorCards}>
               {list.map((e) => {
                 const slot = SLOT[kind] ?? 'trace';
                 const cur = f.errors[slot];
                 const on = !!cur && errorBucketKey(cur.kind, cur.label) === errorBucketKey(e.kind, e.label);
-                const parts = splitErrorLabel(e.label);
                 return (
-                  <li key={`${kind}|${e.label}`}>
-                    <button
-                      type="button"
-                      className={styles.errorCard}
-                      aria-pressed={on}
-                      onClick={() => toggle(kind, e.label)}
-                      title={e.label}
-                    >
-                      <span className={styles.errorTitle}>{parts.title}</span>
-                      {parts.detail ? <span className={styles.errorDetail}>{parts.detail}</span> : null}
-                      <span className={styles.errorCounts}>
-                        {columns.map((col, i) => {
-                          const count = e.counts[i] ?? 0;
-                          const delta = count - (e.counts[baseIdx] ?? 0);
-                          return (
-                            <span key={col.key} className={styles.errorCount} title={col.title}>
-                              <RunDot index={col.runIdxs[0] ?? 0} />
-                              {letterOf(col.runIdxs[0] ?? 0)} {count}
-                              {i !== baseIdx && delta !== 0 ? (
-                                <Tag kind="data" tone={delta < 0 ? 'success' : 'danger'}>
-                                  {delta < 0 ? '▼' : '▲'} {delta > 0 ? '+' : '−'}
-                                  {Math.abs(delta)}
-                                </Tag>
-                              ) : null}
-                            </span>
-                          );
-                        })}
-                      </span>
-                    </button>
+                  <li key={`${kind}|${e.label}`} className={styles.errorItem}>
+                    <ErrorCard
+                      entry={e}
+                      active={on}
+                      onPress={() => toggle(kind, e.label)}
+                      columns={columns}
+                      baseIdx={baseIdx}
+                    />
                   </li>
                 );
               })}
@@ -94,5 +75,62 @@ export function ErrorsTab() {
         );
       })}
     </div>
+  );
+}
+
+/** Above this many runs, runs with no error of this kind fold into one line. */
+const FOLD_FROM = 6;
+
+function ErrorCard({
+  entry,
+  active,
+  onPress,
+  columns,
+  baseIdx,
+}: {
+  entry: ErrorEntry;
+  active: boolean;
+  onPress: () => void;
+  columns: MetricColumn[];
+  baseIdx: number;
+}) {
+  const { model } = useCompare();
+  const parts = splitErrorLabel(entry.label);
+  const fold = columns.length > FOLD_FROM;
+  const shown = columns
+    .map((col, i) => ({ col, i, count: entry.counts[i] ?? 0 }))
+    .filter((x) => !fold || x.i === baseIdx || x.count > 0);
+  const hidden = columns.length - shown.length;
+  return (
+    <Card
+      tone={entry.kind === 'Task error' ? 'danger' : 'warning'}
+      compact
+      onPress={onPress}
+      isSelected={active}
+      data-testid="error-card"
+    >
+      <div className={styles.errorHead}>
+        <span className={styles.errorTitle}>{parts.title}</span>
+        <Tag kind="count">{entry.count}</Tag>
+      </div>
+      {parts.detail ? <span className={styles.errorDetail}>{parts.detail}</span> : null}
+      <ul className={styles.errorRuns}>
+        {shown.map(({ col, i, count }) => (
+          <ErrorCardRow
+            key={col.key}
+            index={col.runIdxs[0] ?? 0}
+            name={columnName(model, col)}
+            title={col.title}
+            count={count}
+            delta={i === baseIdx ? null : count - (entry.counts[baseIdx] ?? 0)}
+          />
+        ))}
+      </ul>
+      {hidden > 0 ? (
+        <span className={styles.errorDetail}>
+          {hidden} run{hidden === 1 ? '' : 's'} with none
+        </span>
+      ) : null}
+    </Card>
   );
 }

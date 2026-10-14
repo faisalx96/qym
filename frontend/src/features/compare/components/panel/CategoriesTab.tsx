@@ -1,10 +1,13 @@
 /** Performance by category: one table per metadata key, a row per value, a column per run (brief 05 J4). */
 import { useMemo, useState } from 'react';
 import { formatLatency, formatMetricValue } from '@/lib/metrics';
-import { Chip, Text } from '@/ui';
+import { Chip, SegmentedControl, Text } from '@/ui';
 import { AUTO_CATEGORIES, categoryDelta, categoryGroups, categoryKeys } from '../../lib/breakdown';
-import { letterOf, useCompare } from '../../CompareContext';
-import { DeltaTag, RunDot } from '../common';
+import { useCompare } from '../../CompareContext';
+import { columnName } from '../../lib/columnName';
+import { DeltaTag } from '../common';
+import { RunTag } from '../RunTag';
+import { CategoryCards } from './CategoryCards';
 import { ScrollRegion } from '../ScrollRegion';
 import styles from './Panel.module.css';
 
@@ -57,71 +60,6 @@ export function CategoriesTab() {
     );
   return (
     <div className={styles.stack}>
-      <Text variant="sm" tone="muted">
-        Average of {metric} per value; pressing a row filters the items to it.
-      </Text>
-      {selected.map((key) => {
-        const list = groups[key] ?? [];
-        if (!list.length) return null;
-        return (
-          <section key={key} aria-label={`By ${key}`}>
-            <Text variant="md" weight={600}>
-              {key}
-            </Text>
-            <ScrollRegion className={styles.scroll} label={`${key} breakdown`}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th scope="col">Value</th>
-                    {columns.map((col) => (
-                      <th scope="col" key={col.key} title={col.title}>
-                        <RunDot index={col.runIdxs[0] ?? 0} /> {letterOf(col.runIdxs[0] ?? 0)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.map((g) => (
-                    <tr key={g.value} data-active={active(key, g.value) || undefined}>
-                      <th scope="row">
-                        <button
-                          type="button"
-                          className={styles.rowButton}
-                          aria-pressed={active(key, g.value)}
-                          onClick={() => setFilter(key, g.value)}
-                        >
-                          {g.value} <span className={styles.count}>{g.itemIds.size}</span>
-                        </button>
-                      </th>
-                      {columns.map((col, i) => {
-                        const cell = g.cells[i]!;
-                        const base = g.cells[baseIdx];
-                        const d =
-                          i !== baseIdx && base && cell.score !== null && base.score !== null
-                            ? categoryDelta(model, col, baseline, ctx, cell, base)
-                            : null;
-                        return (
-                          <td key={col.key}>
-                            <div className={styles.cell}>
-                              <span className={styles.value}>
-                                {cell.score === null ? '—' : formatMetricValue(cell.score, type, 0)}
-                              </span>
-                              <span className={styles.sub}>
-                                {cell.latency === null ? '' : formatLatency(cell.latency)}
-                              </span>
-                              {d ? <DeltaTag stats={d} type={type} metric={metric} /> : null}
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </ScrollRegion>
-          </section>
-        );
-      })}
       <div className={styles.chipRow} role="group" aria-label="Metadata keys">
         {keys.map(({ key, count }) => (
           <Chip
@@ -134,6 +72,97 @@ export function CategoriesTab() {
           </Chip>
         ))}
       </div>
+      {selected.map((key, rank) => {
+        const list = groups[key] ?? [];
+        if (!list.length) return null;
+        return (
+          <section key={key} aria-label={`By ${key}`}>
+            <Text variant="md" weight={600}>
+              {key}
+            </Text>
+            {c.view.catView === 'cards' ? (
+              <CategoryCards
+                keyName={key}
+                groups={list}
+                rank={rank}
+                active={(value) => active(key, value)}
+                onPick={(value) => setFilter(key, value)}
+              />
+            ) : (
+              <ScrollRegion className={styles.scroll} label={`${key} breakdown`}>
+                <table className={`${styles.table} ${styles.fixed}`}>
+                  <thead>
+                    <tr>
+                      <th scope="col">Value</th>
+                      {columns.map((col) => (
+                        <th scope="col" key={col.key} title={col.title}>
+                          <RunTag index={col.runIdxs[0] ?? 0} name={columnName(model, col)} compact />
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((g) => (
+                      <tr key={g.value} data-active={active(key, g.value) || undefined}>
+                        <th scope="row">
+                          <button
+                            type="button"
+                            className={styles.rowButton}
+                            aria-pressed={active(key, g.value)}
+                            onClick={() => setFilter(key, g.value)}
+                          >
+                            {g.value} <span className={styles.count}>{g.itemIds.size}</span>
+                          </button>
+                        </th>
+                        {columns.map((col, i) => {
+                          const cell = g.cells[i]!;
+                          const base = g.cells[baseIdx];
+                          const d =
+                            i !== baseIdx && base && cell.score !== null && base.score !== null
+                              ? categoryDelta(model, col, baseline, ctx, cell, base)
+                              : null;
+                          return (
+                            <td key={col.key}>
+                              <div className={styles.cell}>
+                                <span className={styles.value}>
+                                  {cell.score === null ? '—' : formatMetricValue(cell.score, type, 0)}
+                                </span>
+                                <span className={styles.sub}>
+                                  {cell.latency === null ? '' : formatLatency(cell.latency)}
+                                </span>
+                                {d ? <DeltaTag stats={d} type={type} metric={metric} /> : null}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollRegion>
+            )}
+          </section>
+        );
+      })}
     </div>
+  );
+}
+
+/** Cards | Table switch for the Categories section header (`catView=table` in the URL). */
+export function CategoryViewToggle() {
+  const { model, items, c } = useCompare();
+  const idSet = useMemo(() => new Set(items.map((i) => i.itemId)), [items]);
+  const keys = useMemo(() => categoryKeys(model, idSet), [model, idSet]);
+  if (!keys.length) return null;
+  return (
+    <SegmentedControl<'cards' | 'table'>
+      label="Categories view"
+      value={c.view.catView}
+      onChange={(v) => c.setView({ catView: v })}
+      options={[
+        { value: 'cards', label: 'Cards' },
+        { value: 'table', label: 'Table' },
+      ]}
+    />
   );
 }

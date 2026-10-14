@@ -1,78 +1,9 @@
-/** Run chips (baseline star, remove), the cohort banner with inline-editable labels, and the metric / pass controls. */
+/** The cohort banner with inline-editable labels, and the metric / baseline / pass controls. */
 import { useState } from 'react';
-import {
-  Button,
-  Chip,
-  IconButton,
-  RunStatusBadge,
-  Select,
-  SegmentedControl,
-  Tag,
-  Text,
-  TextField,
-} from '@/ui';
+import { IconButton, Select, SegmentedControl, Tag, Text, TextField } from '@/ui';
 import { useCompare, letterOf } from '../CompareContext';
-import { MIN_COMPARE_RUNS } from '../lib/refs';
-import { RunDot } from './common';
+import { columnName } from '../lib/columnName';
 import styles from './SelectionBar.module.css';
-
-export function RunChips() {
-  const { model, c, baseline, columns } = useCompare();
-  const bases = model.bases;
-  const removable = bases.length > MIN_COMPARE_RUNS;
-  // "Each pass" lists every pass as its own candidate baseline; otherwise one chip per run.
-  const each = c.view.columns === 'each' && columns.some((col) => col.pass);
-  const entries = each
-    ? columns.map((col) => ({
-        key: col.key,
-        base: col.base,
-        idx: col.runIdxs[0] ?? 0,
-        label: col.label,
-        isBase: baseline.key === col.key,
-      }))
-    : bases.map((base) => {
-        const idx = model.runs.findIndex((r) => r.base === base);
-        const run = model.runs[idx];
-        return {
-          key: base,
-          base,
-          idx,
-          label: (run?.label ?? base).replace(/ · pass \d+$/, ''),
-          isBase: baseline.base === base,
-        };
-      });
-  return (
-    <div className={styles.chips} role="group" aria-label="Runs in this comparison">
-      {entries.map(({ key, base, idx, label, isBase }) => {
-        const run = model.runs[idx];
-        if (!run) return null;
-        const status = String(run.run.status).toUpperCase();
-        // Anything but a finished run is flagged on its chip: its numbers may be partial.
-        const unfinished = !['COMPLETED', 'APPROVED', 'SUBMITTED'].includes(status);
-        return (
-          <Chip
-            key={key}
-            isSelected={isBase}
-            onChange={() => c.setView({ baseline: key })}
-            aria-label={`${letterOf(idx)} ${label}${unfinished ? `, ${status.toLowerCase()}` : ''}${isBase ? ', baseline' : ', set as baseline'}`}
-            removeLabel={`Remove ${label} from the comparison`}
-            onRemove={removable ? () => c.removeRun(base) : undefined}
-          >
-            <RunDot index={idx} />
-            <span className={styles.letter}>{letterOf(idx)}</span> {label}
-            {isBase ? <span className={styles.baseMark}> {'★'} Baseline</span> : null}
-            {unfinished ? (
-              <>
-                {' '}
-                <RunStatusBadge status={status} label={status} />
-              </>
-            ) : null}
-          </Chip>
-        );
-      })}
-    </div>
-  );
-}
 
 function CohortSide({ side }: { side: 'left' | 'right' }) {
   const { cohorts, c } = useCompare();
@@ -167,30 +98,34 @@ export function MetricSelect() {
   );
 }
 
-export function SelectionBar() {
-  const { cohorts, c, model } = useCompare();
-  // The baseline is a per-run concept: Sweep compares two cohorts, so no baseline to reset there.
-  const sweep = !!cohorts && c.view.tab === 'sweep';
-  const hasPasses = model.runs.some((r) => r.pass);
-  const showReset = !sweep;
+const RESET_KEY = '__reset-baseline__';
+
+/** Which column every change is measured against (a star on a run card sets it too); also resets thresholds. */
+export function BaselineSelect() {
+  const { columns, baseline, model, c } = useCompare();
+  if (columns.length < 2) return null;
+  const dirty = !!c.view.baseline || Object.keys(c.view.thresholds).length > 0;
+  const items = [
+    ...columns.map((col) => {
+      const idx = col.runIdxs[0] ?? 0;
+      const name = columnName(model, col);
+      return { key: col.key, label: `${letterOf(idx)}  ${name}` };
+    }),
+    ...(dirty ? [{ key: RESET_KEY, label: 'Reset baseline and thresholds' }] : []),
+  ];
   return (
-    <div className={styles.bar}>
-      {cohorts ? null : <RunChips />}
-      {hasPasses || showReset ? (
-        <div className={styles.tools}>
-          <PassToggle />
-          {showReset ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              isDisabled={!c.view.baseline && !Object.keys(c.view.thresholds).length}
-              onPress={() => c.setView({ baseline: null, thresholds: {} })}
-            >
-              Reset baseline
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+    <Select
+      label="Baseline"
+      hideLabel
+      value={baseline.key}
+      onChange={(k) => {
+        if (k === null) return;
+        if (k === RESET_KEY) c.setView({ baseline: null, thresholds: {} });
+        else c.setView({ baseline: String(k) });
+      }}
+      items={items}
+      searchable="auto"
+      width={200}
+    />
   );
 }

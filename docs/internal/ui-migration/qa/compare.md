@@ -231,6 +231,22 @@ sections (`#compare-averages|overview|categories|steps|errors|root-cause|items`)
 `?panel=` and hashes scroll to them. Run cards are always visible (collapsed behind "Run details" above 4 runs). A
 quick-filter sidebar appears only while a scope is active. The deferred list below is unchanged.
 
+## Redesign 2 mapping (2026-10-14)
+
+| Was | Now |
+|---|---|
+| Sticky block of run chips, delta pills and nav (128 to 200 px) | One 44 px `CompareBar`: nav, metric select, baseline select (with "Reset baseline and thresholds"), "N of M" count; below 1200 px the selects sit in a "View" popover; static on phones |
+| Run chips with X and baseline star | Run cards (always visible; compact 3-up at 5 to 8 runs, auto-fill beyond): X, "Set as baseline", stat strip; the baseline switcher is the bar select |
+| Delta pills in the sticky block | "Changes vs baseline" strip at the top of the Items section (same `aria-label`, `li[data-column]`) |
+| Pass toggle in the selection bar | Per-run averages section header |
+| Runs-as-rows averages table | `AveragesMatrix` (DataTable): metric rows, run columns, `ScoreValue` pill, `DeltaTag`, count buttons; cards per run below 768 px |
+| Category table | Category cards with baseline tick (`ScoreBar marker`); `catView=table` keeps the table |
+| Error chips | Error cards with a per-run table (count, change vs baseline); runs with none fold above 6 runs |
+| Expanded item wrapped grid, per-card metric details | One row of runs (horizontal scroll with snap), run-colour rail, aligned metric details under every run (Escape closes), All / Only differing outputs, Best tag |
+
+Letters are now `RunTag` (swatch, letter, name); hovering or keyboard-focusing a run dims the other runs everywhere.
+New sort "Biggest change vs baseline". Specs: `e2e/compare/redesign.spec.ts`.
+
 ## Deferred
 
 Fix list items 1-18 are all addressed; two are deliberately narrower than the old page.

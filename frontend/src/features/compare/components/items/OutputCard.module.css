@@ -96,16 +96,25 @@
 
 .caret {
   display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
   padding: 0;
   border: 0;
   background: none;
   color: var(--text-muted);
+  text-align: start;
   cursor: pointer;
 }
 
+.caret:hover,
+.caret[aria-expanded='true'] {
+  color: var(--text-primary);
+}
+
 .metricName {
-  flex: 1;
-  color: var(--text-secondary);
+  color: inherit;
   font-size: var(--font-sm);
 }
 

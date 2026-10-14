@@ -11,14 +11,8 @@ import { gotoApp } from '../helpers';
 import { runUrl } from '../run-detail/support';
 import { createLaunchAreas, seedTour, settled, type AreasWorld, type Tour } from './support';
 
-/** Dead on hover today, fixed by the area application that owns the page. */
-const PENDING = new Set<string>([
-  // compare (A3): run segments, distribution bars and matrix row buttons
-  'compare button._seg',
-  'compare button._distBar',
-  'compare button._rowButton',
-  'compare button._errorCard',
-]);
+/** Dead on hover today, fixed by the area application that owns the page (empty: the audit is strict). */
+const PENDING = new Set<string>([]);
 
 let tour: Tour;
 let areas: AreasWorld;

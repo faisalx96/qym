@@ -1,59 +1,12 @@
 .page {
+  --compare-bar-h: 44px;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
   min-width: 0;
 }
 
-.sticky {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-sm) 0;
-  background: var(--bg-base);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.chrome {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-/* Short viewports (laptops): only the section nav stays stuck; the chips and delta line scroll away. */
-@media (max-height: 999px) {
-  .sticky {
-    top: calc(-1 * var(--compare-chrome-h, 0px) - 2 * var(--space-sm));
-  }
-}
-
-/* The run chips plus the delta rows stack to about a quarter of a phone screen: let them scroll away. */
-@media (max-width: 640px) {
-  .sticky {
-    position: static;
-  }
-}
-
-.body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-lg);
-  align-items: start;
-}
-
-.body[data-panel] {
-  grid-template-columns: minmax(0, 1fr) minmax(24rem, 34rem);
-}
-
-.main {
-  min-width: 0;
-}
-
-@media (max-width: 1100px) {
-  .body[data-panel] {
-    grid-template-columns: minmax(0, 1fr);
-  }
+/* The hosts of the sticky bar and the run-focus root add no box: the page flex column and sticky parents stay. */
+.focusRoot {
+  display: contents;
 }

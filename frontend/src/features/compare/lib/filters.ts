@@ -25,7 +25,14 @@ import {
   rootCauseCategories,
   rowHasEditedMetric,
 } from '@/features/run-detail/lib/rowMeta';
-import { columnItemScores, deltaKind, metricColumns, type DeltaKind, type PassColumns } from './baseline';
+import {
+  columnItemScores,
+  deltaKind,
+  metricColumns,
+  resolveBaseline,
+  type DeltaKind,
+  type PassColumns,
+} from './baseline';
 import { computeGroupedComparison, type CohortGroups } from './cohort';
 import type { CompareModel } from './model';
 import { itemOutcomes, metricCtx, type MetricCtx } from './scoring';
@@ -68,7 +75,7 @@ export interface CompareFilters {
   categories: Record<string, string[]>;
 }
 
-export const SORT_VALUES = ['score_asc', 'score_desc', 'latency_asc', 'latency_desc'] as const;
+export const SORT_VALUES = ['score_asc', 'score_desc', 'latency_asc', 'latency_desc', 'change_desc'] as const;
 export type SortBy = 'index' | (typeof SORT_VALUES)[number];
 export const SHOW_VALUES = [
   'different',
@@ -96,6 +103,8 @@ export interface CompareView {
   columns: PassColumns;
   /** `thr=metric:0.7` (new, additive: shareable pass thresholds, Q9). */
   thresholds: Record<string, number>;
+  /** Categories section: cards (default) or the table; `catView=table`. */
+  catView: 'cards' | 'table';
 }
 
 export const emptyGroup = (): FilterGroup => ({ op: 'and', children: [] });
@@ -126,6 +135,7 @@ export const emptyView = (): CompareView => ({
   baseline: null,
   columns: 'run',
   thresholds: {},
+  catView: 'cards',
 });
 
 /* ── URL codec ── */
@@ -298,6 +308,7 @@ export function readView(params: URLSearchParams, ctx: DecodeContext): CompareVi
   v.baseline = params.get('baseline') || null;
   v.columns = params.get('columns') === 'passes' ? 'each' : 'run';
   v.thresholds = parseThresholds(params.getAll('thr'));
+  v.catView = params.get('catView') === 'table' ? 'table' : 'cards';
   v.filters = decodeFiltersParam(params.get('filters'), ctx);
   return v;
 }
@@ -320,6 +331,7 @@ export function writeView(
     baseline: v.baseline,
     columns: v.columns === 'each' ? 'passes' : null,
     thr: Object.entries(v.thresholds).map(([m, t]) => `${m}:${t}`),
+    catView: v.catView === 'table' ? 'table' : null,
   };
 }
 
@@ -595,10 +607,19 @@ export interface ApplyResult {
   defs: FieldDef[];
 }
 
-function outputIdentity(row: Row | null): string {
+export function outputIdentity(row: Row | null): string {
   if (!row) return '';
   if (row.output_digest === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855') return '';
   return String(row.output_digest ?? (row.output_full || row.output || ''));
+}
+
+/**
+ * "Only differing outputs": per run, whether it stays visible. The baseline run always does; any other run is hidden
+ * when its output equals the baseline's (the identity the `different` filter uses). Missing rows stay as they are.
+ */
+export function visibleWhenOnlyDiffering(rows: ReadonlyArray<Row | null>, baselineIdx: number): boolean[] {
+  const base = outputIdentity(rows[baselineIdx] ?? null);
+  return rows.map((row, i) => i === baselineIdx || !row || outputIdentity(row) !== base);
 }
 
 export function rowText(row: Row | null): string {
@@ -795,6 +816,14 @@ export function applyFilters(input: ApplyInput): ApplyResult {
     keyed.sort((a, b) => (view.sort === 'score_asc' ? a[0] - b[0] : b[0] - a[0]));
     return { items: keyed.map((k) => k[1]), stats, defs };
   }
+  if (view.sort === 'change_desc') {
+    const columns = metricColumns(model, view.columns);
+    const base = resolveBaseline(columns, view.baseline);
+    const baseIdxs = base ? base.runIdxs : [0];
+    const keyed = out.map((item) => [changeMagnitude(item.scores, baseIdxs), item] as const);
+    keyed.sort((a, b) => b[0] - a[0]);
+    return { items: keyed.map((k) => k[1]), stats, defs };
+  }
   if (view.sort === 'latency_asc' || view.sort === 'latency_desc') {
     const low = (item: FilteredItem) => {
       const vals = item.rows.filter((r) => r?.latency_ms).map((r) => r!.latency_ms as number);
@@ -805,6 +834,23 @@ export function applyFilters(input: ApplyInput): ApplyResult {
     return { items: keyed.map((k) => k[1]), stats, defs };
   }
   return { items: out, stats, defs };
+}
+
+/** Sum of the absolute paired differences of every other run from the baseline's score on one item. */
+export function changeMagnitude(
+  scores: ReadonlyArray<number | null>,
+  baselineIdxs: readonly number[],
+): number {
+  const baseVals = baselineIdxs
+    .map((i) => scores[i])
+    .filter((s): s is number => s !== null && s !== undefined);
+  if (!baseVals.length) return 0;
+  const base = baseVals.reduce((a, b) => a + b, 0) / baseVals.length;
+  let total = 0;
+  scores.forEach((s, i) => {
+    if (s !== null && s !== undefined && !baselineIdxs.includes(i)) total += Math.abs(s - base);
+  });
+  return total;
 }
 
 /** Rules + page filters, for the badge on the Filters button. */

@@ -80,3 +80,21 @@ export function pillState(
 export const runReadOnly = (run: CompareRun) => !!run.run.project?.archived;
 export const runScoresLocked = (run: CompareRun) =>
   ['SUBMITTED', 'APPROVED'].includes(String(run.run.status).toUpperCase());
+
+/**
+ * The run with the unique best score on an item (null on ties, no declared direction, fewer than two scores, or
+ * when any run errored on it). `states` are the runs' pill states in run order.
+ */
+export function uniqueBestRun(
+  scores: ReadonlyArray<number | null>,
+  states: readonly PillState[],
+  direction: MetricDirection,
+): number | null {
+  if (!direction || states.includes('error')) return null;
+  const valid = scores.map((s, i) => ({ s, i })).filter((x): x is { s: number; i: number } => x.s !== null);
+  if (valid.length < 2) return null;
+  const sign = direction === 'minimize' ? -1 : 1;
+  const best = Math.max(...valid.map((x) => sign * x.s));
+  const winners = valid.filter((x) => sign * x.s === best);
+  return winners.length === 1 ? winners[0]!.i : null;
+}

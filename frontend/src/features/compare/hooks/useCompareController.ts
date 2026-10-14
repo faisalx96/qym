@@ -131,7 +131,13 @@ export function useCompareController(): CompareController {
     (patch, opts) => {
       // Any filter-like change returns to page 1 unless the caller says otherwise.
       const resets = Object.keys(patch).some(
-        (k) => k !== 'page' && k !== 'item' && k !== 'tab' && k !== 'columns' && k !== 'baseline',
+        (k) =>
+          k !== 'page' &&
+          k !== 'item' &&
+          k !== 'tab' &&
+          k !== 'columns' &&
+          k !== 'baseline' &&
+          k !== 'catView',
       );
       write({ ...view, ...patch, page: patch.page ?? (resets && !opts?.keepPage ? 1 : view.page) });
     },

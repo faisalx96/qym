@@ -35,6 +35,7 @@ const SORT: Record<SortBy, string> = {
   score_desc: 'Score, high to low',
   latency_asc: 'Latency, fast to slow',
   latency_desc: 'Latency, slow to fast',
+  change_desc: 'Biggest change vs baseline',
 };
 const SLOT: Record<string, ErrorSlot> = {
   'Task error': 'task',

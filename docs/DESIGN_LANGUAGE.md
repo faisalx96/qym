@@ -409,6 +409,14 @@ is not allowed.
   fail = band 1, task error = an open `--error` ring on the axis, latency bulk is `--bg-active` and only the tail is
   `--score-3` (p90) and `--score-2` (p95), series come from `--chart-1..8`. A scatter shows two faint quadrant washes
   (fast and passing, slow and failing) and a legend with the same swatches. Hit areas are at least 24px.
+- **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
+  (`--chart-1..8`, `runColor`/`runSeries` in `CompareContext`), the mono letter (the unique key beyond 8 runs and for
+  colour-blind readers) and the name (`run_name`, label as fallback, truncated, full label in the tooltip). Run
+  colour is identity, never verdict: text is never run-coloured. Elements that belong to a run carry
+  `useRunMark(index)` (`data-mark`, `data-series`, hover and keyboard focus-visible handlers) inside the page's
+  `SeriesHighlightRoot`, so hovering a run dims every other run's cards, cells, rows and legend entries (no layout
+  change; instant under reduced motion). `ScoreBar` takes `marker` (a decorative tick at the baseline position, used by
+  compare category cards) and `height="md"`.
 - **Motion** (`ui/motion`, tokens `--motion-fill` 360ms, `--ease-out`, `--motion-stagger` 24ms, `--motion-flash` 700ms):
   M1 colour changes use `--transition-fast`; M2 data marks (bar fills, histogram bars, rings, scatter dots) grow in once
   per mount (`data-enter` from `useEntrance`, which a container turns off for rows that scroll in later) with a stagger of

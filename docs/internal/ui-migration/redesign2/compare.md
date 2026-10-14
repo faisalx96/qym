@@ -263,3 +263,15 @@ Risks:
 8. New tokens only `--chart-6..8`; new `ScoreBar marker`; no other primitive changes besides `DataTable` column `maxWidth`.
 9. Biggest risk: e2e specs coupled to sticky chrome layout (rewrite in T2).
 10. Evidence: screenshots in scratchpad `cmp2/shots/`; servers on 8875, 8876, 5876 stopped.
+
+## Decisions
+
+- Two runs of different models open in the sides layout (Compare/Sweep, no Baseline select, no remove): intended, it matches round 1 and the legacy auto-cohort. Run cards carry a "Side A/B" tag there.
+- Run colours 6 to 8 keep the legacy hues (close to 1 to 3); letter and name disambiguate.
+
+## Deferred
+
+| Item | What is left | Why / estimate |
+|---|---|---|
+| T3 | The baseline column of the averages matrix has no `--bg-hover` fill (DataTable cells cannot be styled per column); the baseline is marked by the star in the header and the word "baseline" in each cell | Needs a per-column cell class in `DataTable`; 0.5 h |
+| T7 | Hovered item cell tooltip keeps the existing `Run label: spoken value` title rather than `name . value (+delta vs baseline)` | Low value; 0.5 h |

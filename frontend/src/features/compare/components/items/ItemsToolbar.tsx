@@ -17,6 +17,7 @@ const SORT_LABEL: Record<SortBy, string> = {
   score_desc: 'Score, high to low',
   latency_asc: 'Latency, fast to slow',
   latency_desc: 'Latency, slow to fast',
+  change_desc: 'Biggest change vs baseline',
 };
 
 export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
@@ -125,6 +126,10 @@ export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
         </Popover>
         <Text variant="sm" tone="muted" className={styles.count} role="status">
           {items.length} of {model.itemIds.length} items{searchPending ? ' · searching…' : ''}
+        </Text>
+        <Text variant="sm" tone="muted" className={styles.legend}>
+          <span className={styles.railWarn} aria-hidden /> a run regressed vs baseline
+          <span className={styles.railError} aria-hidden /> error
         </Text>
         {count || c.view.q ? (
           <Button size="sm" variant="ghost" onPress={() => c.setView(clearedView())}>

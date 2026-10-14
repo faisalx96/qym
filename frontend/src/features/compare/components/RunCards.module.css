@@ -5,26 +5,44 @@
   min-width: 0;
 }
 
-.head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-}
-
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  min-width: 0;
-}
-
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr));
   gap: var(--space-sm);
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* 5 to 8 runs: three across (two below 1100px), two lines per card */
+.cards[data-variant='compact'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cards[data-variant='dense'] {
+  grid-template-columns: repeat(auto-fill, minmax(min(13rem, 100%), 1fr));
+}
+
+@media (max-width: 1100px) {
+  .cards[data-variant='compact'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .cards,
+  .cards[data-variant='compact'],
+  .cards[data-variant='dense'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.item {
+  min-width: 0;
+}
+
+.runCard {
+  height: 100%;
 }
 
 .stack {
@@ -36,24 +54,70 @@
 .cardHead {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-sm);
   min-width: 0;
 }
 
-.letter {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  color: var(--text-primary);
+.cardHead > :first-child {
+  flex: 1 1 auto;
+  min-width: 4rem;
 }
 
-.name {
+.cardHead > :not(:first-child) {
+  flex: none;
+}
+
+.badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
   min-width: 0;
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+.line {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+  margin: 0;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.stat dd {
+  margin: 0;
   color: var(--text-primary);
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 650;
+}
+
+.stat[data-danger] dd {
+  color: var(--error-text);
+}
+
+.stat dt {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
 }
 
 .facts {

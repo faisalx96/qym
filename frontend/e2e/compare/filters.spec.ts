@@ -1,6 +1,14 @@
 /** Scenarios 3, 4 and 8: count-button filters, Overview tab, the rule builder, search, Display and panel chips. */
 import { expect, test, type Page } from '@playwright/test';
-import { compareUrl, expectShown, seedScenario, urlParams, waitLoaded, goSection } from './support';
+import {
+  averagesGrid,
+  compareUrl,
+  expectShown,
+  seedScenario,
+  urlParams,
+  waitLoaded,
+  goSection,
+} from './support';
 import type { CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -57,7 +65,7 @@ test('count button in the delta line filters the list; chip and Clear restore it
 
 test('count button in the Metrics table selects that metric and filters the list', async ({ page }) => {
   await open4(page);
-  const table = page.getByRole('table', { name: /Average per run/ });
+  const table = averagesGrid(page);
   const btn = table.getByRole('button', { name: '9 items improved vs baseline on correct; filter items' });
   await btn.click();
   await expectShown(page, 9);
@@ -90,7 +98,7 @@ test('Overview: threshold slider changes Pass@K and is written to ?thr=', async 
   await page.keyboard.press('ArrowLeft'); // 65 -> 60
   await expect.poll(() => urlParams(page).getAll('thr')).toEqual(['quality:0.6']);
   await expect.poll(strip).not.toBe(before);
-  await expect(page.getByText(/A run passes when its score is/)).toContainText('60');
+  await expect(page.locator('#compare-overview')).toContainText(/a run passes when its score is .*60/);
 });
 
 test('Overview: Winner bar and Runs-correct distribution bars set filter chips', async ({ page }) => {
@@ -252,8 +260,8 @@ test('Categories and Errors tabs: pressing a row / card filters the items and ad
 }) => {
   await open4(page);
   await goSection(page, 'Categories');
-  const easy = page.getByRole('button', { name: /^easy \d+$/ }).first();
-  const n = Number(/(\d+)$/.exec((await easy.innerText()).trim())![1]);
+  const easy = page.getByTestId('category-card').filter({ hasText: /^easy/ }).first();
+  const n = Number(/^easy\s*(\d+)/i.exec((await easy.innerText()).trim())![1]);
   await easy.click();
   await expectShown(page, n);
   await expect(pageChips(page)).toContainText('Complexity: easy');
@@ -262,7 +270,10 @@ test('Categories and Errors tabs: pressing a row / card filters the items and ad
   await expectShown(page, 40);
 
   await goSection(page, 'Errors');
-  const card = page.getByRole('button', { name: /TimeoutError/ }).first();
+  const card = page
+    .getByTestId('error-card')
+    .filter({ hasText: /TimeoutError/ })
+    .first();
   await expect(card).toBeVisible();
   await card.click();
   await expect(pageChips(page)).toContainText(/Task error/);

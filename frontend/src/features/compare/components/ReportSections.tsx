@@ -1,20 +1,22 @@
 /** The compare report: stacked full-width sections in legacy order, a jump nav with scroll-spy, and section anchors. */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
+import { metricDirectionLabel, passThresholdLabel } from '@/lib/metrics';
 import { alignToElement } from '@/lib/scrollToElement';
 import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
 import { ReportSection } from '@/ui';
 import { useCompare } from '../CompareContext';
 import { useScope } from '../hooks/useScope';
 import { hasAnyRootCause } from '../lib/breakdown';
-import { CategoriesTab } from './panel/CategoriesTab';
+import { CategoriesTab, CategoryViewToggle } from './panel/CategoriesTab';
 import { ErrorsTab } from './panel/ErrorsTab';
 import { MetricsTab } from './panel/MetricsTab';
-import { OverviewTab } from './panel/OverviewTab';
+import { OverviewControls, OverviewTab } from './panel/OverviewTab';
 import { RootCauseTab } from './panel/RootCauseTab';
 import { StepsTab } from './panel/StepsTab';
 import { ItemsSection } from './items/ItemsSection';
 import { RunCards } from './RunCards';
+import { PassToggle } from './SelectionBar';
 import styles from './ReportSections.module.css';
 
 export type SectionKey =
@@ -137,7 +139,7 @@ export function useSectionAnchor(): void {
 }
 
 export function CompareReport() {
-  const { metric } = useCompare();
+  const { metric, ctx, model } = useCompare();
   const scope = useScope();
   const sections = useSectionList();
   const has = (k: SectionKey) => sections.some((s) => s.key === k);
@@ -145,6 +147,8 @@ export function CompareReport() {
     ? `over ${scope.shown.toLocaleString('en-US')} of ${scope.total.toLocaleString('en-US')} items`
     : undefined;
   useSectionAnchor();
+  const passes = ctx.direction && !ctx.isBoolean && model.types[metric] !== 'numeric';
+  const overviewDescription = `Pass rates, winners and how many runs got each item right for ${metric}. ${metricDirectionLabel(ctx.direction)}${passes ? `; a run passes when its score is ${passThresholdLabel(ctx.threshold, ctx.direction)}` : ''}.`;
   return (
     <>
       <ReportSection
@@ -157,24 +161,27 @@ export function CompareReport() {
       <ReportSection
         id={sectionDomId('averages')}
         title="Per-run averages"
-        description={`Average per run with the paired change from the baseline and its noise band.`}
+        description="Average per run with the paired change from the baseline and its 95% noise band; press a count to filter the items."
         scopeNote={note}
+        aside={<PassToggle />}
       >
         <MetricsTab />
       </ReportSection>
       <ReportSection
         id={sectionDomId('overview')}
         title="Comparison overview"
-        description={`Pass rates, winners and how many runs got each item right for ${metric}.`}
+        description={overviewDescription}
         scopeNote={note}
+        aside={<OverviewControls />}
       >
         <OverviewTab />
       </ReportSection>
       <ReportSection
         id={sectionDomId('categories')}
         title="Performance by category"
-        description="Average per metadata value and run; press a row to filter the items."
+        description="Average per metadata value and run, against the baseline tick; press a card to filter the items."
         scopeNote={note}
+        aside={<CategoryViewToggle />}
         lazy
         minHeight={200}
       >

@@ -13,14 +13,22 @@ import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
 import { platformUrl } from '@/lib/runtime';
 import { KEYS, readLocal } from '@/lib/storage';
-import { EmptyState, ErrorState, LinkButton, PageHeader, SegmentedControl, Skeleton, useToast } from '@/ui';
+import {
+  EmptyState,
+  ErrorState,
+  LinkButton,
+  PageHeader,
+  SegmentedControl,
+  SeriesHighlightRoot,
+  Skeleton,
+  useToast,
+} from '@/ui';
 import { CompareCtx, type CompareValue } from './CompareContext';
-import { DeltaLine } from './components/DeltaLine';
+import { CompareBar } from './components/CompareBar';
 import { CompareBody } from './components/CompareBody';
 import { ItemsUiHost } from './components/items/ItemsUi';
 import { Notices } from './components/Notices';
-import { ReportNav } from './components/ReportSections';
-import { CohortBanner, SelectionBar } from './components/SelectionBar';
+import { CohortBanner } from './components/SelectionBar';
 import { SweepView } from './components/sweep/SweepView';
 import { DetailsProvider, useNewDetailsStore } from './hooks/useDetails';
 import { useCompareController, type CompareController } from './hooks/useCompareController';
@@ -176,30 +184,23 @@ function CompareLoaded({
     () => (c.ctx ? computeComparisonStats(model, c.ctx, itemIds) : null),
     [model, c.ctx, itemIds],
   );
-  const stickyRef = useRef<HTMLDivElement>(null);
-  const chromeRef = useRef<HTMLDivElement>(null);
-  // Sections and the sticky toolbar offset themselves by the real height of the sticky chrome.
+  const barRef = useRef<HTMLDivElement>(null);
+  // Sections and the sticky toolbar offset themselves by the real height of the sticky bar.
   const stuck =
     !!info && !!metric && !!c.ctx && !!result && !!stats && !(c.view.tab === 'sweep' && !!c.cohorts);
   useEffect(() => {
-    const el = stickyRef.current;
-    const host = el?.parentElement;
+    const el = barRef.current?.querySelector<HTMLElement>('[data-compare-sticky]');
+    const host = barRef.current;
     if (!el || !host || typeof ResizeObserver === 'undefined') return undefined;
-    const chrome = chromeRef.current;
-    // On a short viewport the run chips and delta line scroll away (negative sticky top); only the nav stays.
-    const short = window.matchMedia('(max-height: 999px)');
     const set = () => {
-      const chromeH = chrome ? chrome.offsetHeight : 0;
-      host.style.setProperty('--compare-chrome-h', `${chromeH}px`);
-      host.style.setProperty('--report-nav-h', `${el.offsetHeight - (short.matches ? chromeH + 16 : 0)}px`);
+      host.style.setProperty('--report-nav-h', `${el.offsetHeight}px`);
+      host.style.setProperty('--compare-chrome-h', `${el.offsetHeight}px`);
     };
     set();
     const ro = new ResizeObserver(set);
     ro.observe(el);
-    short.addEventListener('change', set);
     return () => {
       ro.disconnect();
-      short.removeEventListener('change', set);
       host.style.removeProperty('--report-nav-h');
       host.style.removeProperty('--compare-chrome-h');
     };
@@ -270,16 +271,12 @@ function CompareLoaded({
       />
       <Notices />
       {c.cohorts ? <CohortBanner /> : null}
-      {sweep ? null : (
-        <div ref={stickyRef} className={styles.sticky} data-compare-sticky="">
-          <div ref={chromeRef} className={styles.chrome}>
-            <SelectionBar />
-            <DeltaLine info={info} />
-          </div>
-          <ReportNav />
-        </div>
-      )}
-      <ItemsUiHost>{sweep ? <SweepView /> : <CompareBody />}</ItemsUiHost>
+      <div ref={barRef} className={styles.focusRoot}>
+        <SeriesHighlightRoot className={styles.focusRoot}>
+          {sweep ? null : <CompareBar />}
+          <ItemsUiHost>{sweep ? <SweepView /> : <CompareBody />}</ItemsUiHost>
+        </SeriesHighlightRoot>
+      </div>
     </CompareCtx.Provider>
   );
 }

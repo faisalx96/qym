@@ -1,0 +1,42 @@
+/* Run identity: swatch + letter + name. The swatch carries the run colour; text is never run-coloured. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-primary);
+  font-size: var(--font-base);
+  vertical-align: middle;
+}
+
+.tag[data-compact] {
+  font-size: var(--font-sm);
+}
+
+.swatch {
+  flex: none;
+  inline-size: 0.625rem;
+  block-size: 0.625rem;
+  border-radius: var(--radius-sm);
+}
+
+.letter {
+  flex: none;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.name {
+  min-width: 0;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.star {
+  flex: none;
+  color: var(--text-muted);
+}

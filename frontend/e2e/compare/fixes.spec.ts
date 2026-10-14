@@ -1,6 +1,7 @@
 /** QA fix list (docs/internal/ui-migration/qa/compare.md): run cards, score pills, per-pass baseline, export, trace rows, small defects. */
 import { expect, test, type Page } from '@playwright/test';
 import {
+  baselineSelect,
   client,
   cohortUrl,
   compareUrl,
@@ -138,7 +139,7 @@ test('C020 run cards show status, counts and dataset version; the chip flags an 
 }) => {
   await page.goto(compareUrl([fix.a, fix.b, fix.c]));
   await waitLoaded(page);
-  await expect(page.getByRole('group', { name: 'Runs in this comparison' })).toContainText('RUNNING');
+  await expect(page.getByRole('list', { name: 'Runs in this comparison' })).toContainText('RUNNING');
   // up to four runs the cards are always visible (no toggle)
   await expect(page.getByRole('button', { name: 'Run details' })).toHaveCount(0);
   const cards = page.getByTestId('run-card');
@@ -149,6 +150,7 @@ test('C020 run cards show status, counts and dataset version; the chip flags an 
   await expect(b).toContainText('6');
   await expect(b).toContainText('cmp-fix-v1');
   await expect(page.getByText('What differs between the runs')).toBeVisible();
+  await page.getByRole('button', { name: /What differs between the runs/ }).click();
   await expect(page.getByRole('row', { name: /temperature/ })).toContainText('0.9');
 });
 
@@ -156,11 +158,11 @@ test('C029 Each pass lists every pass as a baseline candidate', async ({ page })
   const { repeat3, base } = seed.runs;
   await page.goto(compareUrl([repeat3, base], { columns: 'passes' }));
   await waitLoaded(page);
-  const chips = page.getByRole('group', { name: 'Runs in this comparison' });
-  await expect(chips.getByRole('button', { name: /pass 2/ })).toBeVisible();
-  await chips.getByRole('button', { name: /pass 2.*set as baseline/ }).click();
+  await baselineSelect(page).click();
+  await expect(page.getByRole('option', { name: /pass 2/ })).toBeVisible();
+  await page.getByRole('option', { name: /pass 2/ }).click();
   await expect.poll(() => urlParams(page).get('baseline')).toMatch(/pass2$/);
-  await expect(chips.getByRole('button', { name: /pass 2.*, baseline/ })).toBeVisible();
+  await expect(baselineSelect(page)).toContainText(/pass 2/);
 });
 
 test('C107/C108 the compare export carries averages, deltas, the winner strip and the item diff', async () => {

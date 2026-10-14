@@ -173,12 +173,13 @@ export function VisualLanguageGallery() {
             </Stack>
           </Stack>
         </Case>
-        <Case label="ScoreBar (grow-in, series, lg)">
+        <Case label="ScoreBar (grow-in, series, marker, lg)">
           <Stack gap="sm">
             <ScoreBar value={0.92} direction="higher" width={120} />
             <ScoreBar value={0.45} direction="higher" width={120} index={1} />
             <ScoreBar value={0.2} direction="higher" width={120} index={2} />
             <ScoreBar value={0.7} series={2} width={120} />
+            <ScoreBar value={0.7} series={4} width={120} height="md" marker={0.5} />
             <ScoreBar value={0.82} direction="higher" size="lg" />
             <ScoreBar value={0.18} direction="higher" size="lg" />
           </Stack>

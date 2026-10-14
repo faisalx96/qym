@@ -35,10 +35,12 @@ export interface ScoreBarProps {
   index?: number;
   /** Flash a faint tint when the value changes (a live value on a running run). */
   live?: boolean;
-  /** A baseline tick on the track in the same units as `value` (e.g. the overall average of a category table). */
+  /** A baseline tick on the track in the same units as `value` (the baseline to beat, or a category table's overall average). */
   marker?: number | null;
   /** Accessible/hover name of the marker (default "Overall average"). */
   markerLabel?: string;
+  /** Track thickness for 'sm' bars: 'sm' = 6px (default), 'md' = 10px. */
+  height?: 'sm' | 'md';
 }
 
 function normDirection(d: ScoreBarProps['direction']): MetricDirection {
@@ -67,6 +69,7 @@ export function ScoreBar({
   index,
   live,
   marker,
+  height = 'sm',
   markerLabel = 'Overall average',
 }: ScoreBarProps) {
   const enter = useEntrance();
@@ -101,7 +104,7 @@ export function ScoreBar({
       className={styles.scoreBar}
       data-band={band ?? undefined}
       data-series={band ? undefined : series}
-      data-size={size === 'lg' ? 'lg' : undefined}
+      data-size={size === 'lg' ? 'lg' : height === 'md' ? 'md' : undefined}
       data-changed={flash ? '' : undefined}
       style={
         color || width
@@ -123,6 +126,7 @@ export function ScoreBar({
             className={styles.marker}
             style={{ insetInlineStart: `${markerPct(marker, max)}%` }}
             title={markerLabel}
+            aria-hidden="true"
             data-testid="score-marker"
           />
         ) : null}

@@ -1,5 +1,5 @@
 /** Expanded item: input, expected output, metadata and one output card per compared run (bodies load lazily). */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button, Chip, CopyButton, Tag } from '@/ui';
 import { bodyText } from '@/features/run-detail/lib/itemText';
@@ -9,7 +9,12 @@ import {
   itemMetadataBadgeValues,
   itemMetadataDisplayValue,
 } from '@/features/run-detail/lib/rowMeta';
-import { letterOf, useCompare } from '../../CompareContext';
+import { runSeries, useCompare } from '../../CompareContext';
+import { runShortName } from '../../lib/labels';
+import { visibleWhenOnlyDiffering } from '../../lib/filters';
+import { pillState, uniqueBestRun } from '../../lib/rowCells';
+import { RunTag, useRunMark } from '../RunTag';
+import { MetricPanelCell } from './MetricPanel';
 import { useDetailsStore, useEnsureBodies, useResolvedRows } from '../../hooks/useDetails';
 import { Collapsible, OutputCard } from './OutputCard';
 import { useItemsUi } from './ItemsUi';
@@ -17,15 +22,44 @@ import styles from './ItemDetail.module.css';
 
 const INITIAL_CARDS = 8;
 
+/** A grid item in one run's column; it joins the run focus linking. */
+function Slot({
+  index,
+  column,
+  row,
+  children,
+}: {
+  index: number;
+  column: number;
+  row: 1 | 2;
+  children: ReactNode;
+}) {
+  const mark = useRunMark(index);
+  return (
+    <div className={styles.slot} style={{ gridColumn: column, gridRow: row }} {...mark}>
+      {children}
+    </div>
+  );
+}
+
 export function ItemDetail({ itemId }: { itemId: string }) {
-  const { model } = useCompare();
+  const { model, ctx, baseline } = useCompare();
   const ui = useItemsUi();
+  const [openMetric, setOpenMetric] = useState<string | null>(null);
   const store = useDetailsStore();
   const location = useLocation();
   const resolved = useResolvedRows(model.runs, itemId);
   const ensure = useEnsureBodies(model.runs);
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [all, setAll] = useState(false);
+  useEffect(() => {
+    if (!openMetric) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMetric(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [openMetric]);
   useEffect(() => {
     void ensure([itemId]);
   }, [ensure, itemId]);
@@ -58,6 +92,21 @@ export function ItemDetail({ itemId }: { itemId: string }) {
       typeof v !== 'object',
   );
   const link = `${window.location.origin}${location.pathname}?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(location.search)), item: itemId }).toString()}`;
+  const baseIdx = baseline.runIdxs[0] ?? 0;
+  const differing = useMemo(
+    () =>
+      visibleWhenOnlyDiffering(
+        resolved.map((r) => r.row ?? null),
+        baseIdx,
+      ),
+    [resolved, baseIdx],
+  );
+  const states = model.runs.map((run, i) => pillState(run, resolved[i]?.row ?? null, ctx));
+  const bestIdx = uniqueBestRun(
+    states.map((p) => p.score),
+    states.map((p) => p.state),
+    ctx.direction,
+  );
   const cards = resolved.map((r, i) => ({ r, i })).filter((x) => x.r.row && !hidden.has(x.i));
   const shown = all ? cards : cards.slice(0, INITIAL_CARDS);
   return (
@@ -114,37 +163,75 @@ export function ItemDetail({ itemId }: { itemId: string }) {
         </div>
       ) : null}
       {model.runs.length > 1 ? (
-        <div className={styles.toggles} role="group" aria-label="Runs shown">
-          {model.runs.map((run, i) =>
-            resolved[i]?.row ? (
-              <Chip
-                key={run.ref}
-                isSelected={!hidden.has(i)}
-                onChange={(on) =>
-                  setHidden((h) => {
-                    const n = new Set(h);
-                    if (on) n.delete(i);
-                    else n.add(i);
-                    return n;
-                  })
-                }
-              >
-                {letterOf(i)} {run.label}
-              </Chip>
-            ) : null,
-          )}
+        <div className={styles.toggleRow}>
+          <span className={styles.label}>Output</span>
+          <div className={styles.toggles} role="group" aria-label="Runs shown">
+            {model.runs.map((run, i) =>
+              resolved[i]?.row ? (
+                <Chip
+                  key={run.ref}
+                  isSelected={!hidden.has(i)}
+                  series={runSeries(i)}
+                  onChange={(on) =>
+                    setHidden((h) => {
+                      const n = new Set(h);
+                      if (on) n.delete(i);
+                      else n.add(i);
+                      return n;
+                    })
+                  }
+                >
+                  <RunTag index={i} name={runShortName(run)} title={run.label} compact bare />
+                </Chip>
+              ) : null,
+            )}
+          </div>
+          <Button size="sm" variant="ghost" onPress={() => setHidden(new Set())}>
+            All
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onPress={() =>
+              setHidden(new Set(differing.map((keep, i) => (keep ? -1 : i)).filter((i) => i >= 0)))
+            }
+          >
+            Only differing outputs
+          </Button>
         </div>
       ) : null}
-      <div className={styles.grid}>
-        {shown.map(({ r, i }) => (
-          <OutputCard
-            key={model.runs[i]!.ref}
-            run={model.runs[i]!}
-            runIndex={i}
-            row={r.row!}
-            itemId={itemId}
-          />
-        ))}
+      <div className={styles.scroller} data-testid="output-grid">
+        <div
+          className={styles.grid}
+          data-open={openMetric ? '' : undefined}
+          style={shown.length <= 4 ? ({ '--col-min': '16rem' } as React.CSSProperties) : undefined}
+        >
+          {shown.map(({ r, i }, col) => (
+            <Slot key={model.runs[i]!.ref} index={i} column={col + 1} row={1}>
+              <OutputCard
+                run={model.runs[i]!}
+                runIndex={i}
+                row={r.row!}
+                itemId={itemId}
+                openMetric={openMetric}
+                onOpenMetric={setOpenMetric}
+                best={bestIdx === i}
+              />
+            </Slot>
+          ))}
+          {openMetric
+            ? shown.map(({ r, i }, col) => (
+                <Slot key={`${model.runs[i]!.ref}:panel`} index={i} column={col + 1} row={2}>
+                  <MetricPanelCell
+                    metric={openMetric}
+                    row={r.row!}
+                    runIndex={i}
+                    name={runShortName(model.runs[i]!)}
+                  />
+                </Slot>
+              ))
+            : null}
+        </div>
       </div>
       {!all && cards.length > INITIAL_CARDS ? (
         <Button size="sm" variant="neutral" onPress={() => setAll(true)}>

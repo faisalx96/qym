@@ -2,18 +2,21 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Badge, DataTable, ScoreBar, type Column, type Key } from '@/ui';
 import type { Row } from '@/features/run-detail/types';
-import { letterOf, useCompare } from '../../CompareContext';
-import { metricCellFor, pillState } from '../../lib/rowCells';
-import { deltaKind } from '../../lib/baseline';
+import { letterOf, runColor, useCompare } from '../../CompareContext';
+import { metricCellFor, pillState, uniqueBestRun } from '../../lib/rowCells';
+import { columnName } from '../../lib/columnName';
+import { deltaKind, type MetricColumn } from '../../lib/baseline';
 import type { FilteredItem } from '../../lib/filters';
 import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
-import { RunDot } from '../common';
+import { RunTag, useRunMark } from '../RunTag';
 import { ItemDetail } from './ItemDetail';
 import { useItemsUi } from './ItemsUi';
 import styles from './ItemList.module.css';
 
 export const PAGE_SIZE = 20;
 const HEAT_FROM = 5;
+/** Beyond this many runs the header shows swatch and letter only. */
+const NAMES_UNTIL = 6;
 
 const WORD = { pass: 'Pass', fail: 'Fail', error: 'Error', none: 'No score' } as const;
 const GLYPH = { pass: '✓', fail: '✗', error: '⚠', none: '—' } as const;
@@ -33,6 +36,9 @@ function RunCell({ item, runIdx, numericMax }: { item: FilteredItem; runIdx: num
     !ctx.isBoolean && row && p.score !== null && p.state !== 'error'
       ? metricCellFor(model, run, row, ctx.metric)
       : null;
+  const states = model.runs.map((r, i) => pillState(r, item.rows[i] ?? null, ctx).state);
+  const best = uniqueBestRun(item.scores, states, ctx.direction) === runIdx;
+  const mark = useRunMark(runIdx);
   const word = WORD[p.state];
   const moveWord =
     move === 'improved' ? ', better than baseline' : move === 'regressed' ? ', worse than baseline' : '';
@@ -74,9 +80,23 @@ function RunCell({ item, runIdx, numericMax }: { item: FilteredItem; runIdx: num
     );
   }
   return (
-    <span className={styles.cell} data-state={p.state} title={`${run.label}: ${spoken.slice(2)}`}>
+    <span
+      className={styles.cell}
+      data-state={p.state}
+      data-best={best || undefined}
+      title={`${run.label}: ${spoken.slice(2)}`}
+      {...mark}
+    >
+      {model.runs.length >= HEAT_FROM ? (
+        <span className={styles.swatch} style={{ background: runColor(runIdx) }} aria-hidden />
+      ) : null}
       <span aria-hidden={dense ? undefined : true}>{body}</span>
       {cue}
+      {best ? (
+        <span className={styles.best} role="img" aria-label="best">
+          {'★'}
+        </span>
+      ) : null}
       <span className={styles.srOnly}>{spoken}</span>
     </span>
   );
@@ -107,6 +127,14 @@ export function ItemList() {
     [slice, clamped],
   );
   const dense = model.runs.length > HEAT_FROM;
+  const columnOf = (i: number): MetricColumn => ({
+    key: model.runs[i]!.ref,
+    base: model.runs[i]!.base,
+    runIdxs: [i],
+    pass: model.runs[i]!.pass,
+    label: model.runs[i]!.label,
+    title: model.runs[i]!.title,
+  });
   // The detail row spans the whole (scrollable) table; its content stays as wide as the visible list.
   const hasItems = items.length > 0;
   const listRef = useRef<HTMLDivElement>(null);
@@ -194,6 +222,7 @@ export function ItemList() {
       priority: 1,
       flex: true,
       minWidth: 220,
+      maxWidth: 576,
       wrap: 2,
       resizable: false,
       cell: (it) => it.rows.find((r) => r)?.input_preview || it.itemId,
@@ -201,16 +230,19 @@ export function ItemList() {
     ...model.runs.map((run, i): Column<FilteredItem> => ({
       id: letterOf(i),
       header: (
-        <span className={styles.runHead}>
-          <RunDot index={i} />
-          {letterOf(i)}
-          {baseline.runIdxs.includes(i) ? <span aria-label="baseline"> ★</span> : null}
-        </span>
+        <RunTag
+          index={i}
+          compact
+          name={columnName(model, columnOf(i))}
+          showName={model.runs.length <= NAMES_UNTIL}
+          baseline={baseline.runIdxs.includes(i)}
+          title={`${run.label}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}`}
+        />
       ),
       label: `${letterOf(i)}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}`,
       priority: 2,
-      hint: `${run.label}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}`,
-      width: dense ? 76 : 148,
+      hint: dense ? `${run.label}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}` : undefined,
+      ...(dense ? { width: 96 } : { minWidth: 148, maxWidth: 220, flex: true }),
       resizable: false,
       cell: (it) => <RunCell item={it} runIdx={i} numericMax={numericMax} />,
     })),
