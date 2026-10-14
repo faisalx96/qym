@@ -154,4 +154,23 @@ test.describe('runs table redesign', () => {
     await expect(page.getByTestId('data-table')).toHaveAttribute('data-density', 'comfortable');
     await expect(page.getByTestId('status-bar').getByRole('combobox')).toBeVisible();
   });
+
+  test('a keyboard-focused row is framed by a visible accent band, not just its inner link', async ({
+    page,
+    request,
+  }) => {
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    await page.keyboard.press('Tab');
+    const row = dataRows(page).first();
+    await row.focus();
+    const ring = await row.evaluate((tr) => {
+      const first = getComputedStyle(tr.querySelector('td:first-child')!).boxShadow;
+      const middle = getComputedStyle(tr.querySelector('td:nth-child(3)')!).boxShadow;
+      return { first, middle };
+    });
+    // 2px accent top and bottom on every cell; the first cell also closes the start edge
+    expect(ring.middle).toContain('0px 2px 0px');
+    expect(ring.first).toContain('2px 0px 0px');
+  });
 });

@@ -41,6 +41,10 @@ test.describe('home', () => {
       'true',
     );
     await expect(page.getByRole('button', { name: 'Launch as is' })).toBeDisabled();
+    // Before an environment is picked every start card is disabled alike: "From scratch" is not highlighted either.
+    const scratch = page.getByRole('radio', { name: /From scratch/ });
+    await expect(scratch).toHaveAttribute('aria-disabled', 'true');
+    await expect(scratch).not.toBeChecked();
     // The short path holds neither priority, versioning details nor any section.
     await expect(page.getByLabel('Priority')).toHaveCount(0);
     await expect(page.getByLabel('Versioning details')).toHaveCount(0);

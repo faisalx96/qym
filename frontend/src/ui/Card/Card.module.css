@@ -18,8 +18,12 @@
     box-shadow var(--transition-fast);
 }
 
-.card[data-rail] {
+.card[data-rail='left'] {
   border-inline-start: var(--rail-width) solid var(--tone);
+}
+
+.card[data-rail='bottom'] {
+  border-block-end: var(--rail-width) solid var(--tone);
 }
 
 .card[data-wash='danger'] {
@@ -61,8 +65,12 @@
   box-shadow: var(--shadow-card-hover);
 }
 
-.card[data-interactive][data-rail]:hover {
+.card[data-interactive][data-rail='left']:hover {
   border-inline-start-color: var(--tone);
+}
+
+.card[data-interactive][data-rail='bottom']:hover {
+  border-block-end-color: var(--tone);
 }
 
 .card[data-interactive]:active {
@@ -74,8 +82,12 @@
   background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--bg-surface));
 }
 
-.card[data-selected][data-rail] {
+.card[data-selected][data-rail='left'] {
   border-inline-start-color: var(--tone);
+}
+
+.card[data-selected][data-rail='bottom'] {
+  border-block-end-color: var(--tone);
 }
 
 .card[data-selected][data-interactive]:hover {

@@ -348,7 +348,7 @@ function DetailBody({
             : []),
           ...(active ? [<span key="source">source: {active.source_type}</span>] : []),
           ...(active?.published_by
-            ? [<UserPill key="pub" user={active.published_by} label="Published By:" />]
+            ? [<UserPill key="pub" user={active.published_by} label="Published by:" />]
             : []),
           ...(active?.created_by
             ? [<UserPill key="drafted" user={active.created_by} label="Drafted By:" />]

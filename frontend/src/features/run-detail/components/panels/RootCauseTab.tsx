@@ -1,7 +1,7 @@
 /** Root cause categories across items, aggregate and auto-analyze actions (brief 04 §3h). */
 import { useMemo, useState } from 'react';
 import { useAggregateAnalysis } from '@/api/runs';
-import { Button, LinkButton, Select, Tag, useToast } from '@/ui';
+import { Button, Card, LinkButton, Select, Tag, useToast } from '@/ui';
 import { getRowRootCauseAnalyses, rootCauseCategories, rootCauseIssues } from '../../lib/rowMeta';
 import { useRunPage } from '../../RunContext';
 import { messageFor } from '../items/ScoreEditor';
@@ -87,14 +87,14 @@ export function RootCauseTab() {
         {categories.map(([cat, entry]) => {
           const on = active.some((a) => a.toLowerCase() === cat.toLowerCase());
           return (
-            <button
+            <Card
               key={cat}
-              type="button"
-              className={styles.cardButton}
-              aria-pressed={on}
+              compact
+              tone="neutral"
+              isSelected={on}
               data-testid="root-cause-card"
-              style={{ borderInlineStartWidth: 3, borderInlineStartColor: toneFor(cat) }}
-              onClick={() => {
+              style={{ '--tone': toneFor(cat) } as React.CSSProperties}
+              onPress={() => {
                 if (on) api.setFilters({ rootCause: null, rootCauseMetric: 'all' });
                 else api.setFilters({ rootCause: [cat], rootCauseMetric: metric });
               }}
@@ -110,7 +110,7 @@ export function RootCauseTab() {
                     .join(' · ')}
                 </span>
               ) : null}
-            </button>
+            </Card>
           );
         })}
       </div>

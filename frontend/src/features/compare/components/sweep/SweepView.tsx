@@ -4,6 +4,7 @@ import { metricDirectionLabel } from '@/lib/metrics';
 import {
   Badge,
   Button,
+  Card,
   Checkbox,
   Dialog,
   EmptyState,
@@ -108,7 +109,14 @@ function StatCard({
   const tone = verdict === 'improved' ? 'success' : verdict === 'regressed' ? 'danger' : undefined;
   const word = verdict === 'improved' ? 'improved' : verdict === 'regressed' ? 'regressed' : 'within noise';
   return (
-    <div className={styles.stat} data-verdict={verdict}>
+    <Card
+      compact
+      rail="bottom"
+      tone={tone ?? 'neutral'}
+      className={styles.stat}
+      data-verdict={verdict}
+      data-testid="sweep-stat"
+    >
       <div className={styles.statLabel}>
         {label}
         {help ? (
@@ -134,7 +142,7 @@ function StatCard({
           )}
         </div>
       ) : null}
-    </div>
+    </Card>
   );
 }
 
@@ -404,36 +412,51 @@ export function SweepView() {
         </header>
 
         {basis ? (
-          <div className={styles.verdict} data-verdict={basis.stat.verdict} role="status">
-            <Badge
-              tone={
-                basis.stat.verdict === 'improved'
-                  ? 'success'
-                  : basis.stat.verdict === 'regressed'
-                    ? 'danger'
-                    : 'neutral'
-              }
-            >
-              {basis.stat.verdict === 'improved'
-                ? 'IMPROVED'
+          <Card
+            compact
+            tone={
+              basis.stat.verdict === 'improved'
+                ? 'success'
                 : basis.stat.verdict === 'regressed'
-                  ? 'REGRESSED'
-                  : 'WITHIN NOISE'}
-            </Badge>
-            <div>
-              <Text variant="md" weight={600}>
-                {basis.label} {signed(basis.stat.delta)} {'—'}{' '}
-                {basis.stat.verdict === 'within_noise' ? 'not distinguishable from run luck' : 'beyond noise'}
-              </Text>
-              <Text variant="sm" tone="muted">
-                {ctx.metric}
-                {direction === 'minimize' ? ' · lower is better' : ''} {'·'} noise {'±'}
-                {(basis.stat.halfWidth * 100).toFixed(1)}% at 95% {'·'}{' '}
-                {basis.stat.pValue < 0.001 ? 'p < 0.001' : `p = ${basis.stat.pValue.toFixed(3)}`} {'·'}{' '}
-                {basis.stat.items} paired items {'·'} {metricRole} {'—'} other metrics below are context
-              </Text>
+                  ? 'danger'
+                  : 'neutral'
+            }
+            data-verdict={basis.stat.verdict}
+            role="status"
+          >
+            <div className={styles.verdict}>
+              <Badge
+                tone={
+                  basis.stat.verdict === 'improved'
+                    ? 'success'
+                    : basis.stat.verdict === 'regressed'
+                      ? 'danger'
+                      : 'neutral'
+                }
+              >
+                {basis.stat.verdict === 'improved'
+                  ? 'IMPROVED'
+                  : basis.stat.verdict === 'regressed'
+                    ? 'REGRESSED'
+                    : 'WITHIN NOISE'}
+              </Badge>
+              <div>
+                <Text variant="md" weight={600}>
+                  {basis.label} {signed(basis.stat.delta)} {'—'}{' '}
+                  {basis.stat.verdict === 'within_noise'
+                    ? 'not distinguishable from run luck'
+                    : 'beyond noise'}
+                </Text>
+                <Text variant="sm" tone="muted">
+                  {ctx.metric}
+                  {direction === 'minimize' ? ' · lower is better' : ''} {'·'} noise {'±'}
+                  {(basis.stat.halfWidth * 100).toFixed(1)}% at 95% {'·'}{' '}
+                  {basis.stat.pValue < 0.001 ? 'p < 0.001' : `p = ${basis.stat.pValue.toFixed(3)}`} {'·'}{' '}
+                  {basis.stat.items} paired items {'·'} {metricRole} {'—'} other metrics below are context
+                </Text>
+              </div>
             </div>
-          </div>
+          </Card>
         ) : null}
         <Text variant="sm" tone="muted">
           {metricDirectionLabel(direction)}
@@ -650,27 +673,29 @@ export function SweepView() {
                   const active =
                     kind === 'move' ? f.move === value : kind === 'outcome' ? f.outcome === value : false;
                   return (
-                    <button
+                    <Card
                       key={String(label)}
-                      type="button"
+                      compact
                       className={styles.outcome}
-                      aria-pressed={kind ? active : undefined}
-                      disabled={!kind}
-                      onClick={() =>
-                        kind === 'move'
-                          ? setF({ move: active ? 'all' : (value as SweepMove) })
-                          : setF({ outcome: active ? 'all' : (value as SweepOutcome) })
+                      isSelected={kind ? active : undefined}
+                      onPress={
+                        kind
+                          ? () =>
+                              kind === 'move'
+                                ? setF({ move: active ? 'all' : (value as SweepMove) })
+                                : setF({ outcome: active ? 'all' : (value as SweepOutcome) })
+                          : undefined
                       }
                     >
                       <span className={styles.outcomeValue}>{String(n)}</span>
                       <span className={styles.outcomeLabel}>{String(label)}</span>
-                    </button>
+                    </Card>
                   );
                 })}
-                <div className={styles.outcome}>
+                <Card compact className={styles.outcome}>
                   <span className={styles.outcomeValue}>{summary.counts.avgAttemptsDelta.toFixed(2)}</span>
                   <span className={styles.outcomeLabel}>Avg {'Δ'} attempts / item</span>
-                </div>
+                </Card>
               </div>
             </section>
 

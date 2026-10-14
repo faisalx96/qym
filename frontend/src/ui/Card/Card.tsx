@@ -13,8 +13,11 @@ export interface CardProps {
   band?: CardBand;
   /** Rail colour from a series (a run, a model, a category group). */
   series?: CardSeries;
-  /** 'start' (default when a tone, band or series is set) or 'none' (tone without a rail). */
-  rail?: 'start' | 'none';
+  /**
+   * Where the meaning rail sits: 'left' (inline-start, the default when a tone, band or series is set), 'bottom'
+   * (a tile that reads as a gauge: sweep stats) or 'none' (tone without a rail). 'start' is the old spelling of 'left'.
+   */
+  rail?: 'left' | 'bottom' | 'none' | 'start';
   /** Faint 6% tint; only danger and live states are allowed. */
   wash?: 'danger' | 'live';
   compact?: boolean;
@@ -69,7 +72,7 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
     'data-tone': band || series ? undefined : tone,
     'data-band': band,
     'data-series': band ? undefined : series,
-    'data-rail': hasTone && rail !== 'none' ? '' : undefined,
+    'data-rail': hasTone && rail !== 'none' ? (rail === 'bottom' ? 'bottom' : 'left') : undefined,
     'data-wash': wash,
     'data-compact': compact ? '' : undefined,
     'data-selected': isSelected ? '' : undefined,

@@ -62,49 +62,6 @@
   color: var(--text-primary);
 }
 
-.cardButton {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  width: 100%;
-  padding: var(--space-sm);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--control-radius);
-  background: var(--bg-base);
-  text-align: start;
-  color: var(--text-secondary);
-  font: inherit;
-  cursor: pointer;
-}
-
-.cardButton:hover {
-  background: var(--bg-hover);
-}
-
-.cardButton:focus-visible {
-  outline: 2px solid var(--accent-primary);
-}
-
-.cardButton[aria-pressed='true'] {
-  border-color: var(--accent-primary);
-}
-
-.cardButton[data-kind='task'] {
-  border-inline-start: 3px solid var(--error);
-}
-
-.cardButton[data-kind='metric'] {
-  border-inline-start: 3px solid var(--metric-error);
-}
-
-.cardButton[data-kind='trace'] {
-  border-inline-start: 3px solid var(--warning);
-}
-
-.cardButton[data-kind='analysis'] {
-  border-inline-start: 3px solid var(--info);
-}
-
 .rowHead {
   display: flex;
   flex-wrap: wrap;
@@ -199,33 +156,6 @@
 
 .showMore:focus-visible {
   outline: 2px solid var(--accent-primary);
-}
-
-.statGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-  gap: 2px;
-  margin: 0;
-}
-
-.stat2 {
-  padding: var(--space-sm);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-}
-
-.stat2 dt {
-  font-size: var(--font-sm);
-  font-weight: 650;
-  color: var(--text-muted);
-}
-
-.stat2 dd {
-  margin: var(--space-xs) 0 0;
-  font-family: var(--font-mono);
-  font-size: var(--font-md);
-  font-weight: 700;
-  color: var(--text-primary);
 }
 
 /* A wide table scrolls inside the panel instead of widening it. */
