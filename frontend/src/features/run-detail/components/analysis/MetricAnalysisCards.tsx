@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useIssueAction } from '@/api/runs';
 import { isItemTaskError } from '@/lib/metrics';
-import { Button, Tag, useToast, Card as UiCard } from '@/ui';
+import { Button, Disclosure, Tag, useToast } from '@/ui';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import { rootCauseCategories, rootCauseIssues } from '../../lib/rowMeta';
 import { useRunPage } from '../../RunContext';
@@ -80,16 +80,15 @@ function Card({
       { onError: (e) => toast.show(messageFor(e), { tone: 'error' }) },
     );
   return (
-    <UiCard
-      as="section"
+    <section
+      className={styles.metricRow}
       aria-label={`Root cause analysis for ${metric}`}
       data-testid="metric-analysis-card"
       data-metric={metric}
-      compact
     >
       <div className={styles.stack}>
         <header className={styles.head}>
-          <h4 className={styles.title}>Root cause · {metric}</h4>
+          <h5 className={styles.title}>{metric}</h5>
           {analysis?.error ? <Tag tone="danger">analysis failed</Tag> : null}
           {canEdit ? (
             <Button size="sm" variant="neutral" onPress={() => setDialog({ open: true, issue: null })}>
@@ -156,7 +155,7 @@ function Card({
           />
         ) : null}
       </div>
-    </UiCard>
+    </section>
   );
 }
 
@@ -202,8 +201,22 @@ export function MetricAnalysisCards({ row }: { row: Row }) {
     .filter((c): c is { metric: string; analysis: MetricAnalysis | undefined } => !!c);
   const legacy =
     !Object.keys(analyses).length && (rootCauseCategories(md).length || md.root_cause_note || md.solution);
+  const issueCount = cards.reduce((n, c) => n + rootCauseIssues(c.analysis ?? {}, false).length, 0);
+  if (!cards.length && !legacy) return null;
+  if (!cards.length) return <LegacyDiagnosis md={md} />;
+  if (issueCount === 0 && !canEdit && !cards.some((c) => c.analysis?.error)) {
+    return (
+      <p className={styles.muted} data-testid="root-cause-empty">
+        No root-cause issues assigned
+      </p>
+    );
+  }
+  const summary =
+    issueCount === 0
+      ? `no issues yet, ${cards.length} ${cards.length === 1 ? 'metric' : 'metrics'}`
+      : `${issueCount} ${issueCount === 1 ? 'issue' : 'issues'} across ${cards.length} ${cards.length === 1 ? 'metric' : 'metrics'}`;
   return (
-    <>
+    <Disclosure title="Root cause" summary={summary} className={styles.rootCause}>
       {cards.map((c) => (
         <Card
           key={c.metric}
@@ -214,26 +227,30 @@ export function MetricAnalysisCards({ row }: { row: Row }) {
           canEdit={canEdit}
         />
       ))}
-      {legacy ? (
-        <UiCard as="section" aria-label="Legacy diagnosis" compact>
-          <div className={styles.stack}>
-            <header className={styles.head}>
-              <h4 className={styles.title}>Diagnosis (legacy)</h4>
-            </header>
-            <p className={styles.finding}>
-              {rootCauseCategories(md).join(', ')}
-              {md.root_cause_detail ? ` · ${String(md.root_cause_detail)}` : ''}
-            </p>
-            {md.root_cause_note ? <p className={styles.muted}>{String(md.root_cause_note)}</p> : null}
-            {md.solution ? (
-              <p className={styles.muted}>
-                <b>Solution:</b> {String(md.solution)}
-                {md.solution_note ? ` — ${String(md.solution_note)}` : ''}
-              </p>
-            ) : null}
-          </div>
-        </UiCard>
-      ) : null}
-    </>
+      {legacy ? <LegacyDiagnosis md={md} /> : null}
+    </Disclosure>
+  );
+}
+
+function LegacyDiagnosis({ md }: { md: Record<string, unknown> }) {
+  return (
+    <section className={styles.metricRow} aria-label="Legacy diagnosis">
+      <div className={styles.stack}>
+        <header className={styles.head}>
+          <h5 className={styles.title}>Diagnosis (legacy)</h5>
+        </header>
+        <p className={styles.finding}>
+          {rootCauseCategories(md).join(', ')}
+          {md.root_cause_detail ? ` · ${String(md.root_cause_detail)}` : ''}
+        </p>
+        {md.root_cause_note ? <p className={styles.muted}>{String(md.root_cause_note)}</p> : null}
+        {md.solution ? (
+          <p className={styles.muted}>
+            <b>Solution:</b> {String(md.solution)}
+            {md.solution_note ? ` — ${String(md.solution_note)}` : ''}
+          </p>
+        ) : null}
+      </div>
+    </section>
   );
 }

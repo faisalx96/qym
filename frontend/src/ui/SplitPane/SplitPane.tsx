@@ -1,3 +1,5 @@
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex --
+   A focusable separator is the WAI-ARIA window splitter widget: it takes keys, pointer drag and focus. */
 import {
   useCallback,
   useEffect,
