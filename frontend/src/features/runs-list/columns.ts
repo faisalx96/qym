@@ -26,14 +26,14 @@ const base = (id: string, label: string, width: number, sortKey?: string): Colum
 
 export const BASE_COLUMNS: ColumnDef[] = [
   { ...base('run', 'Run', 260, 'run') },
-  base('status', 'Status', 200, 'status'),
-  { ...base('signals', 'Signals', 84), visKey: null },
-  base('task', 'Task', 100, 'task'),
-  base('model', 'Model', 150, 'model'),
-  base('dataset', 'Dataset', 120, 'dataset'),
+  base('status', 'Status', 150, 'status'),
+  { ...base('signals', 'Signals', 70), visKey: null },
+  base('task', 'Task', 92, 'task'),
+  base('model', 'Model', 132, 'model'),
+  base('dataset', 'Dataset', 112, 'dataset'),
   base('owner', 'Owner', 120, 'owner'),
   base('time', 'Date', 128, 'time'),
-  base('analysis', 'Analysis', 92),
+  base('analysis', 'Analysis', 104),
   base('experiment', 'Experiment', 110),
   base('version', 'Version', 150, 'version'),
 ];
@@ -173,18 +173,18 @@ export function buildColumns(
     DURATION_COLUMN,
     ACTIONS_COLUMN,
   ];
-  // Table order: Run, Status, Signals, first two scores, Date, the other context columns, more scores, system, trace, duration, actions.
   // The first two metric columns follow Status so a score is visible on first paint.
   const metricCols = metrics.map(metricColumn);
   const byId = (id: string) => BASE_COLUMNS.find((c) => c.id === id)!;
+  // Legacy order for what a run is (task, model, dataset) and the Analyze action, then the first score and the date,
+  // so all of them are on screen at 1440 next to the frozen Run and Status; the other context columns follow.
+  const front = ['run', 'status', 'signals', 'task', 'model', 'dataset', 'analysis'];
   const ordered = [
-    byId('run'),
-    byId('status'),
-    byId('signals'),
-    ...metricCols.slice(0, 2),
+    ...front.map(byId),
+    ...metricCols.slice(0, 1),
     byId('time'),
-    ...BASE_COLUMNS.filter((c) => !['run', 'status', 'signals', 'time', 'duration'].includes(c.id)),
-    ...metricCols.slice(2),
+    ...BASE_COLUMNS.filter((c) => ![...front, 'time', 'duration'].includes(c.id)),
+    ...metricCols.slice(1),
     ...SYSTEM_COLUMNS,
     ...TRACE_COLUMNS,
     DURATION_COLUMN,

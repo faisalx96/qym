@@ -5,13 +5,13 @@
   font-weight: 600;
 }
 
-.action[data-state='idle'] {
-  color: var(--text-secondary);
+/* idle: the plain meta button (tinted fill, sparkle); done: the same with a filled sparkle and the count */
+.action[data-state='done'] {
   background: transparent;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-tertiary) 45%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-tertiary) 55%, transparent);
 }
-.action[data-state='idle']:hover {
-  color: var(--accent-tertiary-soft);
+.action[data-state='done']:hover {
+  background: color-mix(in srgb, var(--accent-tertiary) var(--tint-soft), transparent);
 }
 
 .action[data-state='running'] {
