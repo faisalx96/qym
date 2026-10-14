@@ -91,6 +91,42 @@ describe('DataTable v2', () => {
     expect(row).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('fits an expanded detail to the visible scroller width (detailFit)', async () => {
+    const user = userEvent.setup();
+    const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 640 });
+    try {
+      const { rerender } = render(
+        <DataTable
+          aria-label="t"
+          columns={COLS}
+          rows={ROWS}
+          rowKey={(r) => r.id}
+          renderExpanded={(r) => <p>detail {r.name}</p>}
+        />,
+      );
+      screen.getAllByRole('row')[1]!.focus();
+      await user.keyboard('{ArrowRight}');
+      const hold = document.querySelector<HTMLElement>('[data-detail-hold]');
+      expect(hold).not.toBeNull();
+      expect(hold!.style.getPropertyValue('--scroller-w')).toBe('640px');
+      rerender(
+        <DataTable
+          aria-label="t"
+          columns={COLS}
+          rows={ROWS}
+          rowKey={(r) => r.id}
+          detailFit="table"
+          renderExpanded={(r) => <p>detail {r.name}</p>}
+        />,
+      );
+      expect(document.querySelector('[data-detail-hold]')).toBeNull();
+    } finally {
+      if (desc) Object.defineProperty(HTMLElement.prototype, 'clientWidth', desc);
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+    }
+  });
+
   it('moves row focus with arrows and opens with Enter', async () => {
     const user = userEvent.setup();
     const open = vi.fn();

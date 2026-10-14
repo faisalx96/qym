@@ -2,6 +2,7 @@
    This is the grid widget: rows are roving-focus stops with the key handler delegated on <tbody>,
    the scroller is a keyboard-scrollable region, and the overflow title is a progressive hint. */
 import {
+  type CSSProperties,
   Children,
   Fragment,
   isValidElement,
@@ -132,6 +133,12 @@ export interface DataTableProps<R> {
   selectOnRowClick?: boolean;
 
   renderExpanded?: (row: R) => ReactNode;
+  /**
+   * How wide an expanded detail may be. `viewport` (default): never wider than the visible part of the
+   * scroller, pinned to its start edge while the columns scroll sideways (--scroller-w). `table`: the whole
+   * table width (the legacy behaviour).
+   */
+  detailFit?: 'viewport' | 'table';
   expanded?: Set<Key>;
   onExpandedChange?: (keys: Set<Key>) => void;
   expandOnRowClick?: boolean;
@@ -281,6 +288,7 @@ function DataTableInner<R>({
   selectAllLabel = 'Select all rows',
   selectOnRowClick,
   renderExpanded,
+  detailFit = 'viewport',
   expanded: expandedProp,
   onExpandedChange,
   expandOnRowClick,
@@ -966,6 +974,20 @@ function DataTableInner<R>({
 
   const cardMode =
     useMedia('(max-width: 639px)') && responsive !== 'scroll' && visible.some((c) => c.priority);
+
+  /* visible width of the scroller, for detailFit="viewport" */
+  const [scrollerW, setScrollerW] = useState(0);
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !renderExpanded || detailFit !== 'viewport') return undefined;
+    const read = () => setScrollerW((p) => (p === el.clientWidth ? p : el.clientWidth));
+    read();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailFit, Boolean(renderExpanded), cardMode]);
   const isEmpty = !loading && !error && rows.length === 0;
   const showFilteredEmpty = isEmpty && isFiltered && filteredEmpty !== undefined;
   const emptyNode = showFilteredEmpty ? filteredEmpty : empty;
@@ -1318,7 +1340,17 @@ function DataTableInner<R>({
       bodyRows.push(
         <tr key={d.id} className={styles.detailRow} data-detail-row="" {...measure}>
           <td colSpan={colCount} role="gridcell" className={styles.detailCell}>
-            {renderExpanded?.(d.row)}
+            {detailFit === 'viewport' && scrollerW > 0 ? (
+              <div
+                className={styles.detailHold}
+                data-detail-hold=""
+                style={{ '--scroller-w': `${scrollerW}px` } as CSSProperties}
+              >
+                {renderExpanded?.(d.row)}
+              </div>
+            ) : (
+              renderExpanded?.(d.row)
+            )}
           </td>
         </tr>,
       );

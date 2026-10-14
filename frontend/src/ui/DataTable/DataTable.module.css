@@ -555,6 +555,16 @@
   position: relative;
 }
 
+/* detailFit="viewport": the expanded detail is as wide as the visible scroller and stays put while the columns scroll sideways */
+.detailHold {
+  position: sticky;
+  inset-inline-start: 0;
+  inline-size: var(--scroller-w, 100%);
+  max-inline-size: 100%;
+  box-sizing: border-box;
+  contain: layout;
+}
+
 /* One continuous rail above the nested cards (an inset shadow is painted under their backgrounds). */
 .detailCell::before {
   content: '';
