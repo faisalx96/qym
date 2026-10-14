@@ -27,7 +27,11 @@
 }
 
 .trigger[data-hovered] .title {
-  color: var(--text-primary);
+  color: var(--accent-primary);
+}
+
+.trigger[data-hovered] .chevron {
+  color: var(--accent-primary);
 }
 
 .trigger[data-focus-visible] {
