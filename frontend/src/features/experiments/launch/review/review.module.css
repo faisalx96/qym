@@ -119,6 +119,10 @@
   overflow-wrap: anywhere;
 }
 
+.problemLink:hover {
+  color: var(--text-primary);
+}
+
 .problemLink:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
