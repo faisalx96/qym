@@ -181,6 +181,8 @@ test.describe('analysis metric and threshold', () => {
     await page.getByRole('button', { name: /Analysis metric/ }).click();
     await page.getByRole('listbox').getByRole('option', { name: 'hallucination' }).click();
     await expect.poll(() => params(page).get('metric')).toBe('hallucination');
+    // the URL changes before the transition commits: click Fail once the page shows the new metric
+    await expect(page.getByRole('button', { name: /Analysis metric/ })).toContainText('hallucination');
     await page.getByRole('radio', { name: 'Fail' }).click({ force: true });
     await expect(page.getByTestId('filter-banner')).toContainText('hallucination');
   });

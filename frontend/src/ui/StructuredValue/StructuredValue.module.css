@@ -142,6 +142,8 @@
 }
 
 .tableWrap {
+  inline-size: 100%;
+  max-inline-size: 48rem;
   display: flex;
   flex-direction: column;
   align-items: flex-start;

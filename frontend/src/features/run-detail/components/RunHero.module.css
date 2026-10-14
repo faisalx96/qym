@@ -146,6 +146,11 @@
   color: var(--accent-primary);
 }
 
+/* a link around a Tag keeps the tag's own colour: hover dims it instead */
+.metaLink:hover > * {
+  opacity: 0.8;
+}
+
 .datasetCell,
 .modelCell {
   display: inline-flex;

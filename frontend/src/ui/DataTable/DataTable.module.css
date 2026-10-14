@@ -144,6 +144,11 @@
 }
 
 /* Page-scroller sticky header: cells are translated by --head-shift (set from the scroll handler). */
+.table:not([data-shift]) {
+  /* a table nested in an expanded detail must not inherit the outer header's sticky shift */
+  --head-shift: 0px;
+}
+
 .table[data-shift] .thead th {
   transform: translateY(var(--head-shift, 0px));
   z-index: 3;
