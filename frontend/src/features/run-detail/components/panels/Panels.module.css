@@ -333,3 +333,46 @@
 .table td[data-tone='danger'] {
   color: var(--error-text);
 }
+
+/* Errors as rows: severity glyph (colour and shape), message, items, count. */
+.sev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--error);
+  font-size: var(--font-base);
+}
+
+.sev[data-kind='metric'] {
+  color: var(--metric-error);
+}
+
+.sev[data-kind='trace'] {
+  color: var(--warning);
+}
+
+.sev[data-kind='analysis'] {
+  color: var(--info);
+}
+
+.errMsg {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.errTitle {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.errDetail {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
