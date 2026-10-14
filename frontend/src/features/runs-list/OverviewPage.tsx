@@ -490,7 +490,7 @@ function Card({
       header={
         <header className={styles.cardHead}>
           <div className={styles.cardTitle}>
-            <Text variant="md" as="h2">
+            <Text variant="lg" as="h2">
               {title}
             </Text>
             {description ? (

@@ -11,13 +11,13 @@ interface CardProps {
   id?: string;
 }
 
-/** Section card: --font-md title, muted description, optional header aside. */
+/** Section card: --font-xl section title, muted description, optional header aside. */
 export function Card({ title, description, aside, children, className, id }: CardProps) {
   const uid = useId();
   const head = (
     <header className={s.cardHead}>
       <div className={s.cardTitles}>
-        <Text variant="md" weight={600} id={`${uid}-t`} as="h3">
+        <Text variant="xl" id={`${uid}-t`} as="h3">
           {title}
         </Text>
         {description ? (

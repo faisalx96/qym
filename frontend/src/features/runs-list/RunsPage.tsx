@@ -1,7 +1,7 @@
 /** /projects/:slug — the runs list (brief 03 J1–J6). Variant A "dense table" per UX_DECISION. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, EmptyState, StaleBanner, useToast } from '@/ui';
+import { Button, EmptyState, StaleBanner, Text, useToast } from '@/ui';
 import { useAnalyzingRuns } from '@/api/analysis';
 import { readPersisted } from '@/ui/DataTable/model';
 import { useAuth, useDocumentTitle, useProjectContext } from '@/features/shell';
@@ -481,7 +481,9 @@ export function RunsPage() {
   return (
     <RunsCtx.Provider value={ctx}>
       <div className={styles.runs} data-testid="runs-page" ref={pageRef}>
-        <h1 className={styles.srOnly}>Runs</h1>
+        <Text variant="title" as="h1" className={styles.srOnly}>
+          Runs
+        </Text>
         {stale && d.updatedAt ? (
           <StaleBanner
             since={d.updatedAt}

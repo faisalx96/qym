@@ -140,7 +140,9 @@ export function ChartsPage() {
   return (
     <RunsCtx.Provider value={ctx}>
       <div className={styles.screen} data-density="compact" data-testid="charts-page">
-        <h1 className={styles.srOnly}>Charts</h1>
+        <Text variant="title" as="h1" className={styles.srOnly}>
+          Charts
+        </Text>
         <RunsToolbar
           mode="charts"
           view={view}
@@ -161,7 +163,7 @@ export function ChartsPage() {
         />
         <div className={styles.head}>
           <div>
-            <Text variant="lg" as="h2">
+            <Text variant="xl" as="h2">
               Metrics by task and dataset
             </Text>
             <Text variant="sm" tone="muted" as="p">
@@ -459,7 +461,7 @@ function TaskCard({
       data-testid={`chart-card-${task}`}
     >
       <header className={styles.cardHead}>
-        <Text variant="md" as="h3" id={`card-${task}`} className={styles.cardTitle}>
+        <Text variant="lg" as="h3" id={`card-${task}`} className={styles.cardTitle}>
           {task}
         </Text>
         <Text variant="sm" tone="muted" as="span" mono>
