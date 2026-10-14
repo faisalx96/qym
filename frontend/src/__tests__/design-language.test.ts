@@ -4,7 +4,7 @@
  * text-colour ramp, mono-for-data, themed surfaces, and the primitive
  * module contracts. Read the doc before "fixing" a rule here.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fg from 'fast-glob';
@@ -88,6 +88,37 @@ describe('typography tokens', () => {
     }
     const shell = read(join(SRC, 'styles/shell.css'));
     for (const decl of ['--shell-font-sm: 13px', '--shell-font-md: 15px']) expect(shell).toContain(decl);
+  });
+
+  it('self-hosts the Plex faces and nothing else', () => {
+    const css = read(join(SRC, 'styles/tokens.css'));
+    expect(css).toMatch(/--font-sans:\s*'Qym Sans', 'Qym Arabic', 'Qym Sans Fallback'/);
+    expect(css).toMatch(/--font-mono:\s*'Qym Mono', 'Qym Arabic', 'Qym Mono Fallback'/);
+    expect(css).toContain('font-display: swap');
+    expect(css).toContain('size-adjust');
+    const families = new Set(
+      [...css.matchAll(/@font-face\s*\{\s*font-family:\s*'([^']+)'/g)].map((m) => m[1]),
+    );
+    expect([...families].sort()).toEqual(
+      ['Qym Arabic', 'Qym Mono', 'Qym Mono Fallback', 'Qym Sans', 'Qym Sans Fallback'].sort(),
+    );
+    const dir = join(SRC, 'styles/fonts');
+    const files = readdirSync(dir);
+    const woff2 = files.filter((f) => f.endsWith('.woff2'));
+    expect(woff2.length).toBeGreaterThan(0);
+    for (const f of woff2) expect(css, `${f} is not referenced by tokens.css`).toContain(`./fonts/${f}`);
+    expect(
+      files.filter((f) => f.startsWith('OFL')).length,
+      'a licence file per family',
+    ).toBeGreaterThanOrEqual(3);
+    const total = woff2.reduce((n, f) => n + statSync(join(dir, f)).size, 0);
+    expect(total, 'font payload budget (bytes)').toBeLessThan(200_000);
+    // no component names a family of its own
+    const problems = cssFiles
+      .filter((f) => rel(f) !== 'styles/tokens.css')
+      .filter((f) => /font-family:\s*(?![\s]|var\(|inherit)/.test(read(f)))
+      .map((f) => rel(f));
+    expect(problems).toEqual([]);
   });
 
   it('defines the shared scale in one place only', () => {
@@ -374,9 +405,9 @@ describe('visual language (redesign round 2)', () => {
       '--tint-soft: 12%',
       '--tint-strong: 20%',
       '--error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary))',
-      '--chart-6: #ea580c',
-      '--chart-7: #6366f1',
-      '--chart-8: #a3e635',
+      '--chart-6: #a3e635',
+      '--chart-7: #22d3ee',
+      '--chart-8: #cbd5e1',
       '--rail-width: 3px',
       '--ease-out: cubic-bezier(0.16, 1, 0.3, 1)',
       '--motion-fill: 360ms',

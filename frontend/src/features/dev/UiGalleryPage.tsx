@@ -176,6 +176,46 @@ export default function UiGalleryPage() {
             </Text>
           </Stack>
         </Case>
+        <Case label="Typeface specimen (Plex Sans / Arabic / Mono)" wide>
+          <Stack gap="xs" data-testid="gallery-specimen">
+            {(['title', 'xl', 'lg', 'md', 'base', 'sm'] as const).map((v) => (
+              <Text key={v} variant={v}>
+                Evaluation run نتيجة التقييم 0123456789 {v}
+              </Text>
+            ))}
+            <Text variant="base" style={{ fontWeight: 400 }}>
+              Weight 400 Regular · وزن عادي · Il1 O0 rn m
+            </Text>
+            <Text variant="base" style={{ fontWeight: 500 }}>
+              Weight 500 Medium · وزن متوسط · Il1 O0 rn m
+            </Text>
+            <Text variant="base" style={{ fontWeight: 600 }}>
+              Weight 600 SemiBold · وزن شبه عريض · Il1 O0 rn m
+            </Text>
+            <Text variant="base" style={{ fontWeight: 700 }}>
+              Weight 700 Bold · وزن عريض · Il1 O0 rn m
+            </Text>
+            <div
+              role="presentation"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'max-content max-content',
+                gap: '0 12px',
+                justifyContent: 'start',
+                fontVariantNumeric: 'tabular-nums',
+                textAlign: 'end',
+              }}
+            >
+              {['1,111.00', '98.40', '7.05', '100.0', '0.00'].flatMap((n) => [
+                <span key={`${n}-a`}>{n}</span>,
+                <span key={`${n}-b`}>{n.replace('.', ',')}</span>,
+              ])}
+            </div>
+            <Text variant="base" mono>
+              run_2026-10-11T08:00:00Z · text2sql-gpt-4o-040 · {'{"إجابة": "نعم", "score": 0.97}'}
+            </Text>
+          </Stack>
+        </Case>
         <Case label="Eyebrow + Kbd">
           <Stack gap="sm">
             <Eyebrow>Uppercase label</Eyebrow>

@@ -314,7 +314,7 @@ textarea.control {
   border: 1px solid var(--border-subtle);
   border-radius: var(--control-radius);
   /* a control scrolled into view never lands under the sticky first column */
-  scroll-padding-inline-start: 9rem;
+  scroll-padding-inline-start: 11rem;
 }
 
 .table {
