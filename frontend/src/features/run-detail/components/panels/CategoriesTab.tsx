@@ -50,6 +50,7 @@ export function CategoriesTab() {
   const [chosen, setChosen] = useState<string[] | null>(null);
   const [sort, setSort] = useState<CategorySort>('worst');
   const selected = (chosen ?? (defaultKey ? [defaultKey] : [])).filter((k) => keys.some((x) => x.key === k));
+  const selectedKey = selected.join('\u0000');
   const breakdowns = useMemo(
     () =>
       metric
@@ -58,7 +59,7 @@ export function CategoriesTab() {
             .filter((b): b is NonNullable<typeof b> => !!b)
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected.join('\u0000'), rows, metric, api.ctx, filters.domain],
+    [selectedKey, rows, metric, api.ctx, filters.domain],
   );
   if (!keys.length || !metric) return <p className={styles.note}>No metadata categories to break down.</p>;
   const numeric = model.metricTypes[metric] === 'numeric';

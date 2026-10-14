@@ -2,7 +2,21 @@
 import { Link } from 'react-router-dom';
 import { exportHtmlUrl } from '@/api/runs';
 import { platformUrl } from '@/lib/runtime';
-import { Badge, Icon, IconButton, Identicon, JsonPreview, LinkButton, RunStatusBadge, Tag, Text } from '@/ui';
+import {
+  Badge,
+  Card,
+  Icon,
+  IconButton,
+  Identicon,
+  JsonPreview,
+  KeyValueGrid,
+  LinkButton,
+  RunStatusBadge,
+  Tag,
+  Text,
+  runStatusTone,
+  type CardTone,
+} from '@/ui';
 import type { LiveRunState } from '../hooks/useLiveRun';
 import { useTicker } from '../hooks/useLiveRun';
 import {
@@ -32,6 +46,8 @@ export interface RunHeroProps {
   /** Meta grid + execution context shown (the chevron toggles it). */
   expanded: boolean;
   onToggleExpanded: () => void;
+  /** Extra hero content under the execution context (versioning details). */
+  extra?: React.ReactNode;
 }
 
 function Meta({ label, children, title }: { label: string; children: React.ReactNode; title?: string }) {
@@ -77,6 +93,7 @@ export function RunHero({
   basePath,
   expanded,
   onToggleExpanded,
+  extra,
 }: RunHeroProps) {
   const samples = model.samples;
   const viewPass = model.viewPass;
@@ -106,197 +123,216 @@ export function RunHero({
   const projectName = run.project?.name ?? '';
 
   return (
-    <section className={styles.hero} aria-label="Run summary">
-      <div className={styles.top}>
-        <div className={styles.identity}>
-          <div className={styles.eyebrow}>Run detail</div>
-          <div className={styles.headline}>
-            <h1 className={styles.name} title={run.run_name || run.run_id}>
-              {run.run_name || run.run_id}
-            </h1>
-            {viewPass ? (
-              <Link
-                className={styles.passPill}
-                to={basePath}
-                title={`Viewing pass ${viewPass} of ${samples}. Return to all passes.`}
-              >
-                Pass {viewPass}/{samples}
-              </Link>
-            ) : samples === 1 && model.isRepeat ? (
-              <Link
-                className={styles.passPill}
-                to={`${basePath}?pass=1`}
-                title="View the remaining pass and its reviews"
-              >
-                Pass 1
-              </Link>
-            ) : samples > 1 ? (
-              <Tag kind="count" title={`${samples} passes per item`}>
-                x{samples} passes
-              </Tag>
-            ) : null}
+    <Card
+      as="section"
+      aria-label="Run summary"
+      className={styles.hero}
+      tone={
+        (runStatusTone(statusKey) as CardTone) === 'neutral'
+          ? undefined
+          : (runStatusTone(statusKey) as CardTone)
+      }
+      data-testid="run-hero"
+    >
+      <div className={styles.heroBody}>
+        <div className={styles.top}>
+          <div className={styles.identity}>
+            <div className={styles.eyebrow}>Run detail</div>
+            <div className={styles.headline}>
+              <h1 className={styles.name} title={run.run_name || run.run_id}>
+                {run.run_name || run.run_id}
+              </h1>
+              {viewPass ? (
+                <Link
+                  className={styles.passPill}
+                  to={basePath}
+                  title={`Viewing pass ${viewPass} of ${samples}. Return to all passes.`}
+                >
+                  Pass {viewPass}/{samples}
+                </Link>
+              ) : samples === 1 && model.isRepeat ? (
+                <Link
+                  className={styles.passPill}
+                  to={`${basePath}?pass=1`}
+                  title="View the remaining pass and its reviews"
+                >
+                  Pass 1
+                </Link>
+              ) : samples > 1 ? (
+                <Tag kind="count" title={`${samples} passes per item`}>
+                  x{samples} passes
+                </Tag>
+              ) : null}
+            </div>
           </div>
-        </div>
-        <div className={styles.right}>
-          <span title={!viewPass && run.status_reason_label ? run.status_reason_label : undefined}>
-            <RunStatusBadge status={statusKey} label={statusText + runningPass} />
-          </span>
-          <LiveIndicator live={live} run={run} />
-          {liveNow && runtimeMs != null ? (
-            <span className={styles.live} data-testid="hero-runtime-live">
-              Runtime <span className={styles.mono}>{formatDurationMs(runtimeMs)}</span>
+          <div className={styles.right}>
+            <span title={!viewPass && run.status_reason_label ? run.status_reason_label : undefined}>
+              <RunStatusBadge status={statusKey} label={statusText + runningPass} />
             </span>
-          ) : null}
-          <LinkButton
-            variant="accent"
-            size="sm"
-            href={platformUrl(exportHtmlUrl(run.run_id))}
-            target="_blank"
-            rel="noopener noreferrer"
-            icon={<Icon name="external" size={14} />}
-            title="Download this run as a standalone HTML file (opens the classic export)"
-          >
-            Export HTML
-          </LinkButton>
-          <RunPager runId={run.run_id} slug={slug} listParam={listParam} />
-          <IconButton
-            label={expanded ? 'Hide run details' : 'Show run details'}
-            icon={expanded ? 'chevron-up' : 'chevron-down'}
-            aria-expanded={expanded}
-            aria-controls="run-hero-details"
-            onPress={onToggleExpanded}
-          />
-        </div>
-      </div>
-
-      {warning ? (
-        <div className={styles.banner} role="status" data-testid="ingest-warning">
-          <Icon name="warning" size={16} />
-          <div>
-            <div className={styles.bannerTitle}>Incomplete data</div>
-            {warning.missing > 0 ? (
-              <p className={styles.bannerBody}>
-                The evaluation reported <b>{warning.expected}</b> items, but only <b>{warning.received}</b>{' '}
-                reached the platform (<b>{warning.missing}</b> missing). The rows and metrics below cover the
-                received items only — check the eval client’s upload warnings for the rest.
-              </p>
+            <LiveIndicator live={live} run={run} />
+            {liveNow && runtimeMs != null ? (
+              <span className={styles.live} data-testid="hero-runtime-live">
+                Runtime <span className={styles.mono}>{formatDurationMs(runtimeMs)}</span>
+              </span>
             ) : null}
-            {warning.rejectedCount > 0 ? (
-              <div className={styles.bannerBody} data-ingest-rejected={warning.rejectedCount}>
-                The platform rejected <b>{warning.rejectedCount}</b>{' '}
-                {warning.rejectedCount === 1 ? 'event' : 'events'} from this run, so the data{' '}
-                {warning.rejectedCount === 1 ? 'it' : 'they'} carried is missing below
-                {warning.rejected.length ? ':' : '.'}
-                {warning.rejected.length ? (
-                  <ul className={styles.rejected}>
-                    {warning.rejected.map((r, i) => (
-                      <li key={i}>
-                        <span className={styles.mono}>{r.type ?? 'event'}</span>
-                        {r.item_id ? (
-                          <>
-                            {' '}
-                            for item <span className={styles.mono}>{r.item_id}</span>
-                          </>
-                        ) : r.sequence != null ? (
-                          <> #{r.sequence}</>
-                        ) : null}
-                        : {r.error ?? 'rejected'}
-                      </li>
-                    ))}
-                    {warning.moreCount > 0 ? <li>and {warning.moreCount} more</li> : null}
-                  </ul>
-                ) : null}
-              </div>
-            ) : null}
+            <LinkButton
+              variant="accent"
+              size="sm"
+              href={platformUrl(exportHtmlUrl(run.run_id))}
+              target="_blank"
+              rel="noopener noreferrer"
+              icon={<Icon name="external" size={14} />}
+              title="Download this run as a standalone HTML file (opens the classic export)"
+            >
+              Export HTML
+            </LinkButton>
+            <RunPager runId={run.run_id} slug={slug} listParam={listParam} />
+            <IconButton
+              label={expanded ? 'Hide run details' : 'Show run details'}
+              icon={expanded ? 'chevron-up' : 'chevron-down'}
+              aria-expanded={expanded}
+              aria-controls="run-hero-details"
+              onPress={onToggleExpanded}
+            />
           </div>
         </div>
-      ) : null}
-      {run.items_restricted ? (
-        <div className={styles.banner} role="status" data-testid="private-test-set">
-          <Icon name="info" size={16} />
-          <div>
-            <div className={styles.bannerTitle}>Private test set</div>
-            <p className={styles.bannerBody}>
-              This run was evaluated on a private test set. Scores and latencies are shown, but item inputs,
-              expected outputs, outputs, traces, and analysis are visible to admins only.
-            </p>
-          </div>
-        </div>
-      ) : null}
 
-      <div id="run-hero-details" hidden={!expanded} className={styles.details}>
-        <dl className={styles.metaGrid}>
-          <Meta label="Task" title={run.task_name}>
-            <MetaLink to={links.task} title={`Runs of task ${run.task_name}`}>
-              {run.task_name ?? '—'}
-            </MetaLink>
-          </Meta>
-          <Meta label="Dataset" title={run.dataset_name}>
-            <MetaLink to={links.dataset} title={links.datasetTitle}>
-              <span className={styles.datasetCell}>
-                {run.dataset_name ? <Identicon seed={run.dataset_name} cell={2} gap={1} chip /> : null}
-                {run.dataset_name ?? '—'}
-                {run.dataset_version ? <Tag kind="version">v{run.dataset_version}</Tag> : null}
-                {(run.dataset_aliases ?? []).map((a) => (
-                  <Tag key={a} kind="data">
-                    {a}
-                  </Tag>
-                ))}
-              </span>
-            </MetaLink>
-          </Meta>
-          <Meta label="Model" title={modelName}>
-            <MetaLink to={links.model} title={`Runs of model ${modelName}`}>
-              <span className={styles.modelCell}>
-                {shortModelName(modelName) || '—'}
-                {(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning ? (
-                  <Badge tone="info" title="Reasoning model">
-                    reasoning
-                  </Badge>
-                ) : null}
-              </span>
-            </MetaLink>
-          </Meta>
-          <Meta label="Owner" title={ownerLabel}>
-            <MetaLink to={links.owner} title={`Runs owned by ${ownerLabel}`}>
-              {ownerLabel}
-            </MetaLink>
-          </Meta>
-          <Meta label="Project" title={projectName}>
-            <MetaLink to={links.project} title={`Runs in ${projectName}`}>
-              {projectName}
-            </MetaLink>
-          </Meta>
-          <Meta label="Started">{formatIsoDateTime(timing.startedAt)}</Meta>
-          <Meta label="Runtime">
-            <span data-testid="hero-runtime" className={styles.mono}>
-              {runtimeMs != null ? formatDurationMs(runtimeMs) : '—'}
-            </span>
-          </Meta>
-          <Meta label="Version">{version ? <span className={styles.mono}>{version}</span> : null}</Meta>
-          {viewPass ? null : <Meta label="Stop reason">{run.status_reason_label ?? ''}</Meta>}
-        </dl>
-
-        {context.length ? (
-          <div className={styles.context}>
-            <Text variant="sm" tone="muted" className={styles.contextTitle}>
-              Execution context
-            </Text>
-            <dl className={styles.contextGrid}>
-              {context.map((entry) => (
-                <div className={styles.contextCell} key={`${entry.group}:${entry.key}`}>
-                  <dt className={styles.contextKey}>
-                    {entry.label} • {entry.group}
-                  </dt>
-                  <dd className={styles.contextVal} title={entry.value}>
-                    {entry.json ? <JsonPreview value={entry.raw} title={entry.label} compact /> : entry.value}
-                  </dd>
+        {warning ? (
+          <div className={styles.banner} role="status" data-testid="ingest-warning">
+            <Icon name="warning" size={16} />
+            <div>
+              <div className={styles.bannerTitle}>Incomplete data</div>
+              {warning.missing > 0 ? (
+                <p className={styles.bannerBody}>
+                  The evaluation reported <b>{warning.expected}</b> items, but only <b>{warning.received}</b>{' '}
+                  reached the platform (<b>{warning.missing}</b> missing). The rows and metrics below cover
+                  the received items only — check the eval client’s upload warnings for the rest.
+                </p>
+              ) : null}
+              {warning.rejectedCount > 0 ? (
+                <div className={styles.bannerBody} data-ingest-rejected={warning.rejectedCount}>
+                  The platform rejected <b>{warning.rejectedCount}</b>{' '}
+                  {warning.rejectedCount === 1 ? 'event' : 'events'} from this run, so the data{' '}
+                  {warning.rejectedCount === 1 ? 'it' : 'they'} carried is missing below
+                  {warning.rejected.length ? ':' : '.'}
+                  {warning.rejected.length ? (
+                    <ul className={styles.rejected}>
+                      {warning.rejected.map((r, i) => (
+                        <li key={i}>
+                          <span className={styles.mono}>{r.type ?? 'event'}</span>
+                          {r.item_id ? (
+                            <>
+                              {' '}
+                              for item <span className={styles.mono}>{r.item_id}</span>
+                            </>
+                          ) : r.sequence != null ? (
+                            <> #{r.sequence}</>
+                          ) : null}
+                          : {r.error ?? 'rejected'}
+                        </li>
+                      ))}
+                      {warning.moreCount > 0 ? <li>and {warning.moreCount} more</li> : null}
+                    </ul>
+                  ) : null}
                 </div>
-              ))}
-            </dl>
+              ) : null}
+            </div>
           </div>
         ) : null}
+        {run.items_restricted ? (
+          <div className={styles.banner} role="status" data-testid="private-test-set">
+            <Icon name="info" size={16} />
+            <div>
+              <div className={styles.bannerTitle}>Private test set</div>
+              <p className={styles.bannerBody}>
+                This run was evaluated on a private test set. Scores and latencies are shown, but item inputs,
+                expected outputs, outputs, traces, and analysis are visible to admins only.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        <div id="run-hero-details" hidden={!expanded} className={styles.details}>
+          <dl className={styles.metaGrid}>
+            <Meta label="Task" title={run.task_name}>
+              <MetaLink to={links.task} title={`Runs of task ${run.task_name}`}>
+                {run.task_name ? <Tag kind="task">{run.task_name}</Tag> : '—'}
+              </MetaLink>
+            </Meta>
+            <Meta label="Dataset" title={run.dataset_name}>
+              <MetaLink to={links.dataset} title={links.datasetTitle}>
+                <span className={styles.datasetCell}>
+                  {run.dataset_name ? <Identicon seed={run.dataset_name} cell={2} gap={1} chip /> : null}
+                  {run.dataset_name ?? '—'}
+                  {run.dataset_version ? <Tag kind="version">v{run.dataset_version}</Tag> : null}
+                  {(run.dataset_aliases ?? []).map((a) => (
+                    <Tag key={a} kind="data">
+                      {a}
+                    </Tag>
+                  ))}
+                </span>
+              </MetaLink>
+            </Meta>
+            <Meta label="Model" title={modelName}>
+              <MetaLink to={links.model} title={`Runs of model ${modelName}`}>
+                <span className={styles.modelCell}>
+                  {shortModelName(modelName) || '—'}
+                  {(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning ? (
+                    <Badge tone="info" title="Reasoning model">
+                      reasoning
+                    </Badge>
+                  ) : null}
+                </span>
+              </MetaLink>
+            </Meta>
+            <Meta label="Owner" title={ownerLabel}>
+              <MetaLink to={links.owner} title={`Runs owned by ${ownerLabel}`}>
+                {ownerLabel}
+              </MetaLink>
+            </Meta>
+            <Meta label="Project" title={projectName}>
+              <MetaLink to={links.project} title={`Runs in ${projectName}`}>
+                {projectName}
+              </MetaLink>
+            </Meta>
+            <Meta label="Started">{formatIsoDateTime(timing.startedAt)}</Meta>
+            <Meta label="Runtime">
+              <span data-testid="hero-runtime" className={styles.mono}>
+                {runtimeMs != null ? formatDurationMs(runtimeMs) : '—'}
+              </span>
+            </Meta>
+            <Meta label="Version">{version ? <span className={styles.mono}>{version}</span> : null}</Meta>
+            {viewPass ? null : <Meta label="Stop reason">{run.status_reason_label ?? ''}</Meta>}
+          </dl>
+
+          {context.length ? (
+            <div className={styles.context}>
+              <Text variant="sm" tone="muted" className={styles.contextTitle}>
+                Execution context
+              </Text>
+              <KeyValueGrid
+                columns={3}
+                dense
+                aria-label="Execution context"
+                items={context.map((entry) => ({
+                  key: `${entry.group}:${entry.key}`,
+                  label: entry.label,
+                  kind: entry.group === 'Config' ? 'config' : 'metadata',
+                  mono: !entry.json,
+                  value: entry.json ? (
+                    <JsonPreview value={entry.raw} title={entry.label} compact />
+                  ) : (
+                    <span className={styles.ctxVal} title={entry.value}>
+                      {entry.value}
+                    </span>
+                  ),
+                }))}
+              />
+            </div>
+          ) : null}
+          {extra ? <div className={styles.context}>{extra}</div> : null}
+        </div>
       </div>
-    </section>
+    </Card>
   );
 }
