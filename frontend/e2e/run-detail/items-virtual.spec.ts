@@ -94,7 +94,9 @@ test('metric names stay visible under the sticky bars after scrolling 20 screens
     const r = grid.getBoundingClientRect();
     host.scrollTop += r.top - host.getBoundingClientRect().top + Math.min(20 * 900, r.height - 800);
   });
-  const head = page.getByRole('treegrid', { name: 'Items' }).getByRole('columnheader', { name: 'quality', exact: true });
+  const head = page
+    .getByRole('treegrid', { name: 'Items' })
+    .getByRole('columnheader', { name: 'quality', exact: true });
   await expect(head).toBeInViewport();
   const covered = await head.evaluate((el) => {
     const r = el.getBoundingClientRect();
