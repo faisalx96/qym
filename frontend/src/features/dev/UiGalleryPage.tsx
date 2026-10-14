@@ -336,6 +336,24 @@ export default function UiGalleryPage() {
             emptyOption={{ key: '__none__', label: '(no model)' }}
           />
         </Case>
+        <Case label="MultiSelect triggerVariant=bar (filter bar: label, then · value; accent tint when active)">
+          <Stack direction="row" gap="sm">
+            <MultiSelect
+              triggerVariant="bar"
+              label="Model"
+              items={ITEMS}
+              value={new Set()}
+              onChange={() => {}}
+            />
+            <MultiSelect
+              triggerVariant="bar"
+              label="Status"
+              items={ITEMS}
+              value={new Set([ITEMS[0]!.key])}
+              onChange={() => {}}
+            />
+          </Stack>
+        </Case>
         <Case label="Stepper (always-clickable rail; compact below 760px)">
           <GalleryStepper />
         </Case>
@@ -496,6 +514,16 @@ export default function UiGalleryPage() {
               { label: 'Pass rate', value: '91.2%', tone: 'success', sub: '+2.1 vs last week' },
               { label: 'Failed', value: '12', tone: 'danger' },
               { label: 'Pending reviews', value: '7', icon: <Icon name="review" size={14} /> },
+            ]}
+          />
+        </Case>
+        <Case label="StatStrip compact with bars (passes panel)">
+          <StatStrip
+            variant="compact"
+            items={[
+              { label: 'Pass@3', value: '100.0%', bar: 1, barBand: 5 },
+              { label: 'Pass^3', value: '37.5%', bar: 0.375, barBand: 2 },
+              { label: 'Avg@3', value: '82.8%', bar: 0.828, barBand: 4 },
             ]}
           />
         </Case>

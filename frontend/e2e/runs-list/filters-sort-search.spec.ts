@@ -65,83 +65,59 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await expect(page.getByTestId('status-bar')).toContainText('13 runs');
   });
 
-  test('Filters popover: facet disclosures, tick stays open, Only, Select all / Clear / None, Escape returns focus', async ({
+  test('filter bar: one trigger per facet, tick stays open, Only, Select all / None, Escape returns focus', async ({
     page,
     request,
   }) => {
     const s = await sharedProject(request, 12);
     const cap = capture(page, 'runs');
     await openRuns(page, s.project.slug);
-    const trigger = page.getByTestId('filters-trigger');
-    await openFilters(page);
-    const panel = page.getByTestId('filters-panel');
-    for (const name of ['Tasks', 'Datasets', 'Models', 'Versions', 'Status', 'Users']) {
-      await expect(panel.getByRole('button', { name: new RegExp(`^${name}\\b`) })).toBeVisible();
+    const bar = page.getByTestId('filter-bar');
+    for (const name of ['Task', 'Dataset', 'Model', 'Version', 'Status', 'User']) {
+      await expect(bar.getByRole('button', { name: new RegExp(`^${name} filter`) })).toBeVisible();
     }
+    const trigger = bar.getByRole('button', { name: /^Model filter/ });
     await openFacet(page, 'Models');
-    const models = panel.getByRole('list', { name: 'Models values' });
-    await expect(models.getByRole('listitem')).toHaveCount(2);
-    // ticking keeps the popover open (was a blocking bug in the mock)
-    await clickBox(models.getByRole('checkbox', { name: /gpt-4o/ }));
+    const panel = page.getByTestId('filters-panel');
+    await expect(panel.getByRole('button', { name: /^Only / })).toHaveCount(2);
+    // ticking keeps the list open and applies at once
+    await clickBox(panel.getByRole('checkbox', { name: /gpt-4o/ }));
     await expect(panel).toBeVisible();
     await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText('model: ');
     await expect.poll(() => urlParams(page).getAll('model').length).toBe(1);
-    await expect(panel.getByRole('button', { name: /^Models/ })).toContainText(/gpt-4o/);
+    await expect(trigger).toContainText(/gpt-4o/);
     await expect
       .poll(() => listRequests(cap).at(-1)!.body.filters.models)
       .toEqual([expect.stringMatching(/gpt-4o\|\|\|plain$/)]);
-    // tick the second one too, then Only on the first
-    await clickBox(models.getByRole('checkbox', { name: /claude/ }));
+    // tick the second one too, then Only on it
+    await clickBox(panel.getByRole('checkbox', { name: /claude/ }));
     await expect.poll(() => urlParams(page).getAll('model').length).toBe(2);
-    await models.getByRole('button', { name: /Only .*claude/ }).click();
+    await expect(trigger).toContainText('2');
+    await panel.getByRole('button', { name: /Only .*claude/ }).click();
     await expect.poll(() => urlParams(page).getAll('model')).toEqual([expect.stringContaining('claude')]);
     await expect(panel).toBeVisible();
-    // Select all / Clear / None
+    // Select all / None (None clears the facet)
     await panel.getByRole('button', { name: 'Select all' }).click();
     await expect.poll(() => urlParams(page).getAll('model').length).toBe(2);
     await panel.getByRole('button', { name: 'None' }).click();
-    await expect.poll(() => urlParams(page).getAll('model')).toEqual(['__none__']);
-    await expect(page.getByText('No runs match current filters')).toBeVisible();
-    await panel.getByRole('button', { name: 'Clear', exact: true }).click();
     await expect.poll(() => urlParams(page).has('model')).toBe(false);
     await expect(dataRows(page).first()).toBeVisible();
-    // the panel stayed open through all of it; Escape closes and restores focus to the trigger
-    await expect(panel).toBeVisible();
-    await panel.getByRole('button', { name: /^Models/ }).focus();
+    // Escape closes the list and restores focus to its trigger
     await page.keyboard.press('Escape');
     await expect(panel).toHaveCount(0);
     await expect(trigger).toBeFocused();
   });
 
-  test('Escape still closes the Filters popover right after a facet Clear (focus must not be lost)', async ({
-    page,
-    request,
-  }) => {
+  test('a facet list opens with one click and a click outside closes it', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug, '');
     await openFacet(page, 'Models');
     const panel = page.getByTestId('filters-panel');
     await panel.getByRole('button', { name: /Only .*claude/ }).click();
-    await panel.getByRole('button', { name: 'Select all' }).click();
-    await panel.getByRole('button', { name: 'None' }).click();
-    await expect.poll(() => urlParams(page).getAll('model')).toEqual(['__none__']);
-    await panel.getByRole('button', { name: 'Clear', exact: true }).click(); // disables itself once nothing is selected
-    await expect.poll(() => urlParams(page).has('model')).toBe(false);
-    // Chrome drops focus to <body> a moment after the focused button becomes disabled
-    await expect
-      .poll(
-        async () => {
-          await new Promise((r) => setTimeout(r, 300));
-          return page.evaluate(() =>
-            Boolean(document.activeElement?.closest('[data-testid="filters-panel"]')),
-          );
-        },
-        { message: 'focus stayed inside the Filters panel after Clear' },
-      )
-      .toBe(true);
-    await page.keyboard.press('Escape');
+    await expect.poll(() => urlParams(page).getAll('model').length).toBe(1);
+    await page.getByRole('heading', { name: 'Runs', level: 1 }).click({ force: true });
+    await page.mouse.click(5, 5);
     await expect(panel).toHaveCount(0);
-    await expect(page.getByTestId('filters-trigger')).toBeFocused();
   });
 
   test('facet values narrow rows, Status facet writes status= and chips remove', async ({
@@ -155,7 +131,9 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await panel.getByRole('button', { name: 'Only Completed' }).click();
     await expect.poll(() => urlParams(page).getAll('status')).toEqual(['COMPLETED']);
     await expect(page.getByTestId('status-bar')).toContainText(/of 13 runs — status: Completed/);
-    await expect(page.getByTestId('filters-trigger')).toContainText('Filters · 1');
+    await expect(
+      page.getByTestId('filter-bar').getByRole('button', { name: /^Status filter/ }),
+    ).toContainText('Completed');
     for (const st of await dataRows(page).evaluateAll((rows) =>
       rows.map((r) => (r as HTMLElement).dataset.status),
     ))
@@ -221,9 +199,11 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await origin.getByText('Local', { exact: true }).click();
     await expect.poll(() => urlParams(page).get('origin')).toBe('local');
     await expect(dataRows(page).first()).toBeVisible();
-    await page.keyboard.press('Escape');
     const chips = page.getByRole('group', { name: 'Active filters', exact: true });
-    await chips.getByRole('button', { name: /^Clear \d/ }).click();
+    await page
+      .getByTestId('filter-bar')
+      .getByRole('button', { name: /^Clear \d/ })
+      .click();
     await expect(chips).toHaveCount(0);
     expect(new URL(page.url()).search).toBe('');
   });
@@ -242,7 +222,7 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     const chips = page.getByRole('group', { name: 'Active filters', exact: true });
     await expect(chips).toContainText('Prompt version: v2');
     await expect(chips).toContainText('Agent: alpha');
-    await expect(page.getByTestId('filters-trigger')).toContainText('Filters · 2');
+    await expect(page.getByTestId('filters-trigger')).toContainText('More filters · 3');
     // the URL keeps the keys (sorted) and the values
     const sp = urlParams(page);
     expect(sp.getAll('v.prompt_version')).toEqual(['v2', 'v3']);
@@ -293,21 +273,14 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     await expect(page.locator('th[aria-sort="descending"], th[aria-sort="ascending"]')).toHaveCount(1);
   });
 
-  test('Clear all keeps focus in the popover so Escape still closes it', async ({ page, request }) => {
+  test('Clear n in the bar removes every filter in one click', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
-    await openRuns(page, s.project.slug);
-    await openFilters(page);
-    const panel = page.getByTestId('filters-panel');
-    await openFacet(page, 'Models');
-    await panel
-      .getByRole('button', { name: /^Only / })
-      .first()
-      .click();
-    await panel.getByRole('button', { name: 'Clear all' }).click();
-    await expect(panel.getByRole('button', { name: 'Clear all' })).toBeDisabled();
-    await expect(panel.getByRole('button', { name: 'Done' })).toBeFocused();
-    await page.keyboard.press('Escape');
-    await expect(panel).toHaveCount(0);
+    await openRuns(page, s.project.slug, 'task=summarize&status=COMPLETED');
+    const clear = page.getByTestId('filter-bar').getByRole('button', { name: /^Clear 2/ });
+    await clear.click();
+    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toHaveCount(0);
+    expect(new URL(page.url()).search).toBe('');
+    await expect(clear).toHaveCount(0);
   });
 
   test('a deep-linked metric sort never asks for the time-desc order first', async ({ page, request }) => {

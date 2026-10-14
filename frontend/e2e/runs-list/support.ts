@@ -86,15 +86,40 @@ export function capture(
 /** Run-list page requests only (the `ids` pinned-row lookups and Overview pages excluded). */
 export const listRequests = (cap: ReturnType<typeof capture>) => cap.all().filter((c) => !c.body.ids?.length);
 
+/** The filter bar is always on screen (desktop); this only asserts it, kept so specs read the same. */
 export async function openFilters(page: Page): Promise<void> {
-  const panel = page.getByTestId('filters-panel');
-  if (!(await panel.isVisible())) await page.getByTestId('filters-trigger').click();
-  await expect(panel).toBeVisible();
+  await expect(page.getByTestId('filter-bar')).toBeVisible();
 }
 
+const SINGULAR: Record<string, string> = {
+  Tasks: 'Task',
+  Datasets: 'Dataset',
+  Models: 'Model',
+  Versions: 'Version',
+  Status: 'Status',
+  Users: 'User',
+};
+
+/**
+ * Opens a facet's value list from the bar (one click) and leaves `filters-panel` visible. Versioning-key facets
+ * live under `More filters`: that popover opens and the key's list expands inside it.
+ */
 export async function openFacet(page: Page, name: string): Promise<void> {
-  await openFilters(page);
-  const head = page.getByTestId('filters-panel').getByRole('button', { name: new RegExp(`^${name}\\b`) });
+  const bar = page.getByTestId('filter-bar');
+  await expect(bar).toBeVisible();
+  const singular = SINGULAR[name];
+  if (singular) {
+    const trigger = bar.getByRole('button', { name: new RegExp(`^${singular} filter`) });
+    if (await trigger.count()) {
+      if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
+      await expect(page.getByTestId('filters-panel')).toBeVisible();
+      return;
+    }
+  }
+  const panel = page.getByTestId('filters-panel');
+  if (!(await panel.isVisible())) await bar.getByTestId('filters-trigger').click();
+  await expect(panel).toBeVisible();
+  const head = panel.getByRole('button', { name: new RegExp(`^${name}\\b`) });
   if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click();
   await expect(head).toHaveAttribute('aria-expanded', 'true');
 }
@@ -138,4 +163,14 @@ export function failOnNativeDialogs(page: Page): { seen: () => string[] } {
     await d.dismiss();
   });
   return { seen: () => seen };
+}
+
+/** Opens the row-actions menu of pass `n` inside a passes panel. */
+export async function openPassMenu(panel: Locator, page: Page, n: number): Promise<void> {
+  await panel.locator(`tr[data-pass-row="${n}"]`).getByRole('button', { name: 'Row actions' }).click();
+  await expect(page.getByRole('menu')).toBeVisible();
+}
+export async function deletePassFromMenu(panel: Locator, page: Page, n: number): Promise<void> {
+  await openPassMenu(panel, page, n);
+  await page.getByRole('menuitem', { name: new RegExp(`^Delete pass ${n}`) }).click();
 }

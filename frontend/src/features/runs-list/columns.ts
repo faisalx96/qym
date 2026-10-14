@@ -152,6 +152,8 @@ export function metricColumn(name: string): ColumnDef {
 
 export interface ColumnSet {
   all: ColumnDef[];
+  /** Every column in the default table order (hidden ones included). */
+  ordered: ColumnDef[];
   visible: ColumnDef[];
 }
 
@@ -160,6 +162,8 @@ export function buildColumns(
   metrics: string[],
   traceWithData: Set<string>,
   visible: Set<string> | null,
+  /** Column ids the user hid (the table's own layout); wins over `visible`. */
+  hidden?: Set<string> | null,
 ): ColumnSet {
   const all: ColumnDef[] = [
     ...BASE_COLUMNS,
@@ -188,11 +192,12 @@ export function buildColumns(
   ];
   const show = (c: ColumnDef) => {
     if (c.visKey === null) return true;
+    if (hidden) return !hidden.has(c.id);
     if (visible) return visible.has(c.visKey);
     if (c.group === 'trace') return traceWithData.has(c.visKey);
     return true;
   };
-  return { all, visible: ordered.filter(show) };
+  return { all, ordered, visible: ordered.filter(show) };
 }
 
 /** A sort key whose column is hidden falls back to the default order (dashboard.js 4373–4396). */

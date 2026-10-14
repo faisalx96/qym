@@ -1,7 +1,7 @@
 /** J6 / §8.7: expanding a repeat run: passes, group metrics, select mode, pass delete. */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { BOOL, LOWER, SCORE, seedRun } from './seed';
-import { clickBox, freshProject, openRuns, rowOf } from './support';
+import { clickBox, freshProject, openRuns, rowOf, openPassMenu, deletePassFromMenu } from './support';
 
 const NAME = 'summarize-repeat-done';
 
@@ -47,11 +47,10 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       'aria-expanded',
       'true',
     );
-    await expect(panel.getByRole('table', { name: `${NAME} passes` }).locator('tbody tr')).toHaveCount(3);
-    await expect(panel.getByText('Group metrics')).toBeVisible();
-    await expect(panel.getByText(/k = 3/)).toBeVisible();
-    for (const label of ['Pass@3', 'Pass^3', 'Consistency', 'Reliability'])
-      await expect(panel.locator('dt', { hasText: label })).toBeVisible();
+    await expect(panel.locator('tbody tr[data-pass-row]')).toHaveCount(3);
+    await expect(panel.getByText(/3 passes · \d+ items/)).toBeVisible();
+    for (const label of ['Pass@3', 'Pass^3', 'Avg@3', 'Consistency', 'Reliability'])
+      await expect(panel.locator('[aria-label="Group metrics"]').first()).toContainText(label);
     // collapse again
     await row.getByRole('button', { name: `Collapse 3 passes of ${NAME}` }).click();
     await expect(panel).toHaveCount(0);
@@ -68,7 +67,7 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       .getByRole('button', { name: `Expand 3 passes of ${NAME}` })
       .click();
     const panel = page.getByRole('region', { name: `Passes of ${NAME}` });
-    await expect(panel.locator('dt', { hasText: 'Pass@3' })).toBeVisible();
+    await expect(panel.locator('[aria-label="Group metrics"]').first()).toContainText('Pass@3');
     await expect.poll(() => reqs.length).toBeGreaterThanOrEqual(1);
     const base = reqs.length;
     const first = reqs.at(-1)!;
@@ -81,7 +80,8 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     expect(reqs.at(-1)!.searchParams.get('metric')).toBe(other);
     // slider: keyboard step triggers a request with a new threshold
     const n = reqs.length;
-    const thumb = panel.getByRole('slider', { name: 'Pass threshold' });
+    await panel.getByTestId('pass-threshold-chip').click();
+    const thumb = page.getByRole('slider', { name: 'Pass threshold' });
     const t0 = Number(await thumb.inputValue());
     await thumb.focus();
     await page.keyboard.press('ArrowRight');
@@ -169,14 +169,13 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       .getByRole('button', { name: `Expand 3 passes of ${NAME}` })
       .click();
     const panel = page.getByRole('region', { name: `Passes of ${NAME}` });
-    const rows = panel.getByRole('table').locator('tbody tr');
+    const rows = panel.locator('tbody tr[data-pass-row]');
     await expect(rows).toHaveCount(3);
     await expect(panel.getByRole('columnheader', { name: 'Date' })).toBeVisible();
     await expect(rows.first().locator('time')).toBeVisible();
-    await expect(panel.getByRole('term').filter({ hasText: /^Avg@3/ })).toBeVisible();
-    await expect(panel.getByRole('term').filter({ hasText: 'Avg latency' })).toBeVisible();
+    await expect(panel.locator('[aria-label="Group metrics"]').first()).toContainText('Avg@3');
     await expect(panel.getByText(/^Pass if [≥≤] \d+%$/)).toBeVisible();
-    const analyze = rows.nth(1).getByRole('link', { name: /Analyze|causes/ });
+    const analyze = rows.nth(1).getByRole('link', { name: /^Analyze pass 2/ });
     await expect(analyze).toHaveAttribute('href', /\/analyzer\?.*pass=2/);
     // the pass row opens that pass of the run
     await rows.nth(1).getByRole('link', { name: 'Open pass 2' }).click();
@@ -189,18 +188,15 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       .getByRole('button', { name: `Expand 3 passes of ${NAME}` })
       .click();
     const panel = page.getByRole('region', { name: `Passes of ${NAME}` });
-    await expect(panel.getByRole('table').locator('tbody tr')).toHaveCount(3);
-    await panel.getByRole('button', { name: `Delete pass 2 of ${NAME}` }).click();
+    await expect(panel.locator('tbody tr[data-pass-row]')).toHaveCount(3);
+    await deletePassFromMenu(panel, page, 2);
     const dlg = page.getByRole('alertdialog').or(page.getByRole('dialog', { name: 'Delete pass 2?' }));
     await expect(dlg).toBeVisible();
     await expect(dlg.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await dlg.getByRole('button', { name: 'Delete pass' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Pass 2 deleted' })).toBeVisible();
     await expect(
-      page
-        .getByRole('region', { name: `Passes of ${NAME}` })
-        .getByRole('table')
-        .locator('tbody tr'),
+      page.getByRole('region', { name: `Passes of ${NAME}` }).locator('tbody tr[data-pass-row]'),
     ).toHaveCount(2, { timeout: 15_000 });
   });
 
@@ -211,7 +207,9 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       .getByRole('button', { name: /Expand 3 passes/ })
       .click();
     const panel = page.getByRole('region', { name: /Passes of rag-qa-gpt-4o-005/ });
-    await expect(panel.getByRole('table').locator('tbody tr')).toHaveCount(3);
-    await expect(panel.getByRole('button', { name: /Delete pass/ })).toHaveCount(0);
+    await expect(panel.locator('tbody tr[data-pass-row]')).toHaveCount(3);
+    await openPassMenu(panel, page, 1);
+    await expect(page.getByRole('menuitem', { name: /Open pass 1/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Delete pass/ })).toHaveCount(0);
   });
 });

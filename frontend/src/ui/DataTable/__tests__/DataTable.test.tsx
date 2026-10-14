@@ -149,4 +149,32 @@ describe('DataTable v2', () => {
     await user.click(high);
     expect(screen.queryByText('alpha')).toBeNull();
   });
+
+  it('reorders a column from the Columns menu with the keyboard and freezes it', async () => {
+    const user = userEvent.setup();
+    const cols: Column<Row>[] = [
+      { id: 'name', header: 'Name', width: 160, pin: 'start' },
+      { id: 'score', header: 'Score', width: 140, accessor: (r) => r.score },
+      { id: 'extra', header: 'Extra', width: 120, accessor: () => 'x' },
+    ];
+    render(
+      <DataTable<Row> aria-label="t" columns={cols} rows={ROWS} rowKey={(r) => r.id} reorderable>
+        <DataTable.Toolbar columnsMenu />
+      </DataTable>,
+    );
+    const heads = () =>
+      screen.getAllByRole('columnheader', { hidden: true }).map((h) => h.textContent?.replace(/\s+/g, ''));
+    expect(heads().slice(0, 3)).toEqual(['Name', 'Score', 'Extra']);
+    await user.click(screen.getByRole('button', { name: /^Columns/ }));
+    const handle = await screen.findByRole('button', { name: 'Reorder Extra' });
+    handle.focus();
+    await user.keyboard(' ');
+    await user.keyboard('{ArrowUp}{ArrowUp}');
+    await user.keyboard(' ');
+    // Extra moved up past Score and across the freeze line: frozen, second in order
+    expect(heads().slice(0, 3)).toEqual(['Name', 'Extra', 'Score']);
+    expect(screen.getByRole('button', { name: 'Freeze Extra' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Reset layout' }));
+    expect(heads().slice(0, 3)).toEqual(['Name', 'Score', 'Extra']);
+  });
 });

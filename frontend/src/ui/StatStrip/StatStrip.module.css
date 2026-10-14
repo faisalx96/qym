@@ -177,7 +177,51 @@
   color: var(--text-muted);
 }
 
+/* Compact: one short row of tiles (label over value over a 2px bar), e.g. the passes band. */
+.strip[data-variant='compact'] .item {
+  min-height: 0;
+  padding: var(--space-sm) var(--space-md);
+}
+
+.strip[data-variant='compact'] .stack {
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.strip[data-variant='compact'] .label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.strip[data-variant='compact'] .value {
+  font-size: var(--font-lg);
+}
+
+.bar {
+  position: relative;
+  display: block;
+  inline-size: 100%;
+  block-size: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.bar::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: var(--bar);
+  background: var(--tone, var(--text-muted));
+  transition: inline-size var(--motion-fill) var(--ease-out);
+}
+
 @media (max-width: 800px) {
+  .strip[data-variant='compact'] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .strip {
     grid-auto-flow: row;
     grid-template-columns: repeat(2, minmax(0, 1fr));

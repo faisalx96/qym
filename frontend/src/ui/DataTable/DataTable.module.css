@@ -88,7 +88,7 @@
   top: 0;
   bottom: 0;
   width: 24px;
-  z-index: 5;
+  z-index: 1; /* above plain cells, below pinned cells, headers and the sticky detail panel */
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--transition-fast);
@@ -135,6 +135,9 @@
   position: sticky;
   top: 0;
   z-index: 3;
+}
+.table[data-sticky] .thead th[data-pin] {
+  z-index: 4;
 }
 .table[data-sticky] .thead .bandRow + tr th {
   top: var(--table-group-height);
@@ -554,6 +557,10 @@
 .detailCell {
   position: relative;
 }
+/* `clip` (not `hidden`) so a sticky panel inside still sticks to the scroller. */
+.tbody td.detailCell {
+  overflow: clip;
+}
 
 /* One continuous rail above the nested cards (an inset shadow is painted under their backgrounds). */
 .detailCell::before {
@@ -948,4 +955,131 @@
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+/* Columns menu v2 (reorderable): handle, visibility, freeze toggle, freeze line */
+.colMenu[data-columns-reorder] {
+  width: 340px;
+  max-width: calc(100vw - 2 * var(--space-lg));
+}
+.colFrozenHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.colFrozenHead:has(+ [role='list'] [data-frozen]) {
+  margin-bottom: calc(-1 * var(--space-xs));
+}
+.colMenuReset {
+  margin-inline-start: auto;
+}
+.colDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: var(--space-xs);
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+.colRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--control-height);
+  padding-inline: var(--space-xs);
+  border-radius: var(--radius);
+}
+.colRow:hover {
+  background: var(--bg-hover);
+}
+.colRow[data-lifted] {
+  background: var(--bg-selected);
+  outline: 1px solid var(--accent-primary);
+}
+.colCheck {
+  flex: 1;
+  min-width: 0;
+}
+.colGroup {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+.colHandle,
+.colPin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+.colPin {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.colHandle:hover,
+.colPin:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.colHandle:active {
+  cursor: grabbing;
+}
+.colHandle:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.colHandle:focus-visible,
+.colPin:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+.colPin[aria-pressed='true'] {
+  color: var(--accent-primary);
+}
+.colLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.colLineNote {
+  font-weight: 400;
+}
+.colLineRule {
+  margin-inline-start: auto;
+  font-weight: 400;
+}
+
+@media (width < 640px) {
+  .colHandle,
+  .colPin,
+  .colLine {
+    display: none;
+  }
+}
+
+.toolbarRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  flex: 1 0 100%;
+  min-width: 0;
+}
+.toolbarRows:empty {
+  display: none;
 }

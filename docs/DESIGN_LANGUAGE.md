@@ -283,6 +283,23 @@ The recipes, by intent:
   renders the pill outside the noise band. Cell kit (`ScoreBar`, `DeltaCell`, `TwoLine`, `IdCell`,
   `RelativeTime`, `TagsCell`, `UserCell`, `ProgressCell`, `StatusCell`, `NumberCell`) lives in `ui/DataTable/cells`.
   Pages never restyle table cells; they supply columns.
+  **Column layout** (`reorderable`, `storageScope`, `maxPinShare`, `Column.lockOrder`): the Columns menu lists every column in
+  display order, one row each: drag handle (pointer, touch, or keyboard: Space lifts, arrows move, Space drops, Esc
+  cancels), visibility checkbox, muted group tag and a freeze toggle (`aria-pressed`, "Freeze Status"); the line between
+  the frozen block and the scrolling columns can be dragged across. A menu header names the frozen count and any column
+  suspended by the cap (the frozen block never takes more than `maxPinShare` = 50% of the scroller; the first frozen
+  column always stays). The header menu has Freeze / Unfreeze, Move left / right / to start, Hide, and
+  `Alt+Shift+Arrow` moves the focused header. Layout (order, pins, widths, hidden, density) is one object saved under
+  `qym:data-table:v2:<storageKey>:<userId>`; an unscoped layout is adopted once. Handles and freeze toggles hide under 640px.
+- **Filter bar** (`features/runs-list/FilterBar`, `MultiSelect triggerVariant="bar"`, toolbar `rows` slot): row 1 is search,
+  Time, Origin and the table controls; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, accent tint
+  when active), `More filters` for versioning keys and facets that do not fit (priority Status, Model, Task, Dataset,
+  User, Version) and one `Clear n`; row 3 the chips (status chips take the status tone). A list applies on each click, no
+  Done button. Under 600px the bar is search plus `Filters n`, opening every facet in a drawer.
+- **Passes panel** (`features/runs-list/passes`): one surface and a 2px accent rail, sticky at the scroller start
+  (`--dt-scroller-width`); header line (title, metric Select, threshold chip with popover, one help marker), a compact
+  `StatStrip` (`bar`, `barBand`) of Pass@k, Pass^k, Avg@k, Consistency, Reliability, and an embedded `DataTable` that mirrors
+  the parent's visible metric columns; issues are one glyph plus count per pass (`!` danger, `~` warning, retry info).
 - **Scores** (`ScoreValue`): score-bearing values use the five-band
   `--score-1..5` ramp, direction-aware via `src/lib/metrics.ts`. Lower-is-better
   metrics read the ramp inverted; a metric that declares no direction stays

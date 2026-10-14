@@ -259,7 +259,7 @@ function withGroupColumns(set: ColumnSet, visibleKeys: Set<string> | null): Colu
     ...set.visible.filter((c) => c.id !== 'duration'),
     ...GROUP_DISPLAY_COLUMNS.filter((c) => visibleKeys === null || visibleKeys.has(c.visKey!)),
   ];
-  return { all, visible };
+  return { all, ordered: set.ordered, visible };
 }
 
 /** Overview-only slice of useRunsData (charts do not page the runs list). */

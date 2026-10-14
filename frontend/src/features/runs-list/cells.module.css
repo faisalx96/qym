@@ -92,6 +92,11 @@
   letter-spacing: 0.02em;
 }
 
+.avatar[data-series] {
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+  color: var(--tone-text);
+}
+
 .ownerName {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -1,7 +1,7 @@
 /** Archived (read-only) project: no write actions in rows or in the selection bar. */
 import { test, expect } from '@playwright/test';
 import { archiveProject } from '../helpers';
-import { clickBox, dataRows, freshProject, openRuns, rowOf } from './support';
+import { clickBox, dataRows, freshProject, openRuns, rowOf, openPassMenu } from './support';
 
 test.describe('archived project (read-only)', () => {
   test('rows hide submit / delete / review actions; the selection bar hides Submit and Delete', async ({
@@ -36,7 +36,8 @@ test.describe('archived project (read-only)', () => {
       .getByRole('button', { name: /Expand 3 passes/ })
       .click();
     const panel = page.getByRole('region', { name: /Passes of rag-qa-gpt-4o-005/ });
-    await expect(panel.getByRole('table').locator('tbody tr')).toHaveCount(3);
-    await expect(panel.getByRole('button', { name: /Delete pass/ })).toHaveCount(0);
+    await expect(panel.locator('tbody tr[data-pass-row]')).toHaveCount(3);
+    await openPassMenu(panel, page, 1);
+    await expect(page.getByRole('menuitem', { name: /Delete pass/ })).toHaveCount(0);
   });
 });

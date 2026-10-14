@@ -67,7 +67,9 @@ test('a live refresh keeps an open Filters popover and the focus inside it', asy
   await broadcastRunStatus(page, [runId], 'FAILED');
   await expect.poll(() => refetches, { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole('button', { name: /^Status\b/ })).toHaveAttribute('aria-expanded', 'true');
+  await expect(
+    page.getByTestId('filter-bar').getByRole('button', { name: /^Status filter/ }),
+  ).toHaveAttribute('aria-expanded', 'true');
   expect(
     await page.evaluate(() => Boolean(document.activeElement?.closest('[data-testid="filters-panel"]'))),
   ).toBe(true);

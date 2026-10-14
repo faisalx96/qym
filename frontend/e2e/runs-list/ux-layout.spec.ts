@@ -81,11 +81,14 @@ test.describe('runs list: UX layout regressions', () => {
     await expect(dataRows(page).first()).toBeVisible();
   });
 
-  test('the custom date range dialog is not covered by the Filters popover', async ({ page, request }) => {
+  test('the custom date range dialog opens from the bar and nothing paints over it', async ({
+    page,
+    request,
+  }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
     await openFilters(page);
-    await page.getByTestId('filters-panel').getByText('Range…').click();
+    await page.getByRole('radiogroup', { name: 'Time range' }).getByText('Range…').click();
     const dlg = page.getByRole('dialog', { name: 'Custom date range' });
     await expect(dlg).toBeVisible();
     await expect(page.getByTestId('filters-panel')).toHaveCount(0);
