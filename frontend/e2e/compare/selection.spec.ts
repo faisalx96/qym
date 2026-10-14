@@ -1,6 +1,15 @@
 /** J1: choosing runs, baseline, removal, pass refs, session handoff, empty / error states. */
 import { expect, test, type Page } from '@playwright/test';
-import { compareUrl, seedScenario, urlParams, waitLoaded } from './support';
+import {
+  averageCell,
+  averagesGrid,
+  baselineSelect,
+  compareUrl,
+  pickBaseline,
+  seedScenario,
+  urlParams,
+  waitLoaded,
+} from './support';
 import type { CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -8,7 +17,7 @@ test.beforeAll(async () => {
   seed = await seedScenario('cmp-sel');
 });
 
-const chips = (page: Page) => page.getByRole('group', { name: 'Runs in this comparison' });
+const cards = (page: Page) => page.getByTestId('run-card');
 const deltaLine = (page: Page) => page.locator('[aria-label="Change against the baseline"]');
 
 test('four runs: summary, delta line against the baseline and the Metrics table', async ({ page }) => {
@@ -19,13 +28,9 @@ test('four runs: summary, delta line against the baseline and the Metrics table'
   await expect(page.getByText('4 columns')).toBeVisible();
   await expect(page.getByText('cmp-qa-v1').first()).toBeVisible();
   await expect(page.getByText('40 aligned items')).toBeVisible();
-  await expect(chips(page).getByRole('button', { name: /^[A-D] .*(baseline|set as baseline)$/ })).toHaveCount(
-    4,
-  );
-  await expect(chips(page).getByRole('button', { name: /^A .*, baseline$/ })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await expect(cards(page)).toHaveCount(4);
+  await expect(page.locator('[data-testid="run-card"][data-baseline]')).toHaveAttribute('data-run', base);
+  await expect(baselineSelect(page)).toContainText('A');
   // one delta entry per candidate (not the baseline), with sign, verdict word and noise band
   await expect(deltaLine(page).locator('li[data-column]')).toHaveCount(3);
   await expect(deltaLine(page)).toContainText('+15.3 pts');
@@ -33,13 +38,16 @@ test('four runs: summary, delta line against the baseline and the Metrics table'
   await expect(deltaLine(page)).toContainText('−10.8 pts');
   await expect(deltaLine(page)).toContainText('(regressed)');
   await expect(deltaLine(page)).toContainText('±8.8');
-  // analytics Metrics table
-  const table = page.getByRole('table', { name: /Average per run over 40 filtered items/ });
-  for (const h of ['Run', 'correct', 'quality', 'Latency', 'Errors'])
-    await expect(table.getByRole('columnheader', { name: h })).toBeVisible();
-  await expect(table.getByRole('rowheader')).toHaveCount(4);
-  await expect(table.getByRole('row', { name: /^A .*Base/ })).toContainText('baseline');
-  await expect(table.getByRole('row', { name: /^A / })).toContainText('2 task · 1 scorer');
+  // per-run averages matrix: a row per metric, a column per run
+  const grid = averagesGrid(page);
+  await expect(grid.getByRole('columnheader', { name: /^A / })).toContainText('★');
+  for (const h of ['Metric', 'A', 'B', 'C', 'D'])
+    await expect(grid.getByRole('columnheader', { name: new RegExp(`^${h}`) })).toBeVisible();
+  for (const row of ['m:correct', 'm:quality', 'latency', 'errors'])
+    await expect(page.locator(`[data-testid="average-row"][data-row="${row}"]`)).toBeVisible();
+  await expect(averageCell(page, 'm:quality', base)).toContainText('baseline');
+  await expect(averageCell(page, 'errors', base)).toContainText('2 task · 1 scorer');
+  await expect(averageCell(page, 'm:quality', a)).toContainText('+15.3 pts');
 });
 
 test('changing the baseline updates ?baseline= and re-signs the deltas', async ({ page }) => {
@@ -47,19 +55,14 @@ test('changing the baseline updates ?baseline= and re-signs the deltas', async (
   await page.goto(compareUrl([base, a, b, c]));
   await waitLoaded(page);
   await expect(deltaLine(page)).toContainText('+15.3 pts');
-  await chips(page)
-    .getByRole('button', { name: /^B .*set as baseline$/ })
-    .click();
+  await pickBaseline(page, /^B /);
   await expect.poll(() => urlParams(page).get('baseline')).toBe(a);
-  await expect(chips(page).getByRole('button', { name: /^B .*, baseline$/ })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await expect(baselineSelect(page)).toContainText('B');
+  await expect(page.locator('[data-testid="run-card"][data-baseline]')).toHaveAttribute('data-run', a);
   // A is now a candidate and is 15.3 pts worse than B
   await expect(deltaLine(page)).toContainText('−15.3 pts');
   await expect(deltaLine(page)).not.toContainText('+15.3 pts');
-  await expect(page.getByRole('button', { name: 'Reset baseline' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Reset baseline' }).click();
+  await pickBaseline(page, /Reset baseline/);
   await expect.poll(() => urlParams(page).get('baseline')).toBeNull();
   await expect(deltaLine(page)).toContainText('+15.3 pts');
 });
@@ -68,7 +71,7 @@ test('removing a run updates the URL; the remove control disappears at two runs'
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c]));
   await waitLoaded(page);
-  const remove = chips(page).getByRole('button', { name: /^Remove .* from the comparison$/ });
+  const remove = cards(page).getByRole('button', { name: /^Remove .* from the comparison$/ });
   await expect(remove).toHaveCount(4);
   await remove.nth(2).click(); // C (cand-b)
   await expect.poll(() => urlParams(page).getAll('runs')).toEqual([base, a, c]);
@@ -76,7 +79,7 @@ test('removing a run updates the URL; the remove control disappears at two runs'
   // base + cand-c share a model, so the page stays in plain Compare mode at two runs
   await remove.nth(1).click(); // B (cand-a)
   await expect.poll(() => urlParams(page).getAll('runs')).toEqual([base, c]);
-  await expect(chips(page).getByRole('button', { name: /^[A-D] / })).toHaveCount(2);
+  await expect(cards(page)).toHaveCount(2);
   await expect(remove).toHaveCount(0);
   await expect(deltaLine(page).locator('li[data-column]')).toHaveCount(1);
 });
@@ -88,7 +91,7 @@ test('two runs of two different models open as a cohort comparison (legacy auto-
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
   await expect(page.getByRole('group', { name: 'Compare sides' })).toBeVisible();
-  await expect(page.getByRole('radiogroup', { name: 'View' })).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: 'View', exact: true })).toBeVisible();
 });
 
 test('pass refs and a whole repeat run expand into pass columns (columns=passes)', async ({ page }) => {
@@ -110,9 +113,9 @@ test('pass refs and a whole repeat run expand into pass columns (columns=passes)
   await toggle.getByText('Each pass').click();
   await expect.poll(() => urlParams(page).get('columns')).toBe('passes');
   await expect(page.getByText('4 columns')).toBeVisible();
-  const table = page.getByRole('table', { name: /Average per run/ });
-  await expect(table.getByRole('rowheader')).toHaveCount(4);
-  await expect(table.getByRole('rowheader').nth(0)).toContainText('pass 1');
+  const grid = averagesGrid(page);
+  await expect(grid.getByRole('columnheader')).toHaveCount(5);
+  await expect(grid.getByRole('columnheader').nth(1)).toContainText('pass 1');
   await page.getByTestId('item-row').first().click();
   for (const p of [1, 2, 3])
     await expect(page.locator(`[data-testid="output-card"][data-run="${repeat3}::pass${p}"]`)).toBeVisible();

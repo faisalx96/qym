@@ -107,7 +107,6 @@ function ErrorCard({
       compact
       onPress={onPress}
       isSelected={active}
-      aria-label={`${parts.title}: ${entry.count} errors; filter the items`}
       data-testid="error-card"
     >
       <div className={styles.errorHead}>

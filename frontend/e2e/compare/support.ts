@@ -67,3 +67,20 @@ export async function goSection(page: Page, name: string): Promise<void> {
 /** The expanded detail of one item (a sibling row of the item-row, so it is found by item id). */
 export const itemDetail = (page: Page, id: string) =>
   page.locator(`[data-testid="item-detail"][data-item-id="${id}"]`);
+
+/** The sticky bar's baseline select trigger. */
+export const baselineSelect = (page: Page) =>
+  page.locator('[data-compare-sticky]').getByRole('button', { name: /Baseline/ });
+
+/** Open the baseline select and pick the option whose text matches. */
+export async function pickBaseline(page: Page, option: RegExp): Promise<void> {
+  await baselineSelect(page).click();
+  await page.getByRole('option', { name: option }).click();
+}
+
+/** The "Per-run averages" matrix (a DataTable grid). */
+export const averagesGrid = (page: Page) => page.getByRole('grid', { name: 'Per-run averages' });
+
+/** One matrix cell: metric row id (`m:quality`, `latency`, `errors`) and column key (run id). */
+export const averageCell = (page: Page, row: string, column: string) =>
+  page.locator(`[data-testid="average-cell"][data-row="${row}"][data-column="${column}"]`);

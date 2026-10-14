@@ -13,7 +13,7 @@ const url = (extra: Record<string, string> = {}) => {
   return cohortUrl([b, base], [a, c], { cohortALabel: 'Weak', cohortBLabel: 'Strong', ...extra });
 };
 const banner = (page: Page) => page.getByRole('group', { name: 'Compare sides' });
-const view = (page: Page) => page.getByRole('radiogroup', { name: 'View' });
+const view = (page: Page) => page.getByRole('radiogroup', { name: 'View', exact: true });
 const sweep = (page: Page) => page.getByTestId('sweep-view');
 const verdictWord = async (page: Page) => {
   const t = (await sweep(page).getByRole('status').first().innerText()).toUpperCase();

@@ -9,50 +9,66 @@ test.beforeAll(async () => {
 });
 const three = () => compareUrl([seed.runs.base, seed.runs.a, seed.runs.b]);
 
-test('the averages caption wraps inside the scroll region instead of being cut off', async ({ page }) => {
+test('the averages matrix fits its section: one row per metric, no clipped header, no sideways page scroll', async ({
+  page,
+}) => {
   await page.goto(three());
   await waitLoaded(page);
-  const scroller = page.getByLabel('Metrics table');
-  const caption = scroller.locator('caption');
-  await expect(caption).toBeVisible();
-  const [s, c] = await Promise.all([scroller.boundingBox(), caption.boundingBox()]);
-  expect(c!.x + c!.width).toBeLessThanOrEqual(s!.x + s!.width + 1);
-  // it stays put while the table scrolls sideways
-  await scroller.evaluate((e) => (e.scrollLeft = 120));
-  const moved = await caption.boundingBox();
-  expect(Math.abs(moved!.x - c!.x)).toBeLessThan(2);
+  const grid = page.getByRole('grid', { name: 'Per-run averages' });
+  await expect(grid).toBeVisible();
+  await expect(page.getByTestId('average-row')).toHaveCount(4);
+  const [g, section] = await Promise.all([
+    grid.boundingBox(),
+    page.locator('#compare-averages').boundingBox(),
+  ]);
+  expect(g!.x + g!.width).toBeLessThanOrEqual(section!.x + section!.width + 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
 });
 
-test('no empty block between the page header and the run chips', async ({ page }) => {
+test('no empty block between the page header and the sticky bar', async ({ page }) => {
   await page.goto(three());
   await waitLoaded(page);
   const empty = await page
     .getByTestId('compare-page')
     .locator('> *')
-    .evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().height === 0).map((e) => e.className));
+    .evaluateAll((els) =>
+      els
+        .filter((e) => getComputedStyle(e).display !== 'contents')
+        .filter((e) => e.getBoundingClientRect().height === 0)
+        .map((e) => e.className),
+    );
   expect(empty).toEqual([]);
 });
 
-test('phone width: per-run deltas get their own row and the chip bar does not stay stuck', async ({
+test('sticky bar is 44px tall and stays stuck while the report scrolls', async ({ page }) => {
+  await page.goto(three());
+  await waitLoaded(page);
+  const bar = page.locator('[data-compare-sticky]');
+  expect((await bar.boundingBox())!.height).toBeLessThanOrEqual(48);
+  await page.getByTestId('item-list').scrollIntoViewIfNeeded();
+  await expect(bar).toBeInViewport();
+  expect(await bar.evaluate((e) => getComputedStyle(e).position)).toBe('sticky');
+});
+
+test('phone width: the bar scrolls with the page, the nav and selects each take a row, per-run deltas wrap', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(three());
   await waitLoaded(page);
-  const first = page.locator('li[data-column]').first();
+  const bar = page.locator('[data-compare-sticky]');
+  expect(await bar.evaluate((e) => getComputedStyle(e).position)).toBe('static');
+  const first = page.locator('[aria-label="Change against the baseline"] li[data-column]').first();
+  await first.scrollIntoViewIfNeeded();
   await expect(first).toBeVisible();
   const box = await first.boundingBox();
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(390);
-  const list = page.locator('ul', { has: first });
-  expect((await list.boundingBox())!.width).toBeGreaterThan(250);
-  const position = await page
-    .getByTestId('compare-page')
-    .locator('> div')
-    .filter({ has: page.getByRole('combobox').or(page.getByRole('button', { name: /^quality/ })) })
-    .first()
-    .evaluate((e) => getComputedStyle(e).position);
-  expect(position).toBe('static');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  // averages become one card per run, baseline first
+  const cards = page.getByTestId('average-card');
+  await expect(cards).toHaveCount(3);
+  await expect(cards.first()).toContainText('baseline');
 });
 
 test('the Analyze popover lists one run per line inside its own surface', async ({ page }) => {

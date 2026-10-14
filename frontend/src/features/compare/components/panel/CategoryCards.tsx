@@ -95,7 +95,6 @@ export function CategoryCards({
               compact
               onPress={() => onPick(g.value)}
               isSelected={active(g.value)}
-              aria-label={`${keyName} ${g.value}, ${g.itemIds.size} items; filter the items to it`}
               data-testid="category-card"
               data-value={g.value}
             >

@@ -91,12 +91,14 @@ test('item rows: visible keyboard focus ring; Enter expands and collapses', asyn
 
 test('every control has an accessible name; remove buttons say what they remove', async ({ page }) => {
   await open4(page);
-  const chips = page.getByRole('group', { name: 'Runs in this comparison' });
-  const names = await chips
+  const cards = page.getByRole('list', { name: 'Runs in this comparison' });
+  const names = await cards
     .getByRole('button')
     .evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.textContent ?? ''));
-  expect(names).toHaveLength(8);
+  // per card: remove, plus "set as baseline" on the three that are not the baseline
+  expect(names).toHaveLength(7);
   expect(names.filter((n) => /^Remove .+ from the comparison$/.test(n))).toHaveLength(4);
+  expect(names.filter((n) => /^Set .+ as the baseline$/.test(n))).toHaveLength(3);
   const unnamed = await page.evaluate(() => {
     const bad: string[] = [];
     for (const el of Array.from(
@@ -122,7 +124,7 @@ test('every control has an accessible name; remove buttons say what they remove'
   await expect(page.getByRole('main')).toHaveCount(1); // the shell's; the items list must not nest a second main
   await expect(page.getByRole('navigation', { name: 'Comparison sections' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Per-run averages' })).toBeVisible();
-  await expect(page.getByRole('table', { name: /Average per run/ })).toBeVisible();
+  await expect(page.getByRole('grid', { name: 'Per-run averages' })).toBeVisible();
 });
 
 const axeScan = async (page: Page) => {
