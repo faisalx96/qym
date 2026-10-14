@@ -297,7 +297,7 @@ test.describe('polish', () => {
     await expect(bar.getByText('Baseline', { exact: true })).toHaveCount(0);
     await bar.getByRole('button', { name: 'View' }).click();
     await expect(
-      page.getByRole('dialog', { name: 'View options' }).getByText('Baseline', { exact: true }),
+      page.getByRole('dialog', { name: 'View options' }).getByText('Baseline', { exact: true }).first(),
     ).toBeVisible();
   });
 });
