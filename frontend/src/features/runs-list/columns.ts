@@ -26,13 +26,13 @@ const base = (id: string, label: string, width: number, sortKey?: string): Colum
 
 export const BASE_COLUMNS: ColumnDef[] = [
   { ...base('run', 'Run', 260, 'run') },
-  base('status', 'Status', 150, 'status'),
+  base('status', 'Status', 144, 'status'),
   { ...base('signals', 'Signals', 60), visKey: null },
   base('task', 'Task', 90, 'task'),
-  base('model', 'Model', 142, 'model'),
-  base('dataset', 'Dataset', 116, 'dataset'),
+  base('model', 'Model', 132, 'model'),
+  base('dataset', 'Dataset', 110, 'dataset'),
   base('owner', 'Owner', 120, 'owner'),
-  base('time', 'Date', 128, 'time'),
+  base('time', 'Date', 120, 'time'),
   base('analysis', 'Analysis', 100),
   base('experiment', 'Experiment', 110),
   base('version', 'Version', 150, 'version'),

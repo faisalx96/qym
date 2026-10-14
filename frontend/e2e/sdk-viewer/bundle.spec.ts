@@ -10,11 +10,12 @@ const dir = path.resolve(
 );
 
 test.describe('bundle', () => {
-  test('contains exactly index.html, app.js, app.css, favicon.svg and stays under 300 KB', () => {
+  test('contains exactly index.html, app.js, app.css, favicon.svg and stays under 450 KB', () => {
     const files = readdirSync(dir).sort();
     expect(files).toEqual(['app.css', 'app.js', 'favicon.svg', 'index.html']);
     const total = files.reduce((n, f) => n + statSync(path.join(dir, f)).size, 0);
-    expect(total).toBeLessThan(300 * 1024);
+    // 300 KB before the Plex faces were embedded (about 184 KB of base64 woff2, see tokens.css)
+    expect(total).toBeLessThan(450 * 1024);
   });
 
   test('has no external URLs, webfonts or CDN references', () => {
@@ -24,13 +25,17 @@ test.describe('bundle', () => {
     expect(html).not.toMatch(/https?:\/\//);
     expect(css).not.toMatch(/https?:\/\//);
     expect(css).not.toMatch(/@import/);
-    expect(css).not.toMatch(/url\(/); // no font or image files to fetch
-    // the only @font-face maps the Arabic family onto fonts already installed on the machine
+    // no font or image files to fetch: the only url() allowed is an inlined woff2 data URI
+    for (const m of css.matchAll(/url\(([^)]*)\)/g))
+      expect(m[1], 'url()').toMatch(/^["']?data:font\/woff2;base64,/);
+    // every @font-face is either inlined (data URI) or maps onto fonts already installed on the machine
     for (const face of css.match(/@font-face\s*\{[^}]*\}/g) ?? []) {
       const src = /src:([^;}]*)/.exec(face)?.[1] ?? '';
       expect(
-        src.split(',').every((part) => /^\s*local\(/.test(part)),
-        face,
+        src
+          .split(/,(?![^(]*\))/)
+          .every((part) => /^\s*(local\(|url\(["']?data:font\/woff2;base64,)/.test(part)),
+        face.slice(0, 120),
       ).toBe(true);
     }
     expect(html).not.toMatch(/fonts\.(googleapis|gstatic)/);

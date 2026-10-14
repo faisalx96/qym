@@ -86,8 +86,11 @@ Three strongest reasons:
    fallbacks, with a CI-enforced 200 KB cap.
 
 Two main trade-offs:
-- It is about 3% wider than the old Arial-like fallback: two fixed-width runs-list columns (`model` 124 to 142,
-  `dataset` 104 to 116) were widened so identity chips do not truncate; other tables fit unchanged.
+- It is about 3% wider than the old Arial-like fallback: two fixed-width runs-list columns were widened so identity
+  chips do not truncate (`model` 124 to 132, `dataset` 104 to 110), paid for by trimming `status` 150 to 144 and
+  `date` 128 to 120 so Date still sits left of Actions at 1280 (an existing e2e guard); the experiments settings
+  table `scroll-padding-inline-start` went 9rem to 11rem so a control scrolled into view clears the now-wider sticky
+  role column at 390 (an e2e caught the sweep button hiding under it).
 - Plex has a slightly formal, technical character (and a taller Arabic line box than the system faces) compared with
   Inter or Geist; and the OFL Reserved Font Name "Plex" applies to the subset files, which keep their original
   internal names (we load them under the CSS names `Qym Sans`/`Qym Arabic`/`Qym Mono`; the licence texts ship beside
