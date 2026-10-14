@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ToggleButton } from 'react-aria-components';
 import { useModelsStats, useOverview, usePoints, useRunsPage } from '@/api/dashboard';
 import type { Combo, GroupStats, MetricType, RunRow } from '@/api/dashboardTypes';
-import { Button, EmptyState, ErrorState, SegmentedControl, Skeleton, Tabs, TabPanel, Text } from '@/ui';
+import { Button, Card, EmptyState, ErrorState, SegmentedControl, Skeleton, Tabs, TabPanel, Text } from '@/ui';
 import { useDocumentTitle, useProjectContext } from '@/features/shell';
 import { formatClock } from '@/lib/format';
 import { useDelayedPending } from '@/lib/pending';
@@ -450,7 +450,9 @@ function TaskCard({
   const sortBy = (key: string, dir: SortDir) => setSort({ key, dir });
 
   return (
-    <section
+    <Card
+      as="section"
+      flush
       ref={(el) => {
         ref.current = el;
         cardRef.current = el;
@@ -591,7 +593,7 @@ function TaskCard({
           </div>
         </TabPanel>
       </Tabs>
-    </section>
+    </Card>
   );
 }
 

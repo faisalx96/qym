@@ -57,10 +57,7 @@
 }
 
 .card {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  overflow: hidden;
+  overflow: hidden; /* a ui/Card (flush): the rounded frame clips the chart and table */
 }
 
 .cardHead {
