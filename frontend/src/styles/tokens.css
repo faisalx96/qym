@@ -112,7 +112,8 @@
   --motion-step: 180ms;
   --motion-step-out: 140ms;
   --ease-standard: ease;
-  --page-constrained-width: 1120px;
+  --page-max-w: 1233px; /* every report and settings page; the one page width */
+  --page-narrow-w: 1120px; /* text-first pages (profile): an explicit `narrow` container */
   --settings-prompt-rail-width: 200px;
   --settings-prompt-tab-width: 240px;
   --settings-prompt-editor-min-height: 280px;

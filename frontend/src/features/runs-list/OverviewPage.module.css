@@ -8,7 +8,7 @@
 }
 
 .screen[data-constrained] {
-  max-width: var(--page-constrained-width);
+  max-width: var(--page-max-w);
   margin: 0 auto;
 }
 
