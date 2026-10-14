@@ -36,7 +36,7 @@ The dim rule is the one most often violated, and it is absolute: if a human is
 expected to read it, it is `--text-muted` or brighter.
 
 Semantic colors (`--success/--warning/--error/--metric-error/--info`), the 5-step score scale
-(`--score-1..5`), chart colors (`--chart-1..5`), and accents
+(`--score-1..5`), chart colors (`--chart-1..8`), and accents
 (`--accent-primary/secondary/tertiary/tertiary-soft`) are for state and data
 encoding — they are not part of the hierarchy ramp and don't substitute for it.
 
@@ -80,12 +80,20 @@ entry is a deliberate exemption, named in the commit message.
 - `--font-mono` — **data only**: IDs, row numbers, JSON, code, metric/latency
   values, timestamps, version strings. Never for prose or UI chrome. When in
   doubt: if it could contain a sentence, it's sans.
-- No other families. No webfonts (DM Sans and Georgia were removed; the CI test
-  bans them).
-- The mono stack is system faces only: `ui-monospace, SFMono-Regular, 'SF Mono',
-  Menlo, …, Consolas, 'Liberation Mono', monospace`. **Menlo must stay**: it is
-  the only mono face Chrome on macOS can see by name; without it the generic
-  `monospace` resolves to Courier. Any hardcoded mono stack names Menlo too; CI checks both.
+- One typeface family, three scripts: **IBM Plex Sans** (Latin), **IBM Plex Sans Arabic** and
+  **IBM Plex Mono**, self-hosted as subsetted woff2 in `src/styles/fonts/` (SIL OFL, licence texts beside
+  the files; choice and measurements in `docs/internal/ui-migration/redesign2/typeface-study.md`).
+  `@font-face` lives in `tokens.css`: `Qym Sans` and `Qym Mono` are Latin-only by `unicode-range`, `Qym Arabic`
+  is Arabic-only, so Arabic text in a sans or mono block renders in the Arabic face at its own optical size
+  with no `lang` plumbing. All use `font-display: swap`, and `Qym Sans Fallback` / `Qym Mono Fallback`
+  (local Arial / Menlo with `size-adjust` and `ascent-override`) keep layout still during the swap.
+- The stacks are `--font-sans` and `--font-mono` and nothing else; never name a family in a component.
+  DM Sans, Georgia, Google Fonts imports and `@fontsource` packages stay banned (the CI test checks).
+  New files must be subsetted (Latin + Arabic), woff2, with a licence file; total font payload is capped
+  at 200 KB by the design test.
+- The system tail of the mono stack still names **Menlo** (the only mono face Chrome on macOS can see by name);
+  any hardcoded mono stack names Menlo too; CI checks both.
+- Tables (`table`, `grid`, `treegrid`) set `font-variant-numeric: tabular-nums` once in `base.css`.
 - **Text direction.** Every block that shows user or model text goes through
   `TextBlock` (`src/ui/TextBlock`) or takes `textDirAttrs(text)` from
   `@/lib/text`: mostly-Arabic text gets `dir="rtl" lang="ar"`, anything else
@@ -125,7 +133,7 @@ Enforced by `npm run test:design` (vitest), ESLint (TSX rules) and Stylelint.
 2. **`--text-dim` never on readable content.**
 3. **No readable text below 11px.**
 4. **Mono for data, sans for words.**
-5. **No new font families**; DM Sans / Georgia / webfont imports are banned.
+5. **No new font families** beyond the self-hosted Plex set; DM Sans / Georgia / Google Fonts / `@fontsource` are banned.
 6. **The old grays `#7a7a90` and `#50505e` must not reappear** (they were the
    pre-2026-07 sub-AA ramp).
 7. **No hardcoded colours.** Hex and `white` are rejected for `color` and
@@ -377,8 +385,15 @@ cross, trace clock, analysis sparkle), series keep their letter or name.
 | Status | lifecycle of a run, job, review | `--success` completed/approved, `--accent-secondary` running, `--error` failed/rejected, `--warning` stopped/draft, neutral submitted/pending | `Badge`, `RunStatusBadge` | running has the pulsing dot; approved adds the check glyph |
 | Delta | change vs a baseline | good `--score-5`, bad `--score-1`, flat `--text-muted` | `DeltaCell`, `StatStrip trend` | colour only beyond the noise band; sign and arrow always; lower-is-better inverts |
 | Severity / kind | what failed | task `--error`, metric `--metric-error`, trace `--warning`, analysis `--info` | 3px rail, glyph, title colour | rail and glyph, never a filled card |
-| Series | which run, model, category group | `--chart-1..8` | marker dot and letter, `Card series`, chart marks, `Chip series`, `Tag kind=model` | never good or bad; always paired with letter or name; A is the baseline; series 1 is teal for parity, never relied on alone |
+| Series | which run, model, category group | `--chart-1..8` | marker dot and letter, `Card series`, chart marks, `Chip series`, `Tag kind=model` | never good or bad; always paired with letter or name; A is the baseline; series 1 is indigo (teal is reserved for selection, links and the primary action), never relied on alone |
 | Definition metadata | what was run | `--accent-tertiary` (purple) | `Tag kind=task|version|config`, `KeyValueGrid kind` | purple is only this |
+
+Palette rules from the design pass (`docs/internal/ui-migration/redesign2/colour-review.md`): the score ramp is
+red `#ef4444`, orange `#f97316`, yellow `#facc15`, light green `#4ade80`, green `#10b981`; adjacent bands stay at
+least dE 21 apart under protanopia and deuteranopia (the old yellow/lime pair was dE 4 to 10). The eight series
+are indigo, amber, pink, sky, orange, cyan, slate, lime: no teal, purple or red, every one at least 4.5:1 on
+`--bg-surface` and `--bg-elevated`; series colours live in `tokens.css` only (no second palette file).
+Hairlines are `--border-subtle/default/strong` at 1.25 / 1.59 / 2.3 : 1 on `--bg-surface`.
 
 **Tint recipe.** `tones.css` maps `data-tone` (success, info, warning, danger, accent, meta, neutral), `data-band` (1 to 5)
 and `data-series` (1 to 8) to `--tone` and `--tone-text` (the AA-safe text variant: `--error-text` for danger and band 1,

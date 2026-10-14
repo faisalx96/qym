@@ -49,21 +49,25 @@
   /* 5-color score scale (red → orange → yellow → lime → green) */
   --score-1: #ef4444; /* 0-39%: red */
   --score-2: #f97316; /* 40-59%: orange */
-  --score-3: #eab308; /* 60-74%: yellow */
-  --score-4: #84cc16; /* 75-89%: lime */
+  --score-3: #facc15; /* 60-74%: yellow (brighter than the old #eab308 so it separates from lime under protan/deutan) */
+  --score-4: #4ade80; /* 75-89%: light green (was lime #84cc16, which collapsed into yellow for red-green colour blindness) */
   --score-5: #10b981; /* 90-100%: green */
 
   /* Chart colors */
-  --chart-1: #00d4aa;
-  --chart-2: #00a8ff;
-  --chart-3: #a855f7;
-  --chart-4: #f472b6;
-  --chart-5: #fbbf24;
+  /* Series palette (design pass): no teal (reserved for selection/links/primary action), no purple
+     (metadata tags), no red (errors); every hue clears 4.5:1 on surface and elevated. */
+  --chart-1: #818cf8;
+  --chart-2: #f472b6;
+  --chart-3: #38bdf8;
+  --chart-4: #22d3ee;
+  --chart-5: #fb923c;
 
   /* Borders — more visible */
-  --border-subtle: #252536;
-  --border-default: #333348;
-  --border-strong: #4a4a60;
+  /* Hairlines were 1.14 / 1.40 / 2.0 : 1 on --bg-surface, so table rules and card edges vanished on
+     a dim screen; the design pass lifts them to 1.25 / 1.59 / 2.3 : 1. */
+  --border-subtle: #2b2b40;
+  --border-default: #3b3b54;
+  --border-strong: #52526c;
 
   /* Spacing — more breathing room */
   --space-xs: 4px;
@@ -131,26 +135,109 @@
 
   /* Shared width for the charts view label/control column */
 
-  /* Mono font for data. 'Qym Arabic' leads both stacks: its unicode-range
-     limits it to Arabic glyphs, so Latin falls through untouched while any
-     Arabic — prose, code blocks, metric details, table cells — renders in a
-     real Arabic face at a corrected optical size (see @font-face below).
-     Latin resolves to a real system mono on every OS: ui-monospace and
-     SFMono-Regular reach SF Mono in Safari, Menlo is the face Chrome on
-     macOS can actually see (without it the generic 'monospace' falls back to
-     Courier), Consolas covers Windows and Liberation Mono covers Linux. */
-  --font-mono: 'Qym Arabic', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', monospace;
-  --font-sans: 'Qym Arabic', -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  /* Typefaces (docs/internal/ui-migration/redesign2/typeface-study.md): one family, three scripts.
+     IBM Plex Sans (Latin), IBM Plex Sans Arabic and IBM Plex Mono, self-hosted as subsetted woff2
+     (src/styles/fonts, SIL OFL). Each stack lists the web face, the Arabic face (its unicode-range
+     keeps it to Arabic glyphs, so Latin never falls into it), a metric-matched local fallback that
+     stops the swap from moving layout, then the system faces. */
+  --font-sans: 'Qym Sans', 'Qym Arabic', 'Qym Sans Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Qym Mono', 'Qym Arabic', 'Qym Mono Fallback', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
-/* This face applies ONLY to the Arabic Unicode blocks: any Arabic — prose,
-   code blocks, metric details, table cells — renders in a real Arabic sans
-   instead of the browser's thin mono-stack fallback. Rendered size equals
-   the nominal font-size (no scale multiplier). */
+/* Web faces. Latin and Arabic are split by unicode-range so a missing glyph never silently
+   borrows from the wrong script. Variable Latin covers 400-700 in one file; the Arabic and mono
+   faces are static cuts (Regular / Medium / SemiBold, the last also serving 650-700). */
+@font-face {
+  font-family: 'Qym Sans';
+  src: url('./fonts/plex-sans-latin.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2010-2015,
+    U+2018-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2190-2193, U+2212,
+    U+2215, U+2248, U+2260, U+2264-2265, U+25CF;
+}
+
 @font-face {
   font-family: 'Qym Arabic';
-  src: local('Geeza Pro'), local('Segoe UI'), local('Tahoma'), local('Noto Sans Arabic');
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+  src: url('./fonts/plex-arabic-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200F, U+25CC, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
+  font-family: 'Qym Arabic';
+  src: url('./fonts/plex-arabic-medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200F, U+25CC, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
+  font-family: 'Qym Arabic';
+  src: url('./fonts/plex-arabic-semibold.woff2') format('woff2');
+  font-weight: 600 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+200C-200F, U+25CC, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
+  font-family: 'Qym Mono';
+  src: url('./fonts/plex-mono-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2010-2015,
+    U+2018-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2190-2193, U+2212,
+    U+2215, U+2248, U+2260, U+2264-2265, U+25CF;
+}
+
+@font-face {
+  font-family: 'Qym Mono';
+  src: url('./fonts/plex-mono-medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2010-2015,
+    U+2018-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2190-2193, U+2212,
+    U+2215, U+2248, U+2260, U+2264-2265, U+25CF;
+}
+
+@font-face {
+  font-family: 'Qym Mono';
+  src: url('./fonts/plex-mono-semibold.woff2') format('woff2');
+  font-weight: 600 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2010-2015,
+    U+2018-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2190-2193, U+2212,
+    U+2215, U+2248, U+2260, U+2264-2265, U+25CF;
+}
+
+/* Metric-matched fallbacks (Arial/Helvetica for sans, Menlo/Consolas/Liberation Mono for mono): they
+   take Plex's advance width and vertical metrics while the web face loads, so font-display: swap
+   moves neither line breaks nor row heights. Values derived from the hhea and advance tables:
+   sans size-adjust = Plex 0.471 em / Arial 0.459 em average advance. */
+@font-face {
+  font-family: 'Qym Sans Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('Helvetica'), local('Liberation Sans');
+  size-adjust: 102.55%;
+  ascent-override: 99.9%;
+  descent-override: 26.8%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Qym Mono Fallback';
+  src: local('Menlo'), local('Consolas'), local('Liberation Mono'), local('Courier New');
+  size-adjust: 100%;
+  ascent-override: 102.5%;
+  descent-override: 27.5%;
+  line-gap-override: 0%;
 }
 
 /* RTL blocks (the renderers stamp dir="rtl" lang="ar" on detected Arabic
@@ -201,9 +288,9 @@
   --tint-strong: 20%; /* hover/pressed on a tinted fill, selected pill */
   --error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary)); /* 5.15:1 on a 12% error tint */
 
-  --chart-6: #60a5fa;
-  --chart-7: #34d399;
-  --chart-8: #fb923c;
+  --chart-6: #a3e635;
+  --chart-7: #fbbf24;
+  --chart-8: #cbd5e1;
 
   --rail-width: 3px;
   --field-label-width: 7.5rem; /* FieldRow label column */

@@ -17,6 +17,7 @@ body {
   color: var(--text-primary);
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
+  font-kerning: normal;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-color) var(--scrollbar-track);
   overflow: hidden; /* the shell content area is the only page scroller */
@@ -110,4 +111,12 @@ textarea {
   outline: 2px solid var(--warning);
   outline-offset: 2px;
   border-radius: var(--control-radius);
+}
+
+/* Numbers line up in every table: Plex Sans has real tabular figures, so columns of scores, counts and
+   latencies stay vertically aligned without switching those cells to the mono face. */
+table,
+[role='grid'],
+[role='treegrid'] {
+  font-variant-numeric: tabular-nums;
 }

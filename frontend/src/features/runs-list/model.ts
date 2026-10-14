@@ -1,5 +1,4 @@
 /** Model identity helpers (decision §9.7): series slot from the server's frequency-ordered modelIndex. */
-import './palette.css';
 import { parseModelKey, stripProvider } from '@/lib/runs-order';
 
 export function modelKeyOf(row: { model_key?: string; model_name: string }): string {
