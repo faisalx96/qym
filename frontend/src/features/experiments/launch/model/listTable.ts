@@ -103,3 +103,37 @@ export function collectionTableModel(node: CollectionNode): CollectionTableModel
   const allRow = columns.map((col) => node.allItems.find((a) => a.template === col.template) ?? null);
   return { columns, rows, allRow };
 }
+
+/** The value a new list item starts from for a schema `item_type` (never null: null fails validation). */
+export function defaultForItemType(itemType: string | null | undefined): JsonValue {
+  switch (itemType) {
+    case 'integer':
+    case 'number':
+      return 0;
+    case 'boolean':
+      return false;
+    case 'object':
+      return {};
+    case 'array':
+      return [];
+    default:
+      return '';
+  }
+}
+
+/** The same shape with empty values: '' for text, 0 for numbers, false for booleans, recursively. */
+export function blankLike(value: JsonValue | undefined, itemType?: string | null): JsonValue {
+  if (value === null || value === undefined) return defaultForItemType(itemType);
+  if (Array.isArray(value)) return [];
+  if (typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, blankLike(v as JsonValue)]));
+  }
+  if (typeof value === 'number') return 0;
+  if (typeof value === 'boolean') return false;
+  return '';
+}
+
+/** What "+ Add item" appends: shaped like the last item (so object columns carry over), else the schema type. */
+export function newListItem(list: readonly JsonValue[], itemType?: string | null): JsonValue {
+  return list.length ? blankLike(list[list.length - 1], itemType) : defaultForItemType(itemType);
+}

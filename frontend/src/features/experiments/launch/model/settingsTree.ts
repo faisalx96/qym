@@ -452,7 +452,7 @@ function collection(s: BuildState, template: string, pointer: string): Collectio
     };
   });
   const allItems: AllItemsField[] = [];
-  if (item && keys.length > 1) {
+  if (item && keys.length >= 1) {
     const noun = (entry.key_param || 'entry') + (entry.key_param ? 's' : '');
     for (const childTemplate of item.children ?? []) {
       const child = s.ctx.union.fields[childTemplate];

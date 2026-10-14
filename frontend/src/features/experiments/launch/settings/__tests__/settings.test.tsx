@@ -131,24 +131,27 @@ describe('SettingsSection', () => {
     expect(values()).toEqual({});
   }, 20_000);
 
-  it('sweeps the "All roles" row: chips of values, every role swept together', async () => {
+  it('sweeps the "All roles" row: a compact summary, chips in a popover, every role swept together', async () => {
     const { user } = setup(<SettingsSection />);
     await openGroup(user, /LLM routing/);
     await user.click(screen.getByRole('button', { name: 'Sweep values: All roles · max_tokens' }));
-    const chips = document.querySelector('[data-global-sweep]') as HTMLElement;
-    expect(chips).toBeInTheDocument();
-    await user.type(within(chips).getByRole('textbox'), '256, 512{Enter}');
+    const cell = document.querySelector('[data-global-sweep]') as HTMLElement;
+    expect(cell).toBeInTheDocument();
+    await user.click(within(cell).getByRole('button', { name: 'Edit sweep: All roles · max_tokens' }));
+    const dialog = await screen.findByRole('dialog', { name: /Sweep values of/ });
+    await user.type(within(dialog).getByRole('textbox'), '256, 512{Enter}');
     const swept = Object.entries(values()).filter(([p]) => p.endsWith('/max_tokens'));
     expect(swept.length).toBeGreaterThanOrEqual(5);
     expect(swept.every(([, v]) => JSON.stringify(v) === JSON.stringify({ sweep: [256, 512] }))).toBe(true);
-    expect(chips).toHaveTextContent('sweeps 2 runs');
-    await user.click(within(chips).getByRole('button', { name: /Single value/ }));
+    expect(cell).toHaveTextContent('sweeps 2 runs');
+    expect(cell).toHaveTextContent('256 · 512');
+    await user.click(within(dialog).getByRole('button', { name: /Single value/ }));
     expect(
       Object.entries(values())
         .filter(([p]) => p.endsWith('/max_tokens'))
         .every(([, v]) => v === 256),
     ).toBe(true);
-  });
+  }, 20_000);
 
   it('narrows role rows with the role search', async () => {
     const { user } = setup(<SettingsSection />);
@@ -294,9 +297,18 @@ describe('structured JSON editor and open objects', () => {
     await user.type(screen.getByRole('textbox', { name: 'STOP_WORDS · * (all items)' }), 'z{Enter}');
     expect(values()['/STOP_WORDS']).toEqual(['z', 'z']);
     await user.click(screen.getByRole('button', { name: /Add item/ }));
-    expect(values()['/STOP_WORDS']).toEqual(['z', 'z', 'z']);
+    expect(values()['/STOP_WORDS']).toEqual(['z', 'z', '']);
     await user.click(screen.getByRole('button', { name: 'Remove item 1 of STOP_WORDS' }));
-    expect(values()['/STOP_WORDS']).toEqual(['z', 'z']);
+    expect(values()['/STOP_WORDS']).toEqual(['z', '']);
+  });
+
+  it('"Edit as fields" on an unset list changes nothing until the first edit', async () => {
+    const user = setupSynthetic({});
+    await openGroup(user, /Misc/);
+    await user.click(screen.getByRole('button', { name: 'Edit STOP_WORDS as fields' }));
+    expect(values()).toEqual({});
+    await user.click(screen.getByRole('button', { name: /Add item/ }));
+    expect(values()['/STOP_WORDS']).toEqual(['']);
   });
 
   it('shows same-key objects as a table with an "All items" row', async () => {

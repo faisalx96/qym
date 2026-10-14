@@ -12,7 +12,7 @@
 import { useId, useState } from 'react';
 import { Button } from '@/ui';
 import { plural } from '../../lib/format';
-import { listTableModel, uniformKeys, type JsonObject, type JsonValue } from '../model';
+import { listTableModel, newListItem, uniformKeys, type JsonObject, type JsonValue } from '../model';
 import { AddRow } from './AddRow';
 import styles from './settings.module.css';
 
@@ -109,6 +109,8 @@ function getPath(root: JsonValue, path: Path): JsonValue {
 
 interface Editor {
   label: string;
+  /** Schema `item_type` of the root list: what a new item starts from. */
+  itemType?: string | null;
   /** Applies `fn` to a copy of the current value and stores the result. */
   edit: (fn: (draft: JsonValue) => JsonValue) => void;
 }
@@ -457,7 +459,7 @@ function ListView({ ed, path, list, depth }: { ed: Editor; path: Path; list: Jso
           onPress={() =>
             ed.edit((d) => {
               const items = getPath(d, path) as JsonValue[];
-              items.push(items.length ? copy(items[items.length - 1] as JsonValue) : null);
+              items.push(newListItem(items, path.length ? null : ed.itemType));
               return d;
             })
           }
@@ -607,10 +609,11 @@ export interface JsonFieldsProps {
   /** "Edit as JSON". */
   onRaw: () => void;
   fieldRef?: (el: HTMLElement | null) => void;
+  itemType?: string | null;
 }
 
-export function JsonFields({ value, label, onEdit, onRaw, fieldRef }: JsonFieldsProps) {
-  const ed: Editor = { label, edit: onEdit };
+export function JsonFields({ value, label, onEdit, onRaw, fieldRef, itemType }: JsonFieldsProps) {
+  const ed: Editor = { label, edit: onEdit, itemType };
   return (
     <div ref={fieldRef} className={styles.json} role="group" aria-label={label} tabIndex={-1}>
       <div className={styles.addRow}>

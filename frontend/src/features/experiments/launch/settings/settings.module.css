@@ -622,3 +622,41 @@ button.chip:focus-visible,
 .cellActions[data-reserve] {
   min-width: calc(var(--control-height) * 2 + var(--space-sm));
 }
+
+/* A list or object field takes the whole row of the settings grid so its table is not clipped. */
+.field[data-wide] {
+  grid-column: 1 / -1;
+}
+
+/* Narrow tables: the row name stays while the columns scroll. */
+.table tbody th[scope='row'],
+.table tbody td:first-child {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--bg-surface);
+}
+
+.table tr.allRow th[scope='row'],
+.table tr.allRow td:first-child {
+  background: var(--bg-elevated);
+}
+
+/* Global sweep summary in the All row: one compact trigger, the chip editor in a popover. */
+.sweepTrigger {
+  max-width: 100%;
+}
+
+.sweepSummary {
+  display: block;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.sweepPopover {
+  width: min(22rem, 80vw);
+  padding: var(--space-sm);
+}

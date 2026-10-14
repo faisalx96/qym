@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { makeCtx, PRODUCTION } from './__fixtures__/fixtures';
 import { createDocument } from './document';
 import { addKey } from './layering';
-import { collectionTableModel, columnKind, listTableModel, uniformKeys } from './listTable';
+import {
+  blankLike,
+  collectionTableModel,
+  columnKind,
+  defaultForItemType,
+  listTableModel,
+  newListItem,
+  uniformKeys,
+} from './listTable';
 import { buildSettingsView, type CollectionNode, type ObjectNode } from './settingsTree';
 
 describe('listTableModel (any list of the schema as a table)', () => {
@@ -50,12 +58,32 @@ describe('collectionTableModel (the endpoints as a table)', () => {
     const one = collectionTableModel(llm());
     expect(one?.rows.map((r) => r.item.key)).toEqual(['primary']);
     expect(one?.columns.length).toBeGreaterThan(2);
-    expect(one?.allRow.every((a) => a === null)).toBe(true);
+    expect(one?.allRow.some(Boolean)).toBe(true); // the global row shows with one endpoint, like All roles
     const two = collectionTableModel(
       llm(addKey(createDocument({ environmentIds: [PRODUCTION] }), '/LLM_OVERRIDES/endpoints', 'fast')),
     );
     expect(two?.rows.map((r) => r.item.key)).toEqual(['primary', 'fast']);
     expect(two?.allRow.some(Boolean)).toBe(true);
     expect(two?.rows.every((r) => r.cells.length === two.columns.length)).toBe(true);
+  });
+});
+
+describe('new list items (never null)', () => {
+  it('start from the schema item type, or the shape of the last item', () => {
+    expect(defaultForItemType('string')).toBe('');
+    expect(defaultForItemType('integer')).toBe(0);
+    expect(defaultForItemType('number')).toBe(0);
+    expect(defaultForItemType('boolean')).toBe(false);
+    expect(defaultForItemType('object')).toEqual({});
+    expect(defaultForItemType(null)).toBe('');
+    expect(newListItem([], 'integer')).toBe(0);
+    expect(newListItem(['a', 'b'])).toBe('');
+    expect(newListItem([{ name: 'a', limit: 3, on: true, tags: ['x'] }])).toEqual({
+      name: '',
+      limit: 0,
+      on: false,
+      tags: [],
+    });
+    expect(blankLike(null, 'integer')).toBe(0);
   });
 });

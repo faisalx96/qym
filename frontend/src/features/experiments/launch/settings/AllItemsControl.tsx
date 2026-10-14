@@ -14,6 +14,7 @@ import {
   type AllItemsField,
   type DescriptorEntry,
 } from '../model';
+import { Button, Popover } from '@/ui';
 import { plural } from '../../lib/format';
 import { useLaunch } from '../LaunchContext';
 import { endpointNames, useSettingsActions } from './SettingsContext';
@@ -43,16 +44,36 @@ function AllItemsControlImpl(props: AllItemsControlProps) {
   const targets = pointers ?? field.pointers;
   const swept = sharedSweep(doc, targets);
   if (swept) {
+    const summary = swept.map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).join(' · ');
     return (
       <div className={styles.globalSweep} data-global-sweep="">
-        <SweepChips
-          entry={field.entry}
-          label={field.label}
-          values={swept}
-          endpointKeys={endpointNames({ endpoints }, field.entry)}
-          onChange={(values) => setDoc((d) => setGlobalSweep(d, targets, values))}
-          onSingle={() => setDoc((d) => withPrunedLinks(stopGlobalSweep(d, targets), ctx))}
-        />
+        <Popover
+          label={`Sweep values of ${field.label}`}
+          placement="bottom start"
+          trigger={
+            <Button
+              size="sm"
+              variant="neutral"
+              aria-label={`Edit sweep: ${field.label}`}
+              className={styles.sweepTrigger}
+            >
+              <span className={styles.sweepSummary} title={summary || 'No values yet'}>
+                {summary || 'Add values'}
+              </span>
+            </Button>
+          }
+        >
+          <div className={styles.sweepPopover}>
+            <SweepChips
+              entry={field.entry}
+              label={field.label}
+              values={swept}
+              endpointKeys={endpointNames({ endpoints }, field.entry)}
+              onChange={(values) => setDoc((d) => setGlobalSweep(d, targets, values))}
+              onSingle={() => setDoc((d) => withPrunedLinks(stopGlobalSweep(d, targets), ctx))}
+            />
+          </div>
+        </Popover>
         <span className={styles.hint}>
           {swept.length ? `sweeps ${plural(swept.length, 'run')}` : 'add values to sweep'}
         </span>
