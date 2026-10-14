@@ -276,6 +276,11 @@
   text-transform: inherit;
   color: inherit;
   cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.stepsHead button:hover {
+  color: var(--text-primary);
 }
 
 .stepRow {
