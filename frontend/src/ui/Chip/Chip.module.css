@@ -31,10 +31,23 @@
   color: var(--text-primary);
 }
 
+.chip:not([data-tone], [data-series]) {
+  --tone: var(--accent-primary);
+  --tone-text: var(--accent-primary);
+}
+
+.chip[data-pressed] {
+  background: var(--bg-active);
+}
+
 .chip[data-selected] {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  background: rgba(0, 212, 170, 0.12);
+  border-color: var(--tone);
+  color: var(--tone-text);
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+}
+
+.chip[data-selected][data-hovered] {
+  background: color-mix(in srgb, var(--tone) var(--tint-strong), transparent);
 }
 
 .chip[data-focus-visible] {
@@ -54,7 +67,7 @@
 }
 
 .chip[data-selected] .count {
-  color: var(--accent-primary);
+  color: var(--tone-text);
 }
 
 .remove {

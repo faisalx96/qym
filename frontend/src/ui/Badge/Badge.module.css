@@ -25,31 +25,19 @@
   background: currentcolor;
 }
 
-.badge[data-tone='success'] {
-  color: var(--success);
-  border-color: var(--success);
-  background: rgba(16, 185, 129, 0.09);
-}
-
-.badge[data-tone='info'] {
-  color: var(--accent-secondary);
-  border-color: var(--accent-secondary);
-  background: rgba(0, 168, 255, 0.09);
-}
-
-.badge[data-tone='danger'] {
-  color: color-mix(in srgb, var(--error) 80%, var(--text-primary));
-  border-color: var(--error);
-  background: rgba(239, 68, 68, 0.09);
-}
-
-.badge[data-tone='warning'] {
-  color: var(--warning);
-  border-color: var(--warning);
-  background: rgba(245, 158, 11, 0.09);
+.badge[data-tone] {
+  color: var(--tone-text);
+  border-color: var(--tone);
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
 }
 
 .badge[data-tone='neutral'] {
   color: var(--text-muted);
   border-color: var(--border-strong);
+  background: transparent;
+}
+
+.glyph {
+  font-size: var(--font-sm);
+  line-height: 1;
 }
