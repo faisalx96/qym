@@ -39,9 +39,16 @@ export async function seedTour(): Promise<Tour> {
 
 export { openRun };
 
-/** Resolves when no CSS animation or transition is running (entrances and fills are 360ms). */
+/** Resolves when no finite CSS animation or transition is running (entrances and fills are 360ms; spinners loop). */
 export async function settled(page: Page): Promise<void> {
-  await page.waitForFunction(() => document.getAnimations().length === 0, undefined, { timeout: 10_000 });
+  await page.waitForFunction(
+    () =>
+      document
+        .getAnimations()
+        .every((a) => a.playState === 'finished' || a.effect?.getComputedTiming().iterations === Infinity),
+    undefined,
+    { timeout: 10_000 },
+  );
 }
 
 export interface AreasWorld {
