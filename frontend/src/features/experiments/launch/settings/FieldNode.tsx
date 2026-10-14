@@ -13,10 +13,9 @@ import {
   type SettingsNode,
 } from '../model';
 import { AddRow } from './AddRow';
-import { CollectionTable } from './CollectionTable';
 import { AllItemsControl } from './AllItemsControl';
 import { LeafField } from './LeafField';
-import { RoleTable } from './RoleTable';
+import { CollectionTable, RoleTable } from './RoleTable';
 import { useSettingsActions } from './SettingsContext';
 import styles from './settings.module.css';
 
