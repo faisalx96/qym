@@ -143,7 +143,7 @@ function RunCard({
       data-baseline={isBase || undefined}
       {...mark}
     >
-      <Card series={runSeries(idx)} compact={variant !== 'full'} className={styles.card}>
+      <Card series={runSeries(idx)} compact={variant !== 'full'} className={styles.runCard}>
         <div className={styles.stack}>
           <div className={styles.cardHead}>
             <RunTag index={idx} name={name} title={title} baseline={isBase} bare />
