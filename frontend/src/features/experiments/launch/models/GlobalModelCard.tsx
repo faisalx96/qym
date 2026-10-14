@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { TemporaryModelForm } from '@/features/environments/TemporaryModelForm';
-import { Button, Select, Tag } from '@/ui';
+import { Button, Select, Tag, Card } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import {
   bindingFromSweepItem,
@@ -74,110 +74,114 @@ export function GlobalModelCard() {
   const names = (list: typeof slots) => list.map((s) => s.label).join(', ');
 
   return (
-    <div className={styles.card} data-global role="group" aria-label="Global model" data-global-model>
-      <div className={styles.head}>
-        <span className={styles.title}>Global model</span>
-        {g ? (
-          <Tag kind="count">
-            {summary.following.length} of {summary.total} endpoint{summary.total === 1 ? '' : 's'}
-          </Tag>
-        ) : null}
-        <span className={styles.spacer} />
-        {g ? (
-          <Button variant="ghost" onPress={() => void apply(null)}>
-            Clear
-          </Button>
-        ) : null}
-      </div>
-      <p className={styles.hint}>
-        Sets the model, base URL and API key of every LLM endpoint at once. Roles use the model of the
-        endpoint they point at.
-      </p>
-      {g?.kind === 'sweep' ? (
-        <SweepChips
-          label="Global model"
-          items={g.items}
-          connections={connections}
-          onChange={(next: SweepModelItem[]) => void apply({ kind: 'sweep', items: next })}
-          onSingle={() => {
-            const first = bindingFromSweepItem(g.items[0]);
-            if (first) void apply(first);
-            else
-              setDoc((d) => withPrunedLinks(inheritEverywhere(d, ctxRef.current, secrets), ctxRef.current));
-          }}
-        />
-      ) : (
-        <>
-          <Select
-            label="Global model"
-            items={items}
-            value={value}
-            onChange={(key) => {
-              if (key === CURRENT) return;
-              if (key === NONE || key == null) void apply(null);
-              else void apply({ kind: 'connection', id: String(key) });
-            }}
-            help={
-              connections.length
-                ? undefined
-                : 'No project models are available for experiments on every endpoint.'
-            }
-          />
-          {g?.kind === 'temporary' ? (
-            <>
-              <TemporaryChip binding={g} />
-              {!g.secretRef ? <ReenterKeyRow slotKey={null} label="the global model" /> : null}
-            </>
+    <Card role="group" aria-label="Global model" data-global-model>
+      <div className={styles.cardStack}>
+        <div className={styles.head}>
+          <span className={styles.title}>Global model</span>
+          {g ? (
+            <Tag kind="count">
+              {summary.following.length} of {summary.total} endpoint{summary.total === 1 ? '' : 's'}
+            </Tag>
           ) : null}
-          {formOpen ? (
-            <TemporaryModelForm
-              keysAllowed={keys.allowed}
-              keysReason={keys.reason}
-              canSaveToProject={false}
-              allowHttp
-              onCancel={() => setFormOpen(false)}
-              onSubmit={(v) => void apply(bindingFromTemporaryForm({ ...v, saveToProject: false }, secrets))}
-            />
-          ) : (
-            <div className={styles.row}>
-              {mode === 'launch' ? (
-                <>
-                  <Button variant="neutral" onPress={() => setFormOpen(true)}>
-                    + Temporary model
-                  </Button>
-                  <Button variant="neutral" onPress={() => void apply(startModelSweep(g))}>
-                    + models
-                  </Button>
-                </>
-              ) : null}
-            </div>
-          )}
-        </>
-      )}
-      {g ? (
-        <div>
-          <p className={styles.hint} data-global-status>
-            {summary.custom.length
-              ? `Follows the global model: ${names(summary.following) || 'none'}. Custom: ${names(summary.custom)}.`
-              : 'Every endpoint follows the global model.'}
-          </p>
-          <p className={styles.hint}>
-            Changing the global model sets every endpoint again, custom ones too. Clearing it keeps each
-            endpoint’s model.
-          </p>
-          {summary.custom.length ? (
-            <div className={styles.row}>
-              <Button variant="neutral" onPress={() => void apply(g)}>
-                Apply to all endpoints
-              </Button>
-            </div>
+          <span className={styles.spacer} />
+          {g ? (
+            <Button variant="ghost" onPress={() => void apply(null)}>
+              Clear
+            </Button>
           ) : null}
         </div>
-      ) : (
         <p className={styles.hint}>
-          Pick a model to use it on every endpoint; single endpoints can still be changed below.
+          Sets the model, base URL and API key of every LLM endpoint at once. Roles use the model of the
+          endpoint they point at.
         </p>
-      )}
-    </div>
+        {g?.kind === 'sweep' ? (
+          <SweepChips
+            label="Global model"
+            items={g.items}
+            connections={connections}
+            onChange={(next: SweepModelItem[]) => void apply({ kind: 'sweep', items: next })}
+            onSingle={() => {
+              const first = bindingFromSweepItem(g.items[0]);
+              if (first) void apply(first);
+              else
+                setDoc((d) => withPrunedLinks(inheritEverywhere(d, ctxRef.current, secrets), ctxRef.current));
+            }}
+          />
+        ) : (
+          <>
+            <Select
+              label="Global model"
+              items={items}
+              value={value}
+              onChange={(key) => {
+                if (key === CURRENT) return;
+                if (key === NONE || key == null) void apply(null);
+                else void apply({ kind: 'connection', id: String(key) });
+              }}
+              help={
+                connections.length
+                  ? undefined
+                  : 'No project models are available for experiments on every endpoint.'
+              }
+            />
+            {g?.kind === 'temporary' ? (
+              <>
+                <TemporaryChip binding={g} />
+                {!g.secretRef ? <ReenterKeyRow slotKey={null} label="the global model" /> : null}
+              </>
+            ) : null}
+            {formOpen ? (
+              <TemporaryModelForm
+                keysAllowed={keys.allowed}
+                keysReason={keys.reason}
+                canSaveToProject={false}
+                allowHttp
+                onCancel={() => setFormOpen(false)}
+                onSubmit={(v) =>
+                  void apply(bindingFromTemporaryForm({ ...v, saveToProject: false }, secrets))
+                }
+              />
+            ) : (
+              <div className={styles.row}>
+                {mode === 'launch' ? (
+                  <>
+                    <Button variant="neutral" onPress={() => setFormOpen(true)}>
+                      + Temporary model
+                    </Button>
+                    <Button variant="neutral" onPress={() => void apply(startModelSweep(g))}>
+                      + models
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            )}
+          </>
+        )}
+        {g ? (
+          <div>
+            <p className={styles.hint} data-global-status>
+              {summary.custom.length
+                ? `Follows the global model: ${names(summary.following) || 'none'}. Custom: ${names(summary.custom)}.`
+                : 'Every endpoint follows the global model.'}
+            </p>
+            <p className={styles.hint}>
+              Changing the global model sets every endpoint again, custom ones too. Clearing it keeps each
+              endpoint’s model.
+            </p>
+            {summary.custom.length ? (
+              <div className={styles.row}>
+                <Button variant="neutral" onPress={() => void apply(g)}>
+                  Apply to all endpoints
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className={styles.hint}>
+            Pick a model to use it on every endpoint; single endpoints can still be changed below.
+          </p>
+        )}
+      </div>
+    </Card>
   );
 }

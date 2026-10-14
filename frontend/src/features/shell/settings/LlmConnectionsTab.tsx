@@ -22,6 +22,7 @@ import {
   useToast,
   type Column,
   type RowAction,
+  Card,
 } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
@@ -238,7 +239,6 @@ function ConnectionForm({
   const [forExperiments, setForExperiments] = useState(initial?.available_for_experiments ?? true);
   return (
     <form
-      className={styles.card}
       data-llm-form
       onSubmit={(e) => {
         e.preventDefault();
@@ -251,56 +251,70 @@ function ConnectionForm({
         });
       }}
     >
-      <div className={styles.cardHeader}>
-        <Text variant="md">{initial ? `Edit “${initial.name}”` : 'New connection'}</Text>
-      </div>
-      <div className={styles.cardBody}>
-        <div className={styles.formRow}>
-          <TextField
-            label="Name"
-            value={name}
-            onChange={setName}
-            isRequired
-            placeholder="OpenAI prod"
-            autoFocus
-          />
-          <TextField
-            label="Base URL"
-            value={baseUrl}
-            onChange={setBaseUrl}
-            isRequired
-            mono
-            placeholder="https://api.openai.com/v1"
-            help="An https:// URL is required to offer the connection for experiments."
-          />
-          <TextField label="Model" value={model} onChange={setModel} isRequired mono placeholder="gpt-4.1" />
-          <TextField
-            label="API key"
-            type="password"
-            value={key}
-            onChange={setKey}
-            mono
-            placeholder={initial?.llm_api_key_set ? `Keep current (${initial.llm_api_key_hint})` : 'sk-…'}
-            autoComplete="new-password"
-          />
+      <Card
+        header={
+          <div className={styles.cardHeader}>
+            <Text variant="md">{initial ? `Edit “${initial.name}”` : 'New connection'}</Text>
+          </div>
+        }
+        footer={
+          <div className={styles.cardFooter}>
+            <Button variant="neutral" onPress={onCancel}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={busy}
+              isDisabled={!name.trim() || !baseUrl.trim() || !model.trim()}
+            >
+              {initial ? 'Save changes' : 'Add connection'}
+            </Button>
+          </div>
+        }
+      >
+        <div className={styles.cardBody}>
+          <div className={styles.formRow}>
+            <TextField
+              label="Name"
+              value={name}
+              onChange={setName}
+              isRequired
+              placeholder="OpenAI prod"
+              autoFocus
+            />
+            <TextField
+              label="Base URL"
+              value={baseUrl}
+              onChange={setBaseUrl}
+              isRequired
+              mono
+              placeholder="https://api.openai.com/v1"
+              help="An https:// URL is required to offer the connection for experiments."
+            />
+            <TextField
+              label="Model"
+              value={model}
+              onChange={setModel}
+              isRequired
+              mono
+              placeholder="gpt-4.1"
+            />
+            <TextField
+              label="API key"
+              type="password"
+              value={key}
+              onChange={setKey}
+              mono
+              placeholder={initial?.llm_api_key_set ? `Keep current (${initial.llm_api_key_hint})` : 'sk-…'}
+              autoComplete="new-password"
+            />
+          </div>
+          <Checkbox isSelected={forExperiments} onChange={setForExperiments}>
+            Available for experiments (otherwise analysis only)
+          </Checkbox>
         </div>
-        <Checkbox isSelected={forExperiments} onChange={setForExperiments}>
-          Available for experiments (otherwise analysis only)
-        </Checkbox>
-      </div>
-      <div className={styles.cardFooter}>
-        <Button variant="neutral" onPress={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          variant="primary"
-          loading={busy}
-          isDisabled={!name.trim() || !baseUrl.trim() || !model.trim()}
-        >
-          {initial ? 'Save changes' : 'Add connection'}
-        </Button>
-      </div>
+      </Card>
     </form>
   );
 }

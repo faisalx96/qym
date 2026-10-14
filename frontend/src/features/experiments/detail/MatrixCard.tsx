@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import type { ExperimentJob } from '@/api/experiments';
 import { runPath } from '@/app/routes';
-import { Button, Checkbox, SectionHeader } from '@/ui';
+import { Button, Checkbox, SectionHeader, Card } from '@/ui';
 import { JobStatusBadge } from '../components/StatusBadges';
 import { isCancellable, isRetryable } from '../lib/cancel';
 import { formatMetric, plural } from '../lib/format';
@@ -45,84 +45,88 @@ export function MatrixCard({
   const { envs, combos, cells, liveRunIds } = matrix;
   const selectedSet = new Set(selected);
   return (
-    <section className={styles.card} aria-labelledby="matrix-title" data-exp-matrix>
-      <div className={styles.cardHead}>
-        <SectionHeader
-          id="matrix-title"
-          title="Matrix"
-          description={`${plural(combos.length, 'combination')} × ${plural(envs.length, 'environment')}. Each cell is the latest attempt; earlier attempts stay in the job history.`}
-        />
-        <div className={styles.toolbar} role="group" aria-label="Compare runs">
-          <Button
-            variant="neutral"
-            isDisabled={!liveRunIds.length || selected.length === liveRunIds.length}
-            onPress={onSelectAll}
-          >
-            Select all runs
-          </Button>
-          <Button variant="neutral" isDisabled={!selected.length} onPress={onClear}>
-            Clear
-          </Button>
-          <Button variant="accent" isDisabled={selected.length < 2} onPress={onCompare}>
-            Compare selected ({selected.length})
-          </Button>
+    <Card as="section" aria-labelledby="matrix-title" data-exp-matrix>
+      <div className={styles.stack}>
+        <div className={styles.cardHead}>
+          <SectionHeader
+            id="matrix-title"
+            title="Matrix"
+            description={`${plural(combos.length, 'combination')} × ${plural(envs.length, 'environment')}. Each cell is the latest attempt; earlier attempts stay in the job history.`}
+          />
+          <div className={styles.toolbar} role="group" aria-label="Compare runs">
+            <Button
+              variant="neutral"
+              isDisabled={!liveRunIds.length || selected.length === liveRunIds.length}
+              onPress={onSelectAll}
+            >
+              Select all runs
+            </Button>
+            <Button variant="neutral" isDisabled={!selected.length} onPress={onClear}>
+              Clear
+            </Button>
+            <Button variant="accent" isDisabled={selected.length < 2} onPress={onCompare}>
+              Compare selected ({selected.length})
+            </Button>
+          </div>
+        </div>
+        <div className={styles.tableWrap}>
+          <table className={styles.matrix}>
+            <caption className={styles.srOnly}>
+              Latest attempt of each combination in each environment
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Combination</th>
+                {envs.map((env) => (
+                  <th key={env.id} scope="col" title={env.name}>
+                    {env.name}
+                    {env.active ? '' : ' (disabled)'}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {combos.map((combo) => (
+                <tr key={combo.index} data-combo-index={combo.index}>
+                  <th scope="row">
+                    <span className={styles.comboLabel} title={combo.label}>
+                      {combo.label || (combos.length === 1 ? 'Configuration' : 'Combination')}
+                    </span>
+                    <span className={`${styles.sub} ${styles.mono}`}>#{combo.index}</span>
+                  </th>
+                  {envs.map((env) => {
+                    const cell = cells.get(cellKey(combo.index, env.id));
+                    return (
+                      <td key={env.id}>
+                        {cell?.current ? (
+                          <MatrixCell
+                            slug={slug}
+                            job={cell.current}
+                            earlier={cell.earlier.length}
+                            env={env}
+                            comboLabel={combo.label || `#${combo.index}`}
+                            selected={cell.current.run_id ? selectedSet.has(cell.current.run_id) : false}
+                            onToggle={onToggle}
+                            onShowAttempts={onShowAttempts}
+                            flows={flows}
+                            canControl={canControl}
+                            canSavePreset={canSavePreset}
+                            canPromote={canPromote}
+                            onPromote={onPromote}
+                          />
+                        ) : (
+                          <span className={styles.sub}>—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.matrix}>
-          <caption className={styles.srOnly}>Latest attempt of each combination in each environment</caption>
-          <thead>
-            <tr>
-              <th scope="col">Combination</th>
-              {envs.map((env) => (
-                <th key={env.id} scope="col" title={env.name}>
-                  {env.name}
-                  {env.active ? '' : ' (disabled)'}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {combos.map((combo) => (
-              <tr key={combo.index} data-combo-index={combo.index}>
-                <th scope="row">
-                  <span className={styles.comboLabel} title={combo.label}>
-                    {combo.label || (combos.length === 1 ? 'Configuration' : 'Combination')}
-                  </span>
-                  <span className={`${styles.sub} ${styles.mono}`}>#{combo.index}</span>
-                </th>
-                {envs.map((env) => {
-                  const cell = cells.get(cellKey(combo.index, env.id));
-                  return (
-                    <td key={env.id}>
-                      {cell?.current ? (
-                        <MatrixCell
-                          slug={slug}
-                          job={cell.current}
-                          earlier={cell.earlier.length}
-                          env={env}
-                          comboLabel={combo.label || `#${combo.index}`}
-                          selected={cell.current.run_id ? selectedSet.has(cell.current.run_id) : false}
-                          onToggle={onToggle}
-                          onShowAttempts={onShowAttempts}
-                          flows={flows}
-                          canControl={canControl}
-                          canSavePreset={canSavePreset}
-                          canPromote={canPromote}
-                          onPromote={onPromote}
-                        />
-                      ) : (
-                        <span className={styles.sub}>—</span>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    </Card>
   );
 }
 

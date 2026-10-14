@@ -29,14 +29,13 @@
   pointer-events: none;
 }
 
-.card {
-  position: relative;
+.panel {
   width: min(420px, 100%);
-  padding: var(--space-xl) var(--space-xl) var(--space-lg);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  background: var(--bg-surface);
   box-shadow: var(--shadow-dialog);
+}
+
+.panelBody {
+  padding: var(--space-sm) var(--space-md);
 }
 
 .header {

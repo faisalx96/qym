@@ -23,6 +23,7 @@ import {
   TextField,
   useToast,
   type Column,
+  Card,
 } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
@@ -96,15 +97,21 @@ function KeysCard({
     },
   ];
   return (
-    <section className={styles.card} aria-labelledby="keys-title" data-api-keys>
-      <div className={styles.cardHeader}>
-        <div>
-          <Text variant="md" id="keys-title">
-            API keys
-          </Text>
-          <Text variant="sm">Used by the SDK (QYM_API_KEY) to push runs into this project.</Text>
+    <Card
+      as="section"
+      aria-labelledby="keys-title"
+      data-api-keys
+      header={
+        <div className={styles.cardHeader}>
+          <div>
+            <Text variant="md" id="keys-title">
+              API keys
+            </Text>
+            <Text variant="sm">Used by the SDK (QYM_API_KEY) to push runs into this project.</Text>
+          </div>
         </div>
-      </div>
+      }
+    >
       <div className={styles.cardBody}>
         {!readOnly ? (
           <form
@@ -200,7 +207,7 @@ function KeysCard({
           }}
         />
       ) : null}
-    </section>
+    </Card>
   );
 }
 
@@ -258,18 +265,24 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
     },
   ];
   return (
-    <section className={styles.card} aria-labelledby="tokens-title" data-read-tokens>
-      <div className={styles.cardHeader}>
-        <div>
-          <Text variant="md" id="tokens-title">
-            Dataset read tokens
-          </Text>
-          <Text variant="sm">
-            Admin-issued; lets a service read private test sets (QYM_DATASET_READ_TOKEN). Sent only on dataset
-            reads.
-          </Text>
+    <Card
+      as="section"
+      aria-labelledby="tokens-title"
+      data-read-tokens
+      header={
+        <div className={styles.cardHeader}>
+          <div>
+            <Text variant="md" id="tokens-title">
+              Dataset read tokens
+            </Text>
+            <Text variant="sm">
+              Admin-issued; lets a service read private test sets (QYM_DATASET_READ_TOKEN). Sent only on
+              dataset reads.
+            </Text>
+          </div>
         </div>
-      </div>
+      }
+    >
       <div className={styles.cardBody}>
         {!readOnly ? (
           <form
@@ -362,6 +375,6 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
           }}
         />
       ) : null}
-    </section>
+    </Card>
   );
 }

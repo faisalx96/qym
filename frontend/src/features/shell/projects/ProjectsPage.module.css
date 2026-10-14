@@ -8,31 +8,15 @@
   padding: 0;
 }
 
-.card {
+.fill {
+  height: 100%;
+}
+
+.stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
   height: 100%;
-  padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  text-decoration: none;
-  transition:
-    border-color var(--transition-fast),
-    background var(--transition-fast);
-}
-
-.card:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-elevated);
-  text-decoration: none;
-}
-
-.card:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
 }
 
 .cardHead {

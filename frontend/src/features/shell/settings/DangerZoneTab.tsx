@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Stack, Text } from '@/ui';
+import { Button, Stack, Text, Card } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import { ArchiveProjectDialog, DeleteProjectDialog, UnarchiveProjectDialog } from '../dialogs';
 import styles from './settings.module.css';
@@ -11,11 +11,7 @@ export function DangerZoneTab() {
   const [del, setDel] = useState(false);
   return (
     <Stack gap="lg">
-      <section
-        className={[styles.card, styles.dangerCard].join(' ')}
-        aria-label="Danger zone"
-        data-danger-zone
-      >
+      <Card as="section" aria-label="Danger zone" tone="danger" data-danger-zone>
         <div className={styles.cardBody}>
           {project.is_active ? (
             <div className={styles.dangerRow}>
@@ -53,7 +49,7 @@ export function DangerZoneTab() {
             </Button>
           </div>
         </div>
-      </section>
+      </Card>
       <ArchiveProjectDialog project={project} open={archive} onOpenChange={setArchive} />
       <UnarchiveProjectDialog project={project} open={unarchive} onOpenChange={setUnarchive} />
       <DeleteProjectDialog

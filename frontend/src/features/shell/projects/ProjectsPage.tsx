@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { canCreateProject } from '@/api/me';
 import type { Project } from '@/api/types';
 import { projectPath } from '@/app/routes';
-import { Button, EmptyState, Icon, Identicon, PageHeader, SearchField, Tag, Text } from '@/ui';
+import { Button, EmptyState, Icon, Identicon, PageHeader, SearchField, Tag, Text, Card } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useDocumentTitle } from '../hooks';
 import { constrained } from '../layout';
@@ -95,28 +94,30 @@ export function ProjectsPage() {
 
 function ProjectCard({ project }: { project: Project }) {
   return (
-    <Link to={projectPath(project.slug)} className={styles.card} data-project-card={project.slug}>
-      <div className={styles.cardHead}>
-        <Identicon seed={project.slug} chip />
-        <div className={styles.cardTitle}>
-          <Text variant="md" as="span" truncate>
-            {project.name}
-          </Text>
-          <Text variant="sm" as="span" mono truncate>
-            {project.slug}
-          </Text>
+    <Card to={projectPath(project.slug)} className={styles.fill} data-project-card={project.slug}>
+      <div className={styles.stack}>
+        <div className={styles.cardHead}>
+          <Identicon seed={project.slug} chip />
+          <div className={styles.cardTitle}>
+            <Text variant="md" as="span" truncate>
+              {project.name}
+            </Text>
+            <Text variant="sm" as="span" mono truncate>
+              {project.slug}
+            </Text>
+          </div>
+          <Tag kind="role">{project.role || 'member'}</Tag>
         </div>
-        <Tag kind="role">{project.role || 'member'}</Tag>
+        <div className={styles.cardMeta}>
+          <span>
+            <strong>{project.run_count}</strong> {project.run_count === 1 ? 'run' : 'runs'}
+          </span>
+          <span>
+            <strong>{project.member_count}</strong> {project.member_count === 1 ? 'member' : 'members'}
+          </span>
+          <span>updated {relativeDate(project.updated_at)}</span>
+        </div>
       </div>
-      <div className={styles.cardMeta}>
-        <span>
-          <strong>{project.run_count}</strong> {project.run_count === 1 ? 'run' : 'runs'}
-        </span>
-        <span>
-          <strong>{project.member_count}</strong> {project.member_count === 1 ? 'member' : 'members'}
-        </span>
-        <span>updated {relativeDate(project.updated_at)}</span>
-      </div>
-    </Link>
+    </Card>
   );
 }
