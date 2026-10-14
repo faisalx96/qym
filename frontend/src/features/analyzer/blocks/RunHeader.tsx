@@ -24,13 +24,7 @@ export function RunHeader({
   return (
     <div className={s.runHeader}>
       <div className={s.runTitle}>
-        <Text
-          variant="lg"
-          weight={600}
-          as="h2"
-          dir="auto"
-          mono={isBareRunId(run.run_name || run.run_id, run.run_id)}
-        >
+        <Text variant="xl" as="h2" dir="auto" mono={isBareRunId(run.run_name || run.run_id, run.run_id)}>
           {run.run_name || run.run_id}
         </Text>
         <div className={s.runMeta}>

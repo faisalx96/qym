@@ -72,3 +72,20 @@ for (const p of pages) {
     expect(off, `${p.name}: headings off the 22/18/15 scale`).toEqual([]);
   });
 }
+
+test('analysis: sections are H2 18px, panels H3 15px, no H3 larger than an H2', async ({ page }) => {
+  await gotoApp(page, `/projects/${areas.analysisSlug}/analysis?run=${areas.runId}`);
+  await expect(page.getByRole('main')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Setup', exact: true })).toBeVisible();
+  await settled(page);
+  const sizes = await page.evaluate(() => {
+    const size = (tag: string) =>
+      Array.from(document.querySelectorAll<HTMLElement>(`main ${tag}`))
+        .filter((e) => e.getBoundingClientRect().height > 0)
+        .map((e) => parseFloat(getComputedStyle(e).fontSize));
+    return { h2: size('h2'), h3: size('h3') };
+  });
+  expect(sizes.h2.length).toBeGreaterThanOrEqual(3);
+  expect(new Set(sizes.h2), 'every section H2').toEqual(new Set([18]));
+  for (const h3 of sizes.h3) expect(h3, 'an H3 is a panel heading (15px)').toBeLessThanOrEqual(15);
+});
