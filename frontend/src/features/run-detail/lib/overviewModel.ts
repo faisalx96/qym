@@ -522,6 +522,50 @@ export function categoryBreakdown(
   return { key, metric, overallAverage: overall.reduce((a, b) => a + b, 0) / overall.length, groups: stats };
 }
 
+/** Best-to-worst distance of the group averages (0 when fewer than two groups have one). */
+export function categorySpread(b: Pick<CategoryBreakdown, 'groups'>): number {
+  const avgs = b.groups.map((g) => g.avgScore).filter((v): v is number => v !== null);
+  return avgs.length < 2 ? 0 : Math.max(...avgs) - Math.min(...avgs);
+}
+
+export type CategorySort = 'worst' | 'best' | 'items' | 'name';
+
+/** Groups ordered for the table. Worst/best follow the metric direction; groups without an average go last. */
+export function sortCategoryGroups(
+  groups: CategoryGroupStat[],
+  sort: CategorySort,
+  direction: 'maximize' | 'minimize' | null,
+): CategoryGroupStat[] {
+  const sign = (sort === 'worst') === (direction === 'minimize') ? -1 : 1;
+  const out = groups.slice();
+  if (sort === 'items')
+    return out.sort((a, b) => b.itemCount - a.itemCount || a.value.localeCompare(b.value));
+  if (sort === 'name') return out.sort((a, b) => a.value.localeCompare(b.value));
+  return out.sort((a, b) => {
+    if (a.avgScore === null && b.avgScore === null) return a.value.localeCompare(b.value);
+    if (a.avgScore === null) return 1;
+    if (b.avgScore === null) return -1;
+    return sign * (a.avgScore - b.avgScore) || b.itemCount - a.itemCount;
+  });
+}
+
+/** "Weakest: expert 25% (66 items, 24 pts below overall). Strongest: easy 80%." or null for fewer than two values. */
+export function categoryInsight(
+  b: CategoryBreakdown,
+  direction: 'maximize' | 'minimize' | null,
+  fmt: (v: number | null) => string,
+  numeric: boolean,
+): string | null {
+  const scored = b.groups.filter((g) => g.avgScore !== null);
+  if (scored.length < 2 || b.overallAverage === null) return null;
+  const sorted = sortCategoryGroups(scored, 'worst', direction);
+  const weakest = sorted[0]!;
+  const strongest = sorted[sorted.length - 1]!;
+  const gap = Math.abs((weakest.avgScore as number) - b.overallAverage);
+  const gapText = numeric ? `${fmt(gap)}` : `${Math.round(gap * 100)} pts`;
+  return `Weakest: ${weakest.value} ${fmt(weakest.avgScore)} (${weakest.itemCount} items, ${gapText} ${direction === 'minimize' ? 'above' : 'below'} overall). Strongest: ${strongest.value} ${fmt(strongest.avgScore)}.`;
+}
+
 /* ── deep analysis ── */
 
 export function pearson(pairs: Array<[number, number]>): number | null {
