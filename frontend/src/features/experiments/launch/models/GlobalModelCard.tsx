@@ -74,7 +74,7 @@ export function GlobalModelCard() {
   const names = (list: typeof slots) => list.map((s) => s.label).join(', ');
 
   return (
-    <Card role="group" aria-label="Global model" data-global-model>
+    <Card tone="info" role="group" aria-label="Global model" data-global-model>
       <div className={styles.cardStack}>
         <div className={styles.head}>
           <span className={styles.title}>Global model</span>
