@@ -9,24 +9,14 @@
   color: var(--text-secondary);
 }
 
-.scoreBar[data-band='1'] {
-  --bar: var(--score-1);
-}
-.scoreBar[data-band='2'] {
-  --bar: var(--score-2);
-}
-.scoreBar[data-band='3'] {
-  --bar: var(--score-3);
-}
-.scoreBar[data-band='4'] {
-  --bar: var(--score-4);
-}
-.scoreBar[data-band='5'] {
-  --bar: var(--score-5);
+.scoreBar[data-band],
+.scoreBar[data-series] {
+  --bar: var(--tone);
 }
 
-.scoreBar[data-band] .scoreText {
-  color: var(--bar);
+.scoreBar[data-band] .scoreText,
+.scoreBar[data-series] .scoreText {
+  color: var(--tone-text);
 }
 
 .scoreBar[data-error] {
@@ -54,9 +44,78 @@
 
 .fill {
   display: block;
+  position: relative;
   block-size: 100%;
   border-radius: var(--radius-pill);
   background: var(--bar, var(--text-muted));
+  overflow: hidden;
+  /* M3: a changed value morphs; M2: the entrance below runs once (data-enter, useFirstMount). */
+  transition:
+    inline-size var(--motion-fill) var(--ease-out),
+    background-color var(--transition-fast);
+}
+
+.fill[data-enter] {
+  animation: fill-grow var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+@keyframes fill-grow {
+  from {
+    inline-size: 0;
+  }
+}
+
+/* Large bar: the value sits inside the bar, dark on the fill and primary on the track (two clipped copies). */
+.scoreBar[data-size='lg'] {
+  display: flex;
+  width: 100%;
+}
+
+.scoreBar[data-size='lg'] .track {
+  flex: 1 1 auto;
+  inline-size: var(--track-w, 100%);
+  container-type: inline-size;
+  block-size: 16px;
+  border-radius: var(--control-radius);
+}
+
+.scoreBar[data-size='lg'] .fill {
+  border-radius: var(--control-radius);
+}
+
+.inText,
+.onFill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  display: flex;
+  align-items: center;
+  padding-inline-start: var(--space-sm);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.inText {
+  inline-size: 100%;
+  color: var(--text-primary);
+}
+
+.onFill {
+  inline-size: 100cqw; /* the track's width, so the clipped copy lines up with the primary-coloured one */
+  color: var(--bg-void);
+}
+
+.scoreBar[data-changed] {
+  animation: value-flash var(--motion-flash) var(--ease-out);
+}
+
+@keyframes value-flash {
+  from {
+    background: color-mix(in srgb, var(--accent-secondary) var(--tint-soft), transparent);
+  }
 }
 
 .fill[data-plain] {
@@ -90,6 +149,25 @@
 }
 .delta[data-verdict='flat'] {
   color: var(--text-muted);
+}
+
+.delta[data-pill] {
+  min-block-size: 20px;
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+  color: var(--tone-text);
+  font-weight: 650;
+}
+
+.delta[data-pill][data-verdict='good'] {
+  --tone: var(--score-5);
+  --tone-text: var(--score-5);
+}
+
+.delta[data-pill][data-verdict='bad'] {
+  --tone: var(--score-1);
+  --tone-text: var(--error-text);
 }
 
 .deltaEmpty {

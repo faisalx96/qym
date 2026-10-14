@@ -51,7 +51,11 @@ export type IconName =
   | 'lock'
   | 'upload'
   | 'download'
-  | 'swap';
+  | 'swap'
+  | 'wrench'
+  | 'brain'
+  | 'bot'
+  | 'target';
 
 const PATHS: Record<IconName, string> = {
   'chevron-down': 'M6 9l6 6 6-6',
@@ -107,6 +111,14 @@ const PATHS: Record<IconName, string> = {
   upload: 'M12 16V4M6 10l6-6 6 6M4 20h16',
   download: 'M12 4v12M6 10l6 6 6-6M4 20h16',
   swap: 'M4 7h14M14 3l4 4-4 4M20 17H6M10 13l-4 4 4 4',
+  /* Trace kinds: tool, LLM, agent, evaluator. */
+  wrench:
+    'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
+  brain:
+    'M12 5a3 3 0 1 0-6 .1 4 4 0 0 0-2.5 5.8 4 4 0 0 0 .6 6.6A4 4 0 1 0 12 18zM12 5a3 3 0 1 1 6 .1 4 4 0 0 1 2.5 5.8 4 4 0 0 1-.6 6.6A4 4 0 1 1 12 18zM12 5v13',
+  bot: 'M12 8V4H8M5 8h14v12H5zM2 14h3M19 14h3M9 13v2M15 13v2',
+  target:
+    'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zM12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2z',
 };
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

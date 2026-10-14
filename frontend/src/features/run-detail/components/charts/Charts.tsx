@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MetricDirection } from '@/lib/metrics';
 import { metricBand } from '@/lib/metrics';
+import { staggerIndex, useEntrance } from '@/ui/motion';
 import { bucketTone, scoreTone, type BoolSegment, type ScoreBucket } from '../../lib/overviewModel';
 import styles from './Charts.module.css';
 
@@ -194,20 +195,55 @@ export function BandValue({
   );
 }
 
-/** Horizontal rate bar (categories, repeat distribution). */
+/**
+ * Horizontal rate bar (categories, repeat distribution). The fill is a score band (pass `band`, or `direction`
+ * and optional `type` to derive it) or a series colour, never the accent; with neither it is neutral grey.
+ * The fill grows in once (M2) and morphs when the value changes (M3).
+ */
 export function RateBar({
   value,
   label,
-  tone = 'var(--chart-1)',
+  band,
+  series,
+  direction,
+  type,
+  index,
+  tone,
 }: {
   value: number | null;
   label: string;
+  band?: 1 | 2 | 3 | 4 | 5 | null;
+  series?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  direction?: MetricDirection;
+  type?: string;
+  /** Position among sibling bars: staggers the grow-in. */
+  index?: number;
+  /** Deprecated: a fixed CSS colour. Prefer `band` or `series`. */
   tone?: string;
 }) {
+  const enter = useEntrance();
   const pct = value === null ? 0 : Math.max(0, Math.min(1, value)) * 100;
+  const resolved =
+    band ?? (!series && direction && value !== null ? metricBand(value, type, direction) : null);
   return (
-    <span className={styles.rate} role="img" aria-label={label}>
-      <span className={styles.rateFill} style={{ width: `${pct}%`, background: tone }} />
+    <span
+      className={styles.rate}
+      role="img"
+      aria-label={label}
+      data-band={resolved ?? undefined}
+      data-series={resolved ? undefined : series}
+    >
+      <span
+        className={styles.rateFill}
+        data-enter={enter ? '' : undefined}
+        style={
+          {
+            width: `${pct}%`,
+            ...(tone ? { background: tone } : {}),
+            '--i': staggerIndex(index),
+          } as React.CSSProperties
+        }
+      />
     </span>
   );
 }

@@ -195,6 +195,19 @@ button.col:hover .bar,
   display: block;
   height: 100%;
   border-radius: 4px;
+  background: var(--tone, var(--text-muted));
+  transition: width var(--motion-fill) var(--ease-out);
+}
+
+.rateFill[data-enter] {
+  animation: rate-grow var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+@keyframes rate-grow {
+  from {
+    width: 0;
+  }
 }
 
 .scatter,

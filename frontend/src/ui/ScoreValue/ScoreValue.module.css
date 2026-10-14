@@ -10,25 +10,23 @@
   border-inline-start: 2px solid transparent;
 }
 
-.score[data-band='1'] {
-  color: var(--score-1);
-  border-color: var(--score-1);
+.score[data-band] {
+  color: var(--tone-text);
+  border-color: var(--tone);
 }
-.score[data-band='2'] {
-  color: var(--score-2);
-  border-color: var(--score-2);
+
+/* Pill: the band as a tinted fill (12%), no bar; the number and the title stay the non-colour cue. */
+.score[data-variant='pill'] {
+  min-block-size: 20px;
+  padding-inline: var(--space-sm);
+  border-inline-start: 0;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  font-weight: 650;
 }
-.score[data-band='3'] {
-  color: var(--score-3);
-  border-color: var(--score-3);
-}
-.score[data-band='4'] {
-  color: var(--score-4);
-  border-color: var(--score-4);
-}
-.score[data-band='5'] {
-  color: var(--score-5);
-  border-color: var(--score-5);
+
+.score[data-variant='pill'][data-band] {
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
 }
 
 .score[data-error] {
