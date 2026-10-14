@@ -43,7 +43,7 @@ export function DetailPane(p: DetailPaneProps) {
           <Text as="h2" variant="lg" mono>
             #{row.id} · {row.item_id}
           </Text>
-          <Badge tone={STATUS_TONE[row.status]} glyph={row.status === 'APPROVED' ? '✓' : undefined}>
+          <Badge tone={STATUS_TONE[row.status]} glyph={row.status === 'approved' ? '✓' : undefined}>
             {row.status}
           </Badge>
           {priority ? (

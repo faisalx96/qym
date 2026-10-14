@@ -67,7 +67,7 @@ export function ReviewRow({
         <span className={styles.top}>
           <span className={styles.id}>#{row.id}</span>
           <span className={styles.item}>{row.item_id}</span>
-          <Badge tone={STATUS_TONE[row.status]} glyph={row.status === 'APPROVED' ? '✓' : undefined}>
+          <Badge tone={STATUS_TONE[row.status]} glyph={row.status === 'approved' ? '✓' : undefined}>
             {row.status}
           </Badge>
           {priority ? (
