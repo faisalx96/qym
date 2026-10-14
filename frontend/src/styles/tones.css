@@ -1,0 +1,86 @@
+/* Tone, band and series maps (DESIGN_LANGUAGE §3 "Colour as information"). A data-tone,
+   data-band or data-series attribute sets two custom properties, so a primitive writes ONE rule:
+   background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent); color: var(--tone-text);
+   --tone-text is the AA-safe text variant of the hue on its own 12% tint. */
+[data-tone='success'] {
+  --tone: var(--success);
+  --tone-text: var(--success);
+}
+[data-tone='info'] {
+  --tone: var(--accent-secondary);
+  --tone-text: var(--accent-secondary);
+}
+[data-tone='warning'] {
+  --tone: var(--warning);
+  --tone-text: var(--warning);
+}
+[data-tone='danger'] {
+  --tone: var(--error);
+  --tone-text: var(--error-text);
+}
+[data-tone='accent'] {
+  --tone: var(--accent-primary);
+  --tone-text: var(--accent-primary);
+}
+[data-tone='meta'] {
+  --tone: var(--accent-tertiary);
+  --tone-text: var(--accent-tertiary-soft);
+}
+[data-tone='neutral'] {
+  --tone: var(--text-muted);
+  --tone-text: var(--text-muted);
+}
+
+[data-band='1'] {
+  --tone: var(--score-1);
+  --tone-text: var(--error-text);
+}
+[data-band='2'] {
+  --tone: var(--score-2);
+  --tone-text: var(--score-2);
+}
+[data-band='3'] {
+  --tone: var(--score-3);
+  --tone-text: var(--score-3);
+}
+[data-band='4'] {
+  --tone: var(--score-4);
+  --tone-text: var(--score-4);
+}
+[data-band='5'] {
+  --tone: var(--score-5);
+  --tone-text: var(--score-5);
+}
+
+[data-series='1'] {
+  --tone: var(--chart-1);
+  --tone-text: var(--chart-1);
+}
+[data-series='2'] {
+  --tone: var(--chart-2);
+  --tone-text: var(--chart-2);
+}
+[data-series='3'] {
+  --tone: var(--chart-3);
+  --tone-text: var(--chart-3);
+}
+[data-series='4'] {
+  --tone: var(--chart-4);
+  --tone-text: var(--chart-4);
+}
+[data-series='5'] {
+  --tone: var(--chart-5);
+  --tone-text: var(--chart-5);
+}
+[data-series='6'] {
+  --tone: var(--chart-6);
+  --tone-text: var(--chart-6);
+}
+[data-series='7'] {
+  --tone: var(--chart-7);
+  --tone-text: var(--chart-7);
+}
+[data-series='8'] {
+  --tone: var(--chart-8);
+  --tone-text: var(--chart-8);
+}
