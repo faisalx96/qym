@@ -56,3 +56,13 @@ No overflow at 1440 or 390 on any of 14 screens; no clipped sticky columns seen 
 
 ## Optional
 - Different slot 1 hue or a documented rule vs RUNNING pill; mention exports keep system fonts in DESIGN_LANGUAGE; render and review the experiments wizard steps with an environment seeded.
+
+## Re-review (commit 3262448c)
+
+Verdict: MEETS (fix 1 verified; fix 2 does not do what it claims, residual accepted, doc wording to soften).
+
+1. Series order: VERIFIED. Tokens now sky, pink, orange, amber, indigo, lime, cyan, slate; colour-review.md table and DESIGN_LANGUAGE.md match the tokens. My calculation: min dE over slots 1 to 5 is 31 normal / 20 protan / 16 deutan / 12 tritan (was 22 / 16 / 15 / 8); the worst pair overall is now sky vs cyan (slots 1 and 7, dE 8 tritan, 16 protan), acceptable as slot 7 is rarely reached and runs carry a letter. All series are still 5.2:1 or better on surface and elevated. Screenshot `rr-geo-compare.png`: tags A sky, B pink, C orange, D amber are clearly distinct.
+2. `text-rendering: geometricPrecision` on body: the computed value reaches every header cell, but it does NOT fix the uneven gaps. At the tip "DAT E" and "LAT ENCY" are still uneven (`rr-geo-runs.png`, `rr-geo-arabic.png`, zoom `z-all.png`). Compared with `auto` the crops are nearly identical, and the artefact stays at tracking 0, 0.04, 0.06 and 0.08em and with kerning off, so it is a small-size rasterisation snap of the bold Plex T-E pair in headless Chromium on Linux, not a tracking or positioning setting. My earlier statement that it "made the gaps even" came from a crop (RUN / STATUS / SIGNALS) whose glyph positions happened to land well; that was an over-generalisation and is withdrawn. Severity: low, cosmetic, Linux headless only as far as tested (macOS/Windows not checked). Action: keep the property (harmless) but soften the base.css comment and the typeface-study wording from "fix" to "mitigation; some pairs stay uneven on Linux"; do not change tracking.
+3. Side effects of geometricPrecision (same pages with `body{text-rendering:auto}` as the before): summed leaf text widths 0.1% (runs), 0.4% (Arabic run) and 0.8% (compare) narrower; page heights 0.5% and 1.4% shorter. Body text, Arabic shaping and mono ids look the same in `rr-geo-*` vs `rr-auto-*`; no new truncation. No visible side effect.
+
+Servers stopped (5957 and 8957 free). No heavy command was needed.
