@@ -1,6 +1,7 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Button } from '../Button';
 import { Collapse } from '../Collapse';
+import { DataTable, type Column } from '../DataTable';
 import { CopyButton } from '../CopyButton';
 import { Icon } from '../Icon';
 import { JsonTree } from '../JsonViewer';
@@ -53,36 +54,46 @@ function Scalar({ value }: { value: unknown }) {
   );
 }
 
-function TableBody({ rows }: { rows: Record<string, unknown>[] }) {
+interface TableRow {
+  i: number;
+  values: Record<string, unknown>;
+}
+
+function TableBody({ rows, label }: { rows: Record<string, unknown>[]; label: string }) {
   const [all, setAll] = useState(false);
   const cols = useMemo(() => tableColumns(rows), [rows]);
-  const shown = all ? rows : rows.slice(0, TABLE_LIMIT);
+  const data = useMemo<TableRow[]>(() => rows.map((values, i) => ({ i, values })), [rows]);
+  const shown = all ? data : data.slice(0, TABLE_LIMIT);
+  const columns = useMemo<Column<TableRow>[]>(
+    () =>
+      cols.map((c, ci) => ({
+        id: c,
+        header: c,
+        label: c,
+        type: rows.some((r) => typeof r[c] === 'number') ? 'number' : 'text',
+        accessor: (r) => r.values[c],
+        flex: ci === 0,
+        minWidth: 96,
+        priority: ci === 0 ? 1 : 2,
+        cardTitle: ci === 0,
+        cell: (r) => <span dir="auto">{r.values[c] === undefined ? '' : scalarText(r.values[c])}</span>,
+      })),
+    [cols, rows],
+  );
   return (
     <div className={styles.tableWrap}>
-      <div className={styles.tableScroll}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              {cols.map((c) => (
-                <th key={c} scope="col" dir="ltr">
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((r, i) => (
-              <tr key={i}>
-                {cols.map((c) => (
-                  <td key={c} dir="auto" data-kind={typeof r[c] === 'number' ? 'number' : undefined}>
-                    {r[c] === undefined ? '' : scalarText(r[c])}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<TableRow>
+        aria-label={label}
+        columns={columns}
+        rows={shown}
+        rowKey={(r) => r.i}
+        density="compact"
+        densityLocked
+        columnMenu={false}
+        zebra={false}
+        variant="embedded"
+        stickyHeader={false}
+      />
       {rows.length > TABLE_LIMIT && !all ? (
         <Button size="sm" variant="ghost" onPress={() => setAll(true)}>
           Show all {rows.length}
@@ -92,7 +103,17 @@ function TableBody({ rows }: { rows: Record<string, unknown>[] }) {
   );
 }
 
-function SectionBody({ value, textMode, lines }: { value: unknown; textMode?: TextMode; lines: number }) {
+function SectionBody({
+  value,
+  label,
+  textMode,
+  lines,
+}: {
+  value: unknown;
+  label: string;
+  textMode?: TextMode;
+  lines: number;
+}) {
   const kind = classifySection(value);
   if (kind === 'string') return <ClampedText text={value as string} mode={textMode} lines={lines} />;
   if (kind === 'scalars') {
@@ -106,7 +127,7 @@ function SectionBody({ value, textMode, lines }: { value: unknown; textMode?: Te
       </div>
     );
   }
-  if (kind === 'table' && isUniformObjectArray(value)) return <TableBody rows={value} />;
+  if (kind === 'table' && isUniformObjectArray(value)) return <TableBody rows={value} label={label} />;
   return <JsonTree data={value} expandDepth={1} label="Value" toolbar={false} />;
 }
 
@@ -157,7 +178,7 @@ function Section({ id, name, value, open, onToggle, textMode, lines }: SectionPr
       </div>
       <Collapse open={open} id={bodyId}>
         <div className={styles.body}>
-          <SectionBody value={value} textMode={textMode} lines={lines} />
+          <SectionBody value={value} label={name} textMode={textMode} lines={lines} />
         </div>
       </Collapse>
     </div>

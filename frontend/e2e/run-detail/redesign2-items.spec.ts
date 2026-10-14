@@ -84,7 +84,7 @@ test('JSON output is one section per key, collapsible, with a Raw view', async (
   for (const key of ['answer', 'reasoning', 'citations', 'confidence', 'sql', 'followups'])
     await expect(out.getByRole('group', { name: key, exact: true })).toBeVisible();
   // uniform objects read as a table
-  await expect(out.getByRole('table')).toContainText('policy-2026');
+  await expect(out.getByRole('grid')).toContainText('policy-2026');
   // collapse a key
   const answer = out.getByRole('button', { name: /^answer/ });
   await expect(answer).toHaveAttribute('aria-expanded', 'true');
