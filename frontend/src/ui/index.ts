@@ -17,6 +17,8 @@ export * from './LinkButton';
 export * from './Kbd';
 export * from './Badge';
 export * from './Card';
+export * from './Chart';
+export * from './motion';
 export * from './RunStatusBadge';
 export * from './Tag';
 export * from './Chip';

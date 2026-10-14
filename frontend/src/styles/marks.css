@@ -1,0 +1,67 @@
+/* Chart mark states (DESIGN_LANGUAGE §3 "Chart kit"): every data mark carries data-mark; an interactive one also
+   data-interactive. Hover brightens the mark and dims its siblings inside a [data-marks] host (:has, graceful where
+   unsupported); selected draws a 2px outline and dims the rest; a [data-series-active] root dims every mark of
+   another series (compare cross-highlight). Colour, outline and opacity only: no transform, no glow. */
+[data-mark] {
+  transition:
+    opacity var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+[data-mark][data-interactive] {
+  cursor: pointer;
+}
+
+[data-mark][data-interactive]:hover {
+  filter: brightness(var(--hover-brightness));
+}
+
+[data-mark][data-interactive]:active {
+  filter: brightness(0.95);
+}
+
+[data-marks]:has([data-mark][data-interactive]:hover) [data-mark]:not(:hover) {
+  opacity: var(--dim-opacity);
+}
+
+[data-mark][data-selected] {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 0;
+}
+
+:is(circle, rect, path, line, polygon)[data-mark][data-selected] {
+  outline: 0;
+  stroke: var(--text-primary);
+  stroke-width: 2;
+}
+
+[data-marks]:has([data-mark][data-selected]) [data-mark]:not([data-selected]) {
+  opacity: var(--dim-opacity);
+}
+
+[data-mark]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+:is(circle, rect, path, line, polygon)[data-mark]:focus-visible {
+  outline: 0;
+  stroke: var(--accent-primary);
+  stroke-width: 2;
+}
+
+[data-mark][data-disabled] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+[data-series-active='1'] [data-mark][data-series]:not([data-series='1']),
+[data-series-active='2'] [data-mark][data-series]:not([data-series='2']),
+[data-series-active='3'] [data-mark][data-series]:not([data-series='3']),
+[data-series-active='4'] [data-mark][data-series]:not([data-series='4']),
+[data-series-active='5'] [data-mark][data-series]:not([data-series='5']),
+[data-series-active='6'] [data-mark][data-series]:not([data-series='6']),
+[data-series-active='7'] [data-mark][data-series]:not([data-series='7']),
+[data-series-active='8'] [data-mark][data-series]:not([data-series='8']) {
+  opacity: var(--dim-opacity);
+}
