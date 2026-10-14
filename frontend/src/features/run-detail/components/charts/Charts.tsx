@@ -402,7 +402,7 @@ export function Scatter({
               key={p.id}
               as="g"
               className={styles.dotMark}
-              tabIndex={-1}
+              pointerOnly
               tip={
                 <>
                   <b>{p.id}</b>
@@ -413,10 +413,8 @@ export function Scatter({
                 </>
               }
               onPick={() => onPick(p.id)}
-              aria-label={`${p.id}: ${xLabel} ${fx(p.x)}, ${p.outcome === 'error' ? 'task error' : `${yLabel} ${fy(p.y)}`}`}
               data-outcome={p.outcome ?? undefined}
             >
-              <circle className={styles.dotHit} cx={sx(p.x)} cy={sy(p.y)} r={10} />
               <circle
                 className={styles.dot2}
                 data-enter={enter ? '' : undefined}
@@ -425,6 +423,7 @@ export function Scatter({
                 cy={sy(p.y)}
                 r={3.5}
               />
+              <circle className={styles.dotHit} cx={sx(p.x)} cy={sy(p.y)} r={10} />
             </Mark>
           ))}
           <text className={styles.axisTitle} x={(W + pad.l) / 2} y={H - 2} textAnchor="middle">

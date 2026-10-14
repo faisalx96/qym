@@ -15,6 +15,8 @@ export interface MarkProps {
   onPick?: (e?: React.SyntheticEvent) => void;
   isSelected?: boolean;
   isDisabled?: boolean;
+  /** Pointer-only mark (no role, no tab stop): for dense SVG plots inside a role=img figure, where a keyboard route exists elsewhere. */
+  pointerOnly?: boolean;
   className?: string;
   style?: React.CSSProperties;
   role?: string;
@@ -48,6 +50,7 @@ export function Mark({
   onPick,
   isSelected,
   isDisabled,
+  pointerOnly,
   className,
   style,
   children,
@@ -64,7 +67,13 @@ export function Mark({
     'data-interactive': interactive ? '' : undefined,
     'data-selected': isSelected ? '' : undefined,
     'data-disabled': isDisabled ? '' : undefined,
-    ...(band ? { 'data-band': band } : series ? { 'data-series': series } : tone ? { 'data-tone': tone } : {}),
+    ...(band
+      ? { 'data-band': band }
+      : series
+        ? { 'data-series': series }
+        : tone
+          ? { 'data-tone': tone }
+          : {}),
     'aria-describedby': describedBy,
     'aria-pressed': native && onPick && isSelected !== undefined ? isSelected : undefined,
     onPointerEnter: handlers.onPointerEnter,
@@ -79,6 +88,8 @@ export function Mark({
       handlers.onClick?.(e);
       if (interactive) onPick?.(e);
     };
+  } else if (interactive && pointerOnly) {
+    props.onClick = (e: React.MouseEvent) => onPick?.(e);
   } else if (interactive) {
     props.role = 'button';
     if (rest.tabIndex === undefined) props.tabIndex = 0;
@@ -94,8 +105,8 @@ export function Mark({
       }
     };
   } else if (tip !== undefined) {
-    // A passive mark with a tooltip is still reachable by keyboard.
-    if (rest.tabIndex === undefined) props.tabIndex = 0;
+    // A passive HTML mark with a tooltip is still reachable by keyboard (SVG marks live inside a role=img plot).
+    if (rest.tabIndex === undefined && !['g', 'circle', 'rect', 'path'].includes(as)) props.tabIndex = 0;
     props.onClick = handlers.onClick;
   }
   return createElement(as, props as SVGProps<SVGElement>, children);
