@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { workersFromMemory } from './scripts/workers-from-memory';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -35,7 +36,9 @@ export default defineConfig({
   testIgnore: '**/sdk-viewer/**', // own config: playwright.sdk.config.ts
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
-  workers: 1,
+  // Sized from free memory (1 or 2); QYM_PW_WORKERS overrides (scripts/heavy.sh sets it).
+  // A --workers flag on the command line overrides both: do not pass it on shared machines.
+  workers: workersFromMemory(process.env.QYM_PW_WORKERS, 1.5, 2),
   retries: process.env.CI ? 1 : 0,
   timeout: 30_000,
   expect: { timeout: 8_000 },
