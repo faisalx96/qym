@@ -33,10 +33,10 @@ test('endpoints are a table: a global row writes to every endpoint, new endpoint
   await table.getByRole('textbox', { name: 'All endpoints · Timeout' }).fill('45');
   await table.getByRole('textbox', { name: 'All endpoints · Timeout' }).press('Enter');
   await expect(
-    table.getByRole('row', { name: /^primary/ }).getByRole('textbox', { name: /Timeout/ }),
+    table.getByRole('row', { name: /^primary/ }).getByRole('textbox', { name: /^(primary|fast) · Timeout$/ }),
   ).toHaveValue('45');
   await expect(
-    table.getByRole('row', { name: /^fast/ }).getByRole('textbox', { name: /Timeout/ }),
+    table.getByRole('row', { name: /^fast/ }).getByRole('textbox', { name: /^(primary|fast) · Timeout$/ }),
   ).toHaveValue('45');
   await table.getByRole('button', { name: 'Remove fast' }).click();
   await expect(table.getByRole('rowheader', { name: 'fast' })).toHaveCount(0);
@@ -48,9 +48,9 @@ test('role overrides keep their table and global row', async ({ page }) => {
   await expect(table.getByRole('rowheader', { name: 'All roles' })).toBeVisible();
   await table.getByRole('textbox', { name: 'All roles · max_tokens' }).fill('512');
   await table.getByRole('textbox', { name: 'All roles · max_tokens' }).press('Enter');
-  const first = table.getByRole('row').nth(2).getByRole('textbox').first();
-  await expect(table.getByRole('textbox', { name: /max_tokens/ }).nth(1)).toHaveValue('512');
-  await expect(first).toBeVisible();
+  await expect(
+    table.getByRole('row', { name: /router/i }).getByRole('textbox', { name: /max.?tokens/i }),
+  ).toHaveValue('512');
 });
 
 test('the global row sweeps several values: chips, "sweeps N runs", and one run per value', async ({

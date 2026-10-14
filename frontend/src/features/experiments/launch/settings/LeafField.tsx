@@ -383,9 +383,11 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
       <div className={styles.cell} data-field={node.fieldName} data-changed={node.changed ? '' : undefined}>
         <div className={styles.cellRow}>
           {control}
-          {dot}
-          {reset}
-          {sweepBtn}
+          <span className={styles.cellActions} data-reserve={sweepBtn ? '' : undefined}>
+            {sweepBtn}
+            {reset}
+            {dot}
+          </span>
         </div>
         {node.missingEnvs.length ? tags : null}
         {errorsEl}

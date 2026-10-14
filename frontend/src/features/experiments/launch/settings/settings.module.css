@@ -610,3 +610,15 @@ button.chip:focus-visible,
   gap: var(--space-xs);
   min-width: 0;
 }
+
+/* Cell actions keep their width when "changed" adds Reset and the dot, so the Sweep button stays under the pointer. */
+.cellActions {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+}
+
+.cellActions[data-reserve] {
+  min-width: calc(var(--control-height) * 2 + var(--space-sm));
+}
