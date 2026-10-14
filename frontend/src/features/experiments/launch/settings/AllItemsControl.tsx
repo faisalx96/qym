@@ -51,15 +51,11 @@ function AllItemsControlImpl(props: AllItemsControlProps) {
           label={`Sweep values of ${field.label}`}
           placement="bottom start"
           trigger={
-            <Button
-              size="sm"
-              variant="neutral"
-              aria-label={`Edit sweep: ${field.label}`}
-              className={styles.sweepTrigger}
-            >
+            <Button size="sm" variant="neutral" className={styles.sweepTrigger}>
               <span className={styles.sweepSummary} title={summary || 'No values yet'}>
                 {summary || 'Add values'}
               </span>
+              <span className={styles.sr}>{`, edit sweep: ${field.label}`}</span>
             </Button>
           }
         >

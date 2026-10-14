@@ -137,7 +137,7 @@ describe('SettingsSection', () => {
     await user.click(screen.getByRole('button', { name: 'Sweep values: All roles · max_tokens' }));
     const cell = document.querySelector('[data-global-sweep]') as HTMLElement;
     expect(cell).toBeInTheDocument();
-    await user.click(within(cell).getByRole('button', { name: 'Edit sweep: All roles · max_tokens' }));
+    await user.click(within(cell).getByRole('button', { name: /edit sweep: All roles · max_tokens/ }));
     const dialog = await screen.findByRole('dialog', { name: /Sweep values of/ });
     await user.type(within(dialog).getByRole('textbox'), '256, 512{Enter}');
     const swept = Object.entries(values()).filter(([p]) => p.endsWith('/max_tokens'));
