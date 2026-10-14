@@ -19,6 +19,8 @@ export interface ToolbarProps {
   count?: ReactNode;
   /** Extra controls on the right (Select, Export …). */
   trailing?: ReactNode;
+  /** Full-width rows under the main line (filter facets, chips). */
+  rows?: ReactNode;
   /** Columns menu: default shown when the table has 5+ hideable columns. */
   columnsMenu?: boolean;
   /** Density menu: default shown unless the table locks its density. */
@@ -32,7 +34,16 @@ const DENSITIES: { id: Density; label: string }[] = [
 ];
 
 /** Search, filters, chips, count, then the built-in Columns and Density menus. */
-export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, densityMenu }: ToolbarProps) {
+export function Toolbar({
+  search,
+  filters,
+  chips,
+  rows,
+  count,
+  trailing,
+  columnsMenu,
+  densityMenu,
+}: ToolbarProps) {
   const {
     model,
     columns,
@@ -98,6 +109,7 @@ export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, 
           />
         ) : null}
       </div>
+      {rows ? <div className={styles.toolbarRows}>{rows}</div> : null}
     </div>
   );
 }

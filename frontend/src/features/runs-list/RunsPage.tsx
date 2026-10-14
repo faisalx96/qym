@@ -405,7 +405,7 @@ export function RunsPage() {
       toolbar={{
         search: toolbarParts.search,
         filters: toolbarParts.filters,
-        chips: toolbarParts.chips,
+        rows: toolbarParts.rows,
         trailing: (
           <>
             <Button

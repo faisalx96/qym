@@ -1,4 +1,5 @@
 /** One removable chip per active filter, in canonical URL order. */
+import { runStatusTone, type ChipTone } from '@/ui';
 import { datasetLabel } from './FiltersPopover';
 import {
   customRangeLabel,
@@ -13,6 +14,8 @@ import {
 export interface FilterChip {
   id: string;
   label: string;
+  /** Status chips take the status tone when selected. */
+  tone?: ChipTone;
   remove: (v: RunsView) => RunsView;
 }
 
@@ -47,6 +50,7 @@ export function activeChips(view: RunsView, ownerLabel: (id: string) => string =
       chips.push({
         id: `${key}:${value}`,
         label: `${singular}: ${value === NONE ? 'none' : label(value)}`,
+        tone: key === 'statuses' && value !== NONE ? (runStatusTone(value) as ChipTone) : undefined,
         remove: (v) => {
           const rest = (key === 'models' ? modelUrlValues(v.models) : v[key]).filter((x) => x !== value);
           // A collapsed plain name stands for both variants.

@@ -963,7 +963,7 @@
   height: 6px;
   margin-inline-start: var(--space-xs);
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-primary);
 }
 .colRow {
   display: flex;
@@ -978,7 +978,7 @@
 }
 .colRow[data-lifted] {
   background: var(--bg-selected);
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--accent-primary);
 }
 .colCheck {
   flex: 1;
@@ -1021,11 +1021,11 @@
 }
 .colHandle:focus-visible,
 .colPin:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  outline: 2px solid var(--accent-primary);
   outline-offset: -1px;
 }
 .colPin[aria-pressed='true'] {
-  color: var(--accent);
+  color: var(--accent-primary);
 }
 .colLine {
   display: flex;
@@ -1051,4 +1051,15 @@
   .colLine {
     display: none;
   }
+}
+
+.toolbarRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  flex: 1 0 100%;
+  min-width: 0;
+}
+.toolbarRows:empty {
+  display: none;
 }
