@@ -15,6 +15,7 @@ import { plural } from '../../lib/format';
 import { listTableModel, newListItem, uniformKeys, type JsonObject, type JsonValue } from '../model';
 import { AddRow } from './AddRow';
 import styles from './settings.module.css';
+import { TableWrap } from './TableWrap';
 
 const MAX_DEPTH = 6;
 
@@ -381,7 +382,7 @@ function ListView({ ed, path, list, depth }: { ed: Editor; path: Path; list: Jso
     body = <ListTable ed={ed} path={path} list={list as JsonObject[]} keys={keys} removeItem={removeItem} />;
   else if (listTableModel(list)?.shape === 'scalars') {
     body = (
-      <div className={styles.tableWrap}>
+      <TableWrap>
         <table className={styles.table}>
           <caption className={styles.sr}>{labelFor(ed, path) || 'Items'}</caption>
           <thead>
@@ -428,7 +429,7 @@ function ListView({ ed, path, list, depth }: { ed: Editor; path: Path; list: Jso
             ))}
           </tbody>
         </table>
-      </div>
+      </TableWrap>
     );
   } else {
     body = (
@@ -534,7 +535,7 @@ function ListTable({
   const scalarColumn = (key: string) => list.every((item) => isScalar(item[key]));
   const columnKind = (key: string) => listKind(list.map((item) => item[key]));
   return (
-    <div className={styles.tableWrap}>
+    <TableWrap>
       <table className={styles.table}>
         <caption className={styles.sr}>{labelFor(ed, path) || 'Items'}</caption>
         <thead>
@@ -597,7 +598,7 @@ function ListTable({
           ))}
         </tbody>
       </table>
-    </div>
+    </TableWrap>
   );
 }
 
