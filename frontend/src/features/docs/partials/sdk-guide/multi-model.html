@@ -1,61 +1,23 @@
 <p class="docs-eyebrow">SDK GUIDE</p>
 <h1>Multi-model, multi-run &amp; group analysis</h1>
-<p class="docs-lead">
-  One execution rarely settles a question. qym combines multi-model evaluation, multi-run specs, native repeat
-  runs, and offline group-analysis helpers. The same item-aligned math powers estimator-aware Pass@K metrics
-  and noise-aware cohort comparisons in the platform.
-</p>
+<p class="docs-lead">One execution rarely settles a question. qym combines multi-model evaluation, multi-run specs, native repeat runs, and offline group-analysis helpers. The same item-aligned math powers estimator-aware Pass@K metrics and noise-aware cohort comparisons in the platform.</p>
 
 <p>This page covers, in order:</p>
 <ul>
-  <li>
-    <strong>Multi-model</strong> &mdash; same task, same dataset, same metrics, only the model changes
-    (<code>model=[...]</code>).
-  </li>
-  <li>
-    <strong>Multi-run</strong> &mdash; tasks, datasets, metrics, or configs differ between runs (<code
-      >Evaluator.run_parallel(...)</code
-    >
-    / <code>RunSpec</code>).
-  </li>
-  <li>
-    <strong>Group analysis</strong> &mdash; compute Pass@K, Pass^K, Avg@K, Max@K, consistency, reliability,
-    and comparison noise over <code>EvaluationResult</code> objects (<code>analyze_group_runs</code> /
-    <code>compare_group_runs</code>).
-  </li>
+  <li><strong>Multi-model</strong> &mdash; same task, same dataset, same metrics, only the model changes (<code>model=[...]</code>).</li>
+  <li><strong>Multi-run</strong> &mdash; tasks, datasets, metrics, or configs differ between runs (<code>Evaluator.run_parallel(...)</code> / <code>RunSpec</code>).</li>
+  <li><strong>Group analysis</strong> &mdash; compute Pass@K, Pass^K, Avg@K, Max@K, consistency, reliability, and comparison noise over <code>EvaluationResult</code> objects (<code>analyze_group_runs</code> / <code>compare_group_runs</code>).</li>
 </ul>
 
 <div class="docs-callout tip">
-  <svg
-    class="docs-callout-icon"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="16" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12.01" y2="8" />
-  </svg>
-  <p>
-    <span class="docs-callout-title">Align by item ID.</span> Every comparison and group metric on this page
-    aligns runs by <strong>dataset item identity</strong>, not row position. Give each dataset row a stable
-    <code>id</code> (see <a href="#get-started/datasets">Datasets</a>) so runs line up correctly across models
-    and repetitions.
-  </p>
+  <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+  <p><span class="docs-callout-title">Align by item ID.</span> Every comparison and group metric on this page aligns runs by <strong>dataset item identity</strong>, not row position. Give each dataset row a stable <code>id</code> (see <a href="#get-started/datasets">Datasets</a>) so runs line up correctly across models and repetitions.</p>
 </div>
 
 <h2>Choosing the right mode</h2>
 <table>
   <thead>
-    <tr>
-      <th>Mode</th>
-      <th>Use when</th>
-      <th>Entry point</th>
-      <th>Returns</th>
-    </tr>
+    <tr><th>Mode</th><th>Use when</th><th>Entry point</th><th>Returns</th></tr>
   </thead>
   <tbody>
     <tr>
@@ -66,41 +28,26 @@
     </tr>
     <tr>
       <td><strong>Multi-run</strong></td>
-      <td>
-        Tasks, datasets, metrics, configs, or model groups differ between runs (e.g. prompt A vs prompt B).
-      </td>
+      <td>Tasks, datasets, metrics, configs, or model groups differ between runs (e.g. prompt A vs prompt B).</td>
       <td><code>Evaluator.run_parallel(runs=[...])</code></td>
       <td><code>list[EvaluationResult]</code></td>
     </tr>
     <tr>
       <td><strong>Repeat run</strong> (for Pass@k)</td>
       <td>Same exact config run k times to measure stability/flakiness.</td>
-      <td>
-        <code>Evaluator(..., samples=k).run()</code> &mdash; see
-        <a href="#sdk-guide/repeats">Repeat runs &amp; pass@k</a>. Duplicating the same spec k times is
-        deprecated (the SDK warns).
-      </td>
+      <td><code>Evaluator(..., samples=k).run()</code> &mdash; see <a href="#sdk-guide/repeats">Repeat runs &amp; pass@k</a>. Duplicating the same spec k times is deprecated (the SDK warns).</td>
       <td><code>EvaluationResult</code> (one logical run)</td>
     </tr>
   </tbody>
 </table>
 
-<p>
-  The first two produce a <strong>list of <code>EvaluationResult</code></strong
-  >, which is exactly the input the group-analysis helpers expect. A repeat run (<code>samples=k</code>)
-  reports its group metrics directly via <code>result.group_stats()</code> &mdash; no post-hoc grouping
-  needed.
-</p>
+<p>The first two produce a <strong>list of <code>EvaluationResult</code></strong>, which is exactly the input the group-analysis helpers expect. A repeat run (<code>samples=k</code>) reports its group metrics directly via <code>result.group_stats()</code> &mdash; no post-hoc grouping needed.</p>
 
 <h2>Multi-model runs</h2>
 
-<p>
-  Pass a list of model labels to <code>model=</code>. qym creates one run per model, all sharing the same
-  task, dataset, metrics, and config.
-</p>
+<p>Pass a list of model labels to <code>model=</code>. qym creates one run per model, all sharing the same task, dataset, metrics, and config.</p>
 
-<pre data-lang="python">
-from qym import Evaluator
+<pre data-lang="python">from qym import Evaluator
 
 
 def answer(question: str, model_name: str = "gpt-4o-mini") -&gt; str:
@@ -119,38 +66,14 @@ for r in results:
     print(r.run_name, r.success_rate)</pre>
 
 <div class="docs-callout warn">
-  <svg
-    class="docs-callout-icon"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-  <p>
-    <span class="docs-callout-title">List vs single result.</span> A multi-model run returns a
-    <strong>list</strong>. Internally, <code>run()</code> only takes the multi-model path when
-    <strong>more than one</strong> model is given (the check is <code>len(models) &gt; 1</code>). So
-    <code>model=["gpt-4o-mini"]</code> &mdash; a one-element list &mdash; runs as a single model and returns a
-    single <code>EvaluationResult</code>, not a list. Use two or more entries when you want list semantics.
-  </p>
+  <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  <p><span class="docs-callout-title">List vs single result.</span> A multi-model run returns a <strong>list</strong>. Internally, <code>run()</code> only takes the multi-model path when <strong>more than one</strong> model is given (the check is <code>len(models) &gt; 1</code>). So <code>model=["gpt-4o-mini"]</code> &mdash; a one-element list &mdash; runs as a single model and returns a single <code>EvaluationResult</code>, not a list. Use two or more entries when you want list semantics.</p>
 </div>
 
 <h3>Routing the model into your task</h3>
-<p>
-  qym injects the model into your task function when the function declares a parameter named
-  <code>model_name</code> or <code>model</code>. If your task hardcodes a provider model and ignores that
-  parameter, every model run will silently call the same model &mdash; the comparison looks like it ran but
-  tells you nothing.
-</p>
+<p>qym injects the model into your task function when the function declares a parameter named <code>model_name</code> or <code>model</code>. If your task hardcodes a provider model and ignores that parameter, every model run will silently call the same model &mdash; the comparison looks like it ran but tells you nothing.</p>
 
-<pre data-lang="python">
-# qym fills model_name for each run in the list
+<pre data-lang="python"># qym fills model_name for each run in the list
 def answer(question: str, model_name: str = "gpt-4o-mini") -&gt; str:
     return call_llm(model=model_name, prompt=question)
 
@@ -159,70 +82,27 @@ def answer(question: str, model: str = "gpt-4o-mini") -&gt; str:
     return call_llm(model=model, prompt=question)</pre>
 
 <h3>Provider-prefixed model names</h3>
-<p>
-  You can pass provider-prefixed IDs such as <code>openai/gpt-4o-mini</code> or <code>qwen/qwen3-235b</code>.
-  qym strips the provider prefix for display, run IDs, and artifact paths (so the run shows
-  <code>gpt-4o-mini</code>), while the <strong>full</strong> prefixed name is preserved for routing into your
-  task (delivered through <code>model</code> / <code>model_full</code>). This is what lets OpenRouter-style
-  identifiers work for the API call while keeping platform displays clean.
-</p>
+<p>You can pass provider-prefixed IDs such as <code>openai/gpt-4o-mini</code> or <code>qwen/qwen3-235b</code>. qym strips the provider prefix for display, run IDs, and artifact paths (so the run shows <code>gpt-4o-mini</code>), while the <strong>full</strong> prefixed name is preserved for routing into your task (delivered through <code>model</code> / <code>model_full</code>). This is what lets OpenRouter-style identifiers work for the API call while keeping platform displays clean.</p>
 
 <h3>Controlling parallelism with <code>max_parallel_runs</code></h3>
 <table>
-  <thead>
-    <tr>
-      <th>Value</th>
-      <th>Behavior</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Value</th><th>Behavior</th></tr></thead>
   <tbody>
-    <tr>
-      <td><code>None</code> (default)</td>
-      <td>All model runs execute in parallel.</td>
-    </tr>
-    <tr>
-      <td><code>1</code></td>
-      <td>Sequential &mdash; one model run at a time.</td>
-    </tr>
-    <tr>
-      <td><code>N</code></td>
-      <td>At most <code>N</code> model runs active concurrently.</td>
-    </tr>
+    <tr><td><code>None</code> (default)</td><td>All model runs execute in parallel.</td></tr>
+    <tr><td><code>1</code></td><td>Sequential &mdash; one model run at a time.</td></tr>
+    <tr><td><code>N</code></td><td>At most <code>N</code> model runs active concurrently.</td></tr>
   </tbody>
 </table>
 
 <div class="docs-callout warn">
-  <svg
-    class="docs-callout-icon"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-  <p>
-    <span class="docs-callout-title">Concurrency multiplies.</span> Each run uses its own
-    <code>max_concurrency</code> (default <strong>10</strong>; see
-    <a href="#sdk-guide/config">Configs &amp; options</a>). Running models in parallel multiplies the
-    in-flight item calls: <code>parallel runs &times; max_concurrency</code>. Four models at
-    <code>max_concurrency=10</code> can produce up to 40 simultaneous provider calls. Cap it with
-    <code>max_parallel_runs</code>, a lower <code>max_concurrency</code>, or both before you hit rate limits.
-  </p>
+  <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  <p><span class="docs-callout-title">Concurrency multiplies.</span> Each run uses its own <code>max_concurrency</code> (default <strong>10</strong>; see <a href="#sdk-guide/config">Configs &amp; options</a>). Running models in parallel multiplies the in-flight item calls: <code>parallel runs &times; max_concurrency</code>. Four models at <code>max_concurrency=10</code> can produce up to 40 simultaneous provider calls. Cap it with <code>max_parallel_runs</code>, a lower <code>max_concurrency</code>, or both before you hit rate limits.</p>
 </div>
 
 <h3>The CLI equivalent</h3>
-<p>
-  From the command line, pass <strong>comma-separated</strong> model names to a single
-  <code>--model</code> option. See the <a href="#developer/cli">CLI reference</a> for the full flag set.
-</p>
+<p>From the command line, pass <strong>comma-separated</strong> model names to a single <code>--model</code> option. See the <a href="#developer/cli">CLI reference</a> for the full flag set.</p>
 
-<pre data-lang="bash">
-qym run create \
+<pre data-lang="bash">qym run create \
   --task-file tasks.py --task-function answer \
   --dataset-csv datasets/qa.csv \
   --metrics exact_match,contains \
@@ -231,16 +111,11 @@ qym run create \
 
 <h2>Multi-run specs (<code>run_parallel</code>)</h2>
 
-<p>
-  Use <code>Evaluator.run_parallel(...)</code> when runs differ in more than just the model &mdash; different
-  tasks, datasets, metric sets, or config values. Each run is described by a dict (or a <code>RunSpec</code>),
-  and they all execute together under one shared dashboard.
-</p>
+<p>Use <code>Evaluator.run_parallel(...)</code> when runs differ in more than just the model &mdash; different tasks, datasets, metric sets, or config values. Each run is described by a dict (or a <code>RunSpec</code>), and they all execute together under one shared dashboard.</p>
 
 <p>The verified signature is:</p>
 
-<pre data-lang="python">
-Evaluator.run_parallel(
+<pre data-lang="python">Evaluator.run_parallel(
     runs,                       # Sequence[dict | RunSpec]
     show_tui=True,
     auto_save=False,            # note: defaults False here, unlike run()
@@ -250,102 +125,29 @@ Evaluator.run_parallel(
 ) -&gt; list[EvaluationResult]</pre>
 
 <div class="docs-callout warn">
-  <svg
-    class="docs-callout-icon"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-  <p>
-    <span class="docs-callout-title">auto_save differs from run().</span>
-    <code>run_parallel(...)</code> defaults <code>auto_save=False</code> (and so does <code>arun()</code>),
-    whereas <code>run()</code> defaults <code>auto_save=True</code>. If you want artifacts written
-    automatically, pass <code>auto_save=True</code> &mdash; or set a per-run <code>output_path</code> (see
-    below), which is saved regardless.
-  </p>
+  <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  <p><span class="docs-callout-title">auto_save differs from run().</span> <code>run_parallel(...)</code> defaults <code>auto_save=False</code> (and so does <code>arun()</code>), whereas <code>run()</code> defaults <code>auto_save=True</code>. If you want artifacts written automatically, pass <code>auto_save=True</code> &mdash; or set a per-run <code>output_path</code> (see below), which is saved regardless.</p>
 </div>
 
 <h3>The run dict shape</h3>
 <p>Each run definition accepts these keys (mapped to a <code>RunSpec</code> internally):</p>
 
 <table>
-  <thead>
-    <tr>
-      <th>Key</th>
-      <th>Required</th>
-      <th>Meaning</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Key</th><th>Required</th><th>Meaning</th></tr></thead>
   <tbody>
-    <tr>
-      <td><code>name</code></td>
-      <td>Yes</td>
-      <td>Stable run key. Required on <code>RunSpec</code>; becomes the run identifier.</td>
-    </tr>
-    <tr>
-      <td><code>task</code></td>
-      <td>Yes</td>
-      <td>The callable (or supported framework object) being evaluated.</td>
-    </tr>
-    <tr>
-      <td><code>dataset</code></td>
-      <td>Yes</td>
-      <td>
-        A dataset object, a local <code>.csv</code>/<code>.jsonl</code> path, or a platform dataset name. See
-        the <a href="#get-started/datasets">Datasets</a> page for string-resolution rules.
-      </td>
-    </tr>
-    <tr>
-      <td><code>metrics</code></td>
-      <td>Yes</td>
-      <td>
-        List of built-in metric names and/or metric callables. A comma-separated string is also accepted and
-        split into a list.
-      </td>
-    </tr>
-    <tr>
-      <td><code>config</code></td>
-      <td>No</td>
-      <td>
-        A dict (or <code>EvaluatorConfig</code>) of run config such as <code>run_name</code>,
-        <code>max_concurrency</code>, <code>task_name</code>.
-      </td>
-    </tr>
-    <tr>
-      <td><code>display_name</code></td>
-      <td>No</td>
-      <td>Human-readable label for the dashboard / TUI.</td>
-    </tr>
-    <tr>
-      <td><code>metadata</code></td>
-      <td>No</td>
-      <td>Non-secret labels (e.g. <code>prompt_version</code>). Keep secrets out.</td>
-    </tr>
-    <tr>
-      <td><code>output</code> / <code>output_path</code></td>
-      <td>No</td>
-      <td>
-        File path to save this run's artifact to. The format is inferred from the extension (<code>.csv</code>
-        or <code>.json</code>).
-      </td>
-    </tr>
-    <tr>
-      <td><code>models</code></td>
-      <td>No</td>
-      <td>A list here is <strong>expanded</strong> into one run per model before execution.</td>
-    </tr>
+    <tr><td><code>name</code></td><td>Yes</td><td>Stable run key. Required on <code>RunSpec</code>; becomes the run identifier.</td></tr>
+    <tr><td><code>task</code></td><td>Yes</td><td>The callable (or supported framework object) being evaluated.</td></tr>
+    <tr><td><code>dataset</code></td><td>Yes</td><td>A dataset object, a local <code>.csv</code>/<code>.jsonl</code> path, or a platform dataset name. See the <a href="#get-started/datasets">Datasets</a> page for string-resolution rules.</td></tr>
+    <tr><td><code>metrics</code></td><td>Yes</td><td>List of built-in metric names and/or metric callables. A comma-separated string is also accepted and split into a list.</td></tr>
+    <tr><td><code>config</code></td><td>No</td><td>A dict (or <code>EvaluatorConfig</code>) of run config such as <code>run_name</code>, <code>max_concurrency</code>, <code>task_name</code>.</td></tr>
+    <tr><td><code>display_name</code></td><td>No</td><td>Human-readable label for the dashboard / TUI.</td></tr>
+    <tr><td><code>metadata</code></td><td>No</td><td>Non-secret labels (e.g. <code>prompt_version</code>). Keep secrets out.</td></tr>
+    <tr><td><code>output</code> / <code>output_path</code></td><td>No</td><td>File path to save this run's artifact to. The format is inferred from the extension (<code>.csv</code> or <code>.json</code>).</td></tr>
+    <tr><td><code>models</code></td><td>No</td><td>A list here is <strong>expanded</strong> into one run per model before execution.</td></tr>
   </tbody>
 </table>
 
-<pre data-lang="python">
-from qym import Evaluator
+<pre data-lang="python">from qym import Evaluator
 
 results = Evaluator.run_parallel(
     runs=[
@@ -375,15 +177,9 @@ results = Evaluator.run_parallel(
 )</pre>
 
 <h3>Using a typed <code>RunSpec</code></h3>
-<p>
-  <code>RunSpec</code> is exported from <code>qym</code> and is the typed form of a run dict. Its required
-  field is <code>name</code>; <code>task</code>, <code>dataset</code>, and <code>metrics</code> are also
-  required, while <code>config</code> defaults to an empty <code>EvaluatorConfig</code> and
-  <code>metadata</code> to an empty dict.
-</p>
+<p><code>RunSpec</code> is exported from <code>qym</code> and is the typed form of a run dict. Its required field is <code>name</code>; <code>task</code>, <code>dataset</code>, and <code>metrics</code> are also required, while <code>config</code> defaults to an empty <code>EvaluatorConfig</code> and <code>metadata</code> to an empty dict.</p>
 
-<pre data-lang="python">
-from qym import Evaluator, RunSpec
+<pre data-lang="python">from qym import Evaluator, RunSpec
 from qym.core.config import EvaluatorConfig
 
 results = Evaluator.run_parallel(
@@ -400,39 +196,14 @@ results = Evaluator.run_parallel(
 )</pre>
 
 <div class="docs-callout tip">
-  <svg
-    class="docs-callout-icon"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="16" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12.01" y2="8" />
-  </svg>
-  <p>
-    <span class="docs-callout-title">Multi-model is multi-run under the hood.</span> When you call
-    <code>Evaluator(..., model=[...]).run()</code>, qym builds one run dict per model and delegates to
-    <code>run_parallel(...)</code>. That is why both modes return a list and share the same dashboard,
-    observer events, and <code>max_parallel_runs</code> semantics.
-  </p>
+  <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+  <p><span class="docs-callout-title">Multi-model is multi-run under the hood.</span> When you call <code>Evaluator(..., model=[...]).run()</code>, qym builds one run dict per model and delegates to <code>run_parallel(...)</code>. That is why both modes return a list and share the same dashboard, observer events, and <code>max_parallel_runs</code> semantics.</p>
 </div>
 
 <h3>Progress for wrappers: the <code>run_matrix</code> event</h3>
-<p>
-  Both multi-model and multi-run executions emit a <code>run_matrix</code> progress event
-  <strong>before</strong> any individual run starts, so a wrapper UI can create pending rows up front. Attach
-  a callback via <code>observer=ProgressCallbackObserver(...)</code> (the
-  <code>progress_callback=</code> shortcut lives on <code>Evaluator(...)</code>, not on
-  <code>run_parallel(...)</code>). See
-  <a href="#sdk-guide/observers">Progress, observers &amp; wrappers</a> for the full event vocabulary.
-</p>
+<p>Both multi-model and multi-run executions emit a <code>run_matrix</code> progress event <strong>before</strong> any individual run starts, so a wrapper UI can create pending rows up front. Attach a callback via <code>observer=ProgressCallbackObserver(...)</code> (the <code>progress_callback=</code> shortcut lives on <code>Evaluator(...)</code>, not on <code>run_parallel(...)</code>). See <a href="#sdk-guide/observers">Progress, observers &amp; wrappers</a> for the full event vocabulary.</p>
 
-<pre data-lang="python">
-from qym import Evaluator, ProgressCallbackObserver, ProgressSnapshot
+<pre data-lang="python">from qym import Evaluator, ProgressCallbackObserver, ProgressSnapshot
 
 
 def on_progress(snapshot: ProgressSnapshot) -&gt; None:
@@ -459,114 +230,46 @@ results = Evaluator.run_parallel(
     observer=ProgressCallbackObserver(on_progress),
 )</pre>
 
-<p>
-  Each matrix row carries: <code>run_id</code>, <code>display_name</code>, <code>task</code>,
-  <code>dataset</code>, <code>model</code>, <code>metrics</code>, <code>total_items</code> (when the dataset
-  can be resolved up front, otherwise <code>None</code>), <code>status</code> (initially
-  <code>"pending"</code>), and <code>qym_url</code> / <code>platform_run_id</code> (both <code>null</code> in
-  the matrix). Platform URLs are patched in later through each run's own <code>run_start</code> event, because
-  the platform run is only created when that run begins.
-</p>
+<p>Each matrix row carries: <code>run_id</code>, <code>display_name</code>, <code>task</code>, <code>dataset</code>, <code>model</code>, <code>metrics</code>, <code>total_items</code> (when the dataset can be resolved up front, otherwise <code>None</code>), <code>status</code> (initially <code>"pending"</code>), and <code>qym_url</code> / <code>platform_run_id</code> (both <code>null</code> in the matrix). Platform URLs are patched in later through each run's own <code>run_start</code> event, because the platform run is only created when that run begins.</p>
 
 <h2>Group run analysis</h2>
 
-<p>
-  Once you have a list of <code>EvaluationResult</code> objects &mdash; from a multi-model run, a multi-run
-  batch, or K repetitions of the same config &mdash; the group-analysis helpers compute the same cohort
-  statistics the platform dashboard shows, entirely in Python and offline. They are exported at the top level:
-</p>
+<p>Once you have a list of <code>EvaluationResult</code> objects &mdash; from a multi-model run, a multi-run batch, or K repetitions of the same config &mdash; the group-analysis helpers compute the same cohort statistics the platform dashboard shows, entirely in Python and offline. They are exported at the top level:</p>
 
-<pre data-lang="python">
-from qym import (
+<pre data-lang="python">from qym import (
     analyze_group_runs,
     compare_group_runs,
     GroupRunAnalysis,
 )</pre>
 
 <h3>How scores are read</h3>
-<p>
-  For each run, the helpers read every item's score for the requested metric out of
-  <code>result.results[item_id]["scores"][metric]</code>, normalize it to a number, and then aggregate
-  <strong>over the union of item IDs</strong> across the runs in the group. Score normalization (verified from
-  <code>parse_score_value</code>) is:
-</p>
+<p>For each run, the helpers read every item's score for the requested metric out of <code>result.results[item_id]["scores"][metric]</code>, normalize it to a number, and then aggregate <strong>over the union of item IDs</strong> across the runs in the group. Score normalization (verified from <code>parse_score_value</code>) is:</p>
 
 <table>
-  <thead>
-    <tr>
-      <th>Raw value</th>
-      <th>Normalized score</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Raw value</th><th>Normalized score</th></tr></thead>
   <tbody>
-    <tr>
-      <td><code>bool</code> <code>True</code> / <code>False</code></td>
-      <td><code>1.0</code> / <code>0.0</code></td>
-    </tr>
-    <tr>
-      <td><code>int</code> / <code>float</code> (finite)</td>
-      <td>the number itself</td>
-    </tr>
-    <tr>
-      <td>object with a <code>.score</code> attribute (e.g. <code>MetricResult</code>)</td>
-      <td>recurses into <code>.score</code></td>
-    </tr>
-    <tr>
-      <td>dict with an <code>"error"</code> key</td>
-      <td><code>0.0</code></td>
-    </tr>
-    <tr>
-      <td>dict with a <code>"score"</code> key</td>
-      <td>recurses into <code>"score"</code></td>
-    </tr>
-    <tr>
-      <td>strings <code>"true"/"yes"/"y"</code> or <code>&#x2713;</code></td>
-      <td><code>1.0</code></td>
-    </tr>
-    <tr>
-      <td>strings <code>"false"/"no"/"n"</code> or <code>&#x2717;</code></td>
-      <td><code>0.0</code></td>
-    </tr>
-    <tr>
-      <td>percent string like <code>"82%"</code></td>
-      <td><code>0.82</code></td>
-    </tr>
-    <tr>
-      <td><code>None</code>, empty, or <code>"n/a"/"na"/"none"/"null"</code></td>
-      <td><code>None</code> (excluded for that item)</td>
-    </tr>
+    <tr><td><code>bool</code> <code>True</code> / <code>False</code></td><td><code>1.0</code> / <code>0.0</code></td></tr>
+    <tr><td><code>int</code> / <code>float</code> (finite)</td><td>the number itself</td></tr>
+    <tr><td>object with a <code>.score</code> attribute (e.g. <code>MetricResult</code>)</td><td>recurses into <code>.score</code></td></tr>
+    <tr><td>dict with an <code>"error"</code> key</td><td><code>0.0</code></td></tr>
+    <tr><td>dict with a <code>"score"</code> key</td><td>recurses into <code>"score"</code></td></tr>
+    <tr><td>strings <code>"true"/"yes"/"y"</code> or <code>&#x2713;</code></td><td><code>1.0</code></td></tr>
+    <tr><td>strings <code>"false"/"no"/"n"</code> or <code>&#x2717;</code></td><td><code>0.0</code></td></tr>
+    <tr><td>percent string like <code>"82%"</code></td><td><code>0.82</code></td></tr>
+    <tr><td><code>None</code>, empty, or <code>"n/a"/"na"/"none"/"null"</code></td><td><code>None</code> (excluded for that item)</td></tr>
   </tbody>
 </table>
 
 <div class="docs-callout warn">
-  <svg
-    class="docs-callout-icon"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-  <p>
-    <span class="docs-callout-title">Missing scores are excluded; errors count as 0.</span> If an item has no
-    score in a given run (missing or <code>None</code>), that run is simply not counted for that item. Failed
-    items count as a <code>0.0</code> score &mdash; but
-    <strong>only when the requested metric is among that run's declared metrics</strong>
-    (<code>result.metrics</code>). Erroring on a metric the run never declared does not silently inject zeros.
-  </p>
+  <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  <p><span class="docs-callout-title">Missing scores are excluded; errors count as 0.</span> If an item has no score in a given run (missing or <code>None</code>), that run is simply not counted for that item. Failed items count as a <code>0.0</code> score &mdash; but <strong>only when the requested metric is among that run's declared metrics</strong> (<code>result.metrics</code>). Erroring on a metric the run never declared does not silently inject zeros.</p>
 </div>
 
 <h3><code>analyze_group_runs</code> &mdash; statistics for one group</h3>
 
 <p>Verified signature (all arguments after <code>results</code> are keyword-only):</p>
 
-<pre data-lang="python">
-analyze_group_runs(
+<pre data-lang="python">analyze_group_runs(
     results,                    # Sequence[EvaluationResult]
     *,
     metric: str,                # required
@@ -575,16 +278,9 @@ analyze_group_runs(
     report_k: Optional[int] = None,
 ) -&gt; dict</pre>
 
-<p>
-  <code>k</code> is the number of executions supplied. Set <code>report_k</code> below that count to publish
-  Pass@k and Pass^k as unbiased estimates from the complete execution pool. For an item with
-  <code>n</code> usable scores and <code>c</code> passes, the helper uses
-  <code>1 - C(n-c, k) / C(n, k)</code> and <code>C(c, k) / C(n, k)</code>. Omitting
-  <code>report_k</code> preserves the observed any/all behavior.
-</p>
+<p><code>k</code> is the number of executions supplied. Set <code>report_k</code> below that count to publish Pass@k and Pass^k as unbiased estimates from the complete execution pool. For an item with <code>n</code> usable scores and <code>c</code> passes, the helper uses <code>1 - C(n-c, k) / C(n, k)</code> and <code>C(c, k) / C(n, k)</code>. Omitting <code>report_k</code> preserves the observed any/all behavior.</p>
 
-<pre data-lang="python">
-from qym import Evaluator, analyze_group_runs
+<pre data-lang="python">from qym import Evaluator, analyze_group_runs
 
 results = Evaluator(
     task=answer,
@@ -605,189 +301,52 @@ print(summary["pass_at_k"], summary["pass_hat_k"], summary["avg_at_k"])</pre>
 <p>The returned dict contains (verified field names):</p>
 
 <table>
-  <thead>
-    <tr>
-      <th>Key</th>
-      <th>Meaning</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
   <tbody>
-    <tr>
-      <td><code>metric</code>, <code>threshold</code>, <code>report_k</code></td>
-      <td>Echo of the analysis inputs.</td>
-    </tr>
-    <tr>
-      <td><code>k</code></td>
-      <td>Number of runs in the group (<code>len(results)</code>).</td>
-    </tr>
-    <tr>
-      <td><code>total_items</code></td>
-      <td>Items that had at least one usable score across the group.</td>
-    </tr>
-    <tr>
-      <td><code>total_score_count</code>, <code>total_score_sum</code></td>
-      <td>Count and sum of all included item&times;run scores.</td>
-    </tr>
-    <tr>
-      <td><code>failed_count</code></td>
-      <td>Number of error rows counted across the group.</td>
-    </tr>
-    <tr>
-      <td><code>pass_at_k</code></td>
-      <td>
-        <strong>Pass@K</strong> &mdash; mean probability that at least one of k selected executions passes.
-        With no <code>report_k</code>, this is the observed fraction with any pass.
-      </td>
-    </tr>
-    <tr>
-      <td><code>pass_hat_k</code></td>
-      <td>
-        <strong>Pass^K</strong> &mdash; mean probability that all k selected executions pass. With no
-        <code>report_k</code>, this is the observed fraction where all usable executions pass.
-      </td>
-    </tr>
-    <tr>
-      <td><code>avg_at_k</code> / <code>avg_score</code></td>
-      <td>
-        <strong>Avg@K</strong> &mdash; mean over all included item&times;run scores. (Both keys carry the same
-        value.)
-      </td>
-    </tr>
-    <tr>
-      <td><code>max_at_k</code></td>
-      <td><strong>Max@K</strong> &mdash; mean of the best score per item.</td>
-    </tr>
-    <tr>
-      <td><code>consistency</code></td>
-      <td>
-        Average agreement across runs (see formula below). <code>None</code> if no item had &gt;1 score.
-      </td>
-    </tr>
-    <tr>
-      <td><code>reliability</code></td>
-      <td>
-        Average pass frequency for solvable items (see below). <code>None</code> if no item had &gt;1 score
-        and a pass.
-      </td>
-    </tr>
-    <tr>
-      <td><code>avg_latency</code>, <code>median_latency</code></td>
-      <td>Latency stats in milliseconds over scored item&times;run pairs.</td>
-    </tr>
-    <tr>
-      <td><code>min_score</code>, <code>stddev_score</code></td>
-      <td>Min and population standard deviation over all included scores.</td>
-    </tr>
-    <tr>
-      <td><code>correct_distribution</code></td>
-      <td>
-        Histogram of pass counts per item (length <code>k+1</code>), only when
-        <code>track_distribution=True</code>; otherwise <code>None</code>.
-      </td>
-    </tr>
-    <tr>
-      <td><code>items</code></td>
-      <td>Per-item breakdown (scores, passes, attempts, per-item consistency/reliability, etc.).</td>
-    </tr>
+    <tr><td><code>metric</code>, <code>threshold</code>, <code>report_k</code></td><td>Echo of the analysis inputs.</td></tr>
+    <tr><td><code>k</code></td><td>Number of runs in the group (<code>len(results)</code>).</td></tr>
+    <tr><td><code>total_items</code></td><td>Items that had at least one usable score across the group.</td></tr>
+    <tr><td><code>total_score_count</code>, <code>total_score_sum</code></td><td>Count and sum of all included item&times;run scores.</td></tr>
+    <tr><td><code>failed_count</code></td><td>Number of error rows counted across the group.</td></tr>
+    <tr><td><code>pass_at_k</code></td><td><strong>Pass@K</strong> &mdash; mean probability that at least one of k selected executions passes. With no <code>report_k</code>, this is the observed fraction with any pass.</td></tr>
+    <tr><td><code>pass_hat_k</code></td><td><strong>Pass^K</strong> &mdash; mean probability that all k selected executions pass. With no <code>report_k</code>, this is the observed fraction where all usable executions pass.</td></tr>
+    <tr><td><code>avg_at_k</code> / <code>avg_score</code></td><td><strong>Avg@K</strong> &mdash; mean over all included item&times;run scores. (Both keys carry the same value.)</td></tr>
+    <tr><td><code>max_at_k</code></td><td><strong>Max@K</strong> &mdash; mean of the best score per item.</td></tr>
+    <tr><td><code>consistency</code></td><td>Average agreement across runs (see formula below). <code>None</code> if no item had &gt;1 score.</td></tr>
+    <tr><td><code>reliability</code></td><td>Average pass frequency for solvable items (see below). <code>None</code> if no item had &gt;1 score and a pass.</td></tr>
+    <tr><td><code>avg_latency</code>, <code>median_latency</code></td><td>Latency stats in milliseconds over scored item&times;run pairs.</td></tr>
+    <tr><td><code>min_score</code>, <code>stddev_score</code></td><td>Min and population standard deviation over all included scores.</td></tr>
+    <tr><td><code>correct_distribution</code></td><td>Histogram of pass counts per item (length <code>k+1</code>), only when <code>track_distribution=True</code>; otherwise <code>None</code>.</td></tr>
+    <tr><td><code>items</code></td><td>Per-item breakdown (scores, passes, attempts, per-item consistency/reliability, etc.).</td></tr>
   </tbody>
 </table>
 
 <h3>The metric definitions</h3>
-<p>
-  These are the exact formulas the helper computes per item, then averages. Let <code>score_count</code> be
-  the usable execution count, <code>pass_count</code> the number scoring <code>&gt;= threshold</code>,
-  <code>fail_count = score_count - pass_count</code>, and <code>k_eff</code> the smaller of
-  <code>report_k</code> and <code>score_count</code>. Without <code>report_k</code>,
-  <code>k_eff = score_count</code>.
-</p>
+<p>These are the exact formulas the helper computes per item, then averages. Let <code>score_count</code> be the usable execution count, <code>pass_count</code> the number scoring <code>&gt;= threshold</code>, <code>fail_count = score_count - pass_count</code>, and <code>k_eff</code> the smaller of <code>report_k</code> and <code>score_count</code>. Without <code>report_k</code>, <code>k_eff = score_count</code>.</p>
 
 <table>
-  <thead>
-    <tr>
-      <th>Metric</th>
-      <th>Per item</th>
-      <th>Reported as</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Metric</th><th>Per item</th><th>Reported as</th></tr></thead>
   <tbody>
-    <tr>
-      <td><strong>Pass@K</strong> (<code>pass_at_k</code>)</td>
-      <td><code>1 - C(score_count-pass_count, k_eff) / C(score_count, k_eff)</code></td>
-      <td>mean of per-item subset probabilities</td>
-    </tr>
-    <tr>
-      <td><strong>Pass^K</strong> (<code>pass_hat_k</code>)</td>
-      <td><code>C(pass_count, k_eff) / C(score_count, k_eff)</code></td>
-      <td>mean of per-item subset probabilities</td>
-    </tr>
-    <tr>
-      <td><strong>Avg@K</strong> (<code>avg_at_k</code>)</td>
-      <td>&mdash;</td>
-      <td><code>total_score_sum / total_score_count</code></td>
-    </tr>
-    <tr>
-      <td><strong>Max@K</strong> (<code>max_at_k</code>)</td>
-      <td><code>max(scores)</code></td>
-      <td>mean of per-item max</td>
-    </tr>
-    <tr>
-      <td><strong>Consistency</strong></td>
-      <td>
-        <code>2 * max(pass_count, fail_count) / score_count - 1</code> (only for items with
-        <code>score_count &gt; 1</code>)
-      </td>
-      <td>mean over multi-run items</td>
-    </tr>
-    <tr>
-      <td><strong>Reliability</strong></td>
-      <td>
-        <code>pass_count / score_count</code> (only items with <code>score_count &gt; 1</code> <em>and</em> at
-        least one pass)
-      </td>
-      <td>mean over those items</td>
-    </tr>
+    <tr><td><strong>Pass@K</strong> (<code>pass_at_k</code>)</td><td><code>1 - C(score_count-pass_count, k_eff) / C(score_count, k_eff)</code></td><td>mean of per-item subset probabilities</td></tr>
+    <tr><td><strong>Pass^K</strong> (<code>pass_hat_k</code>)</td><td><code>C(pass_count, k_eff) / C(score_count, k_eff)</code></td><td>mean of per-item subset probabilities</td></tr>
+    <tr><td><strong>Avg@K</strong> (<code>avg_at_k</code>)</td><td>&mdash;</td><td><code>total_score_sum / total_score_count</code></td></tr>
+    <tr><td><strong>Max@K</strong> (<code>max_at_k</code>)</td><td><code>max(scores)</code></td><td>mean of per-item max</td></tr>
+    <tr><td><strong>Consistency</strong></td><td><code>2 * max(pass_count, fail_count) / score_count - 1</code> (only for items with <code>score_count &gt; 1</code>)</td><td>mean over multi-run items</td></tr>
+    <tr><td><strong>Reliability</strong></td><td><code>pass_count / score_count</code> (only items with <code>score_count &gt; 1</code> <em>and</em> at least one pass)</td><td>mean over those items</td></tr>
   </tbody>
 </table>
 
-<p>
-  <strong>Reading the two stability metrics.</strong> Consistency ranges from <code>0</code> (a perfect 50/50
-  split &mdash; maximally flaky) to <code>1</code> (every run agrees). Reliability is simply how often a
-  solvable item actually passes, so it focuses on items the system <em>can</em> get right but doesn't always.
-  A model that always passes or always fails an item is perfectly consistent; reliability tells you, among the
-  items it sometimes gets right, how dependable it is.
-</p>
+<p><strong>Reading the two stability metrics.</strong> Consistency ranges from <code>0</code> (a perfect 50/50 split &mdash; maximally flaky) to <code>1</code> (every run agrees). Reliability is simply how often a solvable item actually passes, so it focuses on items the system <em>can</em> get right but doesn't always. A model that always passes or always fails an item is perfectly consistent; reliability tells you, among the items it sometimes gets right, how dependable it is.</p>
 
 <div class="docs-callout tip">
-  <svg
-    class="docs-callout-icon"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="16" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12.01" y2="8" />
-  </svg>
-  <p>
-    <span class="docs-callout-title">Threshold matters.</span> The default <code>threshold</code> is
-    <code>0.8</code>. Pass@K, Pass^K, consistency, and reliability all depend on it &mdash; a score
-    <em>at or above</em> the threshold counts as a pass. For boolean metrics like
-    <code>exact_match</code> (which normalize to <code>1.0</code>/<code>0.0</code>) the threshold is
-    effectively a yes/no line. For graded judge scores, set it to the bar you actually care about.
-  </p>
+  <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+  <p><span class="docs-callout-title">Threshold matters.</span> The default <code>threshold</code> is <code>0.8</code>. Pass@K, Pass^K, consistency, and reliability all depend on it &mdash; a score <em>at or above</em> the threshold counts as a pass. For boolean metrics like <code>exact_match</code> (which normalize to <code>1.0</code>/<code>0.0</code>) the threshold is effectively a yes/no line. For graded judge scores, set it to the bar you actually care about.</p>
 </div>
 
 <h3>The <code>GroupRunAnalysis</code> wrapper</h3>
-<p>
-  <code>GroupRunAnalysis</code> is a thin convenience class over a list of results, useful when you want to
-  call several metrics or compare without re-passing the same list.
-</p>
+<p><code>GroupRunAnalysis</code> is a thin convenience class over a list of results, useful when you want to call several metrics or compare without re-passing the same list.</p>
 
-<pre data-lang="python">
-from qym import GroupRunAnalysis
+<pre data-lang="python">from qym import GroupRunAnalysis
 
 group = GroupRunAnalysis(results)
 acc = group.metric("correctness", threshold=0.8)
@@ -796,38 +355,19 @@ overlap = group.metric("contains", threshold=1.0)
 # compare_to(other, *, metric, threshold=0.8)
 delta = group.compare_to(other_results, metric="correctness", threshold=0.8)</pre>
 
-<p>
-  The wrapper exposes the historical defaults. Call <code>analyze_group_runs</code> or
-  <code>compare_group_runs</code> directly when you need <code>report_k</code> or a non-default confidence
-  level.
-</p>
+<p>The wrapper exposes the historical defaults. Call <code>analyze_group_runs</code> or <code>compare_group_runs</code> directly when you need <code>report_k</code> or a non-default confidence level.</p>
 
 <h3>Execution-balanced cohorts in the platform</h3>
 
-<p>
-  The Runs view balances cohort sides by <strong>execution count</strong>, not row count. An ordinary run
-  contributes one execution, a repeat run with <code>samples=9</code> contributes nine, and an expanded
-  completed pass contributes one. This allows one repeat experiment to be compared fairly with nine ordinary
-  runs or with any other nine-execution mix.
-</p>
+<p>The Runs view balances cohort sides by <strong>execution count</strong>, not row count. An ordinary run contributes one execution, a repeat run with <code>samples=9</code> contributes nine, and an expanded completed pass contributes one. This allows one repeat experiment to be compared fairly with nine ordinary runs or with any other nine-execution mix.</p>
 
-<p>
-  Selecting a pass creates a reference such as <code>&lt;file_path&gt;::pass3</code>. Compare loads the base
-  repeat run and slices its output, scores, judge metadata, latency, and trace to that pass before analysis. A
-  whole run and one of its own passes cannot overlap across cohort sides. Exact execution references must be
-  disjoint and execution-balanced; different passes from the same repeat run may appear on opposing sides.
-</p>
+<p>Selecting a pass creates a reference such as <code>&lt;file_path&gt;::pass3</code>. Compare loads the base repeat run and slices its output, scores, judge metadata, latency, and trace to that pass before analysis. A whole run and one of its own passes cannot overlap across cohort sides. Exact execution references must be disjoint and execution-balanced; different passes from the same repeat run may appear on opposing sides.</p>
 
 <h3><code>compare_group_runs</code> &mdash; comparing two groups</h3>
 
-<p>
-  Use this to compare a baseline cohort against a candidate cohort (for example, prompt v1 across 3 seeds vs
-  prompt v2 across 3 seeds). It uses <strong>stricter cohort semantics</strong> than
-  <code>analyze_group_runs</code>.
-</p>
+<p>Use this to compare a baseline cohort against a candidate cohort (for example, prompt v1 across 3 seeds vs prompt v2 across 3 seeds). It uses <strong>stricter cohort semantics</strong> than <code>analyze_group_runs</code>.</p>
 
-<pre data-lang="python">
-compare_group_runs(
+<pre data-lang="python">compare_group_runs(
     left_results,               # Sequence[EvaluationResult] (baseline)
     right_results,              # Sequence[EvaluationResult] (candidate)
     *,
@@ -838,29 +378,11 @@ compare_group_runs(
 ) -&gt; dict</pre>
 
 <div class="docs-callout warn">
-  <svg
-    class="docs-callout-icon"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-  <p>
-    <span class="docs-callout-title">Eligibility is all-or-nothing.</span> An item is eligible only when every
-    execution on both sides has a non-null score. Missing or null scores remove the item from the comparison.
-    A declared-metric execution error is normalized to <code>0</code>, so it remains eligible and counts as a
-    failure.
-  </p>
+  <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  <p><span class="docs-callout-title">Eligibility is all-or-nothing.</span> An item is eligible only when every execution on both sides has a non-null score. Missing or null scores remove the item from the comparison. A declared-metric execution error is normalized to <code>0</code>, so it remains eligible and counts as a failure.</p>
 </div>
 
-<pre data-lang="python">
-from qym import compare_group_runs
+<pre data-lang="python">from qym import compare_group_runs
 
 comparison = compare_group_runs(
     baseline_results,
@@ -879,178 +401,57 @@ print(comparison["buckets"]["b_sweeps_a"]["item_ids"])</pre>
 <p>The returned dict includes (verified):</p>
 
 <table>
-  <thead>
-    <tr>
-      <th>Key</th>
-      <th>Meaning</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
   <tbody>
-    <tr>
-      <td>
-        <code>metric</code>, <code>threshold</code>, <code>k</code>, <code>report_k</code>,
-        <code>confidence</code>
-      </td>
-      <td>Inputs, published k, confidence level, and the left execution count.</td>
-    </tr>
-    <tr>
-      <td><code>eligible_items</code></td>
-      <td>Items scored by every run on both sides.</td>
-    </tr>
-    <tr>
-      <td><code>left_run_count</code>, <code>right_run_count</code></td>
-      <td>Runs per side.</td>
-    </tr>
-    <tr>
-      <td><code>left</code>, <code>right</code></td>
-      <td>
-        Aggregates per side: <code>pass_at_k</code>, <code>pass_hat_k</code>, <code>avg_at_k</code>,
-        <code>consistency</code>, <code>reliability</code>, <code>avg_attempts</code>.
-      </td>
-    </tr>
-    <tr>
-      <td><code>deltas</code></td>
-      <td>
-        <code>right - left</code> for <code>pass_at_k</code>, <code>pass_hat_k</code>, <code>avg_at_k</code>,
-        <code>consistency</code>, <code>reliability</code>.
-      </td>
-    </tr>
-    <tr>
-      <td><code>noise</code></td>
-      <td>
-        Per-metric <code>delta</code>, luck-band <code>half_width</code>, two-sided <code>p_value</code>, and
-        <code>verdict</code>. Reliability is <code>None</code> because its conditional item set makes this
-        band invalid.
-      </td>
-    </tr>
-    <tr>
-      <td><code>summary</code></td>
-      <td>
-        <code>improved_count</code>, <code>regressed_count</code>, <code>unchanged_count</code> (by per-item
-        pass-count move), and <code>avg_attempts_delta</code>.
-      </td>
-    </tr>
-    <tr>
-      <td><code>buckets</code></td>
-      <td>
-        Four swing buckets (see below), each with <code>count</code>, <code>percentage</code>, and
-        <code>item_ids</code>.
-      </td>
-    </tr>
-    <tr>
-      <td><code>items</code></td>
-      <td>Per-item rows, sorted so the biggest swings toward the candidate appear first.</td>
-    </tr>
+    <tr><td><code>metric</code>, <code>threshold</code>, <code>k</code>, <code>report_k</code>, <code>confidence</code></td><td>Inputs, published k, confidence level, and the left execution count.</td></tr>
+    <tr><td><code>eligible_items</code></td><td>Items scored by every run on both sides.</td></tr>
+    <tr><td><code>left_run_count</code>, <code>right_run_count</code></td><td>Runs per side.</td></tr>
+    <tr><td><code>left</code>, <code>right</code></td><td>Aggregates per side: <code>pass_at_k</code>, <code>pass_hat_k</code>, <code>avg_at_k</code>, <code>consistency</code>, <code>reliability</code>, <code>avg_attempts</code>.</td></tr>
+    <tr><td><code>deltas</code></td><td><code>right - left</code> for <code>pass_at_k</code>, <code>pass_hat_k</code>, <code>avg_at_k</code>, <code>consistency</code>, <code>reliability</code>.</td></tr>
+    <tr><td><code>noise</code></td><td>Per-metric <code>delta</code>, luck-band <code>half_width</code>, two-sided <code>p_value</code>, and <code>verdict</code>. Reliability is <code>None</code> because its conditional item set makes this band invalid.</td></tr>
+    <tr><td><code>summary</code></td><td><code>improved_count</code>, <code>regressed_count</code>, <code>unchanged_count</code> (by per-item pass-count move), and <code>avg_attempts_delta</code>.</td></tr>
+    <tr><td><code>buckets</code></td><td>Four swing buckets (see below), each with <code>count</code>, <code>percentage</code>, and <code>item_ids</code>.</td></tr>
+    <tr><td><code>items</code></td><td>Per-item rows, sorted so the biggest swings toward the candidate appear first.</td></tr>
   </tbody>
 </table>
 
 <h3>Noise bands, p-values, and verdicts</h3>
 
-<p>
-  The observed delta alone does not distinguish a real change from favorable executions. For each paired item,
-  qym pools the two cohorts under a no-change hypothesis and estimates how far the right-minus-left metric
-  could move through execution luck. Pass@k, Pass^k, and Consistency use exact binomial estimator variance;
-  Avg@k uses pooled within-item score variance.
-</p>
+<p>The observed delta alone does not distinguish a real change from favorable executions. For each paired item, qym pools the two cohorts under a no-change hypothesis and estimates how far the right-minus-left metric could move through execution luck. Pass@k, Pass^k, and Consistency use exact binomial estimator variance; Avg@k uses pooled within-item score variance.</p>
 
 <table>
-  <thead>
-    <tr>
-      <th>Field</th>
-      <th>Interpretation</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Field</th><th>Interpretation</th></tr></thead>
   <tbody>
-    <tr>
-      <td><code>half_width</code></td>
-      <td>
-        The symmetric luck band at <code>confidence</code>; the default display is
-        <code>&plusmn;half_width</code> at 95%.
-      </td>
-    </tr>
-    <tr>
-      <td><code>p_value</code></td>
-      <td>Two-sided normal probability of a delta at least this extreme under the no-change model.</td>
-    </tr>
-    <tr>
-      <td><code>improved</code></td>
-      <td>The delta is above the positive edge of the luck band.</td>
-    </tr>
-    <tr>
-      <td><code>regressed</code></td>
-      <td>The delta is below the negative edge of the luck band.</td>
-    </tr>
-    <tr>
-      <td><code>within_noise</code></td>
-      <td>
-        The delta remains inside the band; it is not distinguishable from execution luck at this confidence
-        level.
-      </td>
-    </tr>
+    <tr><td><code>half_width</code></td><td>The symmetric luck band at <code>confidence</code>; the default display is <code>&plusmn;half_width</code> at 95%.</td></tr>
+    <tr><td><code>p_value</code></td><td>Two-sided normal probability of a delta at least this extreme under the no-change model.</td></tr>
+    <tr><td><code>improved</code></td><td>The delta is above the positive edge of the luck band.</td></tr>
+    <tr><td><code>regressed</code></td><td>The delta is below the negative edge of the luck band.</td></tr>
+    <tr><td><code>within_noise</code></td><td>The delta remains inside the band; it is not distinguishable from execution luck at this confidence level.</td></tr>
   </tbody>
 </table>
 
-<p>
-  The platform's <strong>Sweep</strong> view shows the corresponding <strong>Improved</strong>,
-  <strong>Regressed</strong>, or <strong>Within noise</strong> verdict for its primary metric, plus each
-  metric's band and p-value. “Within noise” means insufficient evidence of change, not proof that both cohorts
-  are equal.
-</p>
+<p>The platform's <strong>Sweep</strong> view shows the corresponding <strong>Improved</strong>, <strong>Regressed</strong>, or <strong>Within noise</strong> verdict for its primary metric, plus each metric's band and p-value. “Within noise” means insufficient evidence of change, not proof that both cohorts are equal.</p>
 
 <h3>Swing buckets</h3>
-<p>
-  For each eligible item, <code>compare_group_runs</code> classifies it into one of four buckets when the
-  result is unambiguous (all runs on a side agree). "A" is the left/baseline group, "B" is the right/candidate
-  group:
-</p>
+<p>For each eligible item, <code>compare_group_runs</code> classifies it into one of four buckets when the result is unambiguous (all runs on a side agree). "A" is the left/baseline group, "B" is the right/candidate group:</p>
 
 <table>
-  <thead>
-    <tr>
-      <th>Bucket</th>
-      <th>Condition</th>
-      <th>Read it as</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Bucket</th><th>Condition</th><th>Read it as</th></tr></thead>
   <tbody>
-    <tr>
-      <td><code>a_sweeps_b</code></td>
-      <td>Baseline passes on every run; candidate fails on every run.</td>
-      <td>Regression the candidate introduced.</td>
-    </tr>
-    <tr>
-      <td><code>b_sweeps_a</code></td>
-      <td>Candidate passes on every run; baseline fails on every run.</td>
-      <td>Clean win for the candidate.</td>
-    </tr>
-    <tr>
-      <td><code>both_pass</code></td>
-      <td>Every run on both sides passes.</td>
-      <td>Solidly solved either way.</td>
-    </tr>
-    <tr>
-      <td><code>both_fail</code></td>
-      <td>Every run on both sides fails.</td>
-      <td>Hard item neither side solves.</td>
-    </tr>
+    <tr><td><code>a_sweeps_b</code></td><td>Baseline passes on every run; candidate fails on every run.</td><td>Regression the candidate introduced.</td></tr>
+    <tr><td><code>b_sweeps_a</code></td><td>Candidate passes on every run; baseline fails on every run.</td><td>Clean win for the candidate.</td></tr>
+    <tr><td><code>both_pass</code></td><td>Every run on both sides passes.</td><td>Solidly solved either way.</td></tr>
+    <tr><td><code>both_fail</code></td><td>Every run on both sides fails.</td><td>Hard item neither side solves.</td></tr>
   </tbody>
 </table>
 
-<p>
-  Items that are mixed (some runs pass, some fail) fall into none of the four buckets &mdash; they still
-  appear in <code>items</code> with a <code>move</code> value (<code>right_pass_count - left_pass_count</code
-  >) and feed the <code>improved/regressed/unchanged</code> summary counts.
-</p>
+<p>Items that are mixed (some runs pass, some fail) fall into none of the four buckets &mdash; they still appear in <code>items</code> with a <code>move</code> value (<code>right_pass_count - left_pass_count</code>) and feed the <code>improved/regressed/unchanged</code> summary counts.</p>
 
 <h2>End-to-end: compare two models with Pass@K</h2>
 
-<p>
-  A complete pattern: run the same task across several models, then compute and compare group statistics
-  offline.
-</p>
+<p>A complete pattern: run the same task across several models, then compute and compare group statistics offline.</p>
 
-<pre data-lang="python">
-from qym import Evaluator, analyze_group_runs, compare_group_runs
+<pre data-lang="python">from qym import Evaluator, analyze_group_runs, compare_group_runs
 
 baseline = Evaluator(
     task=baseline_task,
@@ -1079,102 +480,29 @@ print("pass@k delta:", round(diff["deltas"]["pass_at_k"], 3))
 print("regressions:", diff["buckets"]["a_sweeps_b"]["item_ids"])</pre>
 
 <div class="docs-callout tip">
-  <svg
-    class="docs-callout-icon"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="16" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12.01" y2="8" />
-  </svg>
-  <p>
-    <span class="docs-callout-title">Use native repeats for new stability experiments.</span> Group helpers
-    can still analyze separate historical results, regardless of whether they came from models, prompts, or
-    earlier repetitions. For a new same-config experiment, prefer <code>samples=n</code>: it preserves all
-    executions inside one logical run and exposes <code>result.group_stats()</code> directly.
-  </p>
+  <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+  <p><span class="docs-callout-title">Use native repeats for new stability experiments.</span> Group helpers can still analyze separate historical results, regardless of whether they came from models, prompts, or earlier repetitions. For a new same-config experiment, prefer <code>samples=n</code>: it preserves all executions inside one logical run and exposes <code>result.group_stats()</code> directly.</p>
 </div>
 
 <h2>Common pitfalls</h2>
 <table>
-  <thead>
-    <tr>
-      <th>Pitfall</th>
-      <th>Symptom</th>
-      <th>Fix</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Pitfall</th><th>Symptom</th><th>Fix</th></tr></thead>
   <tbody>
-    <tr>
-      <td>Hardcoded model in the task</td>
-      <td><code>model=[...]</code> runs but every model gets identical scores.</td>
-      <td>
-        Accept a <code>model_name</code> (or <code>model</code>) parameter and route the API call through it.
-      </td>
-    </tr>
-    <tr>
-      <td>Unstable item IDs</td>
-      <td>
-        Group metrics look noisy; <code>compare_group_runs</code> reports few <code>eligible_items</code>.
-      </td>
-      <td>Give every dataset row a stable <code>id</code> so runs align by identity, not row order.</td>
-    </tr>
-    <tr>
-      <td>One-element model list</td>
-      <td>Expected a list, got a single <code>EvaluationResult</code>.</td>
-      <td>Multi-model needs &gt;1 model. Use 2+ entries, or wrap the single result in a list yourself.</td>
-    </tr>
-    <tr>
-      <td>Mismatched metric names across runs</td>
-      <td><code>analyze_group_runs(metric=...)</code> finds no scores for some runs.</td>
-      <td>Keep the metric you analyze in every run's <code>metrics</code> list, under the same name.</td>
-    </tr>
-    <tr>
-      <td>Balanced rows, unequal executions</td>
-      <td>The platform will not open the cohort.</td>
-      <td>
-        Balance execution units: a repeat row contributes its <code>samples</code>; a selected pass
-        contributes one.
-      </td>
-    </tr>
-    <tr>
-      <td>Provider throttling</td>
-      <td>Timeouts and sporadic failures under multi-model load.</td>
-      <td>Lower <code>max_parallel_runs</code> and/or per-run <code>max_concurrency</code>.</td>
-    </tr>
-    <tr>
-      <td>Forgotten artifacts</td>
-      <td><code>run_parallel</code> produced no saved files.</td>
-      <td>
-        <code>run_parallel</code> defaults <code>auto_save=False</code> &mdash; pass
-        <code>auto_save=True</code> or set <code>output_path</code> per run.
-      </td>
-    </tr>
+    <tr><td>Hardcoded model in the task</td><td><code>model=[...]</code> runs but every model gets identical scores.</td><td>Accept a <code>model_name</code> (or <code>model</code>) parameter and route the API call through it.</td></tr>
+    <tr><td>Unstable item IDs</td><td>Group metrics look noisy; <code>compare_group_runs</code> reports few <code>eligible_items</code>.</td><td>Give every dataset row a stable <code>id</code> so runs align by identity, not row order.</td></tr>
+    <tr><td>One-element model list</td><td>Expected a list, got a single <code>EvaluationResult</code>.</td><td>Multi-model needs &gt;1 model. Use 2+ entries, or wrap the single result in a list yourself.</td></tr>
+    <tr><td>Mismatched metric names across runs</td><td><code>analyze_group_runs(metric=...)</code> finds no scores for some runs.</td><td>Keep the metric you analyze in every run's <code>metrics</code> list, under the same name.</td></tr>
+    <tr><td>Balanced rows, unequal executions</td><td>The platform will not open the cohort.</td><td>Balance execution units: a repeat row contributes its <code>samples</code>; a selected pass contributes one.</td></tr>
+    <tr><td>Provider throttling</td><td>Timeouts and sporadic failures under multi-model load.</td><td>Lower <code>max_parallel_runs</code> and/or per-run <code>max_concurrency</code>.</td></tr>
+    <tr><td>Forgotten artifacts</td><td><code>run_parallel</code> produced no saved files.</td><td><code>run_parallel</code> defaults <code>auto_save=False</code> &mdash; pass <code>auto_save=True</code> or set <code>output_path</code> per run.</td></tr>
   </tbody>
 </table>
 
 <h2>Related pages</h2>
 <ul>
-  <li>
-    <a href="#sdk-guide/config">Configs &amp; options</a> &mdash; <code>max_concurrency</code>,
-    <code>dataset_version</code>/<code>dataset_alias</code>, and the rest of <code>EvaluatorConfig</code>.
-  </li>
-  <li>
-    <a href="#sdk-guide/observers">Progress, observers &amp; wrappers</a> &mdash; the full local event
-    vocabulary, including <code>run_matrix</code>.
-  </li>
-  <li>
-    <a href="#sdk-guide/results">Results, artifacts &amp; tracing</a> &mdash; the shape of each
-    <code>EvaluationResult</code> the group helpers consume.
-  </li>
+  <li><a href="#sdk-guide/config">Configs &amp; options</a> &mdash; <code>max_concurrency</code>, <code>dataset_version</code>/<code>dataset_alias</code>, and the rest of <code>EvaluatorConfig</code>.</li>
+  <li><a href="#sdk-guide/observers">Progress, observers &amp; wrappers</a> &mdash; the full local event vocabulary, including <code>run_matrix</code>.</li>
+  <li><a href="#sdk-guide/results">Results, artifacts &amp; tracing</a> &mdash; the shape of each <code>EvaluationResult</code> the group helpers consume.</li>
   <li><a href="#get-started/datasets">Datasets</a> &mdash; stable item IDs and dataset string resolution.</li>
-  <li>
-    <a href="#developer/cli">CLI reference</a> &mdash; <code>qym run create</code> flags for multi-model and
-    <code>--runs-config</code>.
-  </li>
+  <li><a href="#developer/cli">CLI reference</a> &mdash; <code>qym run create</code> flags for multi-model and <code>--runs-config</code>.</li>
 </ul>

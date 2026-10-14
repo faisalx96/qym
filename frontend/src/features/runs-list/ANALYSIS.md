@@ -11,7 +11,7 @@ the `?` help modal, `/charts` and `/overview`; every XHR was recorded.
 ## Confirmed (matches the brief)
 
 - Requests: Runs page = one `POST /api/dashboard/runs` (`limit 50, offset,
-ids:[], include_overview:true`, `sort:'time-desc'`); a filter change
+  ids:[], include_overview:true`, `sort:'time-desc'`); a filter change
   re-sends it with `include_overview:true`; a **text sort** first fetches
   `POST /api/dashboard/overview` for `sort_values`, then `/runs` with
   `collation:[…]`. Charts = `/overview` + one `/points` per visible card.
@@ -32,7 +32,7 @@ ids:[], include_overview:true`, `sort:'time-desc'`); a filter change
   `1–43 of 43 runs [1] of 1`, `Last Updated: hh:mm:ss PM · ? Shortcuts`; with
   filters: `8 of 43 runs — task: rag-qa, status: Completed`.
 - Topbar KPIs: `All runs · 43 runs · 95.4% execution success · 13 runs with
-errors · 2 models · 422 items`; the Overview cards show the same numbers
+  errors · 2 models · 422 items`; the Overview cards show the same numbers
   (`test_runs_kpis_browser.py` contract); on Charts with filters the scope
   flips to `Filtered runs`.
 - Overview: title = project name, Origin segmented top-right, 5 KPI cards
@@ -64,7 +64,7 @@ errors · 2 models · 422 items`; the Overview cards show the same numbers
   `dashboard.js` only. We ship a dedicated shortcuts dialog.
 - The Playwright config from the foundation starts the platform with
   `QYM_ROLE=api`, which disables the dashboard summary worker, so `/api/
-dashboard/runs` stays empty forever in e2e. Removed for this area's runs
+  dashboard/runs` stays empty forever in e2e. Removed for this area's runs
   (foundation change, reported).
 - `frontend/src/lib/` was never committed on `ui/foundation`: the repo
   `.gitignore` has a Python `lib/` pattern. Copied from the foundation worktree
