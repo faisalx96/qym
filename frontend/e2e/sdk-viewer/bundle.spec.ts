@@ -30,7 +30,7 @@ test.describe('bundle', () => {
       expect(m[1], 'url()').toMatch(/^["']?data:font\/woff2;base64,/);
     // every @font-face is either inlined (data URI) or maps onto fonts already installed on the machine
     for (const face of css.match(/@font-face\s*\{[^}]*\}/g) ?? []) {
-      const src = /src:([^;}]*)/.exec(face)?.[1] ?? '';
+      const src = /src:((?:[^;()]|\([^)]*\))*)/.exec(face)?.[1] ?? '';
       expect(
         src
           .split(/,(?![^(]*\))/)
