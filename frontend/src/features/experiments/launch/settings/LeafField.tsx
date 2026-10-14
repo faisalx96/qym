@@ -146,7 +146,8 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
   const canEditAsFields = Boolean(encoding) && !bound && !asJson && startValue() !== undefined;
 
   let control: JSX.Element;
-  if (node.swept && isSweepValue(node.value) && !bound) {
+  // In a table cell a sweep is a read-only summary (the chips live in the global row and in Sweeps).
+  if (node.swept && isSweepValue(node.value) && !bound && !cell) {
     const swept = node.value.sweep;
     control = (
       <SweepChips

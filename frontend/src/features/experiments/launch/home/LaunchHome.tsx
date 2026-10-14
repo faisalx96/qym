@@ -28,12 +28,12 @@ export function LaunchHome({ onCustomize }: { onCustomize: (step: WizardStepId) 
           <DatasetPicker />
         </div>
       </div>
+      <VersionsBlock onCustomize={() => onCustomize('where')} />
       {envRecords.length ? (
         <div className={panel.panel}>
           <StartFrom />
         </div>
       ) : null}
-      <VersionsBlock onCustomize={() => onCustomize('where')} />
       <HomeBar onCustomize={onCustomize} />
     </div>
   );
