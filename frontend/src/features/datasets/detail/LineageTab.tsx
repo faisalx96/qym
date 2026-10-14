@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import { useDatasetLineage, type DatasetVersion, type LineageChange } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
-import { EmptyState, ErrorState, LinkButton, SectionHeader, Skeleton, Tag, Text } from '@/ui';
+import { EmptyState, ErrorState, LinkButton, SectionHeader, Skeleton, Tag, Text, Card } from '@/ui';
 import { UserPill } from '../components/UserPill';
 import { VersionBadge, AliasTags } from '../components/VersionSwitcher';
 import { formatDate, pluralize } from '../lib/itemValue';
@@ -36,52 +36,54 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
 
   const renderNode = (v: DatasetVersion, depth: number) => (
     <li key={v.id} className={styles.node} style={{ '--depth': depth } as React.CSSProperties}>
-      <div className={styles.card} data-version-node={v.version}>
-        <div className={styles.cardMain}>
-          <Link
-            to={datasetPath(slug, datasetRef, { tab: 'lineage', v: v.version })}
-            className={styles.versionLink}
-          >
-            {v.version}
-          </Link>
-          <Text as="span" variant="md" weight={600}>
-            {v.name || <em className={styles.unnamed}>unnamed</em>}
-          </Text>
-          <VersionBadge version={v} />
-          <AliasTags version={v} />
-          <span className={styles.meta}>
-            {pluralize(v.item_count, 'item')} · {pluralize(v.run_count, 'run')}
-          </span>
-          {v.change_counts ? (
-            <span className={styles.changes} role="group" aria-label="Changes vs parent">
-              {v.change_counts.added ? <Tag tone="success">+{v.change_counts.added}</Tag> : null}
-              {v.change_counts.deleted ? <Tag tone="danger">−{v.change_counts.deleted}</Tag> : null}
-              {v.change_counts.modified ? <Tag tone="warning">~{v.change_counts.modified}</Tag> : null}
-            </span>
-          ) : null}
-        </div>
-        <div className={styles.cardSide}>
-          <UserPill user={v.published_by} label="Published By:" />
-          <UserPill user={v.created_by} label="Drafted By:" />
-          {v.parent_version_id && byId.has(v.parent_version_id) ? (
-            <LinkButton
-              to={comparePath(slug, datasetRef, {
-                base: byId.get(v.parent_version_id)?.version,
-                head: v.version,
-              })}
-              variant="neutral"
-              size="sm"
+      <Card data-version-node={v.version}>
+        <div className={styles.grid}>
+          <div className={styles.cardMain}>
+            <Link
+              to={datasetPath(slug, datasetRef, { tab: 'lineage', v: v.version })}
+              className={styles.versionLink}
             >
-              Compare
-            </LinkButton>
-          ) : null}
+              {v.version}
+            </Link>
+            <Text as="span" variant="md" weight={600}>
+              {v.name || <em className={styles.unnamed}>unnamed</em>}
+            </Text>
+            <VersionBadge version={v} />
+            <AliasTags version={v} />
+            <span className={styles.meta}>
+              {pluralize(v.item_count, 'item')} · {pluralize(v.run_count, 'run')}
+            </span>
+            {v.change_counts ? (
+              <span className={styles.changes} role="group" aria-label="Changes vs parent">
+                {v.change_counts.added ? <Tag tone="success">+{v.change_counts.added}</Tag> : null}
+                {v.change_counts.deleted ? <Tag tone="danger">−{v.change_counts.deleted}</Tag> : null}
+                {v.change_counts.modified ? <Tag tone="warning">~{v.change_counts.modified}</Tag> : null}
+              </span>
+            ) : null}
+          </div>
+          <div className={styles.cardSide}>
+            <UserPill user={v.published_by} label="Published By:" />
+            <UserPill user={v.created_by} label="Drafted By:" />
+            {v.parent_version_id && byId.has(v.parent_version_id) ? (
+              <LinkButton
+                to={comparePath(slug, datasetRef, {
+                  base: byId.get(v.parent_version_id)?.version,
+                  head: v.version,
+                })}
+                variant="neutral"
+                size="sm"
+              >
+                Compare
+              </LinkButton>
+            ) : null}
+          </div>
+          <div className={styles.dates}>
+            created {formatDate(v.created_at)}
+            {v.published_at ? ` · published ${formatDate(v.published_at)}` : ''}
+            {orphans.includes(v) ? ' · parent version no longer exists' : ''}
+          </div>
         </div>
-        <div className={styles.dates}>
-          created {formatDate(v.created_at)}
-          {v.published_at ? ` · published ${formatDate(v.published_at)}` : ''}
-          {orphans.includes(v) ? ' · parent version no longer exists' : ''}
-        </div>
-      </div>
+      </Card>
       {children.get(v.id)?.length ? (
         <ul className={styles.children}>{children.get(v.id)!.map((c) => renderNode(c, depth + 1))}</ul>
       ) : null}

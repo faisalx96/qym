@@ -22,14 +22,10 @@
   border-inline-start: 2px solid var(--border-default);
 }
 
-.card {
+.grid {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: var(--space-xs) var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
 }
 
 .cardMain {

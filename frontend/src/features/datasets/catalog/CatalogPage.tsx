@@ -3,7 +3,7 @@
  * client-side and mirrored to `?q=`; sort lives in `?sort=`.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useDatasetCatalog, type Dataset } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
@@ -23,6 +23,7 @@ import {
   Select,
   Skeleton,
   Text,
+  Card,
 } from '@/ui';
 import { NewDatasetDialog } from '../components/dialogs';
 import { UserPill } from '../components/UserPill';
@@ -205,49 +206,53 @@ export function CatalogPage() {
 
 function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
   return (
-    <Link to={datasetPath(slug, d.slug)} className={styles.card} data-dataset-card={d.slug}>
-      <div className={styles.cardHead}>
-        <Identicon seed={d.slug} chip />
-        <div className={styles.cardTitle}>
-          <Text variant="lg" as="span" truncate>
-            {d.name}
-          </Text>
-          <span className={styles.state}>
-            {catalogStateLine(d)
-              .split(' · ')
-              .map((part, i) => (
-                <span
-                  key={part}
-                  data-kind={part.endsWith(' prod') ? 'prod' : part.endsWith(' draft') ? 'draft' : undefined}
-                >
-                  {i ? ' · ' : ''}
-                  {part}
-                </span>
-              ))}
+    <Card to={datasetPath(slug, d.slug)} className={styles.fill} data-dataset-card={d.slug}>
+      <div className={styles.stack}>
+        <div className={styles.cardHead}>
+          <Identicon seed={d.slug} chip />
+          <div className={styles.cardTitle}>
+            <Text variant="lg" as="span" truncate>
+              {d.name}
+            </Text>
+            <span className={styles.state}>
+              {catalogStateLine(d)
+                .split(' · ')
+                .map((part, i) => (
+                  <span
+                    key={part}
+                    data-kind={
+                      part.endsWith(' prod') ? 'prod' : part.endsWith(' draft') ? 'draft' : undefined
+                    }
+                  >
+                    {i ? ' · ' : ''}
+                    {part}
+                  </span>
+                ))}
+            </span>
+          </div>
+          {d.private_test_set ? <Badge tone="warning">Private test set</Badge> : null}
+        </div>
+        <p className={styles.description} dir="auto">
+          {d.description || <span className={styles.noDescription}>No description</span>}
+        </p>
+        <div className={styles.stats}>
+          <span>
+            <strong>{catalogItemCount(d).toLocaleString()}</strong> items
+          </span>
+          <span>
+            <strong>{catalogVersionCount(d)}</strong> {catalogVersionCount(d) === 1 ? 'version' : 'versions'}
+          </span>
+          <span>
+            <strong>{d.run_count.toLocaleString()}</strong> {d.run_count === 1 ? 'run' : 'runs'}
           </span>
         </div>
-        {d.private_test_set ? <Badge tone="warning">Private test set</Badge> : null}
+        <div className={styles.cardFoot}>
+          <UserPill user={d.created_by} />
+          <span className={styles.dates}>
+            created {formatDate(d.created_at, 'date')} · updated {relativeTime(d.updated_at)}
+          </span>
+        </div>
       </div>
-      <p className={styles.description} dir="auto">
-        {d.description || <span className={styles.noDescription}>No description</span>}
-      </p>
-      <div className={styles.stats}>
-        <span>
-          <strong>{catalogItemCount(d).toLocaleString()}</strong> items
-        </span>
-        <span>
-          <strong>{catalogVersionCount(d)}</strong> {catalogVersionCount(d) === 1 ? 'version' : 'versions'}
-        </span>
-        <span>
-          <strong>{d.run_count.toLocaleString()}</strong> {d.run_count === 1 ? 'run' : 'runs'}
-        </span>
-      </div>
-      <div className={styles.cardFoot}>
-        <UserPill user={d.created_by} />
-        <span className={styles.dates}>
-          created {formatDate(d.created_at, 'date')} · updated {relativeTime(d.updated_at)}
-        </span>
-      </div>
-    </Link>
+    </Card>
   );
 }

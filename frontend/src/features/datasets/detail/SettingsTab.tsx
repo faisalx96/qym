@@ -13,6 +13,7 @@ import {
   TextField,
   Textarea,
   useToast,
+  Card,
 } from '@/ui';
 import { catalogPath, datasetPath } from '../lib/route';
 import { DELETE_RULE } from '../lib/versions';
@@ -82,104 +83,110 @@ export function SettingsTab({
 
   return (
     <div className={styles.wrap} data-dataset-settings>
-      <section className={styles.card} aria-labelledby="ds-general">
-        <SectionHeader id="ds-general" title="General" />
-        <TextField label="Name" value={name} onChange={setName} isReadOnly={readOnly} isRequired />
-        <Textarea
-          label="Description"
-          value={description}
-          onChange={setDescription}
-          rows={3}
-          isReadOnly={readOnly}
-        />
-        <div className={styles.tags}>
-          <TextField
-            label="Tags"
-            value={tagDraft}
-            onChange={(v) => {
-              setTagDraft(v);
-              setTagError(null);
-            }}
+      <Card as="section" aria-labelledby="ds-general">
+        <div className={styles.stack}>
+          <SectionHeader id="ds-general" title="General" />
+          <TextField label="Name" value={name} onChange={setName} isReadOnly={readOnly} isRequired />
+          <Textarea
+            label="Description"
+            value={description}
+            onChange={setDescription}
+            rows={3}
             isReadOnly={readOnly}
-            placeholder="Type a tag and press Enter"
-            help={tagError ? undefined : 'Press Enter to add a tag.'}
-            errorMessage={tagError ?? undefined}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addTag();
-              }
-            }}
           />
-          {tags.length ? (
-            <div className={styles.chipRow} role="list" aria-label="Tags">
-              {tags.map((t) => (
-                <Chip
-                  key={t}
-                  isSelected
-                  onRemove={readOnly ? undefined : () => setTags(tags.filter((x) => x !== t))}
-                  removeLabel={`Remove tag ${t}`}
-                >
-                  {t}
-                </Chip>
-              ))}
+          <div className={styles.tags}>
+            <TextField
+              label="Tags"
+              value={tagDraft}
+              onChange={(v) => {
+                setTagDraft(v);
+                setTagError(null);
+              }}
+              isReadOnly={readOnly}
+              placeholder="Type a tag and press Enter"
+              help={tagError ? undefined : 'Press Enter to add a tag.'}
+              errorMessage={tagError ?? undefined}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addTag();
+                }
+              }}
+            />
+            {tags.length ? (
+              <div className={styles.chipRow} role="list" aria-label="Tags">
+                {tags.map((t) => (
+                  <Chip
+                    key={t}
+                    isSelected
+                    onRemove={readOnly ? undefined : () => setTags(tags.filter((x) => x !== t))}
+                    removeLabel={`Remove tag ${t}`}
+                  >
+                    {t}
+                  </Chip>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          {!readOnly ? (
+            <div>
+              <Button
+                variant="primary"
+                onPress={() => void save()}
+                isDisabled={!dirty || !name.trim()}
+                loading={patch.isPending}
+              >
+                Save changes
+              </Button>
             </div>
           ) : null}
         </div>
-        {!readOnly ? (
-          <div>
-            <Button
-              variant="primary"
-              onPress={() => void save()}
-              isDisabled={!dirty || !name.trim()}
-              loading={patch.isPending}
-            >
-              Save changes
-            </Button>
-          </div>
-        ) : null}
-      </section>
+      </Card>
 
       {dataset.can_set_private_test_set ? (
-        <section className={styles.card} aria-labelledby="ds-visibility">
-          <SectionHeader
-            id="ds-visibility"
-            title="Visibility"
-            description="A private test set hides its items from everyone except admins, including the inputs, expected outputs, outputs, and traces of runs evaluated on it. Members still see versions, run history, and scores."
-          />
-          <Checkbox
-            isSelected={dataset.private_test_set}
-            isDisabled={readOnly || patch.isPending}
-            onChange={(v) => setConfirmPrivate(v)}
-            data-testid="private-toggle"
-          >
-            Private test set (admins only)
-          </Checkbox>
-        </section>
+        <Card as="section" aria-labelledby="ds-visibility">
+          <div className={styles.stack}>
+            <SectionHeader
+              id="ds-visibility"
+              title="Visibility"
+              description="A private test set hides its items from everyone except admins, including the inputs, expected outputs, outputs, and traces of runs evaluated on it. Members still see versions, run history, and scores."
+            />
+            <Checkbox
+              isSelected={dataset.private_test_set}
+              isDisabled={readOnly || patch.isPending}
+              onChange={(v) => setConfirmPrivate(v)}
+              data-testid="private-toggle"
+            >
+              Private test set (admins only)
+            </Checkbox>
+          </div>
+        </Card>
       ) : null}
 
-      <section className={[styles.card, styles.danger].join(' ')} aria-labelledby="ds-danger">
-        <SectionHeader
-          id="ds-danger"
-          title="Danger zone"
-          description="Deleting moves the dataset, with all its versions, items and history, to Deleted datasets, where a project manager can restore it. Runs that used it keep their results."
-        />
-        {readOnly ? (
-          <Text variant="sm" tone="muted">
-            This project is archived.
-          </Text>
-        ) : dataset.permissions.can_delete ? (
-          <div>
-            <Button variant="danger" onPress={() => setConfirmDelete(true)} data-testid="delete-dataset">
-              Delete dataset
-            </Button>
-          </div>
-        ) : (
-          <Text variant="sm" tone="muted">
-            {DELETE_RULE}
-          </Text>
-        )}
-      </section>
+      <Card as="section" aria-labelledby="ds-danger" tone="danger">
+        <div className={styles.stack}>
+          <SectionHeader
+            id="ds-danger"
+            title="Danger zone"
+            description="Deleting moves the dataset, with all its versions, items and history, to Deleted datasets, where a project manager can restore it. Runs that used it keep their results."
+          />
+          {readOnly ? (
+            <Text variant="sm" tone="muted">
+              This project is archived.
+            </Text>
+          ) : dataset.permissions.can_delete ? (
+            <div>
+              <Button variant="danger" onPress={() => setConfirmDelete(true)} data-testid="delete-dataset">
+                Delete dataset
+              </Button>
+            </div>
+          ) : (
+            <Text variant="sm" tone="muted">
+              {DELETE_RULE}
+            </Text>
+          )}
+        </div>
+      </Card>
 
       <ConfirmDialog
         open={confirmDelete}

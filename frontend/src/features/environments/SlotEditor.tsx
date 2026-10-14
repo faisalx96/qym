@@ -16,7 +16,7 @@ import {
 } from '@/api/evalEnvironments';
 import { errorCode, errorList, errorMessage, type EvalEnvironment } from '@/api/evalCommon';
 import { ApiError, api } from '@/lib/http';
-import { Button, Dialog, ErrorState, Select, Skeleton, Tag, TextField, useToast } from '@/ui';
+import { Button, Dialog, ErrorState, Select, Skeleton, Tag, TextField, useToast, Card } from '@/ui';
 import styles from './SlotEditor.module.css';
 import {
   candidatesFor,
@@ -287,123 +287,126 @@ export function SlotCard({ slot: input, editor, errors = [] }: SlotCardProps) {
   const mergeTargets =
     editor && !slot.required ? editor.state.slots.filter((s) => s.slot_key !== slot.slot_key) : [];
   return (
-    <article
-      className={styles.card}
+    <Card
+      as="article"
       data-slot-key={slot.slot_key}
       data-error={errors.length ? '' : undefined}
+      tone={errors.length ? 'danger' : undefined}
     >
-      <header className={styles.header}>
-        {editor ? (
-          <TextField
-            className={styles.labelField}
-            label={`Name of group ${slot.slot_key}`}
-            hideLabel
-            placeholder="Group name"
-            value={slot.label}
-            maxLength={200}
-            onChange={(label) => editor.dispatch({ type: 'rename', slotKey: slot.slot_key, label })}
-          />
-        ) : (
-          <span className={styles.title}>{slot.label || slot.slot_key}</span>
-        )}
-        <Tag kind="data" title="Slot key">
-          {slot.slot_key}
-        </Tag>
-        {status ? (
-          <Tag kind={status.kind} tone={status.tone} title={status.title}>
-            {status.label}
+      <div className={styles.stack}>
+        <header className={styles.header}>
+          {editor ? (
+            <TextField
+              className={styles.labelField}
+              label={`Name of group ${slot.slot_key}`}
+              hideLabel
+              placeholder="Group name"
+              value={slot.label}
+              maxLength={200}
+              onChange={(label) => editor.dispatch({ type: 'rename', slotKey: slot.slot_key, label })}
+            />
+          ) : (
+            <span className={styles.title}>{slot.label || slot.slot_key}</span>
+          )}
+          <Tag kind="data" title="Slot key">
+            {slot.slot_key}
           </Tag>
-        ) : null}
-        {slot.required ? <Tag title="Required by the service">Required</Tag> : null}
-      </header>
-      <div className={styles.keysets}>
-        {sets.map((_, setIdx) => (
-          <div key={setIdx} className={styles.keyset}>
-            {sets.length > 1 || editor ? (
-              <div className={styles.keysetHead}>
-                <span className={styles.keysetTitle}>Keys {setIdx + 1}</span>
-                {editor && setIdx > 0 ? (
-                  <Button
-                    variant="ghost"
-                    aria-label={`Remove key set ${setIdx + 1} of ${slot.label || slot.slot_key}`}
-                    onPress={() => editor.dispatch({ type: 'removeSet', slotKey: slot.slot_key, setIdx })}
-                  >
-                    Remove
-                  </Button>
-                ) : null}
+          {status ? (
+            <Tag kind={status.kind} tone={status.tone} title={status.title}>
+              {status.label}
+            </Tag>
+          ) : null}
+          {slot.required ? <Tag title="Required by the service">Required</Tag> : null}
+        </header>
+        <div className={styles.keysets}>
+          {sets.map((_, setIdx) => (
+            <div key={setIdx} className={styles.keyset}>
+              {sets.length > 1 || editor ? (
+                <div className={styles.keysetHead}>
+                  <span className={styles.keysetTitle}>Keys {setIdx + 1}</span>
+                  {editor && setIdx > 0 ? (
+                    <Button
+                      variant="ghost"
+                      aria-label={`Remove key set ${setIdx + 1} of ${slot.label || slot.slot_key}`}
+                      onPress={() => editor.dispatch({ type: 'removeSet', slotKey: slot.slot_key, setIdx })}
+                    >
+                      Remove
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className={styles.roles}>
+                {ROLES.map((role) => (
+                  <RoleCell key={role} slot={slot} setIdx={setIdx} role={role} editor={editor} />
+                ))}
               </div>
-            ) : null}
-            <div className={styles.roles}>
-              {ROLES.map((role) => (
-                <RoleCell key={role} slot={slot} setIdx={setIdx} role={role} editor={editor} />
-              ))}
             </div>
+          ))}
+          {editor ? (
+            <div>
+              <Button
+                variant="neutral"
+                onPress={() => editor.dispatch({ type: 'addSet', slotKey: slot.slot_key })}
+              >
+                + Add another set of keys
+              </Button>
+            </div>
+          ) : null}
+        </div>
+        {Object.keys(slot.transport_fields).length ? (
+          <div className={styles.transport}>
+            <span className={styles.roleName}>Transport</span>
+            {Object.entries(slot.transport_fields).map(([name, pointer]) => (
+              <Tag key={name} kind="data" title={pointer}>
+                <span className={styles.chip}>
+                  {name}
+                  {editor ? (
+                    <Button
+                      variant="ghost"
+                      aria-label={`Unmap ${name}; it stays a plain input`}
+                      onPress={() => editor.dispatch({ type: 'detach', slotKey: slot.slot_key, name })}
+                    >
+                      ×
+                    </Button>
+                  ) : null}
+                </span>
+              </Tag>
+            ))}
           </div>
-        ))}
-        {editor ? (
-          <div>
-            <Button
-              variant="neutral"
-              onPress={() => editor.dispatch({ type: 'addSet', slotKey: slot.slot_key })}
-            >
-              + Add another set of keys
-            </Button>
+        ) : null}
+        {editor && (mergeTargets.length || !slot.required) ? (
+          <div className={styles.footer}>
+            {mergeTargets.length ? (
+              <Select
+                label={`Merge ${slot.label || slot.slot_key} into another group`}
+                hideLabel
+                placeholder="Move keys into group…"
+                value={null}
+                items={mergeTargets.map((s) => ({ key: s.slot_key, label: s.label || s.slot_key }))}
+                onChange={(key) =>
+                  key && editor.dispatch({ type: 'merge', srcKey: slot.slot_key, dstKey: String(key) })
+                }
+              />
+            ) : null}
+            {!slot.required ? (
+              <Button
+                variant="danger"
+                onPress={() => editor.dispatch({ type: 'remove', slotKey: slot.slot_key })}
+              >
+                Remove group
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+        {errors.length ? (
+          <div className={styles.errors} role="alert">
+            {errors.map((m, i) => (
+              <div key={i}>{m}</div>
+            ))}
           </div>
         ) : null}
       </div>
-      {Object.keys(slot.transport_fields).length ? (
-        <div className={styles.transport}>
-          <span className={styles.roleName}>Transport</span>
-          {Object.entries(slot.transport_fields).map(([name, pointer]) => (
-            <Tag key={name} kind="data" title={pointer}>
-              <span className={styles.chip}>
-                {name}
-                {editor ? (
-                  <Button
-                    variant="ghost"
-                    aria-label={`Unmap ${name}; it stays a plain input`}
-                    onPress={() => editor.dispatch({ type: 'detach', slotKey: slot.slot_key, name })}
-                  >
-                    ×
-                  </Button>
-                ) : null}
-              </span>
-            </Tag>
-          ))}
-        </div>
-      ) : null}
-      {editor && (mergeTargets.length || !slot.required) ? (
-        <div className={styles.footer}>
-          {mergeTargets.length ? (
-            <Select
-              label={`Merge ${slot.label || slot.slot_key} into another group`}
-              hideLabel
-              placeholder="Move keys into group…"
-              value={null}
-              items={mergeTargets.map((s) => ({ key: s.slot_key, label: s.label || s.slot_key }))}
-              onChange={(key) =>
-                key && editor.dispatch({ type: 'merge', srcKey: slot.slot_key, dstKey: String(key) })
-              }
-            />
-          ) : null}
-          {!slot.required ? (
-            <Button
-              variant="danger"
-              onPress={() => editor.dispatch({ type: 'remove', slotKey: slot.slot_key })}
-            >
-              Remove group
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-      {errors.length ? (
-        <div className={styles.errors} role="alert">
-          {errors.map((m, i) => (
-            <div key={i}>{m}</div>
-          ))}
-        </div>
-      ) : null}
-    </article>
+    </Card>
   );
 }
 

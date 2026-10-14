@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useIssueAction } from '@/api/runs';
 import { isItemTaskError } from '@/lib/metrics';
-import { Button, Tag, useToast, Card } from '@/ui';
+import { Button, Tag, useToast, Card as UiCard } from '@/ui';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import { rootCauseCategories, rootCauseIssues } from '../../lib/rowMeta';
 import { useRunPage } from '../../RunContext';
@@ -80,7 +80,8 @@ function Card({
       { onError: (e) => toast.show(messageFor(e), { tone: 'error' }) },
     );
   return (
-    <Card as="section"
+    <UiCard
+      as="section"
       aria-label={`Root cause analysis for ${metric}`}
       data-testid="metric-analysis-card"
       data-metric={metric}
@@ -155,7 +156,7 @@ function Card({
           />
         ) : null}
       </div>
-    </Card>
+    </UiCard>
   );
 }
 
@@ -214,10 +215,7 @@ export function MetricAnalysisCards({ row }: { row: Row }) {
         />
       ))}
       {legacy ? (
-        <Card as="section"
-          aria-label="Legacy diagnosis"
-          compact
-        >
+        <UiCard as="section" aria-label="Legacy diagnosis" compact>
           <div className={styles.stack}>
             <header className={styles.head}>
               <h4 className={styles.title}>Diagnosis (legacy)</h4>
@@ -234,7 +232,7 @@ export function MetricAnalysisCards({ row }: { row: Row }) {
               </p>
             ) : null}
           </div>
-        </Card>
+        </UiCard>
       ) : null}
     </>
   );

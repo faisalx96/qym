@@ -13,6 +13,7 @@ import {
   ScoreValue,
   Tag,
   TextBlock,
+  Card,
 } from '@/ui';
 import type { Row, RootCauseIssue } from '@/features/run-detail/types';
 import { bodyText } from '@/features/run-detail/lib/itemText';
@@ -269,72 +270,90 @@ export function OutputCard({
     );
   const slug = run.run.project?.slug;
   return (
-    <article className={styles.card} data-testid="output-card" data-run={run.ref} data-state={pill.state}>
-      <header className={styles.head}>
-        <RunDot index={runIndex} />
-        <span className={styles.letter}>{letterOf(runIndex)}</span>
-        {slug ? (
-          <Link
-            className={styles.runLink}
-            to={`${runPath(slug, run.base)}?item=${encodeURIComponent(row.item_id)}${run.pass ? `&pass=${run.pass}` : ''}`}
-            title={run.title}
-          >
-            {run.label}
-          </Link>
-        ) : (
-          <span className={styles.runLink} title={run.title}>
-            {run.label}
+    <Card
+      as="article"
+      data-testid="output-card"
+      data-run={run.ref}
+      data-state={pill.state}
+      tone={
+        pill.state === 'pass'
+          ? 'success'
+          : pill.state === 'fail'
+            ? 'danger'
+            : pill.state === 'error'
+              ? 'warning'
+              : 'neutral'
+      }
+    >
+      <div className={styles.stack}>
+        <header className={styles.head}>
+          <RunDot index={runIndex} />
+          <span className={styles.letter}>{letterOf(runIndex)}</span>
+          {slug ? (
+            <Link
+              className={styles.runLink}
+              to={`${runPath(slug, run.base)}?item=${encodeURIComponent(row.item_id)}${run.pass ? `&pass=${run.pass}` : ''}`}
+              title={run.title}
+            >
+              {run.label}
+            </Link>
+          ) : (
+            <span className={styles.runLink} title={run.title}>
+              {run.label}
+            </span>
+          )}
+          <Tag tone={pill.state === 'pass' ? 'success' : pill.state === 'none' ? undefined : 'danger'}>
+            {pill.state === 'pass'
+              ? '✓ PASS'
+              : pill.state === 'fail'
+                ? '✗ FAIL'
+                : pill.state === 'error'
+                  ? '⚠ ERROR'
+                  : '—'}
+          </Tag>
+          {row.latency_ms != null ? (
+            <span className={styles.meta}>
+              {row.latency_ms === 0 ? '0ms' : formatLatency(row.latency_ms)}
+            </span>
+          ) : null}
+          <span className={styles.actions}>
+            {row.trace_id ? (
+              <Button
+                size="sm"
+                variant="neutral"
+                icon={<Icon name="list" size={12} />}
+                onPress={() => ui.openTrace({ runId: run.base, itemId: row.item_id, pass: run.pass })}
+              >
+                Trace
+              </Button>
+            ) : null}
+            {langfuse ? (
+              <LinkButton
+                size="sm"
+                variant="neutral"
+                href={langfuse}
+                target="_blank"
+                rel="noopener noreferrer"
+                icon={<Icon name="external" size={12} />}
+              >
+                Langfuse
+              </LinkButton>
+            ) : null}
+            <CopyButton text={output} label={`Copy output of ${run.label}`} />
           </span>
+        </header>
+        {row.output_received === false ? (
+          <p className={styles.note} role="note">
+            Output not received: this item’s outcome event never reached the platform.
+          </p>
+        ) : run.run.items_restricted ? (
+          <p className={styles.note}>Item bodies are visible to admins only on a private test set.</p>
+        ) : (
+          <Collapsible text={output} />
         )}
-        <Tag tone={pill.state === 'pass' ? 'success' : pill.state === 'none' ? undefined : 'danger'}>
-          {pill.state === 'pass'
-            ? '✓ PASS'
-            : pill.state === 'fail'
-              ? '✗ FAIL'
-              : pill.state === 'error'
-                ? '⚠ ERROR'
-                : '—'}
-        </Tag>
-        {row.latency_ms != null ? (
-          <span className={styles.meta}>{row.latency_ms === 0 ? '0ms' : formatLatency(row.latency_ms)}</span>
-        ) : null}
-        <span className={styles.actions}>
-          {row.trace_id ? (
-            <Button
-              size="sm"
-              variant="neutral"
-              icon={<Icon name="list" size={12} />}
-              onPress={() => ui.openTrace({ runId: run.base, itemId: row.item_id, pass: run.pass })}
-            >
-              Trace
-            </Button>
-          ) : null}
-          {langfuse ? (
-            <LinkButton
-              size="sm"
-              variant="neutral"
-              href={langfuse}
-              target="_blank"
-              rel="noopener noreferrer"
-              icon={<Icon name="external" size={12} />}
-            >
-              Langfuse
-            </LinkButton>
-          ) : null}
-          <CopyButton text={output} label={`Copy output of ${run.label}`} />
-        </span>
-      </header>
-      {row.output_received === false ? (
-        <p className={styles.note} role="note">
-          Output not received: this item’s outcome event never reached the platform.
-        </p>
-      ) : run.run.items_restricted ? (
-        <p className={styles.note}>Item bodies are visible to admins only on a private test set.</p>
-      ) : (
-        <Collapsible text={output} />
-      )}
-      <MetricChips run={run} row={row} itemId={itemId} />
-      <Issues run={run} row={row} />
-    </article>
+        <MetricChips run={run} row={row} itemId={itemId} />
+        <Issues run={run} row={row} />
+      </div>
+    </Card>
   );
 }

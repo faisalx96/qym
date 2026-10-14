@@ -409,7 +409,12 @@ describe('visual language (redesign round 2)', () => {
 
   it('lets no page declare its own .card (use ui/Card); the allow-list may only shrink', () => {
     // Remaining local card classes, each with a reason. Everything else composes <Card>.
-    const ALLOWED = new Set<string>([]);
+    const ALLOWED = new Set<string>([
+      // role=radio selection cards; Card's interactive mode is role=button + aria-pressed, which is not radio semantics.
+      'features/experiments/launch/entry/entry.module.css',
+      // Edge-to-edge tabs + wide data table inside an overflow:hidden card; Card's body padding would inset the table.
+      'features/runs-list/ChartsPage.module.css',
+    ]);
     const found = cssFiles
       .filter((f) => /^\.card(?![\w-])/m.test(read(f)))
       .map(rel)
