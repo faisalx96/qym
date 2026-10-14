@@ -48,7 +48,7 @@ test.describe('repeat analysis (J4)', () => {
     const bar = page
       .getByRole('group', { name: 'Items by number of passes that passed' })
       .getByRole('button', {
-        name: /^3 of 3 passes passed/,
+        name: /3 of 3 passes passed/,
       });
     await bar.click();
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(60);

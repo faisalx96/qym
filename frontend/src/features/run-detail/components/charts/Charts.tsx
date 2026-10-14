@@ -544,6 +544,7 @@ export function Curve({
                     className={styles.marker}
                     style={{ stroke: s.tone }}
                     tip={`${s.name} @${xLabel}=${p.k}: ${format(p.value!)}`}
+                    role="img"
                     aria-label={`${s.name} @${xLabel}=${p.k}: ${format(p.value!)}`}
                   />
                 ))}
@@ -590,10 +591,12 @@ export function PassCountBars({
           isDisabled={c === 0}
           isSelected={selected === i}
           tip={`${i} of ${total} passes passed: ${c} items`}
-          aria-label={`${i} of ${total} passes passed: ${c} items, filter the table`}
+          aria-label={`${c} ${i}/${total}${
+            i === 0 ? ' always fail' : i === counts.length - 1 ? ' always pass' : ''
+          }: ${i} of ${total} passes passed, ${c} items, filter the table`}
           onPick={() => onPick(i)}
         >
-          <span className={styles.count}>{c}</span>
+          <span className={styles.count}>{c}</span>{' '}
           <span className={styles.barArea}>
             <span
               className={styles.bar}
@@ -603,9 +606,10 @@ export function PassCountBars({
                   i === counts.length - 1 ? 'var(--score-5)' : i === 0 ? 'var(--score-1)' : 'var(--score-3)',
               }}
             />
-          </span>
+          </span>{' '}
           <span className={styles.axis}>
             {i}/{total}
+            {i === 0 || i === counts.length - 1 ? ' ' : null}
             {i === 0 || i === counts.length - 1 ? (
               <small className={styles.axisNote}>{i === 0 ? 'always fail' : 'always pass'}</small>
             ) : null}

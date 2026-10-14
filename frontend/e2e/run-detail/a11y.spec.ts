@@ -8,6 +8,7 @@ import {
   describeViolations,
   openRootCause,
   openRun,
+  seedArabic,
   seedClassic,
   seedProject,
   seedRepeat,
@@ -17,11 +18,13 @@ import {
 let s: Seeded;
 let classic: string;
 let repeat: string;
+let arabic: string;
 
 test.beforeAll(async () => {
   s = await seedProject('rd-axe');
   classic = await seedClassic(s);
   repeat = await seedRepeat(s);
+  arabic = await seedArabic(s);
 });
 
 async function audit(page: Page, label: string, context: string): Promise<void> {
@@ -104,4 +107,22 @@ test.describe('axe', () => {
     await expect(page.getByRole('grid', { name: /by item and pass/ })).toBeVisible();
     await audit(page, 'heatmap', '#shell-content');
   });
+
+  // The repeat panel was missing from the scan list: the Pass@k dots had an aria-label without a role and the
+  // per-pass column buttons a name that did not contain their visible text. No serious violation is allowed here.
+  for (const [label, id] of [
+    ['repeat run', () => repeat],
+    ['Arabic multi-pass run', () => arabic],
+  ] as const) {
+    for (const width of [1440, 390]) {
+      test(`${label} repeat panel has no serious violation at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await openRun(page, s.slug, id(), 'panel=repeat');
+        await expect(page.getByTestId('repeat-analysis')).toBeVisible();
+        const violations = await axeSeriousViolations(page, '#shell-content');
+        const bad = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+        expect(bad, describeViolations(bad)).toEqual([]);
+      });
+    }
+  }
 });
