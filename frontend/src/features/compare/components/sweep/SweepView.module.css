@@ -235,3 +235,14 @@ button.outcome {
   flex-wrap: wrap;
   gap: var(--space-xs);
 }
+
+/* Outcome tiles answer the pointer like every other card-shaped control: border, fill, then pressed. */
+button.outcome:not(:disabled):hover {
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+button.outcome:not(:disabled):active {
+  background: var(--bg-active);
+}

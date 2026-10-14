@@ -73,3 +73,14 @@
 .mono {
   font-family: var(--font-mono);
 }
+
+.toggle:hover .title {
+  color: var(--accent-primary);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+

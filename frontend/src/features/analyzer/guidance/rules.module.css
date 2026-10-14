@@ -250,3 +250,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.ruleToggle:hover,
+.diffItem summary:hover {
+  color: var(--accent-primary);
+}

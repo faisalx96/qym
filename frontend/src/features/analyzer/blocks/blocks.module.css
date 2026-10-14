@@ -764,3 +764,7 @@
 .collapsibleBody[hidden] {
   display: none;
 }
+
+.details summary:hover {
+  color: var(--text-primary);
+}
