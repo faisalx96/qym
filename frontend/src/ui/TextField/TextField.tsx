@@ -69,7 +69,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
         className={styles.wrap}
         data-size={size}
         data-prefix={prefixIcon ? '' : undefined}
-        style={{ width }}
+        style={{ width, maxWidth: '100%' }}
       >
         {prefixIcon ? <span className={styles.prefix}>{prefixIcon}</span> : null}
         <Input

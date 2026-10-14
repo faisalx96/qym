@@ -38,7 +38,7 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
       <Label className={fieldStyles.label} data-hidden={hideLabel ? '' : undefined}>
         {label}
       </Label>
-      <span className={tfStyles.wrap} data-prefix="" style={{ width }}>
+      <span className={tfStyles.wrap} data-prefix="" style={{ width, maxWidth: '100%' }}>
         <span className={tfStyles.prefix}>
           <Icon name="search" size={12} />
         </span>

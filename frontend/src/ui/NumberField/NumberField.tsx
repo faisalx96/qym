@@ -34,7 +34,7 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
       <Label className={fieldStyles.label} data-hidden={hideLabel ? '' : undefined}>
         {label}
       </Label>
-      <Group className={styles.group} style={{ width }}>
+      <Group className={styles.group} style={{ width, maxWidth: '100%' }}>
         <Input ref={ref} className={[tfStyles.control, styles.input].join(' ')} placeholder={placeholder} />
         {steppers ? (
           <span className={styles.steppers}>

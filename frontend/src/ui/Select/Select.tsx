@@ -103,7 +103,7 @@ export function Select<T extends SelectItem>({
       name={name}
       isOpen={open}
       onOpenChange={setOpen}
-      style={{ width }}
+      style={{ width, maxWidth: '100%' }}
     >
       <Label className={fieldStyles.label} data-hidden={hideLabel ? '' : undefined}>
         {label}
