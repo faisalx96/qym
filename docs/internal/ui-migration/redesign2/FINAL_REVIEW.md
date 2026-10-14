@@ -131,3 +131,49 @@ Playwright failures:
 - Feedback points: 18 (4 round 1, 14 round 2): 16 met, 2 partly, 0 not met.
 - Findings: 17 (2 S1, 7 S2, 8 S3), plus the 13-row cross-area table in section 3.
 - axe: 56 loads, 2 with serious violations (same panel). Console errors: 0.
+
+## Re-review (fix pass, tip 92a13ecc)
+
+Re-walked in the running app (platform 8941, Vite 5941, same seeds, 28 routes x 2 widths again) plus targeted probes (`fr/*.mjs`, screenshots `fr/shots/rr-*`, `item-arabic-1440`, `cw-*`; round-1 shots kept in `fr/shots-r1`). Fonts and colours were not judged.
+
+### Per finding
+
+| ID | Verdict | Evidence |
+|---|---|---|
+| F1 | **Fixed** | `test_archived_project_read_only.py` 282 passed; `npm run check` 140 files / 1,263 tests, design-language 48, green. |
+| F2 | **Fixed** | axe on all 56 page loads: 0 serious/critical (repeat and Arabic multi-pass runs at 1440 and 390 were the two offenders before). 0 console errors. |
+| F3 | **Fixed** | No clipped fields on admin users, project settings, projects at 390; overview and admin stat grids no longer leave a grey cell (`overview-390`, `m6`). |
+| F4 | **Fixed** | Header strip is about 95 px at 1440 (was 420) and about 290 px at 390 (was over 1,100); first section is on the first screen at both widths. Nothing from legacy is lost: the strip carries name, status, Export, pager, task / dataset / model tags, start, runtime; the chevron (collapsed by default) reveals owner, project, execution context, run-name metadata and versioning details (`rr-header-expanded`). |
+| F5 | **Fixed** | Arabic multi-pass item: EXPECTED OUTPUT > ANSWER header is left-anchored like CONTEXT / TOPICS, only the value text is RTL in its own column; pass columns unchanged (`item-arabic-1440`). |
+| F6 | **Fixed** | Heatmap: item column capped, block as wide as its three pass columns, 30 rows then "Show 30 more" (`rr-heatmap`). |
+| F7 | **Partly** | Fixed and confirmed by pixel diff or computed style: sweep tiles, queue "Remote queue" toggle, docs links, review problem link. Experiments rows and dataset item rows do react (my first probe was too coarse; they were not a defect, the implementer is right). **Still no hover change** on the analysis page disclosures "Input mapping", "More options" and the "Full value" buttons (identical pixels hovered vs not; `hov3.mjs`); the claimed analysis hover is not visible on those three. |
+| F8 | **Partly** | Section navs are now both 44 px (run detail and compare); analysis action rail 56 px. The experiment home bar is still 61 px and the run items toolbar 71 px (the spec says one 56 px action bar). Compare item header 28 px unchanged. |
+| F9 | **Fixed** | Settings step uses the full width, Review rail becomes a compact launch bar ("1 run to launch / Ready to launch / Cancel / Raw JSON / Launch"), nesting down to two levels, tables show an edge fade where they still overflow (`ex-llm-1440`, `-b`). Flows verified end to end against the fakes: "Launch as is" from home created 1 experiment and 1 job; Customize > step 4 > compact-bar "Launch" created 1 job. |
+| F10 | **Partly** | Run name is sans on Overview, Admin, runs list, compare, analysis; mono only for ids and the run header (the id is the title). Task / dataset / model tags are shared on the run header, analysis header, compare and runs list; dataset items show the prompt string, not raw JSON. Remaining: Admin still stacks the task pill under the run name while the runs list puts it inline; Overview recent runs show no task, dataset or model tag at all. |
+| F11 | **Fixed** | Relationship scatter coloured pass / fail (implementer test `charts.spec.ts`; seen in the walk). |
+| F12 | **Fixed** | `--chart-6..8` distinct from 1 to 3 in the 8-run compare (`cw-p8-1440-s0`); compare tab edge cue present. Error cards now span the full width (see N1). |
+| F13 | **Partly** | Scale is consistent on run detail, compare, charts, admin, reviews, trash (H1 22 everywhere, H2 18, H3 15). Overview mixes H2 15 (5 panels) and 18 (2) by design; Analysis still has H3 18 (three) under an H2 15 (inverted hierarchy). |
+| F14 | **Fixed** | Every page except Profile (deliberately narrow, 1120) is 1233 px wide. |
+| F15 | **Partly** | `Card rail` covers run cards, queue cards, sweep tiles, home start cards. Still three recipes in play: repeat tiles (5 px radius, 8 px padding), experiment home cards (14/20), tables (0 padding). |
+| F16 | **Fixed** | Copy and small items (Published by, Back to runs, steps count on one line, From scratch disabled before an environment, runs-row focus band, 1,000+ item run opens at 100 rows) covered by their specs; not individually re-screenshotted. |
+| F17 | **Fixed** | `cutover-run-rows.spec.ts:8` and the other two flaky specs: 3 of 3 passes alone each (see below). |
+
+Counts: 17 findings, 11 fixed, 5 partly (F7, F8, F10, F13, F15), 0 not fixed (F16 counted fixed on spec evidence).
+
+### New observations (no regression of a met feedback point)
+
+- N1 (S3): compare error cards stretch to 1,190 px, so the run name sits about 1,000 px from its count and delta; cap the card width or the inner grid (`ReportSections.module.css`).
+- N2 (S3): wizard settings step stacks two sticky bars at the bottom (Back / Skip / Continue, then the compact launch bar), about 100 px of the viewport; merge them or only stick one.
+- N3 (S3): the sweep view still uses 13 px section titles under its 18 px title and tighter spacing than the compare tabs.
+
+### Gate (targeted)
+
+- `npm run check`: pass (typecheck, eslint, stylelint, Vitest 140 files / 1,263 tests, design-language 48).
+- Playwright through `heavy.sh --cost 4` on `e2e/run-detail e2e/compare e2e/experiments e2e/visual-language e2e/shell e2e/runs-list`: **865 passed, 9 skipped, 0 failed** (18.9 min).
+- The three earlier flakes, each rerun alone 3 times: `runs-list/cutover-run-rows.spec.ts:8` 3/3 pass, `experiments/launch/tables.spec.ts` "390px: the global sweep keeps the run count in the launch bar" 3/3 pass, `runs-list/table-redesign.spec.ts` "Date ... at 1280" 3/3 pass.
+- pytest: only `test_archived_project_read_only.py` re-run here (282 passed); the implementer reports the full platform + sdk run green.
+- All servers stopped; no listener on 8941, 5941, 8945, 5945, 9041, 9042, 9045, 9046, 9941, 9945.
+
+### Final verdict
+
+**Pass.** All S1 and S2 defects from the first review are fixed except two small residuals (analysis hover, bar heights 61 / 71 px vs 56 px). Nothing regressed, the gate is green. The colour and typeface pass can start now; carry F7 (analysis hover), F8, F10 (Admin / Overview tags), F13 (analysis headings), F15 and N1 to N3 into it as they touch the same recipes the design pass restyles, so fix them there rather than in a separate pass.
