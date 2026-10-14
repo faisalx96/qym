@@ -33,7 +33,7 @@ export const BASE_COLUMNS: ColumnDef[] = [
   base('dataset', 'Dataset', 112, 'dataset'),
   base('owner', 'Owner', 120, 'owner'),
   base('time', 'Date', 128, 'time'),
-  base('analysis', 'Analysis', 104),
+  base('analysis', 'Analysis', 100),
   base('experiment', 'Experiment', 110),
   base('version', 'Version', 150, 'version'),
 ];
