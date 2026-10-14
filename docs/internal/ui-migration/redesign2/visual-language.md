@@ -502,3 +502,49 @@ Risks: (1) `color-mix` needs Chrome 111, Safari 16.2, Firefox 113, already used 
 8. Work plan: foundation 45.5h (T1 and T3 start immediately, T2/T4 to T7/T10 parallel after T1), areas runs 5h, run detail 12h, compare 9h, sweep 14.5h; total about 86h.
 9. Tests: tokens/`tones.css`/rgba-ratchet in the design test, primitive Vitest states, Playwright dead-clickable pixel audit, reduced-motion and contrast specs.
 10. Defaults: no gradients/glows (Q1), series 1 stays teal (Q2), owner hue by id (Q3), 6% wash only for failed/live (Q4), check glyph on Approved (Q5), task tag purple (Q6), custom chart tooltips (Q7), entrance animation once (Q8), rail only (Q9), outline icons (Q10).
+
+---
+
+## Decisions (implementation of the foundation T1 to T11 and sweep S1 to S6)
+
+All ten open questions use the recommended defaults (Q1 no gradients, glows or lifts; Q2 series 1 stays teal; Q3 owner
+avatar hue by id is left to A1; Q4 6% wash for failed and live rows; Q5 check glyph on Approved; Q6 task tag purple;
+Q7 custom chart tooltips; Q8 entrance animation on by default, once; Q9 rail only, wash for danger and live; Q10 outline icons).
+
+- **Tokens.** Added exactly the 5.3 block plus `--hover-brightness` (1.12), `--scrim`, `--scrim-light` and `--scrollbar-*`
+  (so `base.css` and the dialogs have no raw `rgba()`). `--shadow-card-hover` keeps its one rgba inside `tokens.css`.
+  New global `styles/marks.css` (chart mark states, series cross-highlight) next to `tones.css`; both are imported by
+  `main.tsx` and the SDK viewer entry.
+- **Ratchets are zero, not shrink-only.** Raw `rgba(` outside `tokens.css` is 0 (the 31 literals of the brief were 17 by
+  the time of this pass; Badge, Tag, Chip and Button went through the tone recipe, scrims and scrollbars became tokens).
+  `.card` declared by a page is 0 except the entries in the allow-list of the design test (see S1 below).
+- **Card.** Interactive cards render `div role="button"` (not `button`) so a card can hold block content; the contract is
+  that an interactive card holds no other interactive element. Selected fill is `--tint-soft` of the accent (the brief's
+  `--bg-selected` is a translucent colour and does not composite over the surface). Hover brightens nothing: border,
+  fill and `--shadow-card-hover` only.
+- **Chart kit location.** `Scatter`, histogram and split bar stayed in `run-detail/components/charts/Charts.tsx`
+  (moving them would collide with A2 and A3, which edit them next); the reusable parts live in `ui/Chart`
+  (`ChartTooltipHost`, `Mark`, `SeriesHighlightRoot`, `useSeriesHighlight`) and are used by every chart there.
+  Scatter dots stay pointer-only (`tabIndex -1`); the items table is the keyboard route (1,500 tab stops would be a trap).
+- **Scatter encodings.** Outcome comes from `LatencyItem.passed`; task errors are plotted on the x axis as open rings;
+  quadrant washes use the median latency and a 0.5 score split and only appear for metrics that declare a direction.
+- **Motion.** `useEntrance` (container flag times the first-mount flag) is the single gate: `DataTable` turns the flag off
+  after its first paint of data, so virtualised rows that scroll in, sort or page never replay the grow-in. The flash
+  attribute is `data-changed` (the global `[data-flash]` already outlines launch-form fields). `base.css` also zeroes
+  `animation-delay` and `transition-delay` under reduced motion so the stagger cannot hold a mark invisible.
+- **ScoreValue pill** drops the 2px bar (a bar on a pill reads as a bug); the number and `Band n of 5` title remain the
+  non-colour cue. Band 1 text now uses `--error-text` (5.15:1) on text and pill.
+- **ScoreBar lg** draws the value twice (void colour clipped to the fill, primary colour over the track) so it stays AA at
+  any fill; it needs `container-type` on the track (`100cqw`).
+- **StatStrip** with `onPress` renders a `button` inside the cell and moves `help` outside it (no nested buttons).
+- **S3.** Models ranking values are band pills (`ScoreValue variant="pill"`, medal glyph already present). The brief's
+  "Charts page: ScoreBar lg for the matrix" has no target: the Charts page has no matrix (`ScoreBar size="lg"` exists and is
+  in the gallery for the passes analysis of A1). Overview stat tones were already set.
+- **S4.** Experiments, Datasets, Reviews and Settings already used `Badge`/`Tag` tones and `Card tone="danger"` after S1;
+  Reviews Approved got the check glyph.
+- **S5.** The hover audit (`e2e/visual-language/hover-audit.spec.ts`) found the dead clickables; fixed here: `LinkButton`,
+  latency pins, bins and steps header buttons, correlation matrix cells, chart marks. Still pending (A3, listed in the
+  spec's `PENDING` set, which must shrink to empty): compare `_seg`, `_distBar`, `_rowButton`.
+- **S6** (coloured dots on top-bar stats) is not done; it is optional in the brief.
+- **Commit trailer.** Commits end with `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` (the attribution the
+  environment prescribes) instead of the Fable line quoted in the implementation brief.
