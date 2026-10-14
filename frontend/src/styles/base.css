@@ -18,8 +18,8 @@ body {
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   font-kerning: normal;
-  /* Subpixel glyph positioning: with Plex, tracked uppercase labels (letter-spacing 0.05em) otherwise snap
-     glyphs to whole pixels and show uneven gaps ("STAT US"). Inherited by every label recipe. */
+  /* Subpixel glyph positioning for tracked uppercase labels (letter-spacing 0.05em). Mitigation only: with
+     Plex some bold pairs ("DAT E") stay uneven in headless Chromium on Linux; harmless elsewhere. */
   text-rendering: geometricPrecision;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-color) var(--scrollbar-track);

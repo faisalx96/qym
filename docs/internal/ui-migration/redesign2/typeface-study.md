@@ -124,6 +124,7 @@ Two main trade-offs:
 
 Uppercase labels with 0.05em tracking (table headers, eyebrows) showed uneven letter gaps with Plex ("ENVIRONMENT S",
 "STAT US"). The raw unsubsetted TTF reproduces it, and lowering the tracking to 0.04em does not fix it: Chromium snaps
-glyphs to whole pixels. Fix (found in the independent review): `text-rendering: geometricPrecision` on `body` in
-`base.css` (inherited, so every label recipe gets subpixel positioning with its existing 0.05em); verified on the runs
-list headers and the item card keys at 1440.
+glyphs to whole pixels. Mitigation: `text-rendering: geometricPrecision` on `body` in `base.css` (inherited by every
+label recipe, no visible side effect on body text, Arabic or mono ids). The re-review found it does not remove the gap
+for some bold pairs ("DAT E", "LAT ENCY") in headless Chromium on Linux at any tracking from 0 to 0.08em, so this is
+a low, cosmetic rasterisation issue of the platform, not something CSS fixes. Not checked on macOS or Windows.
