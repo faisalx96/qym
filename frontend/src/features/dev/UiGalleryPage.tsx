@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { DataTableGallery } from './DataTableGallery';
+import { VisualLanguageGallery } from './VisualLanguageGallery';
 import type { Key } from 'react-aria-components';
 import {
   Badge,
@@ -536,6 +537,8 @@ export default function UiGalleryPage() {
           </Stack>
         </Case>
       </Section>
+
+      <VisualLanguageGallery />
 
       <Section id="table" title="DataTable">
         <Case label="Sortable, resizable, persisted widths (storageKey=gallery)">
