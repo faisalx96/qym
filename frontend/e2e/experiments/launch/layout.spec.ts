@@ -54,11 +54,11 @@ test.describe('390px', () => {
     await expect(page).toHaveURL(/\/experiments\/[0-9a-f-]{36}$/);
   });
 
-  test('the bar names the first problem and jumps to it', async ({ page }) => {
+  test('the bar names the first problem (in its overflow menu) and jumps to it', async ({ page }) => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
-    const problem = page.getByRole('button', { name: /^Fix 1 problem first: Name/ });
+    await page.getByRole('button', { name: 'More launch options' }).click();
+    const problem = page.getByRole('menuitem', { name: /^Fix 1 problem first: Name/ });
     await expect(problem).toBeVisible();
-    await expect(problem).toBeInViewport();
     await problem.click();
     await expect(nameBox(page)).toBeFocused();
   });

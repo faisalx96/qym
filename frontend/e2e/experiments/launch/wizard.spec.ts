@@ -167,17 +167,18 @@ test.describe('layout', () => {
     expect(aside!.x).toBeGreaterThan(panel!.x);
   });
 
-  test('390px: the sticky Continue sits above the launch bar and the bar is gone on the review step', async ({
+  test('390px: Continue lives in the one launch bar and the bar is gone on the review step', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
     const bar = page.getByRole('region', { name: 'Launch', exact: true });
     await expect(bar).toBeVisible();
-    const next = page.getByRole('button', { name: /Continue to environment configurations/ });
+    const next = bar.getByRole('button', { name: /Continue to environment configurations/ });
     await expect(next).toBeInViewport();
     const [nb, bb] = [await next.boundingBox(), await bar.boundingBox()];
-    expect(nb!.y + nb!.height).toBeLessThanOrEqual(bb!.y + 1);
+    expect(nb!.y).toBeGreaterThanOrEqual(bb!.y);
+    expect(nb!.y + nb!.height).toBeLessThanOrEqual(bb!.y + bb!.height + 1);
     await goStep(page, 'review');
     await expect(page.getByRole('region', { name: 'Launch', exact: true })).toHaveCount(0);
   });
@@ -272,14 +273,16 @@ test.describe('polish', () => {
     expect(lowest, tops.slice(0, 60).join(',')).toBeGreaterThan(0);
   });
 
-  test('390px: step navigation is one row and the launch bar is one compact row', async ({ page }) => {
+  test('390px: step navigation and the launch bar are one --bar-action-h row', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
     const nav = page.getByRole('navigation', { name: 'Step navigation' });
     const bar = page.getByRole('region', { name: 'Launch', exact: true });
     const [nb, bb] = [await nav.boundingBox(), await bar.boundingBox()];
     expect(nb!.height).toBeLessThan(50);
-    expect(bb!.height).toBeLessThan(70);
+    expect(bb!.height).toBeGreaterThanOrEqual(56);
+    expect(bb!.height).toBeLessThanOrEqual(57);
+    await expect(bar.getByRole('navigation', { name: 'Step navigation' })).toBeVisible();
     await expect(nav.getByRole('button', { name: 'Continue to environment configurations' })).toBeVisible();
     await expect(nav.getByRole('button', { name: 'Skip to review' })).toBeVisible();
   });
