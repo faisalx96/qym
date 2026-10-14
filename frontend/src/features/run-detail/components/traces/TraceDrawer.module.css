@@ -27,6 +27,10 @@
   min-height: 0;
 }
 
+.split[data-narrow] {
+  margin-block-start: var(--space-sm);
+}
+
 .split[data-narrow] > * {
   flex: 1;
 }

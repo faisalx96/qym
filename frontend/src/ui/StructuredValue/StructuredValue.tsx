@@ -8,7 +8,7 @@ import { JsonTree } from '../JsonViewer';
 import { SegmentedControl } from '../SegmentedControl';
 import { Tag } from '../Tag';
 import { TextBlock } from '../TextBlock';
-import type { TextMode } from '@/lib/text';
+import { isRTL, type TextMode } from '@/lib/text';
 import { ClampedText } from './ClampedText';
 import {
   classifySection,
@@ -73,7 +73,8 @@ function TableBody({ rows, label }: { rows: Record<string, unknown>[]; label: st
         type: rows.some((r) => typeof r[c] === 'number') ? 'number' : 'text',
         accessor: (r) => r.values[c],
         flex: ci === 0,
-        minWidth: 96,
+        minWidth: 48,
+        width: ci === 0 ? undefined : 72,
         priority: ci === 0 ? 1 : 2,
         cardTitle: ci === 0,
         cell: (r) => <span dir="auto">{r.values[c] === undefined ? '' : scalarText(r.values[c])}</span>,
@@ -159,7 +160,15 @@ function Section({ id, name, value, open, onToggle, textMode, lines }: SectionPr
     );
   }
   return (
-    <div className={styles.section} id={id} data-kind={kind} data-open={open} role="group" aria-label={name}>
+    <div
+      className={styles.section}
+      id={id}
+      data-kind={kind}
+      data-open={open}
+      role="group"
+      aria-label={name}
+      dir={kind === 'string' && isRTL(value) ? 'rtl' : undefined}
+    >
       <div className={styles.head}>
         <button
           type="button"

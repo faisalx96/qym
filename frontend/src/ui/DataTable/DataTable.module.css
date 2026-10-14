@@ -144,6 +144,15 @@
 }
 
 /* Page-scroller sticky header: cells are translated by --head-shift (set from the scroll handler). */
+.card .card .table .tbody td {
+  /* a table inside an expanded detail keeps its own density: the outer table's tall rule must not widen its rows */
+  height: var(--row-h);
+}
+
+.card .card .table[data-tall] .tbody td {
+  height: max(var(--row-h), var(--row-comfortable));
+}
+
 .table:not([data-shift]) {
   /* a table nested in an expanded detail must not inherit the outer header's sticky shift */
   --head-shift: 0px;

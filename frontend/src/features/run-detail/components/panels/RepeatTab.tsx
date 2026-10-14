@@ -206,14 +206,14 @@ export function RepeatTab() {
       ) : null}
       {g?.error ? <p className={styles.note}>{g.error}</p> : null}
       {stats ? (
-        <>
+        <div className={styles.visuals + ' ' + styles.stack}>
           {verdict ? (
             <p className={styles.verdict} data-testid="repeat-verdict">
               {verdict}
             </p>
           ) : null}
           <StatStrip aria-label="Repeat run summary" items={statItems} />
-        </>
+        </div>
       ) : null}
       <div className={styles.single + ' ' + styles.visuals}>
         {g?.band ? (

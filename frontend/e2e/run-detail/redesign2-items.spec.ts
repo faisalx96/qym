@@ -144,3 +144,35 @@ for (const width of [390, 1280]) {
     expect(bad, describeViolations(bad)).toEqual([]);
   });
 }
+
+for (const width of [1280, 1440]) {
+  test(`an RTL value in a JSON section sits next to its key at ${width}px; tables fit their column`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await openRun(page, s.slug, arabic, 'pass=1');
+    await expandFirst(page);
+    const out = page.getByRole('group', { name: 'Output', exact: true }).first();
+    const section = out.getByRole('group', { name: 'answer', exact: true });
+    await expect(section).toHaveAttribute('dir', 'rtl');
+    const key = (await section.locator('span[dir="ltr"]').first().boundingBox())!;
+    // the rendered text, not its (wider) block
+    const text = await section.locator('[data-text-mode]').evaluate((el) => {
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      const b = r.getBoundingClientRect();
+      return { left: b.left, right: b.right };
+    });
+    // RTL: the key is at the inline start (right); the text starts under it
+    expect(Math.abs(key.x + key.width - text.right)).toBeLessThan(120);
+    // the citations table is not wider than the pass output it sits in
+    const grid = out.getByRole('group', { name: 'citations', exact: true }).getByRole('grid');
+    const fits = await grid.evaluate((el) => {
+      const sc = el.closest<HTMLElement>('[data-dt-scroller]');
+      return !!sc && sc.scrollWidth <= sc.clientWidth + 1;
+    });
+    expect(fits).toBe(true);
+    const row = await grid.locator('tbody tr').first().boundingBox();
+    expect(row!.height).toBeLessThan(40);
+  });
+}

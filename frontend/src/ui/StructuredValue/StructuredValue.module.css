@@ -114,6 +114,17 @@
   padding-block: var(--space-xs) var(--space-sm);
   padding-inline-start: calc(12px + var(--space-sm));
   min-width: 0;
+  /* reading measure: a short value stays next to its key, whichever direction it runs */
+  max-inline-size: calc(var(--field-measure) + 12px + var(--space-sm));
+}
+
+/* the section of an RTL value mirrors (chevron, key and copy flip), like a FieldRow */
+.section[dir='rtl'] .toggle {
+  flex: 0 1 auto;
+}
+
+.section[dir='rtl'] .head {
+  justify-content: flex-start;
 }
 
 .scalar {
