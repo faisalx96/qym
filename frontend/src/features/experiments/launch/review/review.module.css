@@ -121,6 +121,13 @@
   color: var(--text-primary);
 }
 
+/* The long button labels give way before the bar can overflow (a tablet has less room than a desktop). */
+@media (max-width: 1100px) {
+  .long {
+    display: none;
+  }
+}
+
 /* Phone: the run count stays in the DOM for assistive tech; the Launch label carries it visually. */
 @media (max-width: 760px) {
   .wizardBar {

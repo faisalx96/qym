@@ -19,8 +19,12 @@
   gap: var(--space-sm);
 }
 
+.chipList {
+  display: contents;
+}
+
 /* Wide (the bar is sticky): one --bar-action-h row, controls then the count and chips; extra chips scroll. */
-@media (min-width: 1280px) and (min-height: 640px) {
+@media (min-width: 1440px) and (min-height: 640px) {
   .bar {
     flex-direction: row;
     align-items: center;
@@ -37,9 +41,18 @@
     flex: 1 1 0;
     min-width: 0;
     flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+
+  /* only the chips scroll; the count and "Clear" stay in reach */
+  .chipList {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
-    white-space: nowrap;
   }
 }
 

@@ -42,7 +42,8 @@
   clip-path: inset(50%);
 }
 
-/* The filter bar stays under the section nav while the table scrolls (tall viewports only). */
+/* The filter bar stays under the section nav while the table scrolls (wide, tall viewports only: it is one
+   --bar-action-h row, which needs the room; narrower it wraps and scrolls with the table). */
 .sticky {
   display: flex;
   flex-direction: column;
@@ -50,7 +51,7 @@
   background: var(--bg-void);
 }
 
-@media (min-width: 761px) and (min-height: 640px) {
+@media (min-width: 1440px) and (min-height: 640px) {
   .sticky {
     position: sticky;
     min-height: var(--bar-action-h);
@@ -62,7 +63,7 @@
 }
 
 /* Wide: the filter bar is exactly one --bar-action-h row (FilterBar lays itself out in one line). */
-@media (min-width: 1280px) and (min-height: 640px) {
+@media (min-width: 1440px) and (min-height: 640px) {
   .sticky {
     height: var(--bar-action-h);
     padding-bottom: 0;

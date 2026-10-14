@@ -45,6 +45,20 @@ test('the run items toolbar is one --bar-action-h row (wide)', async ({ page }) 
   expect(h).toBeLessThanOrEqual(want + 1);
 });
 
+test('the items toolbar stays one row with active filters and keeps Clear reachable', async ({ page }) => {
+  await gotoApp(page, runUrl(tour.slug, tour.runId));
+  const toolbar = page.locator('[data-run-filters]');
+  await expect(toolbar).toBeVisible();
+  await page.locator('button[data-bucket]').nth(5).click();
+  const clear = page.getByTestId('clear-filters');
+  await expect(clear).toBeVisible();
+  expect((await toolbar.boundingBox())!.height).toBeLessThanOrEqual(
+    (await token(page, '--bar-action-h')) + 1,
+  );
+  await clear.click();
+  await expect(clear).toHaveCount(0);
+});
+
 test('the experiment home launch bar is one --bar-action-h row (wide)', async ({ page }) => {
   await gotoApp(page, `/projects/${areas.slug}/experiments/new?env=${areas.envId}`);
   const bar = page.getByRole('region', { name: 'Launch' });
