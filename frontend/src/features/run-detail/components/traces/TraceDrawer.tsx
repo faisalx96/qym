@@ -2,7 +2,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useItemTraceQuery } from '@/api/runs';
-import { Chip, CopyButton, Drawer, ErrorState, Icon, LinkButton, Skeleton, Tag, Text } from '@/ui';
+import {
+  Button,
+  Chip,
+  CopyButton,
+  Drawer,
+  ErrorState,
+  Icon,
+  LinkButton,
+  SegmentedControl,
+  Skeleton,
+  SplitPane,
+  Tag,
+  Text,
+} from '@/ui';
+import { useMediaQuery } from '@/features/shell/hooks';
 import { useRunPage } from '../../RunContext';
 import {
   aggregateStats,
@@ -23,11 +37,11 @@ import {
   type TraceBounds,
 } from '../../lib/traceTree';
 import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard';
-import { KIND_GLYPH, KIND_LABEL, KIND_TONE } from './spanKinds';
+import { KIND_ICON, KIND_LABEL, KIND_TONE } from './spanKinds';
 import { SpanDetail } from './SpanDetail';
 import styles from './TraceDrawer.module.css';
 
-const ROW = 34;
+const ROW = 32; // --row-compact
 interface TraceSummaryLite {
   span_count?: number;
   duration_ms?: number | null;
@@ -128,11 +142,12 @@ function Row({
         )}
         <span
           className={styles.glyph}
-          style={{ background: KIND_TONE[kind] }}
+          style={{ ['--tone' as string]: KIND_TONE[kind] }}
           title={KIND_LABEL[kind]}
+          data-kind={kind}
           aria-hidden="true"
         >
-          {KIND_GLYPH[kind]}
+          <Icon name={KIND_ICON[kind]} size={12} />
         </span>
         <span className={styles.name} title={node.name}>
           {node.name}
@@ -193,6 +208,8 @@ export function TraceDrawer({
   const [expandedBy, setExpandedBy] = useState<Record<string, Set<string>>>({});
   const [selectedBy, setSelectedBy] = useState<Record<string, string>>({});
   const searchRef = useRef<HTMLInputElement>(null);
+  const narrow = useMediaQuery('(max-width: 899px)');
+  const [pane, setPane] = useState<'tree' | 'detail'>('tree');
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
 
   const active = useMemo(() => {
@@ -243,6 +260,10 @@ export function TraceDrawer({
   });
 
   const select = (id: string) => setSelectedBy((s) => ({ ...s, [key]: id }));
+  const pickRow = (id: string) => {
+    select(id);
+    if (narrow) setPane('detail');
+  };
   const setOpen = (id: string, on: boolean) =>
     setExpandedBy((s) => {
       const next = new Set(expanded);
@@ -309,13 +330,15 @@ export function TraceDrawer({
     norm?.item.trace_url ||
     buildLangfuseTraceUrl(run.langfuse_host, run.langfuse_project_id, norm?.item.trace_id);
   const errors = active?.summary.error_count ?? 0;
-  const header =
+  const meta =
     norm && active ? (
-      <div className={styles.chips} aria-label="Trace summary">
+      <div className={styles.chips} role="group" aria-label="Trace summary">
         <Tag kind="data">{active.summary.span_count ?? active.tree.nodes.length} spans</Tag>
         <Tag kind="data">{formatDuration(active.summary.duration_ms)}</Tag>
         {stats?.totalTokens ? (
-          <Tag kind="data">{stats.totalTokens.toLocaleString('en-US')} tokens</Tag>
+          <Tag kind="data" tone="info">
+            {stats.totalTokens.toLocaleString('en-US')} tokens
+          </Tag>
         ) : null}
         {stats && formatCost(stats.totalCost) ? <Tag kind="data">{formatCost(stats.totalCost)}</Tag> : null}
         {norm.attempts.length > 1 ? (
@@ -333,16 +356,124 @@ export function TraceDrawer({
         {query.data?.summary?.has_orphans ? (
           <Tag tone="warning">{query.data.summary.orphan_count ?? ''} orphan spans</Tag>
         ) : null}
+        {norm.item.trace_id ? (
+          <span className={styles.idChip}>
+            <Tag kind="data" title={norm.item.trace_id}>
+              ID {norm.item.trace_id.slice(0, 8)}
+            </Tag>
+            <CopyButton text={norm.item.trace_id} label="Copy trace id" />
+          </span>
+        ) : null}
       </div>
     ) : null;
+  const drawerWidth =
+    typeof window === 'undefined'
+      ? 1320
+      : narrow
+        ? window.innerWidth
+        : Math.min(1320, window.innerWidth * 0.97);
+
+  const treeEl = active ? (
+    <section className={styles.treePane} aria-label="Spans">
+      <div className={styles.treeTools}>
+        <label className={styles.search}>
+          <span className={styles.srOnly}>Filter spans</span>
+          <input
+            ref={searchRef}
+            type="search"
+            className={styles.searchInput}
+            placeholder="Filter spans… (/)"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && search) {
+                e.stopPropagation();
+                setSearch('');
+              } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                scroller?.focus();
+              }
+            }}
+          />
+        </label>
+        <Button
+          size="sm"
+          variant="ghost"
+          onPress={() =>
+            setExpandedBy((s) => ({
+              ...s,
+              [key]: new Set(
+                flattenTree(active.tree.roots)
+                  .filter((n) => n._children.length)
+                  .map((n) => n.span_id),
+              ),
+            }))
+          }
+        >
+          Expand all
+        </Button>
+        <Button size="sm" variant="ghost" onPress={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}>
+          Collapse all
+        </Button>
+      </div>
+      <div
+        ref={setScroller}
+        className={styles.tree}
+        role="tree"
+        aria-label="Span tree"
+        tabIndex={0}
+        aria-activedescendant={selectedId ? `span-${selectedId}` : undefined}
+        onKeyDown={onTreeKey}
+      >
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {virtualizer.getVirtualItems().map((v) => {
+            const row = rows[v.index]!;
+            return (
+              <div
+                key={v.key}
+                className={styles.vrow}
+                style={{ height: ROW, transform: `translateY(${v.start}px)` }}
+              >
+                <Row
+                  row={row}
+                  bounds={active.bounds}
+                  selected={row.node.span_id === selectedId}
+                  onSelect={() => pickRow(row.node.span_id)}
+                  onToggle={() => setOpen(row.node.span_id, !row.open)}
+                />
+              </div>
+            );
+          })}
+        </div>
+        {rows.length === 0 ? (
+          <Text variant="sm" tone="muted">
+            No spans match.
+          </Text>
+        ) : null}
+      </div>
+    </section>
+  ) : null;
+  const detailEl = (
+    <section className={styles.detailPane} aria-label="Span details">
+      {selectedNode ? (
+        <SpanDetail key={selectedNode.span_id} node={selectedNode} />
+      ) : (
+        <Text variant="sm" tone="muted">
+          Select a span.
+        </Text>
+      )}
+    </section>
+  );
 
   return (
     <Drawer
       open
       onOpenChange={(o) => !o && onClose()}
       title="Trace"
-      subtitle={norm?.item.trace_id ? `${itemId} · ${norm.item.trace_id}` : itemId}
-      width={Math.min(1040, typeof window === 'undefined' ? 1040 : window.innerWidth)}
+      subtitle={<span className={styles.mono}>{`${runId} · ${itemId}`}</span>}
+      meta={meta}
+      scrim="heavy"
+      width={drawerWidth}
       actions={
         <span className={styles.actions}>
           {langfuse ? (
@@ -357,7 +488,6 @@ export function TraceDrawer({
               Open in Langfuse
             </LinkButton>
           ) : null}
-          {norm?.item.trace_id ? <CopyButton text={norm.item.trace_id} label="Copy trace id" /> : null}
         </span>
       }
     >
@@ -373,7 +503,6 @@ export function TraceDrawer({
         ) : null}
         {norm && active ? (
           <>
-            {header}
             {norm.attempts.length > 1 ? (
               <div className={styles.attempts} role="group" aria-label="Attempts">
                 <Chip isSelected={attempt === 'combined'} onChange={() => setAttempt('combined')}>
@@ -399,99 +528,37 @@ export function TraceDrawer({
                 platform{langfuse ? '; open it in Langfuse for the full trace' : ''}.
               </p>
             ) : (
-              <div className={styles.split}>
-                <section className={styles.treePane} aria-label="Spans">
-                  <div className={styles.treeTools}>
-                    <label className={styles.search}>
-                      <span className={styles.srOnly}>Filter spans</span>
-                      <input
-                        ref={searchRef}
-                        type="search"
-                        className={styles.searchInput}
-                        placeholder="Filter spans… (/)"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Escape' && search) {
-                            e.stopPropagation();
-                            setSearch('');
-                          } else if (e.key === 'ArrowDown') {
-                            e.preventDefault();
-                            scroller?.focus();
-                          }
-                        }}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className={styles.tool}
-                      onClick={() =>
-                        setExpandedBy((s) => ({
-                          ...s,
-                          [key]: new Set(
-                            flattenTree(active.tree.roots)
-                              .filter((n) => n._children.length)
-                              .map((n) => n.span_id),
-                          ),
-                        }))
-                      }
-                    >
-                      Expand all
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.tool}
-                      onClick={() => setExpandedBy((s) => ({ ...s, [key]: new Set() }))}
-                    >
-                      Collapse all
-                    </button>
-                  </div>
-                  <div
-                    ref={setScroller}
-                    className={styles.tree}
-                    role="tree"
-                    aria-label="Span tree"
-                    tabIndex={0}
-                    aria-activedescendant={selectedId ? `span-${selectedId}` : undefined}
-                    onKeyDown={onTreeKey}
-                  >
-                    <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-                      {virtualizer.getVirtualItems().map((v) => {
-                        const row = rows[v.index]!;
-                        return (
-                          <div
-                            key={v.key}
-                            className={styles.vrow}
-                            style={{ height: ROW, transform: `translateY(${v.start}px)` }}
-                          >
-                            <Row
-                              row={row}
-                              bounds={active.bounds}
-                              selected={row.node.span_id === selectedId}
-                              onSelect={() => select(row.node.span_id)}
-                              onToggle={() => setOpen(row.node.span_id, !row.open)}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {rows.length === 0 ? (
-                      <Text variant="sm" tone="muted">
-                        No spans match.
-                      </Text>
-                    ) : null}
-                  </div>
-                </section>
-                <section className={styles.detailPane} aria-label="Span details">
-                  {selectedNode ? (
-                    <SpanDetail key={selectedNode.span_id} node={selectedNode} />
+              <>
+                {narrow ? (
+                  <SegmentedControl<'tree' | 'detail'>
+                    label="Trace view"
+                    value={pane}
+                    onChange={setPane}
+                    options={[
+                      { value: 'tree', label: 'Tree' },
+                      { value: 'detail', label: 'Detail' },
+                    ]}
+                  />
+                ) : null}
+                <div className={styles.split} data-narrow={narrow || undefined}>
+                  {narrow ? (
+                    pane === 'tree' ? (
+                      treeEl
+                    ) : (
+                      detailEl
+                    )
                   ) : (
-                    <Text variant="sm" tone="muted">
-                      Select a span.
-                    </Text>
+                    <SplitPane
+                      label="Resize span tree and details"
+                      storageKey="qym:trace-split"
+                      defaultPct={55}
+                      minPx={280}
+                      start={treeEl}
+                      end={detailEl}
+                    />
                   )}
-                </section>
-              </div>
+                </div>
+              </>
             )}
           </>
         ) : null}
