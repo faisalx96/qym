@@ -131,7 +131,7 @@ export function ErrorsTab() {
               return {
                 'data-testid': 'error-card',
                 'data-kind': CLASS[b.kind],
-                'aria-selected': String(on),
+                'aria-current': on ? 'true' : undefined,
                 'data-selected': on ? '' : undefined,
               };
             }}

@@ -108,7 +108,7 @@ export function CategoriesTab() {
       ) : null}
       <div className={styles.controls}>
         <Select
-          label="Sort"
+          label="Rank by"
           items={SORTS.map((s) => ({ key: s.key, label: s.label }))}
           value={sort}
           onChange={(k) => k && setSort(k as CategorySort)}
@@ -267,7 +267,7 @@ function KeyTable({
           return {
             'data-testid': 'category-row',
             'data-value': g.value,
-            'aria-selected': String(on),
+            'aria-current': on ? 'true' : undefined,
             'data-selected': on ? '' : undefined,
           };
         }}

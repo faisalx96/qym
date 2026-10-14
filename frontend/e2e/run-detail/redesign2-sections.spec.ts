@@ -112,10 +112,10 @@ test.describe('categories', () => {
     const before = (await itemsCount(page))[0];
     const row = page.getByTestId('category-row').first();
     await row.click();
-    await expect(row).toHaveAttribute('aria-selected', 'true');
+    await expect(row).toHaveAttribute('data-selected', '');
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(before);
     await row.click();
-    await expect(row).toHaveAttribute('aria-selected', 'false');
+    await expect(row).not.toHaveAttribute('data-selected', '');
     await expect.poll(async () => (await itemsCount(page))[0]).toBe(before);
   });
 
@@ -137,7 +137,7 @@ test.describe('errors', () => {
     await expect(rows.first()).toBeVisible();
     const before = (await itemsCount(page))[0];
     await rows.first().click();
-    await expect(rows.first()).toHaveAttribute('aria-selected', 'true');
+    await expect(rows.first()).toHaveAttribute('data-selected', '');
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(before);
   });
 });

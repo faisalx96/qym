@@ -97,6 +97,14 @@ export async function showItems(page: Page): Promise<void> {
   await expect(page.getByRole('button', { name: /^Open item #\d+$/ }).first()).toBeVisible();
 }
 
+/** Open the item's closed "Root cause" disclosure (its per-metric cards are inside). */
+export async function openRootCause(card: Locator): Promise<void> {
+  const trigger = card.getByRole('button', { name: /^Root cause/ });
+  await expect(trigger).toBeVisible();
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+}
+
 export function itemRow(page: Page, n: number): Locator {
   return page.getByRole('row', { name: new RegExp(`^Open item #${n} `) });
 }
