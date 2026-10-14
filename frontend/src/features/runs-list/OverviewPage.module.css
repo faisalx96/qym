@@ -130,6 +130,11 @@
   min-width: 0;
 }
 
+.runTask {
+  display: inline-flex;
+  min-width: 0;
+}
+
 .runTags > * {
   flex: 0 1 auto;
   min-width: 0;

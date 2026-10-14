@@ -411,10 +411,14 @@ function RunLink({ slug, row, withTask }: { slug: string; row: RunRow; withTask?
             Official
           </Tag>
         ) : null}
+        {withTask && row.task_name ? (
+          <span className={styles.runTask} data-testid="run-task">
+            <TaskTag name={row.task_name} />
+          </span>
+        ) : null}
       </span>
       {withTask ? (
         <span className={styles.runTags} data-testid="run-tags">
-          {row.task_name ? <TaskTag name={row.task_name} /> : null}
           <DatasetCell row={row} />
           <span className={styles.runModel}>
             <ModelCell row={row} />

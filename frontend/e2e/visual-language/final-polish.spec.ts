@@ -43,9 +43,10 @@ test.describe('1440', () => {
     const card = page.getByRole('region', { name: 'Recent runs' });
     const tags = card.getByTestId('run-tags').first();
     await expect(tags).toBeVisible();
+    await expect(card.getByTestId('run-task').first()).toBeVisible();
     const kinds = tags.locator('> *');
-    expect(await kinds.count()).toBe(3);
-    for (let i = 0; i < 3; i += 1) await expect(kinds.nth(i)).toBeVisible();
+    expect(await kinds.count()).toBe(2);
+    for (let i = 0; i < 2; i += 1) await expect(kinds.nth(i)).toBeVisible();
   });
 
   test('compare error cards are compact: the name, count and bar sit together', async ({ page }) => {
@@ -166,8 +167,11 @@ test.describe('390', () => {
     await gotoApp(page, `/projects/${tour.slug}/overview`);
     const tags = page.getByRole('region', { name: 'Recent runs' }).getByTestId('run-tags').first();
     await expect(tags).toBeVisible();
+    await expect(
+      page.getByRole('region', { name: 'Recent runs' }).getByTestId('run-task').first(),
+    ).toBeVisible();
     await expect(tags.locator('> *').nth(0)).toBeVisible();
-    await expect(tags.locator('> *').nth(2)).toBeHidden();
+    await expect(tags.locator('> *').nth(1)).toBeHidden();
   });
 
   test('wizard: one --bar-action-h bar, the problems link lives in its overflow menu', async ({ page }) => {
