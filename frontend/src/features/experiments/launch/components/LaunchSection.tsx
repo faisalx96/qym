@@ -84,22 +84,26 @@ export function LaunchSection({
   );
   if ((variant ?? (frame ? 'static' : 'collapsible')) === 'static') {
     const titled = !frame?.untitled.includes(id);
+    // Hidden behind a button: until it is open the section is just that button (one visible trigger).
+    const headShown = !hideBehind || open;
     return (
       <section
         id={`launch-anchor-${id}`}
         className={styles.staticSection}
-        aria-labelledby={titled ? sectionHeadingId(id) : undefined}
-        aria-label={titled ? undefined : title}
+        aria-labelledby={titled && headShown ? sectionHeadingId(id) : undefined}
+        aria-label={titled && headShown ? undefined : title}
       >
-        <div className={styles.staticHead} data-titled={titled}>
-          {titled ? (
-            <h3 id={sectionHeadingId(id)} className={styles.toggleTitle}>
-              {title}
-            </h3>
-          ) : null}
-          {titled || !frame?.badgeSlot ? badges : createPortal(badges, frame.badgeSlot)}
-          {description ? <p className={styles.staticDesc}>{description}</p> : null}
-        </div>
+        {headShown ? (
+          <div className={styles.staticHead} data-titled={titled}>
+            {titled ? (
+              <h3 id={sectionHeadingId(id)} className={styles.toggleTitle}>
+                {title}
+              </h3>
+            ) : null}
+            {titled || !frame?.badgeSlot ? badges : createPortal(badges, frame.badgeSlot)}
+            {description ? <p className={styles.staticDesc}>{description}</p> : null}
+          </div>
+        ) : null}
         {hideBehind ? (
           <>
             <div>

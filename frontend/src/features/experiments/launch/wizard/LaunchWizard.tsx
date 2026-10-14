@@ -165,7 +165,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
           title="Review and launch"
           description="Check the summary, then launch."
         >
-          <ReviewPane onCancel={onCancel} />
+          <ReviewPane onCancel={onCancel} rawAction={false} />
           {hasEnv ? (
             <StaticSections>
               <RawJsonSection />

@@ -660,3 +660,8 @@ button.chip:focus-visible,
   width: min(22rem, 80vw);
   padding: var(--space-sm);
 }
+
+/* A control scrolled into view never lands under the sticky first column. */
+.tableWrap {
+  scroll-padding-inline-start: 9rem;
+}

@@ -80,7 +80,16 @@ function ChangesByStep() {
 }
 
 /** The always-visible review: summary, live run count, changes by step, problems, launch actions. */
-export function ReviewPane({ onCancel, hideActions }: { onCancel: () => void; hideActions?: boolean }) {
+export function ReviewPane({
+  onCancel,
+  hideActions,
+  rawAction = true,
+}: {
+  onCancel: () => void;
+  hideActions?: boolean;
+  /** Offer the "Raw JSON" action (off on the review step, which has its own Show raw JSON button). */
+  rawAction?: boolean;
+}) {
   const { doc, ctx, review, preview, selectedEnvs, readOnly } = useLaunch();
   const { count } = review;
   const envCount = doc.environmentIds.length;
@@ -171,7 +180,7 @@ export function ReviewPane({ onCancel, hideActions }: { onCancel: () => void; hi
         </details>
       ) : null}
       {readOnly ? <Callout tone="warning">Archived project: read only.</Callout> : null}
-      {hideActions ? null : <LaunchActions onCancel={onCancel} />}
+      {hideActions ? null : <LaunchActions onCancel={onCancel} hideRaw={!rawAction} />}
     </aside>
   );
 }

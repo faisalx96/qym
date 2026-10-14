@@ -480,3 +480,13 @@
   font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
+
+@media (max-width: 760px) {
+  /* The card's links sit on their own row, aligned to the card edge. */
+  .versionsActions {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+    justify-content: flex-start;
+    gap: var(--space-md);
+  }
+}

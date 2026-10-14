@@ -3,8 +3,8 @@
  * global row can sweep several values (one run per value).
  */
 import { expect, type Page } from '@playwright/test';
-import { resetFakes, test } from '../support';
-import { openGroup, openLaunch, openSection, review, seedLaunch, type LaunchFixture } from './launchSupport';
+import { expectNoPageOverflow, FAKE_A, resetFakes, setFakeArrayLeaves, test } from '../support';
+import { openGroup, openLaunch, review, seedLaunch, type LaunchFixture } from './launchSupport';
 
 test.setTimeout(90_000);
 test.use({ actionTimeout: 10_000 });
@@ -60,12 +60,15 @@ test('the global row sweeps several values: chips, "sweeps N runs", and one run 
   const table = page.getByRole('table', { name: 'role overrides' });
   await table.getByRole('button', { name: 'Sweep values: All roles · max_tokens' }).click();
   const chips = table.locator('[data-global-sweep]');
-  await chips.getByRole('textbox').fill('256, 512, 1024');
-  await chips.getByRole('textbox').press('Enter');
+  await chips.getByRole('button', { name: /Edit sweep/ }).click();
+  const editor = page.getByRole('dialog', { name: /Sweep values of/ });
+  await editor.getByRole('textbox').fill('256, 512, 1024');
+  await editor.getByRole('textbox').press('Enter');
   await expect(chips).toContainText('sweeps 3 runs');
+  await expect(chips).toContainText('256 · 512 · 1024');
   // linked: three runs (one per value), not one per combination of the roles
   await expect(review(page)).toContainText(/3\s*runs to launch/, { timeout: 15_000 });
-  await chips.getByRole('button', { name: /Single value/ }).click();
+  await editor.getByRole('button', { name: /Single value/ }).click();
   await expect(review(page)).toContainText(/1\s*run to launch/, { timeout: 15_000 });
 });
 
@@ -75,13 +78,78 @@ test('390px: the global sweep keeps the run count in the launch bar', async ({ p
   const table = page.getByRole('table', { name: 'role overrides' });
   await table.getByRole('button', { name: 'Sweep values: All roles · max_tokens' }).click();
   const chips = table.locator('[data-global-sweep]');
-  await chips.getByRole('textbox').fill('256, 512');
-  await chips.getByRole('textbox').press('Enter');
+  await chips.getByRole('button', { name: /Edit sweep/ }).click();
+  const editor = page.getByRole('dialog', { name: /Sweep values of/ });
+  await editor.getByRole('textbox').fill('256, 512');
+  await editor.getByRole('textbox').press('Enter');
   await expect(page.getByRole('region', { name: 'Launch', exact: true })).toContainText(
     /2\s*runs to launch/,
     {
       timeout: 15_000,
     },
   );
-  await openSection(page, 'Models');
+});
+
+test.describe('list settings (the fake service serves STOP_WORDS, ALLOWED_REGIONS, TOOL_LIMITS)', () => {
+  test.beforeEach(async ({ request }) => {
+    await resetFakes(request);
+    await setFakeArrayLeaves(request, FAKE_A);
+    f = await seedLaunch(request);
+  });
+
+  test('adding items to a string list gives blank rows and no problems; an integer list starts at 0', async ({
+    page,
+  }) => {
+    await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'settings');
+    await openGroup(page, 'Other');
+    await page.getByRole('button', { name: /Edit .*Stop Words.* as fields/ }).click();
+    const stop = page.getByRole('group', { name: /Stop Words/ }).first();
+    // an unset list opened as fields changes nothing yet
+    await expect(page.getByRole('button', { name: /Reset .*Stop Words/ })).toHaveCount(0);
+    for (let i = 0; i < 3; i++) await stop.getByRole('button', { name: '+ Add item' }).click();
+    const table = stop.getByRole('table');
+    await expect(table.getByRole('textbox')).toHaveCount(4); // the All row plus three items
+    await expect(review(page)).not.toContainText(/None is not of type|Every item must be/);
+    await table.getByRole('textbox', { name: /\(all items\)/ }).fill('x');
+    await table.getByRole('textbox', { name: /\(all items\)/ }).press('Enter');
+    await expect(table.getByRole('textbox').nth(1)).toHaveValue('x');
+    await page.getByRole('button', { name: /Edit .*Allowed Regions.* as fields/ }).click();
+    const regions = page.getByRole('group', { name: /Allowed Regions/ }).first();
+    await regions.getByRole('button', { name: '+ Add item' }).click();
+    await expect(regions.getByRole('table').getByRole('textbox').first()).toHaveValue('0');
+  });
+
+  test('the list block takes the whole section width (no clipped columns)', async ({ page }) => {
+    await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'settings');
+    await openGroup(page, 'Other');
+    await page.getByRole('button', { name: /Edit .*Stop Words.* as fields/ }).click();
+    const stop = page.getByRole('group', { name: /Stop Words/ }).first();
+    const [block, group] = [
+      await stop.boundingBox(),
+      await page.locator('[data-group]').last().boundingBox(),
+    ];
+    expect(block!.width).toBeGreaterThan(group!.width * 0.8);
+  });
+});
+
+test('one endpoint already shows the All endpoints row (like All roles)', async ({ page }) => {
+  await routing(page);
+  const table = page.getByRole('table', { name: 'endpoint overrides' });
+  await expect(table.getByRole('row', { name: /^primary/ })).toBeVisible();
+  await expect(table.getByRole('rowheader', { name: 'All endpoints' })).toBeVisible();
+});
+
+test('390px: the first column of the tables stays while the columns scroll, and nothing overflows the page', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await routing(page);
+  const table = page.getByRole('table', { name: 'role overrides' });
+  const wrap = table.locator('xpath=..');
+  await wrap.evaluate((el) => (el.scrollLeft = 200));
+  const name = table.getByRole('rowheader', { name: /router/i });
+  const [w, n] = [await wrap.boundingBox(), await name.boundingBox()];
+  expect(n!.x).toBeGreaterThanOrEqual(w!.x - 1);
+  expect(n!.x).toBeLessThan(w!.x + 40);
+  await expectNoPageOverflow(page);
 });

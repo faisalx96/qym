@@ -211,7 +211,7 @@ export async function expectReady(page: Page): Promise<void> {
 export async function maxAttempts(page: Page): Promise<Locator> {
   await openSection(page, 'Environment configurations');
   await openGroup(page, 'LLM routing');
-  return page.getByRole('textbox', { name: 'Max Attempts' });
+  return page.getByRole('textbox', { name: 'primary · Max Attempts', exact: true });
 }
 
 /** Segmented radios hide their input behind a label: click the label, like a user. */
