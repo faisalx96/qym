@@ -211,3 +211,12 @@ with systemd runs the command in its own cgroup with `MemoryHigh`/`MemoryMax`
 so that, if memory does run short, the test run is what gets killed, not your
 shell. Without systemd it still gates and caps. Single test files and single
 specs are light enough to run directly.
+
+## Saved table layouts (localStorage / sessionStorage keys)
+
+| Key | Holds |
+|---|---|
+| `qym:data-table:v2:<storageKey>[:<userId>]` | one DataTable layout: widths, hidden columns, pins, column `order`, density, collapsed groups. The runs table uses `runs.v2` scoped by the user id; an unscoped layout is copied once on first read |
+| `qym:data-table:widths:<storageKey>` | legacy v1 widths, still read |
+| `qym_visible_metrics` (sessionStorage) | legacy runs column choice: read once as the default hidden set, no longer written by the runs page (the Charts page still uses it) |
+| `qym:runs:passes-metric:<slug>` (sessionStorage) | last metric chosen in a passes panel of the project |
