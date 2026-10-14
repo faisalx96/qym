@@ -60,7 +60,7 @@ test('the global row sweeps several values: chips, "sweeps N runs", and one run 
   const table = page.getByRole('table', { name: 'role overrides' });
   await table.getByRole('button', { name: 'Sweep values: All roles · max_tokens' }).click();
   const chips = table.locator('[data-global-sweep]');
-  await chips.getByRole('button', { name: /Edit sweep/ }).click();
+  await chips.getByRole('button', { name: /edit sweep/i }).click();
   const editor = page.getByRole('dialog', { name: /Sweep values of/ });
   await editor.getByRole('textbox').fill('256, 512, 1024');
   await editor.getByRole('textbox').press('Enter');
@@ -78,7 +78,7 @@ test('390px: the global sweep keeps the run count in the launch bar', async ({ p
   const table = page.getByRole('table', { name: 'role overrides' });
   await table.getByRole('button', { name: 'Sweep values: All roles · max_tokens' }).click();
   const chips = table.locator('[data-global-sweep]');
-  await chips.getByRole('button', { name: /Edit sweep/ }).click();
+  await chips.getByRole('button', { name: /edit sweep/i }).click();
   const editor = page.getByRole('dialog', { name: /Sweep values of/ });
   await editor.getByRole('textbox').fill('256, 512');
   await editor.getByRole('textbox').press('Enter');
