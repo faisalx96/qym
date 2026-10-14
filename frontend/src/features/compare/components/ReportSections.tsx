@@ -1,10 +1,10 @@
 /** The compare report: stacked full-width sections in legacy order, a jump nav with scroll-spy, and section anchors. */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { metricDirectionLabel, passThresholdLabel } from '@/lib/metrics';
 import { alignToElement } from '@/lib/scrollToElement';
 import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
-import { ReportSection } from '@/ui';
+import { ReportSection, scrollCue, useScrollCue } from '@/ui';
 import { useCompare } from '../CompareContext';
 import { useScope } from '../hooks/useScope';
 import { hasAnyRootCause } from '../lib/breakdown';
@@ -93,7 +93,8 @@ function useSpy(keys: SectionKey[], navBottom: () => number): SectionKey {
 }
 
 export function ReportNav() {
-  const navRef = useRef<HTMLElement>(null);
+  // Edge fade while more sections lie past the visible edge (a phone shows about four of them).
+  const navRef = useScrollCue<HTMLElement>();
   const sections = useSectionList();
   const navBottom = useMemo(
     () => () =>
@@ -105,7 +106,7 @@ export function ReportNav() {
     navBottom,
   );
   return (
-    <nav ref={navRef} className={styles.nav} aria-label="Comparison sections">
+    <nav ref={navRef} className={`${styles.nav} ${scrollCue}`} aria-label="Comparison sections">
       {sections.map((s) => (
         <a
           key={s.key}

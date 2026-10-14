@@ -269,7 +269,7 @@
 
 .errorCards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); /* fit: the cards share the whole row */
   gap: var(--space-sm);
   margin: var(--space-xs) 0 0;
   padding: 0;
