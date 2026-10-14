@@ -124,6 +124,7 @@ export function DeepTab() {
           xLabel={names[xi] ?? ''}
           yLabel={names[yi] ?? ''}
           onPick={setItem}
+          aspect={3}
           fmt={(v) => (Math.abs(v) >= 100 ? String(Math.round(v)) : String(Math.round(v * 100) / 100))}
         />
       </section>

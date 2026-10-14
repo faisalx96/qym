@@ -287,9 +287,21 @@
   fill: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
 }
 
-.quadLabel {
-  font-size: var(--font-sm);
-  fill: var(--text-muted);
+.quadKey {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-inline-end: var(--space-xs);
+  border-radius: 2px;
+  border: 1px solid var(--border-subtle);
+}
+
+.quadKey[data-q='good'] {
+  background: color-mix(in srgb, var(--success) var(--tint-soft), transparent);
+}
+
+.quadKey[data-q='bad'] {
+  background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
 }
 
 .outcomeKey {
