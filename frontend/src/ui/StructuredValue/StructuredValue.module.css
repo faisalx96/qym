@@ -118,14 +118,8 @@
   max-inline-size: calc(var(--field-measure) + 12px + var(--space-sm));
 }
 
-/* the section of an RTL value mirrors (chevron, key and copy flip), like a FieldRow */
-.section[dir='rtl'] .toggle {
-  flex: 0 1 auto;
-}
-
-.section[dir='rtl'] .head {
-  justify-content: flex-start;
-}
+/* An RTL value reads right-to-left inside its own column (TextBlock sets dir); the key header stays left-anchored
+   in the same row as every LTR key, so the eye never travels to the far edge to find the label. */
 
 .scalar {
   font-family: var(--font-mono);
