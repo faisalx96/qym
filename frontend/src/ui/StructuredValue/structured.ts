@@ -65,6 +65,7 @@ export function classifySection(value: unknown): SectionKind {
 }
 
 export function scalarText(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(Number(value.toPrecision(6)));
   return value === null ? 'null' : String(value);
 }
 

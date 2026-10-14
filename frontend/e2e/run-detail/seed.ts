@@ -668,7 +668,13 @@ export async function seedArabicRepeatRun(client: SeedClient, token: string): Pr
   const samples = 3;
   const random = rng(5);
   const specs = {
-    correct: { score_type: 'boolean', direction: 'maximize', pass_threshold: 1, primary: true, schema_version: 2 },
+    correct: {
+      score_type: 'boolean',
+      direction: 'maximize',
+      pass_threshold: 1,
+      primary: true,
+      schema_version: 2,
+    },
     quality: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
   };
   const metrics = Object.keys(specs);
@@ -701,7 +707,11 @@ export async function seedArabicRepeatRun(client: SeedClient, token: string): Pr
         pass_number: p,
         input:
           i % 3 === 0
-            ? { question: AR_PROMPTS[i % 4], context: ['وثيقة السياسة المالية', 'دليل المنتجات المصرفية'], lang: 'ar' }
+            ? {
+                question: AR_PROMPTS[i % 4],
+                context: ['وثيقة السياسة المالية', 'دليل المنتجات المصرفية'],
+                lang: 'ar',
+              }
             : AR_PROMPTS[i % 4],
         expected:
           i % 3 === 0 ? { answer: 'التعلم العميق فرع من التعلم الآلي', topics: ['ml', 'dl'] } : 'الرياض',
@@ -764,7 +774,10 @@ export async function seedArabicRepeatRun(client: SeedClient, token: string): Pr
     }
     s.push('pass_completed', { pass_number: p, samples });
   }
-  s.push('run_completed', { ended_at: new Date(Date.UTC(2026, 9, 3, 10)).toISOString(), final_status: 'COMPLETED' });
+  s.push('run_completed', {
+    ended_at: new Date(Date.UTC(2026, 9, 3, 10)).toISOString(),
+    final_status: 'COMPLETED',
+  });
   await s.flush();
   return runId;
 }
@@ -772,7 +785,13 @@ export async function seedArabicRepeatRun(client: SeedClient, token: string): Pr
 /** 300 items whose metadata has many categories: topic 24, team 14, region 9, customer_tier 6, complexity 4. */
 export async function seedManyCategories(client: SeedClient, token: string): Promise<string> {
   const specs = {
-    quality: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, primary: true, schema_version: 2 },
+    quality: {
+      score_type: 'percentage',
+      direction: 'maximize',
+      pass_threshold: 0.7,
+      primary: true,
+      schema_version: 2,
+    },
   };
   const r = rng(8);
   const runId = await createRun(client, token, {
@@ -825,7 +844,10 @@ export async function seedManyCategories(client: SeedClient, token: string): Pro
       latency_ms: 300 + Math.round(r() * 2000),
     });
   }
-  s.push('run_completed', { ended_at: new Date(Date.UTC(2026, 9, 4, 10)).toISOString(), final_status: 'COMPLETED' });
+  s.push('run_completed', {
+    ended_at: new Date(Date.UTC(2026, 9, 4, 10)).toISOString(),
+    final_status: 'COMPLETED',
+  });
   await s.flush();
   return runId;
 }

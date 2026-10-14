@@ -163,7 +163,7 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
       <ReportSection
         id={sectionDomId('errors')}
         title="Errors"
-        description="Task, metric, trace and analysis errors grouped by message. Click a card to filter."
+        description="Task, metric, trace and analysis errors grouped by message. Click a row to filter."
         scopeNote={scopeNote}
       >
         <ErrorsTab />

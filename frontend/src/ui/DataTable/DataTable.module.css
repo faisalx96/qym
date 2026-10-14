@@ -349,7 +349,8 @@
   box-shadow: inset 1px 0 0 var(--border-default);
 }
 
-.tbody td {
+.tbody > :where(tr) > td {
+  /* direct cells only: a table inside an expanded detail must not inherit row heights, nowrap and fills */
   font-size: var(--font-base);
   color: var(--text-secondary);
   font-family: var(--font-sans);
@@ -366,7 +367,7 @@
   vertical-align: middle;
 }
 
-.table[data-tall] .tbody td {
+.table[data-tall] .tbody > :where(tr) > td {
   height: max(var(--row-h), var(--row-comfortable));
 }
 

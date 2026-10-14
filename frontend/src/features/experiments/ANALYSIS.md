@@ -9,9 +9,10 @@ Read the backend routes, `experiments.js`, `eval_queue.js`, `eval_environments.j
 the launch-form family alongside.
 
 ## Confirmed
+
 - Experiments list/detail/queue/environments/environment page/launch entry render as the
   brief says (screens: list, detail with stat strip + queue strip + matrix, queue env cards
-  + job table, entry screen with Environment/Dataset cards + Start-from cards).
+  - job table, entry screen with Environment/Dataset cards + Start-from cards).
 - Dispatcher moves QUEUED jobs to SUBMITTED within seconds (the fake service answers
   RUNNING on first read), so seeded jobs are in flight, not QUEUED. Queued/blocked states are
   produced by a HIGH job on the same environment (fake enforces the 409) and by stopping
@@ -28,6 +29,7 @@ the launch-form family alongside.
   command bar for both.
 
 ## The brief was wrong or incomplete
+
 - "Best score" column: confirmed absent from the payload (always an em dash). Dropped.
 - Queue strip "N running" counts SUBMITTED + RUNNING together; the new strip keeps the
   four honest states (queued, submitted, running, blocked).
@@ -41,6 +43,7 @@ the launch-form family alongside.
   task, dataset) so it works independently; see OPEN_QUESTIONS.
 
 ## Behaviours to keep
+
 Everything under "MUST-KEEP" in brief §3, with these notes: polling (decision logged),
 cancel semantics (queued+blocked first, running only when nothing else pending),
 preemption acknowledgement re-ask, matrix compare handoff via `sessionStorage.compareRuns`,
@@ -51,5 +54,6 @@ visit, dry-run preview debounced and generation-guarded, URL compatibility
 (`?new=1`, `?environment=`, `?view=environments`, `?experiment=` all redirect).
 
 ## Dropped
+
 `Function('import')` CodeMirror loader, non-summary models code path, "Best score"
 column, hand-rolled column-width persistence (shared `DataTable` is used instead).

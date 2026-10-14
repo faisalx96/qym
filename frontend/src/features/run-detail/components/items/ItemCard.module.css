@@ -4,6 +4,7 @@
   flex-direction: column;
   gap: var(--space-sm);
   min-width: 0;
+  padding: var(--space-md) var(--space-lg);
 }
 
 .fields {
