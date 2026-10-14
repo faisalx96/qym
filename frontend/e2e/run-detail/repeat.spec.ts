@@ -151,6 +151,31 @@ test.describe('heatmap layout (scenario 10, J4.5)', () => {
   });
 });
 
+test.describe('heatmap readability (final review F6)', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('the item column is capped, rows light up on hover, and 30 rows show before "Show more"', async ({
+    page,
+  }) => {
+    await openRun(page, s.slug, repeat, 'view=heatmap');
+    const grid = page.getByRole('grid', { name: /by item and pass/ });
+    await expect(grid).toBeVisible();
+    // the block is as wide as its columns, not the 1100 px of the page
+    expect((await grid.boundingBox())!.width).toBeLessThan(640);
+    const first = grid.locator('[data-heat-row]').first();
+    const idle = await first.evaluate((el) => getComputedStyle(el).backgroundColor);
+    await first.hover();
+    await expect
+      .poll(() => first.evaluate((el) => getComputedStyle(el).backgroundColor))
+      .not.toBe(idle);
+    // 60 items: the first 30, then a button for 30 more
+    await expect(page.getByText('Showing 30 of 60 items')).toBeVisible();
+    expect(await grid.locator('[data-heat-row]').count()).toBeLessThanOrEqual(30);
+    await page.getByRole('button', { name: 'Show 30 more' }).click();
+    await expect(page.getByText('Showing 60 of 60 items')).toBeVisible();
+  });
+});
+
 test.describe('latency filter (scenario 10)', () => {
   test('a histogram bar on the repeat run sets a latency filter chip', async ({ page }) => {
     await openRun(page, s.slug, repeat, 'panel=latency');

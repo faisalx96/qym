@@ -1,6 +1,6 @@
 /** Item × pass heatmap of the analysis metric for repeat runs, virtualized (brief 04 J4). */
-import { useMemo, useRef } from 'react';
-import { useStickyShift } from '@/ui';
+import { useMemo, useRef, useState } from 'react';
+import { Button, useStickyShift } from '@/ui';
 import { useScrollMargin, useShellScroller, useStickyOffset } from '../../hooks/useScrollMargin';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { metricBand } from '@/lib/metrics';
@@ -11,15 +11,21 @@ import { useRunPage } from '../../RunContext';
 import styles from './Heatmap.module.css';
 
 const ROW = 32;
+/** Rows shown before "Show more": a heatmap reads as a picture, so it stays a screen or two long. */
+const PAGE = 30;
+const ITEM_COL = 280;
+const PASS_COL = 72;
 
 export function Heatmap({
-  items,
+  items: all,
   onOpen,
 }: {
   items: FilteredItem[];
   onOpen: (itemId: string, pass: number) => void;
 }) {
   const { model, api } = useRunPage();
+  const [limit, setLimit] = useState(PAGE);
+  const items = useMemo(() => all.slice(0, limit), [all, limit]);
   const metric = api.selectedMetric;
   const passes = useMemo(() => Array.from({ length: model.samples }, (_, i) => i + 1), [model.samples]);
   const scroller = useShellScroller();
@@ -43,7 +49,9 @@ export function Heatmap({
     getItemKey: (i) => items[i]?.row.item_id ?? i,
   });
   if (!metric) return null;
-  const cols = `minmax(120px, 1fr) repeat(${passes.length}, 72px)`;
+  const cols = `minmax(160px, ${ITEM_COL}px) repeat(${passes.length}, ${PASS_COL}px)`;
+  // the block is as wide as its columns (an item column of a few hundred px, then the cells), never the page
+  const blockWidth = ITEM_COL + (PASS_COL + 4) * passes.length + 24;
   return (
     <div className={styles.wrap}>
       <div className={styles.scroll}>
@@ -52,9 +60,9 @@ export function Heatmap({
           className={styles.grid}
           role="grid"
           aria-label={`${metric} by item and pass`}
-          aria-rowcount={items.length + 1}
+          aria-rowcount={all.length + 1}
           aria-colcount={passes.length + 1}
-          style={{ minWidth: 364 + 72 * passes.length }}
+          style={{ width: blockWidth, minWidth: 364 + 72 * passes.length }}
         >
           <div className={styles.row} data-heat-head="" role="row" style={{ gridTemplateColumns: cols }}>
             <span role="columnheader" className={styles.th}>
@@ -75,6 +83,7 @@ export function Heatmap({
                   role="row"
                   aria-rowindex={v.index + 2}
                   className={styles.row}
+                  data-heat-row=""
                   style={{
                     gridTemplateColumns: cols,
                     height: ROW,
@@ -108,6 +117,22 @@ export function Heatmap({
           </div>
         </div>
       </div>
+      {all.length > PAGE ? (
+        <div className={styles.more}>
+          <span>
+            Showing {items.length.toLocaleString('en-US')} of {all.length.toLocaleString('en-US')} items
+          </span>
+          {items.length < all.length ? (
+            <Button size="sm" variant="ghost" onPress={() => setLimit((n) => n + PAGE)}>
+              Show {Math.min(PAGE, all.length - items.length)} more
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" onPress={() => setLimit(PAGE)}>
+              Show fewer
+            </Button>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
