@@ -59,6 +59,7 @@ function FacetTrigger({ def, onChange }: { def: FacetDef; onChange: (patch: View
   return (
     <MultiSelect
       triggerVariant="bar"
+      panelTestId="filters-panel"
       label={FACET_SINGULAR[def.id] ?? def.label}
       items={items}
       value={value}

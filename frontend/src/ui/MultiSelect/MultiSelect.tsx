@@ -35,6 +35,8 @@ export interface MultiSelectProps<T extends MultiSelectItem> {
   triggerVariant?: 'field' | 'bar';
   /** Text after the label on a 'bar' trigger (default: the single label, or the count). */
   summary?: (selected: Set<Key>) => string;
+  /** `data-testid` of the popover panel (e2e hook). */
+  panelTestId?: string;
 }
 
 /**
@@ -57,6 +59,7 @@ export function MultiSelect<T extends MultiSelectItem>({
   inline,
   triggerVariant = 'field',
   summary: summaryOf,
+  panelTestId,
 }: MultiSelectProps<T>) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -235,7 +238,12 @@ export function MultiSelect<T extends MultiSelectItem>({
         <Icon name="chevron-down" size={12} />
       </AriaButton>
       <Popover className={styles.popover} placement="bottom start" offset={4}>
-        <Dialog className={styles.dialog} aria-label={`${label} options`} id={listId}>
+        <Dialog
+          className={styles.dialog}
+          aria-label={`${label} options`}
+          id={listId}
+          data-testid={panelTestId}
+        >
           {({ close }) => renderPanel(close)}
         </Dialog>
       </Popover>

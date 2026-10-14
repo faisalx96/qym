@@ -369,7 +369,7 @@ function ReorderBody<R>({
           );
         })}
       </div>
-      <span className={styles.srOnly} role="status" aria-live="polite">
+      <span className={styles.srOnly} aria-live="polite">
         {message}
       </span>
     </div>

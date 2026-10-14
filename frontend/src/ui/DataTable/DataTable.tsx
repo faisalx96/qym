@@ -1559,7 +1559,7 @@ function DataTableInner<R>({
         data-zebra={zebraOn ? '' : undefined}
         data-testid="data-table"
       >
-        <span className={styles.srOnly} role="status" aria-live="polite" data-dt-announce="">
+        <span className={styles.srOnly} aria-live="polite" data-dt-announce="">
           {announcement}
         </span>
         {toolbarNode ? null : <SelectionBar />}
