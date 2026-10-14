@@ -18,6 +18,9 @@ body {
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   font-kerning: normal;
+  /* Subpixel glyph positioning: with Plex, tracked uppercase labels (letter-spacing 0.05em) otherwise snap
+     glyphs to whole pixels and show uneven gaps ("STAT US"). Inherited by every label recipe. */
+  text-rendering: geometricPrecision;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-color) var(--scrollbar-track);
   overflow: hidden; /* the shell content area is the only page scroller */

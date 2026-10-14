@@ -120,10 +120,10 @@ Two main trade-offs:
   the Plex faces and nothing else" (stack tokens, only the five declared families, every woff2 referenced, licence per
   family, payload under 200 KB, no component names a family).
 
-## Caveat found while looking
+## Caveat found while looking (resolved)
 
-Uppercase labels with 0.05em tracking (table headers, eyebrows) show slightly uneven letter gaps in headless Chromium on
-Linux ("ENVIRONMENT S"). The same raw, unsubsetted Plex TTF reproduces it, it also happens at deviceScaleFactor 2 in
-that renderer, and it disappears without tracking, so it is that renderer's glyph positioning, not the subsetting. Worth
-a look on macOS/Windows Chrome; if it shows there, drop the uppercase tracking to 0.04em in one place (Text, Eyebrow, table
-header recipe).
+Uppercase labels with 0.05em tracking (table headers, eyebrows) showed uneven letter gaps with Plex ("ENVIRONMENT S",
+"STAT US"). The raw unsubsetted TTF reproduces it, and lowering the tracking to 0.04em does not fix it: Chromium snaps
+glyphs to whole pixels. Fix (found in the independent review): `text-rendering: geometricPrecision` on `body` in
+`base.css` (inherited, so every label recipe gets subpixel positioning with its existing 0.05em); verified on the runs
+list headers and the item card keys at 1440.

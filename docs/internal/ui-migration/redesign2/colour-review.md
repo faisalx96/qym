@@ -39,9 +39,15 @@ deutan 25, 21, 50, 21. Worst adjacent pair went from dE 4 to 21. Bands 4 and 5 a
 "good"); they differ in lightness and every band is also written as a number or label, so colour never carries the
 value alone.
 
-Series palette, closest pair dE (normal / protan / deutan): before 9 / 1 / 6; after 22 / 10 / 8, with the first five slots
-(the ones real runs use) at 22+ in every simulation. Slots 6 to 8 are the weak tail; they already come with a letter or a
-marker shape beyond 8 series.
+Series palette, closest pair dE (normal / protan / deutan): before 9 / 1 / 6; after (all eight) 22 / 10 / 8. The first
+five slots (the ones real runs use: sky, pink, orange, amber, indigo) are at 31 / 20 / 16 (the independent review's tritan
+simulation gives 12). Cyan was moved out of the first five after review: as slot 4 it sat 22 / 16 / 15 dE (8 tritan)
+from sky slot 1 and run tags A and D were hard to tell apart; it is now slot 7. Slots 6 to 8 are the weak tail; they
+already come with a letter or a marker shape beyond 8 series.
+
+Kept on purpose: series 1 sky `#38bdf8` vs the info/RUNNING blue `#00a8ff` (dE 19, 7 tritan). They never encode the same
+object (a series is a dot, tag or rail beside a name; info is a status pill or progress bar with a word), and moving
+series 1 elsewhere would collide with teal, purple, amber or red, which are all taken.
 
 ## Palette changes (token by token)
 
@@ -52,10 +58,10 @@ marker shape beyond 8 series.
 | `--chart-1` | `#00d4aa` (teal) | `#38bdf8` | teal is the accent |
 | `--chart-2` | `#00a8ff` | `#f472b6` | was the info blue |
 | `--chart-3` | `#a855f7` (purple) | `#fb923c` | purple is metadata |
-| `--chart-4` | `#f472b6` | `#22d3ee` | |
-| `--chart-5` | `#fbbf24` | `#fbbf24` | unchanged value, now series 5 |
-| `--chart-6` | `#60a5fa` (and palette.css `#ea580c`) | `#818cf8` | 4.5:1 and distinct from 1 |
-| `--chart-7` | `#34d399` (and palette.css `#6366f1`) | `#a3e635` | |
+| `--chart-4` | `#f472b6` | `#fbbf24` | cyan moved out of the first five (too close to sky) |
+| `--chart-5` | `#fbbf24` | `#818cf8` | distinct, 5.8:1 |
+| `--chart-6` | `#60a5fa` (and palette.css `#ea580c`) | `#a3e635` | |
+| `--chart-7` | `#34d399` (and palette.css `#6366f1`) | `#22d3ee` | |
 | `--chart-8` | `#fb923c` (and palette.css `#0d9488`) | `#cbd5e1` | neutral last slot |
 | `--border-subtle` | `#252536` (1.14:1 on surface) | `#2b2b40` (1.25:1) | hairlines readable without grey boxes |
 | `--border-default` | `#333348` (1.40:1) | `#3b3b54` (1.59:1) | |

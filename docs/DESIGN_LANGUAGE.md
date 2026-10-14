@@ -391,7 +391,7 @@ cross, trace clock, analysis sparkle), series keep their letter or name.
 Palette rules from the design pass (`docs/internal/ui-migration/redesign2/colour-review.md`): the score ramp is
 red `#ef4444`, orange `#f97316`, yellow `#facc15`, light green `#4ade80`, green `#10b981`; adjacent bands stay at
 least dE 21 apart under protanopia and deuteranopia (the old yellow/lime pair was dE 4 to 10). The eight series
-are sky, pink, orange, cyan, amber, indigo, lime, slate: no teal, purple or red, every one at least 4.5:1 on
+are sky, pink, orange, amber, indigo, lime, cyan, slate: no teal, purple or red, every one at least 4.5:1 on
 `--bg-surface` and `--bg-elevated`; series colours live in `tokens.css` only (no second palette file).
 Hairlines are `--border-subtle/default/strong` at 1.25 / 1.59 / 2.3 : 1 on `--bg-surface`.
 
