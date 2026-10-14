@@ -31,16 +31,16 @@ test.describe('runs columns layout (1280)', () => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
     const before = await headers(page);
-    expect(before.indexOf('time')).toBeGreaterThan(before.indexOf('metric-accuracy'));
+    expect(before.indexOf('owner')).toBeGreaterThan(before.indexOf('time'));
     await openMenu(page);
-    await handle(page, 'Date').focus();
+    await handle(page, 'Owner').focus();
     await page.keyboard.press('Space');
     await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowUp');
     await page.keyboard.press('Space');
     const after = await headers(page);
-    expect(after.indexOf('time')).toBe(before.indexOf('time') - 3);
+    expect(after.indexOf('owner')).toBe(before.indexOf('owner') - 3);
     // the scores keep their relative order
     expect(after.filter((c) => c.startsWith('metric-'))).toEqual(
       before.filter((c) => c.startsWith('metric-')),
