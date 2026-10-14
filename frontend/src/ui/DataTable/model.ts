@@ -161,14 +161,43 @@ export function pinOffsets<R>(
   return out;
 }
 
-/** Header bands: consecutive columns sharing a `group` merge into one span. */
-export function groupBands<R>(cols: Column<R>[]): { label: string | null; span: number; key: string }[] {
-  const bands: { label: string | null; span: number; key: string }[] = [];
+export interface Band {
+  label: string | null;
+  span: number;
+  key: string;
+  /** Frozen side of the first column; a band never mixes frozen and scrolling columns, so it can stay put too. */
+  pin: 'start' | 'end' | null;
+  firstId: string;
+  lastId: string;
+  /** Second half of a group split by the freeze line: its label is shown on the first half only. */
+  continued: boolean;
+}
+
+/**
+ * Header bands: consecutive columns sharing a `group` merge into one span. With `pinOf`, a band is also cut at the
+ * freeze line so a frozen band can stick with its columns.
+ */
+export function groupBands<R>(cols: Column<R>[], pinOf?: (c: Column<R>) => 'start' | 'end' | null): Band[] {
+  const bands: Band[] = [];
   for (const c of cols) {
     const label = c.group ?? null;
+    const pin = pinOf?.(c) ?? null;
     const last = bands[bands.length - 1];
-    if (last && last.label === label && label !== null) last.span += 1;
-    else bands.push({ label, span: 1, key: `${label ?? '_'}-${c.id}` });
+    if (last && last.label === label && label !== null && last.pin === pin) {
+      last.span += 1;
+      last.lastId = c.id;
+    } else {
+      const continued = Boolean(last && label !== null && last.label === label);
+      bands.push({
+        label: continued ? null : label,
+        span: 1,
+        key: `${label ?? '_'}-${c.id}`,
+        pin,
+        firstId: c.id,
+        lastId: c.id,
+        continued,
+      });
+    }
   }
   return bands;
 }

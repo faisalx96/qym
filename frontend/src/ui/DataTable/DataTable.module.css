@@ -211,6 +211,11 @@
   border-bottom: 0;
 }
 
+.thead th.bandCell[data-pin] {
+  position: sticky;
+  z-index: 4;
+}
+
 .bandCell[data-labelled] {
   box-shadow: inset 0 -1px 0 var(--border-default);
 }

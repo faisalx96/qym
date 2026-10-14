@@ -4772,6 +4772,32 @@ async def start_analysis_job(
     return JSONResponse(status_code=202 if created else 200, content=payload)
 
 
+class ActiveAnalysisRunsBody(BaseModel):
+    run_ids: List[str] = Field(default_factory=list, max_length=200)
+
+
+@router.post("/api/analysis-jobs/active-runs")
+def get_active_analysis_runs(
+    body: ActiveAnalysisRunsBody,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Which of these runs have an analysis in flight (the runs list shows "Analyzing")."""
+    ids = list(dict.fromkeys(body.run_ids))
+    active = analysis_job_manager.active_run_ids(ids, db=db)
+    if not active:
+        return {"run_ids": []}
+    runs = Run.active(db).filter(Run.id.in_(active)).all()
+    return {
+        "run_ids": sorted(
+            r.id
+            for r in runs
+            if _can_operate_analyzer(db, principal, r)
+            and can_view_run_items(db, principal, r)
+        )
+    }
+
+
 @router.get("/api/runs/{run_id:path}/analysis-jobs/active")
 def get_active_analysis_job(
     run_id: str,
