@@ -56,11 +56,11 @@
   /* Chart colors */
   /* Series palette (design pass): no teal (reserved for selection/links/primary action), no purple
      (metadata tags), no red (errors); every hue clears 4.5:1 on surface and elevated. */
-  --chart-1: #818cf8;
+  --chart-1: #38bdf8;
   --chart-2: #f472b6;
-  --chart-3: #38bdf8;
+  --chart-3: #fb923c;
   --chart-4: #22d3ee;
-  --chart-5: #fb923c;
+  --chart-5: #fbbf24;
 
   /* Borders — more visible */
   /* Hairlines were 1.14 / 1.40 / 2.0 : 1 on --bg-surface, so table rules and card edges vanished on
@@ -288,8 +288,8 @@
   --tint-strong: 20%; /* hover/pressed on a tinted fill, selected pill */
   --error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary)); /* 5.15:1 on a 12% error tint */
 
-  --chart-6: #a3e635;
-  --chart-7: #fbbf24;
+  --chart-6: #818cf8;
+  --chart-7: #a3e635;
   --chart-8: #cbd5e1;
 
   --rail-width: 3px;

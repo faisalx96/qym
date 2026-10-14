@@ -385,13 +385,13 @@ cross, trace clock, analysis sparkle), series keep their letter or name.
 | Status | lifecycle of a run, job, review | `--success` completed/approved, `--accent-secondary` running, `--error` failed/rejected, `--warning` stopped/draft, neutral submitted/pending | `Badge`, `RunStatusBadge` | running has the pulsing dot; approved adds the check glyph |
 | Delta | change vs a baseline | good `--score-5`, bad `--score-1`, flat `--text-muted` | `DeltaCell`, `StatStrip trend` | colour only beyond the noise band; sign and arrow always; lower-is-better inverts |
 | Severity / kind | what failed | task `--error`, metric `--metric-error`, trace `--warning`, analysis `--info` | 3px rail, glyph, title colour | rail and glyph, never a filled card |
-| Series | which run, model, category group | `--chart-1..8` | marker dot and letter, `Card series`, chart marks, `Chip series`, `Tag kind=model` | never good or bad; always paired with letter or name; A is the baseline; series 1 is indigo (teal is reserved for selection, links and the primary action), never relied on alone |
+| Series | which run, model, category group | `--chart-1..8` | marker dot and letter, `Card series`, chart marks, `Chip series`, `Tag kind=model` | never good or bad; always paired with letter or name; A is the baseline; series 1 is sky blue (teal is reserved for selection, links and the primary action), never relied on alone |
 | Definition metadata | what was run | `--accent-tertiary` (purple) | `Tag kind=task|version|config`, `KeyValueGrid kind` | purple is only this |
 
 Palette rules from the design pass (`docs/internal/ui-migration/redesign2/colour-review.md`): the score ramp is
 red `#ef4444`, orange `#f97316`, yellow `#facc15`, light green `#4ade80`, green `#10b981`; adjacent bands stay at
 least dE 21 apart under protanopia and deuteranopia (the old yellow/lime pair was dE 4 to 10). The eight series
-are indigo, amber, pink, sky, orange, cyan, slate, lime: no teal, purple or red, every one at least 4.5:1 on
+are sky, pink, orange, cyan, amber, indigo, lime, slate: no teal, purple or red, every one at least 4.5:1 on
 `--bg-surface` and `--bg-elevated`; series colours live in `tokens.css` only (no second palette file).
 Hairlines are `--border-subtle/default/strong` at 1.25 / 1.59 / 2.3 : 1 on `--bg-surface`.
 
