@@ -122,6 +122,7 @@ function ErrorCard({
             name={columnName(model, col)}
             title={col.title}
             count={count}
+            max={Math.max(...entry.counts, 0)}
             delta={i === baseIdx ? null : count - (entry.counts[baseIdx] ?? 0)}
           />
         ))}

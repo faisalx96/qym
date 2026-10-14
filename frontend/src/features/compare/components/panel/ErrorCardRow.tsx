@@ -8,12 +8,15 @@ export function ErrorCardRow({
   name,
   title,
   count,
+  max,
   delta,
 }: {
   index: number;
   name: string;
   title: string;
   count: number;
+  /** The card's largest count: the bar's full width. */
+  max: number;
   /** null for the baseline row. */
   delta: number | null;
 }) {
@@ -22,6 +25,9 @@ export function ErrorCardRow({
     <li className={styles.errorRun} data-testid="error-run" {...mark}>
       <RunTag index={index} name={name} title={title} compact bare />
       <span className={styles.errorNum}>{count}</span>
+      <span className={styles.errorBar} aria-hidden="true">
+        <span style={{ inlineSize: `${max > 0 ? Math.round((count / max) * 100) : 0}%` }} />
+      </span>
       {delta === null ? (
         <Text variant="sm" tone="muted">
           Baseline

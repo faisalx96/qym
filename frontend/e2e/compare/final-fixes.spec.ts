@@ -39,18 +39,17 @@ test('the eight run colours are eight distinct hues', async ({ page }) => {
     }
 });
 
-test('error cards fill the row', async ({ page }) => {
+test('error cards keep a compact column (about 420px) instead of stretching across the row', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const { base, a, b } = seed.runs;
   await page.goto(compareUrl([base, a, b], { panel: 'errors' }));
   await waitLoaded(page);
   const cards = page.getByTestId('error-card');
   await expect(cards.first()).toBeVisible();
-  const list = (await cards.first().locator('xpath=ancestor::ul[1]').boundingBox())!;
-  const n = await cards.count();
-  const last = (await cards.nth(n - 1).boundingBox())!;
-  // the last card reaches the right edge of the list: no empty third of the row
-  expect(last.x + last.width).toBeGreaterThan(list.x + list.width - 4);
+  for (let i = 0; i < (await cards.count()); i += 1)
+    expect((await cards.nth(i).boundingBox())!.width).toBeLessThanOrEqual(430);
 });
 
 test('390px: the section tabs scroll and show an edge cue while more sections lie past the edge', async ({
