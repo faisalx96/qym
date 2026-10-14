@@ -38,6 +38,7 @@ import {
   MultiSelect,
   NumberField,
   PageHeader,
+  ScoreValue,
   Select,
   Skeleton,
   Slider,
@@ -401,15 +402,19 @@ export function ModelsPage() {
                             )}
                           </span>
                           <span>{label}</span>
-                          <span>
-                            (
-                            {item.avg === null
-                              ? '—'
-                              : isNumeric
-                                ? item.avg.toFixed(2)
-                                : formatPercent(item.avg, 1)}
-                            )
-                          </span>
+                          <ScoreValue
+                            variant="pill"
+                            value={item.avg}
+                            direction={isNumeric ? null : direction}
+                            digits={1}
+                            text={
+                              item.avg === null
+                                ? '—'
+                                : isNumeric
+                                  ? item.avg.toFixed(2)
+                                  : formatPercent(item.avg, 1)
+                            }
+                          />
                         </li>
                       );
                     })}
