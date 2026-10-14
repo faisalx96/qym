@@ -21,6 +21,7 @@ export * from './Chart';
 export * from './motion';
 export * from './RunStatusBadge';
 export * from './Tag';
+export * from './EntityTag';
 export * from './Chip';
 export * from './ScoreValue';
 export * from './Identicon';

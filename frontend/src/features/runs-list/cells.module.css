@@ -57,19 +57,6 @@
   background: var(--chart-8);
 }
 
-.model {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.modelName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .owner {
   display: inline-flex;
   align-items: center;
@@ -101,13 +88,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.dataset {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-width: 0;
 }
 
 .status {
@@ -253,33 +233,6 @@
 }
 
 .runLink:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-
-.analyze,
-.analyzeQuiet {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  color: var(--accent-tertiary-soft);
-  text-decoration: none;
-  white-space: nowrap;
-  border-radius: 2px;
-}
-
-.analyzeQuiet {
-  color: var(--text-muted);
-}
-
-.analyze:hover,
-.analyzeQuiet:hover {
-  text-decoration: underline;
-  color: var(--text-primary);
-}
-
-.analyze:focus-visible,
-.analyzeQuiet:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }

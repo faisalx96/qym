@@ -820,6 +820,22 @@ export function useStartAnalysisJob(runId: string) {
   });
 }
 
+/** Which of these runs have an analysis in flight (one request for a whole page of the runs list). */
+export function useAnalyzingRuns(runIds: string[], enabled = true) {
+  const key = [...runIds].sort();
+  return useQuery({
+    queryKey: ['analysis', 'active-runs', key],
+    queryFn: async () =>
+      new Set(
+        (await api.post<{ run_ids: string[] }>('/api/analysis-jobs/active-runs', { run_ids: key })).run_ids,
+      ),
+    enabled: enabled && key.length > 0,
+    // a running analysis finishes by itself: keep looking while one is in flight
+    refetchInterval: (q) => ((q.state.data?.size ?? 0) > 0 ? 5000 : false),
+    staleTime: 10_000,
+  });
+}
+
 export function useActiveAnalysisJob(runId: string, pass: number | null, enabled: boolean) {
   return useQuery({
     queryKey: ['analysis', 'active-job', runId, pass],

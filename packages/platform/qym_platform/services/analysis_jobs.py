@@ -23,7 +23,7 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Set, Tuple, Union
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 from uuid import uuid4
 
 from qym_platform.datetime_utils import utc_now_naive
@@ -234,6 +234,21 @@ class AnalysisJobManager:
                     continue  # finished here since the scan above
             return RemoteAnalysisJob(row)
         return None
+
+    def active_run_ids(self, run_ids: List[str], db: Any = None) -> Set[str]:
+        """Which of `run_ids` have an unfinished analysis (any pass), for the runs list."""
+        wanted = set(run_ids)
+        found: Set[str] = set()
+        with self._lock:
+            for job in self._jobs.values():
+                if job.run_id in wanted and job.status in ACTIVE_JOB_STATUSES:
+                    found.add(job.run_id)
+        if db is not None and wanted - found:
+            for row in job_registry.active(db, self.kind, scope_ids=wanted - found):
+                scope = row.get("scope_id")
+                if scope in wanted:
+                    found.add(scope)
+        return found
 
     def _describe(self, job: AnalysisJob) -> JobDescription:
         with self._lock:

@@ -31,16 +31,16 @@ test.describe('runs columns layout (1280)', () => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
     const before = await headers(page);
-    expect(before.indexOf('time')).toBeGreaterThan(before.indexOf('metric-accuracy'));
+    expect(before.indexOf('owner')).toBeGreaterThan(before.indexOf('time'));
     await openMenu(page);
-    await handle(page, 'Date').focus();
+    await handle(page, 'Owner').focus();
     await page.keyboard.press('Space');
     await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowUp');
     await page.keyboard.press('ArrowUp');
     await page.keyboard.press('Space');
     const after = await headers(page);
-    expect(after.indexOf('time')).toBe(before.indexOf('time') - 3);
+    expect(after.indexOf('owner')).toBe(before.indexOf('owner') - 3);
     // the scores keep their relative order
     expect(after.filter((c) => c.startsWith('metric-'))).toEqual(
       before.filter((c) => c.startsWith('metric-')),
@@ -157,7 +157,7 @@ test.describe('runs columns layout (768)', () => {
     await page.keyboard.press('Escape');
     const scroller = table(page).locator('[data-dt-scroller]');
     const frozenWidth = await scroller.evaluate((el) => {
-      const cells = Array.from(el.querySelectorAll<HTMLElement>('thead th[data-pin="start"]'));
+      const cells = Array.from(el.querySelectorAll<HTMLElement>('thead th[data-pin="start"][data-col]'));
       return cells.reduce((n, c) => n + c.getBoundingClientRect().width, 0) / el.clientWidth;
     });
     expect(frozenWidth).toBeLessThan(0.75);

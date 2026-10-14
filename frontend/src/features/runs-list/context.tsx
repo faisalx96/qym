@@ -15,6 +15,8 @@ export interface RunsCtxValue {
    * unset = every metric of the run.
    */
   visibleMetrics?: string[];
+  /** Runs with an analysis in flight (the Analyze action shows "Analyzing"). */
+  analyzing?: Set<string>;
 }
 
 export const EMPTY_CTX: RunsCtxValue = {

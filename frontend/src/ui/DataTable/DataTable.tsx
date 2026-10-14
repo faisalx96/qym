@@ -1524,7 +1524,7 @@ function DataTableInner<R>({
       <thead className={styles.thead}>
         {hasBands ? (
           <tr className={styles.bandRow} role="row">
-            {renderBands(renderCols, styles)}
+            {renderBands(renderCols, styles, pins, offsets)}
           </tr>
         ) : null}
         <tr role="row">{renderCols.map((c) => thFor(c))}</tr>
@@ -1670,9 +1670,14 @@ function DataTableInner<R>({
   );
 }
 
-function renderBands<R>(cols: Column<R>[], s: Record<string, string>) {
+function renderBands<R>(
+  cols: Column<R>[],
+  s: Record<string, string>,
+  pins: Record<string, 'start' | 'end' | null>,
+  offsets: Record<string, number>,
+) {
   // Pseudo (select/expand/actions) columns never carry a group.
-  return groupBands(cols).map((b) => (
+  return groupBands(cols, (c) => effectivePin(c, pins)).map((b) => (
     <th
       key={b.key}
       colSpan={b.span}
@@ -1680,6 +1685,11 @@ function renderBands<R>(cols: Column<R>[], s: Record<string, string>) {
       role={b.label ? 'columnheader' : 'presentation'}
       className={s.bandCell}
       data-labelled={b.label ? '' : undefined}
+      data-pin={b.pin ?? undefined}
+      style={{
+        insetInlineStart: b.pin === 'start' ? offsets[b.firstId] : undefined,
+        insetInlineEnd: b.pin === 'end' ? offsets[b.lastId] : undefined,
+      }}
     >
       {b.label}
     </th>

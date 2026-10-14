@@ -52,6 +52,9 @@ import {
   StaleBanner,
   Stack,
   StatStrip,
+  TaskTag,
+  DatasetTag,
+  ModelTag,
   Switch,
   TabPanel,
   Tabs,
@@ -356,6 +359,14 @@ export default function UiGalleryPage() {
               value={new Set([ITEMS[0]!.key])}
               onChange={() => {}}
             />
+          </Stack>
+        </Case>
+        <Case label="EntityTag: TaskTag, DatasetTag (version, alias), ModelTag (series colour, reasoning)">
+          <Stack direction="row" gap="sm">
+            <TaskTag name="text2sql" />
+            <DatasetTag name="spider-dev" version="3" aliases={['golden']} />
+            <ModelTag name="gpt-4o" series={1} />
+            <ModelTag name="claude-sonnet-4" series={2} reasoning />
           </Stack>
         </Case>
         <Case label="Stepper (always-clickable rail; compact below 760px)">

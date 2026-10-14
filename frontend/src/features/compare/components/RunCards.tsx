@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
-import { Button, Icon, RunStatusBadge, Tag, Text, Card } from '@/ui';
+import { Button, DatasetTag, Icon, ModelTag, RunStatusBadge, Tag, Text, Card } from '@/ui';
 import { formatDurationMs } from '@/features/run-detail/lib/heroModel';
 import { letterOf, useCompare } from '../CompareContext';
 import { differingContext, ownerLabel, runCounts } from '../lib/runInfo';
@@ -92,11 +92,14 @@ export function RunCards() {
                         {counts.items} · {counts.completed} completed · {counts.errors} error
                         {counts.errors === 1 ? '' : 's'}
                       </Fact>
-                      <Fact label="Model">{run.model_name}</Fact>
+                      <Fact label="Model">
+                        {run.model_name ? (
+                          <ModelTag name={run.model_name} series={((idx % 8) + 1) as 1} />
+                        ) : null}
+                      </Fact>
                       <Fact label="Owner">{owner}</Fact>
                       <Fact label="Dataset">
-                        {run.dataset_name}
-                        {run.dataset_version ? ` v${run.dataset_version}` : ''}
+                        <DatasetTag name={run.dataset_name} version={run.dataset_version} />
                       </Fact>
                       <Fact label="Runtime">{runtime === '—' ? '' : runtime}</Fact>
                       <Fact label="Experiment">

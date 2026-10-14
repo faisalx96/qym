@@ -2,9 +2,10 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { MetricType, RunPass, RunRow } from '@/api/dashboardTypes';
-import { DataTable, Icon, RunStatusBadge, ScoreBar, type Column, type RowAction } from '@/ui';
+import { DataTable, RunStatusBadge, ScoreBar, type Column, type RowAction } from '@/ui';
 import { formatDateParts, formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
 import { metricDirection } from '@/lib/metrics';
+import { AnalyzeAction } from '../AnalyzeAction';
 import { Mono } from '../cells';
 import { passRef } from '../selection';
 import { passIssues, type PassIssue, type PassView } from './model';
@@ -24,7 +25,7 @@ export const toPassRows = (runId: string, rows: PassView[]): PassRow[] =>
 const headerLabel = (m: string) => m.replace(/_/g, ' ');
 
 export function IssuesCell({ issues }: { issues: PassIssue[] }) {
-  if (!issues.length) return <span className={styles.none}>–</span>;
+  if (!issues.length) return <span className={[styles.none, styles.issues].join(' ')}>–</span>;
   return (
     <span className={styles.issues}>
       {issues.map((i) => (
@@ -52,6 +53,7 @@ export function PassesTable({
   metricTypes,
   selectedMetric,
   passHref,
+  analyzing,
   selectMode,
   selected,
   onToggle,
@@ -66,6 +68,8 @@ export function PassesTable({
   metricTypes: Record<string, MetricType>;
   selectedMetric: string | null;
   passHref: (n: number, sub?: string) => string;
+  /** An analysis is running for this run. */
+  analyzing: boolean;
   selectMode: boolean;
   selected: Set<string>;
   onToggle: (ref: string) => void;
@@ -80,7 +84,7 @@ export function PassesTable({
       header: headerLabel(m),
       label: headerLabel(m),
       type: 'score',
-      width: 128,
+      width: 116,
       align: 'end',
       priority: m === selectedMetric ? 1 : 3,
       cell: (r) =>
@@ -95,7 +99,7 @@ export function PassesTable({
           />
         ),
     }));
-    return [
+    const all: Column<PassRow>[] = [
       {
         id: 'pass',
         pin: 'start',
@@ -155,7 +159,7 @@ export function PassesTable({
         id: 'items',
         header: 'Items',
         type: 'number',
-        width: 80,
+        width: 68,
         align: 'end',
         priority: 3,
         cell: (r) => (
@@ -168,7 +172,7 @@ export function PassesTable({
         id: 'latency',
         header: 'Latency',
         type: 'number',
-        width: 90,
+        width: 84,
         align: 'end',
         priority: 3,
         cell: (r) => <Mono>{formatLatency(r.pass.avg_latency_ms)}</Mono>,
@@ -177,7 +181,7 @@ export function PassesTable({
         id: 'duration',
         header: 'Duration',
         type: 'duration',
-        width: 110,
+        width: 100,
         align: 'end',
         priority: 3,
         cell: (r) => <Mono>{formatDurationMs(r.pass.duration_ms)}</Mono>,
@@ -185,40 +189,34 @@ export function PassesTable({
       {
         id: 'issues',
         header: 'Issues',
-        width: 120,
+        width: 100,
         priority: 1,
         cell: (r) => <IssuesCell issues={passIssues(r.pass)} />,
       },
       {
         id: 'analyze',
         header: 'Analyze',
-        hideLabel: true,
-        width: 64,
+        width: 118,
         priority: 2,
         cell: (r) => {
           if (r.status === 'running' || r.status === 'pending') return <span className={styles.none}>—</span>;
-          const n = r.pass.analysis_cause_count ?? 0;
           return (
-            <Link
+            <AnalyzeAction
               to={passHref(r.pass.pass_number, '/analyzer')}
-              className={styles.analyze}
-              aria-label={
-                n ? `Analyze pass ${r.pass.pass_number}, ${n} causes` : `Analyze pass ${r.pass.pass_number}`
-              }
-              title={
-                n
-                  ? `${n} cause${n > 1 ? 's' : ''} found: analyze pass ${r.pass.pass_number}`
-                  : 'Analyze this pass'
-              }
-            >
-              <Icon name="sparkles" size={12} />
-              {n ? <Mono>{n}</Mono> : null}
-            </Link>
+              causeCount={r.pass.analysis_cause_count ?? 0}
+              analyzing={analyzing}
+              subject={`pass ${r.pass.pass_number}`}
+            />
           );
         },
       },
     ];
-  }, [metrics, specs, metricTypes, selectedMetric, passHref]);
+    // Analyze sits right after Status so it is on screen next to the pass number at any width
+    const at = all.findIndex((c) => c.id === 'analyze');
+    const [analyze] = all.splice(at, 1);
+    all.splice(all.findIndex((c) => c.id === 'status') + 1, 0, analyze!);
+    return all;
+  }, [metrics, specs, metricTypes, selectedMetric, passHref, analyzing]);
 
   const rowActions = (r: PassRow): RowAction<PassRow>[] => [
     {
