@@ -12,6 +12,7 @@ import {
   ScoreBar,
   DatasetTag,
   ModelTag,
+  RunName,
   Tag,
   Tooltip,
 } from '@/ui';
@@ -358,15 +359,13 @@ export function RunNameCell({
       ) : (
         <span className={styles.chevronSpacer} aria-hidden="true" />
       )}
-      <Link
+      <RunName
         to={runHref(runPath(slug, row.run_id), listContext)}
-        className={styles.runLink}
-        title={row.run_id}
+        name={name}
+        runId={row.run_id}
         onClick={() => rememberRunFile(row.run_id)}
         {...textDirAttrs(name)}
-      >
-        {name}
-      </Link>
+      />
       {repeat ? <Tag kind="count">×{row.samples}</Tag> : null}
       {row.origin === 'official' ? (
         <Tag kind="accent" title="Run launched by an official experiment">

@@ -148,7 +148,7 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
     [api.ctx, api.view, api.defs, search.searchMatcher, search.outputMatcher],
   );
 
-  const [heroExpanded, setHeroExpanded] = useState(() => readJson<boolean>(HERO_KEY, true));
+  const [heroExpanded, setHeroExpanded] = useState(() => readJson<boolean>(HERO_KEY, false));
   const toggleHero = useCallback(() => {
     setHeroExpanded((v) => {
       writeJson(HERO_KEY, !v);
@@ -188,11 +188,7 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
             onToggleExpanded={toggleHero}
             extra={<VersioningDetails run={run} flat />}
           />
-          {heroExpanded ? (
-            <>
-              <ExperimentPanel run={run} slug={slug} />
-            </>
-          ) : null}
+          <ExperimentPanel run={run} slug={slug} />
           <RunNotices run={run} readOnly={readOnly} />
           <div id={sectionDomId('reviews')} className={styles.reviews}>
             <ReviewHistory runId={runId} status={run.status} />

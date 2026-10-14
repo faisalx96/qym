@@ -125,7 +125,7 @@ test.describe('Runs list history', () => {
     await page.waitForTimeout(500);
     const target = await top(page, sel);
     expect(target).toBeGreaterThan(300);
-    // the run details are expanded by default on the report page
+    // the run details are folded by default on the report page; the strip tags link to the filtered list
     await page
       .locator('a[href*="?model="]')
       .first()

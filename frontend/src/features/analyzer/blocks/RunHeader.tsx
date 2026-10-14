@@ -1,6 +1,6 @@
 import { viewRunTo } from './JobStatus';
 import type { RunPasses, RunSummary } from '@/api/analysis';
-import { LinkButton, Select, Tag, Text } from '@/ui';
+import { DatasetTag, isBareRunId, LinkButton, ModelTag, Select, Tag, TaskTag, Text } from '@/ui';
 import s from './blocks.module.css';
 
 /** Run name, task / model / dataset, sample select for repeat runs, View run. */
@@ -24,34 +24,19 @@ export function RunHeader({
   return (
     <div className={s.runHeader}>
       <div className={s.runTitle}>
-        <Text variant="lg" weight={600} as="h2" dir="auto">
+        <Text
+          variant="lg"
+          weight={600}
+          as="h2"
+          dir="auto"
+          mono={isBareRunId(run.run_name || run.run_id, run.run_id)}
+        >
           {run.run_name || run.run_id}
         </Text>
         <div className={s.runMeta}>
-          {run.task_name ? (
-            <Text variant="sm" tone="muted" as="span">
-              Task{' '}
-              <Text variant="sm" mono tone="secondary" as="span">
-                {run.task_name}
-              </Text>
-            </Text>
-          ) : null}
-          {run.model_name ? (
-            <Text variant="sm" tone="muted" as="span">
-              Model{' '}
-              <Text variant="sm" mono tone="secondary" as="span">
-                {run.model_name}
-              </Text>
-            </Text>
-          ) : null}
-          {run.dataset_name ? (
-            <Text variant="sm" tone="muted" as="span">
-              Dataset{' '}
-              <Text variant="sm" mono tone="secondary" as="span">
-                {run.dataset_name}
-              </Text>
-            </Text>
-          ) : null}
+          <TaskTag name={run.task_name} />
+          {run.model_name ? <ModelTag name={run.model_name} /> : null}
+          <DatasetTag name={run.dataset_name} />
           <Tag kind="data">{runId}</Tag>
         </div>
       </div>

@@ -115,6 +115,7 @@
 .runCell {
   display: inline-flex;
   flex-direction: column;
+  align-items: flex-start; /* the task tag hugs its text, never a wide block */
   gap: 2px;
   min-width: 0;
 }

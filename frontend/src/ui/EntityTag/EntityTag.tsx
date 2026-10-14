@@ -3,9 +3,11 @@
  *   task    mono tag in the meta tone
  *   dataset database glyph, name, version suffix (and alias tags)
  *   model   tag tinted with the model's series colour and its dot
+ * and the run's own name (RunName): sans, a link when it has a target, mono only when the label is a bare id.
  * Long names truncate with an ellipsis and show in full as a tooltip.
  */
-import type { ReactNode } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Icon } from '../Icon';
 import { Tag } from '../Tag';
 import styles from './EntityTag.module.css';
@@ -82,5 +84,48 @@ export function ModelTag({
       <span className={styles.text}>{name}</span>
       {reasoning ? <span className={styles.version}>reasoning</span> : null}
     </Tag>
+  );
+}
+
+const BARE_ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$|^[0-9a-f]{8,32}$/i;
+
+/** True when a run label is only an identifier (no human name was given), so it reads in the mono face. */
+export function isBareRunId(label: string, runId?: string): boolean {
+  return label === runId || BARE_ID.test(label);
+}
+
+/** The run's name, written the same way on every surface (list, overview, admin, header, compare, analysis). */
+export function RunName({
+  name,
+  runId,
+  to,
+  title,
+  onClick,
+  className,
+  ...rest
+}: EntityTagBase & {
+  name: string | null | undefined;
+  runId?: string;
+  to?: string;
+  title?: string;
+  onClick?: MouseEventHandler<HTMLAnchorElement>;
+  dir?: 'auto' | 'ltr' | 'rtl';
+  lang?: string;
+}) {
+  const label = name || (runId ? runId.slice(0, 8) : '—');
+  const cls = [styles.runName, className].filter(Boolean).join(' ');
+  const id = isBareRunId(label, runId) ? '' : undefined;
+  const tip = title ?? runId ?? label;
+  if (!to) {
+    return (
+      <span className={cls} data-id={id} title={tip} {...rest}>
+        {label}
+      </span>
+    );
+  }
+  return (
+    <Link to={to} className={cls} data-id={id} title={tip} onClick={onClick} {...rest}>
+      {label}
+    </Link>
   );
 }

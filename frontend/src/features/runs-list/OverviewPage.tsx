@@ -8,6 +8,7 @@ import {
   EmptyState,
   ErrorState,
   PageHeader,
+  RunName,
   RunStatusBadge,
   SegmentedControl,
   Select,
@@ -23,6 +24,7 @@ import { projectPath, runPath } from '@/app/routes';
 import { kpiEntries, kpiScope } from '@/lib/kpis';
 import { formatPercentValue, formatRelative } from '@/lib/format';
 import { useDelayedPending } from '@/lib/pending';
+import { textDirAttrs } from '@/lib/text';
 import { useSearchParamsState } from '@/lib/url-state';
 import { Mono, OwnerCell, StatusCell } from './cells';
 import { isActiveRun } from './polling';
@@ -378,9 +380,12 @@ export function OverviewPage() {
 
 function RunLink({ slug, row, withTask }: { slug: string; row: RunRow; withTask?: boolean }) {
   const link = (
-    <Link to={runPath(slug, row.run_id)} className={styles.runLink}>
-      {row.external_run_id || row.run_name}
-    </Link>
+    <RunName
+      to={runPath(slug, row.run_id)}
+      name={row.external_run_id || row.run_name}
+      runId={row.run_id}
+      {...textDirAttrs(row.external_run_id || row.run_name)}
+    />
   );
   if (!withTask && row.origin !== 'official') return link;
   return (

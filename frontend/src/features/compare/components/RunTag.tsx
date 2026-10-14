@@ -4,7 +4,7 @@
  * (SeriesHighlightRoot dims every `[data-mark][data-series]` of another run).
  */
 import type { CSSProperties, FocusEvent } from 'react';
-import { useSeriesHighlight } from '@/ui';
+import { isBareRunId, useSeriesHighlight } from '@/ui';
 import { letterOf, runColor, runSeries } from '../CompareContext';
 import styles from './RunTag.module.css';
 
@@ -60,7 +60,9 @@ function Inner({
     >
       <span className={styles.swatch} style={{ background: runColor(index) } as CSSProperties} aria-hidden />
       {showLetter ? <span className={styles.letter}>{letterOf(index)}</span> : null}
-      {showName && name ? <span className={styles.name}>{name}</span> : null}
+      {showName && name ? <span className={styles.name} data-id={isBareRunId(name) ? '' : undefined}>
+          {name}
+        </span> : null}
       {baseline ? (
         <span className={styles.star} role="img" aria-label="baseline">
           {'★'}
