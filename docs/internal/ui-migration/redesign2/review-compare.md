@@ -29,3 +29,32 @@ T3 (baseline column fill) and T7 (cell tooltip text) are honestly listed; both l
 
 ## Counts
 Screenshots captured and viewed: 36 (react 2/4/8/cohort at 1440 and 390 tiled, legacy 4/8/cohort, expanded 4/8 at both widths with and without a metric, category table, hover). Findings: 0 blocker, 4 medium (1, 2, 3, 7), 5 low (4, 5, 6, 8, 9).
+
+## Re-review (commits e3cfbf84, 66f7c643)
+
+Gate, run by the reviewer through heavy.sh: `npm run check` all green (Vitest 1188/1188, no flake this time), `npm run build` OK, Playwright compare + shell + visual-language + run-detail: 432 passed, 8 skipped (session-auth specs), 0 failed. Hover audit PENDING still empty. Fresh screenshots at 1440 and 390 for 4 and 8 runs, cohort, expanded item with metric open, Categories Table.
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Run card head wraps | Fixed: one row at 1440 (4 and 8 runs) and at 390. Side effect: names now truncate hard ("baseline-gpt...", "cand-a-so...") even where there is room; the status pill wins the space. Low, see below. |
+| 2 | 4 expanded cards at 1440 | Fixed: all four fit, metric details still aligned under each card. |
+| 3 | Category chips and table template | Fixed: chips sit under the description above the cards; in Table view complexity and domain share one column template (columns line up). |
+| 4 | Phone sticky bar | Fixed: nav plus a single "View" popover and the count on one row at 390. |
+| L1 | Averages Errors row clipped at 8 runs | Fixed (wraps to two lines, readable). |
+| L2 | Run colours 6 to 8 close to 1 to 3 | Unchanged, accepted (letters and names disambiguate). |
+| L3 | Cohort run cards lack side | Fixed: "SIDE A" / "SIDE B" tag on each card. Cost: in cohort mode names truncate to 5 to 8 characters ("basel...", "cand-a-..."), so the identity (name) is lost on the card. |
+| L4 | 2 runs: no baseline select | Not changed (matches round 1); still needs a product decision. |
+| L5 | Noise glyph and baseline alignment | Glyph now sits under the delta; baseline cells are vertically centred while run columns are top-aligned, a small remaining difference. |
+
+New low items: (a) let the run name keep priority over the status pill and the side tag (shorten or drop the pill text to a dot at narrow widths, or move the side tag to the strip); (b) baseline column cell alignment.
+
+### Merge conflicts with the UI-redesign tip
+`git merge-tree` of this branch with UI-redesign reports content conflicts in:
+- `frontend/src/features/compare/components/RunCards.tsx` (EntityTag from runs-polish against RunTag/card head here)
+- `frontend/src/ui/DataTable/cells/cells.tsx`
+- `frontend/src/ui/DataTable/cells/cells.module.css`
+- `frontend/README.md`
+`docs/DESIGN_LANGUAGE.md` and `frontend/e2e/visual-language/hover-audit.spec.ts` auto-merge but should be re-read.
+
+### Verdict
+PASS. All four mediums are fixed and verified; the gate is green. Remaining items are low (name truncation with side tag and status pill, 2-run baseline, baseline cell alignment) and can ride along with the merge resolution of RunCards.tsx.
