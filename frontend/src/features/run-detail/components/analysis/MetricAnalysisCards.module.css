@@ -1,4 +1,17 @@
-/* Root cause cards and the issue dialog form. */
+/* Root cause: one closed Disclosure holding a hairline row per metric; and the issue dialog form. */
+.rootCause {
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.metricRow {
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.metricRow:first-child {
+  border-block-start: 0;
+}
+
 .stack {
   display: flex;
   flex-direction: column;
@@ -14,8 +27,8 @@
 .title {
   flex: 1;
   margin: 0;
-  font-size: var(--font-md);
-  font-weight: 600;
+  font-size: var(--font-base);
+  font-weight: 650;
   color: var(--text-primary);
 }
 

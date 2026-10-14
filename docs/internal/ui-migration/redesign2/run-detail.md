@@ -543,3 +543,21 @@ keep `data-testid` and `data-kind` attributes on the new nodes to avoid churn. (
 8. New primitives: `FieldRow`, `StructuredValue`, `SplitPane`; extended: `DataTable detailFit`, `StatStrip group`, `ScoreBar marker`, `Drawer eyebrow/meta/scrim`, `Icon` span glyphs.
 9. Estimate about 63 h (4 h optional); 3 parallel tracks (items track about 29 h, trace drawer 10 h, sections 20 h); seeds for an Arabic multi-pass JSON run and a many-categories run are in the scratchpad (`rd2/seed2.ts`, `seed3.ts`) and must be ported.
 10. Defaults for open questions: Q1 yes, Q2 yes 76ch, Q3 Steps table only, Q4 Deep and Repeat single (Latency keeps pair), Q5 one key by default with "+", Q6 yes pass accents, Q7 no Compare view, Q8 rows, Q9 yes auto-collapse, Q10 keep Metrics tab, Q11 differs tags now and compare-by-key later.
+
+## Implementation notes and Deferred (2026-10-14)
+
+Implemented on `ui/redesign2-run-detail`: items track (T2 `DataTable detailFit`, T3 `FieldRow`, T4 `StructuredValue`, T5 item detail, T6 metric chips with
+full-width panels, T7 pass columns with accents, labelled Trace and "differs from Pass 1" tags), trace drawer (T14: `SplitPane`, `Drawer` slots, kind icons, header
+chips with ID copy, labelled I/O blocks with expand dialog, Tree / Detail switch under 900 px), sections (T8 hero, T9 repeat, T10 deep, T11 categories, T12 errors,
+T13 steps), seeds (T15), docs (T1, T16). Visual-language A2 applied: hero status rail and `Tag kind="task"`, series chips for passes, band bars in categories,
+severity glyphs for errors, kind icon tiles in the trace tree, hover on every target, scatter quadrant labels moved to the legend and the latency histogram bulk
+made visible at 390 px.
+
+Deviations and deferred:
+
+- **Compare keeps its local `.detailHold`** (`features/compare/.../ItemList.module.css`). `detailFit` is in `DataTable` and compare is wrapped by it (harmless: the inner
+  hold is the same width); dropping the local copy touches `features/compare`, which another agent edits. Remove it at merge (about 0.5 h).
+- **T7c "compare by key across passes"** (optional, +4 h) is not done; the "differs from / same as Pass 1" tags (T7b) are.
+- **Categories "Cards | Compare" (Q7)** is not restored, as the default says.
+- `StructuredValue` renders uniform object arrays through the compact `DataTable`; `RepeatTab`'s two raw tables stay on the design-test allow-list (second pass).
+- The category chip row uses `Chip onPress` modifiers (Shift/Cmd/Ctrl-click adds a key) and a "+" icon button per unselected key.

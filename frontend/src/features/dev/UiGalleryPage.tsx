@@ -42,6 +42,9 @@ import {
   SectionHeader,
   SegmentedControl,
   Stepper,
+  SplitPane,
+  FieldRow,
+  StructuredValue,
   Collapse,
   Select,
   Skeleton,
@@ -120,6 +123,7 @@ export default function UiGalleryPage() {
   const [dangerConfirm, setDangerConfirm] = useState(false);
   const [form, setForm] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const [wideDrawer, setWideDrawer] = useState(false);
   const [seg, setSeg] = useState<'all' | 'official' | 'local'>('all');
   const [tab, setTab] = useState('general');
   const [page, setPage] = useState(3);
@@ -652,6 +656,7 @@ export default function UiGalleryPage() {
             </Button>
             <Button onPress={() => setForm(true)}>Form dialog</Button>
             <Button onPress={() => setDrawer(true)}>Drawer</Button>
+            <Button onPress={() => setWideDrawer(true)}>Drawer (eyebrow, meta, heavy scrim, split)</Button>
             <Button onPress={() => toast.show('Could not save', { tone: 'error' })}>Error toast</Button>
             <Button
               onPress={() =>
@@ -760,6 +765,89 @@ export default function UiGalleryPage() {
               <JsonPreview value={{ a: 1, b: [1, 2] }} title="nested" />
             </Stack>
           </Drawer>
+          <Drawer
+            open={wideDrawer}
+            onOpenChange={setWideDrawer}
+            eyebrow="Trace"
+            title="run-0042 · item-0007"
+            meta={
+              <>
+                <Tag kind="data">8 spans</Tag>
+                <Tag kind="data" tone="info">
+                  800 tokens
+                </Tag>
+              </>
+            }
+            scrim="heavy"
+            width={Math.min(1320, typeof window === 'undefined' ? 1320 : window.innerWidth * 0.97)}
+          >
+            <SplitPane
+              label="Resize list and detail"
+              storageKey="qym:gallery-split"
+              start={
+                <Text variant="base">
+                  Start pane. Drag the divider, use the arrow keys, Home / End, or double click.
+                </Text>
+              }
+              end={<Text variant="base">End pane.</Text>}
+            />
+          </Drawer>
+        </Case>
+        <Case label="SplitPane (separator: drag, Left/Right 2%, Home/End, double click resets)">
+          <div style={{ height: 120, border: '1px solid var(--border-subtle)' }}>
+            <SplitPane
+              label="Resize gallery panes"
+              start={<Text variant="base">Start</Text>}
+              end={<Text variant="base">End</Text>}
+            />
+          </div>
+        </Case>
+        <Case label="FieldRow (label and body adjacent; the row mirrors for Arabic)">
+          <Stack gap="sm">
+            <FieldRow
+              label="Input"
+              text="What does clause 1 require?"
+              actions={<CopyButton text="x" label="Copy input" />}
+            >
+              <TextBlock text="What does clause 1 of the finance policy require?" />
+            </FieldRow>
+            <FieldRow
+              label="Input"
+              text="ما هي شروط الحصول على تمويل عقاري؟"
+              actions={<CopyButton text="x" label="Copy input" />}
+            >
+              <TextBlock text="ما هي شروط الحصول على تمويل عقاري وفق الضوابط الحالية؟" />
+            </FieldRow>
+            <FieldRow label="Output" rail="danger" measure="full">
+              <TextBlock text="Wrong ORDER BY column" />
+            </FieldRow>
+          </Stack>
+        </Case>
+        <Case label="StructuredValue (JSON: one section per key)">
+          <StructuredValue
+            label="Gallery output"
+            value={{
+              answer: 'عاصمة المملكة العربية السعودية هي الرياض.',
+              reasoning: 'Looked up the capital.',
+              citations: [
+                { doc: 'policy-2026', page: 3, score: 0.91 },
+                { doc: 'products-guide', page: 4, score: 0.62 },
+              ],
+              confidence: 0.75,
+              tags: ['a', 'b'],
+              meta: { source: 'kb', nested: { deep: true } },
+            }}
+          />
+        </Case>
+        <Case label="Span kind glyphs">
+          <Stack direction="row" gap="md" wrap>
+            {(['agent', 'retriever', 'llm', 'tool', 'chain', 'guardrail', 'embedding'] as const).map((n) => (
+              <span key={n} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Icon name={n} size={16} />
+                <Text variant="sm">{n}</Text>
+              </span>
+            ))}
+          </Stack>
         </Case>
       </Section>
       <Section id="report" title="Report page">

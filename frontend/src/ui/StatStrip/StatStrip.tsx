@@ -33,6 +33,8 @@ export interface StatStripItem {
   bar?: number;
   /** Score band 1..5 for the bar (direction-aware, from `metricBand`); without it the bar takes `tone`. */
   barBand?: 1 | 2 | 3 | 4 | 5;
+  /** Group label: consecutive items sharing a group sit under one small heading, groups divided by a hairline. */
+  group?: string;
 }
 
 export interface StatStripProps {
@@ -112,6 +114,35 @@ function Cell({ item, live, variant }: { item: StatStripItem; live: boolean; var
 
 /** Connected statistics band (DESIGN_LANGUAGE §3 "Connected statistics"). */
 export function StatStrip({ items, variant = 'band', live = false, ...rest }: StatStripProps) {
+  if (items.some((i) => i.group)) {
+    const groups: { name: string; items: StatStripItem[] }[] = [];
+    for (const item of items) {
+      const name = item.group ?? '';
+      const last = groups[groups.length - 1];
+      if (last && last.name === name) last.items.push(item);
+      else groups.push({ name, items: [item] });
+    }
+    return (
+      <div className={styles.strip} data-variant={variant} data-grouped="" role="group" {...rest}>
+        {groups.map((g, gi) => (
+          <div
+            key={`${g.name}-${gi}`}
+            className={styles.group}
+            role="group"
+            aria-label={g.name || undefined}
+            style={{ flexGrow: g.items.length }}
+          >
+            {g.name ? <span className={styles.groupLabel}>{g.name}</span> : null}
+            <div className={styles.groupCells}>
+              {g.items.map((item, i) => (
+                <Cell key={item.key ?? i} item={item} live={live} variant={variant} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className={styles.strip} data-variant={variant} role="group" {...rest}>
       {items.map((item, i) => (

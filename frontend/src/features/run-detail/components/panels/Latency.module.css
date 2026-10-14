@@ -100,8 +100,8 @@
   align-items: flex-end;
   width: 100%;
   border-radius: 4px 4px 0 0;
-  /* Bulk is neutral; only the slow tail carries a tone (p90 yellow, p95 orange). */
-  background: var(--bg-active);
+  /* Bulk is neutral but must stay visible on a phone (3:1 against the card); only the slow tail carries a tone. */
+  background: color-mix(in srgb, var(--text-secondary) 45%, var(--bg-surface));
   overflow: hidden;
   transform-origin: bottom;
   transition: height var(--motion-fill) var(--ease-out);

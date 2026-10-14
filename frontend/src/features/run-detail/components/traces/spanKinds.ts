@@ -1,3 +1,4 @@
+import type { IconName } from '@/ui';
 import type { SpanKind } from '../../lib/traceTree';
 
 export const KIND_TONE: Record<SpanKind, string> = {
@@ -34,4 +35,16 @@ export const KIND_LABEL: Record<SpanKind, string> = {
   EMBED: 'Embedding',
   GUARDRAIL: 'Guardrail',
   DEFAULT: 'Span',
+};
+
+export const KIND_ICON: Record<SpanKind, IconName> = {
+  LLM: 'llm',
+  TOOL: 'tool',
+  AGENT: 'agent',
+  CHAIN: 'chain',
+  EVALUATOR: 'check',
+  RETRIEVER: 'retriever',
+  EMBED: 'embedding',
+  GUARDRAIL: 'guardrail',
+  DEFAULT: 'list',
 };

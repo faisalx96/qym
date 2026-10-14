@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   showItems,
   itemButton,
+  openRootCause,
   openRun,
   params,
   scrollTop,
@@ -185,15 +186,16 @@ test.describe('score edits (scenario 7, J8)', () => {
     await itemButton(page, 5).click();
     const c = card(page, 'item-0005');
     const chip = c.locator('[role=listitem][data-metric=quality]');
+    const panel = c.locator('section[data-metric=quality]');
     await expect(chip).toBeVisible();
     await expect(chip).not.toContainText('edited');
     await chip.getByRole('button', { name: 'Edit quality score' }).click();
-    const input = chip.getByRole('textbox', { name: 'New quality score' });
+    const input = panel.getByRole('textbox', { name: 'New quality score' });
     await input.fill('0.5');
-    await chip.getByRole('button', { name: 'Save' }).click();
+    await panel.getByRole('button', { name: 'Save' }).click();
     await expect(chip).toContainText('50');
     await expect(chip).toContainText('edited');
-    await expect(chip.getByRole('textbox')).toHaveCount(0);
+    await expect(panel.getByRole('textbox')).toHaveCount(0);
     // persisted: survives a reload
     await page.reload();
     await expect(card(page, 'item-0005').locator('[role=listitem][data-metric=quality]')).toContainText(
@@ -202,7 +204,7 @@ test.describe('score edits (scenario 7, J8)', () => {
     // reset to the scorer value
     const chip2 = card(page, 'item-0005').locator('[role=listitem][data-metric=quality]');
     await chip2.getByRole('button', { name: 'Edit quality score' }).click();
-    await chip2.getByRole('button', { name: 'Reset to scorer value' }).click();
+    await panel.getByRole('button', { name: 'Reset to scorer value' }).click();
     await expect(chip2).not.toContainText('edited');
   });
 
@@ -210,13 +212,14 @@ test.describe('score edits (scenario 7, J8)', () => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 6).click();
     const chip = card(page, 'item-0006').locator('[role=listitem][data-metric=quality]');
+    const panel = card(page, 'item-0006').locator('section[data-metric=quality]');
     await chip.getByRole('button', { name: 'Edit quality score' }).click();
-    await chip.getByRole('textbox', { name: 'New quality score' }).fill('banana');
-    await chip.getByRole('button', { name: 'Save' }).click();
-    await expect(chip.getByRole('alert')).toBeVisible();
-    await expect(chip.getByRole('textbox')).toBeVisible();
-    await chip.getByRole('textbox').press('Escape');
-    await expect(chip.getByRole('textbox')).toHaveCount(0);
+    await panel.getByRole('textbox', { name: 'New quality score' }).fill('banana');
+    await panel.getByRole('button', { name: 'Save' }).click();
+    await expect(panel.getByRole('alert')).toBeVisible();
+    await expect(panel.getByRole('textbox')).toBeVisible();
+    await panel.getByRole('textbox').press('Escape');
+    await expect(panel.getByRole('textbox')).toHaveCount(0);
   });
 
   test('a 409 keeps the editor open and shows the message', async ({ page }) => {
@@ -226,11 +229,12 @@ test.describe('score edits (scenario 7, J8)', () => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 7).click();
     const chip = card(page, 'item-0007').locator('[role=listitem][data-metric=quality]');
+    const panel = card(page, 'item-0007').locator('section[data-metric=quality]');
     await chip.getByRole('button', { name: 'Edit quality score' }).click();
-    await chip.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
-    await chip.getByRole('button', { name: 'Save' }).click();
-    await expect(chip.getByRole('alert')).toContainText('changed elsewhere');
-    await expect(chip.getByRole('textbox')).toBeVisible();
+    await panel.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
+    await panel.getByRole('button', { name: 'Save' }).click();
+    await expect(panel.getByRole('alert')).toContainText('changed elsewhere');
+    await expect(panel.getByRole('textbox')).toBeVisible();
     await expect(chip).not.toContainText('edited');
   });
 
@@ -288,6 +292,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 3).click(); // item-0003: quality 60.5% < 70% => failing
     const c = card(page, 'item-0003');
+    await openRootCause(c);
     const rc = c.locator('[data-testid=metric-analysis-card][data-metric=quality]');
     await expect(rc).toBeVisible();
     await expect(rc).toContainText('No issues recorded');
@@ -327,6 +332,7 @@ test.describe('root-cause issues (scenario 9)', () => {
   test('an issue can be edited and deleted', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 4).click();
+    await openRootCause(card(page, 'item-0004'));
     const rc = card(page, 'item-0004').locator('[data-testid=metric-analysis-card][data-metric=exact_match]');
     await rc.getByRole('button', { name: '+ Add issue' }).click();
     const dlg = page.getByTestId('issue-dialog');
@@ -353,6 +359,7 @@ test.describe('root-cause issues (scenario 9)', () => {
   test('saving without a category shows a validation message', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 9).click();
+    await openRootCause(card(page, 'item-0009'));
     const rc = card(page, 'item-0009').locator('[data-testid=metric-analysis-card][data-metric=quality]');
     await rc.getByRole('button', { name: '+ Add issue' }).click();
     const dlg = page.getByTestId('issue-dialog');
@@ -378,6 +385,7 @@ test.describe('root-cause issues (scenario 9)', () => {
     // sql-005 fails every pass on its score: its failing metric card offers an issue
     await openRun(page, s.slug, repeat, 'pass=2&item=sql-005');
     const c3 = card(page, 'sql-005');
+    await openRootCause(c3);
     const rc = c3.locator('[data-testid=metric-analysis-card]').first();
     await expect(rc).toBeVisible();
     await rc.getByRole('button', { name: '+ Add issue' }).click();

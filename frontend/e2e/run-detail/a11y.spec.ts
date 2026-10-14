@@ -6,6 +6,7 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   axeSeriousViolations,
   describeViolations,
+  openRootCause,
   openRun,
   seedClassic,
   seedProject,
@@ -89,6 +90,7 @@ test.describe('axe', () => {
   test('issue dialog', async ({ page }) => {
     await openRun(page, s.slug, classic, 'item=item-0003');
     const card = page.locator('[data-testid=item-card][data-item-id="item-0003"]');
+    await openRootCause(card);
     await card.getByRole('button', { name: '+ Add issue' }).first().click();
     await expect(page.getByTestId('issue-dialog')).toBeVisible();
     await audit(page, 'issue dialog', '[role=dialog]');

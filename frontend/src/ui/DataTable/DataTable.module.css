@@ -147,6 +147,20 @@
 }
 
 /* Page-scroller sticky header: cells are translated by --head-shift (set from the scroll handler). */
+.card .card .table .tbody > tr > td {
+  /* a table inside an expanded detail keeps its own density: the outer table's tall rule must not widen its rows */
+  height: var(--row-h);
+}
+
+.card .card .table[data-tall] .tbody > tr > td {
+  height: max(var(--row-h), var(--row-comfortable));
+}
+
+.table:not([data-shift]) {
+  /* a table nested in an expanded detail must not inherit the outer header's sticky shift */
+  --head-shift: 0px;
+}
+
 .table[data-shift] .thead th {
   transform: translateY(var(--head-shift, 0px));
   z-index: 3;
@@ -560,6 +574,16 @@
 /* `clip` (not `hidden`) so a sticky panel inside still sticks to the scroller. */
 .tbody td.detailCell {
   overflow: clip;
+}
+
+/* detailFit="viewport": the expanded detail is as wide as the visible scroller and stays put while the columns scroll sideways */
+.detailHold {
+  position: sticky;
+  inset-inline-start: 0;
+  inline-size: var(--scroller-w, 100%);
+  max-inline-size: 100%;
+  box-sizing: border-box;
+  contain: layout;
 }
 
 /* One continuous rail above the nested cards (an inset shadow is painted under their backgrounds). */

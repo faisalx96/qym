@@ -22,23 +22,38 @@
 
 .cols {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
+  gap: var(--space-lg);
 }
 
 .col {
+  --pass-color: var(--chart-1);
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   min-width: 0;
-  padding: var(--space-sm);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
+  padding-inline-start: var(--space-md);
+  border-inline-start: 2px solid var(--pass-color);
+}
+
+.col[data-pass='2'] {
+  --pass-color: var(--chart-2);
+}
+
+.col[data-pass='3'] {
+  --pass-color: var(--chart-3);
+}
+
+.col[data-pass='4'] {
+  --pass-color: var(--chart-4);
+}
+
+.col[data-pass='5'] {
+  --pass-color: var(--chart-5);
 }
 
 .col[data-status='error'] {
-  border-color: var(--error);
+  border-inline-start-color: var(--error);
 }
 
 .colHead {
@@ -49,8 +64,8 @@
 }
 
 .passLabel {
-  font-size: var(--font-base);
-  font-weight: 600;
+  font-size: var(--font-md);
+  font-weight: 650;
   color: var(--text-primary);
 }
 
@@ -62,64 +77,19 @@
 
 .actions {
   display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   margin-inline-start: auto;
 }
 
 .output {
-  flex: 1;
-  min-height: 3em;
-  max-height: 14em;
-  overflow: auto;
+  min-width: 0;
   font-size: var(--font-base);
   color: var(--text-secondary);
 }
 
-.metrics {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.metric {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-xs);
-  border-radius: var(--control-radius);
-  background: var(--bg-surface);
-}
-
-.metricHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.metricName {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-base);
-  color: var(--text-primary);
-}
-
-.caret {
-  display: inline-flex;
-  padding: var(--space-xs);
-  border: 0;
-  border-radius: var(--control-radius);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.caret:focus-visible {
-  outline: 2px solid var(--accent-primary);
-}
-
 .compare {
+  margin-inline-start: auto;
   display: flex;
   align-items: flex-end;
   flex-wrap: wrap;

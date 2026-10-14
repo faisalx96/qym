@@ -1,7 +1,7 @@
 /** Expanded item: bodies (lazy), metadata, output, trace chips, metrics; repeat items show one column per pass. */
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { isItemTaskError } from '@/lib/metrics';
-import { Button, CopyButton, Icon, LinkButton, Tag, TextBlock } from '@/ui';
+import { Button, CopyButton, FieldRow, Icon, LinkButton, StructuredValue, Tag, parseStructured } from '@/ui';
 import { bodyText, formatCompact, formatStartedAt, itemLink } from '../../lib/itemText';
 import {
   HIDDEN_METADATA_KEYS,
@@ -19,26 +19,30 @@ import { MetricStrip } from './MetricStrip';
 import { PassColumns } from './PassColumns';
 import styles from './ItemCard.module.css';
 
-function Collapsible({ text, lines = 6 }: { text: string; lines?: number }) {
-  const { textMode } = useItemsUi();
-  const [open, setOpen] = useState(false);
-  const long = text.length > 400 || text.split('\n').length > lines;
+/** A series hue per metadata key so tags scan by kind without filled tiles. */
+function hueOf(key: string): number {
+  let h = 0;
+  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) % 5;
+  return h + 1;
+}
+
+function MetaTag({ k, children, title }: { k: string; children: React.ReactNode; title?: string }) {
   return (
-    <div>
-      <div
-        className={long && !open ? styles.clamped : undefined}
-        style={long && !open ? ({ ['--lines' as string]: lines } as React.CSSProperties) : undefined}
-      >
-        <TextBlock text={text} mode={textMode} />
-      </div>
-      {long ? (
-        <button type="button" className={styles.more} aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? 'Show less' : 'Show more'}
-        </button>
-      ) : null}
-    </div>
+    <Tag kind="data" title={title}>
+      <span className={styles.dot} data-hue={hueOf(k)} aria-hidden="true" />
+      {children}
+    </Tag>
   );
 }
+
+/** Plain strings pick their own direction; structured values read left to right with per-leaf direction. */
+function rowText(raw: unknown): string | undefined {
+  return typeof raw === 'string' && !raw.trim().startsWith('{') && !raw.trim().startsWith('[')
+    ? raw
+    : undefined;
+}
+
+const isStructured = (v: unknown): boolean => parseStructured(v).structured;
 
 export function TraceChips({ stats, retries }: { stats: RowTraceStats | null | undefined; retries: number }) {
   const ts = stats ?? {};
@@ -112,8 +116,10 @@ export function ItemCard({ row }: { row: Row }) {
     );
   }
   const link = itemLink(window.location.pathname, row.item_id, model.viewPass, window.location.origin);
-  const input = bodyText(row.input_full ?? row.input ?? row.input_preview);
-  const expected = bodyText(row.expected_full ?? row.expected);
+  const rawInput = row.input_full ?? row.input ?? row.input_preview;
+  const rawExpected = row.expected_full ?? row.expected;
+  const input = bodyText(rawInput);
+  const expected = bodyText(rawExpected);
   const output = isItemTaskError(row)
     ? `ERROR: ${row.error || row.__execution_error || 'The task failed'}`
     : bodyText(row.output_full ?? row.output);
@@ -138,36 +144,48 @@ export function ItemCard({ row }: { row: Row }) {
       {run.items_restricted ? (
         <p className={styles.muted}>Item bodies are visible to admins only on a private test set.</p>
       ) : null}
-      <section className={styles.block} data-kind="input">
-        <header className={styles.blockHead}>
-          <span className={styles.label}>Input</span>
-          <span className={styles.actions}>
-            <CopyButton text={link} label="Copy link" />
-            <CopyButton text={input} label="Copy input" />
-          </span>
-        </header>
-        <TextBlock text={input} mode={ui.textMode} />
-      </section>
-      {expected ? (
-        <section className={styles.block} data-kind="expected">
-          <header className={styles.blockHead}>
-            <span className={styles.label}>Expected output</span>
-            <CopyButton text={expected} label="Copy expected output" />
-          </header>
-          <Collapsible text={expected} />
-        </section>
-      ) : null}
+      <div className={styles.fields}>
+        <FieldRow
+          label="Input"
+          text={rowText(rawInput)}
+          dir={rowText(rawInput) === undefined ? 'ltr' : 'auto'}
+          measure={isStructured(rawInput) ? 'full' : 'prose'}
+          actions={
+            <>
+              <CopyButton text={link} icon="link" label="Copy link" />
+              <CopyButton text={input} label="Copy input" />
+            </>
+          }
+        >
+          <div data-kind="input">
+            <StructuredValue value={rawInput} label="Input" textMode={ui.textMode} />
+          </div>
+        </FieldRow>
+        {expected ? (
+          <FieldRow
+            label="Expected output"
+            text={rowText(rawExpected)}
+            dir={rowText(rawExpected) === undefined ? 'ltr' : 'auto'}
+            measure={isStructured(rawExpected) ? 'full' : 'prose'}
+            actions={<CopyButton text={expected} label="Copy expected output" />}
+          >
+            <div data-kind="expected">
+              <StructuredValue value={rawExpected} label="Expected output" textMode={ui.textMode} />
+            </div>
+          </FieldRow>
+        ) : null}
+      </div>
       {badges.length || tags.length ? (
         <div className={styles.tags}>
           {badges.map(({ k, v }) => (
-            <Tag key={`${k}:${v}`} kind="data" title={k}>
+            <MetaTag key={`${k}:${v}`} k={k} title={k}>
               {v}
-            </Tag>
+            </MetaTag>
           ))}
           {tags.map(([k, v]) => (
-            <Tag key={k} kind="data">
+            <MetaTag key={k} k={k}>
               {k}: {itemMetadataDisplayValue(v)}
-            </Tag>
+            </MetaTag>
           ))}
         </div>
       ) : null}
@@ -182,7 +200,18 @@ export function ItemCard({ row }: { row: Row }) {
       {repeatAggregate ? (
         <PassColumns row={row} />
       ) : (
-        <section className={styles.block} data-kind="output">
+        <section
+          className={styles.output}
+          data-kind="output"
+          data-rail={
+            status.kind === 'pass'
+              ? 'success'
+              : status.kind === 'fail' || status.kind === 'error'
+                ? 'danger'
+                : undefined
+          }
+          aria-label="Output"
+        >
           <header className={styles.blockHead}>
             <span className={styles.label}>Output</span>
             <Tag
@@ -234,7 +263,13 @@ export function ItemCard({ row }: { row: Row }) {
               of Execution success and of the means.
             </p>
           ) : (
-            <Collapsible text={output} lines={12} />
+            <div className={styles.outputBody}>
+              <StructuredValue
+                value={isItemTaskError(row) ? output : (row.output_full ?? row.output)}
+                label="Output"
+                textMode={ui.textMode}
+              />
+            </div>
           )}
         </section>
       )}

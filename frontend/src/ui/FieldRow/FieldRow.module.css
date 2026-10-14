@@ -1,0 +1,71 @@
+/* Field row recipe: label | body | actions on one logical row; hairline between rows; container-query stacking. */
+.host {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: var(--field-label-width) minmax(0, var(--field-measure)) 1fr;
+  grid-template-areas: 'label body actions';
+  column-gap: var(--space-md);
+  align-items: start;
+  min-width: 0;
+  padding-block: var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.row[data-measure='full'] {
+  grid-template-columns: var(--field-label-width) minmax(0, 1fr) auto;
+}
+
+.row[data-rail] {
+  border-inline-start: var(--rail-width) solid var(--tone);
+  padding-inline-start: var(--space-md);
+}
+
+.row[data-rail='success'] {
+  --tone: var(--success);
+}
+
+.row[data-rail='danger'] {
+  --tone: var(--error);
+}
+
+.row[data-rail='info'] {
+  --tone: var(--info);
+}
+
+.label {
+  grid-area: label;
+  padding-block-start: var(--space-xs);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.body {
+  grid-area: body;
+  min-width: 0;
+}
+
+.actions {
+  grid-area: actions;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+@container (max-width: 640px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'label actions'
+      'body body';
+    row-gap: var(--space-xs);
+  }
+}

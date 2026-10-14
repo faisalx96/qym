@@ -1,58 +1,119 @@
-/* Metric chips of an item card, judge metadata, inline score editor. */
+/* Metric chips of an item card (outlined, wrapping), full-width detail panels, inline score editor. */
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
 .strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  padding-block-end: var(--space-xs);
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-sm);
 }
 
 .chip {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-xs);
   min-width: 0;
-  padding: var(--space-xs) var(--space-sm);
+  padding-inline: var(--space-sm);
+  min-height: var(--chip-height);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  background: transparent;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.chip:hover {
+  border-color: var(--border-default);
+}
+
+.chip[data-open] {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .chip[data-selected] {
   box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 
-.chipHead {
-  display: flex;
+.chipMain {
+  display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
-  padding-block: var(--space-xs);
-}
-
-.caret {
-  display: inline-flex;
-  padding: var(--space-xs);
+  min-width: 0;
+  padding: 0;
   border: 0;
   border-radius: var(--control-radius);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-primary);
+  font: inherit;
   cursor: pointer;
 }
 
-.caret:hover {
+.chipMain[data-static] {
+  cursor: default;
+}
+
+.chipMain:hover .name {
   color: var(--accent-primary);
 }
 
-.caret:focus-visible {
+.chipMain[data-static]:hover .name {
+  color: var(--text-primary);
+}
+
+.chipMain:focus-visible {
   outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.caret {
+  flex: none;
+  color: var(--text-muted);
 }
 
 .name {
-  flex: 1;
   min-width: 0;
+  max-inline-size: 24ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--font-base);
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+}
+
+.panelTitle {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.metaBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
 }
 
 .editor {
@@ -66,33 +127,6 @@
   flex-basis: 100%;
   font-size: var(--font-sm);
   color: var(--error);
-}
-
-.metaList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  margin: 0;
-  padding-top: var(--space-xs);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.metaRow {
-  display: grid;
-  grid-template-columns: minmax(80px, 120px) 1fr;
-  gap: var(--space-sm);
-  font-size: var(--font-base);
-}
-
-.metaRow dt {
-  color: var(--text-muted);
-}
-
-.metaRow dd {
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: var(--text-secondary);
 }
 
 .metaEmpty {

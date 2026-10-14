@@ -8,6 +8,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { PERCENT, seedCustomRun, type CustomItem } from './cutover-support';
 import {
   itemButton,
+  openRootCause,
   openRun,
   scrollTop,
   seedClassic,
@@ -181,6 +182,7 @@ test.describe('failed rows', () => {
     await openRun(page, s.slug, classic, 'item=item-0003');
     const c = card(page, 'item-0003');
     await expect(c.locator('[role=listitem][data-metric=quality]')).toBeVisible();
+    await openRootCause(c);
     await expect(c.getByTestId('metric-analysis-card').first()).toBeVisible();
   });
 });
@@ -216,6 +218,7 @@ test.describe('Approve gating by the server review status', () => {
   test('a rejected issue offers no Approve and says Rejected', async ({ page }) => {
     await stub(page, 'rejected');
     await openRun(page, s.slug, classic, 'item=item-0003');
+    await openRootCause(card(page, 'item-0003'));
     const issue = card(page, 'item-0003').getByTestId('issue');
     await expect(issue).toContainText('Rejected');
     await expect(issue.getByRole('button', { name: /Approve issue/ })).toHaveCount(0);
@@ -226,11 +229,13 @@ test.describe('Approve gating by the server review status', () => {
   test('a decided review wins over a stale pending issue; a pending one keeps Approve', async ({ page }) => {
     await stub(page, 'approved');
     await openRun(page, s.slug, classic, 'item=item-0003');
+    await openRootCause(card(page, 'item-0003'));
     await expect(card(page, 'item-0003').getByTestId('issue')).toContainText('Approved');
     await expect(card(page, 'item-0003').getByRole('button', { name: /Approve issue/ })).toHaveCount(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await stub(page, 'pending');
     await openRun(page, s.slug, classic, 'item=item-0003');
+    await openRootCause(card(page, 'item-0003'));
     await expect(card(page, 'item-0003').getByRole('button', { name: /Approve issue/ })).toBeVisible();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
@@ -242,9 +247,10 @@ test.describe('scores', () => {
   }) => {
     await openRun(page, s.slug, classic, 'item=item-0006');
     const chip = card(page, 'item-0006').locator('[role=listitem][data-metric=quality]');
+    const panel = card(page, 'item-0006').locator('section[data-metric=quality]');
     await chip.getByRole('button', { name: 'Edit quality score' }).click();
-    await chip.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
-    await chip.getByRole('button', { name: 'Save' }).click();
+    await panel.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
+    await panel.getByRole('button', { name: 'Save' }).click();
     const badge = chip.getByText('edited', { exact: true });
     await expect(badge).toBeVisible();
     const title = (await badge.getAttribute('title')) ?? '';
@@ -321,10 +327,11 @@ test.describe('repeat runs', () => {
     await expect(panel).toContainText('Probability that all k selected attempts pass.');
     await group.getByText('Average', { exact: true }).click();
     await expect(panel).toContainText('Average score as observed passes are added.');
-    await expect(panel.locator('[data-stat=pass_at_k]')).toHaveAttribute(
-      'title',
-      /(≥\d+%|perfect score|best score)/,
-    );
+    await panel
+      .getByRole('button', { name: /Pass@\d/ })
+      .first()
+      .hover();
+    await expect(page.getByRole('tooltip')).toContainText(/(≥\d+%|perfect score|best score)/);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 

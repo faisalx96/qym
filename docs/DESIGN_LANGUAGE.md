@@ -346,6 +346,19 @@ The recipes, by intent:
   `prefers-reduced-motion`. `EmptyState` is for a successful empty result only:
   glyph icon in `--text-dim`, low opacity, title `--font-xl` / 650 / primary,
   body `--font-md` / muted, line-height 1.5 or more.
+- **Calm surface** (run detail, applies everywhere): a container (card, drawer, expanded item) is the only filled layer; inside
+  it at most one more fill level, reserved for code and JSON viewers, inputs and the selected or open state. Parts are
+  separated by a `--border-subtle` hairline and `--space-md` rhythm, never by nested tiles; colour carries status, band,
+  series (a pass is `--chart-1..3`) or a selected state only. Stats in a group are a `StatStrip` (`StatStripItem.group`
+  labels runs of cells), key/value groups a `KeyValueGrid`.
+- **Field row, structured value, split pane** (`FieldRow`, `StructuredValue`, `SplitPane`): `FieldRow` puts a label, its
+  body (reading measure `--field-measure`, 76ch) and actions on one logical row whose `dir` follows the content, so an
+  Arabic input mirrors with the label next to the text; under 640px of container width the label stacks above. An object,
+  array or JSON string is a `StructuredValue`: one hairline section per top-level key (collapsible, copyable, typed body:
+  text, chips, table, tree), Sections | Raw (`localStorage qym:json-view`), expand all, a key index above four keys.
+  `SplitPane` is the window splitter (`role="separator"`, drag, Left/Right 2%, Home/End, double click resets, persisted in
+  a per-viewer key). `DataTable detailFit="viewport"` (default) keeps an expanded detail as wide as the visible scroller;
+  `ScoreBar marker` draws a baseline tick; `Drawer` takes `eyebrow`, `meta` and `scrim="heavy"`.
 - **Text blocks** (`TextBlock`, `JsonViewer`, `KeyValueGrid`): see Text
   direction above; code and JSON are mono. `KeyValueGrid variant="tiles"` puts each pair on a `--bg-elevated`
   tile (the run "Execution context"); an item `kind` of `config` or `metadata` adds a suffix and the `meta` tone,

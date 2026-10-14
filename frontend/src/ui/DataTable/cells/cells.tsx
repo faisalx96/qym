@@ -35,12 +35,21 @@ export interface ScoreBarProps {
   index?: number;
   /** Flash a faint tint when the value changes (a live value on a running run). */
   live?: boolean;
+  /** A baseline tick on the track in the same units as `value` (e.g. the overall average of a category table). */
+  marker?: number | null;
+  /** Accessible/hover name of the marker (default "Overall average"). */
+  markerLabel?: string;
 }
 
 function normDirection(d: ScoreBarProps['direction']): MetricDirection {
   if (d === 'higher' || d === 'maximize') return 'maximize';
   if (d === 'lower' || d === 'minimize') return 'minimize';
   return null;
+}
+
+function markerPct(marker: number, max: number | undefined): number {
+  const ratio = max === undefined ? marker : max > 0 ? marker / max : 0;
+  return Math.max(0, Math.min(1, ratio)) * 100;
 }
 
 /** Track + fill + value. Errors show the warning glyph, never a bar. */
@@ -57,6 +66,8 @@ export function ScoreBar({
   size = 'sm',
   index,
   live,
+  marker,
+  markerLabel = 'Overall average',
 }: ScoreBarProps) {
   const enter = useEntrance();
   const flash = useFlashOnChange(value, live === true);
@@ -106,6 +117,14 @@ export function ScoreBar({
           <span className={styles.inText} aria-hidden="true">
             {label}
           </span>
+        ) : null}
+        {marker !== null && marker !== undefined && Number.isFinite(marker) ? (
+          <span
+            className={styles.marker}
+            style={{ insetInlineStart: `${markerPct(marker, max)}%` }}
+            title={markerLabel}
+            data-testid="score-marker"
+          />
         ) : null}
         <span
           className={styles.fill}

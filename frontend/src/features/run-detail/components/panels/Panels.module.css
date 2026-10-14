@@ -279,6 +279,13 @@
   }
 }
 
+/* One visual per row (Deep analysis, Repeat): sections stack at full width. */
+.single {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
 /* A pair whose columns share one height (latency histogram beside the scatter). */
 .pair {
   align-items: stretch;
@@ -300,4 +307,72 @@
   .cards[data-count='4'] {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+/* Repeat analysis: full-width visuals capped for wide screens, verdict line, best/worst cell tags. */
+.visuals {
+  max-inline-size: 1100px;
+}
+
+.verdict {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.cellTag {
+  margin-inline-start: var(--space-xs);
+}
+
+.table th[data-selected],
+.table td[data-selected] {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.table td[data-tone='danger'] {
+  color: var(--error-text);
+}
+
+/* Errors as rows: severity glyph (colour and shape), message, items, count. */
+.sev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--error);
+  font-size: var(--font-base);
+}
+
+.sev[data-kind='metric'] {
+  color: var(--metric-error);
+}
+
+.sev[data-kind='trace'] {
+  color: var(--warning);
+}
+
+.sev[data-kind='analysis'] {
+  color: var(--info);
+}
+
+.errMsg {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.errTitle {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.errDetail {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

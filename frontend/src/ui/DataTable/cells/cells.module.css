@@ -42,6 +42,16 @@
   overflow: hidden;
 }
 
+.marker {
+  position: absolute;
+  inset-block: 0;
+  z-index: 1;
+  inline-size: 2px;
+  margin-inline-start: -1px;
+  background: var(--text-primary);
+  pointer-events: none;
+}
+
 .fill {
   display: block;
   position: relative;

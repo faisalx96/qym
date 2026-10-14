@@ -39,17 +39,18 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
     .first()
     .locator('[role=listitem][data-metric=quality]');
   await expect(chip).toBeVisible();
+  const panel = page.locator('[data-testid=item-card]').first().locator('section[data-metric=quality]');
   await chip.getByRole('button', { name: 'Edit quality score' }).click();
-  await chip.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
+  await panel.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
   const refused = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
-  await chip.getByRole('button', { name: 'Save' }).click();
+  await panel.getByRole('button', { name: 'Save' }).click();
   const response = await refused;
   expect(response.status()).toBe(409);
   expect((response.request().postDataJSON() as { expected_pass_version: number }).expected_pass_version).toBe(
     1,
   );
-  await expect(chip.getByRole('alert')).toContainText('Passes changed');
-  await expect(chip.getByRole('textbox')).toBeVisible();
+  await expect(panel.getByRole('alert')).toContainText('Passes changed');
+  await expect(panel.getByRole('textbox')).toBeVisible();
 
   // fresh page: the remaining pass is reachable and its edit goes through under the new version
   await openRun(page, s.slug, runId);
@@ -65,10 +66,11 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
     .locator('[data-testid=item-card]')
     .first()
     .locator('[role=listitem][data-metric=quality]');
+  const freshPanel = page.locator('[data-testid=item-card]').first().locator('section[data-metric=quality]');
   await fresh.getByRole('button', { name: 'Edit quality score' }).click();
-  await fresh.getByRole('textbox', { name: 'New quality score' }).fill('0.25');
+  await freshPanel.getByRole('textbox', { name: 'New quality score' }).fill('0.25');
   const saved = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
-  await fresh.getByRole('button', { name: 'Save' }).click();
+  await freshPanel.getByRole('button', { name: 'Save' }).click();
   const ok = await saved;
   expect(ok.status()).toBe(200);
   const body = ok.request().postDataJSON() as { pass_number: number; expected_pass_version: number };

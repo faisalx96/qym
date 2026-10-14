@@ -1,12 +1,12 @@
 /* Run hero card (brief 04 J1): page-hero recipe + meta grid + execution context. */
 .hero {
+  min-width: 0;
+}
+
+.heroBody {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
 }
 
 .top {
@@ -146,6 +146,11 @@
   color: var(--accent-primary);
 }
 
+/* a link around a Tag keeps the tag's own colour: hover dims it instead */
+.metaLink:hover > * {
+  opacity: 0.8;
+}
+
 .datasetCell,
 .modelCell {
   display: inline-flex;
@@ -168,33 +173,11 @@
   letter-spacing: 0.05em;
 }
 
-.contextGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: var(--space-sm);
-  margin: 0;
-}
-
-.contextCell {
-  min-width: 0;
-  padding: var(--space-sm);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
-}
-
-.contextKey {
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}
-
-.contextVal {
-  margin: var(--space-xs) 0 0;
+.ctxVal {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: var(--font-base);
-  color: var(--text-primary);
 }
 
 .details {

@@ -186,10 +186,10 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
             basePath={basePath}
             expanded={heroExpanded}
             onToggleExpanded={toggleHero}
+            extra={<VersioningDetails run={run} flat />}
           />
           {heroExpanded ? (
             <>
-              <VersioningDetails run={run} />
               <ExperimentPanel run={run} slug={slug} />
             </>
           ) : null}

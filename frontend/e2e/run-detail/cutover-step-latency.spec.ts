@@ -49,6 +49,8 @@ async function mockSteps(page: Page, handler: (route: Route) => Promise<void> | 
   await page.route(/\/api\/runs\/step-latency\?/, handler);
 }
 const stepsRegion = (page: Page) => page.getByRole('region', { name: 'Steps' });
+/** Steps start collapsed (only the phase rows); open every group. */
+const expandAll = (page: Page) => stepsRegion(page).getByRole('button', { name: 'Expand all steps' }).click();
 
 test.describe('Steps (step latency)', () => {
   test('a zero-latency step and an errors-only step are kept; a step with no samples is dropped', async ({
@@ -81,6 +83,7 @@ test.describe('Steps (step latency)', () => {
       }),
     );
     await openRun(page, s.slug, classic, 'panel=latency');
+    await expandAll(page);
     const steps = stepsRegion(page);
     await expect(steps.getByText('llm:zero')).toBeVisible();
     await expect(steps.getByText('tool:broken')).toBeVisible();
@@ -119,6 +122,7 @@ test.describe('Steps (step latency)', () => {
       }),
     );
     await openRun(page, s.slug, classic, 'panel=latency');
+    await expandAll(page);
     await expect(stepsRegion(page).getByText(name)).toBeVisible();
     await expect(stepsRegion(page).locator('image')).toHaveCount(0);
     expect(await page.evaluate(() => (window as unknown as { injected?: boolean }).injected)).toBeUndefined();
@@ -135,15 +139,16 @@ test.describe('Steps (step latency)', () => {
     const header = steps.getByRole('button', { name: /Agent/ });
     // The phase row carries the parent bar's numbers (aria-label of its interval).
     await expect(steps.getByLabel('p5 900 ms, median 900 ms, p95 900 ms')).toBeVisible();
-    await expect(header).toHaveAttribute('aria-expanded', 'true');
-    await expect(steps.getByText('llm:test')).toBeVisible();
+    await expect(header).toHaveAttribute('aria-expanded', 'false');
+    await expect(steps.getByText('llm:test')).toHaveCount(0);
     await header.focus();
     await page.keyboard.press('Enter');
-    await expect(header).toHaveAttribute('aria-expanded', 'false');
+    await expect(header).toHaveAttribute('aria-expanded', 'true');
     await expect(header).toBeFocused();
-    await expect(steps.getByText('llm:test')).toHaveCount(0);
-    await page.keyboard.press('Enter');
     await expect(steps.getByText('llm:test')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(header).toHaveAttribute('aria-expanded', 'false');
+    await expect(steps.getByText('llm:test')).toHaveCount(0);
   });
 
   test('a 30s phase bar shares the axis with the step bars (fits inside the plot)', async ({ page }) => {
@@ -151,6 +156,7 @@ test.describe('Steps (step latency)', () => {
       route.fulfill({ json: payload({ groups: [group()], phases: [group({ n: 1 }, 30000)] }) }),
     );
     await openRun(page, s.slug, classic, 'panel=latency');
+    await expandAll(page);
     const table = page.getByRole('table', { name: 'Step latency by call site' });
     await expect(table.getByLabel('p5 30.0 s, median 30.0 s, p95 30.0 s')).toBeVisible();
     const box = await table.getByLabel('p5 30.0 s, median 30.0 s, p95 30.0 s').boundingBox();
@@ -182,6 +188,7 @@ test.describe('Steps (step latency)', () => {
       }),
     );
     await openRun(page, s.slug, classic, 'panel=latency');
+    await expandAll(page);
     const steps = stepsRegion(page);
     await steps.getByRole('radio', { name: 'By kind' }).click({ force: true });
     await expect(steps.getByText('LLM', { exact: true })).toBeVisible();
