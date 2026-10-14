@@ -634,6 +634,7 @@ ALLOWED = {
     ("DELETE", "/v1/admin/projects/{project_id}"): "admin lifecycle",
     # Reads sent as POST (large filters and id lists).
     ("POST", "/api/projects/{project_slug}/analysis-examples"): "read",
+    ("POST", "/api/analysis-jobs/active-runs"): "read (which of these runs have an analysis in flight)",
     ("POST", "/api/dashboard/models"): "read",
     ("POST", "/api/dashboard/runs"): "read",
     ("POST", "/api/dashboard/overview"): "read",

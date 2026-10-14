@@ -76,7 +76,11 @@ test('390px: the global sweep keeps the run count in the launch bar', async ({ p
   await page.setViewportSize({ width: 390, height: 844 });
   await routing(page);
   const table = page.getByRole('table', { name: 'role overrides' });
-  await table.getByRole('button', { name: 'Sweep values: All roles · max_tokens' }).click();
+  const trigger = table.getByRole('button', { name: 'Sweep values: All roles · max_tokens' });
+  // the sticky launch bar covers the bottom of a phone viewport: put the target in the upper third first
+  await trigger.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.evaluate(() => window.scrollBy(0, -200));
+  await trigger.click();
   const chips = table.locator('[data-global-sweep]');
   await chips.getByRole('button', { name: /edit sweep/i }).click();
   const editor = page.getByRole('dialog', { name: /Sweep values of/ });

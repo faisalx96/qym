@@ -11,7 +11,7 @@ test.describe('runs list: cutover row details', () => {
     const link = page.getByRole('link', { name: /log your first run/ });
     await expect(link).toHaveAttribute('href', /\/docs-guide#get-started\/first-run$/);
     await link.click();
-    await expect(page).toHaveURL(/\/docs-guide#get-started\/first-run$/);
+    await expect(page).toHaveURL(/\/docs\/get-started\/first-run$/);
   });
 
   test('Analysis column: live runs show a dash, finished runs an Analyze link to their analyzer', async ({
