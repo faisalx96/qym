@@ -241,7 +241,7 @@
 
 /* Repeat analysis: full-width visuals capped for wide screens, verdict line, best/worst cell tags. */
 .visuals {
-  max-inline-size: 1100px;
+  max-inline-size: var(--page-max-w);
 }
 
 .verdict {
