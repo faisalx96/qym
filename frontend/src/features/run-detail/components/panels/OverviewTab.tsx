@@ -11,10 +11,7 @@ import styles from './Panels.module.css';
 function MetricCard({ card }: { card: MetricCardModel }) {
   const filters = useChartFilters();
   return (
-    <Card as="article"
-      data-testid="metric-card"
-      data-metric={card.metric}
-    >
+    <Card as="article" data-testid="metric-card" data-metric={card.metric}>
       <div className={styles.metricStack}>
         <header className={styles.cardHead}>
           {card.avg !== null && card.kind !== 'numeric' ? (
