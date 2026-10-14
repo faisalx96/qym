@@ -1,4 +1,4 @@
-/* The one sticky bar (44px): section nav on the left, the view controls on the right. */
+/* The one sticky bar (--bar-nav-h): section nav on the left, the view controls on the right. */
 .bar {
   position: sticky;
   top: 0;
@@ -6,7 +6,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  min-height: var(--compare-bar-h);
+  min-height: var(--bar-nav-h);
+  box-sizing: border-box;
   padding: 0 var(--space-xs);
   background: var(--bg-base);
   border-bottom: 1px solid var(--border-subtle);

@@ -92,8 +92,11 @@
   --info-marker-size: 12px;
   --help-tooltip-width: 240px;
   --status-bar-height: 38px;
+  /* Sticky bars, two heights across the app: the section/navigation bar of a report (run detail, compare) and the
+     action bar (launch bar, analysis action rail, items toolbar). */
+  --bar-nav-h: 44px;
+  --bar-action-h: 56px;
   /* Auto-analysis action rail and reserved results slot (nothing may resize them on state change). */
-  --action-rail-height: 56px;
   --action-primary-width: 168px;
   --results-slot-min-height: 160px;
   --chars-tag-width: 96px;

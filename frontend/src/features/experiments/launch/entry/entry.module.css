@@ -308,6 +308,8 @@
   align-items: flex-end;
   gap: var(--space-md);
   flex-wrap: wrap;
+  min-height: var(--bar-action-h);
+  box-sizing: border-box;
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);

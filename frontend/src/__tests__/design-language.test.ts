@@ -431,6 +431,26 @@ describe('visual language (redesign round 2)', () => {
     ).toEqual([]);
   });
 
+  it('gives sticky bars one of two heights: --bar-nav-h (report section bars) or --bar-action-h (action bars)', () => {
+    const tokens = read(join(SRC, 'styles/tokens.css'));
+    expect(tokens).toMatch(/--bar-nav-h:\s*44px/);
+    expect(tokens).toMatch(/--bar-action-h:\s*56px/);
+    const nav = [
+      'features/run-detail/components/SectionNav.module.css',
+      'features/compare/components/CompareBar.module.css',
+    ];
+    const action = [
+      'features/experiments/launch/entry/entry.module.css',
+      'features/analyzer/blocks/blocks.module.css',
+      'features/run-detail/components/ItemsSection.module.css',
+    ];
+    for (const f of nav) expect(read(join(SRC, f)), `${f} uses --bar-nav-h`).toContain('var(--bar-nav-h)');
+    for (const f of action)
+      expect(read(join(SRC, f)), `${f} uses --bar-action-h`).toContain('var(--bar-action-h)');
+    const legacy = cssFiles.filter((f) => /--compare-bar-h|--action-rail-height/.test(read(f)));
+    expect(legacy.map(rel), 'retired per-page bar heights').toEqual([]);
+  });
+
   it('LinkButton reaches the Button hover and press states from an anchor', () => {
     const css = read(join(SRC, 'ui/Button/Button.module.css'));
     expect(css).toContain('a.button:hover');

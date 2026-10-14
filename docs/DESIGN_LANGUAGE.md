@@ -389,6 +389,11 @@ tile), `--tint-strong` 20% (hover or pressed on a tinted fill, selected pill). N
 (scrims and scrollbars are tokens). At most one tint fill per row-height region; never zebra-tint; a card inside a card
 is not allowed.
 
+- **Sticky bars** (`--bar-nav-h` 44px, `--bar-action-h` 56px): two heights across the app. The navigation bar of a
+  report (run-detail `SectionNav`, the compare bar) is `--bar-nav-h`; an action bar (the experiment home launch bar,
+  the analysis action rail, the run items toolbar) is `--bar-action-h`. Pages set `min-height` from the token, never a
+  number. Enforced by `design-language.test.ts`.
+
 - **Card** (`Card`): the one grouping surface. `--bg-surface`, 1px `--border-subtle`, `--radius-md`, padding
   `--card-padding` (`compact`: `--card-padding-compact`), optional `header` / `footer` slots with a hairline. A 3px
   inline-start rail (`--rail-width`, logical so RTL mirrors) carries the meaning: `tone`, `band` or `series`
