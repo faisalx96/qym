@@ -1,0 +1,106 @@
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 1700px) {
+  .cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1279px) {
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.item {
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.title {
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 650;
+  text-transform: capitalize;
+}
+
+.count {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.runs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.5rem 4rem minmax(5rem, auto);
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.value {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  text-align: end;
+}
+
+.latency {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  text-align: end;
+}
+
+.delta {
+  justify-self: end;
+}
+
+/* the bar fills the card width: the track takes the whole line and the (empty) value text no room */
+.bar {
+  display: block;
+  --track-w: 100%;
+}
+
+.bar > span {
+  display: flex;
+  width: 100%;
+  gap: 0;
+}
+
+@media (max-width: 640px) {
+  .line {
+    grid-template-columns: minmax(0, 1fr) 3rem auto;
+  }
+
+  .latency {
+    display: none;
+  }
+}

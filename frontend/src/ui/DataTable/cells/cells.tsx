@@ -35,6 +35,10 @@ export interface ScoreBarProps {
   index?: number;
   /** Flash a faint tint when the value changes (a live value on a running run). */
   live?: boolean;
+  /** A tick on the track at this position (same scale as `value`): the baseline to beat. Decorative (`aria-hidden`). */
+  marker?: number | null;
+  /** Track thickness for 'sm' bars: 'sm' = 6px (default), 'md' = 10px. */
+  height?: 'sm' | 'md';
 }
 
 function normDirection(d: ScoreBarProps['direction']): MetricDirection {
@@ -57,6 +61,8 @@ export function ScoreBar({
   size = 'sm',
   index,
   live,
+  marker,
+  height = 'sm',
 }: ScoreBarProps) {
   const enter = useEntrance();
   const flash = useFlashOnChange(value, live === true);
@@ -90,7 +96,7 @@ export function ScoreBar({
       className={styles.scoreBar}
       data-band={band ?? undefined}
       data-series={band ? undefined : series}
-      data-size={size === 'lg' ? 'lg' : undefined}
+      data-size={size === 'lg' ? 'lg' : height === 'md' ? 'md' : undefined}
       data-changed={flash ? '' : undefined}
       style={
         color || width
@@ -114,6 +120,16 @@ export function ScoreBar({
         >
           {size === 'lg' ? <span className={styles.onFill}>{label}</span> : null}
         </span>
+        {marker !== null && marker !== undefined && !Number.isNaN(marker) ? (
+          <span
+            className={styles.marker}
+            data-testid="score-marker"
+            aria-hidden="true"
+            style={{
+              insetInlineStart: `${Math.max(0, Math.min(1, max === undefined ? marker : max > 0 ? marker / max : 0)) * 100}%`,
+            }}
+          />
+        ) : null}
       </span>
       {size === 'lg' ? null : <span className={styles.scoreText}>{label}</span>}
     </span>

@@ -399,4 +399,13 @@ describe('chart kit', () => {
     await user.unhover(screen.getByRole('button', { name: 'three' }));
     expect(root).not.toHaveAttribute('data-series-active');
   });
+
+  it('ScoreBar marker draws a decorative tick at the baseline position; height md thickens the track', async () => {
+    const { container } = render(<ScoreBar value={0.8} series={2} marker={0.25} height="md" />);
+    const tick = container.querySelector('[data-testid="score-marker"]');
+    expect(tick).toHaveAttribute('aria-hidden', 'true');
+    expect((tick as HTMLElement).style.insetInlineStart).toBe('25%');
+    expect(container.querySelector('[data-size="md"]')).not.toBeNull();
+    expect(await axe(container)).toHaveNoViolations();
+  });
 });

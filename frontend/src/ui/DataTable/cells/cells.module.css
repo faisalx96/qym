@@ -42,6 +42,20 @@
   overflow: hidden;
 }
 
+.scoreBar[data-size='md'] .track {
+  block-size: 10px;
+}
+
+/* Baseline tick: a 2px bar in the primary text colour across the track. */
+.marker {
+  position: absolute;
+  inset-block: 0;
+  inline-size: 2px;
+  margin-inline-start: -1px;
+  background: var(--text-primary);
+  pointer-events: none;
+}
+
 .fill {
   display: block;
   position: relative;

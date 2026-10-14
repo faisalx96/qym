@@ -81,12 +81,7 @@ export function DeltaLine({ info }: { info: ColumnsInfo }) {
             const idx = col.runIdxs[0] ?? 0;
             return (
               <li key={col.key} className={styles.delta} data-column={col.key}>
-                <RunTag
-                  index={idx}
-                  compact
-                  name={columnName(model, col)}
-                  title={col.title}
-                />
+                <RunTag index={idx} compact name={columnName(model, col)} title={col.title} />
                 {s ? (
                   <>
                     <DeltaTag stats={s} type={type} metric={metric} />

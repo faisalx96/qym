@@ -24,7 +24,9 @@ export function RunCards() {
       const idx = model.runs.findIndex((r) => r.base === base);
       const payload = payloads.get(base);
       const run = model.runs[idx];
-      return payload && run ? { base, idx, payload, name: runShortName({ label: run.label, run: run.run }), title: run.title } : null;
+      return payload && run
+        ? { base, idx, payload, name: runShortName({ label: run.label, run: run.run }), title: run.title }
+        : null;
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
   const diff = differingContext(cards.map((x) => x.payload.run));
@@ -50,12 +52,20 @@ export function RunCards() {
             isBase={baseline.base === card.base}
             removable={removable}
             onRemove={() => c.removeRun(card.base)}
-            onBaseline={cohorts ? undefined : () => c.setView({ baseline: columns.find((col) => col.base === card.base)?.key ?? card.base })}
+            onBaseline={
+              cohorts
+                ? undefined
+                : () =>
+                    c.setView({ baseline: columns.find((col) => col.base === card.base)?.key ?? card.base })
+            }
           />
         ))}
       </ul>
       {diff.length ? (
-        <Disclosure title="What differs between the runs" summary={`${diff.length} setting${diff.length === 1 ? '' : 's'}`}>
+        <Disclosure
+          title="What differs between the runs"
+          summary={`${diff.length} setting${diff.length === 1 ? '' : 's'}`}
+        >
           <div className={styles.diff}>
             <table className={styles.table}>
               <thead>

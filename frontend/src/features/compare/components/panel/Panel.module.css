@@ -175,8 +175,7 @@
 }
 
 .seg:focus-visible,
-.distBar:focus-visible,
-.errorCard:focus-visible {
+.distBar:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
@@ -226,31 +225,46 @@
   color: var(--text-muted);
 }
 
-.errorList {
-  display: flex;
-  flex-direction: column;
+.errorCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
   gap: var(--space-sm);
   margin: var(--space-xs) 0 0;
   padding: 0;
   list-style: none;
 }
 
-.errorCard {
+.errorItem {
+  min-width: 0;
+}
+
+.errorHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.errorRuns {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  width: 100%;
-  padding: var(--space-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  text-align: start;
-  cursor: pointer;
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-.errorCard[aria-pressed='true'] {
-  border-color: var(--accent-primary);
+.errorRun {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.5rem 5rem;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.errorNum {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  text-align: end;
 }
 
 .errorTitle {
@@ -262,20 +276,6 @@
   color: var(--text-muted);
   font-size: var(--font-sm);
   overflow-wrap: anywhere;
-}
-
-.errorCounts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-}
-
-.errorCount {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
 }
 
 .table + .table {
@@ -301,4 +301,11 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
+}
+
+.stackGap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
 }

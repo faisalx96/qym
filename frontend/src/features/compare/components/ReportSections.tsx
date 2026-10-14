@@ -7,7 +7,7 @@ import { ReportSection } from '@/ui';
 import { useCompare } from '../CompareContext';
 import { useScope } from '../hooks/useScope';
 import { hasAnyRootCause } from '../lib/breakdown';
-import { CategoriesTab } from './panel/CategoriesTab';
+import { CategoriesTab, CategoryViewToggle } from './panel/CategoriesTab';
 import { ErrorsTab } from './panel/ErrorsTab';
 import { MetricsTab } from './panel/MetricsTab';
 import { OverviewTab } from './panel/OverviewTab';
@@ -15,6 +15,7 @@ import { RootCauseTab } from './panel/RootCauseTab';
 import { StepsTab } from './panel/StepsTab';
 import { ItemsSection } from './items/ItemsSection';
 import { RunCards } from './RunCards';
+import { PassToggle } from './SelectionBar';
 import styles from './ReportSections.module.css';
 
 export type SectionKey =
@@ -157,8 +158,9 @@ export function CompareReport() {
       <ReportSection
         id={sectionDomId('averages')}
         title="Per-run averages"
-        description={`Average per run with the paired change from the baseline and its noise band.`}
+        description="Average per run with the paired change from the baseline and its 95% noise band; press a count to filter the items."
         scopeNote={note}
+        aside={<PassToggle />}
       >
         <MetricsTab />
       </ReportSection>
@@ -173,8 +175,9 @@ export function CompareReport() {
       <ReportSection
         id={sectionDomId('categories')}
         title="Performance by category"
-        description="Average per metadata value and run; press a row to filter the items."
+        description="Average per metadata value and run, against the baseline tick; press a card to filter the items."
         scopeNote={note}
+        aside={<CategoryViewToggle />}
         lazy
         minHeight={200}
       >

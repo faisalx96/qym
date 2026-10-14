@@ -96,6 +96,8 @@ export interface CompareView {
   columns: PassColumns;
   /** `thr=metric:0.7` (new, additive: shareable pass thresholds, Q9). */
   thresholds: Record<string, number>;
+  /** Categories section: cards (default) or the table; `catView=table`. */
+  catView: 'cards' | 'table';
 }
 
 export const emptyGroup = (): FilterGroup => ({ op: 'and', children: [] });
@@ -126,6 +128,7 @@ export const emptyView = (): CompareView => ({
   baseline: null,
   columns: 'run',
   thresholds: {},
+  catView: 'cards',
 });
 
 /* ── URL codec ── */
@@ -298,6 +301,7 @@ export function readView(params: URLSearchParams, ctx: DecodeContext): CompareVi
   v.baseline = params.get('baseline') || null;
   v.columns = params.get('columns') === 'passes' ? 'each' : 'run';
   v.thresholds = parseThresholds(params.getAll('thr'));
+  v.catView = params.get('catView') === 'table' ? 'table' : 'cards';
   v.filters = decodeFiltersParam(params.get('filters'), ctx);
   return v;
 }
@@ -320,6 +324,7 @@ export function writeView(
     baseline: v.baseline,
     columns: v.columns === 'each' ? 'passes' : null,
     thr: Object.entries(v.thresholds).map(([m, t]) => `${m}:${t}`),
+    catView: v.catView === 'table' ? 'table' : null,
   };
 }
 
