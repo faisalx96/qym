@@ -1061,6 +1061,7 @@
   margin-inline-start: auto;
   font-weight: 400;
 }
+
 @media (width < 640px) {
   .colHandle,
   .colPin,

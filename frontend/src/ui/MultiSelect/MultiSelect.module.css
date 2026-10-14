@@ -245,6 +245,7 @@
 .trigger[data-variant='bar'][data-pressed] {
   filter: brightness(0.92);
 }
+
 @media (prefers-reduced-motion: reduce) {
   .trigger[data-variant='bar'] {
     transition: none;
