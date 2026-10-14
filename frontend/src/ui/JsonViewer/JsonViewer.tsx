@@ -110,34 +110,38 @@ export interface JsonTreeProps {
   data: unknown;
   expandDepth?: number;
   label?: string;
+  /** Expand all / Collapse all / Copy row (default true). */
+  toolbar?: boolean;
 }
 
-export function JsonTree({ data, expandDepth = 2, label = 'JSON' }: JsonTreeProps) {
+export function JsonTree({ data, expandDepth = 2, label = 'JSON', toolbar = true }: JsonTreeProps) {
   const [forced, setForced] = useState<'open' | 'closed' | null>(null);
   const [gen, setGen] = useState(0);
   return (
     <div className={styles.tree}>
-      <div className={styles.toolbar}>
-        <Button
-          variant="ghost"
-          onPress={() => {
-            setForced('open');
-            setGen((g) => g + 1);
-          }}
-        >
-          Expand all
-        </Button>
-        <Button
-          variant="ghost"
-          onPress={() => {
-            setForced('closed');
-            setGen((g) => g + 1);
-          }}
-        >
-          Collapse all
-        </Button>
-        <CopyButton text={() => JSON.stringify(data, null, 2)} label="Copy JSON" />
-      </div>
+      {toolbar ? (
+        <div className={styles.toolbar}>
+          <Button
+            variant="ghost"
+            onPress={() => {
+              setForced('open');
+              setGen((g) => g + 1);
+            }}
+          >
+            Expand all
+          </Button>
+          <Button
+            variant="ghost"
+            onPress={() => {
+              setForced('closed');
+              setGen((g) => g + 1);
+            }}
+          >
+            Collapse all
+          </Button>
+          <CopyButton text={() => JSON.stringify(data, null, 2)} label="Copy JSON" />
+        </div>
+      ) : null}
       <ul role="tree" aria-label={label} className={styles.root} key={gen}>
         <Node name={null} value={data} depth={0} expandDepth={expandDepth} forced={forced} />
       </ul>

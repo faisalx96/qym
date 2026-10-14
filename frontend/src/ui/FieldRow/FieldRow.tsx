@@ -39,7 +39,14 @@ export function FieldRow({
   const attrs = dir === 'auto' ? (text !== undefined ? textDirAttrs(text) : {}) : { dir };
   return (
     <div className={[styles.host, className].filter(Boolean).join(' ')}>
-      <div role="group" aria-labelledby={id} className={styles.row} data-measure={measure} data-rail={rail} {...attrs}>
+      <div
+        role="group"
+        aria-labelledby={id}
+        className={styles.row}
+        data-measure={measure}
+        data-rail={rail}
+        {...attrs}
+      >
         <div id={id} className={styles.label}>
           {label}
         </div>

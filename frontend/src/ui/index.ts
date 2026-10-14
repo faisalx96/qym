@@ -57,3 +57,5 @@ export * from './Tooltip';
 export * from './Toast';
 export * from './DataTable';
 export * from './JsonViewer';
+export * from './FieldRow';
+export * from './StructuredValue';

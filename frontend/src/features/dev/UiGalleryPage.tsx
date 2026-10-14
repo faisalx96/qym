@@ -43,6 +43,8 @@ import {
   SegmentedControl,
   Stepper,
   SplitPane,
+  FieldRow,
+  StructuredValue,
   Collapse,
   Select,
   Skeleton,
@@ -771,6 +773,43 @@ export default function UiGalleryPage() {
               end={<Text variant="base">End</Text>}
             />
           </div>
+        </Case>
+        <Case label="FieldRow (label and body adjacent; the row mirrors for Arabic)">
+          <Stack gap="sm">
+            <FieldRow
+              label="Input"
+              text="What does clause 1 require?"
+              actions={<CopyButton text="x" label="Copy input" />}
+            >
+              <TextBlock text="What does clause 1 of the finance policy require?" />
+            </FieldRow>
+            <FieldRow
+              label="Input"
+              text="ما هي شروط الحصول على تمويل عقاري؟"
+              actions={<CopyButton text="x" label="Copy input" />}
+            >
+              <TextBlock text="ما هي شروط الحصول على تمويل عقاري وفق الضوابط الحالية؟" />
+            </FieldRow>
+            <FieldRow label="Output" rail="danger" measure="full">
+              <TextBlock text="Wrong ORDER BY column" />
+            </FieldRow>
+          </Stack>
+        </Case>
+        <Case label="StructuredValue (JSON: one section per key)">
+          <StructuredValue
+            label="Gallery output"
+            value={{
+              answer: 'عاصمة المملكة العربية السعودية هي الرياض.',
+              reasoning: 'Looked up the capital.',
+              citations: [
+                { doc: 'policy-2026', page: 3, score: 0.91 },
+                { doc: 'products-guide', page: 4, score: 0.62 },
+              ],
+              confidence: 0.75,
+              tags: ['a', 'b'],
+              meta: { source: 'kb', nested: { deep: true } },
+            }}
+          />
         </Case>
         <Case label="Span kind glyphs">
           <Stack direction="row" gap="md" wrap>
