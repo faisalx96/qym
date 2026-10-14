@@ -101,6 +101,8 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
   const actions = useSettingsActions();
   const { ctx, setDoc, registerField, sweeps } = actions;
   const [rawMode, setRawMode] = useState(false);
+  // "Edit as fields" on an unset list: edit a local empty list; the setting is written by the first edit.
+  const [fieldsDraft, setFieldsDraft] = useState(false);
   const { entry, edit, kind } = node;
   const bound = node.boundBy;
   const cell = variant === 'cell';
@@ -136,17 +138,21 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
 
   const encoding = jsonEncoding(entry);
   const structuredOk = Boolean(encoding) && !bound && !asJson && !node.invalid && !rawMode;
-  const container = structuredOk && encoding ? containerOf(node.value, encoding) : null;
+  const stored = structuredOk && encoding ? containerOf(node.value, encoding) : null;
   const startValue = (): JsonValue | undefined => {
     if (!encoding) return undefined;
     if (node.value !== undefined) return containerOf(node.value, encoding) ? node.value : undefined;
     if (entry.has_default && containerOf(entry.default, encoding)) return entry.default;
     return encoding === 'json' ? (entry.type === 'array' ? [] : {}) : undefined;
   };
+  const draftStart = fieldsDraft && node.value === undefined ? startValue() : undefined;
+  const container =
+    stored ?? (structuredOk && draftStart !== undefined ? containerOf(draftStart, 'json') : null);
   const canEditAsFields = Boolean(encoding) && !bound && !asJson && startValue() !== undefined;
 
   let control: JSX.Element;
-  if (node.swept && isSweepValue(node.value) && !bound) {
+  // In a table cell a sweep is a read-only summary (the chips live in the global row and in Sweeps).
+  if (node.swept && isSweepValue(node.value) && !bound && !cell) {
     const swept = node.value.sweep;
     control = (
       <SweepChips
@@ -174,6 +180,11 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
         data-mono=""
         type="text"
         readOnly
+        title={
+          isSweepValue(node.value)
+            ? `Sweep: ${node.value.sweep.map((v) => JSON.stringify(v)).join(', ')}`
+            : undefined
+        }
         value={
           isSweepValue(node.value)
             ? `Sweep: ${node.value.sweep.map((v) => JSON.stringify(v)).join(', ')}`
@@ -199,10 +210,13 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
         value={container}
         label={node.label}
         fieldRef={ref}
+        itemType={entry.item_type}
         onRaw={() => setRawMode(true)}
         onEdit={(fn) =>
           setDoc((d) => {
-            const current = containerOf(d.values[node.pointer], encoding);
+            const current =
+              containerOf(d.values[node.pointer], encoding) ??
+              (draftStart !== undefined ? containerOf(draftStart, 'json') : null);
             if (!current) return d;
             const next = fn(JSON.parse(JSON.stringify(current)) as JsonValue);
             return setValue(d, node.pointer, encoding === 'string' ? JSON.stringify(next) : next);
@@ -347,7 +361,9 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
         onClick={() => {
           setRawMode(false);
           const start = startValue();
-          if (start !== undefined && node.value !== start) setDoc((d) => setValue(d, node.pointer, start));
+          if (node.value === undefined) setFieldsDraft(true);
+          else if (start !== undefined && node.value !== start)
+            setDoc((d) => setValue(d, node.pointer, start));
         }}
       >
         Edit as fields
@@ -383,9 +399,11 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
       <div className={styles.cell} data-field={node.fieldName} data-changed={node.changed ? '' : undefined}>
         <div className={styles.cellRow}>
           {control}
-          {dot}
-          {reset}
-          {sweepBtn}
+          <span className={styles.cellActions} data-reserve={sweepBtn ? '' : undefined}>
+            {sweepBtn}
+            {reset}
+            {dot}
+          </span>
         </div>
         {node.missingEnvs.length ? tags : null}
         {errorsEl}
@@ -401,7 +419,12 @@ function LeafFieldImpl({ node, error, variant = 'field', removeList = null }: Le
       </label>
     );
   return (
-    <div className={styles.field} data-field={node.fieldName} data-changed={node.changed ? '' : undefined}>
+    <div
+      className={styles.field}
+      data-field={node.fieldName}
+      data-changed={node.changed ? '' : undefined}
+      data-wide={container ? '' : undefined}
+    >
       <div className={styles.fieldHead}>
         <span className={styles.headMain}>
           {labelEl}

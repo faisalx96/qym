@@ -101,7 +101,7 @@ test.describe('wizard', () => {
       .first();
     await problem.click();
     await expect(page).toHaveURL(/step=settings/);
-    await expect(page.getByRole('textbox', { name: 'Max Attempts' })).toBeFocused();
+    await expect(page.getByRole('textbox', { name: 'primary · Max Attempts', exact: true })).toBeFocused();
     await expect(page.locator('[data-flash="true"]').first()).toBeAttached();
     await goStep(page, 'where');
     await expect(nameBox(page)).toHaveValue('route run');
@@ -200,9 +200,9 @@ test.describe('motion', () => {
     const toggle = page.getByRole('heading', { name: 'LLM routing', level: 4 }).getByRole('button');
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.getByRole('textbox', { name: 'Max Attempts' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'primary · Max Attempts', exact: true })).toBeVisible();
     await toggle.click();
-    await expect(page.getByRole('textbox', { name: 'Max Attempts' })).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'primary · Max Attempts', exact: true })).toHaveCount(0);
   });
 });
 
@@ -241,7 +241,7 @@ test.describe('polish', () => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'settings');
     await expect(page.getByRole('heading', { name: 'LLM routing', level: 4 })).toBeVisible();
     await page.getByRole('heading', { name: 'LLM routing', level: 4 }).getByRole('button').click();
-    await expect(page.getByRole('textbox', { name: 'Max Attempts' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'primary · Max Attempts', exact: true })).toBeVisible();
     const scroller = await page.evaluateHandle(() => document.querySelector('main')!);
     await scroller.evaluate((el) => {
       el.scrollTop = el.scrollHeight;
@@ -303,5 +303,32 @@ test.describe('polish', () => {
     await expect(page.getByRole('link', { name: 'All experiments' })).toHaveCount(0);
     const bar = await page.getByRole('region', { name: 'Launch', exact: true }).boundingBox();
     expect(bar!.height).toBeLessThan(150);
+  });
+});
+
+test.describe('raw JSON behind a button', () => {
+  test('hidden by default on the review step; Show / Hide toggles it; the Raw JSON action opens it', async ({
+    page,
+  }) => {
+    await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'review');
+    const raw = page.getByRole('region', { name: /^Raw JSON/ });
+    await expect(raw.locator('.cm-content')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Show raw JSON' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await page.getByRole('button', { name: 'Show raw JSON' }).click();
+    await expect(raw.locator('.cm-content')).toBeVisible();
+    await page.getByRole('button', { name: 'Hide raw JSON' }).click();
+    await expect(raw.locator('.cm-content')).toHaveCount(0);
+    // one visible trigger: the review step's pane has no second Raw JSON button, and a closed card has no heading
+    await expect(review(page).getByRole('button', { name: 'Raw JSON' })).toHaveCount(0);
+    await expect(raw.getByRole('heading', { name: 'Raw JSON' })).toHaveCount(0);
+    // the action of the other steps opens the same collapse
+    await goStep(page, 'models');
+    await review(page).getByRole('button', { name: 'Raw JSON' }).click();
+    await expect(page).toHaveURL(/step=review/);
+    await expect(raw.locator('.cm-content')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Hide raw JSON' })).toBeVisible();
   });
 });

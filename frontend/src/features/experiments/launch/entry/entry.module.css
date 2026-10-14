@@ -406,3 +406,87 @@
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
+
+/* Evaluation Service versions card (home view) */
+.versionsHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.versionsActions {
+  display: inline-flex;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.versionRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.versionRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.versionName {
+  min-width: 8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: var(--font-base);
+}
+
+.versionList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin: 0;
+}
+
+.versionItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-base);
+}
+
+.versionItem dt {
+  color: var(--text-muted);
+}
+
+.versionItem dd {
+  margin: 0;
+}
+
+.versionItem dd[data-unset] {
+  color: var(--text-muted);
+}
+
+.errorText {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--error);
+}
+
+.versionSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  /* The card's links sit on their own row, aligned to the card edge. */
+  .versionsActions {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+    justify-content: flex-start;
+    gap: var(--space-md);
+  }
+}

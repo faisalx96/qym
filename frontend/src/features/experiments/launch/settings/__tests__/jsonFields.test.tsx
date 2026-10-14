@@ -91,13 +91,37 @@ describe('JsonFields', () => {
     expect((latest as Array<{ name: string }>).map((i) => i.name)).toEqual(['a', 'c']);
   });
 
-  it('adds rows as copies of the last one and removes rows', async () => {
+  it('adds rows shaped like the last one with blank values (never null) and removes rows', async () => {
     const user = setup(ROUTES);
     await user.click(screen.getByRole('button', { name: '+ Add item' }));
-    expect(latest).toEqual([...(ROUTES as Json[]), (ROUTES as Json[])[1]]);
+    const blank = { name: '', weight: 0, enabled: false };
+    expect(latest).toEqual([...(ROUTES as Json[]), blank]);
     expect(screen.getAllByRole('row')).toHaveLength(5); // header + "All items" + 3
     await user.click(screen.getByRole('button', { name: 'Remove item 1 of SETTING' }));
-    expect(latest).toEqual([(ROUTES as Json[])[1], (ROUTES as Json[])[1]]);
+    expect(latest).toEqual([(ROUTES as Json[])[1], blank]);
+  });
+
+  it('a new item of an empty list starts from the schema item type, not null', async () => {
+    for (const [itemType, expected] of [
+      ['string', ''],
+      ['integer', 0],
+      ['boolean', false],
+      [null, ''],
+    ] as const) {
+      onRaw.mockClear();
+      const { unmount } = render(
+        <JsonFields
+          value={[]}
+          label="L"
+          itemType={itemType}
+          onRaw={onRaw}
+          onEdit={(fn) => (latest = fn([]))}
+        />,
+      );
+      await userEvent.click(screen.getByRole('button', { name: '+ Add item' }));
+      expect(latest).toEqual([expected]);
+      unmount();
+    }
   });
 
   it('rejects text in a number cell without committing it', async () => {

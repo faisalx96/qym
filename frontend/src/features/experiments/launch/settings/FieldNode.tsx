@@ -4,6 +4,7 @@ import { Collapse, Icon, Tag } from '@/ui';
 import { plural } from '../../lib/format';
 import {
   addKey,
+  collectionTableModel,
   envName,
   removeKey,
   type CollectionNode,
@@ -14,7 +15,7 @@ import {
 import { AddRow } from './AddRow';
 import { AllItemsControl } from './AllItemsControl';
 import { LeafField } from './LeafField';
-import { RoleTable } from './RoleTable';
+import { CollectionTable, RoleTable } from './RoleTable';
 import { useSettingsActions } from './SettingsContext';
 import styles from './settings.module.css';
 
@@ -139,6 +140,12 @@ function ExtraKeys({ extra, ...tree }: { extra: ExtraKeysView } & TreeProps) {
 }
 
 function CollectionBlock({ node, ...tree }: { node: CollectionNode } & TreeProps) {
+  const table = collectionTableModel(node);
+  if (table) return <CollectionTable node={node} model={table} {...tree} />;
+  return <StackedCollection node={node} {...tree} />;
+}
+
+function StackedCollection({ node, ...tree }: { node: CollectionNode } & TreeProps) {
   const { setDoc } = useSettingsActions();
   const titleId = useId();
   const [closed, setClosed] = useState<Record<string, boolean | undefined>>({});

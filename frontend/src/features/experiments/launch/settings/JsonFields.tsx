@@ -12,7 +12,7 @@
 import { useId, useState } from 'react';
 import { Button } from '@/ui';
 import { plural } from '../../lib/format';
-import type { JsonObject, JsonValue } from '../model';
+import { listTableModel, newListItem, uniformKeys, type JsonObject, type JsonValue } from '../model';
 import { AddRow } from './AddRow';
 import styles from './settings.module.css';
 
@@ -60,15 +60,7 @@ export function containerOf(value: unknown, encoding: 'json' | 'string'): Contai
   return isContainerValue(value) ? value : null;
 }
 
-/** Keys of a non-empty list of objects that all share the same (non-empty) key set. */
-export function uniformKeys(list: readonly JsonValue[]): string[] | null {
-  if (!list.length || !list.every(isObject)) return null;
-  const objs = list as JsonObject[];
-  const keys = Object.keys(objs[0] as JsonObject);
-  if (!keys.length) return null;
-  const sig = keys.slice().sort().join('\u0000');
-  return objs.every((o) => Object.keys(o).sort().join('\u0000') === sig) ? keys : null;
-}
+export { uniformKeys };
 
 function parseText(kind: Kind, input: string): { value: JsonValue } | { error: string } {
   if (kind === 'string') return { value: input };
@@ -117,6 +109,8 @@ function getPath(root: JsonValue, path: Path): JsonValue {
 
 interface Editor {
   label: string;
+  /** Schema `item_type` of the root list: what a new item starts from. */
+  itemType?: string | null;
   /** Applies `fn` to a copy of the current value and stores the result. */
   edit: (fn: (draft: JsonValue) => JsonValue) => void;
 }
@@ -385,33 +379,55 @@ function ListView({ ed, path, list, depth }: { ed: Editor; path: Path; list: Jso
   let body: JSX.Element;
   if (keys)
     body = <ListTable ed={ed} path={path} list={list as JsonObject[]} keys={keys} removeItem={removeItem} />;
-  else if (list.every(isScalar)) {
+  else if (listTableModel(list)?.shape === 'scalars') {
     body = (
-      <div className={styles.jsonNested}>
-        {list.length > 1 ? (
-          <div className={styles.jsonItemRow}>
-            <span className={styles.allLabel}>All</span>
-            <AllControl
-              kind={listKind(list)}
-              common={shared(list)}
-              label={`${labelFor(ed, [...path, '*'])} (all items)`}
-              onApply={applyAll(null)}
-            />
-            <span />
-          </div>
-        ) : null}
-        {list.map((item, i) => (
-          <div key={i} className={styles.jsonItemRow}>
-            <span className={styles.jsonIndex}>{i + 1}</span>
-            <ScalarInput
-              kind={kindOf(item) as Kind}
-              value={item}
-              label={labelFor(ed, [...path, i])}
-              onValue={(v) => ed.edit((d) => setPath(d, [...path, i], v))}
-            />
-            {removeItem(i)}
-          </div>
-        ))}
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <caption className={styles.sr}>{labelFor(ed, path) || 'Items'}</caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col" className={styles.labelMono}>
+                Value
+              </th>
+              <th scope="col">
+                <span className={styles.sr}>Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.length > 1 ? (
+              <tr className={styles.allRow}>
+                <td className={styles.roleName} title="A value set here is written into every item">
+                  All items
+                </td>
+                <td>
+                  <AllControl
+                    kind={listKind(list)}
+                    common={shared(list)}
+                    label={`${labelFor(ed, [...path, '*'])} (all items)`}
+                    onApply={applyAll(null)}
+                  />
+                </td>
+                <td />
+              </tr>
+            ) : null}
+            {list.map((item, i) => (
+              <tr key={i}>
+                <td className={styles.jsonIndex}>{i + 1}</td>
+                <td>
+                  <ScalarInput
+                    kind={kindOf(item) as Kind}
+                    value={item}
+                    label={labelFor(ed, [...path, i])}
+                    onValue={(v) => ed.edit((d) => setPath(d, [...path, i], v))}
+                  />
+                </td>
+                <td>{removeItem(i)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   } else {
@@ -443,7 +459,7 @@ function ListView({ ed, path, list, depth }: { ed: Editor; path: Path; list: Jso
           onPress={() =>
             ed.edit((d) => {
               const items = getPath(d, path) as JsonValue[];
-              items.push(items.length ? copy(items[items.length - 1] as JsonValue) : null);
+              items.push(newListItem(items, path.length ? null : ed.itemType));
               return d;
             })
           }
@@ -593,10 +609,11 @@ export interface JsonFieldsProps {
   /** "Edit as JSON". */
   onRaw: () => void;
   fieldRef?: (el: HTMLElement | null) => void;
+  itemType?: string | null;
 }
 
-export function JsonFields({ value, label, onEdit, onRaw, fieldRef }: JsonFieldsProps) {
-  const ed: Editor = { label, edit: onEdit };
+export function JsonFields({ value, label, onEdit, onRaw, fieldRef, itemType }: JsonFieldsProps) {
+  const ed: Editor = { label, edit: onEdit, itemType };
   return (
     <div ref={fieldRef} className={styles.json} role="group" aria-label={label} tabIndex={-1}>
       <div className={styles.addRow}>

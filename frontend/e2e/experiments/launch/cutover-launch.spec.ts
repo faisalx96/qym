@@ -77,7 +77,7 @@ test('a saved preset fills every field of the configuration sections and what is
   );
   const groupButtons = env.getByRole('heading', { level: 4 }).getByRole('button');
   for (let i = 0; i < (await groupButtons.count()); i++) await ensureOpen(groupButtons.nth(i));
-  await expect(env.getByRole('textbox', { name: 'Timeout', exact: true })).toHaveValue('60');
+  await expect(env.getByRole('textbox', { name: 'primary · Timeout', exact: true })).toHaveValue('60');
   await expect(env.getByRole('textbox', { name: 'Milvus Search Threshold' })).toHaveValue('0.7');
   await expect(env.getByRole('textbox', { name: 'Sql Result Limit' })).toHaveValue('50');
   await expect(

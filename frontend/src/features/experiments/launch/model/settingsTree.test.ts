@@ -78,7 +78,7 @@ describe('settings view', () => {
     );
   });
 
-  it('collection "All endpoints" appears from two keys', () => {
+  it('collection "All endpoints" appears from one key (like "All roles")', () => {
     const withTwo = addKey(doc, '/LLM_OVERRIDES/endpoints', 'fast');
     const llm = buildSettingsView(withTwo, ctx).groups[0]!.nodes[0] as ObjectNode;
     const endpoints = find<CollectionNode>(llm.children, 'collection');
