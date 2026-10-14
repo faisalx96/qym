@@ -5,6 +5,12 @@
   min-width: 0;
 }
 
+/* Section titles are the shared 18px H2 (SectionHeader), which owns the 48px lead-in and hairline like the compare
+   tabs; the flex gap is taken back so the rhythm is the same. */
+.sweep > section {
+  margin-top: calc(-1 * var(--space-md));
+}
+
 .head {
   display: flex;
   align-items: flex-start;
@@ -195,4 +201,3 @@
   flex-wrap: wrap;
   gap: var(--space-xs);
 }
-
