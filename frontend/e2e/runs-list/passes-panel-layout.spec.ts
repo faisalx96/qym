@@ -143,3 +143,22 @@ test.describe('passes panel paint', () => {
     });
   }
 });
+
+test.describe('pass-level Analyze is inside the panel', () => {
+  for (const width of [1440, 1280]) {
+    test(`at ${width}`, async ({ page, request }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const panel = await open(page, request);
+      const box = (await panel.boundingBox())!;
+      const btn = (await panel
+        .locator('tbody tr[data-pass-row]')
+        .first()
+        .getByTestId('analyze-action')
+        .boundingBox())!;
+      expect(btn.x).toBeGreaterThanOrEqual(box.x);
+      expect(btn.x + btn.width, 'Analyze button right edge inside the panel').toBeLessThanOrEqual(
+        box.x + box.width,
+      );
+    });
+  }
+});

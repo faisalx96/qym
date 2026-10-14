@@ -15,11 +15,12 @@
 }
 
 .action[data-state='running'] {
-  color: var(--info);
-  background: color-mix(in srgb, var(--info) var(--tint-soft), transparent);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--info) var(--tint-strong), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--info) 60%, transparent);
 }
 .action[data-state='running']:hover {
-  background: color-mix(in srgb, var(--info) var(--tint-strong), transparent);
+  background: color-mix(in srgb, var(--info) 32%, transparent);
 }
 
 .spark {

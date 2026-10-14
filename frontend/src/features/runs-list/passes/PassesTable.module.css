@@ -30,6 +30,7 @@
 
 .issues {
   display: inline-flex;
+  padding-inline-start: var(--space-md); /* keeps the glyph off the Duration value */
   align-items: center;
   gap: var(--space-sm);
 }

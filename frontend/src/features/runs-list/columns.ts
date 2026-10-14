@@ -27,10 +27,10 @@ const base = (id: string, label: string, width: number, sortKey?: string): Colum
 export const BASE_COLUMNS: ColumnDef[] = [
   { ...base('run', 'Run', 260, 'run') },
   base('status', 'Status', 150, 'status'),
-  { ...base('signals', 'Signals', 66), visKey: null },
+  { ...base('signals', 'Signals', 60), visKey: null },
   base('task', 'Task', 90, 'task'),
-  base('model', 'Model', 132, 'model'),
-  base('dataset', 'Dataset', 112, 'dataset'),
+  base('model', 'Model', 124, 'model'),
+  base('dataset', 'Dataset', 104, 'dataset'),
   base('owner', 'Owner', 120, 'owner'),
   base('time', 'Date', 128, 'time'),
   base('analysis', 'Analysis', 100),
@@ -178,12 +178,11 @@ export function buildColumns(
   const byId = (id: string) => BASE_COLUMNS.find((c) => c.id === id)!;
   // Legacy order for what a run is (task, model, dataset) and the Analyze action, then the first score and the date,
   // so all of them are on screen at 1440 next to the frozen Run and Status; the other context columns follow.
-  const front = ['run', 'status', 'signals', 'task', 'model', 'dataset', 'analysis'];
+  const front = ['run', 'status', 'signals', 'task', 'model', 'dataset', 'time', 'analysis'];
   const ordered = [
     ...front.map(byId),
     ...metricCols.slice(0, 1),
-    byId('time'),
-    ...BASE_COLUMNS.filter((c) => ![...front, 'time', 'duration'].includes(c.id)),
+    ...BASE_COLUMNS.filter((c) => ![...front, 'duration'].includes(c.id)),
     ...metricCols.slice(1),
     ...SYSTEM_COLUMNS,
     ...TRACE_COLUMNS,

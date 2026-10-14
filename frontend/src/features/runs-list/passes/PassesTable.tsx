@@ -25,7 +25,7 @@ export const toPassRows = (runId: string, rows: PassView[]): PassRow[] =>
 const headerLabel = (m: string) => m.replace(/_/g, ' ');
 
 export function IssuesCell({ issues }: { issues: PassIssue[] }) {
-  if (!issues.length) return <span className={styles.none}>–</span>;
+  if (!issues.length) return <span className={[styles.none, styles.issues].join(' ')}>–</span>;
   return (
     <span className={styles.issues}>
       {issues.map((i) => (
@@ -84,7 +84,7 @@ export function PassesTable({
       header: headerLabel(m),
       label: headerLabel(m),
       type: 'score',
-      width: 128,
+      width: 116,
       align: 'end',
       priority: m === selectedMetric ? 1 : 3,
       cell: (r) =>
@@ -99,7 +99,7 @@ export function PassesTable({
           />
         ),
     }));
-    return [
+    const all: Column<PassRow>[] = [
       {
         id: 'pass',
         pin: 'start',
@@ -159,7 +159,7 @@ export function PassesTable({
         id: 'items',
         header: 'Items',
         type: 'number',
-        width: 80,
+        width: 68,
         align: 'end',
         priority: 3,
         cell: (r) => (
@@ -172,7 +172,7 @@ export function PassesTable({
         id: 'latency',
         header: 'Latency',
         type: 'number',
-        width: 90,
+        width: 84,
         align: 'end',
         priority: 3,
         cell: (r) => <Mono>{formatLatency(r.pass.avg_latency_ms)}</Mono>,
@@ -181,7 +181,7 @@ export function PassesTable({
         id: 'duration',
         header: 'Duration',
         type: 'duration',
-        width: 110,
+        width: 100,
         align: 'end',
         priority: 3,
         cell: (r) => <Mono>{formatDurationMs(r.pass.duration_ms)}</Mono>,
@@ -189,7 +189,7 @@ export function PassesTable({
       {
         id: 'issues',
         header: 'Issues',
-        width: 120,
+        width: 100,
         priority: 1,
         cell: (r) => <IssuesCell issues={passIssues(r.pass)} />,
       },
@@ -211,6 +211,11 @@ export function PassesTable({
         },
       },
     ];
+    // Analyze sits right after Status so it is on screen next to the pass number at any width
+    const at = all.findIndex((c) => c.id === 'analyze');
+    const [analyze] = all.splice(at, 1);
+    all.splice(all.findIndex((c) => c.id === 'status') + 1, 0, analyze!);
+    return all;
   }, [metrics, specs, metricTypes, selectedMetric, passHref, analyzing]);
 
   const rowActions = (r: PassRow): RowAction<PassRow>[] => [

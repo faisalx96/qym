@@ -15,9 +15,9 @@ test.describe('runs table redesign', () => {
     await openRuns(page, s.project.slug);
     const view = (await scroller(page).boundingBox())!;
     const date = (await table(page).getByRole('columnheader', { name: 'Date', exact: true }).boundingBox())!;
-    expect(date.x + date.width, 'Date header inside the visible table').toBeLessThanOrEqual(
-      view.x + view.width,
-    );
+    const actions = (await table(page).locator('thead th[data-col="actions"]').boundingBox())!;
+    expect(date.x + date.width, 'Date header inside the visible table').toBeLessThanOrEqual(actions.x);
+    expect(date.x + date.width).toBeLessThanOrEqual(view.x + view.width);
     const row = dataRows(page).first();
     await expect(row.locator('td[data-col="task"] span').first()).toBeVisible();
     expect(await table(page).locator('tbody [data-band]').count(), 'metric score bars').toBeGreaterThan(0);
@@ -25,6 +25,22 @@ test.describe('runs table redesign', () => {
       table(page).getByRole('columnheader', { name: 'Scores', exact: true }).first(),
     ).toBeVisible();
     await expect(table(page).getByRole('columnheader', { name: 'Overview', exact: true })).toBeVisible();
+  });
+
+  test('Date (the default sort) is on screen at 1280 too, before the first score', async ({
+    page,
+    request,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    const cols = await table(page)
+      .locator('thead tr:last-child th[data-col]')
+      .evaluateAll((ths) => ths.map((t) => (t as HTMLElement).dataset.col));
+    expect(cols.indexOf('time')).toBeLessThan(cols.findIndex((c) => c?.startsWith('metric-')));
+    const date = (await table(page).getByRole('columnheader', { name: 'Date', exact: true }).boundingBox())!;
+    const actions = (await table(page).locator('thead th[data-col="actions"]').boundingBox())!;
+    expect(date.x + date.width, 'Date header left of Actions').toBeLessThanOrEqual(actions.x);
   });
 
   test('no header label is truncated', async ({ page, request }) => {
