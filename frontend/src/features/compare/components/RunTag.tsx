@@ -3,7 +3,7 @@
  * colour-blind readers) and the run's name. Hovering or focusing a tag highlights that run everywhere
  * (SeriesHighlightRoot dims every `[data-mark][data-series]` of another run).
  */
-import type { CSSProperties } from 'react';
+import type { CSSProperties, FocusEvent } from 'react';
 import { useSeriesHighlight } from '@/ui';
 import { letterOf, runColor, runSeries } from '../CompareContext';
 import styles from './RunTag.module.css';
@@ -11,7 +11,15 @@ import styles from './RunTag.module.css';
 /** Props that make an element part of the run-focus linking: it dims when another run is hovered or focused. */
 export function useRunMark(index: number) {
   const handlers = useSeriesHighlight(runSeries(index));
-  return { 'data-mark': '', 'data-series': runSeries(index), ...handlers };
+  return {
+    'data-mark': '',
+    'data-series': runSeries(index),
+    ...handlers,
+    // Keyboard focus highlights the run; a mouse click that leaves focus behind does not hold the dimming.
+    onFocus: (e: FocusEvent<HTMLElement>) => {
+      if (e.target.matches(':focus-visible')) handlers.onFocus();
+    },
+  };
 }
 
 export interface RunTagProps {

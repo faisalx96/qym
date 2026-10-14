@@ -242,7 +242,7 @@ export function ItemList() {
       label: `${letterOf(i)}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}`,
       priority: 2,
       hint: dense ? `${run.label}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}` : undefined,
-      ...(dense ? { width: 76 } : { minWidth: 148, maxWidth: 220, flex: true }),
+      ...(dense ? { width: 96 } : { minWidth: 148, maxWidth: 220, flex: true }),
       resizable: false,
       cell: (it) => <RunCell item={it} runIdx={i} numericMax={numericMax} />,
     })),

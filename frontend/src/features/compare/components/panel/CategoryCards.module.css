@@ -61,7 +61,7 @@
 
 .line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 3.5rem 4rem minmax(5rem, auto);
+  grid-template-columns: minmax(0, 1fr) 3rem 3.5rem 9.5rem;
   align-items: center;
   gap: var(--space-sm);
 }
