@@ -259,6 +259,10 @@
   cursor: pointer;
 }
 
+.disclosure:hover {
+  color: var(--text-primary);
+}
+
 .disclosure:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
@@ -345,6 +349,10 @@
   font-size: var(--font-base);
   text-decoration: underline;
   cursor: pointer;
+}
+
+.homeShow:hover {
+  color: var(--accent-primary-hover);
 }
 
 .homeShow:focus-visible {

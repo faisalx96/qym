@@ -33,6 +33,10 @@
   cursor: pointer;
 }
 
+.main:hover .id {
+  color: var(--text-primary);
+}
+
 .main:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
