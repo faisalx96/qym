@@ -30,14 +30,9 @@ export function Card({ title, description, aside, children, className, id }: Car
     </header>
   );
   return (
-    <UiCard
-      as="section"
-      className={className}
-      aria-labelledby={`${uid}-t`}
-      id={id}
-      header={children ? head : undefined}
-    >
-      {children ? <div className={s.cardBody}>{children}</div> : head}
+    <UiCard as="section" className={className} aria-labelledby={`${uid}-t`} id={id}>
+      {head}
+      {children ? <div className={s.cardBody}>{children}</div> : null}
     </UiCard>
   );
 }

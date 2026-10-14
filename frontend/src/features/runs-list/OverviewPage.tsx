@@ -483,6 +483,7 @@ function Card({
   return (
     <UiCard
       as="section"
+      compact
       aria-label={title}
       header={
         <header className={styles.cardHead}>
