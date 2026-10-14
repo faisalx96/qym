@@ -1,11 +1,35 @@
 /** Stats strip, winner breakdown and "how many runs were correct" over the filtered items (brief 05 J4). */
-import { formatLatency, formatMetricValue, metricDirectionLabel, passThresholdLabel } from '@/lib/metrics';
+import { formatLatency, formatMetricValue } from '@/lib/metrics';
 import { Slider, StatStrip, Text, type StatStripItem } from '@/ui';
-import { letterOf, runColor, useCompare } from '../../CompareContext';
+import { letterOf, runSeries, useCompare } from '../../CompareContext';
+import { runShortName } from '../../lib/labels';
+import { RunTag, useRunMark } from '../RunTag';
 import { statRates } from '../../lib/stats';
 import styles from './Panel.module.css';
 
 const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(1)}%`);
+
+/** Pass-if slider for the Overview section header (only for metrics with a threshold and a direction). */
+export function OverviewControls() {
+  const { model, metric, ctx, c } = useCompare();
+  const type = model.types[metric] ?? 'score';
+  const dir = ctx.direction;
+  if (type === 'boolean' || type === 'numeric' || !dir) return null;
+  const threshold = ctx.threshold;
+  return (
+    <Slider
+      key={`${metric}:${threshold}`}
+      label={dir === 'minimize' ? 'Pass if ≤' : 'Pass if ≥'}
+      unit="%"
+      minValue={5}
+      maxValue={100}
+      step={5}
+      width="8rem"
+      defaultValue={Math.round(threshold * 100)}
+      onChangeEnd={(v) => c.setThreshold(metric, v / 100)}
+    />
+  );
+}
 
 export function OverviewTab() {
   const { model, metric, ctx, stats, c } = useCompare();
@@ -59,8 +83,6 @@ export function OverviewTab() {
           { key: 'lat', label: 'Avg latency', value: formatLatency(stats.overallAvgLatency) },
           { key: 'err', label: 'Errors', value: String(errors), tone: errors ? 'danger' : undefined },
         ];
-  const showThreshold = type !== 'boolean' && type !== 'numeric' && !!dir;
-  const threshold = ctx.threshold;
   const active = c.view.winner;
   const setWinner = (value: string) => c.setView({ winner: active === value ? 'any' : value });
   const passRate = c.view.filters.passRate;
@@ -74,26 +96,6 @@ export function OverviewTab() {
   const maxDist = Math.max(1, ...stats.correctDistribution);
   return (
     <div className={styles.stack}>
-      <Text variant="sm" tone="muted">
-        {metricDirectionLabel(dir)}
-      </Text>
-      {showThreshold ? (
-        <Slider
-          key={`${metric}:${threshold}`}
-          label={dir === 'minimize' ? 'Pass if ≤' : 'Pass if ≥'}
-          unit="%"
-          minValue={5}
-          maxValue={100}
-          step={5}
-          defaultValue={Math.round(threshold * 100)}
-          onChangeEnd={(v) => c.setThreshold(metric, v / 100)}
-        />
-      ) : null}
-      {showThreshold ? (
-        <Text variant="sm" tone="muted">
-          A run passes when its score is {passThresholdLabel(threshold, dir)}.
-        </Text>
-      ) : null}
       <StatStrip items={items} />
       {dir ? (
         <section aria-label="Winner breakdown">
@@ -103,17 +105,14 @@ export function OverviewTab() {
           <div className={styles.bar} role="group" aria-label="Items won by each run">
             {stats.wins.map((w, i) =>
               w ? (
-                <button
+                <WinnerSegment
                   key={i}
-                  type="button"
-                  className={styles.seg}
-                  style={{ flexGrow: w, background: runColor(i) }}
-                  aria-pressed={active === `win_${i}`}
-                  aria-label={`${model.runs[i]?.label}: won ${w} items; filter`}
-                  onClick={() => setWinner(`win_${i}`)}
-                >
-                  {letterOf(i)} {w}
-                </button>
+                  index={i}
+                  wins={w}
+                  label={model.runs[i]?.label ?? ''}
+                  pressed={active === `win_${i}`}
+                  onPress={() => setWinner(`win_${i}`)}
+                />
               ) : null,
             )}
             {stats.ties ? (
@@ -130,6 +129,18 @@ export function OverviewTab() {
               </button>
             ) : null}
           </div>
+          <ul className={styles.legend} aria-label="Winner legend">
+            {model.runs.map((run, i) => (
+              <li key={run.ref} className={styles.legendItem}>
+                <RunTag index={i} name={runShortName(run)} title={run.title} compact />
+                <span className={styles.legendCount}>{stats.wins[i] ?? 0}</span>
+              </li>
+            ))}
+            <li className={styles.legendItem}>
+              <span className={styles.legendTies}>Ties</span>
+              <span className={styles.legendCount}>{stats.ties}</span>
+            </li>
+          </ul>
         </section>
       ) : (
         <Text variant="sm" tone="muted">
@@ -151,7 +162,11 @@ export function OverviewTab() {
                 aria-label={`${count} items with ${k} of ${n} runs correct; filter`}
                 onClick={() => setDist(k)}
               >
-                <span className={styles.distFill} style={{ height: `${(count / maxDist) * 100}%` }} />
+                <span
+                  className={styles.distFill}
+                  data-band={n > 0 ? 1 + Math.round((4 * k) / n) : undefined}
+                  style={{ height: `${(count / maxDist) * 100}%` }}
+                />
                 <span className={styles.distLabel}>{k}</span>
                 <span className={styles.distCount}>{count}</span>
               </button>
@@ -160,5 +175,34 @@ export function OverviewTab() {
         </section>
       ) : null}
     </div>
+  );
+}
+
+function WinnerSegment({
+  index,
+  wins,
+  label,
+  pressed,
+  onPress,
+}: {
+  index: number;
+  wins: number;
+  label: string;
+  pressed: boolean;
+  onPress: () => void;
+}) {
+  const mark = useRunMark(index);
+  return (
+    <button
+      type="button"
+      className={styles.seg}
+      style={{ flexGrow: wins, background: `var(--chart-${runSeries(index)})` }}
+      aria-pressed={pressed}
+      aria-label={`${label}: won ${wins} items; filter`}
+      onClick={onPress}
+      {...mark}
+    >
+      {letterOf(index)} {wins}
+    </button>
   );
 }

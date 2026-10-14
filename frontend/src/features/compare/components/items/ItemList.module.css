@@ -12,17 +12,26 @@
   outline-offset: -2px;
 }
 
-.runHead {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font-family: var(--font-mono);
-}
-
 .cell {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
+}
+
+.swatch {
+  flex: none;
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+  border-radius: var(--radius-sm);
+}
+
+.cell[data-best] {
+  font-weight: 650;
+}
+
+.best {
+  color: var(--accent-primary);
+  font-size: var(--font-sm);
 }
 
 .pill {
