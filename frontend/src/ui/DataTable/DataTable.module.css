@@ -554,6 +554,10 @@
 .detailCell {
   position: relative;
 }
+/* `clip` (not `hidden`) so a sticky panel inside still sticks to the scroller. */
+.tbody td.detailCell {
+  overflow: clip;
+}
 
 /* One continuous rail above the nested cards (an inset shadow is painted under their backgrounds). */
 .detailCell::before {

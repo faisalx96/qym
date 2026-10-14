@@ -186,7 +186,7 @@ test.describe('runs list: keyboard', () => {
       seen.push(desc);
       if (desc.endsWith('HEAD')) break;
     }
-    expect(seen[0], seen.join(' > ')).toContain('All');
+    expect(seen[0], seen.join(' > ')).toContain('INPUT'); // the Time segmented control (radio)
     expect(seen.at(-1), seen.join(' > ')).toMatch(/HEAD$/);
     expect(stops + 1, seen.join(' > ')).toBeLessThanOrEqual(16);
   });

@@ -164,3 +164,13 @@ export function failOnNativeDialogs(page: Page): { seen: () => string[] } {
   });
   return { seen: () => seen };
 }
+
+/** Opens the row-actions menu of pass `n` inside a passes panel. */
+export async function openPassMenu(panel: Locator, page: Page, n: number): Promise<void> {
+  await panel.locator(`tr[data-pass-row="${n}"]`).getByRole('button', { name: 'Row actions' }).click();
+  await expect(page.getByRole('menu')).toBeVisible();
+}
+export async function deletePassFromMenu(panel: Locator, page: Page, n: number): Promise<void> {
+  await openPassMenu(panel, page, n);
+  await page.getByRole('menuitem', { name: new RegExp(`^Delete pass ${n}`) }).click();
+}

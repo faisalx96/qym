@@ -5,7 +5,7 @@
  */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { BOOL, LOWER, SCORE, seedRun } from './seed';
-import { clickBox, freshProject, openRuns, rowOf } from './support';
+import { clickBox, freshProject, openRuns, rowOf, deletePassFromMenu } from './support';
 
 const NAME = 'summarize-repeat-done';
 
@@ -27,11 +27,11 @@ async function seedRepeat(page: Page, request: APIRequestContext, samples = 3) {
     .getByRole('button', { name: `Expand ${samples} passes of ${NAME}` })
     .click();
   const panel = page.getByRole('region', { name: `Passes of ${NAME}` });
-  await expect(panel.getByRole('table').locator('tbody tr')).toHaveCount(samples);
+  await expect(panel.locator('tbody tr[data-pass-row]')).toHaveCount(samples);
   return { s, run, panel };
 }
 
-const passRows = (panel: ReturnType<Page['getByRole']>) => panel.getByRole('table').locator('tbody tr');
+const passRows = (panel: ReturnType<Page['getByRole']>) => panel.locator('tbody tr[data-pass-row]');
 
 // A stale confirm (passes renumbered elsewhere since the panel was read) is refused by the server.
 test('a delete confirmed after the passes were renumbered elsewhere is refused and removes nothing', async ({
@@ -39,7 +39,7 @@ test('a delete confirmed after the passes were renumbered elsewhere is refused a
   request,
 }) => {
   const { run, panel } = await seedRepeat(page, request, 4);
-  await panel.getByRole('button', { name: `Delete pass 2 of ${NAME}` }).click();
+  await deletePassFromMenu(panel, page, 2);
   const dlg = page.getByRole('alertdialog').or(page.getByRole('dialog', { name: 'Delete pass 2?' }));
   await expect(dlg).toBeVisible();
   // Someone deletes pass 1 meanwhile: the old "pass 2" is now called pass 1.
@@ -58,7 +58,7 @@ test('deleting pass 2 keeps the other passes (renumbered) with their scores', as
   await page.getByRole('button', { name: 'Select', exact: true }).click();
   const before = await passRows(panel).allInnerTexts();
   const done = page.waitForResponse((r) => r.request().method() === 'DELETE' && /\/passes\/2/.test(r.url()));
-  await panel.getByRole('button', { name: `Delete pass 2 of ${NAME}` }).click();
+  await deletePassFromMenu(panel, page, 2);
   await page
     .getByRole('alertdialog')
     .or(page.getByRole('dialog', { name: 'Delete pass 2?' }))
@@ -81,7 +81,7 @@ test('a second pass delete on the same run still works', async ({ page, request 
   const { run, panel } = await seedRepeat(page, request, 4);
   for (const n of [2, 2]) {
     const done = page.waitForResponse((r) => r.request().method() === 'DELETE' && /\/passes\//.test(r.url()));
-    await panel.getByRole('button', { name: new RegExp(`^Delete pass ${n} of ${NAME}`) }).click();
+    await deletePassFromMenu(panel, page, n);
     await page
       .getByRole('alertdialog')
       .or(page.getByRole('dialog', { name: `Delete pass ${n}?` }))
@@ -106,7 +106,7 @@ test("deleting a pass clears the picks of that run's passes", async ({ page, req
   await page.getByRole('button', { name: 'Select', exact: true }).click();
   await clickBox(panel.getByRole('checkbox', { name: new RegExp(`^Select pass 3 of ${NAME}$`) }));
   await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
-  await panel.getByRole('button', { name: `Delete pass 2 of ${NAME}` }).click();
+  await deletePassFromMenu(panel, page, 2);
   await page
     .getByRole('alertdialog')
     .or(page.getByRole('dialog', { name: 'Delete pass 2?' }))
@@ -119,7 +119,7 @@ test("deleting a pass clears the picks of that run's passes", async ({ page, req
 
 test('the delete dialogs say a run can be restored and a pass cannot', async ({ page, request }) => {
   const { panel } = await seedRepeat(page, request);
-  await panel.getByRole('button', { name: `Delete pass 2 of ${NAME}` }).click();
+  await deletePassFromMenu(panel, page, 2);
   const passDialog = page.getByRole('alertdialog').or(page.getByRole('dialog', { name: 'Delete pass 2?' }));
   await expect(passDialog).toBeVisible();
   await expect(passDialog).toContainText(/permanent|cannot be restored/i);
