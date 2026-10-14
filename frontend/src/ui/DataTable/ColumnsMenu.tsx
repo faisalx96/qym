@@ -286,7 +286,10 @@ function ReorderBody<R>({
         </Button>
       </div>
       <div className={styles.colFrozenHead} data-col-frozen-head="">
-        <span>Frozen ({frozenCount})</span>
+        <span>
+          Frozen ({frozenCount - suspended.length}
+          {suspended.length ? ` of ${frozenCount}` : ''})
+        </span>
         {suspendedNames.length ? (
           <span className={styles.colLineNote}>Not frozen at this width: {suspendedNames.join(', ')}</span>
         ) : null}

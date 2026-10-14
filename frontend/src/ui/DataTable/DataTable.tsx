@@ -256,7 +256,7 @@ function DataTableInner<R>({
   storageKey,
   storageScope,
   reorderable,
-  maxPinShare = 0.5,
+  maxPinShare = 0.6,
   onHiddenChange,
   className,
   density: densityProp,

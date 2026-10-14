@@ -1,7 +1,9 @@
 .body {
   display: grid;
   gap: var(--space-md);
-  inline-size: 260px;
+  box-sizing: border-box;
+  inline-size: 288px;
+  padding: var(--space-md);
   max-inline-size: 100%;
 }
 

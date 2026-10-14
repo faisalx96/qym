@@ -1,6 +1,7 @@
 /* One surface, one 2px accent rail as the group marker; sticky so horizontal scroll never drags it. */
 .panel {
   position: sticky;
+  z-index: 2; /* above the scroll-edge cues (1), below headers (3) */
   inset-inline-start: 0;
   box-sizing: border-box;
   display: grid;

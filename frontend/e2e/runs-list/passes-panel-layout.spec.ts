@@ -106,3 +106,40 @@ test.describe('passes panel at 390', () => {
     expect(v, describeViolations(v)).toEqual([]);
   });
 });
+
+test.describe('passes panel paint', () => {
+  for (const width of [1440, 1280]) {
+    test(`no scroll-edge shadow is painted over the panel at ${width}`, async ({ page, request }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const panel = await open(page, request);
+      await table(page)
+        .locator('[data-dt-scroller]')
+        .first()
+        .evaluate((el) => (el.scrollLeft = 300));
+      await page.evaluate(() =>
+        Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))),
+      );
+      const box = (await panel.boundingBox())!;
+      // the panel's own top padding is a solid surface: every pixel of that strip must be the same colour
+      const shot = await page.screenshot({
+        clip: { x: box.x + 8, y: box.y + 2, width: box.width - 16, height: 4 },
+      });
+      const spread = await page.evaluate(async (b64) => {
+        const img = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+        const c = new OffscreenCanvas(img.width, 1);
+        const ctx = c.getContext('2d')!;
+        ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(0, 0, img.width, 1).data;
+        let min = 255;
+        let max = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const l = (d[i]! + d[i + 1]! + d[i + 2]!) / 3;
+          min = Math.min(min, l);
+          max = Math.max(max, l);
+        }
+        return max - min;
+      }, shot.toString('base64'));
+      expect(spread, 'a dark band crosses the panel').toBeLessThan(4);
+    });
+  }
+});

@@ -80,7 +80,7 @@ export function PassesTable({
       header: headerLabel(m),
       label: headerLabel(m),
       type: 'score',
-      width: 150,
+      width: 128,
       align: 'end',
       priority: m === selectedMetric ? 1 : 3,
       cell: (r) =>
@@ -98,6 +98,7 @@ export function PassesTable({
     return [
       {
         id: 'pass',
+        pin: 'start',
         header: '#',
         label: 'Pass',
         width: 64,
@@ -115,8 +116,9 @@ export function PassesTable({
       },
       {
         id: 'status',
+        pin: 'start',
         header: 'Status',
-        width: 150,
+        width: 132,
         priority: 1,
         cell: (r) => {
           const p = r.pass;
@@ -135,7 +137,7 @@ export function PassesTable({
       {
         id: 'date',
         header: 'Date',
-        width: 150,
+        width: 132,
         priority: 2,
         cell: (r) => {
           const date = r.pass.started_at ? formatDateParts(r.pass.started_at) : null;
@@ -175,7 +177,7 @@ export function PassesTable({
         id: 'duration',
         header: 'Duration',
         type: 'duration',
-        width: 90,
+        width: 110,
         align: 'end',
         priority: 3,
         cell: (r) => <Mono>{formatDurationMs(r.pass.duration_ms)}</Mono>,
@@ -183,7 +185,7 @@ export function PassesTable({
       {
         id: 'issues',
         header: 'Issues',
-        width: 90,
+        width: 120,
         priority: 1,
         cell: (r) => <IssuesCell issues={passIssues(r.pass)} />,
       },

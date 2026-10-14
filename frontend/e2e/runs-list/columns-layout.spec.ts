@@ -179,3 +179,25 @@ test.describe('runs columns layout (390)', () => {
     await expect(menu(page).getByRole('checkbox', { name: 'Date', exact: true })).toBeVisible();
   });
 });
+
+test.describe('frozen headers while scrolling sideways', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('RUN and STATUS headers stay visible above the scrolled headers', async ({ page, request }) => {
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    const scroller = table(page).locator('[data-dt-scroller]').first();
+    await scroller.evaluate((el) => (el.scrollLeft = 600));
+    for (const col of ['run', 'status']) {
+      const th = table(page).locator(`thead tr:last-child th[data-col="${col}"]`);
+      await expect(th).toBeVisible();
+      const topmost = await th.evaluate((el) => {
+        const b = el.getBoundingClientRect();
+        // a point on the label side, away from the sort/menu buttons
+        const hit = document.elementFromPoint(b.left + 12, b.top + b.height / 2);
+        return !!hit && el.contains(hit);
+      });
+      expect(topmost, `${col} header is covered by a scrolled header`).toBe(true);
+    }
+  });
+});

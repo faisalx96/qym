@@ -144,6 +144,9 @@ export function MultiSelect<T extends MultiSelectItem>({
           </button>
         </div>
       ) : null}
+      {triggerVariant === 'bar' && selectedCount === 0 ? (
+        <div className={styles.hint}>Nothing ticked: every value is included.</div>
+      ) : null}
       <div className={styles.list} ref={listRef}>
         {visible.length === 0 ? <div className={styles.empty}>No matches</div> : null}
         {visible.map((item) => (

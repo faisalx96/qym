@@ -88,7 +88,7 @@
   top: 0;
   bottom: 0;
   width: 24px;
-  z-index: 5;
+  z-index: 1; /* above plain cells, below pinned cells, headers and the sticky detail panel */
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--transition-fast);
@@ -135,6 +135,9 @@
   position: sticky;
   top: 0;
   z-index: 3;
+}
+.table[data-sticky] .thead th[data-pin] {
+  z-index: 4;
 }
 .table[data-sticky] .thead .bandRow + tr th {
   top: var(--table-group-height);
