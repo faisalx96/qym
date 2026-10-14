@@ -12,7 +12,9 @@ import { fileURLToPath } from 'node:url';
 import {
   createApiKey,
   ensureProject,
+  seedArabicRepeatRun,
   seedClassicRun,
+  seedManyCategories,
   seedRepeatRun,
   submitRun,
   type ClassicOptions,
@@ -44,6 +46,16 @@ export async function seedClassic(s: Seeded, opts: ClassicOptions = {}): Promise
 
 export async function seedRepeat(s: Seeded): Promise<string> {
   return seedRepeatRun(client, s.token);
+}
+
+/** 12 items x 3 passes, Arabic prose, JSON inputs and outputs, a trace per pass. */
+export async function seedArabic(s: Seeded): Promise<string> {
+  return seedArabicRepeatRun(client, s.token);
+}
+
+/** 300 items with metadata keys of 24 / 14 / 9 / 6 / 4 values. */
+export async function seedCategories(s: Seeded): Promise<string> {
+  return seedManyCategories(client, s.token);
 }
 
 /** A small COMPLETED run that is then submitted for review (scores locked). */

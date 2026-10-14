@@ -8,6 +8,8 @@
  *             task errors, scorer errors, retries, 3 not-received items, traces
  *   repeat    samples=3, 60 items, 2 metrics, failed passes
  *   running   RUNNING run with 30 completed items and no run_completed
+ *   arabic    12 items x 3 passes, Arabic prose, JSON inputs/outputs, a trace per pass
+ *   categories 300 items, metadata keys with 24 / 14 / 9 / 6 / 4 values
  *   locked    a small COMPLETED run that is then submitted for review
  */
 
@@ -650,6 +652,184 @@ export async function seedRepeatRun(
   return runId;
 }
 
+const AR_PROMPTS = [
+  'اشرح بالتفصيل الفرق بين التعلم الآلي والتعلم العميق مع ذكر أمثلة عملية من قطاع المصارف والتأمين في المملكة العربية السعودية، وبيّن كيف يمكن للمؤسسات المالية الاستفادة منهما في كشف الاحتيال وتحسين تجربة العملاء.',
+  'لخص النص التالي في جملتين: يشهد قطاع التقنية المالية في المملكة نمواً متسارعاً مدفوعاً برؤية 2030 ودعم البنك المركزي للابتكار.',
+  'ما هي شروط الحصول على تمويل عقاري وفق الضوابط الحالية؟ اذكر المستندات المطلوبة والحد الأقصى لنسبة الاستقطاع.',
+  'اكتب استعلام SQL لإيجاد أعلى عشرة عملاء من حيث إجمالي المشتريات خلال الربع الأخير.',
+];
+
+/**
+ * arabic multi-pass JSON run: 12 items x 3 passes, Arabic prose, JSON inputs every third item,
+ * JSON outputs (answer / reasoning / citations / confidence / sql / followups), a trace per pass.
+ */
+export async function seedArabicRepeatRun(client: SeedClient, token: string): Promise<string> {
+  const n = 12;
+  const samples = 3;
+  const random = rng(5);
+  const specs = {
+    correct: { score_type: 'boolean', direction: 'maximize', pass_threshold: 1, primary: true, schema_version: 2 },
+    quality: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
+  };
+  const metrics = Object.keys(specs);
+  const runId = await createRun(client, token, {
+    task: 'arabic_assistant',
+    dataset: 'ar-finance-qa',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: specs,
+    run_metadata: { run_name: 'arabic-multipass-json' },
+    run_config: { samples, temperature: 0.7 },
+  });
+  const s = new EventStream(client, token, runId, 21);
+  s.push('run_started', {
+    task: 'arabic_assistant',
+    dataset: 'ar-finance-qa',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: specs,
+    total_items: n,
+    started_at: new Date(Date.UTC(2026, 9, 3, 9)).toISOString(),
+    run_config: { samples },
+  });
+  for (let p = 1; p <= samples; p++) {
+    for (let i = 0; i < n; i++) {
+      const id = `ar-${String(i + 1).padStart(3, '0')}`;
+      s.push('item_started', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        input:
+          i % 3 === 0
+            ? { question: AR_PROMPTS[i % 4], context: ['وثيقة السياسة المالية', 'دليل المنتجات المصرفية'], lang: 'ar' }
+            : AR_PROMPTS[i % 4],
+        expected:
+          i % 3 === 0 ? { answer: 'التعلم العميق فرع من التعلم الآلي', topics: ['ml', 'dl'] } : 'الرياض',
+        item_metadata: {
+          domain: ['finance', 'support', 'legal'][i % 3],
+          complexity: ['easy', 'hard'][i % 2],
+          lang: 'ar',
+        },
+      });
+      const traceId = `trace-${id}-p${p}`;
+      const latency = Math.round(700 + random() * 2800);
+      s.push('item_attempt_started', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        attempt_number: 1,
+        trace_id: traceId,
+        task_started_at_ms: Date.UTC(2026, 9, 3, 9) + (p * n + i) * 1000,
+      });
+      pushTrace(s, traceId, random, { latency, model: 'gpt-5-mini' });
+      const correct = (i + p) % 3 === 0 ? 0 : 1;
+      s.push('metric_scored', {
+        item_id: id,
+        pass_number: p,
+        metric_name: 'correct',
+        score_numeric: correct,
+        score_raw: correct === 1,
+        meta: { reason: correct ? '' : 'الإجابة لا تذكر المستندات المطلوبة' },
+      });
+      s.push('metric_scored', {
+        item_id: id,
+        pass_number: p,
+        metric_name: 'quality',
+        score_numeric: correct ? 0.82 : 0.41,
+        label: correct ? 'pass' : 'fail',
+        explanation: correct
+          ? 'إجابة دقيقة ومنظمة وتغطي جميع النقاط المطلوبة.'
+          : 'الإجابة عامة ولا تتضمن أمثلة عملية.',
+        meta: { judge_model: 'gpt-5', confidence: 0.8 },
+      });
+      s.push('item_completed', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        is_final_pass: p === samples,
+        output: {
+          answer: `الإجابة رقم ${p}: ${AR_PROMPTS[(i + p) % 4].slice(0, 60)} ... التعلم العميق يستخدم الشبكات العصبية متعددة الطبقات.`,
+          reasoning: 'قمت بتحليل السؤال ثم استرجعت المستندات ذات الصلة وصغت الإجابة اعتماداً عليها.',
+          citations: [
+            { doc: 'policy-2026', page: i + 1, score: 0.91 },
+            { doc: 'products-guide', page: 4, score: 0.62 },
+          ],
+          confidence: 0.7 + p / 20,
+          sql: 'SELECT name, SUM(total) FROM orders GROUP BY name ORDER BY 2 DESC LIMIT 10',
+          followups: ['هل تريد التفاصيل؟', 'هل تحتاج مثالاً؟'],
+        },
+        latency_ms: latency,
+        trace_id: traceId,
+      });
+    }
+    s.push('pass_completed', { pass_number: p, samples });
+  }
+  s.push('run_completed', { ended_at: new Date(Date.UTC(2026, 9, 3, 10)).toISOString(), final_status: 'COMPLETED' });
+  await s.flush();
+  return runId;
+}
+
+/** 300 items whose metadata has many categories: topic 24, team 14, region 9, customer_tier 6, complexity 4. */
+export async function seedManyCategories(client: SeedClient, token: string): Promise<string> {
+  const specs = {
+    quality: { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, primary: true, schema_version: 2 },
+  };
+  const r = rng(8);
+  const runId = await createRun(client, token, {
+    task: 'support_bot',
+    dataset: 'tickets-v9',
+    model: 'openai/gpt-5-mini',
+    metrics: ['quality'],
+    metric_specs: specs,
+    run_metadata: { run_name: 'many-categories' },
+  });
+  const s = new EventStream(client, token, runId, 31);
+  s.push('run_started', {
+    task: 'support_bot',
+    dataset: 'tickets-v9',
+    model: 'openai/gpt-5-mini',
+    metrics: ['quality'],
+    metric_specs: specs,
+    total_items: 300,
+    started_at: new Date(Date.UTC(2026, 9, 4, 9)).toISOString(),
+  });
+  const topics = Array.from({ length: 24 }, (_, i) => `topic-${String.fromCharCode(97 + i)}`);
+  const teams = Array.from({ length: 14 }, (_, i) => `team-${i + 1}`);
+  const regions = ['riyadh', 'jeddah', 'dammam', 'makkah', 'madinah', 'tabuk', 'abha', 'hail', 'jazan'];
+  const tiers = ['free', 'basic', 'plus', 'pro', 'business', 'enterprise'];
+  for (let i = 0; i < 300; i++) {
+    const id = `t-${String(i + 1).padStart(4, '0')}`;
+    s.push('item_started', {
+      item_id: id,
+      index: i,
+      input: `Ticket ${i + 1}`,
+      expected: 'resolved',
+      item_metadata: {
+        topic: topics[i % 24],
+        team: teams[(i * 7) % 14],
+        region: regions[i % 9],
+        customer_tier: tiers[i % 6],
+        complexity: ['easy', 'medium', 'hard', 'expert'][i % 4],
+      },
+    });
+    s.push('metric_scored', {
+      item_id: id,
+      metric_name: 'quality',
+      score_numeric: Number(Math.min(1, Math.max(0, 0.45 + (i % 24) / 60 + (r() - 0.5) * 0.4)).toFixed(3)),
+      meta: {},
+    });
+    s.push('item_completed', {
+      item_id: id,
+      index: i,
+      output: `Answer ${i}`,
+      latency_ms: 300 + Math.round(r() * 2000),
+    });
+  }
+  s.push('run_completed', { ended_at: new Date(Date.UTC(2026, 9, 4, 10)).toISOString(), final_status: 'COMPLETED' });
+  await s.flush();
+  return runId;
+}
+
 /** A RUNNING run: `items` completed, no run_completed. Returns the stream so a test can push more. */
 export async function seedRunningRun(
   client: SeedClient,
@@ -721,6 +901,8 @@ export async function seedAll(client: SeedClient, slug = 'rd-seed'): Promise<See
   const classic = await seedClassicRun(client, token);
   const repeat = await seedRepeatRun(client, token);
   const running = await seedRunningRun(client, token);
+  const arabic = await seedArabicRepeatRun(client, token);
+  const categories = await seedManyCategories(client, token);
   const locked = await seedClassicRun(client, token, {
     items: 12,
     taskErrors: 1,
@@ -735,6 +917,6 @@ export async function seedAll(client: SeedClient, slug = 'rd-seed'): Promise<See
     slug: project.slug,
     projectId: project.id,
     token,
-    runs: { classic, repeat, running: running.runId, locked },
+    runs: { classic, repeat, running: running.runId, locked, arabic, categories },
   };
 }
