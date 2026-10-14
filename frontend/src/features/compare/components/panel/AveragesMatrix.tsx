@@ -3,7 +3,7 @@ import { useMemo, type ReactNode } from 'react';
 import { formatLatency, formatMetricValue, metricDirectionLabel } from '@/lib/metrics';
 import { useMediaQuery } from '@/features/shell';
 import { Card, DataTable, ScoreValue, Tag, Text, type Column } from '@/ui';
-import { runSeries, useCompare } from '../../CompareContext';
+import { letterOf, runSeries, useCompare } from '../../CompareContext';
 import type { DeltaKind, MetricColumn } from '../../lib/baseline';
 import { columnName } from '../../lib/columnName';
 import { buildColumnRows, type ColumnRow } from '../../lib/panelData';
@@ -174,7 +174,7 @@ export function AveragesMatrix() {
     ...columns.map((col): Column<MatrixRow> => ({
       id: col.key,
       header: header(col),
-      label: columnName(model, col),
+      label: `${letterOf(col.runIdxs[0] ?? 0)} ${columnName(model, col)}${col.key === baseline.key ? ' (baseline)' : ''}`,
       minWidth: 132,
       maxWidth: 260,
       flex: true,
