@@ -4,6 +4,7 @@
   inset-inline-start: 0;
   box-sizing: border-box;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-sm);
   inline-size: var(--dt-scroller-width, 100%);
   max-inline-size: 100%;
