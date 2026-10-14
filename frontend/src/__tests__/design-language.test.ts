@@ -237,6 +237,8 @@ describe('primitive module contracts', () => {
       "[data-wash='danger']",
     ],
     Skeleton: ['prefers-reduced-motion'],
+    FieldRow: ['var(--field-label-width)', 'var(--field-measure)', '@container'],
+    StructuredValue: ['var(--border-subtle)', 'var(--font-mono)', 'prefers-reduced-motion'],
     SplitPane: ['cursor: col-resize', 'var(--accent-primary)', 'var(--border-subtle)'],
   };
   for (const [name, decls] of Object.entries(contracts)) {
