@@ -19,3 +19,15 @@
   container-type: inline-size;
   min-width: 0;
 }
+
+/* M4: a lazily mounted body fades up once (opacity + 6px rise); no end state is held, so it never traps a stacking context. */
+.body[data-arrive] {
+  animation: section-arrive var(--arrive-fade) var(--ease-out) backwards;
+}
+
+@keyframes section-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}

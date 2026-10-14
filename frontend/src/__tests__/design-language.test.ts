@@ -227,7 +227,15 @@ describe('primitive module contracts', () => {
     Tooltip: ['z-index: var(--z-tooltip)'],
     Popover: ['z-index: var(--z-dropdown)', 'box-shadow: var(--shadow-popover)'],
     TextBlock: ['unicode-bidi: plaintext', 'text-align: start', 'white-space: pre-wrap'],
-    ScoreValue: ['var(--score-1)', 'var(--score-5)', "[data-band='", 'var(--metric-error)'],
+    ScoreValue: ['[data-band]', 'var(--tone-text)', "[data-variant='pill']", 'var(--metric-error)'],
+    Card: [
+      'var(--rail-width)',
+      'background: var(--bg-surface)',
+      'var(--border-subtle)',
+      '[data-interactive]:hover',
+      '[data-selected]',
+      "[data-wash='danger']",
+    ],
     Skeleton: ['prefers-reduced-motion'],
   };
   for (const [name, decls] of Object.entries(contracts)) {
@@ -353,6 +361,99 @@ describe('primitive module contracts', () => {
         problems.push(`${rel(file)}: dangerouslySetInnerHTML outside TextBlock`);
     }
     expect(problems).toEqual([]);
+  });
+});
+
+describe('visual language (redesign round 2)', () => {
+  it('carries the tint, series, card and motion tokens verbatim', () => {
+    const css = read(join(SRC, 'styles/tokens.css'));
+    for (const decl of [
+      '--tint-faint: 6%',
+      '--tint-soft: 12%',
+      '--tint-strong: 20%',
+      '--error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary))',
+      '--chart-6: #60a5fa',
+      '--chart-7: #34d399',
+      '--chart-8: #fb923c',
+      '--rail-width: 3px',
+      '--ease-out: cubic-bezier(0.16, 1, 0.3, 1)',
+      '--motion-fill: 360ms',
+      '--motion-stagger: 24ms',
+      '--motion-flash: 700ms',
+      '--dim-opacity: 0.45',
+    ])
+      expect(css, `tokens.css lost '${decl}'`).toContain(decl);
+  });
+
+  it('tones.css maps every tone, band and series to --tone/--tone-text', () => {
+    const css = read(join(SRC, 'styles/tones.css'));
+    for (const t of ['success', 'info', 'warning', 'danger', 'accent', 'meta', 'neutral'])
+      expect(css, `tone ${t}`).toContain(`[data-tone='${t}']`);
+    for (let b = 1; b <= 5; b += 1) expect(css, `band ${b}`).toContain(`[data-band='${b}']`);
+    for (let n = 1; n <= 8; n += 1) expect(css, `series ${n}`).toContain(`[data-series='${n}']`);
+    expect(read(join(SRC, 'main.tsx'))).toContain('./styles/tones.css');
+    expect(read(join(SRC, 'sdk-viewer/main.tsx'))).toContain('tones.css');
+  });
+
+  it('has no raw rgba() colour literal outside tokens.css (tints are color-mix of --tone, scrims are tokens)', () => {
+    const problems: string[] = [];
+    for (const file of [...cssFiles, ...tsxFiles]) {
+      if (rel(file) === 'styles/tokens.css') continue;
+      const n = (read(file).match(/rgba?\(/g) ?? []).length;
+      if (n) problems.push(`${rel(file)}: ${n}`);
+    }
+    expect(problems, 'Use color-mix(in srgb, var(--tone) var(--tint-soft), transparent) or a token').toEqual(
+      [],
+    );
+  });
+
+  it('lets no page declare its own .card (use ui/Card); the allow-list may only shrink', () => {
+    // Remaining local card classes, each with a reason. Everything else composes <Card>.
+    const ALLOWED = new Set<string>([
+      // role=radio selection cards; Card's interactive mode is role=button + aria-pressed, which is not radio semantics.
+      'features/experiments/launch/entry/entry.module.css',
+      // Edge-to-edge tabs + wide data table inside an overflow:hidden card; Card's body padding would inset the table.
+      'features/runs-list/ChartsPage.module.css',
+    ]);
+    const found = cssFiles
+      .filter((f) => /^\.card(?![\w-])/m.test(read(f)))
+      .map(rel)
+      .filter((f) => !f.startsWith('ui/'));
+    expect(
+      found.filter((f) => !ALLOWED.has(f)),
+      'Use Card (docs/DESIGN_LANGUAGE.md "Card") instead of a page-local .card',
+    ).toEqual([]);
+    expect(
+      [...ALLOWED].filter((f) => !found.includes(f)),
+      'Remove migrated files from the allow-list',
+    ).toEqual([]);
+  });
+
+  it('LinkButton reaches the Button hover and press states from an anchor', () => {
+    const css = read(join(SRC, 'ui/Button/Button.module.css'));
+    expect(css).toContain('a.button:hover');
+    expect(css).toContain('a.button:active');
+    expect(css).toContain('a.button:focus-visible');
+  });
+
+  it('puts no transform, scale or glow on hover (colour, border and opacity only)', () => {
+    const problems: string[] = [];
+    for (const file of cssFiles) {
+      for (const block of read(file).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selector = block[1]!.trim();
+        if (!/:hover|\[data-hovered\]/.test(selector)) continue;
+        if (/\b(?:transform|translate|scale)\s*:/.test(block[2]!))
+          problems.push(`${rel(file)}: '${selector.split('\n').pop()}' transforms on hover`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('animates data marks only through the shared motion tokens', () => {
+    const cells = read(join(SRC, 'ui/DataTable/cells/cells.module.css'));
+    expect(cells).toContain('var(--motion-fill)');
+    expect(cells).toContain('var(--motion-stagger)');
+    expect(read(join(SRC, 'styles/base.css'))).toContain('animation-delay: 0s !important');
   });
 });
 

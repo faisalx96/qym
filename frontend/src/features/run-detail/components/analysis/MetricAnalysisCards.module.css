@@ -1,12 +1,8 @@
 /* Root cause cards and the issue dialog form. */
-.card {
+.stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--control-radius);
-  background: var(--bg-elevated);
 }
 
 .head {

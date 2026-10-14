@@ -67,3 +67,12 @@ Dated lines; each is a decision the foundation agent made without a human.
 - 2026-10-11 — Known pre-existing failure on `UI-redesign`:
   `tests/platform/test_p1_navigation_browser.py::test_spa_navigation_leaves_no_listeners_or_stale_handlers`
   fails identically on the untouched branch (vanilla shell listener count); not touched here.
+
+## Visual language, redesign round 2 (2026-10-14)
+
+Tokens added to the "Added by the React migration" family in `frontend/src/styles/tokens.css` (no existing value changed):
+`--tint-faint` 6%, `--tint-soft` 12%, `--tint-strong` 20%, `--error-text`, `--chart-6..8`, `--rail-width`, `--card-padding`,
+`--card-padding-compact`, `--shadow-card-hover`, `--ease-out`, `--motion-fill`, `--motion-stagger`, `--motion-flash`,
+`--dim-opacity`, `--hover-brightness`, `--scrim`, `--scrim-light`, `--scrollbar-*`. New global stylesheets `tones.css`
+(tone, band, series maps) and `marks.css` (chart mark states). Decisions are in
+`docs/internal/ui-migration/redesign2/visual-language.md` "## Decisions".

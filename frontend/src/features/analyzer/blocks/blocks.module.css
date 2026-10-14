@@ -31,21 +31,11 @@
 }
 
 /* Card */
-.card {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-}
-
 .cardHead {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg) 0;
 }
 
 .cardTitles {
@@ -70,8 +60,8 @@
 }
 
 .cardBody {
-  padding: var(--space-md) var(--space-lg) var(--space-lg);
   min-width: 0;
+  margin-top: var(--space-md);
 }
 
 /* Run header + metrics */

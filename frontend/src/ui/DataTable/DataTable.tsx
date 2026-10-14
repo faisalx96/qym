@@ -29,6 +29,7 @@ import { Icon, type IconName } from '../Icon';
 import { Tooltip } from '../Tooltip';
 import { IconButton } from '../IconButton';
 import { Button } from '../Button';
+import { EnterContext, ENTER_MS } from '../motion';
 import { DataTableContext } from './context';
 import {
   alignOf,
@@ -380,6 +381,15 @@ function DataTableInner<R>({
   const scrollParent = vcfg?.scrollParent ?? null;
   const [scrollMargin, setScrollMargin] = useState(0);
   const dataRows = display.filter((d): d is Extract<DisplayRow<R>, { kind: 'row' }> => d.kind === 'row');
+  // Data marks (ScoreBar fills) grow in once, during the table's first paint of data; rows that scroll in
+  // later (virtualised remounts), sort or page never replay the entrance.
+  const [entering, setEntering] = useState(true);
+  const hasDisplayRows = display.length > 0;
+  useEffect(() => {
+    if (!hasDisplayRows) return undefined;
+    const id = window.setTimeout(() => setEntering(false), ENTER_MS);
+    return () => window.clearTimeout(id);
+  }, [hasDisplayRows]);
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     enabled: virtual,
@@ -1392,28 +1402,30 @@ function DataTableInner<R>({
         ) : null}
         <tr role="row">{renderCols.map((c) => thFor(c))}</tr>
       </thead>
-      <tbody ref={bodyRef} className={styles.tbody} onKeyDown={onBodyKeyDown} onMouseOver={onBodyMouseOver}>
-        {loading === 'quiet'
-          ? null
-          : loading
-            ? Array.from({ length: 8 }, (_, i) => (
-                <tr key={`sk-${i}`} className={styles.tr} aria-hidden="true">
-                  {renderCols.map((c) => (
-                    <td key={c.id} className={styles.td} data-col={c.id}>
-                      <span
-                        className={styles.bone}
-                        style={{ inlineSize: `${50 + ((i * 7 + c.id.length * 11) % 40)}%` }}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            : [
-                padTop > 0 ? spacer('top', padTop) : null,
-                ...bodyRows,
-                padBottom > 0 ? spacer('bottom', padBottom) : null,
-              ]}
-      </tbody>
+      <EnterContext.Provider value={entering}>
+        <tbody ref={bodyRef} className={styles.tbody} onKeyDown={onBodyKeyDown} onMouseOver={onBodyMouseOver}>
+          {loading === 'quiet'
+            ? null
+            : loading
+              ? Array.from({ length: 8 }, (_, i) => (
+                  <tr key={`sk-${i}`} className={styles.tr} aria-hidden="true">
+                    {renderCols.map((c) => (
+                      <td key={c.id} className={styles.td} data-col={c.id}>
+                        <span
+                          className={styles.bone}
+                          style={{ inlineSize: `${50 + ((i * 7 + c.id.length * 11) % 40)}%` }}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : [
+                  padTop > 0 ? spacer('top', padTop) : null,
+                  ...bodyRows,
+                  padBottom > 0 ? spacer('bottom', padBottom) : null,
+                ]}
+        </tbody>
+      </EnterContext.Provider>
       {visible.some((c) => c.summary) && !groupBy && !loading && rows.length > 0 ? (
         <tfoot className={styles.tfoot}>
           <tr>

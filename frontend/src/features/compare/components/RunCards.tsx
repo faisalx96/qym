@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
-import { Button, Icon, RunStatusBadge, Tag, Text } from '@/ui';
+import { Button, Icon, RunStatusBadge, Tag, Text, Card } from '@/ui';
 import { formatDurationMs } from '@/features/run-detail/lib/heroModel';
 import { letterOf, useCompare } from '../CompareContext';
 import { differingContext, ownerLabel, runCounts } from '../lib/runInfo';
@@ -63,48 +63,50 @@ export function RunCards() {
               const exp = run.experiment;
               const expSlug = run.project?.slug ?? slug;
               return (
-                <li
+                <Card
+                  as="li"
                   key={base}
-                  className={styles.card}
                   data-testid="run-card"
                   data-run={base}
                   data-status={String(run.status).toUpperCase()}
                 >
-                  <div className={styles.cardHead}>
-                    <RunDot index={idx} />
-                    <span className={styles.letter}>{letterOf(idx)}</span>
-                    <span className={styles.name} title={run.run_name || base}>
-                      {label}
-                    </span>
-                    <RunStatusBadge
-                      status={String(run.status).toUpperCase()}
-                      label={String(run.status).toUpperCase()}
-                    />
-                    {run.origin === 'official' ? (
-                      <Tag kind="accent" title="Run launched by an official experiment">
-                        Official
-                      </Tag>
-                    ) : null}
-                  </div>
-                  <dl className={styles.facts}>
-                    <Fact label="Items">
-                      {counts.items} · {counts.completed} completed · {counts.errors} error
-                      {counts.errors === 1 ? '' : 's'}
-                    </Fact>
-                    <Fact label="Model">{run.model_name}</Fact>
-                    <Fact label="Owner">{owner}</Fact>
-                    <Fact label="Dataset">
-                      {run.dataset_name}
-                      {run.dataset_version ? ` v${run.dataset_version}` : ''}
-                    </Fact>
-                    <Fact label="Runtime">{runtime === '—' ? '' : runtime}</Fact>
-                    <Fact label="Experiment">
-                      {exp && expSlug ? (
-                        <Link to={projectPath(expSlug, `experiments/${exp.id}`)}>{exp.name || exp.id}</Link>
+                  <div className={styles.stack}>
+                    <div className={styles.cardHead}>
+                      <RunDot index={idx} />
+                      <span className={styles.letter}>{letterOf(idx)}</span>
+                      <span className={styles.name} title={run.run_name || base}>
+                        {label}
+                      </span>
+                      <RunStatusBadge
+                        status={String(run.status).toUpperCase()}
+                        label={String(run.status).toUpperCase()}
+                      />
+                      {run.origin === 'official' ? (
+                        <Tag kind="accent" title="Run launched by an official experiment">
+                          Official
+                        </Tag>
                       ) : null}
-                    </Fact>
-                  </dl>
-                </li>
+                    </div>
+                    <dl className={styles.facts}>
+                      <Fact label="Items">
+                        {counts.items} · {counts.completed} completed · {counts.errors} error
+                        {counts.errors === 1 ? '' : 's'}
+                      </Fact>
+                      <Fact label="Model">{run.model_name}</Fact>
+                      <Fact label="Owner">{owner}</Fact>
+                      <Fact label="Dataset">
+                        {run.dataset_name}
+                        {run.dataset_version ? ` v${run.dataset_version}` : ''}
+                      </Fact>
+                      <Fact label="Runtime">{runtime === '—' ? '' : runtime}</Fact>
+                      <Fact label="Experiment">
+                        {exp && expSlug ? (
+                          <Link to={projectPath(expSlug, `experiments/${exp.id}`)}>{exp.name || exp.id}</Link>
+                        ) : null}
+                      </Fact>
+                    </dl>
+                  </div>
+                </Card>
               );
             })}
           </ul>

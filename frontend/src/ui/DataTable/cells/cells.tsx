@@ -3,6 +3,7 @@ import { Button as AriaButton } from 'react-aria-components';
 import { formatDurationMs, formatNumericValue, formatRelative } from '@/lib/format';
 import { metricBand, type MetricDirection, type MetricType } from '@/lib/metrics';
 import { CopyButton } from '../../CopyButton';
+import { staggerIndex, useEntrance, useFlashOnChange } from '../../motion';
 import { Identicon } from '../../Identicon';
 import { Popover } from '../../Popover';
 import { RunStatusBadge } from '../../RunStatusBadge';
@@ -24,8 +25,16 @@ export interface ScoreBarProps {
   error?: 'task' | 'metric' | null;
   /** Fixed bar colour (a CSS colour or token) for series that are not score bands, e.g. a model colour. */
   color?: string;
-  /** Track width in px (default 48). */
+  /** Track width in px (default 48; 96 for size 'lg'). */
   width?: number;
+  /** Series 1..8 colour for the fill instead of a band (a run, a model, a category group). */
+  series?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  /** 'sm' (default, 6px track, value beside it) or 'lg' (14px track, value inside the bar). */
+  size?: 'sm' | 'lg';
+  /** Position among sibling marks: staggers the grow-in by 24ms each (capped at 10). */
+  index?: number;
+  /** Flash a faint tint when the value changes (a live value on a running run). */
+  live?: boolean;
 }
 
 function normDirection(d: ScoreBarProps['direction']): MetricDirection {
@@ -35,7 +44,22 @@ function normDirection(d: ScoreBarProps['direction']): MetricDirection {
 }
 
 /** Track + fill + value. Errors show the warning glyph, never a bar. */
-export function ScoreBar({ value, type, direction, max, text, error, color, width }: ScoreBarProps) {
+export function ScoreBar({
+  value,
+  type,
+  direction,
+  max,
+  text,
+  error,
+  color,
+  width,
+  series,
+  size = 'sm',
+  index,
+  live,
+}: ScoreBarProps) {
+  const enter = useEntrance();
+  const flash = useFlashOnChange(value, live === true);
   if (error) {
     return (
       <span className={styles.scoreBar} data-error={error}>
@@ -65,6 +89,9 @@ export function ScoreBar({ value, type, direction, max, text, error, color, widt
     <span
       className={styles.scoreBar}
       data-band={band ?? undefined}
+      data-series={band ? undefined : series}
+      data-size={size === 'lg' ? 'lg' : undefined}
+      data-changed={flash ? '' : undefined}
       style={
         color || width
           ? ({
@@ -74,10 +101,21 @@ export function ScoreBar({ value, type, direction, max, text, error, color, widt
           : undefined
       }
     >
-      <span className={styles.track} aria-hidden="true">
-        <span className={styles.fill} style={{ inlineSize: `${pct}%` }} />
+      <span className={styles.track} aria-hidden={size === 'lg' ? undefined : 'true'}>
+        {size === 'lg' ? (
+          <span className={styles.inText} aria-hidden="true">
+            {label}
+          </span>
+        ) : null}
+        <span
+          className={styles.fill}
+          data-enter={enter ? '' : undefined}
+          style={{ inlineSize: `${pct}%`, '--i': staggerIndex(index) } as React.CSSProperties}
+        >
+          {size === 'lg' ? <span className={styles.onFill}>{label}</span> : null}
+        </span>
       </span>
-      <span className={styles.scoreText}>{label}</span>
+      {size === 'lg' ? null : <span className={styles.scoreText}>{label}</span>}
     </span>
   );
 }
@@ -91,9 +129,11 @@ export interface DeltaCellProps {
   noise?: number;
   /** Formatter for the magnitude (default points: value * 100). */
   format?: (abs: number) => string;
+  /** Pill variant: a tinted fill in the verdict colour (change beyond the noise band); flat and neutral stay plain. */
+  emphasis?: boolean;
 }
 
-export function DeltaCell({ value, direction, noise = 0, format }: DeltaCellProps) {
+export function DeltaCell({ value, direction, noise = 0, format, emphasis }: DeltaCellProps) {
   if (value === null || value === undefined || Number.isNaN(value))
     return <span className={styles.deltaEmpty}>—</span>;
   const dir = normDirection(direction);
@@ -105,6 +145,7 @@ export function DeltaCell({ value, direction, noise = 0, format }: DeltaCellProp
     <span
       className={styles.delta}
       data-verdict={flat ? 'flat' : good === null ? 'neutral' : good ? 'good' : 'bad'}
+      data-pill={emphasis && !flat && good !== null ? '' : undefined}
     >
       <span aria-hidden="true">{flat ? '–' : up ? '▲' : '▼'}</span>
       <span>

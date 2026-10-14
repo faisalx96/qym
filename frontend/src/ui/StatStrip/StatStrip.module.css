@@ -1,4 +1,4 @@
-/* Connected statistics: one outer border, 1px dividers on --border-subtle. */
+/* Connected statistics: one outer border, 1px dividers on --border-subtle; cells tint from --tone. */
 .strip {
   display: grid;
   grid-auto-flow: column;
@@ -11,12 +11,16 @@
 }
 
 .item {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: var(--space-sm);
   min-height: var(--stat-strip-min-height);
   padding: var(--space-md);
   background: var(--bg-surface);
+  transition:
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .strip[data-variant='compact-header'] .item {
@@ -26,11 +30,71 @@
   align-items: center;
 }
 
+/* An interactive cell: the button fills it; the cell carries hover, pressed and selected. */
+.item:has(> .press) {
+  padding: 0;
+}
+
+.press {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: inherit;
+  padding: var(--space-md);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.strip[data-variant='compact-header'] .press {
+  align-items: center;
+  padding: 0 var(--space-md);
+}
+
+.item:has(> .press:hover) {
+  background: var(--bg-hover);
+}
+
+.item:has(> .press:active) {
+  background: var(--bg-active);
+}
+
+.item[data-selected] {
+  background: color-mix(in srgb, var(--tone, var(--accent-primary)) var(--tint-soft), var(--bg-surface));
+  box-shadow: inset 0 -2px 0 var(--tone, var(--accent-primary));
+}
+
+.press:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.help {
+  position: absolute;
+  inset-block-start: var(--space-sm);
+  inset-inline-end: var(--space-sm);
+}
+
 .icon {
   display: inline-flex;
-  align-items: flex-start;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
   color: var(--text-muted);
-  padding-top: 2px;
+}
+
+.item[data-tone] .icon {
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+  color: var(--tone-text);
 }
 
 .stack {
@@ -56,6 +120,7 @@
 }
 
 .value {
+  border-radius: var(--control-radius);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-xl);
@@ -63,17 +128,48 @@
   color: var(--text-primary);
 }
 
-.value[data-tone='accent'] {
-  color: var(--accent-primary);
+.item[data-tone] .value {
+  color: var(--tone-text);
 }
-.value[data-tone='success'] {
-  color: var(--success);
+
+.item[data-tone='neutral'] .value {
+  color: var(--text-primary);
 }
-.value[data-tone='warning'] {
-  color: var(--warning);
+
+.value[data-changed] {
+  animation: stat-flash var(--motion-flash) var(--ease-out);
 }
-.value[data-tone='danger'] {
-  color: var(--error);
+
+@keyframes stat-flash {
+  from {
+    background: color-mix(in srgb, var(--accent-secondary) var(--tint-soft), transparent);
+  }
+}
+
+/* Change pill: arrow, sign and label always present; the tint is the verdict. */
+.trend {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--space-xs);
+  min-block-size: 20px;
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 650;
+}
+
+.trend[data-verdict='good'] {
+  background: color-mix(in srgb, var(--score-5) var(--tint-soft), transparent);
+  color: var(--score-5);
+}
+
+.trend[data-verdict='bad'] {
+  background: color-mix(in srgb, var(--score-1) var(--tint-soft), transparent);
+  color: var(--error-text);
 }
 
 .sub {

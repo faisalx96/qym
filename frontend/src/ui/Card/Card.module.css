@@ -1,0 +1,94 @@
+/* Card: --bg-surface, 1px --border-subtle, --radius-md, optional 3px inline-start rail in --tone; hover/press/selected only when interactive. */
+.card {
+  display: block;
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.card[data-rail] {
+  border-inline-start: var(--rail-width) solid var(--tone);
+}
+
+.card[data-wash='danger'] {
+  background: color-mix(in srgb, var(--error) var(--tint-faint), var(--bg-surface));
+}
+
+.card[data-wash='live'] {
+  background: color-mix(in srgb, var(--accent-secondary) var(--tint-faint), var(--bg-surface));
+}
+
+.header,
+.body,
+.footer {
+  padding: var(--card-padding);
+}
+
+.card[data-compact] .header,
+.card[data-compact] .body,
+.card[data-compact] .footer {
+  padding: var(--card-padding-compact);
+}
+
+.header {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.footer {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.card[data-interactive] {
+  cursor: pointer;
+  width: 100%;
+}
+
+.card[data-interactive]:hover {
+  border-color: var(--border-default);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.card[data-interactive][data-rail]:hover {
+  border-inline-start-color: var(--tone);
+}
+
+.card[data-interactive]:active {
+  background: var(--bg-active);
+}
+
+.card[data-selected] {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--bg-surface));
+}
+
+.card[data-selected][data-rail] {
+  border-inline-start-color: var(--tone);
+}
+
+.card[data-selected][data-interactive]:hover {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), var(--bg-surface));
+}
+
+.card[data-interactive]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.card[data-disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

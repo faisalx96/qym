@@ -43,7 +43,7 @@
   color: var(--error);
 }
 .item[data-tone='danger'][data-focused] {
-  background: rgba(239, 68, 68, 0.12);
+  background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
 }
 
 .item[data-disabled] {

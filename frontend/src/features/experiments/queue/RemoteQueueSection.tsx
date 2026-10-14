@@ -25,6 +25,7 @@ import {
   TwoLine,
   useToast,
   type Column,
+  Card,
 } from '@/ui';
 import { experimentPath } from '../paths';
 import { relTime } from '../lib/format';
@@ -48,7 +49,7 @@ export function RemoteQueueSection({
   const stale = data?.environments.reduce((n, e) => n + e.stale_count, 0) ?? 0;
   const panelId = 'remote-queue-panel';
   return (
-    <section className={styles.card} aria-label="Remote queue">
+    <Card as="section" className={styles.queueCard} aria-label="Remote queue">
       <button
         type="button"
         className={styles.toggle}
@@ -89,7 +90,7 @@ export function RemoteQueueSection({
           ))}
         </div>
       ) : null}
-    </section>
+    </Card>
   );
 }
 

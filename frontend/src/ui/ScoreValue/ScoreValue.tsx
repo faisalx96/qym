@@ -14,6 +14,8 @@ export interface ScoreValueProps {
   raw?: boolean;
   /** Override the displayed text (e.g. True/False for booleans, formatted numerics). */
   text?: string;
+  /** 'text' (default, inline) or 'pill' (tinted fill of the band: cards, stat strips, compare averages). */
+  variant?: 'text' | 'pill';
   className?: string;
 }
 
@@ -37,6 +39,7 @@ export function ScoreValue({
   digits = 0,
   raw,
   text: textOverride,
+  variant = 'text',
   className,
 }: ScoreValueProps) {
   const dir = normalize(direction);
@@ -53,6 +56,7 @@ export function ScoreValue({
       className={[styles.score, className].filter(Boolean).join(' ')}
       data-band={band ?? undefined}
       data-error={error ?? undefined}
+      data-variant={variant === 'pill' ? 'pill' : undefined}
       title={band ? `Band ${band} of 5` : undefined}
     >
       {error ? (

@@ -35,7 +35,12 @@ export function runStatusTone(status: RunStatus): BadgeTone {
 export function RunStatusBadge({ status, label }: { status: RunStatus; label?: string }) {
   const tone = runStatusTone(status);
   return (
-    <Badge tone={tone} dot={tone === 'info'} data-status={String(status).toUpperCase()}>
+    <Badge
+      tone={tone}
+      dot={tone === 'info'}
+      glyph={String(status).toUpperCase() === 'APPROVED' ? '✓' : undefined}
+      data-status={String(status).toUpperCase()}
+    >
       {label ?? String(status).toLowerCase()}
     </Badge>
   );

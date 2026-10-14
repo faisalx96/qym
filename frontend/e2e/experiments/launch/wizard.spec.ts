@@ -209,6 +209,7 @@ test.describe('motion', () => {
 test.describe('polish', () => {
   test('the Models step keeps its "no changes" tag beside the heading', async ({ page }) => {
     await openLaunch(page, f.project.slug, `?env=${f.env.id}`, 'models');
+    await settled(page);
     const h = await page.getByRole('heading', { name: 'Models', level: 2 }).boundingBox();
     const tag = await page.locator('[data-step] >> text=no changes').first().boundingBox();
     expect(Math.abs(tag!.y + tag!.height / 2 - (h!.y + h!.height / 2))).toBeLessThan(12);

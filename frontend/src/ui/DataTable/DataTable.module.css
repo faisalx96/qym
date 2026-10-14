@@ -474,6 +474,14 @@
   --row-base: var(--bg-hover);
 }
 
+.tr[data-state='error'] {
+  --row-tint: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
+}
+
+.tr[data-state='live'] {
+  --row-tint: color-mix(in srgb, var(--accent-secondary) var(--tint-faint), transparent);
+}
+
 .tr[data-selected] {
   --row-tint: var(--bg-selected);
 }

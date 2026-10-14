@@ -16,8 +16,8 @@ export) was only read.
   `metric_names` (empty strings for a task error), `metric_meta`, `item_metadata`
   (incl. `trace_stats`), `trace_id`/`trace_url`. Repeat rows add `pass_scores`,
   `pass_metric_meta`, `pass_attempts`. `snapshot.stats` = `{total, completed,
-  failed, not_received, execution_count, …}`. `metric_specs.score_type ∈
-  boolean|percentage|count|number|legacy`, `direction ∈ maximize|minimize|null`.
+failed, not_received, execution_count, …}`. `metric_specs.score_type ∈
+boolean|percentage|count|number|legacy`, `direction ∈ maximize|minimize|null`.
 - `/passes`, `/group-metrics`, `/items/details`, `/items/{id}/trace` (attempts
   merged, `summary.error_count`, span `attributes` with OpenInference keys),
   `/review-history`, `/live-status` (`revision` string), `POST /api/dashboard/neighbors`,
@@ -39,7 +39,7 @@ export) was only read.
   page are empty. The React page should keep that: heavy charts mount on
   visibility.
 - Item card (collapsed): chevron · `#index` · Pass/Fail tag · title (`dir=rtl
-  lang=ar` for Arabic) · failure reason + source · metric pills that fit + "+N
+lang=ar` for Arabic) · failure reason + source · metric pills that fit + "+N
   more". Expanded: INPUT (Copy link) / EXPECTED OUTPUT / metadata tags / OUTPUT
   (status, latency, started, Trace, copy) / trace chips (tokens, cost, LLM calls,
   tool calls, tool errors, retries) / metric strip with caret + pencil.

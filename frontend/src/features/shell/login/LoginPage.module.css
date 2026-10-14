@@ -14,7 +14,11 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(60% 50% at 50% 0%, rgba(0, 212, 170, 0.12), transparent 70%),
+    radial-gradient(
+      60% 50% at 50% 0%,
+      color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent),
+      transparent 70%
+    ),
     linear-gradient(var(--border-subtle) 1px, transparent 1px),
     linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
   background-size:
@@ -25,14 +29,13 @@
   pointer-events: none;
 }
 
-.card {
-  position: relative;
+.panel {
   width: min(420px, 100%);
-  padding: var(--space-xl) var(--space-xl) var(--space-lg);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  background: var(--bg-surface);
   box-shadow: var(--shadow-dialog);
+}
+
+.panelBody {
+  padding: var(--space-sm) var(--space-md);
 }
 
 .header {

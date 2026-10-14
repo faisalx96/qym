@@ -17,14 +17,14 @@
   gap: var(--space-xs);
   padding: var(--space-sm) var(--space-md);
   border-inline-start: 3px solid var(--warning);
-  background: rgba(245, 158, 11, 0.08);
+  background: color-mix(in srgb, var(--warning) var(--tint-faint), transparent);
   border-radius: 0 var(--control-radius) var(--control-radius) 0;
   color: var(--text-secondary);
 }
 
 .warning[data-tone='danger'] {
   border-color: var(--error);
-  background: rgba(239, 68, 68, 0.08);
+  background: color-mix(in srgb, var(--error) var(--tint-faint), transparent);
 }
 
 .warning strong {

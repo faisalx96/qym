@@ -39,15 +39,10 @@
   gap: var(--space-sm);
 }
 
-.card {
+.stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  min-width: 0;
 }
 
 .cardHead {

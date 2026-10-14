@@ -5,7 +5,7 @@ import type { AuthProvider } from '@/api/types';
 import { api, ApiError, sameOriginTarget } from '@/lib/http';
 import { appUrl, bootstrap, platformUrl } from '@/lib/runtime';
 import { useDelayedPending } from '@/lib/pending';
-import { Button, EmptyState, ErrorState, Icon, Skeleton, Stack, Text, TextField } from '@/ui';
+import { Button, EmptyState, ErrorState, Icon, Skeleton, Stack, Text, TextField, Card } from '@/ui';
 import { useDocumentTitle } from '../hooks';
 import brandIcon from '@/assets/brand/qym-icon.png';
 import brandText from '@/assets/brand/qym-text.png';
@@ -41,30 +41,36 @@ export function LoginPage() {
   return (
     <main className={styles.page} data-login-page>
       <div className={styles.backdrop} aria-hidden="true" />
-      <section className={styles.card} aria-labelledby="login-title">
-        <header className={styles.header}>
-          <img src={brandIcon} alt="" className={styles.logo} width={64} height={64} />
-          <img src={brandText} alt="qym" className={styles.wordmark} width={57} height={36} />
-          <Text variant="xl" as="h1" id="login-title">
-            Sign in to qym
-          </Text>
-          <Text variant="sm">Evaluation runs, datasets and reviews for your projects.</Text>
-        </header>
-        {providers.isPending ? (
-          showSkeleton ? (
-            <Skeleton kind="lines" rows={4} label="Loading sign-in options" />
-          ) : null
-        ) : providers.isError ? (
-          <ErrorState
-            error={providers.error}
-            title="Couldn’t load sign-in options"
-            onRetry={() => providers.refetch()}
-            compact
-          />
-        ) : (
-          <LoginBody providers={providers.data.providers} localAuth={providers.data.local_auth} next={next} />
-        )}
-      </section>
+      <Card as="section" className={styles.panel} aria-labelledby="login-title">
+        <div className={styles.panelBody}>
+          <header className={styles.header}>
+            <img src={brandIcon} alt="" className={styles.logo} width={64} height={64} />
+            <img src={brandText} alt="qym" className={styles.wordmark} width={57} height={36} />
+            <Text variant="xl" as="h1" id="login-title">
+              Sign in to qym
+            </Text>
+            <Text variant="sm">Evaluation runs, datasets and reviews for your projects.</Text>
+          </header>
+          {providers.isPending ? (
+            showSkeleton ? (
+              <Skeleton kind="lines" rows={4} label="Loading sign-in options" />
+            ) : null
+          ) : providers.isError ? (
+            <ErrorState
+              error={providers.error}
+              title="Couldn’t load sign-in options"
+              onRetry={() => providers.refetch()}
+              compact
+            />
+          ) : (
+            <LoginBody
+              providers={providers.data.providers}
+              localAuth={providers.data.local_auth}
+              next={next}
+            />
+          )}
+        </div>
+      </Card>
     </main>
   );
 }

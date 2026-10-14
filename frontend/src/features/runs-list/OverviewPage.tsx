@@ -15,6 +15,7 @@ import {
   StatStrip,
   Tag,
   Text,
+  Card as UiCard,
 } from '@/ui';
 import { constrained, useDocumentTitle, useProjectContext } from '@/features/shell';
 import { projectPath, runPath } from '@/app/routes';
@@ -480,25 +481,31 @@ function Card({
   children: ReactNode;
 }) {
   return (
-    <section className={styles.card} aria-label={title}>
-      <header className={styles.cardHead}>
-        <div className={styles.cardTitle}>
-          <Text variant="md" as="h2">
-            {title}
-          </Text>
-          {description ? (
-            <Text variant="sm" tone="muted" as="p">
-              {description}
+    <UiCard
+      as="section"
+      compact
+      aria-label={title}
+      header={
+        <header className={styles.cardHead}>
+          <div className={styles.cardTitle}>
+            <Text variant="md" as="h2">
+              {title}
             </Text>
+            {description ? (
+              <Text variant="sm" tone="muted" as="p">
+                {description}
+              </Text>
+            ) : null}
+          </div>
+          {aside}
+          {!hideViewAll ? (
+            <Link to={to} className={styles.viewAll}>
+              View all →<span className={styles.srOnly}> {title}</span>
+            </Link>
           ) : null}
-        </div>
-        {aside}
-        {!hideViewAll ? (
-          <Link to={to} className={styles.viewAll}>
-            View all →<span className={styles.srOnly}> {title}</span>
-          </Link>
-        ) : null}
-      </header>
+        </header>
+      }
+    >
       <div className={styles.cardBody}>
         {query?.isError && !query.data ? (
           <ErrorState
@@ -513,6 +520,6 @@ function Card({
           children
         )}
       </div>
-    </section>
+    </UiCard>
   );
 }

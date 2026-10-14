@@ -39,6 +39,17 @@
   font-size: var(--font-sm);
   color: var(--text-secondary);
   cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.pin:hover {
+  background: var(--bg-hover);
+}
+
+.pin:active {
+  background: var(--bg-active);
 }
 
 .pin em {
@@ -52,7 +63,6 @@
 }
 
 .pin:focus-visible,
-.bin:focus-visible,
 .steps button:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 1px;
@@ -75,7 +85,6 @@
   padding: 0;
   border: 0;
   background: transparent;
-  cursor: pointer;
 }
 
 .bin:disabled {
@@ -91,8 +100,22 @@
   align-items: flex-end;
   width: 100%;
   border-radius: 4px 4px 0 0;
-  background: var(--chart-2);
+  /* Bulk is neutral; only the slow tail carries a tone (p90 yellow, p95 orange). */
+  background: var(--bg-active);
   overflow: hidden;
+  transform-origin: bottom;
+  transition: height var(--motion-fill) var(--ease-out);
+}
+
+.binBar[data-enter] {
+  animation: bin-rise var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+@keyframes bin-rise {
+  from {
+    transform: scaleY(0);
+  }
 }
 
 .bin[data-tone='p90'] .binBar {
@@ -134,6 +157,10 @@
   display: flex;
   gap: 2px;
   height: 22px;
+}
+
+.groupToggle:hover {
+  color: var(--accent-primary);
 }
 
 .seg {
@@ -249,6 +276,11 @@
   text-transform: inherit;
   color: inherit;
   cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.stepsHead button:hover {
+  color: var(--text-primary);
 }
 
 .stepRow {

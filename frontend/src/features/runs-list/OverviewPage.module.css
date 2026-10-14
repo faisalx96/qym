@@ -18,19 +18,10 @@
   gap: var(--space-md);
 }
 
-.card {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  min-width: 0;
-}
-
 .cardHead {
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .cardTitle {
@@ -44,7 +35,7 @@
 }
 
 .cardBody {
-  padding: var(--space-sm) var(--space-md) var(--space-md);
+  min-width: 0;
 }
 
 .viewAll {

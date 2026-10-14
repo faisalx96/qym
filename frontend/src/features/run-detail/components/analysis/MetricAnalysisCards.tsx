@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useIssueAction } from '@/api/runs';
 import { isItemTaskError } from '@/lib/metrics';
-import { Button, Tag, useToast } from '@/ui';
+import { Button, Tag, useToast, Card as UiCard } from '@/ui';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import { rootCauseCategories, rootCauseIssues } from '../../lib/rowMeta';
 import { useRunPage } from '../../RunContext';
@@ -80,80 +80,83 @@ function Card({
       { onError: (e) => toast.show(messageFor(e), { tone: 'error' }) },
     );
   return (
-    <section
-      className={styles.card}
+    <UiCard
+      as="section"
       aria-label={`Root cause analysis for ${metric}`}
       data-testid="metric-analysis-card"
       data-metric={metric}
+      compact
     >
-      <header className={styles.head}>
-        <h4 className={styles.title}>Root cause · {metric}</h4>
-        {analysis?.error ? <Tag tone="danger">analysis failed</Tag> : null}
-        {canEdit ? (
-          <Button size="sm" variant="neutral" onPress={() => setDialog({ open: true, issue: null })}>
-            + Add issue
-          </Button>
+      <div className={styles.stack}>
+        <header className={styles.head}>
+          <h4 className={styles.title}>Root cause · {metric}</h4>
+          {analysis?.error ? <Tag tone="danger">analysis failed</Tag> : null}
+          {canEdit ? (
+            <Button size="sm" variant="neutral" onPress={() => setDialog({ open: true, issue: null })}>
+              + Add issue
+            </Button>
+          ) : null}
+        </header>
+        {analysis?.error ? <p className={styles.errorText}>{String(analysis.error)}</p> : null}
+        {issues.length === 0 && !analysis?.error ? (
+          <p className={styles.muted}>No issues recorded for this metric.</p>
         ) : null}
-      </header>
-      {analysis?.error ? <p className={styles.errorText}>{String(analysis.error)}</p> : null}
-      {issues.length === 0 && !analysis?.error ? (
-        <p className={styles.muted}>No issues recorded for this metric.</p>
-      ) : null}
-      <ul className={styles.issues}>
-        {issues.map((issue, i) => (
-          <li key={issue.issue_id ?? i} className={styles.issue} data-testid="issue">
-            <div className={styles.issueHead}>
-              <Tag kind="accent">{issue.category || 'Uncategorized'}</Tag>
-              {issue.subcategory ? <span className={styles.sub}>{issue.subcategory}</span> : null}
-              {statusTag(issueStatus(row, metric, issue, i, analysis))}
-              {issue.confidence != null ? (
-                <span className={styles.conf}>{Math.round(issue.confidence * 100)}% confidence</span>
-              ) : null}
-              {canEdit ? (
-                <span className={styles.actions}>
-                  <Button size="sm" variant="neutral" onPress={() => setDialog({ open: true, issue })}>
-                    Edit
-                  </Button>
-                  {issueStatus(row, metric, issue, i, analysis) === 'pending' ? (
-                    <Button
-                      size="sm"
-                      variant="accent"
-                      onPress={() => approve(issue)}
-                      isDisabled={action.isPending}
-                      aria-label={`Approve issue ${issue.category}`}
-                    >
-                      ✓ Approve
+        <ul className={styles.issues}>
+          {issues.map((issue, i) => (
+            <li key={issue.issue_id ?? i} className={styles.issue} data-testid="issue">
+              <div className={styles.issueHead}>
+                <Tag kind="accent">{issue.category || 'Uncategorized'}</Tag>
+                {issue.subcategory ? <span className={styles.sub}>{issue.subcategory}</span> : null}
+                {statusTag(issueStatus(row, metric, issue, i, analysis))}
+                {issue.confidence != null ? (
+                  <span className={styles.conf}>{Math.round(issue.confidence * 100)}% confidence</span>
+                ) : null}
+                {canEdit ? (
+                  <span className={styles.actions}>
+                    <Button size="sm" variant="neutral" onPress={() => setDialog({ open: true, issue })}>
+                      Edit
                     </Button>
-                  ) : null}
-                </span>
+                    {issueStatus(row, metric, issue, i, analysis) === 'pending' ? (
+                      <Button
+                        size="sm"
+                        variant="accent"
+                        onPress={() => approve(issue)}
+                        isDisabled={action.isPending}
+                        aria-label={`Approve issue ${issue.category}`}
+                      >
+                        ✓ Approve
+                      </Button>
+                    ) : null}
+                  </span>
+                ) : null}
+              </div>
+              {issue.finding ? <p className={styles.finding}>{issue.finding}</p> : null}
+              {issue.category_reason ? (
+                <p className={styles.muted}>
+                  <b>Why this category:</b> {issue.category_reason}
+                </p>
               ) : null}
-            </div>
-            {issue.finding ? <p className={styles.finding}>{issue.finding}</p> : null}
-            {issue.category_reason ? (
-              <p className={styles.muted}>
-                <b>Why this category:</b> {issue.category_reason}
-              </p>
-            ) : null}
-            {issue.solution || issue.solution_note ? (
-              <p className={styles.muted}>
-                <b>Solution:</b> {issue.solution}
-                {issue.solution_note ? ` — ${issue.solution_note}` : ''}
-              </p>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {dialog.open ? (
-        <IssueDialog
-          open
-          onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
-          row={row}
-          metric={metric}
-          issue={dialog.issue}
-          passNumber={passNumber}
-        />
-      ) : null}
-    </section>
+              {issue.solution || issue.solution_note ? (
+                <p className={styles.muted}>
+                  <b>Solution:</b> {issue.solution}
+                  {issue.solution_note ? ` — ${issue.solution_note}` : ''}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {dialog.open ? (
+          <IssueDialog
+            open
+            onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
+            row={row}
+            metric={metric}
+            issue={dialog.issue}
+            passNumber={passNumber}
+          />
+        ) : null}
+      </div>
+    </UiCard>
   );
 }
 
@@ -212,22 +215,24 @@ export function MetricAnalysisCards({ row }: { row: Row }) {
         />
       ))}
       {legacy ? (
-        <section className={styles.card} aria-label="Legacy diagnosis">
-          <header className={styles.head}>
-            <h4 className={styles.title}>Diagnosis (legacy)</h4>
-          </header>
-          <p className={styles.finding}>
-            {rootCauseCategories(md).join(', ')}
-            {md.root_cause_detail ? ` · ${String(md.root_cause_detail)}` : ''}
-          </p>
-          {md.root_cause_note ? <p className={styles.muted}>{String(md.root_cause_note)}</p> : null}
-          {md.solution ? (
-            <p className={styles.muted}>
-              <b>Solution:</b> {String(md.solution)}
-              {md.solution_note ? ` — ${String(md.solution_note)}` : ''}
+        <UiCard as="section" aria-label="Legacy diagnosis" compact>
+          <div className={styles.stack}>
+            <header className={styles.head}>
+              <h4 className={styles.title}>Diagnosis (legacy)</h4>
+            </header>
+            <p className={styles.finding}>
+              {rootCauseCategories(md).join(', ')}
+              {md.root_cause_detail ? ` · ${String(md.root_cause_detail)}` : ''}
             </p>
-          ) : null}
-        </section>
+            {md.root_cause_note ? <p className={styles.muted}>{String(md.root_cause_note)}</p> : null}
+            {md.solution ? (
+              <p className={styles.muted}>
+                <b>Solution:</b> {String(md.solution)}
+                {md.solution_note ? ` — ${String(md.solution_note)}` : ''}
+              </p>
+            ) : null}
+          </div>
+        </UiCard>
       ) : null}
     </>
   );

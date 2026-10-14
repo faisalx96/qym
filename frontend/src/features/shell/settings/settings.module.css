@@ -1,23 +1,12 @@
 /* Project settings: cards, add bars, tables (project_settings.html recipes). */
-.card {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-}
-
 .cardHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .cardBody {
-  padding: var(--space-md) var(--space-lg);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -28,8 +17,6 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-lg) var(--space-md);
-  border-top: 1px solid var(--border-subtle);
 }
 
 .addBar {
@@ -49,10 +36,6 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-}
-
-.dangerCard {
-  border-color: color-mix(in srgb, var(--error) 40%, var(--border-subtle));
 }
 
 .dangerRow {
@@ -131,12 +114,12 @@
 
 .diff ins {
   text-decoration: none;
-  background: rgba(16, 185, 129, 0.18);
+  background: color-mix(in srgb, var(--success) var(--tint-strong), transparent);
   color: var(--success);
 }
 
 .diff del {
-  background: rgba(239, 68, 68, 0.18);
+  background: color-mix(in srgb, var(--error) var(--tint-strong), transparent);
   color: var(--error);
 }
 

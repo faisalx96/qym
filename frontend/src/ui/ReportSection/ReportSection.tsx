@@ -69,7 +69,11 @@ export function ReportSection({
           ) : undefined
         }
       />
-      <div className={styles.body} style={inView ? undefined : { minHeight }}>
+      <div
+        className={styles.body}
+        style={inView ? undefined : { minHeight }}
+        data-arrive={lazy && inView ? '' : undefined}
+      >
         {inView ? children : null}
       </div>
     </section>

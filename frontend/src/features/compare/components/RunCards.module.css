@@ -27,15 +27,10 @@
   list-style: none;
 }
 
-.card {
+.stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  min-width: 0;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
 }
 
 .cardHead {

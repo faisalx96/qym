@@ -94,7 +94,7 @@
 }
 
 .passes tr[data-selected] td {
-  background: rgba(0, 212, 170, 0.08);
+  background: var(--bg-selected);
 }
 
 .selectCol {

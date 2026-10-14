@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useRenameProject, useReviewRules } from '@/api/projects';
 import { ApiError } from '@/lib/http';
 import { useSubmitLock } from '@/lib/pending';
-import { Button, Checkbox, KeyValueGrid, Select, Stack, Text, TextField, useToast } from '@/ui';
+import { Button, Checkbox, KeyValueGrid, Select, Stack, Text, TextField, useToast, Card } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
 
@@ -32,12 +32,17 @@ export function GeneralTab() {
 
   return (
     <Stack gap="lg">
-      <section className={styles.card} aria-labelledby="general-overview">
-        <div className={styles.cardHeader}>
-          <Text variant="md" id="general-overview">
-            Overview
-          </Text>
-        </div>
+      <Card
+        as="section"
+        aria-labelledby="general-overview"
+        header={
+          <div className={styles.cardHeader}>
+            <Text variant="md" id="general-overview">
+              Overview
+            </Text>
+          </div>
+        }
+      >
         <div className={styles.cardBody}>
           <KeyValueGrid
             aria-label="Project overview"
@@ -57,20 +62,25 @@ export function GeneralTab() {
             ]}
           />
         </div>
-      </section>
+      </Card>
 
       {isAdmin && !readOnly ? (
-        <section className={styles.card} aria-labelledby="general-name">
-          <div className={styles.cardHeader}>
-            <div>
-              <Text variant="md" id="general-name">
-                Name
-              </Text>
-              <Text variant="sm">
-                Shown in the sidebar, breadcrumbs and run pages. The slug does not change.
-              </Text>
+        <Card
+          as="section"
+          aria-labelledby="general-name"
+          header={
+            <div className={styles.cardHeader}>
+              <div>
+                <Text variant="md" id="general-name">
+                  Name
+                </Text>
+                <Text variant="sm">
+                  Shown in the sidebar, breadcrumbs and run pages. The slug does not change.
+                </Text>
+              </div>
             </div>
-          </div>
+          }
+        >
           <div className={styles.cardBody}>
             <form
               className={styles.addBar}
@@ -90,22 +100,58 @@ export function GeneralTab() {
               </Button>
             </form>
           </div>
-        </section>
+        </Card>
       ) : null}
 
       {
-        <section className={styles.card} aria-labelledby="general-rules">
-          <div className={styles.cardHeader}>
-            <div>
-              <Text variant="md" id="general-rules">
-                Correction review rules
-              </Text>
-              <Text variant="sm">
-                Who may approve corrections and whether the author can review their own.
-                {canManage ? '' : ' Only project managers can change these rules.'}
-              </Text>
+        <Card
+          as="section"
+          aria-labelledby="general-rules"
+          header={
+            <div className={styles.cardHeader}>
+              <div>
+                <Text variant="md" id="general-rules">
+                  Correction review rules
+                </Text>
+                <Text variant="sm">
+                  Who may approve corrections and whether the author can review their own.
+                  {canManage ? '' : ' Only project managers can change these rules.'}
+                </Text>
+              </div>
             </div>
-          </div>
+          }
+          footer={
+            !readOnly && canManage ? (
+              <div className={styles.cardFooter}>
+                <Button
+                  variant="primary"
+                  loading={rules.isPending}
+                  isDisabled={
+                    approvers === project.correction_approvers &&
+                    differentReviewer === project.correction_require_different_reviewer
+                  }
+                  onPress={() =>
+                    void lock(async () => {
+                      try {
+                        await rules.mutateAsync({
+                          correction_approvers: approvers,
+                          correction_require_different_reviewer: differentReviewer,
+                        });
+                        toast.show('Review rules saved', { tone: 'success' });
+                      } catch (e) {
+                        toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
+                          tone: 'error',
+                        });
+                      }
+                    })
+                  }
+                >
+                  Save rules
+                </Button>
+              </div>
+            ) : undefined
+          }
+        >
           <div className={styles.cardBody}>
             <div className={styles.formRow}>
               <Select
@@ -127,36 +173,7 @@ export function GeneralTab() {
               Require a different reviewer than the author
             </Checkbox>
           </div>
-          {!readOnly && canManage ? (
-            <div className={styles.cardFooter}>
-              <Button
-                variant="primary"
-                loading={rules.isPending}
-                isDisabled={
-                  approvers === project.correction_approvers &&
-                  differentReviewer === project.correction_require_different_reviewer
-                }
-                onPress={() =>
-                  void lock(async () => {
-                    try {
-                      await rules.mutateAsync({
-                        correction_approvers: approvers,
-                        correction_require_different_reviewer: differentReviewer,
-                      });
-                      toast.show('Review rules saved', { tone: 'success' });
-                    } catch (e) {
-                      toast.show(e instanceof ApiError ? e.detail || 'Could not save' : 'Could not save', {
-                        tone: 'error',
-                      });
-                    }
-                  })
-                }
-              >
-                Save rules
-              </Button>
-            </div>
-          ) : null}
-        </section>
+        </Card>
       }
     </Stack>
   );

@@ -19,6 +19,7 @@ import {
   TextField,
   useToast,
   type Column,
+  Card,
 } from '@/ui';
 import type { Project } from '@/api/types';
 import styles from './ProfilePage.module.css';
@@ -60,7 +61,7 @@ export function ProfilePage() {
       <Stack gap="xl">
         <section>
           <SectionHeader title="Account" />
-          <div className={styles.card}>
+          <Card>
             <KeyValueGrid
               aria-label="Account"
               columns={2}
@@ -80,7 +81,7 @@ export function ProfilePage() {
                 { key: 'auth', label: 'Sign-in method', value: me.auth_type?.replace(/_/g, ' ') ?? '—' },
               ]}
             />
-          </div>
+          </Card>
         </section>
         {me.can_bootstrap_admin && !isAdmin ? <BootstrapAdminPanel onGranted={refetch} /> : null}
         <section>

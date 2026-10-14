@@ -2,7 +2,16 @@
 import { Link } from 'react-router-dom';
 import type { ExperimentDetail, ExperimentJob } from '@/api/experiments';
 import { runPath } from '@/app/routes';
-import { Checkbox, DataTable, RelativeTime, SectionHeader, TwoLine, type Column, type RowAction } from '@/ui';
+import {
+  Checkbox,
+  DataTable,
+  RelativeTime,
+  SectionHeader,
+  TwoLine,
+  type Column,
+  type RowAction,
+  Card,
+} from '@/ui';
 import { JobStatusBadge } from '../components/StatusBadges';
 import { isCancellable, isRetryable } from '../lib/cancel';
 import { sweepSummary } from '../lib/format';
@@ -152,36 +161,38 @@ export function JobHistoryCard({
       : []),
   ];
   return (
-    <section className={styles.card} aria-labelledby="history-title" data-exp-jobs>
-      <div className={styles.cardHead}>
-        <SectionHeader
-          id="history-title"
-          title="Job history"
-          description={
-            live ? 'Refreshing automatically while jobs are queued or running.' : 'Every job has finished.'
-          }
-        />
-        {supersededCount ? (
-          <Checkbox isSelected={showEarlier} onChange={onShowEarlier}>
-            Show earlier attempts ({supersededCount})
-          </Checkbox>
-        ) : null}
+    <Card as="section" aria-labelledby="history-title" data-exp-jobs>
+      <div className={styles.stack}>
+        <div className={styles.cardHead}>
+          <SectionHeader
+            id="history-title"
+            title="Job history"
+            description={
+              live ? 'Refreshing automatically while jobs are queued or running.' : 'Every job has finished.'
+            }
+          />
+          {supersededCount ? (
+            <Checkbox isSelected={showEarlier} onChange={onShowEarlier}>
+              Show earlier attempts ({supersededCount})
+            </Checkbox>
+          ) : null}
+        </div>
+        <DataTable<ExperimentJob>
+          aria-label="Jobs"
+          storageKey="experiments.jobs.v1"
+          columns={columns}
+          rows={rows}
+          rowKey={(j) => j.id}
+          minWidth={1000}
+          empty="This experiment has no jobs."
+          rowActions={rowActions}
+          rowState={(j) => (j.status === 'FAILED' || j.status === 'TIMED_OUT' ? 'error' : undefined)}
+          density="regular"
+          refreshing={live}
+        >
+          <DataTable.Footer summary={`${rows.length} ${rows.length === 1 ? 'job' : 'jobs'}`} />
+        </DataTable>
       </div>
-      <DataTable<ExperimentJob>
-        aria-label="Jobs"
-        storageKey="experiments.jobs.v1"
-        columns={columns}
-        rows={rows}
-        rowKey={(j) => j.id}
-        minWidth={1000}
-        empty="This experiment has no jobs."
-        rowActions={rowActions}
-        rowState={(j) => (j.status === 'FAILED' || j.status === 'TIMED_OUT' ? 'error' : undefined)}
-        density="regular"
-        refreshing={live}
-      >
-        <DataTable.Footer summary={`${rows.length} ${rows.length === 1 ? 'job' : 'jobs'}`} />
-      </DataTable>
-    </section>
+    </Card>
   );
 }

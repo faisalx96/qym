@@ -102,6 +102,8 @@ export function CategoriesTab() {
                   <RateBar
                     value={numeric ? null : g.avgScore}
                     label={`${g.value}: average ${fmt(g.avgScore)}`}
+                    direction={model.metricDirections[metric] ?? null}
+                    type={model.metricTypes[metric]}
                   />
                   <span className={styles.detail}>
                     {g.itemCount} items{g.avgLatency ? ` · ${formatLatency(g.avgLatency)}` : ''}

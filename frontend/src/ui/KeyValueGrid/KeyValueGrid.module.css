@@ -26,11 +26,46 @@
 }
 
 .label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
   font-size: var(--font-sm);
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.icon {
+  display: inline-flex;
+  color: var(--tone-text, var(--text-muted));
+}
+
+/* Config/metadata keys carry the definition-metadata (meta) colour on the kind suffix only. */
+.kind {
+  color: var(--tone-text, var(--text-muted));
+  letter-spacing: 0.05em;
+}
+
+.kind::before {
+  content: '·';
+  margin-inline-end: var(--space-xs);
+  color: var(--text-muted);
+}
+
+/* Tiles: each pair on an elevated tile at card rhythm; a tone adds a 3px start rail. */
+.grid[data-variant='tiles'] {
+  gap: var(--space-sm);
+}
+
+.grid[data-variant='tiles'] .item {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.grid[data-variant='tiles'] .item[data-tone] {
+  border-inline-start: var(--rail-width) solid var(--tone);
 }
 
 .value {

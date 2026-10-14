@@ -94,7 +94,7 @@
 .tab[data-tone='danger'] .count {
   /* red text on the red tint was 3.95:1; the tint carries the tone, the numeral stays readable */
   color: var(--text-primary);
-  background: rgba(239, 68, 68, 0.3);
+  background: color-mix(in srgb, var(--error) var(--tint-strong), transparent);
 }
 
 .tab[data-selected] .count {

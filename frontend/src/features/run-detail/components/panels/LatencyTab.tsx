@@ -3,7 +3,17 @@ import { useMemo, useState } from 'react';
 import { useStepLatencyQuery, stepLatencyUrl } from '@/api/runs';
 import { platformUrl } from '@/lib/runtime';
 import { formatPercent, isErrorRow, isNotReceivedRow } from '@/lib/metrics';
-import { Chip, ErrorState, Icon, SearchField, SegmentedControl, Skeleton } from '@/ui';
+import {
+  ChartTooltipHost,
+  Chip,
+  ErrorState,
+  Icon,
+  Mark,
+  SearchField,
+  SegmentedControl,
+  Skeleton,
+  useEntrance,
+} from '@/ui';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import {
   budgetSegments,
@@ -26,7 +36,7 @@ import {
   type StepSortKey,
 } from '../../lib/latencyModel';
 import { useRunPage } from '../../RunContext';
-import { Scatter } from '../charts/Charts';
+import { Scatter, type ScatterPoint, type ScatterQuadrants } from '../charts/Charts';
 import styles from './Latency.module.css';
 import panel from './Panels.module.css';
 
@@ -36,6 +46,7 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
   const L = useMemo(() => latencySummary(items), [items]);
   const H = useMemo(() => (L ? latencyHistogram(items, L) : null), [items, L]);
   const [anchor, setAnchor] = useState<number | null>(null);
+  const enter = useEntrance();
   if (!L || !H) return <p className={panel.note}>No latency recorded for the current items.</p>;
   const apply = (a: number, b: number) => api.setFilters({ latency: { min: a, max: b } });
   const pickBin = (i: number, extend: boolean) => {
@@ -76,7 +87,7 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
           ))}
         </div>
       </div>
-      <div
+      <ChartTooltipHost
         className={styles.hist}
         role="group"
         aria-label="Latency histogram, click a bar or shift-click to extend the range"
@@ -84,31 +95,38 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
         {H.bins.map((b, i) => {
           const n = b.items.length;
           const inRange = !filter || (b.b > filter.min && b.a < filter.max);
+          const tip = `${tickLabel(b.a)}–${tickLabel(b.b)}: ${n} items (${pct(n, items.length).toFixed(0)}%)${b.errors ? `, ${b.errors} task errors` : ''}`;
           return (
-            <button
+            <Mark
               key={i}
-              type="button"
+              as="button"
               className={styles.bin}
               data-tone={b.tone ?? undefined}
               data-out={!inRange || undefined}
-              disabled={n === 0}
-              title={`${tickLabel(b.a)}–${tickLabel(b.b)}: ${n} items (${pct(n, items.length).toFixed(0)}%)${b.errors ? `, ${b.errors} task errors` : ''}`}
+              isDisabled={n === 0}
+              tip={tip}
               aria-label={`${tickLabel(b.a)} to ${tickLabel(b.b)}: ${n} items`}
-              aria-pressed={!!filter && inRange}
-              onClick={(e) => pickBin(i, e.shiftKey)}
+              isSelected={!!filter && inRange}
+              onPick={(e) => pickBin(i, Boolean((e as React.MouseEvent | undefined)?.shiftKey))}
             >
               <span
                 className={styles.binBar}
-                style={{ height: n ? `${Math.max(4, (100 * n) / H.max)}%` : 0 }}
+                data-enter={enter ? '' : undefined}
+                style={
+                  {
+                    height: n ? `${Math.max(4, (100 * n) / H.max)}%` : 0,
+                    '--i': Math.min(i, 10),
+                  } as React.CSSProperties
+                }
               >
                 {b.errors ? (
                   <span className={styles.binErr} style={{ height: `${(100 * b.errors) / n}%` }} />
                 ) : null}
               </span>
-            </button>
+            </Mark>
           );
         })}
-      </div>
+      </ChartTooltipHost>
       <div className={styles.axis} aria-hidden="true">
         {H.ticks.map((t) => (
           <span key={t} style={{ insetInlineStart: `${H.xPct(t)}%` }}>
@@ -131,18 +149,45 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
 
 function QualityLatency({ items, metric }: { items: LatencyItem[]; metric: string }) {
   const { api } = useRunPage();
-  const points = items
-    .filter((i) => i.score !== null)
-    .map((i) => ({ id: i.itemId, x: i.latency, y: i.score as number }));
-  if (points.length < 2) return null;
+  const direction = api.ctx.model.metricDirections[metric] ?? null;
+  const points: ScatterPoint[] = items
+    .filter((i) => i.score !== null || i.error)
+    .map((i) => ({
+      id: i.itemId,
+      x: i.latency,
+      y: i.error ? 0 : (i.score as number),
+      outcome: i.error
+        ? ('error' as const)
+        : i.passed === null
+          ? null
+          : i.passed
+            ? ('pass' as const)
+            : ('fail' as const),
+    }));
+  if (points.filter((p) => p.outcome !== 'error').length < 2) return null;
+  const sorted = items.map((i) => i.latency).sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  const quadrants: ScatterQuadrants | undefined =
+    direction === 'maximize' || direction === 'minimize'
+      ? {
+          x: median,
+          y: 0.5,
+          goodIsHighY: direction === 'maximize',
+          goodLabel: 'Fast and passing',
+          badLabel: 'Slow and failing',
+        }
+      : undefined;
   return (
     <section className={panel.stack} aria-label="Quality versus latency">
       <h3 className={panel.groupTitle}>
         Quality vs latency <span className={panel.note}>{metric}</span>
       </h3>
-      <p className={panel.note}>One dot per item. Select a dot to open the item.</p>
+      <p className={panel.note}>
+        One dot per item; task errors sit on the axis as open rings. Select a dot to open the item.
+      </p>
       <Scatter
         points={points}
+        quadrants={quadrants}
         xLabel="latency"
         yLabel={metric}
         onPick={(id) => api.setItemParam(id)}
@@ -171,7 +216,7 @@ function TimeBudget({ D }: { D: ReturnType<typeof normalizeLatency> }) {
         {D.traces.toLocaleString('en-US')} traces
         {D.failed ? <span className={styles.failPill}> {D.failed} failed</span> : null}
       </p>
-      <div
+      <ChartTooltipHost
         className={styles.budget}
         role="img"
         aria-label={`Time budget of an average trace: ${FAMILY_ORDER.filter((f) => byFamily[f])
@@ -179,14 +224,15 @@ function TimeBudget({ D }: { D: ReturnType<typeof normalizeLatency> }) {
           .join(', ')}`}
       >
         {segs.map((s, i) => (
-          <span
+          <Mark
             key={i}
             className={styles.seg}
             style={{ flexGrow: s.ms, background: FAMILY_TONE[s.family] }}
-            title={`${s.phase === 'eval' ? 'Eval' : (s.agent ?? 'Agent')} · ${FAMILY_LABEL[s.family]}${s.overhead ? ' · overhead' : ''}: ${durText(s.ms)} (${pct(s.ms, total).toFixed(1)}%)`}
+            tip={`${s.phase === 'eval' ? 'Eval' : (s.agent ?? 'Agent')} · ${FAMILY_LABEL[s.family]}${s.overhead ? ' · overhead' : ''}: ${durText(s.ms)} (${pct(s.ms, total).toFixed(1)}%)`}
+            tabIndex={-1}
           />
         ))}
-      </div>
+      </ChartTooltipHost>
       <ul className={panel.note + ' ' + styles.legend}>
         {FAMILY_ORDER.filter((f) => byFamily[f]).map((f) => (
           <li key={f}>

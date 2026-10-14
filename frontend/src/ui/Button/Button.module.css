@@ -39,42 +39,48 @@
   width: 32px;
 }
 
-.button[data-hovered] {
+.button[data-hovered],
+a.button:hover:not([data-disabled]) {
   background: var(--bg-hover);
 }
-.button[data-pressed] {
+.button[data-pressed],
+a.button:active:not([data-disabled]) {
   background: var(--bg-elevated);
 }
 
 .button[data-variant='accent'] {
   color: var(--accent-primary);
-  background: rgba(0, 212, 170, 0.14);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
 }
-.button[data-variant='accent'][data-hovered] {
-  background: rgba(0, 212, 170, 0.22);
+.button[data-variant='accent'][data-hovered],
+a.button[data-variant='accent']:hover:not([data-disabled]) {
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
 }
 
 .button[data-variant='primary'] {
   color: var(--bg-void);
   background: var(--accent-primary);
 }
-.button[data-variant='primary'][data-hovered] {
+.button[data-variant='primary'][data-hovered],
+a.button[data-variant='primary']:hover:not([data-disabled]) {
   background: var(--accent-primary-hover);
 }
 
 .button[data-variant='danger'] {
   color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
-  background: color-mix(in srgb, var(--error) 12%, transparent);
+  background: color-mix(in srgb, var(--error) var(--tint-soft), transparent);
 }
-.button[data-variant='danger'][data-hovered] {
-  background: color-mix(in srgb, var(--error) 20%, transparent);
+.button[data-variant='danger'][data-hovered],
+a.button[data-variant='danger']:hover:not([data-disabled]) {
+  background: color-mix(in srgb, var(--error) var(--tint-strong), transparent);
 }
 
 .button[data-variant='ghost'] {
   color: var(--text-secondary);
   background: transparent;
 }
-.button[data-variant='ghost'][data-hovered] {
+.button[data-variant='ghost'][data-hovered],
+a.button[data-variant='ghost']:hover:not([data-disabled]) {
   color: var(--text-primary);
   background: var(--bg-hover);
 }
@@ -84,7 +90,8 @@
   cursor: not-allowed;
 }
 
-.button[data-focus-visible] {
+.button[data-focus-visible],
+a.button:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }

@@ -192,6 +192,43 @@
   --bg-selected: rgba(0, 212, 170, 0.08);
 }
 
+/* ── Visual language (redesign round 2; DESIGN_LANGUAGE §3 "Colour as information") ──
+   Tint steps are percentages of a tone mixed into transparent; series 6..8 extend the
+   chart palette (legacy compare COLORS); rail/card/motion tokens feed Card and the chart kit. */
+:root {
+  --tint-faint: 6%; /* row/section wash (danger and live only) */
+  --tint-soft: 12%; /* Badge, Tag, Chip selected, score pill, icon tile fill */
+  --tint-strong: 20%; /* hover/pressed on a tinted fill, selected pill */
+  --error-text: color-mix(in srgb, var(--error) 75%, var(--text-primary)); /* 5.15:1 on a 12% error tint */
+
+  --chart-6: #60a5fa;
+  --chart-7: #34d399;
+  --chart-8: #fb923c;
+
+  --rail-width: 3px;
+  --card-padding: var(--space-md) var(--space-lg);
+  --card-padding-compact: var(--space-sm) var(--space-md);
+  --shadow-card-hover: 0 2px 12px rgba(0, 0, 0, 0.28);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-fill: 360ms; /* bars/rings/fills growing in or updating */
+  --motion-stagger: 24ms; /* per-mark delay, capped at 10 marks */
+  --motion-flash: 700ms; /* a live value changed */
+  --dim-opacity: 0.45; /* siblings of a hovered/selected mark */
+  --hover-brightness: 1.12;
+
+  /* Scrims and scrollbars (not tones: neutral shades of the void/ink). */
+  --scrim: rgba(10, 10, 16, 0.6);
+  --scrim-light: rgba(10, 10, 16, 0.5);
+  --scrollbar-track: rgba(255, 255, 255, 0.04);
+  --scrollbar-thumb-from: rgba(122, 122, 144, 0.82);
+  --scrollbar-thumb-to: rgba(80, 80, 94, 0.92);
+  --scrollbar-thumb-edge: rgba(16, 16, 24, 0.75);
+  --scrollbar-thumb-hover-from: rgba(0, 212, 170, 0.82);
+  --scrollbar-thumb-hover-to: rgba(0, 168, 255, 0.82);
+  --scrollbar-color: rgba(120, 120, 150, 0.55);
+}
+
 /* ── Docs prose scale (DESIGN_LANGUAGE.md §5, sanctioned exception) ─────────
    Long-form reading pages keep a larger independent heading/body scale and a
    brighter body colour; labels still use the shared ramp and code the shared
