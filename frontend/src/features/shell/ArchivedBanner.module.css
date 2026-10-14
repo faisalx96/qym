@@ -4,8 +4,8 @@
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-lg);
-  background: rgba(245, 158, 11, 0.1);
-  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+  background: color-mix(in srgb, var(--warning) var(--tint-soft), transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
   color: var(--text-primary);
   font-size: var(--font-sm);
 }

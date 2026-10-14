@@ -39,7 +39,7 @@
 }
 
 .step[data-done] .stepNum {
-  background: rgba(0, 212, 170, 0.12);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
   color: var(--accent-primary);
 }
 

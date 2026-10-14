@@ -37,7 +37,7 @@
   height: 28px;
   flex: none;
   border-radius: var(--radius-pill);
-  background: rgba(0, 212, 170, 0.16);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
   color: var(--accent-primary);
   font-family: var(--font-mono);
   font-size: var(--shell-font-xs);

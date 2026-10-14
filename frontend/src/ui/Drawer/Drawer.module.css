@@ -5,7 +5,7 @@
   z-index: var(--z-dialog);
   display: flex;
   justify-content: flex-end;
-  background: rgba(10, 10, 16, 0.5);
+  background: var(--scrim-light);
 }
 
 .backdrop[data-entering] {

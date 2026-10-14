@@ -7,7 +7,7 @@
   align-items: flex-start;
   justify-content: center;
   padding: 10vh var(--space-lg) var(--space-lg);
-  background: rgba(10, 10, 16, 0.6);
+  background: var(--scrim);
 }
 
 .modal {

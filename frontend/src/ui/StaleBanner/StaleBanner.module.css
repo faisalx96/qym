@@ -5,7 +5,7 @@
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   border-inline-start: 3px solid var(--warning);
-  background: rgba(245, 158, 11, 0.08);
+  background: color-mix(in srgb, var(--warning) var(--tint-faint), transparent);
   color: var(--text-secondary);
   font-size: var(--font-sm);
 }
