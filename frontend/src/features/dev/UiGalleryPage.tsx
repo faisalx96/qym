@@ -195,16 +195,22 @@ export default function UiGalleryPage() {
             <Text variant="base" style={{ fontWeight: 700 }}>
               Weight 700 Bold · وزن عريض · Il1 O0 rn m
             </Text>
-            <table style={{ borderCollapse: 'collapse' }}>
-              <tbody>
-                {['1,111.00', '98.40', '7.05', '100.0', '0.00'].map((n) => (
-                  <tr key={n}>
-                    <td style={{ textAlign: 'end', paddingInlineEnd: 12 }}>{n}</td>
-                    <td style={{ textAlign: 'end' }}>{n.replace('.', ',')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div
+              role="presentation"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'max-content max-content',
+                gap: '0 12px',
+                justifyContent: 'start',
+                fontVariantNumeric: 'tabular-nums',
+                textAlign: 'end',
+              }}
+            >
+              {['1,111.00', '98.40', '7.05', '100.0', '0.00'].flatMap((n) => [
+                <span key={`${n}-a`}>{n}</span>,
+                <span key={`${n}-b`}>{n.replace('.', ',')}</span>,
+              ])}
+            </div>
             <Text variant="base" mono>
               run_2026-10-11T08:00:00Z · text2sql-gpt-4o-040 · {'{"إجابة": "نعم", "score": 0.97}'}
             </Text>
