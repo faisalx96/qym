@@ -246,9 +246,7 @@ export function RunsTable(p: RunsTableProps) {
         bulkOwnSummary
         bulkAlways={p.selectMode}
         onRowOpen={p.onOpen}
-        rowState={(r) =>
-          r.status === 'RUNNING' ? 'live' : r.status === 'FAILED' ? 'error' : undefined
-        }
+        rowState={(r) => (r.status === 'RUNNING' ? 'live' : r.status === 'FAILED' ? 'error' : undefined)}
         rowProps={(r) => ({
           'data-run-id': r.run_id,
           'data-status': r.status,
