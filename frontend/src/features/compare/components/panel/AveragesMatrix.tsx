@@ -99,8 +99,8 @@ export function AveragesMatrix() {
           <>
             <span className={styles.deltaRow}>
               <DeltaTag stats={cell.delta} type={type} metric={m} />
-              <Forest stats={cell.delta} />
             </span>
+            <Forest stats={cell.delta} />
             <CountButtons
               stats={cell.delta}
               direction={model.directions[m] ?? null}
@@ -183,7 +183,13 @@ export function AveragesMatrix() {
         const r = byCol.get(col.key);
         return r ? (
           <Mark index={col.runIdxs[0] ?? 0}>
-            <div data-testid="average-cell" data-column={col.key} data-row={row.id} className={styles.stack}>
+            <div
+              data-testid="average-cell"
+              data-column={col.key}
+              data-row={row.id}
+              data-kind={row.kind}
+              className={styles.stack}
+            >
               {cellBody(row, r)}
             </div>
           </Mark>

@@ -237,6 +237,71 @@ test.describe('run focus', () => {
   });
 });
 
+test.describe('polish', () => {
+  test('run card headers stay on one row at 1440 with four runs', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(compareUrl(four()));
+    await waitLoaded(page);
+    const heights = await page
+      .getByTestId('run-card')
+      .evaluateAll((els) =>
+        els.map((e) => (e.querySelector('[class*="cardHead"]') as HTMLElement).offsetHeight),
+      );
+    expect(Math.max(...heights)).toBeLessThan(40);
+  });
+
+  test('four expanded cards fit the content width at 1440', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(compareUrl(four()));
+    await waitLoaded(page);
+    await page.getByTestId('item-row').first().click();
+    const grid = page.getByTestId('output-grid');
+    await expect(grid.getByTestId('output-card')).toHaveCount(4);
+    const [g, last] = await Promise.all([
+      grid.boundingBox(),
+      grid.getByTestId('output-card').last().boundingBox(),
+    ]);
+    expect(last!.x + last!.width).toBeLessThanOrEqual(g!.x + g!.width + 1);
+  });
+
+  test('category key chips sit above the cards; table view shares one column template', async ({ page }) => {
+    await page.goto(compareUrl(four(), { catView: 'table' }));
+    await waitLoaded(page);
+    await goSection(page, 'Categories');
+    const chips = page.getByRole('group', { name: 'Metadata keys' });
+    const table = page.locator('#compare-categories table').first();
+    expect((await chips.boundingBox())!.y).toBeLessThan((await table.boundingBox())!.y);
+    const lefts = await page
+      .locator('#compare-categories table')
+      .evaluateAll((ts) =>
+        ts.map((t) => Math.round((t.querySelectorAll('th')[1] as HTMLElement).getBoundingClientRect().left)),
+      );
+    expect(new Set(lefts).size).toBe(1);
+  });
+
+  test('cohort run cards say which side they belong to', async ({ page }) => {
+    const { base, a, b, c } = seed.runs;
+    await page.goto(`/compare?cohortA=${base}&cohortA=${a}&cohortB=${b}&cohortB=${c}`);
+    await waitLoaded(page);
+    const cards = page.getByTestId('run-card');
+    await expect(cards.filter({ hasText: 'Side A' })).toHaveCount(2);
+    await expect(cards.filter({ hasText: 'Side B' })).toHaveCount(2);
+  });
+
+  test('390px: the bar is the nav plus a View popover holding the selects', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(compareUrl(four()));
+    await waitLoaded(page);
+    const bar = page.locator('[data-compare-sticky]');
+    await expect(bar.getByRole('button', { name: 'View' })).toBeVisible();
+    await expect(bar.getByText('Baseline', { exact: true })).toHaveCount(0);
+    await bar.getByRole('button', { name: 'View' }).click();
+    await expect(
+      page.getByRole('dialog', { name: 'View options' }).getByText('Baseline', { exact: true }),
+    ).toBeVisible();
+  });
+});
+
 test.describe('accessibility and phone', () => {
   for (const [n, runs] of [
     [4, () => four()],

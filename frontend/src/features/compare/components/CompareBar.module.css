@@ -53,12 +53,12 @@
     padding: var(--space-xs) 0;
   }
 
-  .nav,
-  .controls {
+  .nav {
     flex: 1 1 100%;
   }
 
   .controls {
-    flex-wrap: wrap;
+    flex: 1 1 100%;
+    justify-content: space-between;
   }
 }

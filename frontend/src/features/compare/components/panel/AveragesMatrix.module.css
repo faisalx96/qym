@@ -67,3 +67,13 @@
   gap: var(--space-xs) var(--space-sm);
   min-width: 0;
 }
+
+/* every metric cell reserves the height of a run column so the baseline column aligns with the others */
+.stack[data-kind='metric'] {
+  min-height: 5.25rem;
+  justify-content: flex-start;
+}
+
+.stack[data-kind='errors'] .value {
+  white-space: normal;
+}

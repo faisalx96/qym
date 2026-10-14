@@ -6,7 +6,7 @@ import type { RunPayload } from '@/features/run-detail/types';
 import { formatDurationMs } from '@/features/run-detail/lib/heroModel';
 import { letterOf, runSeries, useCompare } from '../CompareContext';
 import { runShortName } from '../lib/labels';
-import { MIN_COMPARE_RUNS } from '../lib/refs';
+import { MIN_COMPARE_RUNS, passRefBase } from '../lib/refs';
 import { differingContext, ownerLabel, runCounts } from '../lib/runInfo';
 import { RunTag, useRunMark } from './RunTag';
 import styles from './RunCards.module.css';
@@ -18,6 +18,14 @@ const DENSE_CARDS = 8;
 
 export function RunCards() {
   const { model, c, slug, baseline, columns, cohorts } = useCompare();
+  const sideOf = (base: string): 'A' | 'B' | null =>
+    !cohorts
+      ? null
+      : cohorts.left.some((r) => passRefBase(r) === base)
+        ? 'A'
+        : cohorts.right.some((r) => passRefBase(r) === base)
+          ? 'B'
+          : null;
   const payloads = new Map((c.query.data?.runs ?? []).map((p) => [p.run.file_path || p.run.run_id, p]));
   const cards = model.bases
     .map((base) => {
@@ -48,6 +56,8 @@ export function RunCards() {
             key={card.base}
             {...card}
             variant={variant}
+            side={sideOf(card.base)}
+            sideLabel={cohorts ? (sideOf(card.base) === 'A' ? cohorts.leftLabel : cohorts.rightLabel) : ''}
             slug={slug}
             isBase={baseline.base === card.base}
             removable={removable}
@@ -113,6 +123,8 @@ function RunCard({
   name,
   title,
   variant,
+  side,
+  sideLabel,
   slug,
   isBase,
   removable,
@@ -120,6 +132,8 @@ function RunCard({
   onBaseline,
 }: CardData & {
   variant: 'full' | 'compact' | 'dense';
+  side: 'A' | 'B' | null;
+  sideLabel: string;
   slug: string | undefined;
   isBase: boolean;
   removable: boolean;
@@ -147,6 +161,11 @@ function RunCard({
         <div className={styles.stack}>
           <div className={styles.cardHead}>
             <RunTag index={idx} name={name} title={title} baseline={isBase} bare />
+            {side ? (
+              <Tag kind="role" title={`Side ${side}: ${sideLabel}`}>
+                Side {side}
+              </Tag>
+            ) : null}
             <RunStatusBadge status={status} label={status} />
             {run.origin === 'official' ? (
               <Tag kind="accent" title="Run launched by an official experiment">

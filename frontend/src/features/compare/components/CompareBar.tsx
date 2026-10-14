@@ -6,12 +6,13 @@ import { ReportNav } from './ReportSections';
 import { BaselineSelect, MetricSelect } from './SelectionBar';
 import styles from './CompareBar.module.css';
 
-const INLINE_QUERY = '(min-width: 1200px), (max-width: 640px)';
+const INLINE_QUERY = '(min-width: 1200px)';
 
-function Controls() {
+function Controls({ labelled }: { labelled?: boolean }) {
   const { cohorts } = useCompare();
   return (
     <>
+      {labelled ? <span className={styles.label}>Metric</span> : null}
       <MetricSelect />
       {cohorts ? null : (
         <>
@@ -45,7 +46,7 @@ export function CompareBar() {
             }
           >
             <div className={styles.pop}>
-              <Controls />
+              <Controls labelled />
             </div>
           </Popover>
         )}

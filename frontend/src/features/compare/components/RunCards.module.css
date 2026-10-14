@@ -54,7 +54,7 @@
 .cardHead {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-sm);
   min-width: 0;
 }
@@ -158,4 +158,13 @@
 
 .group {
   color: var(--text-muted);
+}
+
+.cardHead > :first-child {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.cardHead > :not(:first-child) {
+  flex: none;
 }

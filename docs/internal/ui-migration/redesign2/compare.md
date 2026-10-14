@@ -264,6 +264,11 @@ Risks:
 9. Biggest risk: e2e specs coupled to sticky chrome layout (rewrite in T2).
 10. Evidence: screenshots in scratchpad `cmp2/shots/`; servers on 8875, 8876, 5876 stopped.
 
+## Decisions
+
+- Two runs of different models open in the sides layout (Compare/Sweep, no Baseline select, no remove): intended, it matches round 1 and the legacy auto-cohort. Run cards carry a "Side A/B" tag there.
+- Run colours 6 to 8 keep the legacy hues (close to 1 to 3); letter and name disambiguate.
+
 ## Deferred
 
 | Item | What is left | Why / estimate |

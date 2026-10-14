@@ -201,7 +201,11 @@ export function ItemDetail({ itemId }: { itemId: string }) {
         </div>
       ) : null}
       <div className={styles.scroller} data-testid="output-grid">
-        <div className={styles.grid} data-open={openMetric ? '' : undefined}>
+        <div
+          className={styles.grid}
+          data-open={openMetric ? '' : undefined}
+          style={shown.length <= 4 ? ({ '--col-min': '16rem' } as React.CSSProperties) : undefined}
+        >
           {shown.map(({ r, i }, col) => (
             <Slot key={model.runs[i]!.ref} index={i} column={col + 1} row={1}>
               <OutputCard

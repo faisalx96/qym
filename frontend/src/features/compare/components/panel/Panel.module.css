@@ -351,3 +351,13 @@
   gap: var(--space-md);
   min-width: 0;
 }
+
+/* Category tables share one column template so run columns line up across metadata keys. */
+.fixed {
+  table-layout: fixed;
+  min-width: 40rem;
+}
+
+.fixed th:first-child {
+  width: 12rem;
+}

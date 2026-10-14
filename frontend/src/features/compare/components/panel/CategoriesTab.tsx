@@ -60,6 +60,18 @@ export function CategoriesTab() {
     );
   return (
     <div className={styles.stack}>
+      <div className={styles.chipRow} role="group" aria-label="Metadata keys">
+        {keys.map(({ key, count }) => (
+          <Chip
+            key={key}
+            count={count}
+            isSelected={selected.includes(key)}
+            onChange={(on) => setPicked(on ? [...selected, key] : selected.filter((k) => k !== key))}
+          >
+            {key}
+          </Chip>
+        ))}
+      </div>
       {selected.map((key, rank) => {
         const list = groups[key] ?? [];
         if (!list.length) return null;
@@ -78,7 +90,7 @@ export function CategoriesTab() {
               />
             ) : (
               <ScrollRegion className={styles.scroll} label={`${key} breakdown`}>
-                <table className={styles.table}>
+                <table className={`${styles.table} ${styles.fixed}`}>
                   <thead>
                     <tr>
                       <th scope="col">Value</th>
@@ -132,18 +144,6 @@ export function CategoriesTab() {
           </section>
         );
       })}
-      <div className={styles.chipRow} role="group" aria-label="Metadata keys">
-        {keys.map(({ key, count }) => (
-          <Chip
-            key={key}
-            count={count}
-            isSelected={selected.includes(key)}
-            onChange={(on) => setPicked(on ? [...selected, key] : selected.filter((k) => k !== key))}
-          >
-            {key}
-          </Chip>
-        ))}
-      </div>
     </div>
   );
 }
