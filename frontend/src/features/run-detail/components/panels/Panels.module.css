@@ -308,3 +308,28 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* Repeat analysis: full-width visuals capped for wide screens, verdict line, best/worst cell tags. */
+.visuals {
+  max-inline-size: 1100px;
+}
+
+.verdict {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.cellTag {
+  margin-inline-start: var(--space-xs);
+}
+
+.table th[data-selected],
+.table td[data-selected] {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.table td[data-tone='danger'] {
+  color: var(--error-text);
+}

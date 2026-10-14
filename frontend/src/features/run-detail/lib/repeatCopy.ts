@@ -89,3 +89,18 @@ export function queuedLabel(queued: number, total: number, samples: number): str
     ? `Pass ${total} of ${samples} queued`
     : `Passes ${total - queued + 1}–${total} of ${samples} queued`;
 }
+
+/** One sentence that reads the summary: how far "passes at least once" is from "passes every time". */
+export function verdictLine(
+  stats: { pass_at_k?: number | null; pass_hat_k?: number | null } | null | undefined,
+  k: number,
+): string | null {
+  const at = stats?.pass_at_k;
+  const hat = stats?.pass_hat_k;
+  if (k < 2 || at == null || hat == null) return null;
+  const pct = (v: number) => `${(Math.round(v * 1000) / 10).toFixed(1)}%`;
+  const gap = Math.round((at - hat) * 100);
+  const lead = `Pass@${k} ${pct(at)}, Pass^${k} ${pct(hat)}: `;
+  if (gap < 1) return `${lead}items that pass once pass every time, so results are consistent.`;
+  return `${lead}${gap} pts of items pass at least once but not every time.`;
+}

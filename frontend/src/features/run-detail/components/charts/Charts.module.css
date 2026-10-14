@@ -158,7 +158,7 @@
 }
 
 .axis {
-  height: 14px;
+  min-height: 14px;
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
@@ -362,4 +362,11 @@
 
 .matrixCell:hover {
   outline: 1px solid var(--text-primary);
+}
+
+.axisNote {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 400;
 }

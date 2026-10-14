@@ -477,7 +477,7 @@ export function Curve({
   xLabel?: string;
 }) {
   const [boxRef, W] = useMeasuredWidth<HTMLElement>(320);
-  const H = 180;
+  const H = 260;
   const pad = { l: 34, r: 12, t: 8, b: 24 };
   const ks = Array.from(new Set(series.flatMap((s) => s.points.map((p) => p.k)))).sort((a, b) => a - b);
   const sx = (k: number) =>
@@ -606,6 +606,9 @@ export function PassCountBars({
           </span>
           <span className={styles.axis}>
             {i}/{total}
+            {i === 0 || i === counts.length - 1 ? (
+              <small className={styles.axisNote}>{i === 0 ? 'always fail' : 'always pass'}</small>
+            ) : null}
           </span>
         </Mark>
       ))}
