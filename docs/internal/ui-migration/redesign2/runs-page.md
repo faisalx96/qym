@@ -435,3 +435,13 @@ default and run the whole `npm run check` plus `npm run e2e`; (d) per-user key u
 8. Defaults: legacy facet order; keep chips; layouts in localStorage keyed by user id (no server sync); frozen Run (+ Status >= 1440), cap 50%; reorder capability for all tables, UI on runs and items; embedded passes table; threshold in a popover chip; remember metric per project.
 9. Risks: 10 e2e references to the Filters button, React Aria drag inside a portal popover, shared DataTable `order` change, toolbar height budget at 1280x720.
 10. Evidence is in the scratchpad `runs-page/` screenshots; servers on 8871/8872/5872 stopped.
+
+## Deferred
+
+- **Header pointer drag (W6, optional)**: not done; reorder is available from the Columns menu (pointer, touch, keyboard), the header menu (Move left / right / to start) and `Alt+Shift+Arrow`. Estimate 4 h (insertion marker plus `moveColumn`).
+- **Chips collapse to "+N more" beyond two lines** (spec 5.1 row 3): chips wrap freely for now. Estimate 1 h.
+- **Phone filter sheet is a right-side `Drawer` (360 px)**, not a bottom sheet: the shared `Drawer` has no bottom placement. Estimate 2 h for a `placement` prop.
+- **Facet trigger `aria-haspopup`** stays `dialog` (the popover holds a search, actions and a checkbox list), not `listbox` as the spec suggests.
+- **Items table reorder UI (Q6)**: the capability is in every `DataTable` (`reorderable` prop, default off); only the runs table enables the menu UI. Estimate 0.5 h to switch it on for the Items table once its owner agrees.
+- **Charts page** keeps the page-level `ColumnsMenu.tsx` (it toggles chart stats, not table columns), so that file stays; the runs page no longer uses it.
+- **Server sync of layouts (Q3)**: localStorage keyed by user id only; needs a platform preferences endpoint.

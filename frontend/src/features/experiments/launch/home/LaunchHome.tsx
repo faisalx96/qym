@@ -2,6 +2,7 @@ import { Callout } from '../components/Callout';
 import panel from '../components/launch.module.css';
 import { DatasetPicker } from '../entry/DatasetPicker';
 import { EnvironmentPicker } from '../entry/EnvironmentPicker';
+import { VersionsBlock } from '../entry/VersionsBlock';
 import { HomeBar } from '../entry/HomeBar';
 import { StartFrom } from '../entry/StartFrom';
 import { useLaunch } from '../LaunchContext';
@@ -27,6 +28,7 @@ export function LaunchHome({ onCustomize }: { onCustomize: (step: WizardStepId) 
           <DatasetPicker />
         </div>
       </div>
+      <VersionsBlock onCustomize={() => onCustomize('where')} />
       {envRecords.length ? (
         <div className={panel.panel}>
           <StartFrom />

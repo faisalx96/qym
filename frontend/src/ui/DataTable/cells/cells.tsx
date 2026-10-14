@@ -35,8 +35,10 @@ export interface ScoreBarProps {
   index?: number;
   /** Flash a faint tint when the value changes (a live value on a running run). */
   live?: boolean;
-  /** A tick on the track at this position (same scale as `value`): the baseline to beat. Decorative (`aria-hidden`). */
+  /** A baseline tick on the track in the same units as `value` (the baseline to beat, or a category table's overall average). */
   marker?: number | null;
+  /** Accessible/hover name of the marker (default "Overall average"). */
+  markerLabel?: string;
   /** Track thickness for 'sm' bars: 'sm' = 6px (default), 'md' = 10px. */
   height?: 'sm' | 'md';
 }
@@ -45,6 +47,11 @@ function normDirection(d: ScoreBarProps['direction']): MetricDirection {
   if (d === 'higher' || d === 'maximize') return 'maximize';
   if (d === 'lower' || d === 'minimize') return 'minimize';
   return null;
+}
+
+function markerPct(marker: number, max: number | undefined): number {
+  const ratio = max === undefined ? marker : max > 0 ? marker / max : 0;
+  return Math.max(0, Math.min(1, ratio)) * 100;
 }
 
 /** Track + fill + value. Errors show the warning glyph, never a bar. */
@@ -63,6 +70,7 @@ export function ScoreBar({
   live,
   marker,
   height = 'sm',
+  markerLabel = 'Overall average',
 }: ScoreBarProps) {
   const enter = useEntrance();
   const flash = useFlashOnChange(value, live === true);
@@ -113,6 +121,15 @@ export function ScoreBar({
             {label}
           </span>
         ) : null}
+        {marker !== null && marker !== undefined && Number.isFinite(marker) ? (
+          <span
+            className={styles.marker}
+            style={{ insetInlineStart: `${markerPct(marker, max)}%` }}
+            title={markerLabel}
+            aria-hidden="true"
+            data-testid="score-marker"
+          />
+        ) : null}
         <span
           className={styles.fill}
           data-enter={enter ? '' : undefined}
@@ -120,16 +137,6 @@ export function ScoreBar({
         >
           {size === 'lg' ? <span className={styles.onFill}>{label}</span> : null}
         </span>
-        {marker !== null && marker !== undefined && !Number.isNaN(marker) ? (
-          <span
-            className={styles.marker}
-            data-testid="score-marker"
-            aria-hidden="true"
-            style={{
-              insetInlineStart: `${Math.max(0, Math.min(1, max === undefined ? marker : max > 0 ? marker / max : 0)) * 100}%`,
-            }}
-          />
-        ) : null}
       </span>
       {size === 'lg' ? null : <span className={styles.scoreText}>{label}</span>}
     </span>

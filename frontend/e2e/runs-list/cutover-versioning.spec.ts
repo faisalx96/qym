@@ -31,6 +31,7 @@ test('one facet per versioning key; choosing a value filters, chips and narrows 
   const cap = capture(page, 'runs');
   await openRuns(page, s.project.slug);
   await openFilters(page);
+  await page.getByTestId('filter-bar').getByTestId('filters-trigger').click();
   const panel = page.getByTestId('filters-panel');
   await expect(panel.getByRole('button', { name: /^Agent version\b/ })).toBeVisible();
   await expect(panel.getByRole('button', { name: /^Kb version\b/ })).toBeVisible();
@@ -42,7 +43,7 @@ test('one facet per versioning key; choosing a value filters, chips and narrows 
     .toEqual({ agent_version: ['v1'] });
   const chips = page.getByRole('group', { name: 'Active filters', exact: true });
   await expect(chips).toContainText('Agent version: v1');
-  await expect(page.getByTestId('filters-trigger')).toContainText('Filters · 1');
+  await expect(page.getByTestId('filters-trigger')).toContainText('More filters · 1');
   expect(urlParams(page).getAll('v.agent_version')).toEqual(['v1']);
   // The other key's values narrow to what the selection leaves.
   await openFacet(page, 'Kb version');
@@ -53,7 +54,7 @@ test('one facet per versioning key; choosing a value filters, chips and narrows 
   await page.getByRole('button', { name: 'Remove Agent version: v1' }).click();
   await expect.poll(() => urlParams(page).has('v.agent_version')).toBe(false);
   await expect(chips).toHaveCount(0);
-  await expect(page.getByTestId('filters-trigger')).not.toContainText('Filters ·');
+  await expect(page.getByTestId('filters-trigger')).not.toContainText('More filters ·');
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
 

@@ -3,12 +3,34 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGroupMetricsQuery, usePassesQuery } from '@/api/runs';
 import { formatLatency, formatPercent, metricDirectionLabel } from '@/lib/metrics';
-import { ErrorState, SegmentedControl, Skeleton, Slider } from '@/ui';
+import { ErrorState, SegmentedControl, Skeleton, Slider, StatStrip, Tag, type StatStripItem } from '@/ui';
 import { latencyLabel } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
 import { Curve, PassCountBars, type CurvePoint } from '../charts/Charts';
-import { queuedLabel, repeatCopy, statisticOptions, type RepeatStatistic } from '../../lib/repeatCopy';
+import {
+  queuedLabel,
+  repeatCopy,
+  statisticOptions,
+  verdictLine,
+  type RepeatStatistic,
+} from '../../lib/repeatCopy';
 import styles from './Panels.module.css';
+
+/** Best and worst pass on the selected metric (null when fewer than two differ, or the metric has no direction). */
+function passExtremes(
+  passes: Array<{ pass_number: number; metric_means?: Record<string, number | null> | null }>,
+  metric: string,
+  direction: string | null,
+): { best: number | null; worst: number | null } {
+  if (!direction) return { best: null, worst: null };
+  const vals = passes
+    .map((p) => ({ n: p.pass_number, v: p.metric_means?.[metric] }))
+    .filter((p): p is { n: number; v: number } => typeof p.v === 'number');
+  if (vals.length < 2) return { best: null, worst: null };
+  const sorted = [...vals].sort((a, b) => (direction === 'minimize' ? a.v - b.v : b.v - a.v));
+  if (sorted[0]!.v === sorted[sorted.length - 1]!.v) return { best: null, worst: null };
+  return { best: sorted[0]!.n, worst: sorted[sorted.length - 1]!.n };
+}
 
 export function RepeatTab() {
   const { runId, model, api, basePath } = useRunPage();
@@ -78,12 +100,72 @@ export function RepeatTab() {
   const latencies = donePasses.map((p) => p.avg_latency_ms).filter((v): v is number => typeof v === 'number');
   const avgLatency = latencies.length ? latencies.reduce((a, b) => a + b, 0) / latencies.length : null;
 
+  const verdict = verdictLine(stats, k);
+  const statItems: StatStripItem[] = stats
+    ? [
+        {
+          key: 'pass_at_k',
+          label: `Pass@${k}`,
+          value: formatPercent(stats.pass_at_k ?? null, 1),
+          help: copy.passAtK,
+          group: 'Capability',
+        },
+        {
+          key: 'avg',
+          label: 'Avg score',
+          value:
+            model.metricTypes[metric] === 'numeric'
+              ? String(Math.round((stats.avg_at_k ?? 0) * 100) / 100)
+              : formatPercent(stats.avg_at_k ?? null, 1),
+          help: copy.avgScore,
+          group: 'Capability',
+        },
+        {
+          key: 'pass_hat_k',
+          label: `Pass^${k}`,
+          value: formatPercent(stats.pass_hat_k ?? null, 1),
+          help: copy.passHatK,
+          group: 'Consistency',
+        },
+        {
+          key: 'consistency',
+          label: 'Consistency',
+          value: formatPercent(stats.consistency ?? null, 1),
+          help: copy.consistency,
+          group: 'Consistency',
+        },
+        {
+          key: 'reliability',
+          label: 'Reliability',
+          value: formatPercent(stats.reliability ?? null, 1),
+          help: copy.reliability,
+          group: 'Consistency',
+        },
+        {
+          key: 'latency',
+          label: 'Avg latency',
+          value: formatLatency(avgLatency ?? undefined),
+          help: copy.avgLatency,
+          group: 'Speed and errors',
+        },
+        {
+          key: 'errors',
+          label: 'Errors',
+          value: String(errors),
+          help: copy.errors,
+          group: 'Speed and errors',
+          tone: errors > 0 ? 'danger' : undefined,
+        },
+      ]
+    : [];
+  const extremes = passExtremes(donePasses, metric, direction);
   if (model.metricNames.length === 0) return null;
   return (
     <div className={styles.stack} data-testid="repeat-analysis">
       <p className={styles.note}>
         Every item was evaluated {model.samples}× in this run.{' '}
-        {metricDirectionLabel(model.metricDirections[metric] ?? null)}.
+        {metricDirectionLabel(model.metricDirections[metric] ?? null)}. One metric drives the summary, the
+        curve and the distribution below.
       </p>
       <div className={styles.controls}>
         {model.metricNames.length > 1 ? (
@@ -124,112 +206,20 @@ export function RepeatTab() {
       ) : null}
       {g?.error ? <p className={styles.note}>{g.error}</p> : null}
       {stats ? (
-        <dl className={styles.statGrid} aria-label="Repeat run summary">
-          {[
-            {
-              key: 'pass_at_k',
-              label: `Pass@${k}`,
-              value: formatPercent(stats.pass_at_k ?? null, 1),
-              help: copy.passAtK,
-            },
-            {
-              key: 'pass_hat_k',
-              label: `Pass^${k}`,
-              value: formatPercent(stats.pass_hat_k ?? null, 1),
-              help: copy.passHatK,
-            },
-            {
-              key: 'consistency',
-              label: 'Consistency',
-              value: formatPercent(stats.consistency ?? null, 1),
-              help: copy.consistency,
-            },
-            {
-              key: 'reliability',
-              label: 'Reliability',
-              value: formatPercent(stats.reliability ?? null, 1),
-              help: copy.reliability,
-            },
-            {
-              key: 'avg',
-              label: 'Avg score',
-              value:
-                model.metricTypes[metric] === 'numeric'
-                  ? String(Math.round((stats.avg_at_k ?? 0) * 100) / 100)
-                  : formatPercent(stats.avg_at_k ?? null, 1),
-              help: copy.avgScore,
-            },
-            {
-              key: 'latency',
-              label: 'Avg latency',
-              value: formatLatency(avgLatency ?? undefined),
-              help: copy.avgLatency,
-            },
-            { key: 'errors', label: 'Errors', value: String(errors), help: copy.errors },
-          ].map((s) => (
-            <div key={s.key} className={styles.stat2} title={s.help || undefined} data-stat={s.key}>
-              <dt>{s.label}</dt>
-              <dd>{s.value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-      {donePasses.length ? (
-        <div className={styles.tableScroll}>
-          <table className={styles.table} aria-label="Passes">
-            <thead>
-              <tr>
-                <th scope="col">Pass</th>
-                {model.metricNames.map((m) => (
-                  <th key={m} scope="col">
-                    {m}
-                  </th>
-                ))}
-                <th scope="col">Avg latency</th>
-                <th scope="col" title={copy.medianLatency}>
-                  Median latency
-                </th>
-                <th scope="col">Errors</th>
-                <th scope="col">Items</th>
-              </tr>
-            </thead>
-            <tbody>
-              {donePasses.map((p) => (
-                <tr key={p.pass_number}>
-                  <td>
-                    <Link to={`${basePath}?pass=${p.pass_number}`} aria-label={`Open pass ${p.pass_number}`}>
-                      Pass {p.pass_number}
-                    </Link>
-                  </td>
-                  {model.metricNames.map((m) => (
-                    <td key={m}>
-                      {p.metric_means?.[m] == null
-                        ? '—'
-                        : model.metricTypes[m] === 'numeric'
-                          ? String(Math.round(p.metric_means[m]! * 10) / 10)
-                          : formatPercent(p.metric_means[m]!, 1)}
-                    </td>
-                  ))}
-                  <td>{p.avg_latency_ms != null ? latencyLabel(p.avg_latency_ms) : '—'}</td>
-                  <td>{p.median_latency_ms != null ? latencyLabel(p.median_latency_ms) : '—'}</td>
-                  <td>{p.error_count ?? 0}</td>
-                  <td>{p.items_total ?? ''}</td>
-                </tr>
-              ))}
-              {queued ? (
-                <tr data-testid="queued-passes">
-                  <td colSpan={5 + model.metricNames.length}>{queued}</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+        <div className={styles.visuals + ' ' + styles.stack}>
+          {verdict ? (
+            <p className={styles.verdict} data-testid="repeat-verdict">
+              {verdict}
+            </p>
+          ) : null}
+          <StatStrip aria-label="Repeat run summary" items={statItems} />
         </div>
       ) : null}
-      <div className={styles.twoUp}>
+      <div className={styles.single + ' ' + styles.visuals}>
         {g?.band ? (
           <section className={styles.stack} aria-label="Performance across attempts">
             <div className={styles.rowHead}>
-              <h3 className={styles.groupTitle}>Performance across attempts</h3>
+              <h3 className={styles.groupTitle}>Across attempts</h3>
               <span className={styles.controls}>
                 {options.length > 1 ? (
                   <SegmentedControl
@@ -318,6 +308,76 @@ export function RepeatTab() {
           </section>
         ) : null}
       </div>
+      {donePasses.length ? (
+        <section className={styles.stack + ' ' + styles.visuals} aria-label="Passes">
+          <h3 className={styles.groupTitle}>By pass</h3>
+          <p className={styles.note}>
+            Each pass on its own. {metric} is the metric driving the summary above.
+          </p>
+          <div className={styles.tableScroll}>
+            <table className={styles.table} aria-label="Passes">
+              <thead>
+                <tr>
+                  <th scope="col">Pass</th>
+                  {model.metricNames.map((m) => (
+                    <th key={m} scope="col" data-selected={m === metric ? '' : undefined}>
+                      {m}
+                    </th>
+                  ))}
+                  <th scope="col">Avg latency</th>
+                  <th scope="col" title={copy.medianLatency}>
+                    Median latency
+                  </th>
+                  <th scope="col">Errors</th>
+                  <th scope="col">Items</th>
+                </tr>
+              </thead>
+              <tbody>
+                {donePasses.map((p) => (
+                  <tr key={p.pass_number}>
+                    <td>
+                      <Link
+                        to={`${basePath}?pass=${p.pass_number}`}
+                        aria-label={`Open pass ${p.pass_number}`}
+                      >
+                        Pass {p.pass_number}
+                      </Link>
+                    </td>
+                    {model.metricNames.map((m) => (
+                      <td key={m} data-selected={m === metric ? '' : undefined}>
+                        {p.metric_means?.[m] == null
+                          ? '—'
+                          : model.metricTypes[m] === 'numeric'
+                            ? String(Math.round(p.metric_means[m]! * 10) / 10)
+                            : formatPercent(p.metric_means[m]!, 1)}
+                        {m === metric && extremes.best === p.pass_number ? (
+                          <Tag tone="success" className={styles.cellTag}>
+                            best
+                          </Tag>
+                        ) : null}
+                        {m === metric && extremes.worst === p.pass_number ? (
+                          <Tag tone="danger" className={styles.cellTag}>
+                            worst
+                          </Tag>
+                        ) : null}
+                      </td>
+                    ))}
+                    <td>{p.avg_latency_ms != null ? latencyLabel(p.avg_latency_ms) : '—'}</td>
+                    <td>{p.median_latency_ms != null ? latencyLabel(p.median_latency_ms) : '—'}</td>
+                    <td data-tone={(p.error_count ?? 0) > 0 ? 'danger' : undefined}>{p.error_count ?? 0}</td>
+                    <td>{p.items_total ?? ''}</td>
+                  </tr>
+                ))}
+                {queued ? (
+                  <tr data-testid="queued-passes">
+                    <td colSpan={5 + model.metricNames.length}>{queued}</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

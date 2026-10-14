@@ -294,6 +294,7 @@ export function Scatter({
   fmtX,
   fmtY,
   quadrants,
+  aspect,
 }: {
   points: ScatterPoint[];
   xLabel: string;
@@ -303,9 +304,11 @@ export function Scatter({
   fmtX?: (v: number) => string;
   fmtY?: (v: number) => string;
   quadrants?: ScatterQuadrants;
+  /** Width / height of the plot (clamped to 220..420 px high); default a fixed 220 px. */
+  aspect?: number;
 }) {
   const [boxRef, W] = useMeasuredWidth<HTMLDivElement>(300);
-  const H = 220;
+  const H = aspect ? Math.round(Math.min(420, Math.max(220, W / aspect))) : 220;
   const pad = { l: 46, r: 8, t: 8, b: 28 };
   const enter = useEntrance();
   const shown = useMemo(
@@ -356,21 +359,6 @@ export function Scatter({
                 y={quadrants.goodIsHighY ? qy : top}
                 height={Math.max(0, quadrants.goodIsHighY ? bottom - qy : qy - top)}
               />
-              <text
-                className={styles.quadLabel}
-                x={left + 6}
-                y={quadrants.goodIsHighY ? top + 12 : bottom - 6}
-              >
-                {quadrants.goodLabel}
-              </text>
-              <text
-                className={styles.quadLabel}
-                x={right - 6}
-                y={quadrants.goodIsHighY ? bottom - 6 : top + 12}
-                textAnchor="end"
-              >
-                {quadrants.badLabel}
-              </text>
             </g>
           ) : null}
           {ticks.map((t) => (
@@ -439,8 +427,20 @@ export function Scatter({
             {yLabel}
           </text>
         </svg>
-        {outcomes.length ? (
+        {outcomes.length || quadrants ? (
           <ul className={styles.legend} aria-label="Dot colours">
+            {quadrants ? (
+              <>
+                <li>
+                  <span className={styles.quadKey} data-q="good" aria-hidden="true" />
+                  {quadrants.goodLabel}
+                </li>
+                <li>
+                  <span className={styles.quadKey} data-q="bad" aria-hidden="true" />
+                  {quadrants.badLabel}
+                </li>
+              </>
+            ) : null}
             {outcomes.map((o) => (
               <li key={o}>
                 <span className={styles.outcomeKey} data-outcome={o} aria-hidden="true" />
@@ -477,7 +477,7 @@ export function Curve({
   xLabel?: string;
 }) {
   const [boxRef, W] = useMeasuredWidth<HTMLElement>(320);
-  const H = 180;
+  const H = 260;
   const pad = { l: 34, r: 12, t: 8, b: 24 };
   const ks = Array.from(new Set(series.flatMap((s) => s.points.map((p) => p.k)))).sort((a, b) => a - b);
   const sx = (k: number) =>
@@ -606,6 +606,9 @@ export function PassCountBars({
           </span>
           <span className={styles.axis}>
             {i}/{total}
+            {i === 0 || i === counts.length - 1 ? (
+              <small className={styles.axisNote}>{i === 0 ? 'always fail' : 'always pass'}</small>
+            ) : null}
           </span>
         </Mark>
       ))}

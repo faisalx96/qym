@@ -5,11 +5,21 @@ import {
   formatDefault,
   formatInput,
   parseInput,
+  isSweepable,
   setAllInput,
+  setGlobalSweep,
+  sharedSweep,
+  startGlobalSweep,
+  stopGlobalSweep,
   type AllItemsField,
   type DescriptorEntry,
 } from '../model';
+import { Button, Popover } from '@/ui';
+import { plural } from '../../lib/format';
+import { useLaunch } from '../LaunchContext';
 import { endpointNames, useSettingsActions } from './SettingsContext';
+import { SweepChips } from './SweepChips';
+import { withPrunedLinks } from './sweepDoc';
 import styles from './settings.module.css';
 
 const MIXED = '__mixed__';
@@ -27,7 +37,67 @@ export interface AllItemsControlProps {
   value?: AllItemsField['value'];
 }
 
-function AllItemsControlImpl({ field, pointers, same, value }: AllItemsControlProps) {
+function AllItemsControlImpl(props: AllItemsControlProps) {
+  const { field, pointers } = props;
+  const { setDoc, endpoints, sweeps, ctx } = useSettingsActions();
+  const { doc } = useLaunch();
+  const targets = pointers ?? field.pointers;
+  const swept = sharedSweep(doc, targets);
+  if (swept) {
+    const summary = swept.map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).join(' · ');
+    return (
+      <div className={styles.globalSweep} data-global-sweep="">
+        <Popover
+          label={`Sweep values of ${field.label}`}
+          placement="bottom start"
+          trigger={
+            <Button size="sm" variant="neutral" className={styles.sweepTrigger}>
+              <span className={styles.sweepSummary} title={summary || 'No values yet'}>
+                {summary || 'Add values'}
+              </span>
+              <span className={styles.sr}>{`, edit sweep: ${field.label}`}</span>
+            </Button>
+          }
+        >
+          <div className={styles.sweepPopover}>
+            <SweepChips
+              entry={field.entry}
+              label={field.label}
+              values={swept}
+              endpointKeys={endpointNames({ endpoints }, field.entry)}
+              onChange={(values) => setDoc((d) => setGlobalSweep(d, targets, values))}
+              onSingle={() => setDoc((d) => withPrunedLinks(stopGlobalSweep(d, targets), ctx))}
+            />
+          </div>
+        </Popover>
+        <span className={styles.hint}>
+          {swept.length ? `sweeps ${plural(swept.length, 'run')}` : 'add values to sweep'}
+        </span>
+      </div>
+    );
+  }
+  const shared =
+    props.same !== undefined ? (props.same ? props.value : undefined) : field.same ? field.value : undefined;
+  const canSweep = sweeps && isSweepable(field.entry) && targets.length > 0;
+  return (
+    <>
+      <PlainAllControl {...props} />
+      {canSweep ? (
+        <button
+          type="button"
+          className={styles.linkBtn}
+          aria-label={`Sweep values: ${field.label}`}
+          title="One run per value, for every item together"
+          onClick={() => setDoc((d) => startGlobalSweep(d, field.entry, targets, shared))}
+        >
+          Sweep values
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+function PlainAllControl({ field, pointers, same, value }: AllItemsControlProps) {
   const { setDoc, endpoints } = useSettingsActions();
   const { entry, label } = field;
   const targets = pointers ?? field.pointers;

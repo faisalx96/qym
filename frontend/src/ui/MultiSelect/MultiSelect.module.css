@@ -215,3 +215,45 @@
   border-radius: var(--dropdown-radius);
   overflow: hidden;
 }
+
+/* Filter-bar trigger: 24px, label then `· value`; a selection tints it with the accent. */
+.trigger[data-variant='bar'] {
+  min-width: 96px;
+  max-width: 168px;
+  background: transparent;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+.trigger[data-variant='bar'] .triggerLabel {
+  font-weight: 500;
+}
+.trigger[data-variant='bar'][data-active] {
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+  color: var(--text-primary);
+}
+.trigger[data-variant='bar'][data-active] .triggerLabel {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+.trigger[data-variant='bar'][data-hovered] {
+  background: var(--bg-hover);
+}
+.trigger[data-variant='bar'][data-active][data-hovered] {
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
+}
+.trigger[data-variant='bar'][data-pressed] {
+  filter: brightness(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger[data-variant='bar'] {
+    transition: none;
+  }
+}
+
+.hint {
+  padding: 0 var(--space-sm) var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}

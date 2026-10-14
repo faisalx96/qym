@@ -111,7 +111,9 @@ test.describe('charts (J7)', () => {
     await expect(legend.getByRole('button', { name: /^(gpt-4o|claude-sonnet-4) \d+ runs/ })).toHaveCount(2);
     await legend.getByRole('button', { name: /claude-sonnet-4 \d+ runs/ }).click();
     await expect.poll(() => urlParams(page).getAll('model')).toEqual([expect.stringContaining('gpt-4o')]);
-    await expect(page.getByTestId('filters-trigger')).toContainText('Filters · 1');
+    await expect(
+      page.getByTestId('filter-bar').getByRole('button', { name: /^Model filter, 1 selected/ }),
+    ).toBeVisible();
     await expect(page.getByTestId(/^chart-card-/).first()).toBeVisible();
     // wait for the filtered overview to land, then the legend must still list the toggled-off model (pressed = false)
     await expect(page.getByText(/^Filtered: \d+ runs/)).toBeVisible();

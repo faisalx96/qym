@@ -1,6 +1,6 @@
 /** Runs-table keyboard model (brief 03 "Keyboard", WCAG 2.1.4 opt-out, Tab order). */
 import { test, expect, type Page } from '@playwright/test';
-import { clickBox, dataRows, freshProject, openRuns, sharedProject, urlParams } from './support';
+import { clickBox, dataRows, freshProject, openFacet, openRuns, sharedProject, urlParams } from './support';
 
 const focusedRow = (page: Page) => page.locator('[data-testid="runs-table"] tbody tr[data-focused]');
 const focusedIndex = (page: Page) =>
@@ -157,7 +157,7 @@ test.describe('runs list: keyboard', () => {
   test('shortcuts never fire with the Filters popover open', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);
-    await page.getByTestId('filters-trigger').click();
+    await openFacet(page, 'Status');
     await expect(page.getByTestId('filters-panel')).toBeVisible();
     for (const k of ['j', 'x', '3', 'c', '?', 'g']) await page.keyboard.press(k);
     expect(await focusedIndex(page)).toBe(-1);
@@ -166,7 +166,7 @@ test.describe('runs list: keyboard', () => {
     await expect(page.getByTestId('selection-bar')).toHaveCount(0);
   });
 
-  test('Tab order: search -> Filters -> ... -> first sortable header within 6 stops', async ({
+  test('Tab order: search -> Time -> Origin -> facets -> ... -> first sortable header within 16 stops', async ({
     page,
     request,
   }) => {
@@ -177,7 +177,7 @@ test.describe('runs list: keyboard', () => {
     await expect(page.getByLabel('Search runs')).toBeFocused();
     const seen: string[] = [];
     let stops = 0;
-    for (; stops < 8; stops++) {
+    for (; stops < 18; stops++) {
       await page.keyboard.press('Tab');
       const desc = await page.evaluate(() => {
         const el = document.activeElement as HTMLElement;
@@ -186,9 +186,9 @@ test.describe('runs list: keyboard', () => {
       seen.push(desc);
       if (desc.endsWith('HEAD')) break;
     }
-    expect(seen[0], seen.join(' > ')).toContain('Filters');
+    expect(seen[0], seen.join(' > ')).toContain('INPUT'); // the Time segmented control (radio)
     expect(seen.at(-1), seen.join(' > ')).toMatch(/HEAD$/);
-    expect(stops + 1, seen.join(' > ')).toBeLessThanOrEqual(6);
+    expect(stops + 1, seen.join(' > ')).toBeLessThanOrEqual(16);
   });
 
   test('keyboard focus crosses the page edge (j on the last row of page 1 loads page 2)', async ({

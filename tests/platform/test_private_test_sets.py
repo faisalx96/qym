@@ -403,6 +403,28 @@ def test_analyzer_is_admin_only_on_private_runs(world):
     assert active.status_code == 200 and active.json() == {"job": None}
 
 
+def test_active_analysis_runs_hides_private_runs_from_members(world, monkeypatch):
+    from qym_platform.api import analysis as analysis_api
+
+    client, _ = world
+    path = "/api/analysis-jobs/active-runs"
+    body = {"run_ids": ["run-secret", "run-open", "no-such-run"]}
+    # Pretend every requested run has an analysis in flight.
+    monkeypatch.setattr(
+        analysis_api.analysis_job_manager, "active_run_ids", lambda ids, db=None: set(ids)
+    )
+    admin = client.post(path, json=body, headers=ADMIN)
+    assert admin.status_code == 200
+    assert admin.json()["run_ids"] == ["run-open", "run-secret"]
+    member = client.post(path, json=body, headers=MEMBER)
+    assert member.status_code == 200
+    assert "run-secret" not in member.json()["run_ids"]
+    assert "no-such-run" not in member.json()["run_ids"]
+    assert client.post(path, json={"run_ids": []}, headers=MEMBER).json() == {"run_ids": []}
+    too_many = client.post(path, json={"run_ids": [str(i) for i in range(201)]}, headers=MEMBER)
+    assert too_many.status_code == 422
+
+
 def _member_api_key(SessionLocal, project_id: str = "project-1") -> str:
     from qym_platform.db.models import ApiKey
     from qym_platform.security import generate_api_key

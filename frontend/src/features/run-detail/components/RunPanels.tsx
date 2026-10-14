@@ -65,11 +65,27 @@ export function ReviewHistory({ runId, status }: { runId: string; status: string
   );
 }
 
-export function VersioningDetails({ run }: { run: Run }) {
+function FlatSection({
+  children,
+  ...rest
+}: {
+  children: React.ReactNode;
+  'aria-label': string;
+  'data-testid': string;
+}) {
+  return (
+    <section {...rest} className={styles.flat}>
+      {children}
+    </section>
+  );
+}
+
+export function VersioningDetails({ run, flat }: { run: Run; flat?: boolean }) {
   const entries = Object.entries(run.versioning_details ?? {}).sort(([a], [b]) => a.localeCompare(b));
   if (!entries.length) return null;
+  const Wrapper = flat ? FlatSection : Card;
   return (
-    <Card as="section" aria-label="Versioning details" data-testid="versioning-details">
+    <Wrapper aria-label="Versioning details" data-testid="versioning-details">
       <div className={styles.title}>Versioning details</div>
       <div className={styles.copy}>
         Keys set by whoever created this run, or by the experiment that launched it.
@@ -88,7 +104,7 @@ export function VersioningDetails({ run }: { run: Run }) {
           </div>
         ))}
       </dl>
-    </Card>
+    </Wrapper>
   );
 }
 

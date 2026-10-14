@@ -304,6 +304,8 @@ textarea.control {
   min-width: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--control-radius);
+  /* a control scrolled into view never lands under the sticky first column */
+  scroll-padding-inline-start: 9rem;
 }
 
 .table {
@@ -602,4 +604,61 @@ button.chip:focus-visible,
 .cellRow .control {
   flex: 1 1 96px;
   min-width: 96px;
+}
+
+.globalSweep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+/* Cell actions keep their width when "changed" adds Reset and the dot, so the Sweep button stays under the pointer. */
+.cellActions {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+}
+
+.cellActions[data-reserve] {
+  min-width: calc(var(--control-height) * 2 + var(--space-sm));
+}
+
+/* A list or object field takes the whole row of the settings grid so its table is not clipped. */
+.field[data-wide] {
+  grid-column: 1 / -1;
+}
+
+/* Narrow tables: the row name stays while the columns scroll. */
+.table tbody th[scope='row'],
+.table tbody td:first-child {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--bg-surface);
+}
+
+.table tr.allRow th[scope='row'],
+.table tr.allRow td:first-child {
+  background: var(--bg-elevated);
+}
+
+/* Global sweep summary in the All row: one compact trigger, the chip editor in a popover. */
+.sweepTrigger {
+  max-width: 100%;
+}
+
+.sweepSummary {
+  display: block;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.sweepPopover {
+  width: min(22rem, 80vw);
+  padding: var(--space-sm);
 }

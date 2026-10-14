@@ -19,6 +19,8 @@ export interface ToolbarProps {
   count?: ReactNode;
   /** Extra controls on the right (Select, Export …). */
   trailing?: ReactNode;
+  /** Full-width rows under the main line (filter facets, chips). */
+  rows?: ReactNode;
   /** Columns menu: default shown when the table has 5+ hideable columns. */
   columnsMenu?: boolean;
   /** Density menu: default shown unless the table locks its density. */
@@ -32,9 +34,27 @@ const DENSITIES: { id: Density; label: string }[] = [
 ];
 
 /** Search, filters, chips, count, then the built-in Columns and Density menus. */
-export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, densityMenu }: ToolbarProps) {
-  const { model, columns, selectedCount, bulkActions, bulkOwnSummary, bulkAlways, clearSelection } =
-    useDataTableCtx();
+export function Toolbar({
+  search,
+  filters,
+  chips,
+  rows,
+  count,
+  trailing,
+  columnsMenu,
+  densityMenu,
+}: ToolbarProps) {
+  const {
+    model,
+    columns,
+    reorderable,
+    suspended,
+    selectedCount,
+    bulkActions,
+    bulkOwnSummary,
+    bulkAlways,
+    clearSelection,
+  } = useDataTableCtx();
   const selecting = (selectedCount > 0 || bulkAlways) && Boolean(bulkActions);
   const hideable = columns.filter((c) => c.hideable !== false && !c.id.startsWith('__'));
   const showColumns = columnsMenu ?? hideable.length >= 5;
@@ -69,7 +89,9 @@ export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, 
       <div className={styles.toolbarEnd}>
         {count ? <span className={styles.count}>{count}</span> : null}
         {trailing}
-        {showColumns ? <ColumnsMenu columns={columns} model={model} /> : null}
+        {showColumns ? (
+          <ColumnsMenu columns={columns} model={model} reorderable={reorderable} suspended={suspended} />
+        ) : null}
         {showDensity ? (
           <DropdownMenu
             label="Row density"
@@ -87,6 +109,7 @@ export function Toolbar({ search, filters, chips, count, trailing, columnsMenu, 
           />
         ) : null}
       </div>
+      {rows ? <div className={styles.toolbarRows}>{rows}</div> : null}
     </div>
   );
 }

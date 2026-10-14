@@ -33,6 +33,14 @@
     background var(--transition-fast);
 }
 
+.switch:hover {
+  color: var(--text-primary);
+}
+
+.switch:hover .track {
+  border-color: var(--text-muted);
+}
+
 .switch[data-selected] .track {
   background: var(--accent-primary);
   border-color: var(--accent-primary);

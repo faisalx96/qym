@@ -9,15 +9,17 @@ import { expect, test, type Page } from '@playwright/test';
 import { compareUrl } from '../compare/support';
 import { gotoApp } from '../helpers';
 import { runUrl } from '../run-detail/support';
-import { seedTour, settled, type Tour } from './support';
+import { createLaunchAreas, seedTour, settled, type AreasWorld, type Tour } from './support';
 
 /** Dead on hover today, fixed by the area application that owns the page (empty: the audit is strict). */
 const PENDING = new Set<string>([]);
 
 let tour: Tour;
-test.beforeAll(async () => {
+let areas: AreasWorld;
+test.beforeAll(async ({ request }) => {
   test.setTimeout(180_000);
   tour = await seedTour();
+  areas = await createLaunchAreas(request);
 });
 
 interface Candidate {
@@ -127,6 +129,71 @@ test.describe('hover audit', () => {
     await expect(page.getByTestId('item-list')).toBeVisible({ timeout: 20_000 });
     check('compare', await audit(page, 'compare', 6));
   });
+
+  const areaPages: {
+    name: string;
+    path: () => string;
+    ready: (page: Page) => Promise<void>;
+    steps?: number;
+  }[] = [
+    {
+      name: 'experiments',
+      path: () => `/projects/${areas.slug}/experiments`,
+      ready: (p) => expect(p.locator('[data-experiments-list]')).toBeVisible(),
+    },
+    {
+      name: 'experiment-detail',
+      path: () => `/projects/${areas.slug}/experiments/${areas.experimentId}`,
+      ready: (p) => expect(p.locator('[data-exp-matrix]')).toBeVisible(),
+    },
+    {
+      name: 'launch-home',
+      path: () => `/projects/${areas.slug}/experiments/new?env=${areas.envId}`,
+      ready: (p) => expect(p.getByRole('textbox', { name: 'Experiment name' })).toBeVisible(),
+    },
+    ...(['where', 'start', 'models', 'settings', 'evaluation', 'review'] as const).map((step) => ({
+      name: `wizard-${step}`,
+      path: () => `/projects/${areas.slug}/experiments/new?env=${areas.envId}&step=${step}`,
+      ready: (p: Page) => expect(p.getByRole('heading', { level: 2 }).first()).toBeVisible(),
+    })),
+    {
+      name: 'datasets',
+      path: () => `/projects/${areas.slug}/datasets`,
+      ready: (p) => expect(p.locator('[data-dataset-card]').first()).toBeVisible(),
+    },
+    ...(['items', 'runs', 'lineage', 'settings'] as const).map((tab) => ({
+      name: `dataset-${tab}`,
+      path: () => `/projects/${areas.slug}/datasets/${areas.datasetSlug}?v=v1&tab=${tab}`,
+      ready: (p: Page) => expect(p.getByRole('tab', { selected: true }).first()).toBeVisible(),
+    })),
+    ...(['runs', 'projects', 'users', 'maintenance'] as const).map((tab) => ({
+      name: `admin-${tab}`,
+      path: () => `/admin/${tab}`,
+      ready: (p: Page) => expect(p.getByRole('tab', { selected: true }).first()).toBeVisible(),
+    })),
+    {
+      name: 'analysis',
+      path: () => `/projects/${areas.analysisSlug}/analysis?run=${areas.runId}`,
+      ready: (p) => expect(p.getByRole('region', { name: 'Analysis actions' })).toBeVisible(),
+    },
+    {
+      name: 'reviews',
+      path: () => `/projects/${areas.slug}/reviews?status=all`,
+      ready: (p) => expect(p.getByRole('main')).toBeVisible(),
+    },
+    {
+      name: 'settings',
+      path: () => `/projects/${areas.slug}/settings`,
+      ready: (p) => expect(p.getByRole('main')).toBeVisible(),
+    },
+  ];
+  for (const area of areaPages) {
+    test(`${area.name}`, async ({ page }) => {
+      await gotoApp(page, area.path());
+      await area.ready(page);
+      check(area.name, await audit(page, area.name, area.steps ?? 3));
+    });
+  }
 
   test('the Export HTML link answers hover and press', async ({ page }) => {
     await gotoApp(page, runUrl(tour.slug, tour.runId));

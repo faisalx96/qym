@@ -1,0 +1,38 @@
+/* Task, dataset and model tags: one-line, truncating, with the full name as a tooltip. */
+.entity {
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.version {
+  flex: none;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.alias {
+  flex: none;
+  font-family: var(--font-mono);
+}
+
+.none {
+  color: var(--text-muted);
+}

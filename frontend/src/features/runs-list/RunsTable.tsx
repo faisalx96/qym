@@ -3,9 +3,17 @@
  * shared DataTable (pinned Run and Actions columns, header bands, zebra rows,
  * passes panel as the expanded row, select mode as `selection`).
  */
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { RunRow } from '@/api/dashboardTypes';
-import { DataTable, EmptyState, Tag, type Column, type FooterProps, type Key, type ToolbarProps } from '@/ui';
+import {
+  DataTable,
+  EmptyState,
+  TaskTag,
+  type Column,
+  type FooterProps,
+  type Key,
+  type ToolbarProps,
+} from '@/ui';
 import { formatNumericValue } from '@/lib/format';
 import {
   AnalysisCell,
@@ -33,7 +41,13 @@ import styles from './RunsTable.module.css';
 
 export interface RunsTableProps {
   rows: RunRow[];
+  /** Every column in default order; the table owns visibility, order and freezing. */
   columns: ColumnDef[];
+  /** Column ids hidden until the user chooses. */
+  defaultHidden?: Set<string>;
+  /** Layouts are saved per user. */
+  storageScope?: string;
+  onHiddenChange?: (hidden: Set<string>) => void;
   sort: SortSpec;
   /** `null` clears the sort (back to the default order). */
   onSort: (sortKey: string | null, direction?: 'asc' | 'desc') => void;
@@ -92,13 +106,7 @@ function cellFor(col: ColumnDef, row: RunRow, p: RunsTableProps): ReactNode {
     case 'signals':
       return <Signals row={row} onDetails={(r) => p.onSignalDetails(r)} />;
     case 'task':
-      return row.task_name ? (
-        <Tag kind="data" title={row.task_name}>
-          {row.task_name}
-        </Tag>
-      ) : (
-        <span>—</span>
-      );
+      return <TaskTag name={row.task_name} />;
     case 'model':
       return <ModelCell row={row} />;
     case 'dataset':
@@ -148,7 +156,16 @@ function priorityOf(col: ColumnDef, metricRank: number): 1 | 2 | 3 {
   return 3;
 }
 
+/** Run + Status stay frozen on wide screens; narrower ones freeze Run only (the 50% cap suspends the rest). */
+function useWideDefault(): boolean {
+  const [wide] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 1440px)').matches === true,
+  );
+  return wide;
+}
+
 export function RunsTable(p: RunsTableProps) {
+  const wide = useWideDefault();
   const passRefsOf = (row: RunRow) =>
     Array.from({ length: row.samples }, (_, i) => passRef(row.run_id, i + 1));
   // An expanded repeat run is checked through its passes: all ticked = checked, some = indeterminate.
@@ -173,8 +190,15 @@ export function RunsTable(p: RunsTableProps) {
         sort: def.sortKey ? { key: def.sortKey, first: defaultDirection(def.sortKey) } : undefined,
         width: def.width,
         align: def.align,
-        pin: def.id === 'run' ? 'start' : def.id === 'actions' ? 'end' : undefined,
-        hideable: false,
+        pin:
+          def.id === 'run' || (wide && def.id === 'status')
+            ? 'start'
+            : def.id === 'actions'
+              ? 'end'
+              : undefined,
+        lockOrder: def.id === 'actions',
+        hideable: def.visKey !== null && def.id !== 'run',
+        defaultHidden: p.defaultHidden?.has(def.id),
         resizable: def.id !== 'actions',
         hideLabel: def.id === 'actions',
         priority: priorityOf(def, rank),
@@ -182,7 +206,7 @@ export function RunsTable(p: RunsTableProps) {
       } satisfies Column<RunRow>;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cells read the live props through `p`
-  }, [p.columns, p.expanded, p.perm, p.onAction, p.onSignalDetails, p.onToggleExpand]);
+  }, [p.columns, p.defaultHidden, wide, p.expanded, p.perm, p.onAction, p.onSignalDetails, p.onToggleExpand]);
 
   const selected = useMemo(() => {
     const out = new Set<Key>();
@@ -196,6 +220,9 @@ export function RunsTable(p: RunsTableProps) {
       <DataTable<RunRow>
         aria-label="Runs"
         storageKey="runs.v2"
+        storageScope={p.storageScope}
+        reorderable
+        onHiddenChange={p.onHiddenChange}
         density="compact"
         columns={columns}
         rows={p.rows}
@@ -221,7 +248,7 @@ export function RunsTable(p: RunsTableProps) {
         bulkOwnSummary
         bulkAlways={p.selectMode}
         onRowOpen={p.onOpen}
-        rowState={(r) => (r.status === 'RUNNING' ? 'live' : undefined)}
+        rowState={(r) => (r.status === 'RUNNING' ? 'live' : r.status === 'FAILED' ? 'error' : undefined)}
         rowProps={(r) => ({
           'data-run-id': r.run_id,
           'data-status': r.status,
@@ -268,7 +295,7 @@ export function RunsTable(p: RunsTableProps) {
           p.onFocusIndex(key === null ? -1 : p.rows.findIndex((r) => r.run_id === key))
         }
       >
-        <DataTable.Toolbar columnsMenu={false} {...p.toolbar} />
+        <DataTable.Toolbar columnsMenu {...p.toolbar} />
         <DataTable.Footer testId="status-bar" ariaLabel="Runs status" {...p.footer} />
       </DataTable>
     </div>

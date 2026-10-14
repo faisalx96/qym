@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Badge, Button, KeyValueGrid, Text } from '@/ui';
 import { plural } from '../../lib/format';
 import { Callout } from '../components/Callout';
+import { VersionsSummary } from '../entry/VersionsBlock';
 import { ProblemList } from '../components/ProblemList';
 import { useGoToSection } from '../components/goToSection';
 import panel from '../components/launch.module.css';
@@ -79,7 +80,16 @@ function ChangesByStep() {
 }
 
 /** The always-visible review: summary, live run count, changes by step, problems, launch actions. */
-export function ReviewPane({ onCancel, hideActions }: { onCancel: () => void; hideActions?: boolean }) {
+export function ReviewPane({
+  onCancel,
+  hideActions,
+  rawAction = true,
+}: {
+  onCancel: () => void;
+  hideActions?: boolean;
+  /** Offer the "Raw JSON" action (off on the review step, which has its own Show raw JSON button). */
+  rawAction?: boolean;
+}) {
   const { doc, ctx, review, preview, selectedEnvs, readOnly } = useLaunch();
   const { count } = review;
   const envCount = doc.environmentIds.length;
@@ -116,6 +126,9 @@ export function ReviewPane({ onCancel, hideActions }: { onCancel: () => void; hi
             value: envCount ? baseLabel(doc, (id) => selectedEnvs.find((e) => e.id === id)?.name ?? id) : '—',
           },
           { key: 'prio', label: 'Priority', value: priorityText(doc.priority) },
+          ...(selectedEnvs.length
+            ? [{ key: 'versions', label: 'Versions', value: <VersionsSummary /> }]
+            : []),
         ]}
       />
       <div>
@@ -167,7 +180,7 @@ export function ReviewPane({ onCancel, hideActions }: { onCancel: () => void; hi
         </details>
       ) : null}
       {readOnly ? <Callout tone="warning">Archived project: read only.</Callout> : null}
-      {hideActions ? null : <LaunchActions onCancel={onCancel} />}
+      {hideActions ? null : <LaunchActions onCancel={onCancel} hideRaw={!rawAction} />}
     </aside>
   );
 }

@@ -237,6 +237,9 @@ describe('primitive module contracts', () => {
       "[data-wash='danger']",
     ],
     Skeleton: ['prefers-reduced-motion'],
+    FieldRow: ['var(--field-label-width)', 'var(--field-measure)', '@container'],
+    StructuredValue: ['var(--border-subtle)', 'var(--font-mono)', 'prefers-reduced-motion'],
+    SplitPane: ['cursor: col-resize', 'var(--accent-primary)', 'var(--border-subtle)'],
   };
   for (const [name, decls] of Object.entries(contracts)) {
     it(`${name}.module.css encodes its recipe`, () => {
@@ -312,7 +315,6 @@ describe('primitive module contracts', () => {
       'features/experiments/launch/settings/JsonFields.tsx', // key/value form rows
       'features/experiments/launch/settings/RoleTable.tsx', // role form table
       'features/run-detail/components/panels/RepeatTab.tsx', // run-detail: second pass
-      'features/runs-list/PassesPanel.tsx', // nested passes list with its own select/delete controls
       'features/runs-list/ShortcutsDialog.tsx', // key list in a dialog
       'sdk-viewer/components/RowList.tsx', // offline viewer, separate bundle
     ]);

@@ -1,6 +1,11 @@
-import type { Page } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 import { uniqueSlug } from '../helpers';
 import { createApiKey, ensureProject, seedCompareRun } from '../compare/seed';
+import { seedLaunch } from '../experiments/launch/launchSupport';
+import { experimentSpec, launchExperiment, resetFakes, withFakesLock } from '../experiments/support';
+import { seedReviews } from '../reviews/support';
+import { seedAnalyzer } from '../analyzer/helpers';
+import { bulkItems, createDataset, createVersion, publishVersion, sampleItems } from '../datasets/support';
 import { client, openRun, seedClassic, seedProject, seedRepeat } from '../run-detail/support';
 
 export interface Tour {
@@ -34,7 +39,50 @@ export async function seedTour(): Promise<Tour> {
 
 export { openRun };
 
-/** Resolves when no CSS animation or transition is running (entrances and fills are 360ms). */
+/** Resolves when no finite CSS animation or transition is running (entrances and fills are 360ms; spinners loop). */
 export async function settled(page: Page): Promise<void> {
-  await page.waitForFunction(() => document.getAnimations().length === 0, undefined, { timeout: 10_000 });
+  await page.waitForFunction(
+    () =>
+      document
+        .getAnimations()
+        .every((a) => a.playState === 'finished' || a.effect?.getComputedTiming().iterations === Infinity),
+    undefined,
+    { timeout: 10_000 },
+  );
+}
+
+export interface AreasWorld {
+  slug: string;
+  envId: string;
+  experimentId: string;
+  datasetSlug: string;
+  runId: string;
+  analysisSlug: string;
+}
+
+/** One project that has an environment, a launched experiment, a dataset, an analysed run and pending reviews. */
+export async function createLaunchAreas(request: APIRequestContext): Promise<AreasWorld> {
+  return withFakesLock(async () => {
+    await resetFakes(request);
+    const f = await seedLaunch(request);
+    const exp = await launchExperiment(request, f.project.id, {
+      name: 'vl experiment',
+      environment_ids: [f.env.id],
+      spec: experimentSpec(f.connectionId),
+    });
+    const ds = await createDataset(request, f.project.slug, 'VL dataset', { description: 'vl' });
+    const v = await createVersion(request, f.project.slug, ds.slug);
+    await bulkItems(request, f.project.slug, ds.slug, v.version, sampleItems(8));
+    await publishVersion(request, f.project.slug, ds.slug, v.version, true);
+    await seedReviews(request, 'vlrev', 3, { project: f.project });
+    const an = await seedAnalyzer(request);
+    return {
+      slug: f.project.slug,
+      envId: f.env.id,
+      experimentId: exp.id,
+      datasetSlug: ds.slug,
+      runId: an.runId,
+      analysisSlug: an.slug,
+    };
+  });
 }

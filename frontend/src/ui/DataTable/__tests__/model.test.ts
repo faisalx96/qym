@@ -8,6 +8,7 @@ import {
   pinOffsets,
   rangeKeys,
   sortRows,
+  suspendedPins,
 } from '../model';
 import type { Column } from '../types';
 
@@ -107,5 +108,50 @@ describe('helpers', () => {
   it('middle truncates only long text', () => {
     expect(middleTruncate('short')).toBe('short');
     expect(middleTruncate('0123456789abcdefghijklmnop', 4)).toBe('0123…mnop');
+  });
+});
+
+describe('column order', () => {
+  const ids = (cs: Column<R>[]) => cs.map((c) => c.id);
+  const many: Column<R>[] = [
+    { id: 'a' },
+    { id: 'b' },
+    { id: 'c' },
+    { id: 'd' },
+    { id: 'act', pin: 'end', lockOrder: true },
+  ];
+
+  it('keeps the declared order when nothing is saved', () => {
+    expect(ids(orderColumns(many, {}, null))).toEqual(['a', 'b', 'c', 'd', 'act']);
+  });
+
+  it('applies a saved order; unsaved columns follow their nearest declared predecessor, locked ones stay', () => {
+    expect(ids(orderColumns(many, {}, ['c', 'a', 'b']))).toEqual(['c', 'd', 'a', 'b', 'act']);
+    // a new column after "b" lands after the nearest preceding declared column
+    const grown: Column<R>[] = [...many.slice(0, 2), { id: 'new' }, ...many.slice(2)];
+    expect(ids(orderColumns(grown, {}, ['c', 'a', 'b']))).toEqual(['c', 'd', 'a', 'b', 'new', 'act']);
+  });
+
+  it('drops unknown ids from a saved order', () => {
+    expect(ids(orderColumns(many, {}, ['gone', 'd', 'a']))).toEqual(['d', 'a', 'b', 'c', 'act']);
+  });
+
+  it('pins partition stably: pinning does not reshuffle the saved order inside a block', () => {
+    const order = ['d', 'c', 'b', 'a'];
+    expect(ids(orderColumns(many, { b: 'start', a: 'start' }, order))).toEqual(['b', 'a', 'd', 'c', 'act']);
+    expect(ids(orderColumns(many, { c: 'start' }, order))).toEqual(['c', 'd', 'b', 'a', 'act']);
+  });
+});
+
+describe('suspendedPins', () => {
+  const w = (id: string) => ({ run: 260, status: 200, date: 130 })[id] ?? 100;
+  it('keeps the first frozen column and suspends the ones past the cap', () => {
+    expect(suspendedPins(['run', 'status', 'date'], w, 1000, 0.5)).toEqual(['date']);
+    expect(suspendedPins(['run', 'status', 'date'], w, 1400, 0.5)).toEqual([]);
+    expect(suspendedPins(['run', 'status'], w, 300, 0.5)).toEqual(['status']);
+  });
+  it('never suspends the only frozen column and ignores unmeasured scrollers', () => {
+    expect(suspendedPins(['run'], w, 100, 0.5)).toEqual([]);
+    expect(suspendedPins(['run', 'status'], w, 0, 0.5)).toEqual([]);
   });
 });

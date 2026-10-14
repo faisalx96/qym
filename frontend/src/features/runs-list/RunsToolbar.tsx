@@ -1,11 +1,9 @@
-/** One-row command bar: search, Filters popover, active-filter chips, Columns, Select. */
+/** Runs and Charts command bar: search, Time / Origin, facet triggers, chips (see FilterBar). */
 import type { ReactNode, Ref } from 'react';
 import type { Facets } from '@/api/dashboardTypes';
-import { Button, Chip, SearchField } from '@/ui';
-import { activeChips } from './chips';
-import { FiltersPopover } from './FiltersPopover';
-import { countActiveFilters, DEFAULT_VIEW, type RunsView } from './urlState';
-import { useDebouncedSearch, type ViewPatch } from './useRunsView';
+import { useFilterBarParts } from './FilterBar';
+import type { ViewPatch } from './useRunsView';
+import type { RunsView } from './urlState';
 import styles from './RunsPage.module.css';
 
 export function RunsToolbar({
@@ -25,91 +23,30 @@ export function RunsToolbar({
   searchRef?: Ref<HTMLInputElement>;
   end?: ReactNode;
 }) {
-  const count = countActiveFilters(view);
-  const chips = activeChips(view, (id) => owners[id] ?? id);
-  const search = useDebouncedSearch(view.q, (q) => onChange({ q }));
-  const clear = () => onChange({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort });
+  const parts = useFilterBarParts({ view, facets, owners, onChange, searchRef, showSearch: mode === 'runs' });
   return (
     <div
       className={styles.commandBar}
       role="toolbar"
       aria-label={`${mode === 'runs' ? 'Runs' : 'Charts'} toolbar`}
     >
-      {mode === 'runs' ? (
-        <SearchField
-          ref={searchRef}
-          label="Search runs"
-          placeholder="Search runs"
-          hint="/"
-          value={search.text}
-          onChange={search.change}
-          onClear={() => search.flush('')}
-          onSubmit={(v) => search.flush(v)}
-          width={260}
-        />
-      ) : null}
-      <FiltersPopover view={view} facets={facets} owners={owners} onChange={onChange} />
-      {chips.length ? (
-        <div className={styles.chips} role="group" aria-label="Active filters">
-          {chips.map((c) => (
-            <Chip key={c.id} isSelected onRemove={() => onChange(c.remove)} removeLabel={`Remove ${c.label}`}>
-              {c.label}
-            </Chip>
-          ))}
-          <Button variant="ghost" onPress={clear}>
-            Clear {count}
-          </Button>
-        </div>
-      ) : null}
+      <div className={styles.barMain}>
+        {parts.search}
+        {parts.filters}
+      </div>
       {end ? <div className={styles.barEnd}>{end}</div> : null}
+      <div className={styles.barRows}>{parts.rows}</div>
     </div>
   );
 }
 
-/** The runs toolbar pieces for DataTable.Toolbar: search, Filters popover, active-filter chips. */
-export function useRunsToolbarParts({
-  view,
-  facets,
-  owners,
-  onChange,
-  searchRef,
-}: {
+/** The runs toolbar pieces for DataTable.Toolbar: search, Time / Origin, and the facet and chip rows. */
+export function useRunsToolbarParts(args: {
   view: RunsView;
   facets: Facets | undefined;
   owners: Record<string, string>;
   onChange: (patch: ViewPatch) => void;
   searchRef?: Ref<HTMLInputElement>;
 }) {
-  const count = countActiveFilters(view);
-  const chips = activeChips(view, (id) => owners[id] ?? id);
-  const search = useDebouncedSearch(view.q, (q) => onChange({ q }));
-  const clear = () => onChange({ ...DEFAULT_VIEW, versioning: {}, sort: view.sort });
-  return {
-    search: (
-      <SearchField
-        ref={searchRef}
-        label="Search runs"
-        placeholder="Search runs"
-        hint="/"
-        value={search.text}
-        onChange={search.change}
-        onClear={() => search.flush('')}
-        onSubmit={(v) => search.flush(v)}
-        width={260}
-      />
-    ),
-    filters: <FiltersPopover view={view} facets={facets} owners={owners} onChange={onChange} />,
-    chips: chips.length ? (
-      <div className={styles.chips} role="group" aria-label="Active filters">
-        {chips.map((c) => (
-          <Chip key={c.id} isSelected onRemove={() => onChange(c.remove)} removeLabel={`Remove ${c.label}`}>
-            {c.label}
-          </Chip>
-        ))}
-        <Button variant="ghost" onPress={clear}>
-          Clear {count}
-        </Button>
-      </div>
-    ) : null,
-  };
+  return useFilterBarParts(args);
 }

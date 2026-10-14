@@ -12,6 +12,11 @@ export interface DataTableCtx {
   bulkOwnSummary: boolean;
   bulkAlways: boolean;
   isFiltered: boolean;
+  reorderable: boolean;
+  /** Frozen columns rendered unfrozen because the frozen block would exceed the cap. */
+  suspended: string[];
+  /** Polite screen-reader message (moves, freezes). */
+  announce: (message: string) => void;
 }
 
 export const DataTableContext = createContext<DataTableCtx | null>(null);

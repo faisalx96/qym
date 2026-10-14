@@ -4,6 +4,7 @@ import { useStepLatencyQuery, stepLatencyUrl } from '@/api/runs';
 import { platformUrl } from '@/lib/runtime';
 import { formatPercent, isErrorRow, isNotReceivedRow } from '@/lib/metrics';
 import {
+  Button,
   ChartTooltipHost,
   Chip,
   ErrorState,
@@ -280,12 +281,25 @@ function Kinds({ D }: { D: ReturnType<typeof normalizeLatency> }) {
   );
 }
 
+function groupIds(tree: ReturnType<typeof buildStepsTree>): string[] {
+  const out: string[] = [];
+  const walk = (nodes: ReturnType<typeof buildStepsTree>) =>
+    nodes.forEach((n) => {
+      if (n.children) {
+        out.push(n.id);
+        walk(n.children);
+      }
+    });
+  walk(tree);
+  return out;
+}
+
 function Steps({ D }: { D: ReturnType<typeof normalizeLatency> }) {
   const { runId, model } = useRunPage();
   const [group, setGroup] = useState<'step' | 'kind'>('step');
   const [scale, setScale] = useState<'linear' | 'log'>('linear');
   const [query, setQuery] = useState('');
-  const [open, setOpen] = useState<Set<string>>(() => new Set(['p:task', 'p:eval']));
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [sort, setSort] = useState<{ key: StepSortKey; dir: 1 | -1 }>({ key: 'time', dir: -1 });
   const tree = useMemo(() => buildStepsTree(D, { group, query }), [D, group, query]);
   const rows = useMemo(() => flattenSteps(D, tree, open, sort), [D, tree, open, sort]);
@@ -321,6 +335,22 @@ function Steps({ D }: { D: ReturnType<typeof normalizeLatency> }) {
           value={scale}
           onChange={setScale}
         />
+        <Button
+          size="sm"
+          variant="neutral"
+          onPress={() => setOpen(new Set(groupIds(tree)))}
+          aria-label="Expand all steps"
+        >
+          Expand all
+        </Button>
+        <Button
+          size="sm"
+          variant="neutral"
+          onPress={() => setOpen(new Set())}
+          aria-label="Collapse all steps"
+        >
+          Collapse all
+        </Button>
         <SearchField
           label="Search steps"
           hideLabel

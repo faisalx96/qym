@@ -26,14 +26,14 @@ const base = (id: string, label: string, width: number, sortKey?: string): Colum
 
 export const BASE_COLUMNS: ColumnDef[] = [
   { ...base('run', 'Run', 260, 'run') },
-  base('status', 'Status', 200, 'status'),
-  { ...base('signals', 'Signals', 84), visKey: null },
-  base('task', 'Task', 100, 'task'),
-  base('model', 'Model', 150, 'model'),
-  base('dataset', 'Dataset', 120, 'dataset'),
+  base('status', 'Status', 150, 'status'),
+  { ...base('signals', 'Signals', 60), visKey: null },
+  base('task', 'Task', 90, 'task'),
+  base('model', 'Model', 124, 'model'),
+  base('dataset', 'Dataset', 104, 'dataset'),
   base('owner', 'Owner', 120, 'owner'),
   base('time', 'Date', 128, 'time'),
-  base('analysis', 'Analysis', 92),
+  base('analysis', 'Analysis', 100),
   base('experiment', 'Experiment', 110),
   base('version', 'Version', 150, 'version'),
 ];
@@ -152,6 +152,8 @@ export function metricColumn(name: string): ColumnDef {
 
 export interface ColumnSet {
   all: ColumnDef[];
+  /** Every column in the default table order (hidden ones included). */
+  ordered: ColumnDef[];
   visible: ColumnDef[];
 }
 
@@ -160,6 +162,8 @@ export function buildColumns(
   metrics: string[],
   traceWithData: Set<string>,
   visible: Set<string> | null,
+  /** Column ids the user hid (the table's own layout); wins over `visible`. */
+  hidden?: Set<string> | null,
 ): ColumnSet {
   const all: ColumnDef[] = [
     ...BASE_COLUMNS,
@@ -169,18 +173,17 @@ export function buildColumns(
     DURATION_COLUMN,
     ACTIONS_COLUMN,
   ];
-  // Table order: Run, Status, Signals, first two scores, Date, the other context columns, more scores, system, trace, duration, actions.
   // The first two metric columns follow Status so a score is visible on first paint.
   const metricCols = metrics.map(metricColumn);
   const byId = (id: string) => BASE_COLUMNS.find((c) => c.id === id)!;
+  // Legacy order for what a run is (task, model, dataset) and the Analyze action, then the first score and the date,
+  // so all of them are on screen at 1440 next to the frozen Run and Status; the other context columns follow.
+  const front = ['run', 'status', 'signals', 'task', 'model', 'dataset', 'time', 'analysis'];
   const ordered = [
-    byId('run'),
-    byId('status'),
-    byId('signals'),
-    ...metricCols.slice(0, 2),
-    byId('time'),
-    ...BASE_COLUMNS.filter((c) => !['run', 'status', 'signals', 'time', 'duration'].includes(c.id)),
-    ...metricCols.slice(2),
+    ...front.map(byId),
+    ...metricCols.slice(0, 1),
+    ...BASE_COLUMNS.filter((c) => ![...front, 'duration'].includes(c.id)),
+    ...metricCols.slice(1),
     ...SYSTEM_COLUMNS,
     ...TRACE_COLUMNS,
     DURATION_COLUMN,
@@ -188,11 +191,12 @@ export function buildColumns(
   ];
   const show = (c: ColumnDef) => {
     if (c.visKey === null) return true;
+    if (hidden) return !hidden.has(c.id);
     if (visible) return visible.has(c.visKey);
     if (c.group === 'trace') return traceWithData.has(c.visKey);
     return true;
   };
-  return { all, visible: ordered.filter(show) };
+  return { all, ordered, visible: ordered.filter(show) };
 }
 
 /** A sort key whose column is hidden falls back to the default order (dashboard.js 4373–4396). */

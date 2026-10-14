@@ -59,6 +59,23 @@
   min-width: 0;
 }
 
+.cardHead > :first-child {
+  flex: 1 1 auto;
+  min-width: 4rem;
+}
+
+.cardHead > :not(:first-child) {
+  flex: none;
+}
+
+.badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
 .actions {
   display: inline-flex;
   align-items: center;
@@ -158,13 +175,4 @@
 
 .group {
   color: var(--text-muted);
-}
-
-.cardHead > :first-child {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-.cardHead > :not(:first-child) {
-  flex: none;
 }

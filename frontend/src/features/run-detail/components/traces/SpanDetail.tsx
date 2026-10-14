@@ -1,6 +1,21 @@
 /** Right pane: per-span tabs (Messages, Input/Output, Documents, Metrics, Scores, Raw). */
 import { useMemo, useState } from 'react';
-import { CopyButton, JsonTree, TabPanel, Tabs, Tag, TextBlock, type TabItem } from '@/ui';
+import {
+  Badge,
+  ClampedText,
+  CopyButton,
+  Dialog,
+  Icon,
+  IconButton,
+  JsonTree,
+  StructuredValue,
+  TabPanel,
+  Tabs,
+  Tag,
+  TextBlock,
+  parseStructured,
+  type TabItem,
+} from '@/ui';
 import {
   formatDuration,
   formatCost,
@@ -16,53 +31,116 @@ import {
   type SpanNode,
 } from '../../lib/traceTree';
 import { bodyText } from '../../lib/itemText';
-import { KIND_LABEL } from './spanKinds';
+import { KIND_ICON, KIND_LABEL, KIND_TONE } from './spanKinds';
 import styles from './TraceDrawer.module.css';
 
-function LongText({ text, label }: { text: string; label: string }) {
+type LabelTone = 'info' | 'success' | 'muted';
+
+/** Labelled block: the label row carries copy and expand-to-dialog; the body is hairline separated, never boxed. */
+function Block({
+  label,
+  tone = 'muted',
+  text,
+  children,
+  expanded,
+  role,
+}: {
+  label: string;
+  tone?: LabelTone;
+  /** What copy puts on the clipboard. */
+  text: string;
+  children: React.ReactNode;
+  /** Content for the full-size dialog (defaults to `children`). */
+  expanded?: React.ReactNode;
+  role?: string;
+}) {
   const [open, setOpen] = useState(false);
-  const long = text.length > 1200 || text.split('\n').length > 14;
   return (
-    <div className={styles.longText}>
-      <div className={styles.longHead}>
-        <CopyButton text={text} label={`Copy ${label}`} />
-      </div>
-      <div className={long && !open ? styles.clamp : undefined}>
-        <TextBlock text={text} />
-      </div>
-      {long ? (
-        <button type="button" className={styles.more} aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? 'Show less' : 'Show more'}
-        </button>
+    <section className={styles.block} data-role={role} aria-label={label}>
+      <header className={styles.blockHead}>
+        <span className={styles.blockLabel} data-tone={tone}>
+          {label}
+        </span>
+        <span className={styles.blockActions}>
+          <CopyButton text={text} label={`Copy ${label.toLowerCase()}`} />
+          <IconButton
+            label={`Expand ${label.toLowerCase()}`}
+            icon={<Icon name="expand" size={14} />}
+            onPress={() => setOpen(true)}
+          />
+        </span>
+      </header>
+      <div className={styles.blockBody}>{children}</div>
+      {open ? (
+        <Dialog open onOpenChange={setOpen} title={label} size="data">
+          <div className={styles.expanded}>{expanded ?? children}</div>
+        </Dialog>
       ) : null}
-    </div>
+    </section>
   );
 }
 
-function Messages({ node }: { node: SpanNode }) {
+/** Text or JSON payload of a span: JSON gets per-key sections, text clamps with Show more. */
+function Payload({ value, label }: { value: unknown; label: string }) {
+  return <StructuredValue value={value} label={label} defaultOpen="auto" />;
+}
+
+function ToolArguments({ args }: { args: string }) {
+  const parsed = parseStructured(args);
+  return parsed.structured ? (
+    <JsonTree data={parsed.data} expandDepth={2} label="Tool arguments" toolbar={false} />
+  ) : (
+    <TextBlock text={args} code />
+  );
+}
+
+function Messages({ node, only }: { node: SpanNode; only?: 'input' | 'output' }) {
   const a = node.attributes ?? {};
-  const input = extractMessages(a, 'llm.input_messages');
-  const output = extractMessages(a, 'llm.output_messages');
+  const input = only === 'output' ? [] : extractMessages(a, 'llm.input_messages');
+  const output = only === 'input' ? [] : extractMessages(a, 'llm.output_messages');
   const reasoning = extractReasoning(node);
   const render = (msgs: ReturnType<typeof extractMessages>, key: string) =>
-    msgs.map((m, i) => (
-      <div key={`${key}${i}`} className={styles.msg} data-role={m.role}>
-        <div className={styles.role}>{m.role}</div>
-        {m.reasoning ? (
-          <details className={styles.reasoning}>
-            <summary>Reasoning</summary>
-            <TextBlock text={m.reasoning} />
-          </details>
-        ) : null}
-        {m.content ? <LongText text={m.content} label={`${m.role} message`} /> : null}
-        {m.toolCalls.map((t, j) => (
-          <div key={j} className={styles.toolCall}>
-            <Tag kind="data">{t.name}</Tag>
-            <TextBlock text={t.arguments} code />
-          </div>
-        ))}
-      </div>
-    ));
+    msgs.map((m, i) => {
+      const tone: LabelTone = m.role === 'user' ? 'info' : m.role === 'assistant' ? 'success' : 'muted';
+      return (
+        <Block
+          key={`${key}${i}`}
+          label={m.role.toUpperCase()}
+          tone={tone}
+          role={m.role}
+          text={m.content || m.toolCalls.map((t) => `${t.name} ${t.arguments}`).join('\n')}
+          expanded={
+            <>
+              {m.content ? <TextBlock text={m.content} /> : null}
+              {m.toolCalls.map((t, j) => (
+                <div key={j} className={styles.toolCall}>
+                  <ToolArguments args={t.arguments} />
+                </div>
+              ))}
+            </>
+          }
+        >
+          {m.reasoning ? (
+            <details className={styles.reasoning}>
+              <summary>Reasoning</summary>
+              <TextBlock text={m.reasoning} />
+            </details>
+          ) : null}
+          {m.content ? <ClampedText text={m.content} lines={14} /> : null}
+          {m.toolCalls.map((t, j) => (
+            <div key={j} className={styles.toolCall}>
+              <div className={styles.toolHead}>
+                <span className={styles.toolName}>{t.name}</span>
+                <Tag kind="data" tone="meta">
+                  CALL
+                </Tag>
+              </div>
+              <ToolArguments args={t.arguments} />
+            </div>
+          ))}
+        </Block>
+      );
+    });
   return (
     <div className={styles.stack}>
       {render(input, 'in')}
@@ -114,14 +192,21 @@ export function SpanDetail({ node }: { node: SpanNode }) {
   const scores = extractScores(node);
   const tabs: TabItem[] = useMemo(() => {
     const t: TabItem[] = [];
-    if (inputMsgs) t.push({ id: 'messages', label: 'Messages' });
-    if (a['input.value'] != null || a['output.value'] != null) t.push({ id: 'io', label: 'Input / Output' });
+    const hasIo = a['input.value'] != null || a['output.value'] != null;
+    if (kind === 'LLM' && inputMsgs) {
+      t.push({ id: 'messages', label: 'Messages' });
+      if (extractMessages(a, 'llm.output_messages').length || a['output.value'] != null)
+        t.push({ id: 'response', label: 'Response' });
+    } else {
+      if (hasIo) t.push({ id: 'io', label: 'Input / Output' });
+      if (inputMsgs) t.push({ id: 'messages', label: 'Messages' });
+    }
     if (docs.length) t.push({ id: 'docs', label: 'Documents', count: docs.length });
     t.push({ id: 'metrics', label: 'Metrics' });
     if (scores.length) t.push({ id: 'scores', label: 'Scores', count: scores.length });
     t.push({ id: 'raw', label: 'Raw' });
     return t;
-  }, [a, docs.length, inputMsgs, scores.length]);
+  }, [a, kind, docs.length, inputMsgs, scores.length]);
   const [pick, setPick] = useState('messages');
   const current = tabs.some((t) => t.id === pick) ? pick : tabs[0]!.id;
   const errorEvents = (node.events ?? []).filter((e) => e?.name === 'exception');
@@ -130,20 +215,27 @@ export function SpanDetail({ node }: { node: SpanNode }) {
   const content = (id: string) => {
     if (id !== current) return null;
     if (id === 'messages') return <Messages node={node} />;
+    if (id === 'response') {
+      const out = extractMessages(a, 'llm.output_messages');
+      if (out.length) return <Messages node={node} only="output" />;
+      return (
+        <Block label="OUTPUT" tone="success" text={bodyText(a['output.value'])}>
+          <Payload value={a['output.value']} label="Response" />
+        </Block>
+      );
+    }
     if (id === 'io') {
       return (
         <div className={styles.stack}>
           {a['input.value'] != null ? (
-            <section>
-              <div className={styles.label}>Input</div>
-              <LongText text={bodyText(a['input.value'])} label="input" />
-            </section>
+            <Block label="INPUT" tone="info" text={bodyText(a['input.value'])}>
+              <Payload value={a['input.value']} label="Span input" />
+            </Block>
           ) : null}
           {a['output.value'] != null ? (
-            <section>
-              <div className={styles.label}>Output</div>
-              <LongText text={bodyText(a['output.value'])} label="output" />
-            </section>
+            <Block label="OUTPUT" tone="success" text={bodyText(a['output.value'])}>
+              <Payload value={a['output.value']} label="Span output" />
+            </Block>
           ) : null}
         </div>
       );
@@ -154,7 +246,7 @@ export function SpanDetail({ node }: { node: SpanNode }) {
           {docs.map((d, i) => (
             <article key={i} className={styles.doc}>
               <header className={styles.docHead}>
-                <span className={styles.label}>Document {i + 1}</span>
+                <span className={styles.blockLabel}>Document {i + 1}</span>
                 {d.score !== null ? <Tag kind="data">score {d.score.toFixed(2)}</Tag> : null}
                 {d.meta
                   ? Object.entries(d.meta)
@@ -166,7 +258,7 @@ export function SpanDetail({ node }: { node: SpanNode }) {
                       ))
                   : null}
               </header>
-              <LongText text={d.content} label={`document ${i + 1}`} />
+              <ClampedText text={d.content} lines={14} />
             </article>
           ))}
         </div>
@@ -212,19 +304,37 @@ export function SpanDetail({ node }: { node: SpanNode }) {
   return (
     <div className={styles.detail} data-testid="span-detail">
       <header className={styles.detailHead}>
-        <h3 className={styles.spanName}>{node.name}</h3>
-        <Tag
+        <span
+          className={styles.kindTile}
+          style={{ ['--tone' as string]: KIND_TONE[kind] }}
+          aria-hidden="true"
+        >
+          <Icon name={KIND_ICON[kind]} size={14} />
+        </span>
+        <div className={styles.headText}>
+          <h3 className={styles.spanName}>{node.name}</h3>
+          <div className={styles.metaLine}>
+            {[
+              spanModel(node),
+              formatDuration(node.duration_ms),
+              tokens ? `${tokens.toLocaleString('en-US')} tokens` : '',
+              cost ?? '',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
+        </div>
+        <Badge
           tone={
             statusClass(node.status) === 'error'
               ? 'danger'
               : statusClass(node.status) === 'ok'
                 ? 'success'
-                : undefined
+                : 'neutral'
           }
         >
-          {node.status ?? 'UNSET'}
-        </Tag>
-        <span className={styles.meta}>{formatDuration(node.duration_ms)}</span>
+          {statusClass(node.status) === 'ok' ? 'OK' : (node.status ?? 'UNSET')}
+        </Badge>
       </header>
       {errorEvents.map((e, i) => (
         <div key={i} className={styles.exception} role="alert">

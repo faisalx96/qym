@@ -40,7 +40,7 @@ interface Props {
 
 /** Customize: the six-step wizard. One step on screen at a time over a progress rail; the review stays in view. */
 export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
-  const { doc, ctx, review, flags, sectionSummary, sectionState } = useLaunch();
+  const { doc, ctx, review, flags, sectionSummary } = useLaunch();
   const wide = useMediaQuery('(min-width: 1200px)');
   const swept = useMemo(
     () => axesOf(buildSpec(doc, ctx.evaluatorPanel)).axes.length,
@@ -102,12 +102,6 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
       if (timer) clearTimeout(timer);
     };
   }, [step]);
-
-  // The Raw JSON card is always open in the wizard; its editor registers its field while open.
-  const { setOpen } = sectionState;
-  useEffect(() => {
-    if (step === 'review') setOpen('raw', true);
-  }, [step, setOpen]);
 
   const problemsByStep = useMemo(() => {
     const out: Partial<Record<WizardStepId, number>> = {};
@@ -171,7 +165,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
           title="Review and launch"
           description="Check the summary, then launch."
         >
-          <ReviewPane onCancel={onCancel} />
+          <ReviewPane onCancel={onCancel} rawAction={false} />
           {hasEnv ? (
             <StaticSections>
               <RawJsonSection />

@@ -8,6 +8,12 @@ export interface DrawerProps {
   onOpenChange: (open: boolean) => void;
   title: ReactNode;
   subtitle?: ReactNode;
+  /** Small caps label above the title (e.g. TRACE). */
+  eyebrow?: ReactNode;
+  /** Chips row under the title, inside the header. */
+  meta?: ReactNode;
+  /** Backdrop strength: heavy for wide drawers. */
+  scrim?: 'default' | 'heavy';
   width?: number;
   actions?: ReactNode;
   footer?: ReactNode;
@@ -25,6 +31,9 @@ export function Drawer({
   onOpenChange,
   title,
   subtitle,
+  eyebrow,
+  meta,
+  scrim = 'default',
   width = 480,
   actions,
   footer,
@@ -38,6 +47,7 @@ export function Drawer({
       onOpenChange={onOpenChange}
       isDismissable={dismissOnBackdrop}
       className={styles.backdrop}
+      data-scrim={scrim}
     >
       <Modal className={[styles.drawer, className].filter(Boolean).join(' ')} style={{ width }}>
         <AriaDialog className={styles.dialog} ref={(el) => el?.setAttribute('aria-modal', 'true')}>
@@ -45,10 +55,12 @@ export function Drawer({
             <>
               <header className={styles.header}>
                 <div className={styles.titles}>
+                  {eyebrow ? <div className={styles.eyebrow}>{eyebrow}</div> : null}
                   <Heading slot="title" className={styles.title}>
                     {title}
                   </Heading>
                   {subtitle ? <div className={styles.subtitle}>{subtitle}</div> : null}
+                  {meta ? <div className={styles.meta}>{meta}</div> : null}
                 </div>
                 <div className={styles.actions}>
                   {actions}

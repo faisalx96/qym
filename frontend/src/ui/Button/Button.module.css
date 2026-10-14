@@ -57,6 +57,19 @@ a.button[data-variant='accent']:hover:not([data-disabled]) {
   background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), transparent);
 }
 
+.button[data-variant='meta'] {
+  color: var(--accent-tertiary-soft);
+  background: color-mix(in srgb, var(--accent-tertiary) var(--tint-soft), transparent);
+}
+.button[data-variant='meta'][data-hovered],
+a.button[data-variant='meta']:hover:not([data-disabled]) {
+  background: color-mix(in srgb, var(--accent-tertiary) var(--tint-strong), transparent);
+}
+.button[data-variant='meta'][data-pressed],
+a.button[data-variant='meta']:active:not([data-disabled]) {
+  background: color-mix(in srgb, var(--accent-tertiary) var(--tint-strong), var(--bg-elevated));
+}
+
 .button[data-variant='primary'] {
   color: var(--bg-void);
   background: var(--accent-primary);
@@ -85,8 +98,12 @@ a.button[data-variant='ghost']:hover:not([data-disabled]) {
   background: var(--bg-hover);
 }
 
+/* Disabled reads as inert but stays legible: a flat elevated fill with muted text (6:1) in every variant, instead of
+   fading the variant's own fill (a faded accent fill with void text fell below 3:1 against the ground). */
 .button[data-disabled] {
-  opacity: 0.45;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--border-default);
   cursor: not-allowed;
 }
 

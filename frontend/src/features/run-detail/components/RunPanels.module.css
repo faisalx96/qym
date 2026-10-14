@@ -164,3 +164,7 @@
 .notice b {
   color: var(--text-primary);
 }
+
+.flat {
+  min-width: 0;
+}

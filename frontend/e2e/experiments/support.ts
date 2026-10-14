@@ -82,6 +82,20 @@ async function control(request: APIRequestContext, port: number, path: string, d
   return res.json();
 }
 
+/** Serves three list settings (STOP_WORDS, ALLOWED_REGIONS, TOOL_LIMITS) in the schema until the next `resetFakes`. Call before `createEnvironment`. */
+export async function setFakeArrayLeaves(request: APIRequestContext, port: number, on = true): Promise<void> {
+  await control(request, port, '/schema', { array_leaves: on });
+}
+
+/** What a fake's versioning-details endpoint answers until the next `resetFakes`. */
+export async function setFakeVersioning(
+  request: APIRequestContext,
+  port: number,
+  details: Record<string, string>,
+): Promise<void> {
+  await control(request, port, '/versioning', details);
+}
+
 /** Forget every job on both fakes and restore their health. */
 export async function resetFakes(request: APIRequestContext): Promise<void> {
   await control(request, FAKE_A, '/reset');

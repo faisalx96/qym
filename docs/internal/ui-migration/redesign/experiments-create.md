@@ -374,3 +374,33 @@ Risks:
 - T10 (phase 2): the default-preset editor on the wizard (steps Dataset, Compared with, Models, Environment configurations, Evaluation
   configurations, Review and publish). Out of scope for this pass by the orchestrator (Q4 default); the editor keeps the stacked page,
   `Outline` and the collapsible `LaunchSection`. Estimate about 6 h (`DefaultPresetEditorPage.tsx`, `wizard/steps.ts`, `preset-editor.spec.ts`).
+
+## Decisions: versions on home
+
+- **What "versions" is in this flow.** The launch flow has no per-model or per-slot version picker. The only Evaluation Service
+  version interaction was the read-only "Current versions" block on the Models step (`useEnvVersioning`: a live call that reads
+  `agent_version`, `image_version`, `kb_version` and any other `versioning_details` key from each selected environment, with Refresh). A
+  run records what the service reports; a custom value is the free-form "Versioning details" textarea on Customize step 1 (stored on
+  the experiment and its runs). The data model (`LaunchDocument`, `useLaunch`, the launch request) is unchanged.
+- **Moved to the home view.** The block is now a `Card` (tone `meta`, "Evaluation Service versions") between the environment/dataset
+  row and "Start from": one row per ticked environment, values as version Tags, a Refresh button, an "Add versioning details" link
+  to Customize step 1 (the override). It appears once an environment is ticked and reads once (never on re-render), so the
+  three-action launch path (tick, name, Launch as is) is unchanged: there is nothing to decide and no new required field. With several
+  environments each gets its own row; an unsupported or unreachable service shows its reason and never blocks the launch.
+- **Wizard.** The Models step no longer has the block (nothing else lived in it besides the model cards, so there is no read-only
+  copy there). The review (step 6 and its aside) gets a read-only "Versions" row built from the same cached read, and the "← Start"
+  link in the header is the way back to change or refresh them. A deep link straight to a wizard step still reads them for the review.
+- **No picker.** An Evaluation Service reports the versions it runs; choosing among several would need a platform contract that does
+  not exist (the launch request has no version field). Should one appear later, the card is the place for it.
+
+## Decisions: global sweep, tables, raw JSON (round 2 notes)
+
+- **Global sweep.** The "All roles" / "All endpoints" row has "Sweep values": chips of values written as the same `{ sweep: [...] }` to
+  every target and linked (zipped) in `doc.links`, so one launch makes one run per value, not one per combination of the targets
+  (`model/globalSweep.ts`, covered by Vitest). The row shows "sweeps N runs"; the review and the launch bar already count runs from
+  the spec. In table cells a sweep is a read-only summary; fine editing stays in the Sweeps section.
+- **Tables.** Endpoints render as a table with a global row (`collectionTableModel`); any list of scalars or of objects with a common key
+  set renders as a table with an "All items" row (`listTableModel`, in `JsonFields`). The e2e schema fixture has no array leaf, so lists
+  are covered by Vitest. Other shapes keep the stacked layout.
+- **Raw JSON** is behind a "Show raw JSON" / "Hide raw JSON" button (Collapse) on the review step; the Raw JSON action opens it. The
+  default-preset editor keeps its collapsible section heading (closed by default).

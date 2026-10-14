@@ -71,6 +71,7 @@
 /* every metric cell reserves the height of a run column so the baseline column aligns with the others */
 .stack[data-kind='metric'] {
   min-height: 5.25rem;
+  align-self: stretch;
   justify-content: flex-start;
 }
 

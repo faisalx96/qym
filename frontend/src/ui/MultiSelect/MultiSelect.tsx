@@ -31,6 +31,12 @@ export interface MultiSelectProps<T extends MultiSelectItem> {
    * where a nested popover would be dismissed with its parent. Escape folds the list.
    */
   inline?: boolean;
+  /** 'bar' = compact filter-bar trigger: the label, then `· value` once something is selected. */
+  triggerVariant?: 'field' | 'bar';
+  /** Text after the label on a 'bar' trigger (default: the single label, or the count). */
+  summary?: (selected: Set<Key>) => string;
+  /** `data-testid` of the popover panel (e2e hook). */
+  panelTestId?: string;
 }
 
 /**
@@ -51,6 +57,9 @@ export function MultiSelect<T extends MultiSelectItem>({
   className,
   isDisabled,
   inline,
+  triggerVariant = 'field',
+  summary: summaryOf,
+  panelTestId,
 }: MultiSelectProps<T>) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -135,6 +144,9 @@ export function MultiSelect<T extends MultiSelectItem>({
           </button>
         </div>
       ) : null}
+      {triggerVariant === 'bar' && selectedCount === 0 ? (
+        <div className={styles.hint}>Nothing ticked: every value is included.</div>
+      ) : null}
       <div className={styles.list} ref={listRef}>
         {visible.length === 0 ? <div className={styles.empty}>No matches</div> : null}
         {visible.map((item) => (
@@ -208,14 +220,33 @@ export function MultiSelect<T extends MultiSelectItem>({
         isDisabled={isDisabled}
         aria-haspopup="dialog"
         aria-controls={open ? listId : undefined}
+        aria-label={
+          triggerVariant === 'bar'
+            ? `${label} filter${selectedCount ? `, ${selectedCount} selected` : ''}`
+            : undefined
+        }
+        data-variant={triggerVariant}
         data-active={selectedCount ? '' : undefined}
       >
         <span className={styles.triggerLabel}>{label}</span>
-        <span className={styles.triggerValue}>{summary}</span>
+        {triggerVariant === 'bar' ? (
+          selectedCount ? (
+            <span className={styles.triggerValue}>
+              · {summaryOf ? summaryOf(value) : selectedCount === 1 ? summary : selectedCount}
+            </span>
+          ) : null
+        ) : (
+          <span className={styles.triggerValue}>{summary}</span>
+        )}
         <Icon name="chevron-down" size={12} />
       </AriaButton>
       <Popover className={styles.popover} placement="bottom start" offset={4}>
-        <Dialog className={styles.dialog} aria-label={`${label} options`} id={listId}>
+        <Dialog
+          className={styles.dialog}
+          aria-label={`${label} options`}
+          id={listId}
+          data-testid={panelTestId}
+        >
           {({ close }) => renderPanel(close)}
         </Dialog>
       </Popover>

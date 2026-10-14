@@ -29,7 +29,7 @@ async function openRouting(page: Page): Promise<void> {
 
 /** Connect Timeout = first, then "Sweep values". */
 async function startSweep(page: Page, field: string, first: string): Promise<void> {
-  await page.getByRole('textbox', { name: field, exact: true }).fill(first);
+  await page.getByRole('textbox', { name: `primary · ${field}`, exact: true }).fill(first);
   await page.getByRole('button', { name: `Sweep values: primary · ${field}` }).click();
 }
 

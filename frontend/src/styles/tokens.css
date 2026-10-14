@@ -206,6 +206,8 @@
   --chart-8: #fb923c;
 
   --rail-width: 3px;
+  --field-label-width: 7.5rem; /* FieldRow label column */
+  --field-measure: 76ch; /* reading measure of prose bodies */
   --card-padding: var(--space-md) var(--space-lg);
   --card-padding-compact: var(--space-sm) var(--space-md);
   --shadow-card-hover: 0 2px 12px rgba(0, 0, 0, 0.28);
@@ -220,6 +222,7 @@
   /* Scrims and scrollbars (not tones: neutral shades of the void/ink). */
   --scrim: rgba(10, 10, 16, 0.6);
   --scrim-light: rgba(10, 10, 16, 0.5);
+  --scrim-heavy: rgba(4, 8, 18, 0.65); /* full-width drawers (trace) that should dim the page hard */
   --scrollbar-track: rgba(255, 255, 255, 0.04);
   --scrollbar-thumb-from: rgba(122, 122, 144, 0.82);
   --scrollbar-thumb-to: rgba(80, 80, 94, 0.92);

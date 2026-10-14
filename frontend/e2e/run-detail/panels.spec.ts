@@ -108,8 +108,9 @@ test.describe('categories section', () => {
     const rows = page.getByTestId('category-row');
     await expect(rows.first()).toBeVisible();
     const easy = rows.filter({ hasText: /^easy/ }).first();
-    await expect(easy).toContainText('items');
+    await expect(easy).toContainText('%');
     await easy.click();
+    await expect(easy).toHaveAttribute('data-selected', '');
     await expect.poll(async () => (await itemsCount(page))[0]).toBeLessThan(240);
     await expect(page.getByRole('button', { name: /Remove filter Complexity: easy/ })).toBeVisible();
     await expect.poll(() => params(page).get('filters') ?? '').toContain('complexity');
@@ -119,6 +120,10 @@ test.describe('categories section', () => {
 
   test('a metadata key that is not a built-in facet (source) filters the table', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=categories');
+    await page
+      .getByRole('group', { name: 'Categories', exact: true })
+      .getByRole('button', { name: /^source/ })
+      .click();
     const region = page.getByRole('region', { name: 'source' });
     await region
       .getByTestId('category-row')
@@ -131,14 +136,23 @@ test.describe('categories section', () => {
     expect((await itemsCount(page))[0]).toBe(120);
   });
 
-  test('the chip bar toggles category groups', async ({ page }) => {
+  test('the chip bar picks one key; a plus chip adds another', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=categories');
-    const group = page.getByRole('group', { name: 'Categories' });
-    const complexity = group.getByRole('button', { name: /^complexity/ });
-    await expect(complexity).toHaveAttribute('aria-pressed', 'true');
-    await complexity.click();
-    await expect(complexity).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.getByRole('region', { name: 'complexity' })).toHaveCount(0);
+    const group = page.getByRole('group', { name: 'Categories', exact: true });
+    const selected = group.locator('button[aria-pressed="true"]');
+    await expect(selected).toHaveCount(1);
+    const first = (await selected.first().innerText()).split('\n')[0]!;
+    // another key replaces it
+    const other = group.getByRole('button', { name: /^source/ });
+    await other.click();
+    await expect(other).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('region', { name: first })).toHaveCount(0);
+    // "+" adds one more
+    await group
+      .getByRole('button', { name: /^Add (?!source)/ })
+      .first()
+      .click();
+    await expect(selected).toHaveCount(2);
   });
 });
 
@@ -167,6 +181,8 @@ test.describe('analysis metric and threshold', () => {
     await page.getByRole('button', { name: /Analysis metric/ }).click();
     await page.getByRole('listbox').getByRole('option', { name: 'hallucination' }).click();
     await expect.poll(() => params(page).get('metric')).toBe('hallucination');
+    // the URL changes before the transition commits: click Fail once the page shows the new metric
+    await expect(page.getByRole('button', { name: /Analysis metric/ })).toContainText('hallucination');
     await page.getByRole('radio', { name: 'Fail' }).click({ force: true });
     await expect(page.getByTestId('filter-banner')).toContainText('hallucination');
   });

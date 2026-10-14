@@ -142,3 +142,26 @@ async def test_analysis_job_manager_scopes_active_jobs_by_pass(
     await _wait_for_workers(first, other_pass)
     assert first.status == other_pass.status == "cancelled"
     assert first.error is other_pass.error is None
+
+
+@pytest.mark.asyncio
+async def test_active_run_ids_lists_only_runs_with_unfinished_jobs(
+    manager: AnalysisJobManager,
+) -> None:
+    async def runner(job):
+        await asyncio.Event().wait()
+        return {}
+
+    job, _ = await manager.submit(
+        run_id="run-a",
+        user_id="user-1",
+        auth_type="none",
+        request_payload={},
+        progress={},
+        runner=runner,
+    )
+    assert manager.active_run_ids(["run-a", "run-b"]) == {"run-a"}
+    assert manager.active_run_ids([]) == set()
+    manager.cancel(job.job_id)
+    await _wait_for_workers(job)
+    assert manager.active_run_ids(["run-a"]) == set()

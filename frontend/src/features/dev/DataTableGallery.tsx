@@ -247,6 +247,17 @@ export function DataTableGallery() {
         groupBy={{ key: (r) => r.model, label: (k) => k, collapsible: true }}
         zebra={false}
       />
+      <DataTable<Run>
+        aria-label="Reorderable columns"
+        storageKey="gallery.reorder"
+        reorderable
+        columns={COLUMNS.map((c) => (c.id === 'name' ? { ...c, pin: 'start' as const } : c))}
+        rows={RUNS.slice(0, 4)}
+        rowKey={(r) => r.id}
+        density="compact"
+      >
+        <DataTable.Toolbar columnsMenu />
+      </DataTable>
       <VirtualDemo />
       <DataTable<Run>
         aria-label="Embedded"

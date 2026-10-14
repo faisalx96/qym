@@ -48,6 +48,8 @@ export interface Column<R> {
   /** Absorbs leftover width unless the user resized it. */
   flex?: boolean;
   pin?: 'start' | 'end';
+  /** The column keeps its declared position: not reorderable in the Columns menu, ignores the saved order. */
+  lockOrder?: boolean;
   resizable?: boolean;
   hideable?: boolean;
   defaultHidden?: boolean;

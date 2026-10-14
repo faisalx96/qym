@@ -1,84 +1,14 @@
 /** Repeat items in the all-passes view: one output column per pass with its own verdict, trace and score chips (brief 04 J4). */
 import { useMemo, useState } from 'react';
-import { Chip, CopyButton, Icon, IconButton, ScoreValue, Select, Tag, TextBlock } from '@/ui';
+import { Button, Chip, CopyButton, Icon, ScoreValue, Select, StructuredValue, Tag } from '@/ui';
 import { bodyText } from '../../lib/itemText';
 import { latencyLabel, metricCell, rowStatus } from '../../lib/rowDisplay';
 import { scopeRowToPass } from '../../lib/passScope';
 import { useRunPage } from '../../RunContext';
 import type { Row } from '../../types';
 import { useItemsUi } from './ItemsUi';
-import { MetaList, useCanEdit } from './MetricStrip';
-import { ScoreEditor } from './ScoreEditor';
+import { MetricChips, useCanEdit } from './MetricStrip';
 import styles from './PassColumns.module.css';
-
-function PassMetrics({ row, pass, scoped }: { row: Row; pass: number; scoped: Row }) {
-  const { model, api, runId, payload } = useRunPage();
-  const ui = useItemsUi();
-  const canEdit = useCanEdit(row);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
-  return (
-    <div className={styles.metrics}>
-      {model.metricNames.map((metric) => {
-        const cell = metricCell(api.ctx, scoped, metric);
-        const meta = (scoped.metric_meta?.[metric] ?? {}) as Record<string, unknown>;
-        const key = `${pass}:${metric}`;
-        return (
-          <div key={metric} className={styles.metric} data-metric={metric} data-pass={pass}>
-            <div className={styles.metricHead}>
-              <button
-                type="button"
-                className={styles.caret}
-                aria-expanded={open === key}
-                aria-label={`${open === key ? 'Hide' : 'Show'} ${metric} details for pass ${pass}`}
-                onClick={() => setOpen(open === key ? null : key)}
-              >
-                <Icon name={open === key ? 'chevron-down' : 'chevron-right'} size={12} />
-              </button>
-              <span className={styles.metricName}>{metric}</span>
-              <ScoreValue
-                value={cell.value}
-                type={cell.type}
-                direction={cell.direction}
-                error={cell.error}
-                text={cell.text}
-              />
-              {cell.edited ? <Tag tone="warning">edited</Tag> : null}
-              {canEdit ? (
-                <IconButton
-                  label={`Edit ${metric} score for pass ${pass}`}
-                  icon="edit"
-                  onPress={() => setEditing(editing === key ? null : key)}
-                />
-              ) : null}
-            </div>
-            {editing === key ? (
-              <ScoreEditor
-                runId={runId}
-                filePath={payload.run.file_path ?? payload.run.run_id}
-                row={row}
-                metric={metric}
-                spec={model.metricSpecs[metric]}
-                initial={
-                  cell.value === null
-                    ? ''
-                    : cell.type === 'score'
-                      ? String(Math.round(cell.value * 1000) / 10) + '%'
-                      : String(cell.value)
-                }
-                passNumber={pass}
-                passVersion={model.passRevision}
-                edited={cell.edited}
-                onDone={() => setEditing(null)}
-              />
-            ) : null}
-            {open === key ? <MetaList meta={meta} hidden={ui.hiddenMetricFields} /> : null}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 /** One metric lined up across the passes (the old per-metric comparison panel). */
 function PassMetricCompare({ scoped }: { scoped: Row[] }) {
@@ -121,6 +51,7 @@ function PassMetricCompare({ scoped }: { scoped: Row[] }) {
 
 export function PassColumns({ row }: { row: Row }) {
   const { model, api } = useRunPage();
+  const canEdit = useCanEdit(row);
   const ui = useItemsUi();
   const passes = useMemo(() => Array.from({ length: model.samples }, (_, i) => i + 1), [model.samples]);
   const scoped = useMemo(
@@ -137,6 +68,7 @@ export function PassColumns({ row }: { row: Row }) {
         {passes.map((p) => (
           <Chip
             key={p}
+            series={(((p - 1) % 3) + 1) as 1 | 2 | 3}
             isSelected={!hidden.has(p)}
             onChange={(on) =>
               setHidden((h) => {
@@ -152,8 +84,8 @@ export function PassColumns({ row }: { row: Row }) {
           </Chip>
         ))}
         <Tag kind="count">{unique} unique</Tag>
+        <PassMetricCompare scoped={scoped} />
       </header>
-      <PassMetricCompare scoped={scoped} />
       <div className={styles.cols}>
         {passes
           .filter((p) => !hidden.has(p))
@@ -181,21 +113,40 @@ export function PassColumns({ row }: { row: Row }) {
                   {s.latency_ms != null ? (
                     <span className={styles.meta}>{latencyLabel(s.latency_ms)}</span>
                   ) : null}
+                  {p > 1 && out ? (
+                    <Tag kind="count" data-testid="pass-diff">
+                      {out === outputs[0] ? 'same as Pass 1' : 'differs from Pass 1'}
+                    </Tag>
+                  ) : null}
                   <span className={styles.actions}>
                     {s.trace_id ? (
-                      <IconButton
-                        label={`Open trace of pass ${p}`}
-                        icon="list"
+                      <Button
+                        size="sm"
+                        variant="neutral"
+                        icon={<Icon name="list" size={12} />}
+                        aria-label={`Open trace of pass ${p}`}
                         onPress={() => ui.openTrace(row.item_id, p)}
-                      />
+                      >
+                        Trace
+                      </Button>
                     ) : null}
                     <CopyButton text={text} label={`Copy pass ${p} output`} />
                   </span>
                 </header>
                 <div className={styles.output}>
-                  <TextBlock text={text} mode={ui.textMode} />
+                  <StructuredValue
+                    value={status.kind === 'error' ? text : (s.output_full ?? s.output)}
+                    label={`Output, pass ${p}`}
+                    textMode={ui.textMode}
+                  />
                 </div>
-                <PassMetrics row={row} pass={p} scoped={s} />
+                <MetricChips
+                  row={row}
+                  scoped={s}
+                  pass={p}
+                  canEdit={canEdit}
+                  label={`Metrics for pass ${p}`}
+                />
               </article>
             );
           })}

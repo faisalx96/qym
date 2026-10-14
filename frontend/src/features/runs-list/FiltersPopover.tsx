@@ -36,7 +36,7 @@ import styles from './FiltersPopover.module.css';
 
 type ListKey = 'tasks' | 'datasets' | 'models' | 'versions' | 'statuses' | 'owners';
 
-interface FacetDef {
+export interface FacetDef {
   id: string;
   label: string;
   options: { value: string; label: string }[];
@@ -112,12 +112,125 @@ export interface FiltersPopoverProps {
   trigger?: ReactNode;
 }
 
-export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopoverProps) {
+/** Time and Origin segmented controls; `Range…` hands over to the custom range dialog. */
+export function TimeOriginControls({
+  view,
+  onChange,
+  onCustomRange,
+  labels = true,
+}: {
+  view: RunsView;
+  onChange: (patch: ViewPatch) => void;
+  /** Opens the custom range dialog (a popover must close first: it paints above modals). */
+  onCustomRange: () => void;
+  labels?: boolean;
+}) {
+  return (
+    <>
+      <div className={styles.row}>
+        {labels ? (
+          <Text variant="sm" tone="muted" as="span" className={styles.rowLabel}>
+            Time
+          </Text>
+        ) : null}
+        <SegmentedControl<QuickRange>
+          label="Time range"
+          value={view.range}
+          onChange={(range) => (range === 'custom' ? onCustomRange() : onChange({ range, from: '', to: '' }))}
+          options={[
+            { value: 'all', label: 'All', title: 'Shortcut 1' },
+            { value: 'today', label: 'Today', title: 'Shortcut 2' },
+            { value: 'week', label: '7d', title: 'Shortcut 3' },
+            { value: 'month', label: '30d', title: 'Shortcut 4' },
+            {
+              value: 'custom',
+              label: view.range === 'custom' ? customRangeLabel(view.from, view.to) : 'Range…',
+            },
+          ]}
+        />
+      </div>
+      <div className={styles.row}>
+        {labels ? (
+          <Text variant="sm" tone="muted" as="span" className={styles.rowLabel}>
+            Origin
+          </Text>
+        ) : null}
+        <SegmentedControl<OriginFilter>
+          label="Origin"
+          value={view.origin}
+          onChange={(origin) => onChange({ origin })}
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'official', label: 'Official' },
+            { value: 'local', label: 'Local' },
+          ]}
+        />
+      </div>
+    </>
+  );
+}
+
+/** The full filter list (Time, Origin, one disclosure per facet, Clear all / Done): popover body and phone drawer. */
+export function FiltersPanel({
+  view,
+  facets,
+  owners,
+  onChange,
+  onCustomRange,
+  onDone,
+  doneLabel = 'Done',
+  className,
+}: {
+  view: RunsView;
+  facets: Facets | undefined;
+  owners: Record<string, string>;
+  onChange: (patch: ViewPatch) => void;
+  onCustomRange: () => void;
+  onDone: () => void;
+  doneLabel?: string;
+  className?: string;
+}) {
   const count = countActiveFilters(view) - (view.q ? 1 : 0);
   const defs = useMemo(() => buildFacetDefs(view, facets, owners), [view, facets, owners]);
   const [open, setOpen] = useState<string | null>(null);
-  const [rangeOpen, setRangeOpen] = useState(false);
   const footRef = useRef<HTMLDivElement>(null);
+  return (
+    <div className={[styles.panel, className].filter(Boolean).join(' ')} data-testid="filters-panel">
+      <TimeOriginControls view={view} onChange={onChange} onCustomRange={onCustomRange} />
+      <div className={styles.facets}>
+        {defs.map((def) => (
+          <FacetSection
+            key={def.id}
+            def={def}
+            open={open === def.id}
+            onToggle={() => setOpen(open === def.id ? null : def.id)}
+            onChange={(values) => onChange(def.set(values))}
+          />
+        ))}
+      </div>
+      <div className={styles.foot} ref={footRef}>
+        <Button
+          variant="ghost"
+          onPress={() => {
+            onChange({ ...DEFAULT_VIEW, versioning: {}, q: view.q, sort: view.sort });
+            // the button disables itself: keep focus inside the panel so Esc still closes it
+            footRef.current?.querySelector<HTMLElement>('[data-filters-done]')?.focus();
+          }}
+          isDisabled={!count}
+        >
+          Clear all
+        </Button>
+        <Button variant="primary" onPress={onDone} data-filters-done="">
+          {doneLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopoverProps) {
+  const count = countActiveFilters(view) - (view.q ? 1 : 0);
+  const [rangeOpen, setRangeOpen] = useState(false);
   return (
     <>
       <Popover
@@ -135,75 +248,14 @@ export function FiltersPopover({ view, facets, owners, onChange }: FiltersPopove
         }
       >
         {({ close }) => (
-          <div className={styles.panel} data-testid="filters-panel">
-            <div className={styles.row}>
-              <Text variant="sm" tone="muted" as="span" className={styles.rowLabel}>
-                Time
-              </Text>
-              <SegmentedControl<QuickRange>
-                label="Time range"
-                value={view.range}
-                onChange={(range) =>
-                  range === 'custom'
-                    ? // a react-aria popover always paints above modals, so it must not stay open behind the dialog
-                      (close(), setRangeOpen(true))
-                    : onChange({ range, from: '', to: '' })
-                }
-                options={[
-                  { value: 'all', label: 'All', title: 'Shortcut 1' },
-                  { value: 'today', label: 'Today', title: 'Shortcut 2' },
-                  { value: 'week', label: '7d', title: 'Shortcut 3' },
-                  { value: 'month', label: '30d', title: 'Shortcut 4' },
-                  {
-                    value: 'custom',
-                    label: view.range === 'custom' ? customRangeLabel(view.from, view.to) : 'Range…',
-                  },
-                ]}
-              />
-            </div>
-            <div className={styles.row}>
-              <Text variant="sm" tone="muted" as="span" className={styles.rowLabel}>
-                Origin
-              </Text>
-              <SegmentedControl<OriginFilter>
-                label="Origin"
-                value={view.origin}
-                onChange={(origin) => onChange({ origin })}
-                options={[
-                  { value: 'all', label: 'All' },
-                  { value: 'official', label: 'Official' },
-                  { value: 'local', label: 'Local' },
-                ]}
-              />
-            </div>
-            <div className={styles.facets}>
-              {defs.map((def) => (
-                <FacetSection
-                  key={def.id}
-                  def={def}
-                  open={open === def.id}
-                  onToggle={() => setOpen(open === def.id ? null : def.id)}
-                  onChange={(values) => onChange(def.set(values))}
-                />
-              ))}
-            </div>
-            <div className={styles.foot} ref={footRef}>
-              <Button
-                variant="ghost"
-                onPress={() => {
-                  onChange({ ...DEFAULT_VIEW, versioning: {}, q: view.q, sort: view.sort });
-                  // the button disables itself: keep focus inside the popover so Esc still closes it
-                  footRef.current?.querySelector<HTMLElement>('[data-filters-done]')?.focus();
-                }}
-                isDisabled={!count}
-              >
-                Clear all
-              </Button>
-              <Button variant="primary" onPress={close} data-filters-done="">
-                Done
-              </Button>
-            </div>
-          </div>
+          <FiltersPanel
+            view={view}
+            facets={facets}
+            owners={owners}
+            onChange={onChange}
+            onCustomRange={() => (close(), setRangeOpen(true))}
+            onDone={close}
+          />
         )}
       </Popover>
       <CustomRangeDialog

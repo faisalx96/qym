@@ -9,6 +9,8 @@ next read, never finishing by itself) and exposes /__control to drive them:
     GET  /__control/jobs        every job it holds
     POST /__control/reset       forget jobs, restore health
     POST /__control/health      {"down": true}   next requests answer 503
+    POST /__control/schema      {"array_leaves": true}   serve three list settings in the schema (reset restores)
+    POST /__control/versioning  {"agent_version": "..."}   what /evals/versioning-details/current answers (reset restores)
 Valid API key: any non-empty bearer token.
 """
 
@@ -32,7 +34,21 @@ EVALUATOR = json.loads((FIXTURES / "eval_evaluator_schema.json").read_text())
 
 app = FastAPI()
 JOBS: Dict[str, Dict[str, Any]] = {}
-STATE: Dict[str, Any] = {"down": False}
+DEFAULT_VERSIONING = {"agent_version": "agent-1.4.2", "image_version": "img-20261001", "kb_version": "kb-77"}
+ARRAY_LEAVES = {
+    "STOP_WORDS": {"type": "array", "items": {"type": "string"}, "title": "Stop Words", "default": []},
+    "ALLOWED_REGIONS": {"type": "array", "items": {"type": "integer"}, "title": "Allowed Regions", "default": []},
+    "TOOL_LIMITS": {
+        "type": "array",
+        "title": "Tool Limits",
+        "default": [],
+        "items": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}, "limit": {"type": "integer"}},
+        },
+    },
+}
+STATE: Dict[str, Any] = {"down": False, "versioning": dict(DEFAULT_VERSIONING), "array_leaves": False}
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
 
 
@@ -59,7 +75,10 @@ async def gate(request: Request, call_next):
 
 @app.get("/evals/env-overrides/schema")
 def env_schema() -> Any:
-    return copy.deepcopy(SCHEMA)
+    schema = copy.deepcopy(SCHEMA)
+    if STATE["array_leaves"]:
+        schema["properties"].update(copy.deepcopy(ARRAY_LEAVES))
+    return schema
 
 
 @app.get("/evals/evaluator/schema")
@@ -69,7 +88,7 @@ def evaluator_schema() -> Any:
 
 @app.get("/evals/versioning-details/current")
 def versioning() -> Any:
-    return {"agent_version": "agent-1.4.2", "image_version": "img-20261001", "kb_version": "kb-77"}
+    return dict(STATE["versioning"])
 
 
 @app.get("/evals")
@@ -145,7 +164,22 @@ async def control_set(job_id: str, request: Request) -> Any:
 def control_reset() -> Any:
     JOBS.clear()
     STATE["down"] = False
+    STATE["versioning"] = dict(DEFAULT_VERSIONING)
+    STATE["array_leaves"] = False
     return {"ok": True}
+
+
+@app.post("/__control/versioning")
+async def control_versioning(request: Request) -> Any:
+    STATE["versioning"] = dict(await request.json())
+    return STATE["versioning"]
+
+
+@app.post("/__control/schema")
+async def control_schema(request: Request) -> Any:
+    """{"array_leaves": true} serves three list settings (STOP_WORDS, ALLOWED_REGIONS, TOOL_LIMITS) in the schema."""
+    STATE["array_leaves"] = bool((await request.json()).get("array_leaves"))
+    return {"array_leaves": STATE["array_leaves"]}
 
 
 @app.post("/__control/health")

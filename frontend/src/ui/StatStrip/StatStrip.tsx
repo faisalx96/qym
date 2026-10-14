@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { HelpMarker } from '../HelpMarker';
 import { useFlashOnChange } from '../motion';
 import styles from './StatStrip.module.css';
@@ -29,11 +29,17 @@ export interface StatStripItem {
   /** Makes the cell a button (e.g. filter by this stat) with hover, pressed and selected states. */
   onPress?: () => void;
   isSelected?: boolean;
+  /** 0..1: a thin bar under the value (tone-coloured, or `barBand` when set). */
+  bar?: number;
+  /** Score band 1..5 for the bar (direction-aware, from `metricBand`); without it the bar takes `tone`. */
+  barBand?: 1 | 2 | 3 | 4 | 5;
+  /** Group label: consecutive items sharing a group sit under one small heading, groups divided by a hairline. */
+  group?: string;
 }
 
 export interface StatStripProps {
   items: StatStripItem[];
-  variant?: 'band' | 'compact-header';
+  variant?: 'band' | 'compact-header' | 'compact';
   /** Flash a faint tint on a cell whose value changed (live runs). */
   live?: boolean;
   'aria-label'?: string;
@@ -61,6 +67,14 @@ function Cell({ item, live, variant }: { item: StatStripItem; live: boolean; var
         <span className={styles.value} data-changed={flash ? '' : undefined}>
           {item.value}
         </span>
+        {item.bar !== undefined ? (
+          <span
+            className={styles.bar}
+            data-band={item.barBand}
+            style={{ '--bar': `${Math.round(Math.min(1, Math.max(0, item.bar)) * 100)}%` } as CSSProperties}
+            aria-hidden="true"
+          />
+        ) : null}
         {item.trend ? (
           <span className={styles.trend} data-verdict={item.trend.verdict}>
             <span aria-hidden="true">{ARROW[item.trend.verdict]}</span>
@@ -100,6 +114,35 @@ function Cell({ item, live, variant }: { item: StatStripItem; live: boolean; var
 
 /** Connected statistics band (DESIGN_LANGUAGE §3 "Connected statistics"). */
 export function StatStrip({ items, variant = 'band', live = false, ...rest }: StatStripProps) {
+  if (items.some((i) => i.group)) {
+    const groups: { name: string; items: StatStripItem[] }[] = [];
+    for (const item of items) {
+      const name = item.group ?? '';
+      const last = groups[groups.length - 1];
+      if (last && last.name === name) last.items.push(item);
+      else groups.push({ name, items: [item] });
+    }
+    return (
+      <div className={styles.strip} data-variant={variant} data-grouped="" role="group" {...rest}>
+        {groups.map((g, gi) => (
+          <div
+            key={`${g.name}-${gi}`}
+            className={styles.group}
+            role="group"
+            aria-label={g.name || undefined}
+            style={{ flexGrow: g.items.length }}
+          >
+            {g.name ? <span className={styles.groupLabel}>{g.name}</span> : null}
+            <div className={styles.groupCells}>
+              {g.items.map((item, i) => (
+                <Cell key={item.key ?? i} item={item} live={live} variant={variant} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className={styles.strip} data-variant={variant} role="group" {...rest}>
       {items.map((item, i) => (

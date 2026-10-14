@@ -283,6 +283,23 @@ The recipes, by intent:
   renders the pill outside the noise band. Cell kit (`ScoreBar`, `DeltaCell`, `TwoLine`, `IdCell`,
   `RelativeTime`, `TagsCell`, `UserCell`, `ProgressCell`, `StatusCell`, `NumberCell`) lives in `ui/DataTable/cells`.
   Pages never restyle table cells; they supply columns.
+  **Column layout** (`reorderable`, `storageScope`, `maxPinShare`, `Column.lockOrder`): the Columns menu lists every column in
+  display order, one row each: drag handle (pointer, touch, or keyboard: Space lifts, arrows move, Space drops, Esc
+  cancels), visibility checkbox, muted group tag and a freeze toggle (`aria-pressed`, "Freeze Status"); the line between
+  the frozen block and the scrolling columns can be dragged across. A menu header names the frozen count and any column
+  suspended by the cap (the frozen block never takes more than `maxPinShare` = 50% of the scroller; the first frozen
+  column always stays). The header menu has Freeze / Unfreeze, Move left / right / to start, Hide, and
+  `Alt+Shift+Arrow` moves the focused header. Layout (order, pins, widths, hidden, density) is one object saved under
+  `qym:data-table:v2:<storageKey>:<userId>`; an unscoped layout is adopted once. Handles and freeze toggles hide under 640px.
+- **Filter bar** (`features/runs-list/FilterBar`, `MultiSelect triggerVariant="bar"`, toolbar `rows` slot): row 1 is search,
+  Time, Origin and the table controls; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, accent tint
+  when active), `More filters` for versioning keys and facets that do not fit (priority Status, Model, Task, Dataset,
+  User, Version) and one `Clear n`; row 3 the chips (status chips take the status tone). A list applies on each click, no
+  Done button. Under 600px the bar is search plus `Filters n`, opening every facet in a drawer.
+- **Passes panel** (`features/runs-list/passes`): one surface and a 2px accent rail, sticky at the scroller start
+  (`--dt-scroller-width`); header line (title, metric Select, threshold chip with popover, one help marker), a compact
+  `StatStrip` (`bar`, `barBand`) of Pass@k, Pass^k, Avg@k, Consistency, Reliability, and an embedded `DataTable` that mirrors
+  the parent's visible metric columns; issues are one glyph plus count per pass (`!` danger, `~` warning, retry info).
 - **Scores** (`ScoreValue`): score-bearing values use the five-band
   `--score-1..5` ramp, direction-aware via `src/lib/metrics.ts`. Lower-is-better
   metrics read the ramp inverted; a metric that declares no direction stays
@@ -329,6 +346,19 @@ The recipes, by intent:
   `prefers-reduced-motion`. `EmptyState` is for a successful empty result only:
   glyph icon in `--text-dim`, low opacity, title `--font-xl` / 650 / primary,
   body `--font-md` / muted, line-height 1.5 or more.
+- **Calm surface** (run detail, applies everywhere): a container (card, drawer, expanded item) is the only filled layer; inside
+  it at most one more fill level, reserved for code and JSON viewers, inputs and the selected or open state. Parts are
+  separated by a `--border-subtle` hairline and `--space-md` rhythm, never by nested tiles; colour carries status, band,
+  series (a pass is `--chart-1..3`) or a selected state only. Stats in a group are a `StatStrip` (`StatStripItem.group`
+  labels runs of cells), key/value groups a `KeyValueGrid`.
+- **Field row, structured value, split pane** (`FieldRow`, `StructuredValue`, `SplitPane`): `FieldRow` puts a label, its
+  body (reading measure `--field-measure`, 76ch) and actions on one logical row whose `dir` follows the content, so an
+  Arabic input mirrors with the label next to the text; under 640px of container width the label stacks above. An object,
+  array or JSON string is a `StructuredValue`: one hairline section per top-level key (collapsible, copyable, typed body:
+  text, chips, table, tree), Sections | Raw (`localStorage qym:json-view`), expand all, a key index above four keys.
+  `SplitPane` is the window splitter (`role="separator"`, drag, Left/Right 2%, Home/End, double click resets, persisted in
+  a per-viewer key). `DataTable detailFit="viewport"` (default) keeps an expanded detail as wide as the visible scroller;
+  `ScoreBar marker` draws a baseline tick; `Drawer` takes `eyebrow`, `meta` and `scrim="heavy"`.
 - **Text blocks** (`TextBlock`, `JsonViewer`, `KeyValueGrid`): see Text
   direction above; code and JSON are mono. `KeyValueGrid variant="tiles"` puts each pair on a `--bg-elevated`
   tile (the run "Execution context"); an item `kind` of `config` or `metadata` adds a suffix and the `meta` tone,

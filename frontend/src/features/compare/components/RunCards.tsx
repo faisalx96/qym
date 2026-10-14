@@ -1,7 +1,7 @@
 /** Run cards: identity (swatch, letter, name), status, counts, owner, dataset, runtime, experiment, model; remove and baseline controls. */
 import { Link } from 'react-router-dom';
 import { projectPath } from '@/app/routes';
-import { Card, Disclosure, IconButton, RunStatusBadge, Tag, Text } from '@/ui';
+import { Card, DatasetTag, Disclosure, IconButton, ModelTag, RunStatusBadge, Tag, TaskTag, Text } from '@/ui';
 import type { RunPayload } from '@/features/run-detail/types';
 import { formatDurationMs } from '@/features/run-detail/lib/heroModel';
 import { letterOf, runSeries, useCompare } from '../CompareContext';
@@ -148,6 +148,21 @@ function RunCard({
   const exp = run.experiment;
   const expSlug = run.project?.slug ?? slug;
   const status = String(run.status).toUpperCase();
+  const badges = (
+    <span className={styles.badges}>
+      {side ? (
+        <Tag kind="role" title={`Side ${side}: ${sideLabel}`}>
+          Side {side}
+        </Tag>
+      ) : null}
+      <RunStatusBadge status={status} label={status} />
+      {run.origin === 'official' ? (
+        <Tag kind="accent" title="Run launched by an official experiment">
+          Official
+        </Tag>
+      ) : null}
+    </span>
+  );
   return (
     <li
       className={styles.item}
@@ -161,17 +176,7 @@ function RunCard({
         <div className={styles.stack}>
           <div className={styles.cardHead}>
             <RunTag index={idx} name={name} title={title} baseline={isBase} bare />
-            {side ? (
-              <Tag kind="role" title={`Side ${side}: ${sideLabel}`}>
-                Side {side}
-              </Tag>
-            ) : null}
-            <RunStatusBadge status={status} label={status} />
-            {run.origin === 'official' ? (
-              <Tag kind="accent" title="Run launched by an official experiment">
-                Official
-              </Tag>
-            ) : null}
+            {variant === 'full' ? null : badges}
             <span className={styles.actions}>
               {onBaseline && !isBase ? (
                 <IconButton
@@ -185,6 +190,7 @@ function RunCard({
               ) : null}
             </span>
           </div>
+          {variant === 'full' ? badges : null}
           {variant === 'full' ? (
             <>
               <dl className={styles.strip}>
@@ -193,11 +199,13 @@ function RunCard({
                 <Stat label="Errors" value={counts.errors} danger={counts.errors > 0} />
               </dl>
               <dl className={styles.facts}>
-                <Fact label="Model">{run.model_name}</Fact>
+                <Fact label="Task">{run.task_name ? <TaskTag name={run.task_name} /> : null}</Fact>
+                <Fact label="Model">
+                  {run.model_name ? <ModelTag name={run.model_name} series={((idx % 8) + 1) as 1} /> : null}
+                </Fact>
                 <Fact label="Owner">{owner}</Fact>
                 <Fact label="Dataset">
-                  {run.dataset_name}
-                  {run.dataset_version ? ` v${run.dataset_version}` : ''}
+                  <DatasetTag name={run.dataset_name} version={run.dataset_version} />
                 </Fact>
                 <Fact label="Runtime">{runtime === '—' ? '' : runtime}</Fact>
                 <Fact label="Experiment">
