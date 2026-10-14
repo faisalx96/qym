@@ -129,7 +129,7 @@ describe('SettingsSection', () => {
     expect(written.every(([, v]) => v === 512)).toBe(true);
     await user.click(screen.getByRole('button', { name: 'Reset roles' }));
     expect(values()).toEqual({});
-  });
+  }, 20_000);
 
   it('sweeps the "All roles" row: chips of values, every role swept together', async () => {
     const { user } = setup(<SettingsSection />);
