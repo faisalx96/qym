@@ -309,7 +309,7 @@
   bottom: 0;
   z-index: 5;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--space-md);
   flex-wrap: wrap;
   min-height: var(--bar-action-h);
@@ -375,6 +375,14 @@
   display: flex;
   gap: var(--space-sm);
   margin-inline-start: auto;
+}
+
+/* Wide: one --bar-action-h row exactly (the name field's label is visually hidden; its placeholder is the hint). */
+@media (min-width: 961px) {
+  .homeBar {
+    flex-wrap: nowrap;
+    height: var(--bar-action-h);
+  }
 }
 
 @media (max-width: 960px) {

@@ -19,6 +19,30 @@
   gap: var(--space-sm);
 }
 
+/* Wide (the bar is sticky): one --bar-action-h row, controls then the count and chips; extra chips scroll. */
+@media (min-width: 1280px) and (min-height: 640px) {
+  .bar {
+    flex-direction: row;
+    align-items: center;
+    height: var(--bar-action-h);
+  }
+
+  .row {
+    flex: none;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  .chips {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+  }
+}
+
 .display {
   display: flex;
   flex-direction: column;

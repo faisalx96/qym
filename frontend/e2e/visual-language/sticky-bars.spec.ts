@@ -3,12 +3,14 @@ import { expect, test, type Page } from '@playwright/test';
 import { compareUrl } from '../compare/support';
 import { gotoApp } from '../helpers';
 import { runUrl } from '../run-detail/support';
-import { seedTour, type Tour } from './support';
+import { createLaunchAreas, seedTour, type AreasWorld, type Tour } from './support';
 
 let tour: Tour;
-test.beforeAll(async () => {
+let areas: AreasWorld;
+test.beforeAll(async ({ request }) => {
   test.setTimeout(120_000);
   tour = await seedTour();
+  areas = await createLaunchAreas(request);
 });
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -32,10 +34,23 @@ test('run section nav and compare bar are the same height (--bar-nav-h)', async 
   expect(cmp, 'compare bar').toBeLessThanOrEqual(want + 1);
 });
 
-test('the run items toolbar is at least --bar-action-h', async ({ page }) => {
+test('the run items toolbar is one --bar-action-h row (wide)', async ({ page }) => {
   await gotoApp(page, runUrl(tour.slug, tour.runId));
   const toolbar = page.locator('[data-run-filters]');
   await expect(toolbar).toBeVisible();
   const want = await token(page, '--bar-action-h');
-  expect((await toolbar.boundingBox())!.height).toBeGreaterThanOrEqual(want);
+  expect(want).toBe(56);
+  const h = (await toolbar.boundingBox())!.height;
+  expect(h).toBeGreaterThanOrEqual(want);
+  expect(h).toBeLessThanOrEqual(want + 1);
+});
+
+test('the experiment home launch bar is one --bar-action-h row (wide)', async ({ page }) => {
+  await gotoApp(page, `/projects/${areas.slug}/experiments/new?env=${areas.envId}`);
+  const bar = page.getByRole('region', { name: 'Launch' });
+  await expect(bar).toBeVisible();
+  const want = await token(page, '--bar-action-h');
+  const h = (await bar.boundingBox())!.height;
+  expect(h).toBeGreaterThanOrEqual(want);
+  expect(h).toBeLessThanOrEqual(want + 1);
 });

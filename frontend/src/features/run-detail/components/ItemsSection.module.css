@@ -61,6 +61,14 @@
   }
 }
 
+/* Wide: the filter bar is exactly one --bar-action-h row (FilterBar lays itself out in one line). */
+@media (min-width: 1280px) and (min-height: 640px) {
+  .sticky {
+    height: var(--bar-action-h);
+    padding-bottom: 0;
+  }
+}
+
 /* Narrow: the Items header stacks (description gets the full line, actions wrap) and the table scrolls sideways. */
 @container (max-width: 640px) {
   .head > div {
