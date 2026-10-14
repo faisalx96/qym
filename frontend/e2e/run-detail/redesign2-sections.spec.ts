@@ -39,7 +39,7 @@ test.describe('repeat analysis', () => {
       (await panel.getByRole(name === 'Passes' ? 'region' : 'region', { name }).boundingBox())!;
     const curve = await tops('Performance across attempts');
     const dist = await tops('Distribution of passes passed');
-    const table = (await panel.getByRole('region', { name: 'Passes' }).boundingBox())!;
+    const table = (await panel.getByRole('region', { name: 'Passes', exact: true }).boundingBox())!;
     // one visual per row, in this order
     expect(dist.y).toBeGreaterThan(curve.y + curve.height - 2);
     expect(table.y).toBeGreaterThan(dist.y + dist.height - 2);

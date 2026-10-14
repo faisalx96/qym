@@ -36,17 +36,24 @@ export function CategoriesTab() {
     [model.rows, model.allMetadataKeys, rows],
   );
   const filters = api.view.filters;
-  // the key with the widest best-to-worst spread opens first (it answers "where is the model weak?")
+  // the key with the widest best-to-worst spread opens first (it answers "where is the model weak?"); it is
+  // computed from the whole run, so filtering the items by a value does not make the table jump to another key
+  const allKeys = useMemo(
+    () => categoryChipKeys(model.rows, model.allMetadataKeys),
+    [model.rows, model.allMetadataKeys],
+  );
   const defaultKey = useMemo(() => {
-    if (!metric) return keys[0]?.key ?? null;
+    const pool = allKeys.filter((k) => keys.some((x) => x.key === k.key));
+    if (!metric) return pool[0]?.key ?? null;
     let best: { key: string; spread: number } | null = null;
-    for (const k of keys) {
-      const b = categoryBreakdown(api.ctx, rows, k.key, metric, filters.domain);
+    for (const k of pool) {
+      const b = categoryBreakdown(api.ctx, model.rows, k.key, metric, null);
       const spread = b ? categorySpread(b) : 0;
       if (!best || spread > best.spread) best = { key: k.key, spread };
     }
-    return best?.key ?? keys[0]?.key ?? null;
-  }, [keys, rows, metric, api.ctx, filters.domain]);
+    return best?.key ?? pool[0]?.key ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allKeys, metric, model.rows]);
   const [chosen, setChosen] = useState<string[] | null>(null);
   const [sort, setSort] = useState<CategorySort>('worst');
   const selected = (chosen ?? (defaultKey ? [defaultKey] : [])).filter((k) => keys.some((x) => x.key === k));

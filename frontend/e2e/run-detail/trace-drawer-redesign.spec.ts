@@ -24,7 +24,8 @@ const openTrace = async (page: Page) => {
   await expect(page.getByTestId('trace-drawer')).toBeVisible();
   await expect(page.getByRole('tree', { name: 'Span tree' })).toBeVisible();
 };
-const pct = async (page: Page) => Number(await page.getByRole('separator').getAttribute('aria-valuenow'));
+const pct = async (page: Page) =>
+  Number(await page.getByTestId('split-handle').getAttribute('aria-valuenow'));
 
 test('the split is draggable by keyboard, remembered after a reload, and a double click resets it', async ({
   page,
@@ -32,7 +33,7 @@ test('the split is draggable by keyboard, remembered after a reload, and a doubl
   await page.setViewportSize({ width: 1440, height: 900 });
   await openRun(page, s.slug, classic);
   await openTrace(page);
-  const handle = page.getByRole('separator', { name: /Resize/ });
+  const handle = page.getByTestId('split-handle');
   expect(await pct(page)).toBe(55);
   await handle.focus();
   await page.keyboard.press('ArrowLeft');
@@ -54,7 +55,7 @@ test('the split is draggable by keyboard, remembered after a reload, and a doubl
   await page.reload();
   await expect(page.getByTestId('trace-drawer')).toBeVisible();
   await expect.poll(() => pct(page)).toBe(dragged);
-  await page.getByRole('separator').dblclick();
+  await page.getByTestId('split-handle').dblclick();
   await expect.poll(() => pct(page)).toBe(55);
 });
 
@@ -95,11 +96,12 @@ test('Input and Output blocks copy and expand into a dialog and focus returns', 
 
 test('at 390px the drawer is full width with a Tree / Detail switch', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
-  await openRun(page, s.slug, classic);
-  await openTrace(page);
+  await openRun(page, s.slug, classic, 'trace=item-0001');
+  await expect(page.getByTestId('trace-drawer')).toBeVisible();
+  await expect(page.getByRole('tree', { name: 'Span tree' })).toBeVisible();
   const dlg = page.getByRole('dialog', { name: 'Trace' });
   expect((await dlg.boundingBox())!.width).toBeGreaterThanOrEqual(389);
-  await expect(page.getByRole('separator')).toHaveCount(0);
+  await expect(page.getByTestId('split-handle')).toHaveCount(0);
   const view = page.getByRole('radiogroup', { name: 'Trace view' });
   await expect(view.getByRole('radio', { name: 'Tree' })).toBeChecked();
   await page.getByRole('tree', { name: 'Span tree' }).getByRole('treeitem').nth(1).click();
