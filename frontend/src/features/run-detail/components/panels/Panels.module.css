@@ -279,6 +279,13 @@
   }
 }
 
+/* One visual per row (Deep analysis, Repeat): sections stack at full width. */
+.single {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
 /* A pair whose columns share one height (latency histogram beside the scatter). */
 .pair {
   align-items: stretch;
