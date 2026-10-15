@@ -1,0 +1,142 @@
+/* The metrics matrix: metric rows by pass columns, no tinted cells (band colour is text), one detail panel below. */
+.matrix {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  min-block-size: var(--control-height);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.summary {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.gridHost {
+  min-width: 0;
+}
+
+.metricName {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.cell {
+  min-inline-size: 44px;
+  block-size: var(--control-height);
+  padding: 0;
+  text-align: end;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--tone-text, var(--text-primary));
+  cursor: pointer;
+}
+
+.cell[data-error] {
+  color: var(--metric-error);
+}
+
+.cell:hover {
+  background: var(--bg-hover);
+}
+
+.cell:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.cell[data-selected] {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -2px;
+}
+
+.mean {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.reason {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-base);
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.more {
+  align-self: flex-start;
+}
+
+.detail {
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.detailHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-block-size: var(--control-height);
+}
+
+.detailTitle {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.detailActions {
+  display: inline-flex;
+  margin-inline-start: auto;
+}
+
+.empty {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* Under 640px the cells and names shrink so the shown passes and Mean fit without sideways scrolling. */
+.gridHost[data-compact] .cell {
+  min-inline-size: 0;
+  font-size: var(--font-sm);
+}
+
+.gridHost[data-compact] .mean {
+  font-size: var(--font-sm);
+}
+
+.gridHost[data-compact] .metricName {
+  display: block;
+  overflow: hidden;
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

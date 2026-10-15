@@ -46,7 +46,7 @@ for (const width of [1280, 1440]) {
     expect(box!.x + box!.width).toBeLessThanOrEqual(scroller!.x + scroller!.width + 1);
     expect(box!.x + box!.width).toBeLessThanOrEqual(width);
     // all three pass columns are inside the viewport
-    const cols = page.locator('[data-kind="passes"] article[data-pass]');
+    const cols = page.locator('section[aria-label=Output] [data-pass]');
     await expect(cols).toHaveCount(3);
     for (let i = 0; i < 3; i++) {
       const c = await cols.nth(i).boundingBox();
@@ -55,7 +55,7 @@ for (const width of [1280, 1440]) {
   });
 }
 
-test('an Arabic input row mirrors: the label is next to its text, not a table width away', async ({
+test('an Arabic input keeps its label at the left, next to its text (round 3 P5: labels never move)', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -68,20 +68,23 @@ test('an Arabic input row mirrors: the label is next to its text, not a table wi
     .nth(1)
     .click();
   const row = page.getByTestId('item-card').getByRole('group', { name: 'Input', exact: true }).first();
-  await expect(row).toHaveAttribute('dir', 'rtl');
+  await expect(row).toHaveAttribute('dir', 'ltr');
   const label = await row.locator('> div').first().boundingBox();
   const text = await row.locator('[data-kind="input"]').boundingBox();
-  // RTL: the label is at the right, the text begins within a column gap of it
-  expect(Math.abs(label!.x - (text!.x + text!.width))).toBeLessThan(80);
-  // the text measure is capped (76ch is about 700px)
+  // the label is at the left and the text begins within a column gap of it; the text measure is capped (76ch)
+  expect(label!.x).toBeLessThan(text!.x);
+  expect(text!.x - (label!.x + label!.width)).toBeLessThan(40);
   expect(text!.width).toBeLessThan(760);
+  await expect(row.locator('[dir="rtl"]').first()).toBeVisible();
 });
 
-test('an RTL value keeps its key header left-anchored in the same column as the LTR keys', async ({ page }) => {
+test('an RTL value keeps its key header left-anchored in the same column as the LTR keys', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openRun(page, s.slug, arabic);
   await expandFirst(page);
-  const expected = page.getByTestId('item-card').getByRole('group', { name: 'Expected output', exact: true });
+  const expected = page.getByTestId('item-card').getByRole('group', { name: 'Expected', exact: true });
   const answer = expected.getByRole('group', { name: 'answer', exact: true });
   const topics = expected.getByRole('group', { name: 'topics', exact: true });
   await expect(answer).toBeVisible();
@@ -95,61 +98,62 @@ test('an RTL value keeps its key header left-anchored in the same column as the 
   await expect(text).toBeVisible();
 });
 
-test('JSON output is one section per key, collapsible, with a Raw view', async ({ page }) => {
+test('JSON output is one collapsed row per key, with a Raw view (round 3 P5)', async ({ page }) => {
   await openRun(page, s.slug, arabic, 'pass=1');
   await expandFirst(page);
-  const out = page.getByRole('group', { name: 'Output', exact: true }).first();
+  const out = page.getByRole('region', { name: 'Output', exact: true }).first();
   for (const key of ['answer', 'reasoning', 'citations', 'confidence', 'sql', 'followups'])
-    await expect(out.getByRole('group', { name: key, exact: true })).toBeVisible();
-  // uniform objects read as a table
-  await expect(out.getByRole('grid')).toContainText('policy-2026');
-  // collapse a key
+    await expect(out.getByRole('button', { name: new RegExp(`^${key}`) })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  // open a key
   const answer = out.getByRole('button', { name: /^answer/ });
-  await expect(answer).toHaveAttribute('aria-expanded', 'true');
   await answer.click();
-  await expect(answer).toHaveAttribute('aria-expanded', 'false');
+  await expect(answer).toHaveAttribute('aria-expanded', 'true');
   // Raw keeps the whole payload
   await out.getByRole('radio', { name: 'Raw' }).click({ force: true });
   await expect(out).toContainText('"citations"');
   await out.getByRole('radio', { name: 'Sections' }).click({ force: true });
 });
 
-test('an opened metric reads at the full width under the chip row, several at once', async ({ page }) => {
+test('an opened metric reads at the full width under the matrix, one at a time (round 3 P5)', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openRun(page, s.slug, classic);
   await expandFirst(page);
   const card = page.getByTestId('item-card');
-  const chips = card.getByRole('list', { name: 'Metrics' });
-  const toggles = chips.getByRole('button', { name: /^Show .* details$/ });
-  const n = await toggles.count();
-  expect(n).toBeGreaterThan(0);
-  const chip = await chips.getByRole('listitem').first().boundingBox();
-  await toggles.first().click();
+  const grid = card.getByRole('grid', { name: 'Metrics by pass' });
+  const matrix = await grid.boundingBox();
+  const cells = grid.getByRole('button', { name: /^[a-z_]+, pass \d+:/ });
+  expect(await cells.count()).toBeGreaterThan(0);
+  await cells.first().click();
   const panel = card.locator('section[data-metric]').first();
   await expect(panel).toBeVisible();
   const p = await panel.boundingBox();
-  expect(p!.width).toBeGreaterThan(chip!.width * 2.5);
-  if (n > 1) {
-    await toggles.nth(0).click(); // first label flipped to Hide
-    await card
-      .getByRole('button', { name: /^Show .* details$/ })
-      .first()
-      .click();
-    await expect(card.getByRole('button', { name: /^Hide .* details$/ })).not.toHaveCount(0);
+  expect(p!.width).toBeGreaterThan(matrix!.width * 0.9);
+  if ((await cells.count()) > 1) {
+    await cells.nth(1).click();
+    await expect(card.getByTestId('metric-detail')).toHaveCount(1);
   }
 });
 
-test('pass columns have an accent rail, a labelled Trace button and no fills', async ({ page }) => {
+test('pass columns carry no colour of their own, a labelled Trace button and no fills (round 3 P5)', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openRun(page, s.slug, arabic);
   await expandFirst(page);
-  const cols = page.locator('[data-kind="passes"] article[data-pass]');
-  const colors = await cols.evaluateAll((els) => els.map((e) => getComputedStyle(e).borderInlineStartColor));
-  expect(new Set(colors).size).toBe(3);
+  const cols = page.locator('section[aria-label=Output] [data-pass]');
+  const colors = await cols.evaluateAll((els) =>
+    els.slice(1).map((e) => getComputedStyle(e).borderInlineStartColor),
+  );
+  // only the hairline separates columns: every separator has the same colour
+  expect(new Set(colors).size).toBe(1);
   const bg = await cols.first().evaluate((e) => getComputedStyle(e).backgroundColor);
   expect(bg).toBe('rgba(0, 0, 0, 0)');
   await expect(cols.first().getByRole('button', { name: 'Open trace of pass 1' })).toContainText('Trace');
-  await expect(page.getByTestId('pass-diff').first()).toBeVisible();
 });
 
 for (const width of [390, 1280]) {
@@ -164,37 +168,24 @@ for (const width of [390, 1280]) {
 }
 
 for (const width of [1280, 1440]) {
-  test(`an RTL value in a JSON section keeps its key left-anchored at ${width}px; tables fit their column`, async ({
+  test(`an RTL value in a key row keeps its key left-anchored at ${width}px; the text measure is capped`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 });
     await openRun(page, s.slug, arabic, 'pass=1');
     await expandFirst(page);
-    const out = page.getByRole('group', { name: 'Output', exact: true }).first();
-    const section = out.getByRole('group', { name: 'answer', exact: true });
-    // the section is not mirrored (final review F5): the key header stays at the left like every LTR key
-    await expect(section).not.toHaveAttribute('dir', 'rtl');
-    const box = (await section.boundingBox())!;
-    const key = (await section.locator('span[dir="ltr"]').first().boundingBox())!;
-    // the rendered text, not its (wider) block
-    const text = await section.locator('[data-text-mode]').evaluate((el) => {
-      const r = document.createRange();
-      r.selectNodeContents(el);
-      const b = r.getBoundingClientRect();
-      return { left: b.left, right: b.right };
-    });
+    const out = page.getByRole('region', { name: 'Output', exact: true }).first();
+    const answer = out.getByRole('button', { name: /^answer/ });
+    await answer.click();
+    const row = answer.locator('xpath=ancestor::div[contains(@data-depth, "0")][1]');
+    const box = (await row.boundingBox())!;
+    const key = (await answer.locator('span[dir="ltr"]').first().boundingBox())!;
     expect(key.x - box.x).toBeLessThan(40);
-    // the value text reads right to left inside its own column, which is capped (never the full table width)
-    expect(text.right).toBeLessThanOrEqual(box.x + box.width + 1);
-    expect(text.right - box.x).toBeLessThan(760);
-    // the citations table is not wider than the pass output it sits in
-    const grid = out.getByRole('group', { name: 'citations', exact: true }).getByRole('grid');
-    const fits = await grid.evaluate((el) => {
-      const sc = el.closest<HTMLElement>('[data-dt-scroller]');
-      return !!sc && sc.scrollWidth <= sc.clientWidth + 1;
-    });
-    expect(fits).toBe(true);
-    const row = await grid.locator('tbody tr').first().boundingBox();
-    expect(row!.height).toBeLessThan(40);
+    // the value text reads right to left inside its own block, capped at the reading measure
+    const text = row.locator('[dir="rtl"]').first();
+    await expect(text).toBeVisible();
+    const t = (await text.boundingBox())!;
+    expect(t.width).toBeLessThan(760);
+    expect(t.x + t.width).toBeLessThanOrEqual(box.x + box.width + 1);
   });
 }

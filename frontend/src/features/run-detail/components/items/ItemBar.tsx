@@ -25,7 +25,9 @@ export function ItemBar({
   return (
     <div className={styles.bar} data-item-bar="" data-item-bar-for={itemId}>
       <span className={styles.num}>#{number}</span>
-      <Tag tone={verdict.tone}>{verdict.label}</Tag>
+      <span className={styles.verdict}>
+        <Tag tone={verdict.tone}>{verdict.label}</Tag>
+      </span>
       <span className={styles.preview} dir="auto">
         {preview}
       </span>

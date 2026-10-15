@@ -17,6 +17,7 @@ import {
   settleDashboard,
   client,
   type Seeded,
+  openMetric,
 } from './support';
 import { seedRunningRun } from './seed';
 
@@ -164,8 +165,8 @@ test.describe('failed rows', () => {
     await openRun(page, s.slug, classic, 'item=item-0008');
     const c = card(page, 'item-0008');
     await expect(c).toBeVisible();
-    await expect(c.locator('[data-kind=output]')).toContainText('ERROR');
-    await expect(c.locator('[role=listitem][data-metric]')).toHaveCount(0);
+    await expect(c.locator('[data-kind=output]')).toContainText(/error/i);
+    await expect(c.locator('tr[data-metric]')).toHaveCount(0);
     await expect(c.getByTestId('metric-analysis-card')).toHaveCount(0);
     await expect(c.getByRole('button', { name: '+ Add issue' })).toHaveCount(0);
   });
@@ -174,14 +175,14 @@ test.describe('failed rows', () => {
     await openRun(page, s.slug, classic, 'item=item-0240');
     const c = card(page, 'item-0240');
     await expect(c).toContainText('Output not received');
-    await expect(c.locator('[role=listitem][data-metric]')).toHaveCount(0);
+    await expect(c.locator('tr[data-metric]')).toHaveCount(0);
     await expect(c.getByTestId('metric-analysis-card')).toHaveCount(0);
   });
 
   test('a failing item still gets its chips and cards', async ({ page }) => {
     await openRun(page, s.slug, classic, 'item=item-0003');
     const c = card(page, 'item-0003');
-    await expect(c.locator('[role=listitem][data-metric=quality]')).toBeVisible();
+    await expect(c.locator('tr[data-metric=quality]')).toBeVisible();
     await openRootCause(c);
     await expect(c.getByTestId('metric-analysis-card').first()).toBeVisible();
   });
@@ -246,20 +247,19 @@ test.describe('scores', () => {
     page,
   }) => {
     await openRun(page, s.slug, classic, 'item=item-0006');
-    const chip = card(page, 'item-0006').locator('[role=listitem][data-metric=quality]');
-    const panel = card(page, 'item-0006').locator('section[data-metric=quality]');
-    await chip.getByRole('button', { name: 'Edit quality score' }).click();
+    const panel = await openMetric(card(page, 'item-0006'), 'quality');
+    await panel.getByRole('button', { name: 'Edit quality score' }).click();
     await panel.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
     await panel.getByRole('button', { name: 'Save' }).click();
-    const badge = chip.getByText('edited', { exact: true });
+    const badge = panel.getByText('edited', { exact: true });
     await expect(badge).toBeVisible();
     const title = (await badge.getAttribute('title')) ?? '';
     expect(title).toMatch(/^Edited by .+ on /);
     expect(title).toContain('→');
     expect(title).toContain('Original score:');
-    await chip.getByRole('button', { name: /^Reset quality to its original score/ }).click();
+    await panel.getByRole('button', { name: /^Reset quality to its original score/ }).click();
     await expect(page.getByText(/quality reset to its original score/i)).toBeVisible();
-    await expect(chip.getByText('edited', { exact: true })).toHaveCount(0);
+    await expect(panel.getByText('edited', { exact: true })).toHaveCount(0);
   });
 });
 
@@ -335,12 +335,12 @@ test.describe('repeat runs', () => {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
-  test('a repeat item lines up one metric across the passes', async ({ page }) => {
+  test('a repeat item lines every metric up across the passes (the metrics matrix)', async ({ page }) => {
     await openRun(page, s.slug, repeat);
     await itemButton(page, 1).click();
-    const compare = page.getByTestId('pass-metric-compare').first();
-    await expect(compare).toBeVisible();
-    await expect(compare.locator('[data-pass]')).toHaveCount(3);
+    const row = page.locator('[data-testid=item-card] tr[data-metric=quality]').first();
+    await expect(row).toBeVisible();
+    await expect(row.getByRole('button', { name: /^quality, pass \d:/ })).toHaveCount(3);
   });
 });
 

@@ -20,6 +20,11 @@
   color: var(--text-primary);
 }
 
+.verdict {
+  flex: none;
+  white-space: nowrap;
+}
+
 .preview {
   flex: 0 1 auto;
   min-width: 0;

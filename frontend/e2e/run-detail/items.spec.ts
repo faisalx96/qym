@@ -12,6 +12,8 @@ import {
   seedProject,
   seedRepeat,
   type Seeded,
+  metricRow,
+  openMetric,
 } from './support';
 
 let s: Seeded;
@@ -50,7 +52,7 @@ test.describe('open an item (scenario 6, J6)', () => {
       'Clause 1 requires written approval from the finance lead',
     );
     for (const m of ['exact_match', 'quality', 'hallucination', 'tokens_used']) {
-      await expect(c.locator(`[role=listitem][data-metric="${m}"]`)).toBeVisible();
+      await expect(metricRow(c, m)).toBeVisible();
     }
     await expect.poll(() => params(page).get('item')).toBe('item-0002');
     expect(details).toHaveLength(1);
@@ -185,35 +187,34 @@ test.describe('score edits (scenario 7, J8)', () => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 5).click();
     const c = card(page, 'item-0005');
-    const chip = c.locator('[role=listitem][data-metric=quality]');
-    const panel = c.locator('section[data-metric=quality]');
+    const chip = metricRow(c, 'quality');
     await expect(chip).toBeVisible();
-    await expect(chip).not.toContainText('edited');
-    await chip.getByRole('button', { name: 'Edit quality score' }).click();
+    const panel = await openMetric(c, 'quality');
+    await expect(panel).not.toContainText('edited');
+    await panel.getByRole('button', { name: 'Edit quality score' }).click();
     const input = panel.getByRole('textbox', { name: 'New quality score' });
     await input.fill('0.5');
     await panel.getByRole('button', { name: 'Save' }).click();
     await expect(chip).toContainText('50');
-    await expect(chip).toContainText('edited');
+    await expect(panel).toContainText('edited');
     await expect(panel.getByRole('textbox')).toHaveCount(0);
     // persisted: survives a reload
     await page.reload();
-    await expect(card(page, 'item-0005').locator('[role=listitem][data-metric=quality]')).toContainText(
-      'edited',
-    );
+    const again = card(page, 'item-0005');
+    await expect(again.getByRole('button', { name: /^quality, pass 1: .*\(edited\)$/ })).toBeVisible();
     // reset to the scorer value
-    const chip2 = card(page, 'item-0005').locator('[role=listitem][data-metric=quality]');
-    await chip2.getByRole('button', { name: 'Edit quality score' }).click();
-    await panel.getByRole('button', { name: 'Reset to scorer value' }).click();
-    await expect(chip2).not.toContainText('edited');
+    const panel2 = await openMetric(again, 'quality');
+    await expect(panel2).toContainText('edited');
+    await panel2.getByRole('button', { name: 'Edit quality score' }).click();
+    await panel2.getByRole('button', { name: 'Reset to scorer value' }).click();
+    await expect(again.getByRole('button', { name: /^quality, pass 1: .*\(edited\)$/ })).toHaveCount(0);
   });
 
   test('an invalid score keeps the editor open with a message; Escape cancels', async ({ page }) => {
     await openRun(page, s.slug, classic);
     await itemButton(page, 6).click();
-    const chip = card(page, 'item-0006').locator('[role=listitem][data-metric=quality]');
-    const panel = card(page, 'item-0006').locator('section[data-metric=quality]');
-    await chip.getByRole('button', { name: 'Edit quality score' }).click();
+    const panel = await openMetric(card(page, 'item-0006'), 'quality');
+    await panel.getByRole('button', { name: 'Edit quality score' }).click();
     await panel.getByRole('textbox', { name: 'New quality score' }).fill('banana');
     await panel.getByRole('button', { name: 'Save' }).click();
     await expect(panel.getByRole('alert')).toBeVisible();
@@ -228,9 +229,9 @@ test.describe('score edits (scenario 7, J8)', () => {
     );
     await openRun(page, s.slug, classic);
     await itemButton(page, 7).click();
-    const chip = card(page, 'item-0007').locator('[role=listitem][data-metric=quality]');
-    const panel = card(page, 'item-0007').locator('section[data-metric=quality]');
-    await chip.getByRole('button', { name: 'Edit quality score' }).click();
+    const chip = metricRow(card(page, 'item-0007'), 'quality');
+    const panel = await openMetric(card(page, 'item-0007'), 'quality');
+    await panel.getByRole('button', { name: 'Edit quality score' }).click();
     await panel.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
     await panel.getByRole('button', { name: 'Save' }).click();
     await expect(panel.getByRole('alert')).toContainText('changed elsewhere');
@@ -245,7 +246,8 @@ test.describe('score edits (scenario 7, J8)', () => {
     await itemButton(page, 2).click();
     const c = card(page, 'item-0002');
     await expect(c).toBeVisible();
-    await expect(c.locator('[role=listitem][data-metric=quality]')).toBeVisible();
+    const lockedPanel = await openMetric(c, 'quality');
+    await expect(lockedPanel).toBeVisible();
     await expect(c.getByRole('button', { name: /^Edit .* score$/ })).toHaveCount(0);
     // the submit event shows in the review history under the hero, with a Reviews link in the nav
     await expect(page.getByTestId('review-history')).toContainText(/Submitted/i);

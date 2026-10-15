@@ -1,6 +1,15 @@
 /** J3 + J7, scenarios 3, 4, 5: chart-click filters, search, rule builder, URL round-trips, CSV. */
 import { test, expect } from '@playwright/test';
-import { itemsCount, metricCard, openRun, params, seedClassic, seedProject, type Seeded } from './support';
+import {
+  itemsCount,
+  metricCard,
+  openRun,
+  params,
+  seedClassic,
+  seedProject,
+  type Seeded,
+  openMetric,
+} from './support';
 
 let s: Seeded;
 let classic: string;
@@ -272,7 +281,7 @@ test.describe('URL contract for the view params', () => {
     await openRun(page, s.slug, classic, 'hide_metric_field=judge_model');
     await page.getByRole('button', { name: 'Open item #2', exact: true }).click();
     const card = page.locator('[data-testid=item-card][data-item-id="item-0002"]');
-    await card.getByRole('button', { name: 'Show quality details' }).click();
+    await openMetric(card, 'quality');
     await expect(card.getByText('confidence')).toBeVisible();
     await expect(card.getByText('judge_model')).toHaveCount(0);
     expect(params(page).getAll('hide_metric_field')).toEqual(['judge_model']);

@@ -21,6 +21,8 @@ import {
   startsOpen,
   tableColumns,
 } from './structured';
+import { KeyTree } from './KeyTree';
+import { allPaths } from './keyTree';
 import { useJsonView, type JsonView } from './useJsonView';
 import styles from './StructuredValue.module.css';
 
@@ -41,6 +43,12 @@ export interface StructuredValueProps {
   /** Lines before a text leaf clamps (default 12). */
   lines?: number;
   className?: string;
+  /**
+   * `sections` (default): one section per top-level key. `keys`: collapsed key rows with previews, recursive
+   * Expand all / Collapse all and depth guides (round 3 P5); nothing is open unless `defaultExpanded`.
+   */
+  variant?: 'sections' | 'keys';
+  defaultExpanded?: boolean;
 }
 
 const TABLE_LIMIT = 50;
@@ -160,14 +168,7 @@ function Section({ id, name, value, open, onToggle, textMode, lines }: SectionPr
     );
   }
   return (
-    <div
-      className={styles.section}
-      id={id}
-      data-kind={kind}
-      data-open={open}
-      role="group"
-      aria-label={name}
-    >
+    <div className={styles.section} id={id} data-kind={kind} data-open={open} role="group" aria-label={name}>
       <div className={styles.head}>
         <button
           type="button"
@@ -208,6 +209,8 @@ export function StructuredValue({
   toolbar = true,
   lines = 12,
   className,
+  variant = 'sections',
+  defaultExpanded = false,
 }: StructuredValueProps) {
   const uid = useId();
   const parsed = useMemo(() => parseStructured(value), [value]);
@@ -216,12 +219,48 @@ export function StructuredValue({
   const entries = useMemo(() => (parsed.structured ? entriesOf(parsed.data) : []), [parsed]);
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const root = useRef<HTMLDivElement>(null);
+  const [openKeys, setOpenKeys] = useState<Set<string> | null>(null);
 
   if (!parsed.structured) {
     return parsed.text ? (
       <ClampedText text={parsed.text} mode={textMode} lines={lines} />
     ) : (
       <TextBlock text="" mode={textMode} />
+    );
+  }
+  if (variant === 'keys') {
+    const open = openKeys ?? (defaultExpanded ? new Set(allPaths(parsed.data, uid)) : new Set<string>());
+    return (
+      <div className={[styles.root, className].filter(Boolean).join(' ')} data-variant="keys">
+        {toolbar ? (
+          <div className={styles.toolbar}>
+            <span className={styles.spacer} />
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label="Expand all keys"
+              onPress={() => setOpenKeys(new Set(allPaths(parsed.data, uid)))}
+            >
+              Expand all
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label="Collapse all keys"
+              onPress={() => setOpenKeys(new Set())}
+            >
+              Collapse all
+            </Button>
+          </div>
+        ) : null}
+        <KeyTree
+          value={parsed.data}
+          idPrefix={uid}
+          open={open}
+          onOpenChange={setOpenKeys}
+          textMode={textMode}
+        />
+      </div>
     );
   }
   const isOpen = (i: number, k: string, v: unknown) => overrides[k] ?? startsOpen(i, v, defaultOpen);

@@ -31,7 +31,7 @@ test.describe('live run (scenario 2, J2)', () => {
     await itemButton(page, 2).click();
     const card = page.locator('[data-testid=item-card][data-item-id="live-002"]');
     await expect(card).toBeVisible();
-    await expect(card.locator('[role=listitem][data-metric=quality]')).toBeVisible();
+    await expect(card.locator('tr[data-metric=quality]')).toBeVisible();
     await expect(card.locator('[data-kind=output]')).toContainText('Live answer 2');
     // let opening the card finish its own scroll-into-view, then move the page by hand
     await page.waitForTimeout(1200);

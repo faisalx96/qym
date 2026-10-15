@@ -167,16 +167,35 @@ test('P4-8: at 390 (cards) the ItemBar sticks at the 44px nav and nothing else s
   await itemButton(page, 1).click();
   const card = page.getByRole('article', { name: 'Item #1' });
   await expect(card).toBeVisible();
+  // the virtualised table settles the detail's measured height first
+  await expect
+    .poll(async () => {
+      const a = (await card.boundingBox())!.height;
+      await page.waitForTimeout(300);
+      return Math.abs(a - (await card.boundingBox())!.height) < 1;
+    })
+    .toBe(true);
   const r = await card.evaluate(async (el) => {
     const sc = document.getElementById('shell-content')!;
     const box = el.getBoundingClientRect();
     const nav0 = (document.querySelector('[data-run-nav]') as HTMLElement).getBoundingClientRect();
-    sc.scrollTop += box.top - nav0.bottom + Math.min(200, box.height / 3);
+    sc.scrollTo({
+      top: sc.scrollTop + box.top - nav0.bottom + Math.min(200, box.height / 3),
+      behavior: 'instant',
+    });
     await new Promise((res) => setTimeout(res, 300));
     const bar = el.querySelector('[data-item-bar]')!.getBoundingClientRect();
     const nav = (document.querySelector('[data-run-nav]') as HTMLElement).getBoundingClientRect();
-    return { barTop: bar.top, navBottom: nav.bottom, h: bar.height };
+    return {
+      barTop: bar.top,
+      navBottom: nav.bottom,
+      h: bar.height,
+      shift: el.style.getPropertyValue('--head-shift'),
+      scroll: sc.scrollTop,
+      boxH: box.height,
+      boxTop: box.top,
+    };
   });
-  expect(Math.abs(r.barTop - r.navBottom)).toBeLessThanOrEqual(1.5);
+  expect(Math.abs(r.barTop - r.navBottom), JSON.stringify(r)).toBeLessThanOrEqual(1.5);
   expect(Math.round(r.h)).toBeGreaterThanOrEqual(32);
 });

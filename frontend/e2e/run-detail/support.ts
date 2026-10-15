@@ -119,6 +119,20 @@ export function itemButton(page: Page, n: number): Locator {
   return page.getByRole('button', { name: `Open item #${n}`, exact: true });
 }
 
+/** The matrix row of a metric inside an expanded item (round 3 P5 replaced the metric chips). */
+export function metricRow(card: Locator, metric: string): Locator {
+  return card.locator(`tr[data-metric="${metric}"]`);
+}
+
+/** Open a metric's detail panel by clicking its (first, or the given pass's) matrix value; returns the panel. */
+export async function openMetric(card: Locator, metric: string, pass?: number): Promise<Locator> {
+  const re = new RegExp(`^${metric}, pass ${pass ?? '\\d+'}:`);
+  await card.getByRole('button', { name: re }).first().click();
+  const panel = card.locator(`[data-testid=metric-detail][data-metric="${metric}"]`);
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
 export function metricCard(page: Page, metric: string): Locator {
   return page.locator(`[data-testid=metric-card][data-metric="${metric}"]`);
 }

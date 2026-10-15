@@ -15,6 +15,11 @@ export interface FieldRowProps {
   measure?: 'prose' | 'full';
   /** `success` or `danger` draws the 2px verdict rail at the inline start. */
   rail?: 'success' | 'danger' | 'info';
+  /**
+   * `auto` (default): the row takes the content direction (an Arabic input mirrors the row). `start`: the row is always
+   * left to right, so the label never moves; only the value block carries the text direction (round 3 P5).
+   */
+  labelAnchor?: 'auto' | 'start';
   className?: string;
   children: ReactNode;
 }
@@ -32,11 +37,13 @@ export function FieldRow({
   text,
   measure = 'prose',
   rail,
+  labelAnchor = 'auto',
   className,
   children,
 }: FieldRowProps) {
   const id = useId();
   const attrs = dir === 'auto' ? (text !== undefined ? textDirAttrs(text) : {}) : { dir };
+  const start = labelAnchor === 'start';
   return (
     <div className={[styles.host, className].filter(Boolean).join(' ')}>
       <div
@@ -45,12 +52,21 @@ export function FieldRow({
         className={styles.row}
         data-measure={measure}
         data-rail={rail}
-        {...attrs}
+        data-anchor={start ? 'start' : undefined}
+        {...(start ? { dir: 'ltr' as const } : attrs)}
       >
         <div id={id} className={styles.label}>
           {label}
         </div>
-        <div className={styles.body}>{children}</div>
+        <div className={styles.body}>
+          {start ? (
+            <div className={styles.value} data-measure={measure} {...attrs}>
+              {children}
+            </div>
+          ) : (
+            children
+          )}
+        </div>
         {actions ? <div className={styles.actions}>{actions}</div> : null}
       </div>
     </div>
