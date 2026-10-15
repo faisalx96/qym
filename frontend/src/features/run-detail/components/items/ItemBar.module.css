@@ -1,0 +1,45 @@
+/* The item bar: one --row-compact line, opaque, hairline below; translated to the sticky line by useStickyShift. */
+.bar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--row-compact);
+  margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-lg)) var(--space-sm);
+  padding: 0 var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  transform: translateY(var(--head-shift, 0px));
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.preview {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-base);
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+@container (max-width: 639px) {
+  .preview {
+    display: none;
+  }
+}

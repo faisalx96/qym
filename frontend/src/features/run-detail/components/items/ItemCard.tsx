@@ -1,7 +1,17 @@
 /** Expanded item: bodies (lazy), metadata, output, trace chips, metrics; repeat items show one column per pass. */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { isItemTaskError } from '@/lib/metrics';
-import { Button, CopyButton, FieldRow, Icon, LinkButton, StructuredValue, Tag, parseStructured } from '@/ui';
+import {
+  Button,
+  CopyButton,
+  FieldRow,
+  Icon,
+  LinkButton,
+  StructuredValue,
+  Tag,
+  parseStructured,
+  useStickyShift,
+} from '@/ui';
 import { bodyText, formatCompact, formatStartedAt, itemLink } from '../../lib/itemText';
 import {
   HIDDEN_METADATA_KEYS,
@@ -11,9 +21,12 @@ import {
 } from '../../lib/rowMeta';
 import { buildLangfuseTraceUrl } from '../../lib/traceTree';
 import { latencyLabel, rowStatus } from '../../lib/rowDisplay';
+import { useShellScroller, useStickyOffset } from '../../hooks/useScrollMargin';
+import { itemVerdict } from '../../lib/itemVerdict';
 import { useRunPage } from '../../RunContext';
 import type { MetricAnalysis, Row, RowTraceStats } from '../../types';
 import { MetricAnalysisCards } from '../analysis/MetricAnalysisCards';
+import { ItemBar } from './ItemBar';
 import { useItemsUi } from './ItemsUi';
 import { MetricStrip } from './MetricStrip';
 import { PassColumns } from './PassColumns';
@@ -97,6 +110,18 @@ export function ItemCard({ row }: { row: Row }) {
   const repeatAggregate = model.isRepeat && !model.viewPass;
   const status = rowStatus(api.ctx, row, api.selectedMetric);
   void items;
+  const articleRef = useRef<HTMLElement>(null);
+  const scroller = useShellScroller();
+  const stickyOffset = useStickyOffset();
+  // the bar owns the sticky line while the table header is held above this detail
+  useStickyShift({
+    container: articleRef,
+    head: (c) => c.querySelector<HTMLElement>('[data-item-bar]'),
+    parent: scroller,
+    top: stickyOffset,
+    // the article only exists once the details have loaded
+    enabled: loaded,
+  });
 
   if (!loaded && state?.status === 'error') {
     return (
@@ -140,7 +165,26 @@ export function ItemCard({ row }: { row: Row }) {
   const langfuse =
     row.trace_url || buildLangfuseTraceUrl(run.langfuse_host, run.langfuse_project_id, row.trace_id);
   return (
-    <div className={styles.state} data-testid="item-card" data-item-id={row.item_id}>
+    <article
+      ref={articleRef}
+      className={styles.state}
+      data-testid="item-card"
+      data-item-id={row.item_id}
+      aria-label={`Item #${row.index + 1}`}
+    >
+      <ItemBar
+        number={row.index + 1}
+        itemId={row.item_id}
+        verdict={itemVerdict(api.ctx, row, api.selectedMetric)}
+        preview={(input.split('\n')[0] ?? '').slice(0, 200)}
+        link={link}
+        onCollapse={() => {
+          ui.toggleExpanded(row.item_id, false);
+          requestAnimationFrame(() =>
+            document.querySelector<HTMLElement>(`tr[data-item-id="${CSS.escape(row.item_id)}"]`)?.focus(),
+          );
+        }}
+      />
       {run.items_restricted ? (
         <p className={styles.muted}>Item bodies are visible to admins only on a private test set.</p>
       ) : null}
@@ -152,7 +196,6 @@ export function ItemCard({ row }: { row: Row }) {
           measure={isStructured(rawInput) ? 'full' : 'prose'}
           actions={
             <>
-              <CopyButton text={link} icon="link" label="Copy link" />
               <CopyButton text={input} label="Copy input" />
             </>
           }
@@ -276,6 +319,6 @@ export function ItemCard({ row }: { row: Row }) {
       <TraceChips stats={row.trace_stats} retries={row.retry_count ?? 0} />
       {repeatAggregate || noVerdict ? null : <MetricStrip row={row} />}
       <MetricAnalysisCards row={row} />
-    </div>
+    </article>
   );
 }
