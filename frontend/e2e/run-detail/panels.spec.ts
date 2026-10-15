@@ -121,9 +121,9 @@ test.describe('categories section', () => {
   test('a metadata key that is not a built-in facet (source) filters the table', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=categories');
     await page
-      .getByRole('group', { name: 'Categories', exact: true })
-      .getByRole('button', { name: /^source/ })
-      .click();
+      .getByRole('radiogroup', { name: 'Category' })
+      .getByRole('radio', { name: /^source/ })
+      .click({ force: true });
     const region = page.getByRole('region', { name: 'source' });
     await region
       .getByTestId('category-row')
@@ -136,23 +136,15 @@ test.describe('categories section', () => {
     expect((await itemsCount(page))[0]).toBe(120);
   });
 
-  test('the chip bar picks one key; a plus chip adds another', async ({ page }) => {
+  test('the key switcher shows one key at a time and writes ?category=', async ({ page }) => {
     await openRun(page, s.slug, classic, 'panel=categories');
-    const group = page.getByRole('group', { name: 'Categories', exact: true });
-    const selected = group.locator('button[aria-pressed="true"]');
-    await expect(selected).toHaveCount(1);
-    const first = (await selected.first().innerText()).split('\n')[0]!;
-    // another key replaces it
-    const other = group.getByRole('button', { name: /^source/ });
-    await other.click();
-    await expect(other).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('region', { name: first })).toHaveCount(0);
-    // "+" adds one more
-    await group
-      .getByRole('button', { name: /^Add (?!source)/ })
-      .first()
-      .click();
-    await expect(selected).toHaveCount(2);
+    const group = page.getByRole('radiogroup', { name: 'Category' });
+    const other = group.getByRole('radio', { name: /^source/ });
+    await other.click({ force: true });
+    await expect(other).toBeChecked();
+    await expect.poll(() => params(page).get('category')).toBe('source');
+    await expect(page.getByRole('region', { name: 'source' })).toBeVisible();
+    await expect(page.getByRole('group', { name: /^Values of / })).toHaveCount(1);
   });
 });
 

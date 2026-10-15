@@ -1,31 +1,35 @@
-/** Performance by metadata category: one key at a time as a ranked table (worst first); a row filters the items. */
+/** Categories (round 3 P3): one key at a time, one card of ranked value rows with a bar and a tick at the overall average. */
 import { useMemo, useState } from 'react';
-import { formatLatency, formatNumericValue, formatPercent } from '@/lib/metrics';
-import { Button, Chip, DataTable, Disclosure, IconButton, ScoreBar, Select, type Column } from '@/ui';
-import { useRunPage } from '../../RunContext';
+import { useSearchParams } from 'react-router-dom';
+import { formatLatency, formatNumericValue, formatPercent, metricBand } from '@/lib/metrics';
+import { applyQueryUpdates } from '@/lib/url-state';
+import { Button, Card, SegmentedControl, Select, Text } from '@/ui';
+import { useColumnStep } from '../../lib/columnStep';
+import {
+  barFraction,
+  DEFAULT_VISIBLE_VALUES,
+  defaultKey as pickDefaultKey,
+  insightLine,
+  orderValues,
+  spreadOf,
+  switcherKind,
+  visibleValues,
+  type CategoryOrder,
+} from '../../lib/categoryModel';
 import {
   categoryBreakdown,
   categoryChipKeys,
-  categoryInsight,
-  categorySpread,
-  sortCategoryGroups,
   type CategoryBreakdown,
   type CategoryGroupStat,
-  type CategorySort,
 } from '../../lib/overviewModel';
-import styles from './Panels.module.css';
-
-const SORTS: Array<{ key: CategorySort; label: string }> = [
-  { key: 'worst', label: 'Worst first' },
-  { key: 'best', label: 'Best first' },
-  { key: 'items', label: 'Most items' },
-  { key: 'name', label: 'Name' },
-];
-const COLLAPSED_ROWS = 8;
-const VISIBLE_KEYS = 8;
+import { useRunPage } from '../../RunContext';
+import styles from './Categories.module.css';
+import panel from './Panels.module.css';
 
 export function CategoriesTab() {
   const { model, items, api } = useRunPage();
+  const [params, setParams] = useSearchParams();
+  const [rootRef, , width] = useColumnStep<HTMLDivElement>(1100);
   const metric = api.selectedMetric;
   const rows = useMemo(() => items.map((i) => i.row), [items]);
   const keys = useMemo(
@@ -35,132 +39,106 @@ export function CategoriesTab() {
       ),
     [model.rows, model.allMetadataKeys, rows],
   );
+  // The key with the widest best-to-worst spread opens first, computed once from the whole run so filtering the
+  // items by a value never makes the card jump to another key.
+  const keyList = keys.map((k) => k.key).join('\u0000');
+  const fallbackKey = useMemo(() => {
+    const pool = keys.map((k) => k.key);
+    if (!metric) return pool[0] ?? null;
+    return pickDefaultKey(pool, (k) => spreadOf(categoryBreakdown(api.ctx, model.rows, k, metric, null)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyList, metric, model.rows]);
+  const asked = params.get('category');
+  const selectedKey = asked && keys.some((k) => k.key === asked) ? asked : fallbackKey;
+  const [order, setOrder] = useState<CategoryOrder>('worst');
   const filters = api.view.filters;
-  // the key with the widest best-to-worst spread opens first (it answers "where is the model weak?"); it is
-  // computed from the whole run, so filtering the items by a value does not make the table jump to another key
-  const allKeys = useMemo(
-    () => categoryChipKeys(model.rows, model.allMetadataKeys),
-    [model.rows, model.allMetadataKeys],
-  );
-  const defaultKey = useMemo(() => {
-    const pool = allKeys.filter((k) => keys.some((x) => x.key === k.key));
-    if (!metric) return pool[0]?.key ?? null;
-    let best: { key: string; spread: number } | null = null;
-    for (const k of pool) {
-      const b = categoryBreakdown(api.ctx, model.rows, k.key, metric, null);
-      const spread = b ? categorySpread(b) : 0;
-      if (!best || spread > best.spread) best = { key: k.key, spread };
-    }
-    return best?.key ?? pool[0]?.key ?? null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allKeys, metric, model.rows]);
-  const [chosen, setChosen] = useState<string[] | null>(null);
-  const [sort, setSort] = useState<CategorySort>('worst');
-  const selected = (chosen ?? (defaultKey ? [defaultKey] : [])).filter((k) => keys.some((x) => x.key === k));
-  const selectedKey = selected.join('\u0000');
-  const breakdowns = useMemo(
+  const breakdown = useMemo(
     () =>
-      metric
-        ? selected
-            .map((k) => categoryBreakdown(api.ctx, rows, k, metric, filters.domain))
-            .filter((b): b is NonNullable<typeof b> => !!b)
-        : [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      metric && selectedKey ? categoryBreakdown(api.ctx, rows, selectedKey, metric, filters.domain) : null,
     [selectedKey, rows, metric, api.ctx, filters.domain],
   );
-  if (!keys.length || !metric) return <p className={styles.note}>No metadata categories to break down.</p>;
+  if (!keys.length || !metric || !selectedKey) {
+    return <p className={panel.note}>No metadata categories to break down.</p>;
+  }
   const numeric = model.metricTypes[metric] === 'numeric';
   const direction = model.metricDirections[metric] ?? null;
   const fmt = (v: number | null) =>
     v === null ? '—' : numeric ? formatNumericValue(v) : formatPercent(v, 0);
-  const only = (key: string) => setChosen([key]);
-  const add = (key: string) => setChosen([...selected.filter((k) => k !== key), key]);
-  const drop = (key: string) => setChosen(selected.filter((k) => k !== key));
-  const chip = ({ key, count }: { key: string; count: number }) => {
-    const on = selected.includes(key);
-    return (
-      <span key={key} className={styles.keyChip}>
-        <Chip
-          count={count}
-          isSelected={on}
-          onPress={(e) => {
-            if (e.shiftKey || e.metaKey || e.ctrlKey) {
-              if (on) {
-                if (selected.length > 1) drop(key);
-              } else add(key);
-            } else only(key);
-          }}
-          onRemove={on && selected.length > 1 ? () => drop(key) : undefined}
-          removeLabel={`Remove ${key}`}
-        >
-          {key}
-        </Chip>
-        {!on ? <IconButton label={`Add ${key}`} icon="plus" onPress={() => add(key)} /> : null}
-      </span>
-    );
-  };
-  const head = keys.slice(0, VISIBLE_KEYS);
-  const rest = keys.slice(VISIBLE_KEYS);
+  const choose = (key: string) =>
+    setParams((prev) => applyQueryUpdates(prev, { category: key }), {
+      replace: true,
+      preventScrollReset: true,
+    });
+  const items2 = keys.map((k) => ({ key: k.key, label: `${k.key} · ${k.count}` }));
+  const overall = breakdown?.overallAverage ?? null;
   return (
-    <div className={styles.stack}>
-      <div className={styles.chipRow} role="group" aria-label="Categories">
-        {head.map(chip)}
+    <div className={styles.root} ref={rootRef}>
+      <div className={styles.control}>
+        {keys.length > 1 ? (
+          switcherKind(keys, width) === 'segmented' ? (
+            <SegmentedControl
+              label="Category"
+              options={items2.map((i) => ({ value: i.key, label: i.label }))}
+              value={selectedKey}
+              onChange={choose}
+            />
+          ) : (
+            <Select
+              label="Category"
+              items={items2}
+              value={selectedKey}
+              onChange={(k) => k && choose(String(k))}
+              width={240}
+              searchable
+            />
+          )
+        ) : null}
+        <Text variant="sm" tone="muted" className={styles.metricNote}>
+          Metric: {metric} · overall {fmt(overall)}
+        </Text>
       </div>
-      {rest.length ? (
-        <Disclosure title="More keys" summary={`${rest.length} more`}>
-          <div className={styles.chipRow} role="group" aria-label="More categories">
-            {rest.map(chip)}
-          </div>
-        </Disclosure>
-      ) : null}
-      <div className={styles.controls}>
-        <Select
-          label="Rank by"
-          items={SORTS.map((s) => ({ key: s.key, label: s.label }))}
-          value={sort}
-          onChange={(k) => k && setSort(k as CategorySort)}
-          width="16ch"
-        />
-      </div>
-      {breakdowns.map((b) => (
-        <KeyTable
-          key={b.key}
-          b={b}
-          metric={metric}
-          sort={sort}
+      {breakdown ? (
+        <KeyCard
+          b={breakdown}
+          order={order}
+          onOrder={setOrder}
           numeric={numeric}
           direction={direction}
+          metricType={model.metricTypes[metric]}
           fmt={fmt}
         />
-      ))}
+      ) : (
+        <p className={panel.note}>No scored items for {selectedKey} with the current filters.</p>
+      )}
     </div>
   );
 }
 
-function KeyTable({
+function KeyCard({
   b,
-  metric,
-  sort,
+  order,
+  onOrder,
   numeric,
   direction,
+  metricType,
   fmt,
 }: {
   b: CategoryBreakdown;
-  metric: string;
-  sort: CategorySort;
+  order: CategoryOrder;
+  onOrder: (o: CategoryOrder) => void;
   numeric: boolean;
   direction: 'maximize' | 'minimize' | null;
+  metricType: string | undefined;
   fmt: (v: number | null) => string;
 }) {
-  const { model, api } = useRunPage();
+  const { api } = useRunPage();
   const filters = api.view.filters;
   const [all, setAll] = useState(false);
-  const sorted = useMemo(() => sortCategoryGroups(b.groups, sort, direction), [b.groups, sort, direction]);
-  const shown = all ? sorted : sorted.slice(0, COLLAPSED_ROWS);
-  const insight = categoryInsight(b, direction, fmt, numeric);
-  const maxAvg = numeric
-    ? Math.max(...b.groups.map((g) => g.avgScore ?? 0), b.overallAverage ?? 0, 1e-9)
-    : undefined;
+  const ordered = useMemo(() => orderValues(b.groups, order, direction), [b.groups, order, direction]);
+  const shown = visibleValues(ordered, DEFAULT_VISIBLE_VALUES, all);
+  const insight = insightLine(b, direction, fmt, numeric);
+  const max = numeric ? Math.max(...b.groups.map((g) => g.avgScore ?? 0), b.overallAverage ?? 0, 1e-9) : null;
+  const tick = barFraction(b.overallAverage, max);
   const isOn = (g: CategoryGroupStat) => {
     const current =
       b.key === 'complexity'
@@ -182,110 +160,106 @@ function KeyTable({
       api.setFilters({ categories });
     }
   };
-  const columns: Column<CategoryGroupStat>[] = [
-    {
-      id: 'value',
-      header: b.key,
-      label: b.key,
-      accessor: (g) => g.value,
-      flex: true,
-      priority: 1,
-      cardTitle: true,
-      minWidth: 140,
-    },
-    {
-      id: 'average',
-      header: 'Average',
-      label: 'Average',
-      type: 'score',
-      width: 240,
-      priority: 2,
-      accessor: (g) => g.avgScore,
-      cell: (g) => (
-        <ScoreBar
-          value={g.avgScore}
-          type={model.metricTypes[metric]}
-          direction={direction}
-          max={maxAvg}
-          text={g.avgScore === null ? undefined : fmt(g.avgScore)}
-          marker={b.overallAverage}
-          width={140}
-          markerLabel={`Overall average ${fmt(b.overallAverage)}`}
-        />
-      ),
-    },
-    {
-      id: 'items',
-      header: 'Items',
-      label: 'Items',
-      type: 'number',
-      width: 80,
-      priority: 2,
-      accessor: (g) => g.itemCount,
-    },
-    {
-      id: 'pass',
-      header: 'Pass',
-      label: 'Pass',
-      type: 'number',
-      width: 80,
-      priority: 2,
-      accessor: (g) => g.passRate,
-      cell: (g) => (g.passRate === null ? '—' : formatPercent(g.passRate, 0)),
-    },
-    {
-      id: 'latency',
-      header: 'Latency',
-      label: 'Latency',
-      type: 'number',
-      width: 100,
-      priority: 2,
-      accessor: (g) => g.avgLatency,
-      cell: (g) => (g.avgLatency ? formatLatency(g.avgLatency) : '—'),
-    },
-  ];
   return (
-    <section className={styles.stack} aria-label={b.key}>
-      <h3 className={styles.groupTitle}>
-        {b.key}{' '}
-        <span className={styles.note}>
-          {metric} · overall {fmt(b.overallAverage)}
-        </span>
-      </h3>
+    <Card
+      as="section"
+      aria-label={b.key}
+      className={styles.catCard}
+      header={
+        <div className={styles.head}>
+          <span className={styles.title}>
+            {b.key} <span className={styles.sub}>{b.groups.length} values</span>
+          </span>
+          <span className={styles.headRight}>
+            <span className={styles.legend}>
+              <span className={styles.tickKey} aria-hidden="true" />
+              Overall average
+            </span>
+            <SegmentedControl
+              label="Order"
+              value={order}
+              onChange={onOrder}
+              options={[
+                { value: 'worst', label: 'Worst first' },
+                { value: 'best', label: 'Best first' },
+              ]}
+            />
+          </span>
+        </div>
+      }
+    >
       {insight ? (
-        <p className={styles.verdict} data-testid="category-insight">
+        <p className={styles.insight} data-testid="category-insight">
           {insight}
         </p>
       ) : null}
-      <DataTable<CategoryGroupStat>
-        aria-label={`${b.key} breakdown`}
-        columns={columns}
-        rows={shown}
-        rowKey={(g) => g.value}
-        density="compact"
-        densityLocked
-        columnMenu={false}
-        zebra={false}
-        variant="embedded"
-        stickyHeader={false}
-        onRowOpen={toggle}
-        rowProps={(g) => {
+      <div className={styles.cols} aria-hidden="true">
+        <span>Value</span>
+        <span>Average</span>
+        <span className={styles.num}>Items</span>
+        <span className={styles.num}>Pass</span>
+        <span className={styles.num}>Latency</span>
+      </div>
+      <div
+        role="group"
+        aria-label={`Values of ${b.key}, ${order === 'worst' ? 'worst first' : 'best first'}`}
+      >
+        {shown.map((g) => {
           const on = isOn(g);
-          return {
-            'data-testid': 'category-row',
-            'data-value': g.value,
-            'aria-current': on ? 'true' : undefined,
-            'data-selected': on ? '' : undefined,
-          };
-        }}
-      />
-      {sorted.length > COLLAPSED_ROWS ? (
-        <div>
+          const band =
+            g.avgScore !== null && !numeric && direction
+              ? metricBand(g.avgScore, metricType, direction)
+              : null;
+          const title = `${g.value}: ${fmt(g.avgScore)} average, ${g.itemCount} items${
+            g.avgLatency ? `, ${formatLatency(g.avgLatency)}` : ''
+          }`;
+          return (
+            <button
+              key={g.value}
+              type="button"
+              className={styles.row}
+              aria-pressed={on}
+              data-testid="category-row"
+              data-value={g.value}
+              data-selected={on ? '' : undefined}
+              title={title}
+              onClick={() => toggle(g)}
+            >
+              <span className={styles.name} data-part="name" dir="auto">
+                {g.value}
+              </span>
+              <span className={styles.barCell}>
+                <span
+                  className={styles.track}
+                  data-band={band ?? undefined}
+                  role="img"
+                  aria-label={`average ${fmt(g.avgScore)}, overall average ${fmt(b.overallAverage)}`}
+                >
+                  <span className={styles.fill} style={{ width: `${barFraction(g.avgScore, max) * 100}%` }} />
+                  <span
+                    className={styles.tick}
+                    data-testid="category-tick"
+                    style={{ left: `${tick * 100}%` }}
+                  />
+                </span>
+                <span className={styles.pct} data-band={band ?? undefined}>
+                  {fmt(g.avgScore)}
+                </span>
+              </span>
+              <span className={styles.num}>{g.itemCount}</span>
+              <span className={styles.num}>{g.passRate === null ? '—' : formatPercent(g.passRate, 0)}</span>
+              <span className={styles.num}>{g.avgLatency ? formatLatency(g.avgLatency) : '—'}</span>
+            </button>
+          );
+        })}
+      </div>
+      {ordered.length > DEFAULT_VISIBLE_VALUES ? (
+        <div className={styles.more}>
           <Button size="sm" variant="neutral" onPress={() => setAll(!all)}>
-            {all ? 'Show fewer' : `Show all ${sorted.length} values`}
+            {all ? 'Show fewer' : `Show all ${ordered.length} values`}
           </Button>
         </div>
       ) : null}
-    </section>
+    </Card>
   );
 }

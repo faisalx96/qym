@@ -452,6 +452,12 @@ is not allowed.
   label with its `HelpMarker`, the value in `--font-stat` mono, one plain sentence in `--font-sm` muted (at most 22ch wide).
   No groups, no hover. The grid answers to the report column: one row of N from 900px, a 12-column 4 + 3 split below that,
   two per row and a full-width last tile under 480px. `StatStrip` stays for connected summary bands.
+- **Categories** (run detail, round 3 P3): one key at a time. A `SegmentedControl` "Category" (up to 5 keys that fit the column,
+  else a searchable `Select`; stored in `?category=`) over one `Card`: header with the key, the value count, the "Overall average"
+  tick legend and an Order control (worst first by default); rows `[value][bar + %][items][pass][latency]` as buttons that toggle the
+  item filter (`aria-pressed`, `--bg-selected` and an accent bar, never a band fill). The bar follows the value name (value column at
+  most 220px), is a 12px track in the average's band (neutral without a direction) with a 2 x 18px `--text-primary` tick at the
+  overall average. Six rows show first, then "Show all N values". Under 640px a row is two lines (name, items, pass / full-width bar).
 - **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
   `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
   of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`): each bucket is a

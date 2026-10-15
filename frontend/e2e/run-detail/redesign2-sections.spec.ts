@@ -78,31 +78,31 @@ test.describe('steps and deep analysis', () => {
 });
 
 test.describe('categories', () => {
-  test('one key opens first (the widest spread), others add with "+", rows rank worst first', async ({
+  test('one key opens first (the widest spread), rows rank worst first, six rows before "Show all"', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openRun(page, s.slug, categories, 'panel=categories');
-    const group = page.getByRole('group', { name: 'Categories', exact: true });
-    await expect(group).toBeVisible();
+    await expect(page.getByRole('radiogroup', { name: 'Category' })).toBeVisible();
     await expect(page.getByTestId('category-insight')).toContainText('Weakest:');
-    // topic has 24 values: 8 rows, then Show all
+    // topic has 24 values: 6 rows (round 3 P3), then Show all
     const rows = page.getByTestId('category-row');
-    await expect(rows).toHaveCount(8);
+    await expect(rows).toHaveCount(6);
     await page.getByRole('button', { name: 'Show all 24 values' }).click();
     await expect(rows).toHaveCount(24);
     // worst first: the first row's average is the lowest
     const avg = async (i: number) => Number((await rows.nth(i).innerText()).match(/(\d+)%/)![1]);
     expect(await avg(0)).toBeLessThanOrEqual(await avg(23));
     // a baseline tick on every bar
-    await expect(page.getByTestId('score-marker').first()).toBeVisible();
-    // add another key
-    await group.getByRole('button', { name: 'Add team' }).click();
+    await expect(page.getByTestId('category-tick').first()).toBeVisible();
+    // one key at a time: no "+" chips (round 3 P3), a click on another key replaces the card
+    await expect(page.getByRole('button', { name: /^Add / })).toHaveCount(0);
+    await page
+      .getByRole('radiogroup', { name: 'Category' })
+      .getByRole('radio', { name: /^team/ })
+      .click({ force: true });
     await expect(page.getByRole('region', { name: 'team' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'topic' })).toBeVisible();
-    // a click selects only one key again
-    await group.getByRole('button', { name: /^complexity/ }).click();
-    await expect(page.getByRole('region', { name: 'team' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'topic' })).toHaveCount(0);
   });
 
   test('a row filters the items and toggles off', async ({ page }) => {
