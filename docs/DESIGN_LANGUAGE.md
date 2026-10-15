@@ -463,6 +463,19 @@ is not allowed.
   when the line crosses the detail's bottom; `useStickyShift` takes the detail spans, pure geometry in `stickyShift.ts`). The
   expanded item starts with an `ItemBar` (`--row-compact`, opaque, number, verdict, input preview, Copy link, Collapse) that
   takes the sticky line. The table scroller is an overflow container, so the bar is translated by the same hook, not CSS sticky.
+- **Item details** (round 3 P5): the expanded item is `direction: ltr` and left anchored: Input, Expected and Tags are
+  `FieldRow labelAnchor="start"` (label column `--field-label-width`, the value block as wide as its text up to
+  `--field-measure`; only the value carries `dir`), then the Output region, a full-width divider (1px `--border-strong`, 20px
+  above) and the Metrics region. Output keys are collapsed key rows (`StructuredValue variant="keys"` / `KeyTree`: chevron, key,
+  one-line preview; open: the value, Copy, per-key Expand all / Collapse all recursive; the region has global Expand all / Collapse
+  all and Sections | Raw). A repeat item has a pass rail (a chip per pass with number and verdict glyph, at most three read side by
+  side). **A pass has no colour**: its identity is text, colour on a pass is only its verdict. Metrics are one matrix
+  (metric rows by pass columns, Mean, 8 rows then "Show N more"), values are band-coloured text (no tinted cells) and open ONE
+  detail panel below; score edits happen in that panel.
+- **Run header** (round 3 P6): three bands, nothing behind a chevron. Band 1 identity and actions (name, passes tag, Copy run id,
+  status, Export, pager; a stop reason is one muted line under it). Band 2 seven labelled facts (`dl`, 7 / 4 / 2 columns by
+  column width). Band 3 `KeyValueTag` chips (24px passive key / value, key at most 20 characters, value at most 30) in the groups
+  Versioning, Config, Metadata, clamped to two lines (three on a phone) with an exact "+ N more" (`qym:run-hero-more`).
 - **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
   `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
   of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`): each bucket is a

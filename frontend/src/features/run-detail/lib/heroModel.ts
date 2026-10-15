@@ -258,3 +258,91 @@ export function shortModelName(name: string | null | undefined): string {
   const slash = value.indexOf('/');
   return slash > 0 ? value.slice(slash + 1) : value;
 }
+
+/* ── round 3 P6: the chips of the run header (versioning, config, metadata) ── */
+
+/** Longest key and value a header chip prints; the full `key: value` is in its title. */
+export const CHIP_KEY_MAX = 20;
+export const CHIP_VALUE_MAX = 30;
+
+export function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, Math.max(1, max - 1))}…` : text;
+}
+
+export interface HeaderChip {
+  key: string;
+  /** Clipped key (at most 20 characters). */
+  label: string;
+  /** Clipped value (at most 30 characters) or a one-token summary: `{ 3 keys }`, `[ 4 items ]`. */
+  text: string;
+  /** Full `key: value` for the tooltip (compact JSON for an object). */
+  title: string;
+  /** The raw value when it is an object or array (the expanded view opens it through JsonPreview). */
+  raw?: unknown;
+}
+
+export interface HeaderChipGroup {
+  label: 'Versioning' | 'Config' | 'Metadata';
+  chips: HeaderChip[];
+}
+
+function parsedObject(value: unknown): unknown {
+  if (value !== null && typeof value === 'object') return value;
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+      try {
+        const parsed: unknown = JSON.parse(t);
+        if (parsed !== null && typeof parsed === 'object') return parsed;
+      } catch {
+        /* a string that only looks like JSON stays text */
+      }
+    }
+  }
+  return undefined;
+}
+
+/** One chip for a key and value: scalars print clipped, objects and arrays a one-token summary. */
+export function headerChip(key: string, value: unknown): HeaderChip {
+  const obj = parsedObject(value);
+  if (obj !== undefined) {
+    const n = Array.isArray(obj) ? obj.length : Object.keys(obj as object).length;
+    const text = Array.isArray(obj)
+      ? `[ ${n} ${n === 1 ? 'item' : 'items'} ]`
+      : `{ ${n} ${n === 1 ? 'key' : 'keys'} }`;
+    return { key, label: clip(key, CHIP_KEY_MAX), text, title: `${key}: ${JSON.stringify(obj)}`, raw: obj };
+  }
+  const full = stringify(value);
+  return { key, label: clip(key, CHIP_KEY_MAX), text: clip(full, CHIP_VALUE_MAX), title: `${key}: ${full}` };
+}
+
+/**
+ * The header chip groups in priority order: Versioning (the run's versioning_details by key, then the git chip), Config,
+ * Metadata. Empty groups are left out, so a run with none of them has no band 3.
+ */
+export function headerChips(run: Run): HeaderChipGroup[] {
+  const versioning: HeaderChip[] = Object.entries(run.versioning_details ?? {})
+    .filter(([, v]) => v != null && v !== '')
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => headerChip(k, v));
+  const git = [run.git_branch, run.git_commit].filter(Boolean).join(' • ');
+  if (git) versioning.push(headerChip('git', git));
+  const context = executionContextEntries(run);
+  const config = context.filter((c) => c.group === 'Config').map((c) => headerChip(c.key, c.raw));
+  const metadata = context.filter((c) => c.group === 'Metadata').map((c) => headerChip(c.key, c.raw));
+  return (
+    [
+      { label: 'Versioning', chips: versioning },
+      { label: 'Config', chips: config },
+      { label: 'Metadata', chips: metadata },
+    ] as HeaderChipGroup[]
+  ).filter((g) => g.chips.length > 0);
+}
+
+/** "Stopped: reason" / "Failed: reason" for a run that ended without completing and has a reason; null otherwise. */
+export function stopReasonLine(run: Run): { text: string; danger: boolean } | null {
+  const reason = run.status_reason_label;
+  const status = String(run.status ?? '').toUpperCase();
+  if (!reason || !(status === 'STOPPED' || status === 'FAILED')) return null;
+  return { text: `${status === 'FAILED' ? 'Failed' : 'Stopped'}: ${reason}`, danger: status === 'FAILED' };
+}

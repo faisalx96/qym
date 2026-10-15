@@ -356,7 +356,13 @@ export async function seedClassicRun(
       environment: 'staging',
       prompt_version: 'v7',
     },
-    run_config: { temperature: 0.2, max_tokens: 512, retriever: { top_k: 4, index: 'qa-v3' } },
+    run_config: {
+      temperature: 0.2,
+      max_tokens: 512,
+      retriever: { top_k: 4, index: 'qa-v3' },
+      git_branch: 'main',
+      git_commit: 'abc1234',
+    },
     versioning_details: { prompt: 'v7', retriever_index: 'qa-v3', model_tag: '2026-09' },
   });
   const stream = new EventStream(client, token, runId, 7);
@@ -369,7 +375,13 @@ export async function seedClassicRun(
     total_items: n,
     started_at: startedAt(0),
     run_metadata: { run_name: opts.runName ?? 'classic-rag-eval' },
-    run_config: { temperature: 0.2, max_tokens: 512 },
+    run_config: {
+      temperature: 0.2,
+      max_tokens: 512,
+      retriever: { top_k: 4, index: 'qa-v3' },
+      git_branch: 'main',
+      git_commit: 'abc1234',
+    },
   });
   const taskErrors = new Set<number>();
   const scorerErrors = new Set<number>();

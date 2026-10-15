@@ -1,38 +1,42 @@
 /**
- * Run hero: one primary strip that is always visible (name, status, actions, then task / dataset / model tags with the
- * start time and runtime) and, behind the chevron, the secondary details (owner, project, version, execution
- * context, versioning details). The strip is about the legacy header's height; the report starts on the first screen.
+ * Run hero (round 3 P6): three compact bands, everything about what was run visible without a click. Band 1: identity
+ * and actions. Band 2: seven labelled facts. Band 3: versioning, config and metadata as chips, clamped to two lines
+ * (three on a phone) with "+ N more". Nothing hides behind a chevron.
  */
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { exportHtmlUrl } from '@/api/runs';
 import { platformUrl } from '@/lib/runtime';
 import {
+  Button,
   Card,
+  Collapse,
+  CopyButton,
   DatasetTag,
   Icon,
-  IconButton,
   isBareRunId,
   JsonPreview,
-  KeyValueGrid,
+  KeyValueTag,
   LinkButton,
   ModelTag,
   RunStatusBadge,
   Tag,
   TaskTag,
-  Text,
   runStatusTone,
   type CardTone,
 } from '@/ui';
+import { readJson, writeJson } from '@/lib/storage';
 import type { LiveRunState } from '../hooks/useLiveRun';
 import { useTicker } from '../hooks/useLiveRun';
 import {
-  executionContextEntries,
   formatDurationMs,
   formatIsoDateTime,
   heroTiming,
+  headerChips,
   ingestWarning,
   isLiveStatus,
   runEntityLinks,
+  stopReasonLine,
 } from '../lib/heroModel';
 import type { RunModel } from '../lib/runModel';
 import type { PassSummary, Run } from '../types';
@@ -48,19 +52,14 @@ export interface RunHeroProps {
   listParam: string | null;
   /** Path of this run without the query, for the "all passes" link. */
   basePath: string;
-  /** Secondary details (owner, project, version, execution context, versioning) shown; the chevron toggles it. */
-  expanded: boolean;
-  onToggleExpanded: () => void;
-  /** Extra hero content under the execution context (versioning details). */
-  extra?: React.ReactNode;
 }
 
-function Meta({ label, children, title }: { label: string; children: React.ReactNode; title?: string }) {
+function Fact({ label, children, title }: { label: string; children: React.ReactNode; title?: string }) {
   if (children == null || children === '') return null;
   return (
-    <div className={styles.metaItem}>
-      <dt className={styles.metaLabel}>{label}</dt>
-      <dd className={styles.metaValue} title={title}>
+    <div className={styles.fact}>
+      <dt className={styles.factLabel}>{label}</dt>
+      <dd className={styles.factValue} title={title}>
         {children}
       </dd>
     </div>
@@ -88,18 +87,121 @@ export function LiveIndicator({ live, run }: { live: LiveRunState; run: Run }) {
   );
 }
 
-export function RunHero({
-  run,
-  model,
-  live,
-  passSummary,
-  slug,
-  listParam,
-  basePath,
-  expanded,
-  onToggleExpanded,
-  extra,
-}: RunHeroProps) {
+const MORE_KEY = 'qym:run-hero-more';
+
+/** Band 3: the chip groups, clamped to two lines (three on compact), with an exact "+ N more". */
+function ContextBand({
+  groups,
+  runId,
+  stopReason,
+}: {
+  groups: ReturnType<typeof headerChips>;
+  runId: string;
+  stopReason: string;
+}) {
+  const [open, setOpen] = useState(() => readJson<boolean>(MORE_KEY, false));
+  const [hidden, setHidden] = useState(0);
+  const flow = useRef<HTMLDivElement>(null);
+  const total = groups.reduce((n, g) => n + g.chips.length, 0);
+  useLayoutEffect(() => {
+    const el = flow.current;
+    if (!el) return undefined;
+    const measure = () => {
+      if (open) {
+        setHidden(0);
+        return;
+      }
+      const limit = el.clientHeight;
+      const top = el.getBoundingClientRect().top;
+      const chips = Array.from(el.querySelectorAll<HTMLElement>('[data-chip]'));
+      let n = 0;
+      chips.forEach((c) => {
+        if (c.getBoundingClientRect().bottom - top > limit + 1) n++;
+      });
+      setHidden((prev) => (prev === n ? prev : n));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open, groups]);
+  const toggle = () =>
+    setOpen((v) => {
+      writeJson(MORE_KEY, !v);
+      return !v;
+    });
+  const showButton = open || hidden > 0;
+  return (
+    <div
+      className={styles.context}
+      role="group"
+      aria-label="Versioning, config and metadata"
+      data-testid="hero-context"
+    >
+      <div className={styles.contextRow}>
+        <div
+          ref={flow}
+          id="run-hero-chips"
+          className={styles.flow}
+          data-open={open ? '' : undefined}
+          data-total={total}
+        >
+          {groups.map((g) => (
+            <div key={g.label} role="list" aria-label={g.label} className={styles.group}>
+              {g.chips.map((c, i) => {
+                const chip = (
+                  <span role="listitem" data-chip="" className={styles.chipItem}>
+                    <KeyValueTag label={c.label} text={c.text} title={c.title}>
+                      {open && c.raw !== undefined ? (
+                        <JsonPreview value={c.raw} title={c.key} compact />
+                      ) : undefined}
+                    </KeyValueTag>
+                  </span>
+                );
+                return i === 0 ? (
+                  <span key={c.key} className={styles.lead}>
+                    <span className={styles.groupLabel} aria-hidden="true">
+                      {g.label}
+                    </span>
+                    {chip}
+                  </span>
+                ) : (
+                  <span key={c.key} className={styles.chipWrap}>
+                    {chip}
+                  </span>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        {showButton ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={styles.moreBtn}
+            aria-expanded={open}
+            aria-controls="run-hero-more"
+            onPress={toggle}
+            iconEnd={<Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />}
+          >
+            {open ? 'Show less' : `+ ${hidden} more`}
+          </Button>
+        ) : null}
+      </div>
+      <Collapse open={open} id="run-hero-more">
+        <dl className={styles.moreFacts}>
+          <Fact label="Run ID">
+            <span className={styles.mono}>{runId}</span>
+          </Fact>
+          <Fact label="Stop reason">{stopReason}</Fact>
+        </dl>
+      </Collapse>
+    </div>
+  );
+}
+
+export function RunHero({ run, model, live, passSummary, slug, listParam, basePath }: RunHeroProps) {
   const samples = model.samples;
   const viewPass = model.viewPass;
   const pass = viewPass ? passSummary : null;
@@ -118,8 +220,8 @@ export function RunHero({
   const modelName = run.model_name ?? (run.config?.model as string | undefined) ?? '';
   const links = runEntityLinks(run, slug);
   const warning = ingestWarning(run);
-  const context = executionContextEntries(run);
-  const version = [run.git_branch, run.git_commit].filter(Boolean).join(' • ');
+  const groups = headerChips(run);
+  const stop = viewPass ? null : stopReasonLine(run);
   const runningPass =
     !viewPass && samples > 1 && liveNow
       ? ` • pass ${Math.min((run.last_completed_pass ?? 0) + 1, samples)}/${samples}`
@@ -141,37 +243,36 @@ export function RunHero({
     >
       <div className={styles.heroBody}>
         <div className={styles.top}>
-          <div className={styles.identity}>
-            <div className={styles.headline}>
-              <h1
-                className={styles.name}
-                data-id={isBareRunId(run.run_name || run.run_id, run.run_id) ? '' : undefined}
-                title={run.run_name || run.run_id}
+          <div className={styles.headline}>
+            <h1
+              className={styles.name}
+              data-id={isBareRunId(run.run_name || run.run_id, run.run_id) ? '' : undefined}
+              title={run.run_name || run.run_id}
+            >
+              {run.run_name || run.run_id}
+            </h1>
+            {viewPass ? (
+              <Link
+                className={styles.passPill}
+                to={basePath}
+                title={`Viewing pass ${viewPass} of ${samples}. Return to all passes.`}
               >
-                {run.run_name || run.run_id}
-              </h1>
-              {viewPass ? (
-                <Link
-                  className={styles.passPill}
-                  to={basePath}
-                  title={`Viewing pass ${viewPass} of ${samples}. Return to all passes.`}
-                >
-                  Pass {viewPass}/{samples}
-                </Link>
-              ) : samples === 1 && model.isRepeat ? (
-                <Link
-                  className={styles.passPill}
-                  to={`${basePath}?pass=1`}
-                  title="View the remaining pass and its reviews"
-                >
-                  Pass 1
-                </Link>
-              ) : samples > 1 ? (
-                <Tag kind="count" title={`${samples} passes per item`}>
-                  x{samples} passes
-                </Tag>
-              ) : null}
-            </div>
+                Pass {viewPass}/{samples}
+              </Link>
+            ) : samples === 1 && model.isRepeat ? (
+              <Link
+                className={styles.passPill}
+                to={`${basePath}?pass=1`}
+                title="View the remaining pass and its reviews"
+              >
+                Pass 1
+              </Link>
+            ) : samples > 1 ? (
+              <Tag kind="count" title={`${samples} passes per item`}>
+                x{samples} passes
+              </Tag>
+            ) : null}
+            <CopyButton text={run.run_id} label="Copy run id" />
           </div>
           <div className={styles.right}>
             <span title={!viewPass && run.status_reason_label ? run.status_reason_label : undefined}>
@@ -195,48 +296,17 @@ export function RunHero({
               Export HTML
             </LinkButton>
             <RunPager runId={run.run_id} slug={slug} listParam={listParam} />
-            <IconButton
-              label={expanded ? 'Hide run details' : 'Show run details'}
-              icon={expanded ? 'chevron-up' : 'chevron-down'}
-              aria-expanded={expanded}
-              aria-controls="run-hero-details"
-              onPress={onToggleExpanded}
-            />
           </div>
         </div>
-
-        <div className={styles.strip} data-testid="run-hero-strip">
-          <MetaLink to={links.task} title={`Runs of task ${run.task_name}`}>
-            <TaskTag name={run.task_name} />
-          </MetaLink>
-          <MetaLink to={links.dataset} title={links.datasetTitle}>
-            <DatasetTag
-              name={run.dataset_name}
-              version={run.dataset_version}
-              aliases={run.dataset_aliases}
-            />
-          </MetaLink>
-          {modelName ? (
-            <MetaLink to={links.model} title={`Runs of model ${modelName}`}>
-              <ModelTag
-                name={modelName}
-                title={modelName}
-                reasoning={!!(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning}
-              />
-            </MetaLink>
-          ) : null}
-          <span className={styles.facts}>
-            <span className={styles.fact}>
-              <span className={styles.factLabel}>Started</span> {formatIsoDateTime(timing.startedAt)}
-            </span>
-            <span className={styles.fact}>
-              <span className={styles.factLabel}>Runtime</span>{' '}
-              <span data-testid="hero-runtime" className={styles.mono}>
-                {runtimeMs != null ? formatDurationMs(runtimeMs) : '—'}
-              </span>
-            </span>
-          </span>
-        </div>
+        {stop ? (
+          <p
+            className={styles.stop}
+            data-danger={stop.danger ? '' : undefined}
+            data-testid="hero-stop-reason"
+          >
+            {stop.text}
+          </p>
+        ) : null}
 
         {warning ? (
           <div className={styles.banner} role="status" data-testid="ingest-warning">
@@ -293,49 +363,56 @@ export function RunHero({
           </div>
         ) : null}
 
-        <div id="run-hero-details" hidden={!expanded} className={styles.details}>
-          <dl className={styles.metaGrid}>
-            <Meta label="Owner" title={ownerLabel}>
-              <MetaLink to={links.owner} title={`Runs owned by ${ownerLabel}`}>
-                {ownerLabel}
-              </MetaLink>
-            </Meta>
-            <Meta label="Project" title={projectName}>
-              <MetaLink to={links.project} title={`Runs in ${projectName}`}>
-                {projectName}
-              </MetaLink>
-            </Meta>
-            <Meta label="Version">{version ? <span className={styles.mono}>{version}</span> : null}</Meta>
-            {viewPass ? null : <Meta label="Stop reason">{run.status_reason_label ?? ''}</Meta>}
-          </dl>
-
-          {context.length ? (
-            <div className={styles.context}>
-              <Text variant="sm" tone="muted" className={styles.contextTitle}>
-                Execution context
-              </Text>
-              <KeyValueGrid
-                columns={3}
-                dense
-                aria-label="Execution context"
-                items={context.map((entry) => ({
-                  key: `${entry.group}:${entry.key}`,
-                  label: entry.label,
-                  kind: entry.group === 'Config' ? 'config' : 'metadata',
-                  mono: !entry.json,
-                  value: entry.json ? (
-                    <JsonPreview value={entry.raw} title={entry.label} compact />
-                  ) : (
-                    <span className={styles.ctxVal} title={entry.value}>
-                      {entry.value}
-                    </span>
-                  ),
-                }))}
+        <dl className={styles.facts} aria-label="Run facts" data-testid="run-hero-strip">
+          <Fact label="Task">
+            <MetaLink to={links.task} title={`Runs of task ${run.task_name}`}>
+              <TaskTag name={run.task_name} />
+            </MetaLink>
+          </Fact>
+          <Fact label="Dataset">
+            <MetaLink to={links.dataset} title={links.datasetTitle}>
+              <DatasetTag
+                name={run.dataset_name}
+                version={run.dataset_version}
+                aliases={run.dataset_aliases}
               />
-            </div>
-          ) : null}
-          {extra ? <div className={styles.context}>{extra}</div> : null}
-        </div>
+            </MetaLink>
+          </Fact>
+          <Fact label="Model">
+            {modelName ? (
+              <MetaLink to={links.model} title={`Runs of model ${modelName}`}>
+                <ModelTag
+                  name={modelName}
+                  title={modelName}
+                  reasoning={!!(pass ? pass.trace_stats : run.trace_stats)?.has_reasoning}
+                />
+              </MetaLink>
+            ) : null}
+          </Fact>
+          <Fact label="Owner" title={ownerLabel}>
+            <MetaLink to={links.owner} title={`Runs owned by ${ownerLabel}`}>
+              {ownerLabel}
+            </MetaLink>
+          </Fact>
+          <Fact label="Project" title={projectName}>
+            <MetaLink to={links.project} title={`Runs in ${projectName}`}>
+              {projectName}
+            </MetaLink>
+          </Fact>
+          <Fact label="Started">{formatIsoDateTime(timing.startedAt)}</Fact>
+          <Fact label="Runtime">
+            <span data-testid="hero-runtime" className={styles.mono}>
+              {runtimeMs != null ? formatDurationMs(runtimeMs) : '—'}
+            </span>
+          </Fact>
+        </dl>
+        {groups.length ? (
+          <ContextBand
+            groups={groups}
+            runId={run.run_id}
+            stopReason={viewPass ? '' : (run.status_reason_label ?? '')}
+          />
+        ) : null}
       </div>
     </Card>
   );

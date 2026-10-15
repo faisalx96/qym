@@ -130,4 +130,21 @@ test.describe('axe', () => {
       });
     }
   }
+
+  // Round 3 P5-16: expanded items (Arabic and the 10-pass x 24-metric item) have no serious violation at both widths.
+  for (const [label, item] of [
+    ['Arabic 10-pass item', 'big-002'],
+    ['wide repeat item', 'big-001'],
+  ] as const) {
+    for (const width of [1440, 390]) {
+      test(`${label} expanded has no serious violation at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await openRun(page, s.slug, wide, `item=${item}`);
+        await expect(page.locator(`[data-testid=item-card][data-item-id="${item}"]`)).toBeVisible();
+        const violations = await axeSeriousViolations(page, '#shell-content');
+        const bad = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+        expect(bad, describeViolations(bad)).toEqual([]);
+      });
+    }
+  }
 });
