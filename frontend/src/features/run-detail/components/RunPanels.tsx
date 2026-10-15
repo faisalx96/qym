@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { projectPath } from '@/app/routes';
 import { useReviewHistoryQuery } from '@/api/runs';
-import { Badge, JsonPreview, LinkButton, Tag, Card } from '@/ui';
+import { Badge, LinkButton, Tag, Card } from '@/ui';
 import { formatIsoDateTime, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
 import type { ReviewHistoryEvent, Run } from '../types';
 import styles from './RunPanels.module.css';
@@ -62,49 +62,6 @@ export function ReviewHistory({ runId, status }: { runId: string; status: string
         ))}
       </ol>
     </Card>
-  );
-}
-
-function FlatSection({
-  children,
-  ...rest
-}: {
-  children: React.ReactNode;
-  'aria-label': string;
-  'data-testid': string;
-}) {
-  return (
-    <section {...rest} className={styles.flat}>
-      {children}
-    </section>
-  );
-}
-
-export function VersioningDetails({ run, flat }: { run: Run; flat?: boolean }) {
-  const entries = Object.entries(run.versioning_details ?? {}).sort(([a], [b]) => a.localeCompare(b));
-  if (!entries.length) return null;
-  const Wrapper = flat ? FlatSection : Card;
-  return (
-    <Wrapper aria-label="Versioning details" data-testid="versioning-details">
-      <div className={styles.title}>Versioning details</div>
-      <div className={styles.copy}>
-        Keys set by whoever created this run, or by the experiment that launched it.
-      </div>
-      <dl className={styles.kv}>
-        {entries.map(([key, value]) => (
-          <div className={styles.kvRow} key={key}>
-            <dt className={styles.kvKey}>{key}</dt>
-            <dd className={styles.kvVal}>
-              {value !== null && typeof value === 'object' ? (
-                <JsonPreview value={value} title={key} compact />
-              ) : (
-                String(value ?? '—')
-              )}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </Wrapper>
   );
 }
 
