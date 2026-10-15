@@ -121,6 +121,58 @@ runs are serialized through a lock when several agents share the machine.
 | `npm run e2e:sdk` | 42 passed |
 | `pytest -q -n 4 tests/platform tests/sdk tests/test_restructure.py` | 3338 passed, 744 skipped, 0 failed |
 
+## Redesign round 2 (2026-10-14/15, `ui/redesign2-*`, `ui/final-*`, `ui/design-pass`)
+
+Second product QA round: runs page (filters inline, column order and freezing, passes analysis), run detail
+(grey boxes, repeat analysis, collapsed trace steps, one visual per row in deep analysis, categories, item
+expansion with RTL input, JSON output split per key, metric panel like the old design), traces viewer, compare
+page, and "interactive instead of static single colours". Follow-ups asked for during the round: static frozen
+column names, an explicit Analyze button, old-design task/dataset/model tags, versions on the experiments home,
+global override sweeps, every schema list as an override table, raw JSON hidden on review, then a colour review
+and a typeface study with the winner implemented. Same cycle as round 1: briefs `redesign2/<area>.md`, one
+branch per area, independent review `redesign2/review-<area>.md`, fix passes, `--no-ff` merge.
+
+| Area | Branch and merge | Review rounds | Outcome |
+|---|---|---|---|
+| Visual-language foundation | `ui/redesign2-visual-language`, 9abcdecf; polish f4bb9bcd | review + polish | tone/band/series tint recipe in `tones.css`, hover and focus rules, chart highlight, hover audit spec |
+| Runs page | `ui/redesign2-runs-page`, 8a74b7aa | review (2 CSS blockers) + fix | inline facets, column manager with frozen and scrolling groups, drag and keyboard reorder, passes panel |
+| Run detail and traces | `ui/redesign2-run-detail`, 84436948 | review + fix | flat item sections, repeat panel, collapsed trace rows, one visual per row, category keys, JSON sections, metric reason panel, trace drawer |
+| Runs polish | `ui/redesign2-runs-polish`, a96959fb | review + fix | frozen band cells cut at the freeze line, `AnalyzeAction` with states (`POST /api/analysis-jobs/active-runs`), `ui/EntityTag` |
+| Experiments creation | `ui/redesign2-experiments-versions`, 8dab3e1b | review + polish | versions card on home, global sweeps (one run per value, zipped in `doc.links`), `listTableModel` override tables for every schema list, raw JSON behind a button |
+| Compare | `ui/redesign2-compare`, b4c21515 | review + fix + re-review | RunTag identity, 44 px sticky bar, metric-rows x run-columns averages, category/error cards, aligned items, run-focus dimming |
+| Final consolidated review | `ui/final-review`, f86ce560 | review (16/18 met, 2 partly) + fix pass (17 findings) + re-review (Pass) | run header 95 px, RTL key headers left-anchored, heatmap capped, a11y on the repeat panel, 390 px overflows, bar/page-width tokens, `RunName`, `promptPreview`, `useScrollCue`, `Card rail` |
+| Design pass | `ui/design-pass`, 7e2e6242 | review (MEETS WITH FIXES) + fix + re-review (MEETS) | self-hosted IBM Plex Sans / Plex Sans Arabic / Plex Mono (7 subset woff2, 138 KB, OFL), metric-matched fallbacks, tabular numerals in tables, CVD-checked series palette and score ramp, stronger hairlines, `typeface-study.md` and `colour-review.md` |
+| Final polish | `ui/final-polish`, 3cd22bb8 | implementation + targeted gate | analysis hover, 56 px action bars, entity tags on Overview/Admin, analysis headings, `Card` everywhere, compact error cards, single `WizardBar`, sweep headings |
+
+Typeface decision: IBM Plex, because its Arabic and Latin were designed together (optical-size ratio 0.95 versus
+0.78 to 1.04 for the other pairings), one family covers UI, Arabic and data with real tabular figures, and the
+self-hosted subset costs 138 KB with no layout shift on swap. Export templates keep the system stack on purpose;
+the SDK viewer inlines the fonts (about 384 KB). Known cosmetic issue: some bold Plex pairs in tracked uppercase
+labels ("DAT E") rasterise unevenly in headless Chromium on Linux; `text-rendering: geometricPrecision` is a
+mitigation only.
+
+Deferred from round 2: compare of 2 runs has no baseline select (product decision); runs-list phone drawer is a
+side panel rather than a bottom sheet; the home sticky bar covers lower cards at 390; experiments object-list
+columns are covered by Vitest only; the run items toolbar wraps to two rows between 761 and 1439 px; bespoke card
+frames remain in analyzer guidance, datasets and reviews; `e2e:sdk` `qa-fixes.spec.ts:140` (elapsed clock) is a
+timing flake under parallel load. Backend: `POST /api/analysis-jobs/active-runs` is classified as a read.
+
+Process note: a second session kill (systemd-oomd on sustained user-slice memory pressure, no true OOM) led to
+`scripts/heavy.sh`: memory admission, machine-sized slots, worker caps from available memory, and a transient
+cgroup with `MemoryHigh` so a test run dies instead of the session. Every full suite and build in this round ran
+through it. Docker: the UI build moved to `docker/Dockerfile.frontend` with `FRONTEND_IMAGE` / `CUSTOM_FRONTEND_IMAGE`
+(commit 21890fda).
+
+### Final gate on `UI-redesign` 3cd22bb8
+
+| Suite | Result |
+|---|---|
+| `npm run check` | clean; Vitest 1265 tests, design-language 49 |
+| `npm run build`, `npm run build:sdk` | ok |
+| Full Playwright (`heavy.sh`, workers from memory) | 1142 passed, 12 skipped, 0 failed (23.8 min) |
+| `npm run e2e:sdk` | 42 passed |
+| `pytest -q -n 2 tests/sdk`, `tests/platform` (platform in 4 chunks; one `-n 2` run was killed by the heavy.sh memory cap) | 3263 passed, 744 skipped, 0 failed |
+
 ## Known gaps to decide on
 
 Collected from every area's `decisions/<area>/OPEN_QUESTIONS.md`; read those for the full lists.
