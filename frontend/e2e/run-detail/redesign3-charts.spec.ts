@@ -159,7 +159,7 @@ for (const width of WIDTHS) {
       expect(orphans).toBe(0);
     });
 
-    test('P1-4, P1-6: plots in one overview row are level, a numeric card centres its stat cells', async ({
+    test('P1-4: plots in one overview row are level (the numeric card is a box plot since P7)', async ({
       page,
     }) => {
       await openRun(page, s.slug, classic);
@@ -169,7 +169,7 @@ for (const width of WIDTHS) {
         const byRow = new Map<number, Array<{ metric: string | null; plot: number }>>();
         for (const c of cards) {
           const top = Math.round(c.getBoundingClientRect().top);
-          const plot = c.querySelector('[role=group]')!.getBoundingClientRect().height;
+          const plot = c.querySelector('[data-slot]')!.getBoundingClientRect().height;
           byRow.set(top, [...(byRow.get(top) ?? []), { metric: c.getAttribute('data-metric'), plot }]);
         }
         return Array.from(byRow.values());
@@ -178,15 +178,14 @@ for (const width of WIDTHS) {
         const hs = row.map((r) => r.plot);
         expect(Math.max(...hs) - Math.min(...hs), JSON.stringify(row)).toBeLessThanOrEqual(16);
       }
-      const centre = await page.evaluate(() => {
-        const card = document.querySelector('[data-testid=metric-card][data-metric=tokens_used]')!;
-        const slot = card.querySelector('[data-slot]')!.getBoundingClientRect();
-        const cells = Array.from(card.querySelectorAll('[role=group] > div > span'));
-        const top = Math.min(...cells.map((c) => c.getBoundingClientRect().top));
-        const bottom = Math.max(...cells.map((c) => c.getBoundingClientRect().bottom));
-        return { above: top - slot.top, below: slot.bottom - bottom };
-      });
-      expect(Math.abs(centre.above - centre.below)).toBeLessThanOrEqual(4);
+      // round 3 P7 replaced the Min / Avg / Max / Total cells: a numeric card holds a box plot and its number row
+      const card = page.locator('[data-testid=metric-card][data-metric=tokens_used]');
+      await expect(card.getByRole('img', { name: /^tokens_used/ })).toBeVisible();
+      await expect(
+        card
+          .getByRole('group', { name: 'Distribution values' })
+          .or(card.locator('dl[aria-label="Distribution values"]')),
+      ).toBeVisible();
     });
 
     test('P1-5: a boolean metric is a three column bar chart, no horizontal split bar remains', async ({

@@ -24,6 +24,7 @@ import {
 import { useRunPage } from '../../RunContext';
 import { Curve, CurveLegend, PassCountBars, type CurvePoint } from '../charts/Charts';
 import { ChartCard } from '../charts/ChartCard';
+import { PassDistribution } from './PassDistribution';
 import { PassTable } from './PassTable';
 import { RepeatTiles } from './RepeatTiles';
 import styles from './Repeat.module.css';
@@ -253,6 +254,13 @@ export function RepeatTab() {
             </ChartCard>
           ) : null}
         </div>
+      ) : null}
+      {donePasses.length && !boolean ? (
+        <PassDistribution
+          metric={metric}
+          passes={donePasses}
+          kind={model.metricTypes[metric] === 'numeric' ? 'numeric' : 'percent'}
+        />
       ) : null}
       {donePasses.length ? (
         <PassTable

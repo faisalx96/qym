@@ -476,6 +476,13 @@ is not allowed.
   status, Export, pager; a stop reason is one muted line under it). Band 2 seven labelled facts (`dl`, 7 / 4 / 2 columns by
   column width). Band 3 `KeyValueTag` chips (24px passive key / value, key at most 20 characters, value at most 30) in the groups
   Versioning, Config, Metadata, clamped to two lines (three on a phone) with an exact "+ N more" (`qym:run-hero-more`).
+- **Box plot** (`run-detail/components/charts/BoxPlot.tsx`, round 3 P7): the one glyph set for a distribution: box p25 to p75, a
+  2.5px median line, whiskers p5 to p95 with caps, a hollow mean diamond, dots outside the whiskers (at most 40 per side, min and max
+  always kept). Grey only (`--text-secondary` / `--text-primary` / `--text-muted`; the slow latency tail `--score-2`); no new
+  colour. A plot card holds the plot, a six-cell number row (Min, P25, Median, Mean, P75, Max; "Med" under 300px), a Total row for
+  additive quantities only (numeric metrics, tokens, cost; never latency, scores or negative values) and a legend. The picture
+  is one `role="img"` named by a sentence; the clickable marks (box, whiskers, min, max) are a transparent overlay in tab order.
+  Rows (`BoxTrack`) draw the same glyph per pass and per step.
 - **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
   `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
   of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`): each bucket is a

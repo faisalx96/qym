@@ -46,9 +46,46 @@ import {
   type ScatterPoint,
   type ScatterQuadrants,
 } from '../charts/Charts';
+import { useBoxFilter } from '../charts/BoxCard';
+import { BoxPlot, BoxTrack, boxSentence } from '../charts/BoxPlot';
 import { ChartCard } from '../charts/ChartCard';
+import { selectedPart } from '../../lib/boxFilters';
+import { boxStats } from '../../lib/boxStats';
 import styles from './Latency.module.css';
 import panel from './Panels.module.css';
+
+/** The response-time box strip: same x scale as the histogram above it (round 3 P7). */
+function LatencyStrip({ items, lo, hi }: { items: LatencyItem[]; lo: number; hi: number }) {
+  const { active, onRange, openItem } = useBoxFilter('latency');
+  const stats = useMemo(() => boxStats(items.map((i) => i.latency)), [items]);
+  const byValue = useMemo(() => {
+    const m = new Map<number, string>();
+    items.forEach((i) => m.has(i.latency) || m.set(i.latency, i.itemId));
+    return m;
+  }, [items]);
+  const axis = useMemo(
+    () => ({ domain: [lo, hi] as [number, number], ticks: [], clipped: false, beyond: 0 }),
+    [lo, hi],
+  );
+  if (stats.n < 2) return null;
+  return (
+    <BoxPlot
+      variant="strip"
+      stats={stats}
+      axis={axis}
+      format={(v) => durText(v)}
+      tailTone
+      name={boxSentence('Response time', stats, (v) => durText(v))}
+      selected={selectedPart(active, stats)}
+      onRange={onRange}
+      onItem={(v) => {
+        const id = byValue.get(v);
+        if (id) openItem(id);
+      }}
+      itemLabel={(v) => byValue.get(v)}
+    />
+  );
+}
 
 function ResponseTime({ items }: { items: LatencyItem[] }) {
   const { api } = useRunPage();
@@ -121,6 +158,12 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
                 <em>{p.key}</em> <b>{durText(p.ms)}</b>
               </button>
             ))}
+            <span className={styles.pinStatic}>
+              fastest <b>{durText(L.min)}</b>
+            </span>
+            <span className={styles.pinStatic}>
+              slowest <b>{durText(L.max)}</b>
+            </span>
           </div>
         </div>
       }
@@ -130,6 +173,7 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
         axis={false}
         name="Latency histogram, click a bar or shift-click to extend the range"
       />
+      <LatencyStrip items={items} lo={H.lo} hi={H.hi} />
       <div className={styles.axis} aria-hidden="true">
         {H.ticks.map((t) => (
           <span key={t} style={{ insetInlineStart: `${H.xPct(t)}%` }}>
@@ -452,25 +496,19 @@ function Steps({ D }: { D: ReturnType<typeof normalizeLatency> }) {
                 }
               >
                 {Number.isFinite(st.med) ? (
-                  <>
-                    <span
-                      className={styles.whisker}
-                      style={{
-                        insetInlineStart: `${axis.x(st.p5)}%`,
-                        width: `${Math.max(0.5, axis.x(st.p95) - axis.x(st.p5))}%`,
-                        background: tone,
-                      }}
-                    />
-                    <span
-                      className={styles.box}
-                      style={{
-                        insetInlineStart: `${axis.x(st.p25)}%`,
-                        width: `${Math.max(0.8, axis.x(st.p75) - axis.x(st.p25))}%`,
-                        background: tone,
-                      }}
-                    />
-                    <span className={styles.median} style={{ insetInlineStart: `${axis.x(st.med)}%` }} />
-                  </>
+                  <BoxTrack
+                    stats={{
+                      p5: st.p5,
+                      p25: st.p25,
+                      median: st.med,
+                      mean: st.mean,
+                      p75: st.p75,
+                      p95: st.p95,
+                    }}
+                    x={(v) => axis.x(v) / 100}
+                    tone={tone}
+                    height={14}
+                  />
                 ) : null}
               </span>
             </div>

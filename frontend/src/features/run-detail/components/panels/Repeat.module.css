@@ -125,3 +125,72 @@
     display: none;
   }
 }
+
+/* "{metric} by pass": one 32px box row per pass on a shared axis. */
+.passDist {
+  min-width: 0;
+}
+
+.passRows {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.passRow {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: var(--space-md);
+  block-size: var(--row-compact);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.passRow:hover {
+  background: var(--bg-hover);
+}
+
+.passRow:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.passTag {
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+.passMed::before {
+  content: attr(data-text);
+}
+
+.passMed {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  text-align: end;
+  color: var(--text-secondary);
+}
+
+.passAxis {
+  position: relative;
+  block-size: 20px;
+  margin-inline: calc(72px + var(--space-md)) calc(52px + var(--space-md));
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.passAxis span {
+  position: absolute;
+  inset-inline-start: calc(var(--x) * 100%);
+  transform: translateX(-50%);
+}
+
+@container (max-width: 559px) {
+  .passAxis span:nth-child(even) {
+    display: none;
+  }
+}

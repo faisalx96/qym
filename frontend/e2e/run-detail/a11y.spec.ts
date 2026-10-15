@@ -147,4 +147,30 @@ test.describe('axe', () => {
       });
     }
   }
+
+  // Round 3 P7-19: the box plot cards (Overview numeric and trace cards, Response time strip, repeat per-pass rows).
+  for (const width of [1440, 390]) {
+    for (const [label, run, panel, ctx] of [
+      ['Overview box plots', () => classic, 'overview', '#run-section-overview'],
+      ['Response time box strip', () => classic, 'latency', '#run-section-latency'],
+      ['Repeat by-pass box rows', () => wide, 'repeat', '#run-section-repeat'],
+    ] as const) {
+      test(`${label} have no serious violation at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await openRun(
+          page,
+          s.slug,
+          run(),
+          `panel=${panel}${panel === 'repeat' ? '&metric=rubric_metric_01' : ''}`,
+        );
+        await expect(page.locator(ctx)).toBeInViewport();
+        if (panel === 'repeat')
+          await expect(page.getByRole('region', { name: 'rubric_metric_01 by pass' })).toBeVisible();
+        if (panel === 'overview') await expect(page.locator('svg[role=img]').first()).toBeVisible();
+        const violations = await axeSeriousViolations(page, ctx);
+        const bad = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+        expect(bad, describeViolations(bad)).toEqual([]);
+      });
+    }
+  }
 });

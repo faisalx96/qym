@@ -261,26 +261,6 @@ export function Histogram({
   return <BarColumns bars={bars} name={`${metric} score distribution`} />;
 }
 
-/** Min / Avg / Max / Total of a numeric metric: centred cells in the plot slot, divided by hairlines. */
-export function NumericCells({
-  name,
-  cells,
-}: {
-  name: string;
-  cells: Array<{ key: string; label: string; value: string }>;
-}) {
-  return (
-    <div className={styles.cells} role="group" aria-label={name}>
-      {cells.map((c) => (
-        <div key={c.key} className={styles.cell}>
-          <span className={styles.cellLabel}>{c.label}</span>
-          <span className={styles.cellValue}>{c.value}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function BandValue({
   value,
   type,

@@ -24,6 +24,8 @@
 
 .pins {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-xs);
 }
 
@@ -58,6 +60,20 @@
 }
 
 .pin b {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.pinStatic {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding-block: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.pinStatic b {
   font-family: var(--font-mono);
   color: var(--text-primary);
 }
@@ -251,29 +267,6 @@
 .interval {
   position: relative;
   height: 14px;
-}
-
-.whisker {
-  position: absolute;
-  top: 6px;
-  height: 2px;
-  opacity: 0.5;
-}
-
-.box {
-  position: absolute;
-  top: 2px;
-  height: 10px;
-  border-radius: 2px;
-  opacity: 0.85;
-}
-
-.median {
-  position: absolute;
-  top: 0;
-  width: 2px;
-  height: 14px;
-  background: var(--text-primary);
 }
 
 .axisRow {

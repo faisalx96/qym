@@ -87,6 +87,8 @@ export interface MetricCardModel {
   errorNote: { text: string; title: string } | null;
   kind: 'score' | 'boolean' | 'numeric' | 'empty';
   numeric?: { min: number; max: number; sum: number };
+  /** The item values the header mean averages over (errored items included as 0, or left out for lower-is-better metrics). */
+  values: number[];
   buckets?: ScoreBucket[];
   segments?: BoolSegment[];
   segmentTotal?: number;
@@ -113,12 +115,14 @@ export function metricCardModel(ctx: FilterContext, rows: Row[], metric: string)
   let leftOutRows = 0;
   let cleanSum = 0;
   let cleanCnt = 0;
+  const values: number[] = [];
   const errBuckets = new Array<number>(11).fill(0);
   const taskBuckets = new Array<number>(11).fill(0);
   const bucketOf = (score: number) => Math.min(10, Math.floor(Math.round(score * 100) / 10));
   for (const row of rows) {
     const { score, isError } = rowScoreFor(ctx, row, mIdx, metric);
     if (score !== null) {
+      values.push(score);
       sum += score;
       cnt++;
       if (score < min) min = score;
@@ -193,6 +197,7 @@ export function metricCardModel(ctx: FilterContext, rows: Row[], metric: string)
     avg,
     scoredCount: cnt,
     errorNote,
+    values,
   };
   if (avg === null) return { ...base, avgText: '—', badge: '0 scored', kind: 'empty' };
 
