@@ -42,8 +42,8 @@
   clip-path: inset(50%);
 }
 
-/* The filter bar stays under the section nav while the table scrolls (wide, tall viewports only: it is one
-   --bar-action-h row, which needs the room; narrower it wraps and scrolls with the table). */
+/* The filter bar stays under the section nav while the table scrolls (tall viewports only). At 1440+ it is exactly
+   one --bar-action-h row (below); narrower it wraps onto a second line (the controls need about 1190px). */
 .sticky {
   display: flex;
   flex-direction: column;
@@ -51,7 +51,7 @@
   background: var(--bg-void);
 }
 
-@media (min-width: 1440px) and (min-height: 640px) {
+@media (min-width: 761px) and (min-height: 640px) {
   .sticky {
     position: sticky;
     min-height: var(--bar-action-h);
