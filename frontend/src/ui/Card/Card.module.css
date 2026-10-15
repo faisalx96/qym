@@ -46,6 +46,10 @@
   padding: var(--card-padding-compact);
 }
 
+.card[data-flush] > .body {
+  padding: 0;
+}
+
 .header {
   border-bottom: 1px solid var(--border-subtle);
 }

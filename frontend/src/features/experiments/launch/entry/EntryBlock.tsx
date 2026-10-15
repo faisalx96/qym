@@ -1,3 +1,4 @@
+import { Card } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import { Callout } from '../components/Callout';
 import panel from '../components/launch.module.css';
@@ -14,16 +15,22 @@ export function EntryBlock() {
       {readOnly ? (
         <Callout tone="warning">This project is archived, so nothing can be launched.</Callout>
       ) : null}
-      <section className={panel.panel} aria-label="Name and priority">
-        <RunSettings />
-      </section>
+      <Card as="section" aria-label="Name and priority">
+        <div className={panel.cardStack}>
+          <RunSettings />
+        </div>
+      </Card>
       <div className={styles.where}>
-        <div className={panel.panel}>
-          <EnvironmentPicker />
-        </div>
-        <div className={panel.panel}>
-          <DatasetPicker />
-        </div>
+        <Card>
+          <div className={panel.cardStack}>
+            <EnvironmentPicker />
+          </div>
+        </Card>
+        <Card>
+          <div className={panel.cardStack}>
+            <DatasetPicker />
+          </div>
+        </Card>
       </div>
     </div>
   );

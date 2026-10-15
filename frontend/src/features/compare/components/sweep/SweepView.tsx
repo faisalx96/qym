@@ -15,6 +15,7 @@ import {
   ReportLayout,
   ScopeBar,
   SearchField,
+  SectionHeader,
   Select,
   Tag,
   Text,
@@ -537,9 +538,7 @@ export function SweepView() {
         ) : (
           <>
             <section aria-label="Cohort metrics">
-              <Text variant="md" weight={600}>
-                Cohort metrics
-              </Text>
+              <SectionHeader title="Cohort metrics" />
               <div className={styles.stats}>
                 <StatCard
                   label={estimated ? `Pass@${estimated}` : `Pass@${k}`}
@@ -590,9 +589,7 @@ export function SweepView() {
 
             {brows.length ? (
               <section aria-label={`Cohort metrics by ${bk}`}>
-                <Text variant="md" weight={600}>
-                  Cohort metrics by {bk}
-                </Text>
+                <SectionHeader title={`Cohort metrics by ${bk}`} />
                 <ScrollRegion className={styles.scroll} label={`${bk} breakdown`}>
                   <table className={styles.table}>
                     <thead>
@@ -658,9 +655,7 @@ export function SweepView() {
             ) : null}
 
             <section aria-label="Outcome summary">
-              <Text variant="md" weight={600}>
-                Outcome summary
-              </Text>
+              <SectionHeader title="Outcome summary" />
               <div className={styles.outcomes}>
                 {[
                   ['Total items', shown.length, null, undefined],

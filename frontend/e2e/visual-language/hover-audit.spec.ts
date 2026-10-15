@@ -5,7 +5,7 @@
  * PENDING lists known dead clickables owned by an area application (A1 to A3); it may only shrink (an entry that
  * no longer appears is removed by hand: which samples are on screen depends on the seeded data).
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { cohortUrl, compareUrl } from '../compare/support';
 import { gotoApp } from '../helpers';
 import { runUrl } from '../run-detail/support';
@@ -240,9 +240,37 @@ test.describe('hover audit', () => {
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await settled(page);
       const after = await page.screenshot({ clip });
-      expect(Buffer.compare(before, after), `${row.name}: the row did not change under the pointer`).not.toBe(0);
+      expect(Buffer.compare(before, after), `${row.name}: the row did not change under the pointer`).not.toBe(
+        0,
+      );
     });
   }
+
+  // Final polish F7: the analysis disclosures and the mapping's "Full value" buttons answer hover too.
+  test('analysis: Input mapping, More options and Full value answer hover', async ({ page }) => {
+    await gotoApp(page, `/projects/${areas.analysisSlug}/analysis?run=${areas.runId}`);
+    await expect(page.getByRole('region', { name: 'Analysis actions' })).toBeVisible();
+    const hoverChanges = async (loc: Locator, label: string) => {
+      await loc.scrollIntoViewIfNeeded();
+      await settled(page);
+      await page.mouse.move(0, 0);
+      await settled(page);
+      const box = (await loc.boundingBox())!;
+      const clip = { x: box.x - 2, y: box.y - 2, width: box.width + 4, height: box.height + 4 };
+      const before = await page.screenshot({ clip });
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await settled(page);
+      const after = await page.screenshot({ clip });
+      expect(Buffer.compare(before, after), `${label}: no change under the pointer`).not.toBe(0);
+    };
+    const mapping = page.getByRole('button', { name: /Input mapping/ });
+    await hoverChanges(mapping, 'Input mapping');
+    await hoverChanges(page.getByRole('button', { name: /More options/ }), 'More options');
+    if ((await mapping.getAttribute('aria-expanded')) !== 'true') await mapping.click();
+    const full = page.getByRole('button', { name: 'Full value' }).first();
+    await expect(full).toBeVisible();
+    await hoverChanges(full, 'Full value');
+  });
 
   test('the Export HTML link answers hover and press', async ({ page }) => {
     await gotoApp(page, runUrl(tour.slug, tour.runId));

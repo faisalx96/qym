@@ -25,6 +25,17 @@ import { RateBar } from '@/features/run-detail/components/charts/Charts';
 afterEach(() => vi.useRealTimers());
 
 describe('Card', () => {
+  it('renders as an aside and marks a flush (0-padding table) card', () => {
+    render(
+      <>
+        <Card as="aside" aria-label="Review" flush data-testid="f" />
+      </>,
+    );
+    const el = screen.getByTestId('f');
+    expect(el.tagName).toBe('ASIDE');
+    expect(el).toHaveAttribute('data-flush', '');
+  });
+
   it('is passive by default: no role, no interactive attribute, tone sets the rail', () => {
     const { container } = render(
       <Card tone="danger" data-testid="c">

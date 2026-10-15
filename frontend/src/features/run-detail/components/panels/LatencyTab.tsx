@@ -5,6 +5,7 @@ import { platformUrl } from '@/lib/runtime';
 import { formatPercent, isErrorRow, isNotReceivedRow } from '@/lib/metrics';
 import {
   Button,
+  Card,
   ChartTooltipHost,
   Chip,
   ErrorState,
@@ -252,7 +253,7 @@ function Kinds({ D }: { D: ReturnType<typeof normalizeLatency> }) {
   return (
     <div className={styles.kinds}>
       {panels.map((p) => (
-        <section key={p.family} className={styles.kind} aria-label={FAMILY_LABEL[p.family]}>
+        <Card as="section" compact key={p.family} aria-label={FAMILY_LABEL[p.family]}>
           <header className={styles.kindHead}>
             <span
               className={styles.swatch}
@@ -275,7 +276,7 @@ function Kinds({ D }: { D: ReturnType<typeof normalizeLatency> }) {
               </div>
             ))}
           </dl>
-        </section>
+        </Card>
       ))}
     </div>
   );

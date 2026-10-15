@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useMediaQuery } from '@/features/shell';
-import { Skeleton, Stepper } from '@/ui';
+import { Card, Skeleton, Stepper } from '@/ui';
 import { plural } from '../../lib/format';
 import { EntryBlock } from '../entry/EntryBlock';
 import { StartFrom } from '../entry/StartFrom';
@@ -9,8 +9,8 @@ import panel from '../components/launch.module.css';
 import { useLaunch } from '../LaunchContext';
 import styles from '../LaunchPage.module.css';
 import { axesOf, buildSpec, datasetChanged } from '../model';
-import { MobileLaunchBar } from '../review/MobileLaunchBar';
 import { ReviewPane } from '../review/ReviewPane';
+import { WizardBar } from '../review/WizardBar';
 import { EvaluationSection } from '../sections/EvaluationSection';
 import { ModelsSection } from '../sections/ModelsSection';
 import { RawJsonSection } from '../sections/RawJsonSection';
@@ -147,9 +147,11 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
           description="What the experiment starts from. Your changes are applied on top of it."
         >
           {hasEnv ? (
-            <div className={panel.panel}>
-              <StartFrom />
-            </div>
+            <Card>
+              <div className={panel.cardStack}>
+                <StartFrom />
+              </div>
+            </Card>
           ) : (
             <p className={styles.hint}>Pick an environment first (step 1) to choose a starting point.</p>
           )}
@@ -226,9 +228,14 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
           {review.items.length ? `, ${plural(review.items.length, 'problem')} to fix` : ''}
         </div>
         <div ref={stage}>{body}</div>
-        <StepNav step={step} next={next} prev={prev} onGo={onGo} />
-        {reviewBelow ? <ReviewPane onCancel={onCancel} hideActions /> : null}
-        {reviewBelow ? <MobileLaunchBar onCancel={onCancel} /> : null}
+        {reviewBelow ? (
+          <>
+            <ReviewPane onCancel={onCancel} hideActions />
+            <WizardBar step={step} next={next} prev={prev} onGo={onGo} onCancel={onCancel} />
+          </>
+        ) : (
+          <StepNav step={step} next={next} prev={prev} onGo={onGo} />
+        )}
       </div>
       {showAside ? (
         <div className={styles.aside}>

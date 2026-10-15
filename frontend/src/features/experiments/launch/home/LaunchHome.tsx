@@ -1,3 +1,4 @@
+import { Card } from '@/ui';
 import { Callout } from '../components/Callout';
 import panel from '../components/launch.module.css';
 import { DatasetPicker } from '../entry/DatasetPicker';
@@ -21,18 +22,24 @@ export function LaunchHome({ onCustomize }: { onCustomize: (step: WizardStepId) 
         <Callout tone="warning">This project is archived, so nothing can be launched.</Callout>
       ) : null}
       <div className={styles.where}>
-        <div className={panel.panel}>
-          <EnvironmentPicker />
-        </div>
-        <div className={panel.panel}>
-          <DatasetPicker />
-        </div>
+        <Card>
+          <div className={panel.cardStack}>
+            <EnvironmentPicker />
+          </div>
+        </Card>
+        <Card>
+          <div className={panel.cardStack}>
+            <DatasetPicker />
+          </div>
+        </Card>
       </div>
       <VersionsBlock onCustomize={() => onCustomize('where')} />
       {envRecords.length ? (
-        <div className={panel.panel}>
-          <StartFrom />
-        </div>
+        <Card>
+          <div className={panel.cardStack}>
+            <StartFrom />
+          </div>
+        </Card>
       ) : null}
       <HomeBar onCustomize={onCustomize} />
     </div>

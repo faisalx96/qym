@@ -269,7 +269,8 @@
 
 .errorCards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); /* fit: the cards share the whole row */
+  /* auto-fit with a capped column (about 420px): cards keep a compact width instead of stretching across the row */
+  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 26rem));
   gap: var(--space-sm);
   margin: var(--space-xs) 0 0;
   padding: 0;
@@ -288,9 +289,10 @@
 }
 
 .errorRuns {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+  display: grid;
+  grid-template-columns: minmax(0, max-content) 2rem minmax(2rem, 1fr) 4.5rem;
+  column-gap: var(--space-sm);
+  row-gap: var(--space-xs);
   margin: var(--space-sm) 0 0;
   padding: 0;
   list-style: none;
@@ -298,9 +300,23 @@
 
 .errorRun {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.5rem 5rem;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid; /* every row of a card shares the name / count / bar / change columns */
   align-items: center;
-  gap: var(--space-sm);
+}
+
+/* The count's share of the card's largest count, in the card's tone. */
+.errorBar {
+  block-size: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.errorBar > span {
+  display: block;
+  block-size: 100%;
+  background: var(--tone, var(--text-muted));
 }
 
 .errorNum {

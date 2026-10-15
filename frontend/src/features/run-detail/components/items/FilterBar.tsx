@@ -229,16 +229,20 @@ export function FilterBar({ display }: { display: DisplayState }) {
           {items.length.toLocaleString('en-US')} of {payload.snapshot.rows.length.toLocaleString('en-US')}{' '}
           items
         </Text>
-        {chips.map((chip) => (
-          <Chip
-            key={chip.key}
-            isSelected
-            removeLabel={`Remove filter ${chip.label}`}
-            onRemove={() => api.replaceView(chip.clear(view))}
-          >
-            {chip.label}
-          </Chip>
-        ))}
+        {chips.length ? (
+          <span className={styles.chipList}>
+            {chips.map((chip) => (
+              <Chip
+                key={chip.key}
+                isSelected
+                removeLabel={`Remove filter ${chip.label}`}
+                onRemove={() => api.replaceView(chip.clear(view))}
+              >
+                {chip.label}
+              </Chip>
+            ))}
+          </span>
+        ) : null}
         {filterCount > 0 ? (
           <Button size="sm" variant="ghost" onPress={() => api.clearFilters()} data-testid="clear-filters">
             Clear ({filterCount})

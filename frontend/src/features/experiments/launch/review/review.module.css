@@ -72,35 +72,85 @@
   flex-wrap: wrap;
 }
 
-/* Small screens: a sticky bar at the bottom of the scroller. */
-.bar {
+/* The wizard's single bottom bar (settings step and narrow layouts): one --bar-action-h row. */
+.wizardBar {
   position: sticky;
   bottom: 0;
   z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-  padding: var(--space-sm) var(--space-md);
+  gap: var(--space-md);
+  height: var(--bar-action-h);
+  box-sizing: border-box;
+  padding: 0 var(--space-md);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-popover);
 }
 
-.barText {
+.wizardNav,
+.wizardActions {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.wizardStatus {
+  display: flex;
+  flex: 1 1 0;
+  align-items: baseline;
+  gap: var(--space-sm);
   min-width: 0;
-  flex: 1 1 12rem;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wizardStatus .problemLink {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .barTitle {
+  flex: none;
   font-size: var(--font-md);
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* The long button labels give way before the bar can overflow (a tablet has less room than a desktop). */
+@media (max-width: 1100px) {
+  .long {
+    display: none;
+  }
+}
+
+/* Phone: the run count stays in the DOM for assistive tech; the Launch label carries it visually. */
+@media (max-width: 760px) {
+  .wizardBar {
+    gap: var(--space-xs);
+    padding: 0 var(--space-sm);
+  }
+
+  .wizardNav,
+  .wizardActions {
+    gap: var(--space-xs);
+  }
+
+  .barTitle[data-compact] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .long {
+    display: none;
+  }
 }
 
 .problemLink {
@@ -131,20 +181,4 @@
 .ok {
   font-size: var(--font-sm);
   color: var(--success);
-}
-
-/* Phones: the bar is one compact row; Cancel is the header link, Raw JSON lives on the review step. */
-@media (max-width: 760px) {
-  .barSecondary {
-    display: none;
-  }
-
-  .bar {
-    flex-wrap: nowrap;
-    padding: var(--space-xs) var(--space-sm);
-  }
-
-  .barText {
-    flex: 1 1 0;
-  }
 }

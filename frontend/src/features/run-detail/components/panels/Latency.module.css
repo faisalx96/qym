@@ -192,13 +192,6 @@
   gap: var(--space-sm);
 }
 
-.kind {
-  padding: var(--space-sm);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--control-radius);
-  background: var(--bg-base);
-}
-
 .kindHead {
   display: flex;
   align-items: center;

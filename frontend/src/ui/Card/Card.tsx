@@ -21,13 +21,15 @@ export interface CardProps {
   /** Faint 6% tint; only danger and live states are allowed. */
   wash?: 'danger' | 'live';
   compact?: boolean;
+  /** No body padding: the card frames a table or a chart that brings its own (a 0-padding table card). */
+  flush?: boolean;
   /** onPress, href or to make the card interactive (renders button / a). */
   onPress?: () => void;
   href?: string;
   to?: string;
   isSelected?: boolean;
   isDisabled?: boolean;
-  as?: 'div' | 'section' | 'article' | 'li';
+  as?: 'div' | 'section' | 'article' | 'li' | 'aside';
   header?: ReactNode;
   footer?: ReactNode;
   className?: string;
@@ -53,6 +55,7 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
     rail,
     wash,
     compact,
+    flush,
     onPress,
     href,
     to,
@@ -75,6 +78,7 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
     'data-rail': hasTone && rail !== 'none' ? (rail === 'bottom' ? 'bottom' : 'left') : undefined,
     'data-wash': wash,
     'data-compact': compact ? '' : undefined,
+    'data-flush': flush ? '' : undefined,
     'data-selected': isSelected ? '' : undefined,
     'data-disabled': isDisabled ? '' : undefined,
   };

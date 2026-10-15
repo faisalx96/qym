@@ -131,10 +131,7 @@
 
 /* Matrix */
 .tableWrap {
-  overflow: auto;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-base);
+  overflow: auto; /* a flush ui/Card: the frame, radius and surface are the Card's */
 }
 
 .matrix {

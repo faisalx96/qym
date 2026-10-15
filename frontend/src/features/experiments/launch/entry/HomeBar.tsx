@@ -71,6 +71,7 @@ export function HomeBar({ onCustomize }: { onCustomize: (step: WizardStepId) => 
         ref={(el) => registerField(pointerToFieldName(PSEUDO.name), el)}
         className={styles.homeName}
         label="Experiment name"
+        hideLabel
         placeholder={suggestion}
         value={doc.name}
         maxLength={NAME_MAX}
