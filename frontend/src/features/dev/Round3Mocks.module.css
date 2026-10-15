@@ -1305,3 +1305,256 @@
     display: none;
   }
 }
+
+/* ───────── P7 box plots ───────── */
+.boxGrid {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-md);
+}
+
+.boxGrid .chartCard {
+  container-type: inline-size;
+}
+
+.box {
+  display: block;
+  max-inline-size: 100%;
+}
+
+.iqr {
+  fill: color-mix(in srgb, var(--text-secondary) var(--tint-strong), var(--bg-surface));
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+}
+
+.whisker,
+.cap {
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+}
+
+.median {
+  stroke: var(--text-primary);
+  stroke-width: 2.5;
+}
+
+.meanMark {
+  fill: var(--bg-surface);
+  stroke: var(--text-primary);
+  stroke-width: 1.5;
+}
+
+.outlier {
+  fill: var(--text-muted);
+  fill-opacity: 0.75;
+}
+
+.outlier[data-tail] {
+  fill: var(--score-2);
+  fill-opacity: 0.9;
+}
+
+.medianLabel {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  fill: var(--text-primary);
+}
+
+.boxNums {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-xs) 0;
+  margin: var(--space-sm) 0 0;
+}
+
+.boxNums[data-total] .boxNum[data-kind='total'] {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-block-start: var(--space-xs);
+  padding-inline: var(--space-sm);
+  border-block-start: 1px solid var(--border-default);
+  border-inline-start: 0;
+}
+
+.boxNum {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-inline-size: 0;
+  padding-block: var(--space-xs);
+}
+
+.boxNum dt {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.boxNum dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.boxLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-md);
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.boxLegend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.lgBox {
+  inline-size: 14px;
+  block-size: 9px;
+  border: 1.5px solid var(--text-secondary);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-secondary) var(--tint-strong), var(--bg-surface));
+}
+
+.lgWhisker {
+  inline-size: 14px;
+  block-size: 0;
+  border-block-start: 1.5px solid var(--text-secondary);
+}
+
+.lgMedian {
+  inline-size: 2px;
+  block-size: 11px;
+  background: var(--text-primary);
+}
+
+.lgMean {
+  inline-size: 8px;
+  block-size: 8px;
+  border: 1.5px solid var(--text-primary);
+  background: var(--bg-surface);
+  transform: rotate(45deg);
+}
+
+.lgDot {
+  inline-size: 5px;
+  block-size: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.byPass {
+  grid-column: 1 / -1;
+}
+
+.passRows {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.passRow {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: var(--space-md);
+  block-size: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.passRow:hover {
+  background: var(--bg-hover);
+}
+
+.passRow:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.passTrack {
+  position: relative;
+  block-size: 20px;
+}
+
+.rWhisker {
+  position: absolute;
+  inset-block-start: 9px;
+  inset-inline-start: var(--a);
+  inline-size: calc(var(--b) - var(--a));
+  block-size: 0;
+  border-block-start: 1.5px solid var(--text-secondary);
+}
+
+.rBox {
+  position: absolute;
+  inset-block: 3px;
+  inset-inline-start: var(--a);
+  inline-size: max(3px, calc(var(--b) - var(--a)));
+  border: 1.5px solid var(--text-secondary);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text-secondary) var(--tint-strong), var(--bg-surface));
+}
+
+.rMedian {
+  position: absolute;
+  inset-block: 3px;
+  inset-inline-start: var(--a);
+  inline-size: 2.5px;
+  background: var(--text-primary);
+}
+
+.rMean {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-start: calc(var(--a) - 4px);
+  inline-size: 8px;
+  block-size: 8px;
+  border: 1.5px solid var(--text-primary);
+  background: var(--bg-surface);
+  transform: rotate(45deg);
+}
+
+.passMed {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  text-align: end;
+  color: var(--text-secondary);
+}
+
+.passAxis {
+  position: relative;
+  block-size: 20px;
+  margin-inline: calc(72px + var(--space-md)) calc(52px + var(--space-md));
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.passAxis span {
+  position: absolute;
+  inset-inline-start: calc(var(--x) * 100%);
+  transform: translateX(-50%);
+}
+
+@container (max-width: 560px) {
+  .passAxis span:nth-child(even) {
+    display: none;
+  }
+}

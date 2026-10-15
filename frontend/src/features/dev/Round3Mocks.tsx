@@ -1129,6 +1129,334 @@ export function ItemDetailsMock({ variant }: { variant: 'en1' | 'ar10' | 'en10' 
   );
 }
 
+/* ───────────────────────────── P7: distribution box plots ───────────────────────────── */
+
+function mulberry(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function gauss(r: () => number): number {
+  return Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());
+}
+
+const quant = (sorted: number[], q: number) => {
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (pos - lo);
+};
+
+interface BoxStats {
+  n: number;
+  min: number;
+  p5: number;
+  p25: number;
+  med: number;
+  mean: number;
+  p75: number;
+  p95: number;
+  max: number;
+  sum: number;
+  low: number[];
+  high: number[];
+}
+
+function boxStats(values: number[]): BoxStats {
+  const v = [...values].sort((a, b) => a - b);
+  const n = v.length;
+  const wide = n >= 20;
+  const p5 = wide ? quant(v, 0.05) : v[0]!;
+  const p95 = wide ? quant(v, 0.95) : v[n - 1]!;
+  const sum = v.reduce((a, b) => a + b, 0);
+  const cap = (xs: number[]) => {
+    if (xs.length <= 40) return xs;
+    const out = [xs[0]!];
+    for (let i = 1; i < 39; i++) out.push(xs[Math.round((i * (xs.length - 1)) / 39)]!);
+    out.push(xs[xs.length - 1]!);
+    return out;
+  };
+  return {
+    n,
+    min: v[0]!,
+    p5,
+    p25: quant(v, 0.25),
+    med: quant(v, 0.5),
+    mean: sum / n,
+    p75: quant(v, 0.75),
+    p95,
+    max: v[n - 1]!,
+    sum,
+    low: wide ? cap(v.filter((x) => x < p5)) : [],
+    high: wide ? cap(v.filter((x) => x > p95)) : [],
+  };
+}
+
+const fmtMs = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(2)}s` : `${Math.round(v)}ms`);
+const fmtInt = (v: number) => (v >= 10000 ? `${(v / 1000).toFixed(1)}K` : String(Math.round(v * 10) / 10));
+const fmtPct = (v: number) => `${(v * 100).toFixed(1)}%`;
+
+function niceAxis(max: number, maxTicks = 5): { domain: [number, number]; ticks: number[] } {
+  const raw = max / (maxTicks - 1);
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((x) => x >= raw)!;
+  const top = Math.ceil(max / step) * step;
+  return { domain: [0, top], ticks: Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step) };
+}
+
+const niceTicks = (lo: number, hi: number, n = 4) =>
+  Array.from({ length: n + 1 }, (_, i) => lo + ((hi - lo) * i) / n);
+
+/** Box plot drawn at the measured width: whiskers p5..p95, box p25..p75, median line, mean diamond, outside points as dots. */
+function BoxPlotSvg({
+  st,
+  fmt,
+  domain,
+  ticks: tickValues,
+  tailTone,
+  name,
+}: {
+  st: BoxStats;
+  fmt: (v: number) => string;
+  domain: [number, number];
+  ticks?: number[];
+  tailTone?: boolean;
+  name: string;
+}) {
+  const [ref, W] = useMeasuredWidth<HTMLDivElement>(320);
+  const H = 84;
+  const padX = 14;
+  const cy = 36;
+  const bh = 24;
+  const sx = (v: number) => padX + ((v - domain[0]) / (domain[1] - domain[0] || 1)) * (W - 2 * padX);
+  const ticks = tickValues ?? niceTicks(domain[0], domain[1], W < 320 ? 2 : 4);
+  const medX = sx(st.med);
+  const labelAnchor = medX < 40 ? 'start' : medX > W - 40 ? 'end' : 'middle';
+  return (
+    <div ref={ref}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className={styles.box} role="img" aria-label={name}>
+        {ticks.map((t) => (
+          <g key={t}>
+            <line className={styles.grid} x1={sx(t)} x2={sx(t)} y1={cy - 22} y2={H - 22} />
+            <text
+              className={styles.tick}
+              x={sx(t)}
+              y={H - 6}
+              textAnchor={t === domain[0] ? 'start' : t === domain[1] ? 'end' : 'middle'}
+            >
+              {fmt(t)}
+            </text>
+          </g>
+        ))}
+        <line className={styles.whisker} x1={sx(st.p5)} x2={sx(st.p95)} y1={cy} y2={cy} />
+        <line className={styles.cap} x1={sx(st.p5)} x2={sx(st.p5)} y1={cy - 7} y2={cy + 7} />
+        <line className={styles.cap} x1={sx(st.p95)} x2={sx(st.p95)} y1={cy - 7} y2={cy + 7} />
+        {st.low.map((v, i) => (
+          <circle key={`l${i}`} className={styles.outlier} cx={sx(v)} cy={cy} r={2.5} />
+        ))}
+        {st.high.map((v, i) => (
+          <circle
+            key={`h${i}`}
+            className={styles.outlier}
+            data-tail={tailTone ? '' : undefined}
+            cx={sx(v)}
+            cy={cy}
+            r={2.5}
+          />
+        ))}
+        <rect
+          className={styles.iqr}
+          x={sx(st.p25)}
+          y={cy - bh / 2}
+          width={Math.max(3, sx(st.p75) - sx(st.p25))}
+          height={bh}
+          rx={3}
+        />
+        <line className={styles.median} x1={medX} x2={medX} y1={cy - bh / 2} y2={cy + bh / 2} />
+        <path
+          className={styles.meanMark}
+          d={`M${sx(st.mean)},${cy - 5}L${sx(st.mean) + 5},${cy}L${sx(st.mean)},${cy + 5}L${sx(st.mean) - 5},${cy}Z`}
+        />
+        <text className={styles.medianLabel} x={medX} y={cy - bh / 2 - 6} textAnchor={labelAnchor}>
+          {fmt(st.med)}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+function BoxNumbers({ st, fmt, total }: { st: BoxStats; fmt: (v: number) => string; total?: string }) {
+  const cells: Array<[string, string, string?]> = [
+    ['Min', fmt(st.min)],
+    ['P25', fmt(st.p25)],
+    ['Median', fmt(st.med)],
+    ['Mean', fmt(st.mean), 'mean'],
+    ['P75', fmt(st.p75)],
+    ['Max', fmt(st.max)],
+  ];
+  if (total) cells.push(['Total', total, 'total']);
+  return (
+    <dl className={styles.boxNums} data-total={total ? '' : undefined} aria-label="Distribution values">
+      {cells.map(([k, v, kind]) => (
+        <div key={k} className={styles.boxNum} data-kind={kind}>
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function BoxLegend() {
+  return (
+    <ul className={styles.boxLegend} aria-label="How to read the box plot">
+      <li>
+        <span className={styles.lgBox} aria-hidden="true" />
+        middle 50%
+      </li>
+      <li>
+        <span className={styles.lgWhisker} aria-hidden="true" />
+        p5 to p95
+      </li>
+      <li>
+        <span className={styles.lgMedian} aria-hidden="true" />
+        median
+      </li>
+      <li>
+        <span className={styles.lgMean} aria-hidden="true" />
+        mean
+      </li>
+      <li>
+        <span className={styles.lgDot} aria-hidden="true" />
+        outside p5 to p95
+      </li>
+    </ul>
+  );
+}
+
+export function BoxPlotsMock() {
+  const r = mulberry(7);
+  const latency = Array.from({ length: 237 }, () => Math.exp(7.35 + 0.55 * gauss(r)));
+  const tokens = Array.from({ length: 237 }, (_, i) =>
+    i % 20 === 3 ? 0 : Math.max(0, Math.round(520 + 190 * gauss(r))),
+  );
+  const score = Array.from({ length: 237 }, () => Math.min(1, Math.max(0, 0.5 + 0.2 * gauss(r))));
+  const sl = boxStats(latency);
+  const stt = boxStats(tokens);
+  const ss = boxStats(score);
+  const pass = [1, 2, 3, 4, 5].map((p) => {
+    const rr = mulberry(p * 11);
+    return boxStats(
+      Array.from({ length: 24 }, () => Math.min(1, Math.max(0, 0.45 + p * 0.03 + 0.18 * gauss(rr)))),
+    );
+  });
+  return (
+    <div className={styles.boxGrid} data-r3="box-plots">
+      <ChartCard
+        title="Response time"
+        meta="237 items"
+        value={<span className={styles.mono}>{fmtMs(sl.mean)}</span>}
+        note="Mean, end to end per item"
+      >
+        <BoxPlotSvg
+          st={sl}
+          fmt={fmtMs}
+          domain={niceAxis(sl.max).domain}
+          ticks={niceAxis(sl.max).ticks}
+          tailTone
+          name={`Response time, 237 items: min ${fmtMs(sl.min)}, median ${fmtMs(sl.med)}, mean ${fmtMs(sl.mean)}, max ${fmtMs(sl.max)}`}
+        />
+        <BoxNumbers st={sl} fmt={fmtMs} />
+        <BoxLegend />
+      </ChartCard>
+      <ChartCard
+        title="tokens_used"
+        meta="237 items"
+        value={<span className={styles.mono}>{fmtInt(stt.mean)}</span>}
+        note="12 task errors, counted as 0 in Mean and Min"
+      >
+        <BoxPlotSvg
+          st={stt}
+          fmt={fmtInt}
+          domain={niceAxis(stt.max).domain}
+          ticks={niceAxis(stt.max).ticks}
+          name={`tokens_used, 237 items: min ${fmtInt(stt.min)}, median ${fmtInt(stt.med)}, mean ${fmtInt(stt.mean)}, max ${fmtInt(stt.max)}, total ${fmtInt(stt.sum)}`}
+        />
+        <BoxNumbers st={stt} fmt={fmtInt} total={fmtInt(stt.sum)} />
+        <BoxLegend />
+      </ChartCard>
+      <ChartCard
+        title="quality"
+        meta="217 scored · 20 err"
+        band={2}
+        value={<ScoreValue value={ss.mean} type="percentage" direction="maximize" />}
+        note="8 scorer errors and 12 task errors, counted as 0%"
+      >
+        <BoxPlotSvg
+          st={ss}
+          fmt={(v) => `${Math.round(v * 100)}%`}
+          domain={[0, 1]}
+          name={`quality, 217 scored: min ${fmtPct(ss.min)}, median ${fmtPct(ss.med)}, mean ${fmtPct(ss.mean)}, max ${fmtPct(ss.max)}`}
+        />
+        <BoxNumbers st={ss} fmt={fmtPct} />
+        <BoxLegend />
+      </ChartCard>
+      <Card
+        as="section"
+        aria-label="Quality by pass"
+        className={styles.byPass}
+        header={
+          <div className={styles.cardHead}>
+            <span className={styles.cardTitle}>Quality by pass</span>
+            <Tag kind="count">5 passes · 24 items each</Tag>
+          </div>
+        }
+      >
+        <div className={styles.passRows} role="group" aria-label="Quality distribution by pass">
+          {pass.map((st, i) => (
+            <PassBoxRow key={i} n={i + 1} st={st} />
+          ))}
+          <div className={styles.passAxis} aria-hidden="true">
+            {[0, 25, 50, 75, 100].map((t) => (
+              <span key={t} style={style({ '--x': t / 100 })}>
+                {t}%
+              </span>
+            ))}
+          </div>
+        </div>
+        <BoxLegend />
+      </Card>
+    </div>
+  );
+}
+
+function PassBoxRow({ n, st }: { n: number; st: BoxStats }) {
+  const x = (v: number) => `${v * 100}%`;
+  return (
+    <button
+      type="button"
+      className={styles.passRow}
+      aria-label={`Pass ${n}: median ${fmtPct(st.med)}, mean ${fmtPct(st.mean)}, middle half ${fmtPct(st.p25)} to ${fmtPct(st.p75)}, filter to this pass`}
+    >
+      <span className={styles.passTag}>
+        <Tag kind="count">Pass {n}</Tag>
+      </span>
+      <span className={styles.passTrack}>
+        <span className={styles.rWhisker} style={style({ '--a': x(st.p5), '--b': x(st.p95) })} />
+        <span className={styles.rBox} style={style({ '--a': x(st.p25), '--b': x(st.p75) })} />
+        <span className={styles.rMedian} style={style({ '--a': x(st.med) })} />
+        <span className={styles.rMean} style={style({ '--a': x(st.mean) })} />
+      </span>
+      <span className={styles.passMed}>{fmtPct(st.med)}</span>
+    </button>
+  );
+}
+
 /* ───────────────────────────── gallery wrapper ───────────────────────────── */
 
 export function Round3Mocks({
@@ -1154,6 +1482,9 @@ export function Round3Mocks({
       </Case>
       <Case wide label="r3-categories (P3)">
         <CategoriesMock />
+      </Case>
+      <Case wide label="r3-box-plots (P7: distribution box plots replace min / avg / max / total)">
+        <BoxPlotsMock />
       </Case>
       <Case wide label="r3-item-details-en (P5: single pass, English)">
         <ItemDetailsMock variant="en1" />

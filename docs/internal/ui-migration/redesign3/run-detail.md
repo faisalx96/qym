@@ -714,6 +714,148 @@ and the rest up to the clamp); for a stopped or failed run the stop reason line;
 - Vitest: `lib/heroModel.test.ts` extended (`headerChips(run)` order, caps, JSON summaries, `{ n keys }`, key/value truncation helpers, the 6-chip floor), `components/RunHero.test.tsx` (no chevron; band 3 omitted when empty).
 - Playwright `e2e/run-detail/redesign3-header.spec.ts`: P6-1 to P6-12; update `overview.spec.ts` (the "height at most 200" and "first section on the first screen at 390" assertions: ceilings above; the existing test for hidden-by-default details is removed).
 
+## 6b. P7: distribution box plots
+
+> "metrics that used to output min, avg, max, total, should instead now show a box plot to visualize the distribution."
+
+Numbering: this section sits after P6 and before "7. Primitives and tokens" so no existing acceptance number changes. Its mock is `/__ui#round3` case `r3-box-plots`
+(`shots/mock-r3-box-plots-1440.png`, `shots/mock-r3-box-plots-390.png`).
+
+### 6b.1 Problem and inventory
+
+A Min / Avg / Max / Total row says nothing about shape: a latency with a 180 ms minimum and a 6.7 s maximum reads the same whether 90% of items are near
+1 s or spread evenly. The numeric metric card today is `NumericCells` (`charts/Charts.tsx`, fed by `metricCardModel().numeric = { min, max, sum }` and `avg` in `lib/overviewModel.ts`):
+four equal cells (Min, Avg, Max, Total) centred in the P1 plot slot. Where the same kind of summary appears (React today; the legacy equivalent in the last column):
+
+| # | Place | Shows today | Decision | Legacy |
+|---|---|---|---|---|
+| 1 | Overview, numeric metric card (`tokens_used`, any `type: numeric` metric without a score range) | Min / Avg / Max / Total cells | **box plot card** (6b.3) | `dashboard.js` numeric card: Min, Avg, Max, Total |
+| 2 | Overview, per-item tokens and cost (`row.trace_stats.tokens`, `.cost`) | not shown per item (only trace averages in the Latency tab) | **new auto cards** "Tokens per item" and "Cost per item" after the metric cards, when at least 2 items carry the value | repeat tiles Avg / Min / Max@k / StdDev / Total (numeric) |
+| 3 | Latency tab, "Response time" card | Mean, p50 / p90 / p95 pins, histogram | **box strip** under the histogram on the same x scale; pins, histogram and filters unchanged | latency distribution: mean, p50 / p90 / p95, fastest and slowest |
+| 4 | Repeat panel, any non-boolean metric | one Avg score tile; no distribution | **"Distribution by pass" card**: one box row per pass on a shared axis | numeric repeat tiles Avg, Min, StdDev, Total |
+| 5 | Latency tab, Step timings interval column | already a p5 / p25 / median / p75 / p95 box with a mean | **same data, same encoding as this section** (the shared `BoxPlot` mark replaces its local `.whisker` / `.box` CSS) | step timings: p5-p95 whisker, middle 50%, median tick, mean diamond |
+| 6 | Latency tab, Time budget kind tiles (calls / trace, avg call, tokens / trace) | per-trace means of a composition | **stay numbers** (one value per kind, not a distribution of items) | same |
+| 7 | By-pass table Avg / Median latency, repeat Avg latency tile, categories Latency column, hero Runtime | one value per row or group | **stay numbers** (a cell cannot hold a plot at 32 to 40 px rows; the group value is the sort key) | same |
+| 8 | Score metrics (0 to 100%) and booleans in the Overview | histogram, pass / fail bars | **unchanged** (they already show the distribution as bars; P1) | same |
+
+Legacy had no box plot anywhere except Step timings (row 5). Keep from legacy: the p5 to p95 whisker, middle-50% box, median tick and mean diamond (the exact Step timings glyphs, so a reader who knows
+them reads the new plots without learning anything). Do differently: plot an item-level distribution for every numeric summary (legacy printed four numbers), and keep the numbers readable under the plot.
+
+### 6b.2 Data source and cost
+
+- **Item-level values are already on the client.** `GET /api/runs/{id}?view=compact` returns `snapshot.rows` (type `Row`, `features/run-detail/types.ts`): per row `metric_values[i]` (aligned with `model.metricNames`), `latency_ms`,
+  `trace_stats.tokens` and `trace_stats.cost` (`RowTraceStats`), and on repeat runs `pass_scores[metric][pass - 1]` (already read by `overviewModel.ts` and `runModel.ts`). The page holds these rows for the items table,
+  the overview and the filters; `useRunPage().items` is the filtered set. **No new endpoint, no new request, no server change.** If a fixture ever shows `pass_scores` missing in the compact view, the per-pass card
+  (row 4) falls back to hidden and the gap is reported, not worked around.
+- **The value set V** of a card is exactly the set its header mean averages over, with the same error treatment as today (`metricCardModel`: errored items count as 0 and are included, or are left out for lower-is-better metrics; the existing
+  `errorNote` still says which). `metricCardModel` gains `values: number[]` (V, unsorted); the plot, the number row and the header mean therefore always agree. Filters apply as today (the plot follows the scope chips).
+- **Aggregation (client-side, pure, memoised on the `rows` identity and the metric)**: `boxStats(values): { n, min, p5, p25, median, mean, p75, p95, max, sum, low, high }` in `lib/boxStats.ts`. Quantiles are the existing
+  `quantile()` of `lib/latencyModel.ts` (linear interpolation, type 7); `mean` and `sum` accumulate in one pass; `low` / `high` are the values strictly outside [p5, p95], **capped at 40 per side by even decimation that always keeps the true min and max**.
+- **Cost at 5,200 items** (the size of the virtualised test run): sorting a `Float64Array` of 5,200 values and computing the five quantiles takes about 0.4 ms; measured in Node 24 for 26 metrics x 5,200 values including value generation: **9 ms in total**; one `Array.sort` with a comparator on 5,200 values is about 1 ms. So one `useMemo` per card
+  (dependency: the `rows` array identity, which changes only when the filtered set changes) is enough; no worker, no virtualization. During a live run the rows change per batch; the live hook already batches updates at 1 s, so at most one recompute per second per card (24 cards, about 10 ms). Rendering is at most 7 marks + 80 dots per plot (a cap, not a function of n).
+- **Percentiles below 20 values.** With fewer than 20 values p5 and p95 are not meaningful: whiskers become min and max, no dots are drawn.
+
+### 6b.3 The box plot (visual specification)
+
+**Encoding (identical to Step timings; one glyph set across the page; mock legend row):**
+
+| Element | Value | Mark | Token |
+|---|---|---|---|
+| Box | p25 to p75 (middle 50%) | rect, height 24 px, radius 3 px, 1.5 px stroke, minimum width 3 px | stroke `--text-secondary`; fill `--text-secondary` at `--tint-strong` over the card surface (`color-mix`) |
+| Median | p50 | vertical line through the box, 2.5 px | `--text-primary` |
+| Whiskers | p5 to p95 | 1.5 px line at the box's centre line with 14 px tall end caps | `--text-secondary` |
+| Mean | arithmetic mean of V | hollow diamond, 10 px, 1.5 px stroke, `--bg-surface` fill so it reads over the box | `--text-primary` |
+| Outliers | each value outside [p5, p95], at most 40 per side | dot, radius 2.5 px, 75% opacity | `--text-muted`; latency values above p95 use `--score-2` (the tone the response-time histogram already gives the slow tail) |
+| Median label | p50 value | `--font-sm` mono, 6 px above the box, anchored at the median (clamped inside the plot) | `--text-primary` |
+| Axis | domain and ticks | baseline-less: 1 px vertical gridlines `--border-subtle` through the plot, tick labels `--font-sm` muted at the bottom | `--border-subtle`, `--text-muted` |
+
+No new colour. Neutral grey is deliberate: a numeric metric without a direction has no good or bad (`ScoreValue` rule), and teal is reserved for interaction. A score metric with a direction does not use this card (row 8).
+
+**Axis.** Linear, starting at 0 for non-negative data (latency, tokens, cost, counts) so the box's position reads as magnitude; `[min, max]` rounded out to "nice" ticks (1, 2, 2.5, 5 x 10^k), at most 5 ticks (3 below 320 px of plot width). If max is more than 4 x p95 the axis clips at 1.15 x p95
+and every point beyond the clip collapses into one arrow glyph at the right edge labelled with the max ("-> 18.2s"); the tooltip lists the count. Tick labels use the same formatters as the cards (`tickLabel` for ms, `formatNumericValue` for counts).
+
+**Layout inside the P1 `ChartCard`** (the card is `Card fill`; header title left, `Tag kind="count"` with n right; intro value = the existing header mean and error note, unchanged). The plot slot (min-height 146 px, content centred vertically) holds, top to bottom:
+
+```
+ median label  1.46s
+ |----[  |<>  ]---------------------.  .   . .      plot: 84 px high (box 24, labels, axis)
+ 0       2s       4s       6s       8s              axis labels: --font-sm muted
+ MIN    P25   MEDIAN   MEAN    P75    MAX            number row: dl, labels --font-sm 600 uppercase muted,
+ 180ms  1.10s  1.46s  1.80s  2.28s  6.68s                         values --font-base mono tabular-nums --text-primary
+ ----------------------------------------
+ TOTAL                                118.4K          only for additive metrics (below)
+ [] middle 50%  -- p5 to p95  | median  <> mean  . outside p5 to p95      legend row, --font-sm muted, wraps
+```
+
+- **Orientation: horizontal.** Value on x, because labels, ticks and the numbers row read left to right, and the card grid is wide and short. Plot width = card body width minus `--space-lg` padding (about 340 px at 3-up on 1440, 240 px at 390). Never vertical, never scrolls.
+- **Numbers row (all readable, always visible, no hover):** Min, P25, Median, Mean, P75, Max in a `dl`, six equal cells (`repeat(6, 1fr)`), cell = label over value, centred; this is the text alternative of the plot. Values are rounded by the same rule as the axis (3 significant digits; latency via `durText`; percentages 1 decimal).
+  Under 300 px of card body (the 279 px column at 390 leaves about 237 px: six cells of 39 px) the six cells stay in one row; a label that would overflow its cell is abbreviated ("Median" becomes "Med"; P25, P75, Min, Max, Mean keep their names) and values stay mono `--font-base` (the longest realistic value, "118.4K" or "6.68s", is 7 characters and fits 39 px).
+- **Total stays a number.** A sum is not a property of the distribution, so it never gets a mark. It is shown **only when the quantity is additive**: `type: numeric` metrics and per-item tokens and cost, where the sum is a real quantity (all tokens spent, all dollars). It is **not shown** for latency (items run concurrently, the sum is not elapsed time), for scores and percentages, or when any value is negative. When shown it is a full-width row under the number row,
+  separated by a 1 px `--border-default` rule, label "Total" at the start and value at the end (`--font-base` mono, `--text-primary`), 4 px below the cells. The legacy tile named it "Sum of all values across all items and runs"; keep that as its `title`.
+- **Legend**: the one-line legend row at the bottom of every plot card (5 entries, glyphs drawn with the same shapes, `--font-sm`, `--text-muted`, wraps to two lines on a 240 px card). The card also carries the existing `HelpMarker` "How to read": "The box is the middle half of the items, the line is the median, the diamond the mean. Whiskers reach the 5th and 95th percentile; dots are items outside them."
+- **Heights**: slot content 84 (plot) + 54 (numbers) + 20 (legend) = 158 px plus the optional Total row 30 px; the card's slot is `min-height: 146 px`, so the card is content-sized (P1-3: at most 16 px empty below the lowest element holds).
+
+**Response-time box strip (row 3).** Under the histogram's bars, on the **same x scale** as the histogram (so a box edge lines up with the bar it summarises): a 40 px strip (box 16 px, whisker, median line, mean diamond, outlier dots for the tail beyond p95 in `--score-2`; no tick row, it shares the histogram axis).
+The strip replaces nothing: the Mean KPI and the p50 / p90 / p95 pins stay (they are filter buttons); Min and Max are added to the pins group as two non-button values ("fastest 304 ms", "slowest 4.3 s") so the card keeps all of today's numbers. The strip's elements filter as in "Interaction" below.
+
+**Per-pass distribution (row 4).** A `ChartCard` "Distribution by pass" in the Repeat panel between "Across attempts" and "By pass" (full width at mid and below, and **side by side with "Passes passed" is not used here**: it needs the width). One row per pass, row height 32 px (`--row-compact`):
+`[Pass n tag 72 px] [track: box, whiskers, median, mean on a shared axis] [median value 52 px mono muted]`, one shared axis row under the last pass (0 / 25 / 50 / 75 / 100% for scores; nice ticks otherwise; every other tick label hidden under 560 px). Ten passes are 320 px plus the axis (20 px) and the header: about 420 px at any width. The row is a button: click or Enter sets `?pass=n` exactly like the By-pass table's pass link. Metric = the panel's selected metric (the
+Select) and the card title reads "{metric} by pass". Hidden for boolean metrics (their pass rate is the tile) and when fewer than two passes completed. Each pass's V is that pass's values over the filtered items (`row.pass_scores[metric][pass - 1]`).
+
+**Responsive.** The plot is an SVG drawn at the measured card width (`useMeasuredWidth`), so text never scales. wide / mid / narrow: as above. compact (card or column up to 559 px): ticks 3, median label kept, legend wraps, Total row unchanged; the per-pass rows keep the 72 px tag and 52 px value and the track takes the rest (about 110 px at 279 px: the box and whiskers still read, outlier dots are not drawn in rows, only whiskers).
+
+### 6b.4 Interaction, states, accessibility
+
+- **Hover and focus tooltips (`ChartTooltipHost` / `Mark` `tip`, markup allowed; the native `<title>` is not used):** box: "Middle 50%: 1.10s to 2.28s (IQR 1.18s)"; median: "Median 1.46s"; mean: "Mean 1.80s"; low whisker cap: "5th percentile 0.62s"; high whisker cap: "95th percentile 4.20s"; a dot: "{item id} · 6.68s" (plus "showing 40 of 310 values above p95" on the first and last dot of a decimated side).
+- **Click** (pointer and Enter on the focused mark; the same filter vocabulary as the histograms): box: filter the items to p25 to p75; low whisker (the segment p5 to p25 and the cap): items from min to p25; high whisker: items from p75 to max; a dot: open that item (`?item=`); the mean and median marks do not filter. Filters use the existing `latency: { min, max }` filter for latency and a two-rule `gte` / `lte` rule filter (`lib/filterRules.ts`) for a metric; a selected region draws a 2 px `--text-primary` outline and the card's other marks dim to `--dim-opacity` (the chart-kit selected state); a scope chip appears as for any filter. In the per-pass rows a click selects the pass, not a range.
+- **Focus order**: box, low whisker, high whisker, then min dot and max dot (keyboard-reachable outliers); the other dots are pointer-only (up to 80 tab stops would be a trap; the items table is the keyboard route), as the scatter already does.
+- **Screen reader**: the plot is `role="img"` named by one generated sentence: "tokens_used, 237 items: minimum 0, 25th percentile 354, median 507, mean 499.5, 75th percentile 638, maximum 1058, total 118.4K; 14 values above the 95th percentile." The number row is a real `dl` (read as term/definition pairs), so the same facts are available as text. Interactive marks keep their own `aria-label` ("Middle half, 354 to 638, filter the items").
+- **States**: empty (V has no value): the slot shows "No values" in `--text-muted` at the same 146 px (no axis, no numbers, no legend). One value: a single hollow diamond with the value above it, the number row shows that value in Min, Median, Mean and Max and "-" in P25 and P75, no whiskers, legend reduced to "mean". All values equal (min = max): one vertical line with the label "All {n} values are {v}"; the number row repeats the value. Zero IQR with spread (for example 90% zeros): the box collapses to the 3 px minimum (reads as the median line), the tooltip says "IQR 0". Fewer than 20 values: whiskers min to max, no dots, tooltip note "percentiles need 20 or more values". Errors: the existing `errorNote` line under the header value is unchanged. Loading: `Skeleton` of the slot. Error: `ErrorState`.
+- **Motion**: M2 entrance: the box grows in from its median (`scaleX` about the median, `--motion-fill`) and the whiskers fade in with the same duration; dots fade in staggered by `--motion-stagger` up to 10; a value change morphs the marks (M3, `--transition-fast`). Nothing animates under `prefers-reduced-motion`.
+- **Live runs**: marks move with the same M3 morph; the plot never changes size (axis domain only grows, it is not shrunk until the next full reload, so the box does not jitter).
+
+### 6b.5 Acceptance criteria (P7)
+
+| # | Criterion | Measure |
+|---|---|---|
+| P7-1 | No `NumericCells` and no Min / Avg / Max / Total cell group remains on the Overview: every `type: numeric` metric card contains a box plot (`role="img"`, name starting with the metric) and a `dl` with Min, P25, Median, Mean, P75, Max. | DOM query on the classic run (`tokens_used`) |
+| P7-2 | The six values in the number row equal the plot's geometry: the box's left and right edges are at p25 and p75, the median line at the median, the diamond at the mean (+-1 px after the linear scale), whiskers end at p5 and p95. | unit test on `boxStats` plus a DOM check of `x` attributes against the scale |
+| P7-3 | The mean in the number row equals the card's header value; V is the same set (the test feeds `metricCardModel` rows with errors and checks both). | Vitest |
+| P7-4 | Quartiles are linear interpolation (type 7): `[1..100]` gives p25 = 25.75, median 50.5, p75 = 75.25, p5 = 5.95, p95 = 95.05. | `boxStats.test.ts` |
+| P7-5 | Total is a number and not a mark: present as a labelled row only for numeric additive metrics and per-item tokens or cost; absent for latency, scores, percentages, and when any value is negative. | DOM query on classic (tokens_used has Total; response time and quality do not) |
+| P7-6 | Every number is readable without interaction: the number row and the median label are visible text at 1440 and 390 and none is clipped (`scrollWidth <= clientWidth` for each cell; 36 px minimum cell width; labels abbreviate below 46 px). | Playwright |
+| P7-7 | The plot fits its card: SVG width equals the card body width, never more; at 390 the plot is at least 220 px wide and no tick labels overlap (pairwise disjoint boxes). | boxes |
+| P7-8 | Elements have tooltips on hover and on keyboard focus: box, median, mean, both whisker caps, min and max dots; each tooltip text contains its value. | Playwright (hover and `focus()` each mark) |
+| P7-9 | Keyboard: Tab reaches box, low whisker, high whisker, min dot, max dot in that order; Enter on the box applies a p25-p75 filter (scope chip appears, the items table count drops); Enter on a dot opens the item; Escape closes a tooltip. | e2e |
+| P7-10 | Outliers: at most 40 dots per side; the true min and max are always drawn; with 5,200 values the DOM has at most 80 dots per plot. | unit test and DOM count on the 5,200-row run |
+| P7-11 | States: n = 0 shows "No values"; n = 1 draws one diamond and no box; all-equal draws one line and "All {n} values are {v}"; n < 20 draws no dots and whiskers equal min and max; IQR 0 draws a box of width 3 px. | unit tests (`BoxPlot.test.tsx`) |
+| P7-12 | The Response-time card keeps Mean, p50 / p90 / p95 pins and the histogram, adds the box strip on the same x scale (the box's p25 x equals the x of the histogram value p25, +-1 px) and adds fastest and slowest values. | Playwright |
+| P7-13 | The Repeat panel shows "{metric} by pass" for non-boolean metrics with one row per completed pass on a shared axis, row height 32 px (+-1), the Select's metric drives it, a row click sets `?pass=n`; boolean metrics hide it. | Playwright on `seedWideRepeatRun` |
+| P7-14 | Step timings uses the same `BoxPlot` mark (no local `.whisker` / `.box` CSS remains; the existing steps assertions stay green). | grep and existing specs |
+| P7-15 | Per-item Tokens and Cost cards appear only when at least 2 rows have a value, in Overview after the metric cards. | Playwright on a run with and without trace stats |
+| P7-16 | Cost: computing `boxStats` for 26 metrics x 5,200 values takes under 50 ms on the CI runner (budget; local measure 9 ms), and the Overview commit of the 5,200-row run does not exceed its current render budget by more than 50 ms. | `perf` Vitest and the existing `items-virtual` timing |
+| P7-17 | No colour is introduced: the CSS contains no hex, `rgb(` or `rgba(`; the design-language test is green; the box uses only `--text-secondary`, `--text-primary`, `--text-muted`, `--score-2`, `--border-*`. | existing test |
+| P7-18 | Reduced motion: no animation on any box plot mark (`animation-name: none`). | emulate |
+| P7-19 | Axe: zero serious or critical on the Overview, Latency and Repeat sections with box plots at 1440 and 390; the plot is `role="img"` with a name and the `dl` is exposed. | `a11y.spec.ts` |
+| P7-20 | A card with a box plot has at most 16 px of empty space under its lowest element (P1-3) and the same plot slot height as its row neighbours (P1-4). | as P1 |
+
+### 6b.6 Tests (P7)
+
+- Vitest: `lib/boxStats.test.ts` (P7-2 geometry inputs, P7-4 quantiles, decimation keeps min and max, n < 20 rule, V vs header mean), `components/charts/BoxPlot.test.tsx` (P7-11 states, tooltips text, focus order, `role="img"` name), `lib/overviewModel.test.ts` (`values` exposed and consistent with `avg`; Total visibility rule), `lib/boxStats.perf.test.ts` (P7-16 budget).
+- Playwright `e2e/run-detail/redesign3-box-plots.spec.ts`: P7-1, P7-5 to P7-10, P7-12, P7-13, P7-15, P7-19, P7-20 at 1440 and 390 on `seedClassicRun` (tokens_used, response time), `seedWideRepeatRun` (per pass) and a small run with no trace stats; `e2e/run-detail/steps.spec.ts` stays green for P7-14. Existing overview specs that assert the Min / Avg / Max / Total cells are rewritten to the number row.
+
+### 6b.7 Primitives and decisions
+
+| Item | Kind | Change |
+|---|---|---|
+| `BoxPlot` | new (`features/run-detail/components/charts/BoxPlot.tsx`) | SVG plot at the measured width, props `stats`, `domain`, `ticks`, `format`, `tailTone`, `name`, `onPick`; plus `BoxRow` (the 32 px per-pass row) and `BoxNumbers` (the `dl`). No `ui/` primitive: the chart kit marks (`Mark`, `ChartTooltipHost`) are reused. |
+| `boxStats` | new (`lib/boxStats.ts`) | pure aggregation; reuses `quantile` from `latencyModel.ts`. |
+| `metricCardModel` | extend | `values: number[]`. |
+| `NumericCells` | remove | replaced by `BoxPlot` + `BoxNumbers`. |
+
+Decisions I made: whiskers at p5 / p95 (not 1.5 IQR) to match Step timings and the p95 pin, and because latency tails would put hundreds of Tukey outliers on screen; Total stays a labelled number and only for additive quantities; the box plot never replaces the histogram of a score or boolean metric (they already show the distribution); percentile stats and dots use the filtered
+rows, like every other card; no worker or new endpoint because 26 x 5,200 values cost about 9 ms. Open for the reviewer: show the mean marker also on the response-time histogram (not done; the strip carries it).
+
 ## 7. Primitives and tokens
 
 | Item | Kind | Change |
