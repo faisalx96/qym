@@ -782,6 +782,127 @@ export async function seedArabicRepeatRun(client: SeedClient, token: string): Pr
   return runId;
 }
 
+/**
+ * Round 3 wide repeat run: 10 passes x 24 items x 24 metrics (one boolean "correct" plus 23 percentage rubric
+ * metrics), Arabic and English items, JSON outputs with nested objects and lists, run metadata and config.
+ * Mirrors docs/internal/ui-migration/redesign3/seed-wide-repeat.mts. About 6,500 events.
+ */
+export async function seedWideRepeatRun(client: SeedClient, token: string): Promise<string> {
+  const specs: Record<string, Record<string, unknown>> = {
+    correct: {
+      score_type: 'boolean',
+      direction: 'maximize',
+      pass_threshold: 1,
+      primary: true,
+      schema_version: 2,
+    },
+  };
+  for (let m = 1; m <= 23; m++)
+    specs[`rubric_metric_${String(m).padStart(2, '0')}`] = {
+      score_type: 'percentage',
+      direction: 'maximize',
+      pass_threshold: 0.7,
+      schema_version: 2,
+    };
+  const metrics = Object.keys(specs);
+  const samples = 10;
+  const n = 24;
+  const random = rng(77);
+  const runId = await createRun(client, token, {
+    task: 'big_repeat',
+    dataset: 'ar-big',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: specs,
+    run_metadata: {
+      run_name: 'repeat-10-passes-24-metrics',
+      owner: 'meshari',
+      git_sha: 'a1b2c3d',
+      prompt_version: 'v7',
+    },
+    run_config: { samples, temperature: 0.7, max_tokens: 512 },
+  });
+  const s = new EventStream(client, token, runId, 77);
+  s.push('run_started', {
+    task: 'big_repeat',
+    dataset: 'ar-big',
+    model: 'openai/gpt-5-mini',
+    metrics,
+    metric_specs: specs,
+    total_items: n,
+    started_at: new Date(Date.UTC(2026, 9, 4, 9)).toISOString(),
+    run_config: { samples },
+  });
+  for (let p = 1; p <= samples; p++) {
+    for (let i = 0; i < n; i++) {
+      const id = `big-${String(i + 1).padStart(3, '0')}`;
+      s.push('item_started', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        input:
+          i % 2
+            ? 'ما هي شروط الحصول على تمويل عقاري وفق الضوابط الحالية؟'
+            : `Question ${i}: summarise clause ${i}`,
+        expected: i % 2 ? 'تمويل بشروط' : `Clause ${i} requires approval`,
+        item_metadata: {
+          domain: ['finance', 'support', 'legal'][i % 3],
+          complexity: ['easy', 'hard'][i % 2],
+        },
+      });
+      s.push('item_attempt_started', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        attempt_number: 1,
+        trace_id: `t-${id}-${p}`,
+        task_started_at_ms: Date.UTC(2026, 9, 4, 9) + (p * n + i) * 1000,
+      });
+      const ok = random() > 0.35 + (i % 5) * 0.05 ? 1 : 0;
+      for (const name of metrics) {
+        const v =
+          name === 'correct' ? ok : Math.min(1, Math.max(0, (ok ? 0.8 : 0.4) + (random() - 0.5) * 0.4));
+        s.push('metric_scored', {
+          item_id: id,
+          pass_number: p,
+          metric_name: name,
+          score_numeric: Number(v.toFixed(3)),
+          ...(name === 'correct' ? { score_raw: ok === 1 } : {}),
+          meta:
+            name === 'rubric_metric_01'
+              ? { reason: 'يغطي معظم النقاط', judge_model: 'gpt-5', confidence: 0.7 }
+              : {},
+        });
+      }
+      s.push('item_completed', {
+        item_id: id,
+        index: i,
+        pass_number: p,
+        is_final_pass: p === samples,
+        output: {
+          answer: i % 2 ? `الإجابة ${p}: التمويل العقاري يتطلب مستندات` : `Answer ${p} for ${i}`,
+          reasoning: i % 2 ? 'حللت السؤال ثم استرجعت المستندات' : 'Looked up the clause then summarised it.',
+          citations: [
+            { doc: 'policy', page: i + 1, score: 0.9 },
+            { doc: 'guide', page: 4, score: 0.6 },
+          ],
+          meta: { nested: { a: [1, 2, { b: 'deep' }], c: { d: 'e' } }, tags: ['x', 'y'] },
+          confidence: 0.7,
+        },
+        latency_ms: 800 + Math.round(random() * 2000),
+        trace_id: `t-${id}-${p}`,
+      });
+    }
+    s.push('pass_completed', { pass_number: p, samples });
+  }
+  s.push('run_completed', {
+    ended_at: new Date(Date.UTC(2026, 9, 4, 10)).toISOString(),
+    final_status: 'COMPLETED',
+  });
+  await s.flush();
+  return runId;
+}
+
 /** 300 items whose metadata has many categories: topic 24, team 14, region 9, customer_tier 6, complexity 4. */
 export async function seedManyCategories(client: SeedClient, token: string): Promise<string> {
   const specs = {

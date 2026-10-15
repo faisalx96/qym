@@ -6,7 +6,8 @@ import { formatLatency, formatPercent, metricDirectionLabel } from '@/lib/metric
 import { ErrorState, SegmentedControl, Skeleton, Slider, StatStrip, Tag, type StatStripItem } from '@/ui';
 import { latencyLabel } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
-import { Curve, PassCountBars, type CurvePoint } from '../charts/Charts';
+import { Curve, CurveLegend, PassCountBars, type CurvePoint } from '../charts/Charts';
+import { ChartCard } from '../charts/ChartCard';
 import {
   queuedLabel,
   repeatCopy,
@@ -217,9 +218,12 @@ export function RepeatTab() {
       ) : null}
       <div className={styles.single + ' ' + styles.visuals}>
         {g?.band ? (
-          <section className={styles.stack} aria-label="Performance across attempts">
-            <div className={styles.rowHead}>
-              <h3 className={styles.groupTitle}>Across attempts</h3>
+          <ChartCard
+            title="Across attempts"
+            ariaLabel="Performance across attempts"
+            slot={false}
+            legend={view === 'chart' && hasCurve ? <CurveLegend series={shownSeries} /> : undefined}
+            controls={
               <span className={styles.controls}>
                 {options.length > 1 ? (
                   <SegmentedControl
@@ -239,8 +243,9 @@ export function RepeatTab() {
                   onChange={setView}
                 />
               </span>
-            </div>
-            <p className={styles.note}>{selected.copy}</p>
+            }
+            intro={<p className={styles.note}>{selected.copy}</p>}
+          >
             {!hasCurve ? (
               <p className={styles.note} data-testid="curve-empty">
                 Every pass errored, so there is no {selected.label.toLowerCase()} to show.
@@ -281,14 +286,15 @@ export function RepeatTab() {
                 </tbody>
               </table>
             )}
-          </section>
+          </ChartCard>
         ) : null}
         {g?.distribution?.length ? (
-          <section className={styles.stack} aria-label="Distribution of passes passed">
-            <h3 className={styles.groupTitle}>Passes passed</h3>
-            <p className={styles.note}>
-              Items by number of passes that passed. Select a bar to filter the table.
-            </p>
+          <ChartCard
+            title="Passes passed"
+            ariaLabel="Distribution of passes passed"
+            meta={<span className={styles.note}>Items by passes that passed</span>}
+            caption={`Passes passed, out of ${model.samples} (0 = always fail, ${model.samples} = always pass)`}
+          >
             <PassCountBars
               counts={g.distribution}
               total={model.samples}
@@ -305,7 +311,7 @@ export function RepeatTab() {
                 })
               }
             />
-          </section>
+          </ChartCard>
         ) : null}
       </div>
       {donePasses.length ? (

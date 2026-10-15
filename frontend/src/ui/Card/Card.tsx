@@ -23,6 +23,11 @@ export interface CardProps {
   compact?: boolean;
   /** No body padding: the card frames a table or a chart that brings its own (a 0-padding table card). */
   flush?: boolean;
+  /**
+   * The card is a flex column whose body takes the remaining height: a card that a grid row stretches gives the
+   * extra height to its content (a chart plot), never to empty space under it.
+   */
+  fill?: boolean;
   /** onPress, href or to make the card interactive (renders button / a). */
   onPress?: () => void;
   href?: string;
@@ -56,6 +61,7 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
     wash,
     compact,
     flush,
+    fill,
     onPress,
     href,
     to,
@@ -79,6 +85,7 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
     'data-wash': wash,
     'data-compact': compact ? '' : undefined,
     'data-flush': flush ? '' : undefined,
+    'data-fill': fill ? '' : undefined,
     'data-selected': isSelected ? '' : undefined,
     'data-disabled': isDisabled ? '' : undefined,
   };

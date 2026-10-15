@@ -1,77 +1,73 @@
-/** Metric cards: gauge + mean, error note, histogram / split bar / numeric stats; marks filter the table. */
 import { useMemo } from 'react';
-import { StatStrip, Text, Card } from '@/ui';
+import { Tag } from '@/ui';
 import { useRunPage } from '../../RunContext';
-import { formatNumericValue } from '@/lib/metrics';
+import { formatNumericValue, metricBand } from '@/lib/metrics';
 import { metricCardModel, type MetricCardModel } from '../../lib/overviewModel';
-import { BandValue, Gauge, Histogram, SplitBar } from '../charts/Charts';
+import { BandValue, BoolBars, Histogram, NumericCells } from '../charts/Charts';
+import { ChartCard } from '../charts/ChartCard';
 import { useChartFilters } from './useChartFilters';
 import styles from './Panels.module.css';
 
 function MetricCard({ card }: { card: MetricCardModel }) {
   const filters = useChartFilters();
+  const band =
+    card.avg !== null && card.kind !== 'numeric' && card.direction
+      ? metricBand(card.avg, card.type, card.direction)
+      : null;
   return (
-    <Card as="article" data-testid="metric-card" data-metric={card.metric}>
-      <div className={styles.metricStack}>
-        <header className={styles.cardHead}>
-          {card.avg !== null && card.kind !== 'numeric' ? (
-            <Gauge score={card.avg} direction={card.direction} />
+    <ChartCard
+      title={card.metric}
+      titleHint={card.directionLabel}
+      band={band ?? undefined}
+      meta={<Tag kind="count">{card.badge}</Tag>}
+      data-testid="metric-card"
+      data-metric={card.metric}
+      intro={
+        <>
+          {card.kind === 'numeric' || card.avg === null ? (
+            <span className={styles.plain}>{card.avgText}</span>
+          ) : (
+            <BandValue value={card.avg} type={card.type} direction={card.direction}>
+              {card.avgText}
+            </BandValue>
+          )}
+          {card.errorNote ? (
+            <span className={styles.errorNote} title={card.errorNote.title}>
+              {card.errorNote.text}
+            </span>
           ) : null}
-          <div className={styles.cardInfo}>
-            {card.kind === 'numeric' || card.avg === null ? (
-              <span className={styles.plain}>{card.avgText}</span>
-            ) : (
-              <BandValue value={card.avg} type={card.type} direction={card.direction}>
-                {card.avgText}
-              </BandValue>
-            )}
-            <Text variant="md" tone="primary" title={card.directionLabel}>
-              {card.metric}
-            </Text>
-            {card.errorNote ? (
-              <span className={styles.errorNote} title={card.errorNote.title}>
-                <span aria-hidden="true">⚠</span> {card.errorNote.text}
-              </span>
-            ) : null}
-          </div>
-          <span className={styles.badge}>{card.badge}</span>
-        </header>
-        {card.kind === 'score' && card.buckets ? (
-          <Histogram
-            buckets={card.buckets}
-            direction={card.direction}
-            metric={card.metric}
-            onPick={(b) => filters.pickBucket(card.metric, b)}
-          />
-        ) : null}
-        {card.kind === 'boolean' && card.segments ? (
-          <>
-            <SplitBar
-              segments={card.segments}
-              total={card.segmentTotal ?? 0}
-              metric={card.metric}
-              onPick={(s) => filters.pickSegment(card.metric, s)}
-            />
-            {card.errorLegend ? (
-              <p className={styles.note} title={card.errorLegend.title}>
-                Error {card.errorLegend.pct}%, {card.errorLegend.label}
-              </p>
-            ) : null}
-          </>
-        ) : null}
-        {card.kind === 'numeric' && card.numeric ? (
-          <StatStrip
-            aria-label={`${card.metric} range`}
-            items={[
-              { key: 'min', label: 'Min', value: formatNumericValue(card.numeric.min) },
-              { key: 'avg', label: 'Avg', value: formatNumericValue(card.avg) },
-              { key: 'max', label: 'Max', value: formatNumericValue(card.numeric.max) },
-              { key: 'sum', label: 'Total', value: formatNumericValue(card.numeric.sum) },
-            ]}
-          />
-        ) : null}
-      </div>
-    </Card>
+        </>
+      }
+    >
+      {card.kind === 'score' && card.buckets ? (
+        <Histogram
+          buckets={card.buckets}
+          direction={card.direction}
+          metric={card.metric}
+          onPick={(b) => filters.pickBucket(card.metric, b)}
+        />
+      ) : null}
+      {card.kind === 'boolean' && card.segments ? (
+        <BoolBars
+          segments={card.segments}
+          total={card.segmentTotal ?? 0}
+          metric={card.metric}
+          onPick={(s) => filters.pickSegment(card.metric, s)}
+        />
+      ) : null}
+      {card.kind === 'numeric' && card.numeric ? (
+        <NumericCells
+          name={`${card.metric} range`}
+          cells={[
+            { key: 'min', label: 'Min', value: formatNumericValue(card.numeric.min) },
+            { key: 'avg', label: 'Avg', value: formatNumericValue(card.avg) },
+            { key: 'max', label: 'Max', value: formatNumericValue(card.numeric.max) },
+            { key: 'sum', label: 'Total', value: formatNumericValue(card.numeric.sum) },
+          ]}
+        />
+      ) : null}
+      {card.kind === 'empty' ? <p className={styles.slotEmpty}>No scored items</p> : null}
+    </ChartCard>
   );
 }
 
@@ -87,7 +83,7 @@ export function OverviewTab() {
   );
   if (!cards.length) return <p className={styles.note}>No scored items for the current filters.</p>;
   return (
-    <div className={styles.cards} data-count={cards.length}>
+    <div className={styles.chartGrid} data-count={cards.length}>
       {cards.map((c) => (
         <MetricCard key={c.metric} card={c} />
       ))}

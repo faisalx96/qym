@@ -50,6 +50,19 @@
   padding: 0;
 }
 
+/* fill: the body takes the height a stretched grid row gives the card (a chart plot grows, nothing is left empty). */
+.card[data-fill] {
+  display: flex;
+  flex-direction: column;
+}
+
+.card[data-fill] > .body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .header {
   border-bottom: 1px solid var(--border-subtle);
 }

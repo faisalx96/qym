@@ -433,7 +433,8 @@ is not allowed.
   `onPress` (div `role="button"`, Enter and Space), `href` or `to` (anchors) make it interactive: hover raises the
   border to `--border-default`, the fill to `--bg-elevated` and adds `--shadow-card-hover`; pressed is `--bg-active`;
   `isSelected` draws the accent border and a soft accent fill while the rail keeps its tone; focus is the 2px accent
-  outline. An interactive card holds no other interactive element. Never restyle a card per page: pass layout via
+  outline. `fill` makes the card a flex column whose body takes the remaining height (a card a grid row stretches gives
+  the extra height to its plot, never to empty space under it). An interactive card holds no other interactive element. Never restyle a card per page: pass layout via
   `className`, meaning via props.
 - **Chart kit** (`ui/Chart`, `styles/marks.css`): every data mark is a `Mark` inside a `ChartTooltipHost`. A mark
   carries `data-mark`; with `onPick` it is interactive (a `button`, or an SVG element with `role="button"`, Enter and
@@ -446,6 +447,17 @@ is not allowed.
   fail = band 1, task error = an open `--error` ring on the axis, latency bulk is `--bg-active` and only the tail is
   `--score-3` (p90) and `--score-2` (p95), series come from `--chart-1..8`. A scatter shows two faint quadrant washes
   (fast and passing, slow and failing) and a legend with the same swatches. Hit areas are at least 24px.
+- **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
+  `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
+  of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`): each bucket is a
+  flex column `[spacer][count][bar][axis][sub]`, the spacer taking `1 - p` and the bar `p` of the free height
+  (`--p` = count / max), so the count always sits on the bar's top edge (a 16px line, 2px above it) and is visible at
+  rest, never hover-only (the tooltip only adds the longer sentence). Bars are at most 44px wide with a 4px gap and a
+  3px minimum when the count is above 0; an empty score bucket draws no count, pass/fail bars and "Passes passed"
+  draw `0` in `--text-muted`. A column narrower than 30px shows every second axis label (the full list stays in the
+  `aria-label`). Boolean metrics are the same plot (Pass, Fail, Error columns, percentage under the label), not a
+  horizontal split bar. Bars rise and counts fade in together on mount; nothing animates under
+  `prefers-reduced-motion` (`animation: none`). Overview cards flow in `repeat(auto-fit, minmax(260px, 1fr))`.
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
   (`--chart-1..8`, `runColor`/`runSeries` in `CompareContext`), the mono letter (the unique key beyond 8 runs and for
   colour-blind readers) and the name (`run_name`, label as fallback, truncated, full label in the tooltip). Run

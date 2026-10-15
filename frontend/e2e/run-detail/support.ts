@@ -16,6 +16,7 @@ import {
   seedClassicRun,
   seedManyCategories,
   seedRepeatRun,
+  seedWideRepeatRun,
   submitRun,
   type ClassicOptions,
   type SeedClient,
@@ -51,6 +52,11 @@ export async function seedRepeat(s: Seeded): Promise<string> {
 /** 12 items x 3 passes, Arabic prose, JSON inputs and outputs, a trace per pass. */
 export async function seedArabic(s: Seeded): Promise<string> {
   return seedArabicRepeatRun(client, s.token);
+}
+
+/** 10 passes x 24 items x 24 metrics, Arabic and English items, nested JSON outputs (round 3). */
+export async function seedWideRepeat(s: Seeded): Promise<string> {
+  return seedWideRepeatRun(client, s.token);
 }
 
 /** 300 items with metadata keys of 24 / 14 / 9 / 6 / 4 values. */
