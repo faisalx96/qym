@@ -31,6 +31,7 @@ export * from './ErrorState';
 export * from './StaleBanner';
 export * from './KeyValueGrid';
 export * from './StatStrip';
+export * from './StatTiles';
 export * from './TextField';
 export * from './SearchField';
 export * from './NumberField';

@@ -32,15 +32,19 @@ test.describe('repeat analysis (J4)', () => {
     await expect(page.locator('#run-section-repeat')).toBeInViewport();
     await expect(panel).toContainText('Pass@3');
     await expect(panel).toContainText('Consistency');
-    const passes = panel.getByRole('table', { name: 'Passes' });
+    const passes = panel.getByRole('grid', { name: 'Passes' });
     await expect(passes.getByRole('link', { name: 'Open pass 2' })).toHaveAttribute('href', /\?pass=2/);
     await expect(panel.getByRole('region', { name: 'Performance across attempts' })).toBeVisible();
     // the curve can be shown as a table
     await panel.getByRole('radio', { name: 'Table' }).click({ force: true });
     await expect(panel.getByRole('radio', { name: 'Table' })).toBeChecked();
-    // switching metric re-renders
-    await panel.getByRole('radio', { name: 'quality' }).click({ force: true });
-    await expect(panel.getByRole('radio', { name: 'quality' })).toBeChecked();
+    // switching metric (a Select since round 3) re-renders and writes ?metric=
+    await panel
+      .getByRole('button', { name: /Metric/ })
+      .first()
+      .click();
+    await page.getByRole('option', { name: 'quality' }).click();
+    await expect.poll(() => params(page).get('metric')).toBe('quality');
   });
 
   test('a distribution bar filters the items to "N of 3 passes passed"', async ({ page }) => {
@@ -165,9 +169,7 @@ test.describe('heatmap readability (final review F6)', () => {
     const first = grid.locator('[data-heat-row]').first();
     const idle = await first.evaluate((el) => getComputedStyle(el).backgroundColor);
     await first.hover();
-    await expect
-      .poll(() => first.evaluate((el) => getComputedStyle(el).backgroundColor))
-      .not.toBe(idle);
+    await expect.poll(() => first.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(idle);
     // 60 items: the first 30, then a button for 30 more
     await expect(page.getByText('Showing 30 of 60 items')).toBeVisible();
     expect(await grid.locator('[data-heat-row]').count()).toBeLessThanOrEqual(30);

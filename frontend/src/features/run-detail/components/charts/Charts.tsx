@@ -81,19 +81,22 @@ export function BarColumns({
   bars,
   name,
   axis = true,
+  thin = true,
   className,
 }: {
   bars: BarSpec[];
   name: string;
   /** Per-column axis labels; false when the plot has its own axis (latency bins). */
   axis?: boolean;
+  /** Apply the thinning rule (every second label under 30px per column); false for short labels (0..k) that cannot collide. */
+  thin?: boolean;
   className?: string;
 }) {
   const [boxRef, width] = useMeasuredWidth<HTMLDivElement>(280);
   const enter = useEntrance();
   const max = Math.max(1, ...bars.map((b) => b.count));
   const colWidth = bars.length ? (width - COLUMN_GAP * (bars.length - 1)) / bars.length : width;
-  const showAxis = thinAxisLabels(bars.length, colWidth);
+  const showAxis = thinAxisLabels(bars.length, thin ? colWidth : Infinity);
   return (
     <div ref={boxRef} className={styles.plotBox}>
       <ChartTooltipHost
@@ -700,7 +703,13 @@ export function Curve({
                       data-point-label={s.name}
                       x={sx(p.k)}
                       y={below ? sy(p.value!) + 17 : sy(p.value!) - 9}
-                      textAnchor={pos === ks.length - 1 && ks.length > 1 ? 'end' : 'middle'}
+                      textAnchor={
+                        ks.length > 1 && pos === ks.length - 1
+                          ? 'end'
+                          : pos === 0 && ks.length > 1
+                            ? 'start'
+                            : 'middle'
+                      }
                       aria-hidden="true"
                     >
                       {format(p.value!)}
@@ -741,5 +750,5 @@ export function PassCountBars({
     zero: 'show',
     data: { 'data-passes': i },
   }));
-  return <BarColumns bars={bars} name="Items by number of passes that passed" />;
+  return <BarColumns bars={bars} name="Items by number of passes that passed" thin={false} />;
 }

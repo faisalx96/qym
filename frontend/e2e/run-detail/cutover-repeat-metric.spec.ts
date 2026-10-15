@@ -18,13 +18,13 @@ test.beforeAll(async () => {
 test('a slow response of an earlier metric never replaces the chosen metric', async ({ page }) => {
   await openRun(page, s.slug, repeat, 'panel=repeat');
   const panel = page.getByTestId('repeat-analysis');
-  const metric = panel.getByRole('radiogroup', { name: 'Metric' });
-  const radios = metric.getByRole('radio');
-  await expect(radios).toHaveCount(2);
-  const first = (await radios.nth(0).isChecked()) ? radios.nth(0) : radios.nth(1);
-  const other = (await radios.nth(0).isChecked()) ? radios.nth(1) : radios.nth(0);
-  const otherName =
-    (await other.getAttribute('value')) ?? (await other.evaluate((n) => (n as HTMLInputElement).value));
+  const select = panel.getByRole('button', { name: /Metric/ }).first();
+  const choose = async (name: string) => {
+    await select.click();
+    await page.getByRole('option', { name: new RegExp(`^${name}`) }).click();
+  };
+  const current = ((await select.innerText()).includes('quality') ? 'quality' : 'correct') as string;
+  const otherName = current === 'quality' ? 'correct' : 'quality';
   let delayed = false;
   await page.route(new RegExp(`/group-metrics\\?metric=${otherName}`), async (route) => {
     if (!delayed) {
@@ -33,12 +33,11 @@ test('a slow response of an earlier metric never replaces the chosen metric', as
     }
     await route.continue();
   });
-  await other.click({ force: true });
+  await choose(otherName);
   await page.waitForTimeout(250);
-  await first.click({ force: true });
+  await choose(current);
   await page.waitForTimeout(2200); // the slow response has landed by now
-  await expect(first).toBeChecked();
-  await expect(other).not.toBeChecked();
+  await expect(select).toContainText(current);
   await expect(panel).toContainText('Pass@3');
 });
 

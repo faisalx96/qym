@@ -104,3 +104,26 @@ export function verdictLine(
   if (gap < 1) return `${lead}items that pass once pass every time, so results are consistent.`;
   return `${lead}${gap} pts of items pass at least once but not every time.`;
 }
+
+export type RepeatTileKey =
+  'pass_at_k' | 'pass_hat_k' | 'consistency' | 'reliability' | 'avg' | 'latency' | 'errors';
+
+/** The one plain sentence under each stat tile (round 3 P2); `k` is the pass count, `metric` the metric driving the tiles. */
+export function tileMeaning(key: RepeatTileKey, k: number, metric: string): string {
+  switch (key) {
+    case 'pass_at_k':
+      return `Items that passed in at least 1 of ${k} passes`;
+    case 'pass_hat_k':
+      return `Items that passed in all ${k} passes`;
+    case 'consistency':
+      return `Items whose ${k} passes all agree`;
+    case 'reliability':
+      return 'Chance an item passes, over items solved at least once';
+    case 'avg':
+      return `Mean of ${metric} over all passes`;
+    case 'latency':
+      return 'Mean time per item and pass';
+    case 'errors':
+      return 'Item runs that failed to produce a result';
+  }
+}

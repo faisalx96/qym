@@ -447,6 +447,11 @@ is not allowed.
   fail = band 1, task error = an open `--error` ring on the axis, latency bulk is `--bg-active` and only the tail is
   `--score-3` (p90) and `--score-2` (p95), series come from `--chart-1..8`. A scatter shows two faint quadrant washes
   (fast and passing, slow and failing) and a legend with the same swatches. Hit areas are at least 24px.
+- **Stat tiles** (`ui/StatTiles`, round 3 P2): seven or fewer equal, separate, centred tiles (the repeat analysis). Each is a
+  passive `Card compact rail="bottom"` (rail in the value's band; none for latency and errors): a `--font-sm` 600 uppercase
+  label with its `HelpMarker`, the value in `--font-stat` mono, one plain sentence in `--font-sm` muted (at most 22ch wide).
+  No groups, no hover. The grid answers to the report column: one row of N from 900px, a 12-column 4 + 3 split below that,
+  two per row and a full-width last tile under 480px. `StatStrip` stays for connected summary bands.
 - **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
   `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
   of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`): each bucket is a

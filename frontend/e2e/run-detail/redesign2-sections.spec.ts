@@ -25,29 +25,27 @@ test.beforeAll(async () => {
 });
 
 test.describe('repeat analysis', () => {
-  test('reads in order: verdict, grouped stats, curve, distribution, per-pass table', async ({ page }) => {
+  test('reads in order: verdict, tiles, curve beside distribution, per-pass table', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openRun(page, s.slug, repeat, 'panel=repeat');
     const panel = page.getByTestId('repeat-analysis');
     await expect(panel.getByTestId('repeat-verdict')).toContainText(
       /Pass@3 .*Pass\^3 .*pts of items pass at least once/,
     );
-    const strip = panel.getByRole('group', { name: 'Repeat run summary' });
-    for (const g of ['Capability', 'Consistency', 'Speed and errors'])
-      await expect(strip.getByRole('group', { name: g })).toBeVisible();
-    const tops = async (name: string | RegExp) =>
-      (await panel.getByRole(name === 'Passes' ? 'region' : 'region', { name }).boundingBox())!;
-    const curve = await tops('Performance across attempts');
-    const dist = await tops('Distribution of passes passed');
+    // round 3 P2: seven separate tiles, no groups; the curve sits beside the distribution at 1440 (redesign2 stacked them)
+    await expect(
+      panel.getByRole('list', { name: 'Repeat run statistics' }).getByRole('listitem'),
+    ).toHaveCount(7);
+    const curve = (await panel.getByRole('region', { name: 'Performance across attempts' }).boundingBox())!;
+    const dist = (await panel.getByRole('region', { name: 'Distribution of passes passed' }).boundingBox())!;
     const table = (await panel.getByRole('region', { name: 'Passes', exact: true }).boundingBox())!;
-    // one visual per row, in this order
-    expect(dist.y).toBeGreaterThan(curve.y + curve.height - 2);
-    expect(table.y).toBeGreaterThan(dist.y + dist.height - 2);
+    expect(dist.x).toBeGreaterThan(curve.x + curve.width - 2);
+    expect(table.y).toBeGreaterThan(Math.max(curve.y + curve.height, dist.y + dist.height) - 2);
     // plain-language distribution labels
     await expect(panel).toContainText('always fail');
     await expect(panel).toContainText('always pass');
     // best and worst pass on the selected metric
-    await expect(panel.getByRole('table', { name: 'Passes' })).toContainText(/best|worst/);
+    await expect(panel.getByRole('grid', { name: 'Passes' })).toContainText(/best|worst/);
   });
 });
 

@@ -1,6 +1,7 @@
 /** The analysis sections of the run report, stacked at full width (legacy order), plus the nav entries that point at them. */
 import { useMemo } from 'react';
 import { useReviewHistoryQuery } from '@/api/runs';
+import { metricDirectionLabel } from '@/lib/metrics';
 import { ReportSection, StatStrip } from '@/ui';
 import { runCounts } from '../lib/overviewModel';
 import { errorBucketCount } from '../lib/panelCounts';
@@ -83,8 +84,12 @@ export function useSectionEntries(): SectionEntry[] {
 }
 
 export function ReportSections({ scopeNote }: { scopeNote?: string }) {
-  const { model, items } = useRunPage();
+  const { model, items, api } = useRunPage();
   const hasRootCause = useHasRootCause();
+  const repeatMetric = api.selectedMetric;
+  const repeatDescription = `Every item was evaluated ${model.samples}×. ${metricDirectionLabel(
+    repeatMetric ? (model.metricDirections[repeatMetric] ?? null) : null,
+  )}.`;
   const counts = useMemo(
     () =>
       runCounts(
@@ -125,7 +130,7 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
       <ReportSection
         id={sectionDomId('repeat')}
         title="Repeat run analysis"
-        description="Pass@k, per-pass results and how many passes passed."
+        description={repeatDescription}
         hidden={!(model.isRepeat && !model.viewPass)}
         lazy
         minHeight={320}

@@ -12,6 +12,7 @@ import {
   seedClassic,
   seedProject,
   seedRepeat,
+  seedWideRepeat,
   type Seeded,
 } from './support';
 
@@ -19,12 +20,15 @@ let s: Seeded;
 let classic: string;
 let repeat: string;
 let arabic: string;
+let wide: string;
 
 test.beforeAll(async () => {
+  test.setTimeout(120_000);
   s = await seedProject('rd-axe');
   classic = await seedClassic(s);
   repeat = await seedRepeat(s);
   arabic = await seedArabic(s);
+  wide = await seedWideRepeat(s);
 });
 
 async function audit(page: Page, label: string, context: string): Promise<void> {
@@ -113,6 +117,7 @@ test.describe('axe', () => {
   for (const [label, id] of [
     ['repeat run', () => repeat],
     ['Arabic multi-pass run', () => arabic],
+    ['wide repeat run (10 passes, 24 metrics)', () => wide],
   ] as const) {
     for (const width of [1440, 390]) {
       test(`${label} repeat panel has no serious violation at ${width}px`, async ({ page }) => {
