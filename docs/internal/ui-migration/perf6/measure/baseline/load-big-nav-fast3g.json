@@ -1,0 +1,109 @@
+{
+  "run": "big",
+  "kind": "nav",
+  "net": "fast3g",
+  "median": {
+    "heroMs": 2638.5,
+    "overviewMs": 2638.5,
+    "rowsMs": 2638.5,
+    "ttiMs": 2638.5,
+    "tbtMs": 76.5,
+    "cls": 0.0145,
+    "requests": 15,
+    "jsChunks": 6,
+    "jsKB": 100.7,
+    "apiRequests": 3,
+    "apiKB": 89.6,
+    "compactKB": 88.2,
+    "compactTtfbMs": 571,
+    "compactDoneMs": 2511
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 2662,
+      "skeletonMs": 58,
+      "overviewMs": 2662,
+      "rowsMs": 2662,
+      "ttiMs": 2662,
+      "tbtMs": 97,
+      "cls": 0.0145,
+      "reactCommits": 42,
+      "requests": 15,
+      "jsChunks": 6,
+      "jsKB": 100.7,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 571,
+      "compactDoneMs": 2515,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "RunDetailPage-BHDSrhZc.js 75.3kB @17-1207ms",
+        "useSidebarHidden-CDM2YtW1.js 20.8kB @17-863ms",
+        "TextBlock-NQaC9h_M.js 0.9kB @18-603ms",
+        "Collapse-J4LagQgg.js 1.0kB @18-588ms",
+        "structured-B1EJLoP6.js 1.4kB @18-1212ms",
+        "Disclosure-Cj_VUU5L.js 1.2kB @19-1429ms"
+      ],
+      "apiList": [
+        "/api/runs/c599be98-3950-43d6-b28e-4042f2f26e8a?view=compact 88.2kB @1431-2515ms",
+        "/api/dashboard/neighbors 1.1kB @2613-3195ms",
+        "/api/runs/c599be98-3950-43d6-b28e-4042f2f26e8a/review-history 0.3kB @2613-3187ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 2615,
+      "skeletonMs": 32,
+      "overviewMs": 2615,
+      "rowsMs": 2615,
+      "ttiMs": 2615,
+      "tbtMs": 56,
+      "cls": 0.0145,
+      "reactCommits": 292,
+      "requests": 15,
+      "jsChunks": 6,
+      "jsKB": 100.7,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 571,
+      "compactDoneMs": 2507,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "RunDetailPage-BHDSrhZc.js 75.3kB @13-1202ms",
+        "useSidebarHidden-CDM2YtW1.js 20.8kB @13-860ms",
+        "TextBlock-NQaC9h_M.js 0.9kB @13-601ms",
+        "Collapse-J4LagQgg.js 1.0kB @14-592ms",
+        "structured-B1EJLoP6.js 1.4kB @14-1209ms",
+        "Disclosure-Cj_VUU5L.js 1.2kB @14-1427ms"
+      ],
+      "apiList": [
+        "/api/runs/c599be98-3950-43d6-b28e-4042f2f26e8a?view=compact 88.2kB @1429-2507ms",
+        "/api/dashboard/neighbors 1.1kB @2578-3168ms",
+        "/api/runs/c599be98-3950-43d6-b28e-4042f2f26e8a/review-history 0.3kB @2578-3151ms"
+      ]
+    }
+  ]
+}

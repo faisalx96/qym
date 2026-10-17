@@ -1,0 +1,19 @@
+{
+  "table": "runs",
+  "width": 1440,
+  "cpu": 1,
+  "target": {
+    "line": 207,
+    "y": 198,
+    "x": 0,
+    "headH": 0
+  },
+  "compositedFrames": 128,
+  "framesWithMarker": 128,
+  "judged": 96,
+  "medianLagPx": 0,
+  "p95LagPx": 0,
+  "maxLagPx": 0,
+  "framesLagOver1px": 0,
+  "presentedFps": 30
+}
