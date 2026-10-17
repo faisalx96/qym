@@ -92,6 +92,10 @@ of the whole user slice; see `docs/internal/ui-migration/POSTMORTEM.md` section 
 - Light commands (one spec with `--workers 1`, one or two Vitest files, tsc, eslint) run directly.
 - Stop uvicorn, Vite and stub servers the moment a check ends; find your own PIDs by port (`ss -ltnp`).
   Never `pkill -f` by pattern: it kills other agents' Playwright and servers.
+- Filesystem boundary: an agent (the orchestrator and every sub-agent) may read or write only inside this
+  repository and its parent directory one level up (`..`, where the `qym-wt-*` worktrees and the legacy checkout
+  live), plus its own scratchpad. Nothing above that parent (home, other projects, system paths) is opened,
+  listed, searched or written; the project venv and nvm are used through their documented commands only.
 - Agents: at most one sub-agent each; `free -h` with at least 3 GB available before starting another agent;
   one hand-back per task (an agent that re-sends the same report is stopped, not answered).
 - Environment for anything that boots the platform: `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"`

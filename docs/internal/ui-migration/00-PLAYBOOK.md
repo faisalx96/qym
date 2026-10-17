@@ -133,6 +133,8 @@ rounds that went from a prose brief straight to code had to be redone (`POSTMORT
 - Never log or display credentials. Never commit `.env`, DBs, screenshots (except
   the curated `redesign*/shots/` folders), `node_modules`, `dist`, `*.tsbuildinfo`,
   `test-results` or `playwright-report`.
+- Filesystem boundary: stay inside the repository and its parent directory one
+  level up (worktrees, the legacy checkout); never read, list or write above it.
 - Memory: every full suite, build and `pytest -n` through `scripts/heavy.sh` (cost
   table in `AGENTS.md`); stop servers when done; never `pkill -f`; at most one
   sub-agent; one hand-back.
