@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RunPass, RunPasses, RunRow } from '@/api/dashboardTypes';
 import { childRowsOf, loadingCount, resolveMetric, runKeyOf } from '../passes/rows';
 
-const run = (samples: number, status = 'COMPLETED') => ({ run_id: 'r1', samples, status }) as unknown as RunRow;
+const run = (samples: number, status = 'COMPLETED') =>
+  ({ run_id: 'r1', samples, status }) as unknown as RunRow;
 const pass = (n: number, status: string) => ({ pass_number: n, status }) as unknown as RunPass;
 const data = (passes: RunPass[], samples: number) => ({ passes, samples }) as unknown as RunPasses;
 const q = (over: Partial<Parameters<typeof childRowsOf>[1] & object>) => ({
@@ -14,7 +15,7 @@ const q = (over: Partial<Parameters<typeof childRowsOf>[1] & object>) => ({
 });
 
 describe('childRowsOf', () => {
-  it('shows as many loading rows as the run has passes (1..10) and keeps the strip's frame', () => {
+  it('shows as many loading rows as the run has passes (1..10) and keeps the frame of the strip', () => {
     const out = childRowsOf(run(3), q({ isPending: true }));
     expect(out.rows.map((r) => r.kind)).toEqual(['loading', 'loading', 'loading']);
     expect(out.detail).toBe(true);

@@ -23,7 +23,15 @@ describe('buildDisplayRows child rows', () => {
 
   it('puts children after their parent and the detail row after the last child', () => {
     const out = buildDisplayRows(rows, key, { ...base, expanded: new Set(['a']), children });
-    expect(out.map((d) => d.id)).toEqual(['r:a', 'c:a::pass1', 'c:a::pass2', 'c:a::pass3', 'd:a', 'r:b', 'r:c']);
+    expect(out.map((d) => d.id)).toEqual([
+      'r:a',
+      'c:a::pass1',
+      'c:a::pass2',
+      'c:a::pass3',
+      'd:a',
+      'r:b',
+      'r:c',
+    ]);
   });
 
   it('numbers the children for aria-posinset / setsize and keeps the parent link', () => {
@@ -50,9 +58,21 @@ describe('buildDisplayRows child rows', () => {
   });
 
   it('keeps children under their parent when the input order changes', () => {
-    const out = buildDisplayRows([rows[2]!, rows[0]!], key, { ...base, expanded: new Set(['a', 'c']), children });
+    const out = buildDisplayRows([rows[2]!, rows[0]!], key, {
+      ...base,
+      expanded: new Set(['a', 'c']),
+      children,
+    });
     expect(out.map((d) => d.id)).toEqual([
-      'r:c', 'c:c::pass1', 'c:c::pass2', 'd:c', 'r:a', 'c:a::pass1', 'c:a::pass2', 'c:a::pass3', 'd:a',
+      'r:c',
+      'c:c::pass1',
+      'c:c::pass2',
+      'd:c',
+      'r:a',
+      'c:a::pass1',
+      'c:a::pass2',
+      'c:a::pass3',
+      'd:a',
     ]);
   });
 

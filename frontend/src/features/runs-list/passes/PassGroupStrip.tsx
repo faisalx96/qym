@@ -63,16 +63,16 @@ export function PassGroupStrip({
         </Text>
       </span>
       <span className={styles.select}>
-      <Select
-        label="Metric"
-        hideLabel
-        items={scoreMetrics.map((m) => ({ key: m, label: m.replace(/_/g, ' ') }))}
-        value={activeMetric}
-        onChange={(key) => {
-          if (key) onMetric(String(key));
-        }}
-        width="100%"
-      />
+        <Select
+          label="Metric"
+          hideLabel
+          items={scoreMetrics.map((m) => ({ key: m, label: m.replace(/_/g, ' ') }))}
+          value={activeMetric}
+          onChange={(key) => {
+            if (key) onMetric(String(key));
+          }}
+          width="100%"
+        />
       </span>
       {dir && activeMetric ? (
         <PassThreshold

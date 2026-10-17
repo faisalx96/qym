@@ -187,7 +187,9 @@ function childCell(col: ColumnDef, tr: ChildOf, h: CellHandlers): ReactNode {
   if (id.startsWith('trace-')) {
     const v = pass.trace_stats?.[id.slice(6)];
     if (typeof v !== 'number') return <span>—</span>;
-    return <Mono>{id === 'trace-tool_success_rate' ? `${(v * 100).toFixed(1)}%` : formatNumericValue(v, 1)}</Mono>;
+    return (
+      <Mono>{id === 'trace-tool_success_rate' ? `${(v * 100).toFixed(1)}%` : formatNumericValue(v, 1)}</Mono>
+    );
   }
   switch (id) {
     case 'run':
@@ -435,7 +437,13 @@ export function RunsTable(p: RunsTableProps) {
           else if (tr.kind === 'pass') openPass(tr.run, tr.pass.pass_number);
         }}
         rowState={(tr) =>
-          tr.kind !== 'run' ? undefined : tr.row.status === 'RUNNING' ? 'live' : tr.row.status === 'FAILED' ? 'error' : undefined
+          tr.kind !== 'run'
+            ? undefined
+            : tr.row.status === 'RUNNING'
+              ? 'live'
+              : tr.row.status === 'FAILED'
+                ? 'error'
+                : undefined
         }
         rowProps={(tr) =>
           tr.kind === 'run'
@@ -496,7 +504,9 @@ export function RunsTable(p: RunsTableProps) {
         childGroupLabel={(tr) => `Passes of ${runName(tr.kind === 'run' ? tr.row : tr.run)}`}
         cardChildColumns={cardMetric ? [`metric-${cardMetric}`, 'signals'] : ['signals']}
         renderExpanded={(tr) =>
-          tr.kind === 'run' ? <PassGroupStrip row={tr.row} remembered={choice} onMetric={chooseMetric} /> : null
+          tr.kind === 'run' ? (
+            <PassGroupStrip row={tr.row} remembered={choice} onMetric={chooseMetric} />
+          ) : null
         }
         focusedKey={focusedKey}
         onFocusedKeyChange={(key) => {

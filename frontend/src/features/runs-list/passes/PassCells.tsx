@@ -102,7 +102,8 @@ export function PassAnalysis({ run, pass, status }: { run: RunRow; pass: RunPass
 export function PassMetricCell({ run, pass, metric }: { run: RunRow; pass: RunPass; metric: string }) {
   const { metricTypes } = useRunsCtx();
   const v = pass.metric_means?.[metric];
-  if (v === undefined || v === null || !run.metrics.includes(metric)) return <span className={styles.none}>—</span>;
+  if (v === undefined || v === null || !run.metrics.includes(metric))
+    return <span className={styles.none}>—</span>;
   const type = metricTypes[metric];
   const errors = pass.metric_error_counts?.[metric] ?? 0;
   const marker = errors ? (

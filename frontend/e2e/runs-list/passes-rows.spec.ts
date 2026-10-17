@@ -60,21 +60,24 @@ type Rect = { left: number; width: number; height: number };
 const rectsOf = (tr: Locator): Promise<Record<string, Rect>> =>
   tr.evaluate((el) =>
     Object.fromEntries(
-      [...el.querySelectorAll('td[data-col]')].map((td) => {
+      Array.from(el.querySelectorAll('td[data-col]')).map((td) => {
         const r = td.getBoundingClientRect();
         return [td.getAttribute('data-col')!, { left: r.left, width: r.width, height: r.height }];
       }),
     ),
   );
 const colSeq = (tr: Locator) =>
-  tr.evaluate((el) => [...el.querySelectorAll('td[data-col]')].map((td) => td.getAttribute('data-col')));
+  tr.evaluate((el) =>
+    Array.from(el.querySelectorAll('td[data-col]')).map((td) => td.getAttribute('data-col')),
+  );
 const setScroll = (page: Page, x: number) =>
   scroller(page).evaluate((el, v) => {
     el.scrollLeft = v;
     return el.scrollLeft;
   }, x);
 
-async function mockPasses(page: Page, mutate: (body: any) => any) {
+type PassesBody = { samples: number; passes: Array<Record<string, unknown>> };
+async function mockPasses(page: Page, mutate: (body: PassesBody) => PassesBody) {
   await page.route(/\/api\/runs\/[^/]+\/passes$/, async (route) => {
     const res = await route.fetch();
     const body = await res.json();
@@ -281,7 +284,8 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
       expect(((await r.locator('td[data-col="status"]').innerText()) ?? '').trim()).toMatch(/^[A-Z ]+$/);
       await expect(r.locator('td[data-col="time"] time')).toBeVisible();
     }
-    const leftOf = (el: Locator, sel: string) => el.locator(sel).evaluate((e) => e.getBoundingClientRect().left);
+    const leftOf = (el: Locator, sel: string) =>
+      el.locator(sel).evaluate((e) => e.getBoundingClientRect().left);
     expect(
       Math.abs(
         (await leftOf(rows.first(), 'td[data-col="run"] a')) -
@@ -370,7 +374,7 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     const order = await table(page)
       .locator('tbody')
       .evaluate((tb) =>
-        [...tb.children].map((tr) =>
+        Array.from(tb.children).map((tr) =>
           tr.hasAttribute('data-strip-row') ? 'strip' : tr.hasAttribute('data-pass-row') ? 'pass' : 'run',
         ),
       );
@@ -451,7 +455,7 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
         .evaluate((tb) => {
           const out: string[] = [];
           let last = '';
-          for (const tr of [...tb.children]) {
+          for (const tr of Array.from(tb.children)) {
             if (tr.hasAttribute('data-run-id')) {
               last = tr.getAttribute('data-run-id')!;
               out.push('run');
@@ -658,7 +662,7 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
       table(page)
         .locator('tbody')
         .evaluate((tb, nm) => {
-          const rows = [...tb.children] as HTMLElement[];
+          const rows = Array.from(tb.children) as HTMLElement[];
           const i = rows.findIndex((tr) => tr.hasAttribute('data-run-id') && tr.textContent?.includes(nm));
           let sum = 0;
           for (let j = i + 1; j < rows.length && !rows[j]!.hasAttribute('data-run-id'); j++)

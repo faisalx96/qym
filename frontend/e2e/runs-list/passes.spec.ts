@@ -101,7 +101,9 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       .getByRole('button', { name: `Expand 3 passes of ${NAME}` })
       .click();
     const panel = page.getByTestId('runs-table');
-    const passBoxes = panel.getByRole('checkbox', { name: new RegExp(`^Select pass \\d of 3 of run ${NAME}$`) });
+    const passBoxes = panel.getByRole('checkbox', {
+      name: new RegExp(`^Select pass \\d of 3 of run ${NAME}$`),
+    });
     await expect(passBoxes).toHaveCount(3);
     const parent = page.getByRole('checkbox', { name: `Select ${NAME}`, exact: true });
     await clickBox(passBoxes.nth(0));
@@ -135,7 +137,9 @@ test.describe('runs list: repeat-run passes (J6)', () => {
       .getByRole('button', { name: `Expand 3 passes of ${NAME}` })
       .click();
     const panel = page.getByTestId('runs-table');
-    const passBoxes = panel.getByRole('checkbox', { name: new RegExp(`^Select pass \\d of 3 of run ${NAME}$`) });
+    const passBoxes = panel.getByRole('checkbox', {
+      name: new RegExp(`^Select pass \\d of 3 of run ${NAME}$`),
+    });
     const parent = page.getByRole('checkbox', { name: `Select ${NAME}`, exact: true });
     for (const i of [0, 1, 2]) await clickBox(passBoxes.nth(i));
     await expect(parent).toBeChecked();
@@ -178,7 +182,10 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     const analyze = rows.nth(1).getByRole('link', { name: /^Analyze pass 2/ });
     await expect(analyze).toHaveAttribute('href', /\/analyzer\?.*pass=2/);
     // the pass row opens that pass of the run
-    await rows.nth(1).getByRole('link', { name: `Pass 2 of 3 of run ${NAME}` }).click();
+    await rows
+      .nth(1)
+      .getByRole('link', { name: `Pass 2 of 3 of run ${NAME}` })
+      .click();
     await expect(page).toHaveURL(/pass=2/);
   });
 
@@ -195,9 +202,9 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     await expect(dlg.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await dlg.getByRole('button', { name: 'Delete pass' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Pass 2 deleted' })).toBeVisible();
-    await expect(
-      page.getByTestId('runs-table').locator('tbody tr[data-pass-row]'),
-    ).toHaveCount(2, { timeout: 15_000 });
+    await expect(page.getByTestId('runs-table').locator('tbody tr[data-pass-row]')).toHaveCount(2, {
+      timeout: 15_000,
+    });
   });
 
   test('a SUBMITTED repeat run cannot have passes deleted', async ({ page, request }) => {

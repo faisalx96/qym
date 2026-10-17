@@ -175,5 +175,8 @@ export async function openPassMenu(panel: Locator, page: Page, n: number): Promi
 }
 /** Pass rows carry a Delete pass icon button (redesign 4: no menu step). */
 export async function deletePassFromMenu(panel: Locator, _page: Page, n: number): Promise<void> {
-  await panel.locator(`tr[data-pass-row="${n}"]`).getByRole('button', { name: `Delete pass ${n}` }).click();
+  await panel
+    .locator(`tr[data-pass-row="${n}"]`)
+    .getByRole('button', { name: `Delete pass ${n}` })
+    .click();
 }

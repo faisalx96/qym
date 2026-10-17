@@ -1,6 +1,15 @@
 /** Pure DataTable logic (sort, order, pins, grouping, range selection, persisted state). Unit-tested. */
 import { KEYS, readJson, writeJson } from '@/lib/storage';
-import type { CellType, ChildRows, Column, Density, DisplayRow, GroupByConfig, Key, SortState } from './types';
+import type {
+  CellType,
+  ChildRows,
+  Column,
+  Density,
+  DisplayRow,
+  GroupByConfig,
+  Key,
+  SortState,
+} from './types';
 
 export const NUMERIC_TYPES: ReadonlySet<CellType> = new Set(['number', 'delta', 'duration']);
 export const MONO_TYPES: ReadonlySet<CellType> = new Set(['id', 'number', 'score', 'delta', 'duration']);
