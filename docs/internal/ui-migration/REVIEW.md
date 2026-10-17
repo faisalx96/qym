@@ -173,6 +173,56 @@ through it. Docker: the UI build moved to `docker/Dockerfile.frontend` with `FRO
 | `npm run e2e:sdk` | 42 passed |
 | `pytest -q -n 2 tests/sdk`, `tests/platform` (platform in 4 chunks; one `-n 2` run was killed by the heavy.sh memory cap) | 3263 passed, 744 skipped, 0 failed |
 
+## Redesign round 3 (2026-10-15/17, `ui/redesign3-run-detail`)
+
+Third product QA round, all on run detail: graphs (counts above bars, charts centred in their own boxes), repeat
+analysis (metric from a dropdown, full-width rows, separate centred statistic boxes, no grouping), categories
+(like the old design), the items column header hovering over an expanded item, item details (input and output
+anchored on the same side, output separated from metrics, output keys collapsed with Expand all, pass colours),
+the run header that had lost too many details (added mid-round), and box plots for metrics that used to show
+min / avg / max / total (added mid-round). The user's standing instruction for the round: "invest heavily in UI
+design and strict adherence to it in implementation", so the cycle gained a design stage: a designer measured the
+current and legacy pages, wrote the spec `redesign3/run-detail.md` with numbered acceptance criteria (P1 to P7,
+about 100), per-width layouts and static mocks in the gallery (`/__ui#round3`, shots `redesign3/shots/mock-*`);
+the implementer worked criterion by criterion (`redesign3/impl-notes.md`, shots `after-*`); an independent
+reviewer measured every criterion in the browser (`redesign3/review-run-detail.md`).
+
+| Point | Change | Review |
+|---|---|---|
+| P1 graphs | `ChartCard` (`Card fill`) for every chart, column recipe with the count above each bar, boolean split as the same chart, labelled curve points, reduced-motion guards | met |
+| P2 repeat | one metric `Select` bound to `?metric=`, seven separate centred `StatTiles` (no groups), curve and distribution side by side from 1100 px, `PassTable` on DataTable with a metrics picker | met; section ceiling amended at 390 (1,950) and for numeric metrics (by-pass box card) |
+| P3 categories | one key at a time (`SegmentedControl` / `Select`), six rows plus "Show all", overall-average tick, `?category=` | met; ceiling amended 460 to 540 (the old number compared a section to a body-only mock) |
+| P4 sticky header | items column header held above an expanded item, 32 px `ItemBar` owns the sticky line with Collapse (`stickyShift`) | met (0 px overlap in a scroll sweep) |
+| P5 item details | single left anchor (dir only on value text), output keys collapsed with recursive Expand all / Collapse all (`KeyTree`), divider and Metrics heading, metric x pass `MetricMatrix`, up to 3 pass columns, passes shown by number and verdict tone instead of hue | met |
+| P6 run header | chevron removed; three always-visible bands (identity and actions; seven facts; versioning / config / metadata chips with a clamp and "+ N more") | met at 1440 (188 px, every field); at 390 the clamp went to five lines and the ceiling to 570 after the first review (554 px, 7 of 8 chips, no truncation) |
+| P7 box plots | `BoxPlot` (p25 to p75 box, median line, hollow mean diamond, p5 to p95 whiskers, outliers capped at 40 a side) replaces Min / Avg / Max / Total on numeric metric cards, with the six numbers always visible; new Tokens per item and Cost per item cards; latency strip under the histogram; per-pass box rows in Repeat; step timings on the same mark; bar and box clicks write filter rules | met (20 of 20) |
+
+Review: first pass MEETS WITH FIXES (4 criteria not met: P2-12, P3-8, P6-1 and P6-8 at 390), fix commit 0be574e4,
+re-review MEETS. Spec amendments made during the fixes (P1-10, P2-12, P3-8, P6-3, P6-8) are each recorded with the
+measured number and a reason in `run-detail.md`, and the reviewer judged each as measured reality rather than
+convenience. Design decisions worth knowing: passes carry no colour (ten distinguishable hues cannot reach the
+palette's perceptual-distance rule, so passes are a number plus a pass / fail tone); the gallery mocks stay static
+design contracts rather than being rebuilt on the shipped components; `Row.pass_scores` is present in the compact
+run payload, so no new endpoint was needed for the per-pass box rows.
+
+Deferred from round 3: the by-pass table at 390 cuts the Errors header when the picked metric name is long
+(e.g. `rubric_metric_01`); histogram x labels in the 4-up overview are tight (15 to 17 px gaps, no overlap);
+the runs-list Passes panel still cycles three series colours; `e2e:sdk` `qa-fixes.spec.ts` "elapsed clock stops while
+reconnecting" flaked once under load and passed on rerun. Commits `aafb3516` to `9bbbdc53` on the branch carry the
+"Claude Sonnet 5.5" attribution trailer.
+
+### Final gate on `UI-redesign` 741ec52e
+
+| Suite | Result |
+|---|---|
+| `npm run check` | clean; Vitest 1356 tests (154 files), design-language 49 |
+| `npm run build`, `npm run build:sdk` | ok |
+| `pytest tests/platform/test_design_language.py` | 1 passed |
+| Full Playwright (`heavy.sh --cost 4`) | 1238 passed, 12 skipped, 0 failed (25.6 min) |
+| `npm run e2e:sdk` | 41 passed, 1 failed (`qa-fixes.spec.ts:140` elapsed clock, the known timing flake); rerun alone twice: 18 passed |
+| `pytest -q -n 2 tests/sdk` | 496 passed, 4 skipped |
+| `pytest -q -n 2 tests/platform` (4 chunks, `heavy.sh --cost 4`; `--cost 5` never admits while the desktop leaves under 8 GB free) | 2767 passed, 740 skipped, 0 failed |
+
 ## Known gaps to decide on
 
 Collected from every area's `decisions/<area>/OPEN_QUESTIONS.md`; read those for the full lists.
