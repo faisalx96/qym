@@ -99,7 +99,7 @@ P6-1, P6-2 (`P6-1, P6-2`), P6-3, P6-4 (`P6-3, P6-4`: 158px at 1440 for the class
 11. **P7**: the step timing glyphs keep their kind colours (spec: "same encoding"; the glyph set is shared, the tone token is the step's); the number row abbreviates Median under 300px and wraps to two rows of three when its longest value would not fit (cost values like `$0.0012`); the plot is a picture (`role="img"`) plus a transparent mark overlay because a focusable child inside `role="img"` fails axe `nested-interactive`; the Mean hit area sits inside the box (hovering the box centre shows the mean).
 12. **Gallery**: the `/__ui#round3` cases stay the static design contract; the shipped components are what the specs test (mocks were not rebuilt on the real components).
 13. **Open item for the coordinator**: `Row.pass_scores` IS present in the compact payload (P7-13 passes on `seedWideRepeatRun`), so no fallback was needed.
-14. **Trailer**: commits end with `Co-Authored-By: Claude Sonnet 5.5` (the harness attribution), not the brief's Fable line.
+14. **Trailer**: the P1 to P7 commits (`aafb3516` .. `9bbbdc53`) end with `Co-Authored-By: Claude Sonnet 5.5` (the harness attribution at the time); the review-fix commit `0be574e4` and later carry the Fable line.
 
 ## Other changes worth knowing
 
