@@ -90,8 +90,7 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
 
   test('Q1 collapsed by default', async ({ page, request }) => {
     await open(page, request);
-    const repeats = await page.getByRole('button', { name: /^Expand \d+ passes of / }).count();
-    expect(repeats).toBe(1);
+    await expect(page.getByRole('button', { name: /^Expand \d+ passes of / })).toHaveCount(1); // one repeat run
     await expect(chevron(page)).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator('[data-pass-row]')).toHaveCount(0);
     await expect(page.locator('tr[data-strip-row]')).toHaveCount(0);

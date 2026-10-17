@@ -78,3 +78,14 @@ Measured 2026-10-17 on the r4-seed project (1440 x 900, compact) and by the spec
     `passes-rows.spec.ts`: the panel no longer exists); the other passes specs only changed locators (panel region -> the
     runs table, `Select pass n of 3 of run NAME`, `Delete pass n` is a button, no menu step) and keep every assertion
     (threshold, metric select, Analyze, delete, selection, readonly, live refetch).
+
+## Gate (through `scripts/heavy.sh`, worktree root, ports 8983 / 5983)
+
+| Step | Result |
+|---|---|
+| `npm run check` (cost 3): tsc, eslint, stylelint, Vitest, design test | green: 157 Vitest files / 1373 tests, design test 49 |
+| Playwright `runs-list` + `shell` + `visual-language` (cost 4) | 385 passed, 9 skipped, 3 failed; the 3 (a11y spec still asked for `grid`, renumber spec read the old `#n` cell, round-4 gallery card mock had invalid list markup) were fixed with reasons in the commit and passed on rerun (19 passed) |
+| `npm run build` and `npm run build:sdk` (cost 2) | both built |
+| `pytest tests/platform/test_design_language.py` | 1 passed |
+| full `npm run e2e` (cost 4), once | 1253 passed, 12 skipped, 2 failed; `Q1` raced the table render (count before the chevron existed; now `toHaveCount`), `run-detail/redesign2-items` "JSON output ... Raw" is outside this area (viewport click); both passed on two reruns alone |
+| backend | not touched, `tests/platform` not run |
