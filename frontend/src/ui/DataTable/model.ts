@@ -1,6 +1,6 @@
 /** Pure DataTable logic (sort, order, pins, grouping, range selection, persisted state). Unit-tested. */
 import { KEYS, readJson, writeJson } from '@/lib/storage';
-import type { CellType, Column, Density, DisplayRow, GroupByConfig, Key, SortState } from './types';
+import type { CellType, ChildRows, Column, Density, DisplayRow, GroupByConfig, Key, SortState } from './types';
 
 export const NUMERIC_TYPES: ReadonlySet<CellType> = new Set(['number', 'delta', 'duration']);
 export const MONO_TYPES: ReadonlySet<CellType> = new Set(['id', 'number', 'score', 'delta', 'duration']);
@@ -210,14 +210,33 @@ export function buildDisplayRows<R>(
     collapsed: Set<string>;
     expanded: Set<Key>;
     canExpand: boolean;
+    /** Child rows of an expanded row (undefined = none: the row only gets its detail block). */
+    children?: (row: R) => ChildRows<R> | undefined;
   },
 ): DisplayRow<R>[] {
   const out: DisplayRow<R>[] = [];
   let index = 0;
   const push = (row: R) => {
     const key = rowKey(row);
-    out.push({ kind: 'row', id: `r:${String(key)}`, key, row, index: index++ });
-    if (opts.canExpand && opts.expanded.has(key))
+    const at = index++;
+    out.push({ kind: 'row', id: `r:${String(key)}`, key, row, index: at });
+    if (!opts.expanded.has(key)) return;
+    const kids = opts.children?.(row);
+    kids?.rows.forEach((child, i) => {
+      const ck = rowKey(child);
+      out.push({
+        kind: 'child',
+        id: `c:${String(ck)}`,
+        key: ck,
+        row: child,
+        index: at,
+        parentKey: key,
+        parentRow: row,
+        posinset: i + 1,
+        setsize: kids.rows.length,
+      });
+    });
+    if (opts.canExpand && (!kids || kids.detail !== false))
       out.push({ kind: 'detail', id: `d:${String(key)}`, key, row });
   };
   if (!opts.groupBy) {
