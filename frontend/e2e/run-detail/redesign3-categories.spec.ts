@@ -79,15 +79,13 @@ for (const width of [1440, 390]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
 
-    test('P3-8: the section with the 24-value key is at most 460px (900px at 390), collapsed (body, header excluded)', async ({
+    test('P3-8: the whole section with the 24-value key is at most 540px at 1440 (spec amended from 460) and 740px at 390, collapsed', async ({
       page,
     }) => {
       await openRun(page, s.slug, many, 'panel=categories');
       await expect(page.getByTestId('category-row').first()).toBeVisible();
-      const body = await page
-        .locator(`${section} > div:last-child`)
-        .evaluate((el) => el.getBoundingClientRect().height);
-      expect(body).toBeLessThanOrEqual(width === 1440 ? 460 : 900);
+      const h = (await page.locator(section).boundingBox())!.height;
+      expect(h, 'section height').toBeLessThanOrEqual(width === 1440 ? 540 : 740);
     });
   });
 }

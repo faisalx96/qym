@@ -81,10 +81,19 @@ for (const width of [1440, 390]) {
       await expect(h.getByTestId('hero-runtime')).toBeVisible();
       // versioning, git, config and the first metadata chips are in view without a click
       const band = h.getByRole('group', { name: 'Versioning, config and metadata' });
-      // (at 279px the three-line clamp holds the versioning chips; config and metadata wait behind "+ N more":
-      // deviation recorded in redesign3/impl-notes.md)
-      const texts = ['model_tag', '2026-09', 'prompt', 'v7', 'retriever_index', 'qa-v3'];
-      if (width === 1440) texts.push('main • abc1234', 'temperature', '0.2', 'max_tokens', '512');
+      const texts = [
+        'model_tag',
+        '2026-09',
+        'prompt',
+        'v7',
+        'retriever_index',
+        'qa-v3',
+        'main • abc1234',
+        'temperature',
+        '0.2',
+        'max_tokens',
+        '512',
+      ];
       for (const text of texts) {
         const el = band.getByText(text, { exact: true }).first();
         await expect(el).toBeVisible();
@@ -103,7 +112,7 @@ for (const width of [1440, 390]) {
     test('P6-3, P6-4: height ceilings and the first section close to the top', async ({ page }) => {
       await openRun(page, s.slug, classic);
       const h = (await hero(page).boundingBox())!.height;
-      const ceiling = width === 1440 ? 200 : 520;
+      const ceiling = width === 1440 ? 200 : 570; // compact ceiling amended 520 -> 570 (run-detail.md P6-3)
       expect(h).toBeLessThanOrEqual(ceiling);
       if (width === 1440) {
         const top = await page
@@ -229,9 +238,7 @@ test('P6-8, P6-9: the clamp keeps 54px (84 compact), "+ N more" is exact, openin
   await page.evaluate(() => localStorage.removeItem('qym:run-hero-more'));
 });
 
-test('P6-8 compact: three lines (84px); fewer than six chips fit at 279px (deviation in impl-notes)', async ({
-  page,
-}) => {
+test('P6-8 compact: five lines (144px, spec amended) and at least six chips at 279px', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.route(new RegExp(`/api/runs/${classic}\\?view=compact`), async (route) => {
     const res = await route.fetch();
@@ -251,9 +258,9 @@ test('P6-8 compact: three lines (84px); fewer than six chips fit at 279px (devia
       visible: chips.filter((c) => c.getBoundingClientRect().bottom <= b.bottom + 1).length,
     };
   });
-  expect(info.height).toBeLessThanOrEqual(84 + 1);
-  expect(info.visible).toBeGreaterThanOrEqual(3);
-  expect((await hero(page).boundingBox())!.height).toBeLessThanOrEqual(520);
+  expect(info.height).toBeLessThanOrEqual(144 + 1);
+  expect(info.visible).toBeGreaterThanOrEqual(6);
+  expect((await hero(page).boundingBox())!.height).toBeLessThanOrEqual(570);
   await expect(hero(page).getByRole('button', { name: /^\+ \d+ more$/ })).toBeVisible();
 });
 

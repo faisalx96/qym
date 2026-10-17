@@ -302,14 +302,11 @@ export function BoxPlot({
               data-mark-kind="median"
             />
             <Mark
-              as="rect"
+              as="path"
               className={styles.hit}
               tabIndex={-1}
               tip={`Mean ${fmt(s.mean)}`}
-              x={meanX - 6}
-              y={cy - 6}
-              width={12}
-              height={12}
+              d={diamond(meanX, cy)}
               data-mark-kind="mean"
             />
             {[...lowDots, ...highDots].map((v, i) => (

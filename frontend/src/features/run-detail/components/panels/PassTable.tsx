@@ -83,7 +83,8 @@ export function PassTable({
     type: 'text',
     align: 'end',
     mono: true,
-    minWidth: compact ? 92 : 128,
+    width: compact ? 110 : undefined,
+    minWidth: compact ? 80 : 128,
     cell: (p) => {
       const v = p.metric_means?.[m];
       const dir = model.metricDirections[m] ?? null;
@@ -118,7 +119,8 @@ export function PassTable({
       label: 'Pass',
       pin: 'start',
       lockOrder: true,
-      minWidth: compact ? 84 : 104,
+      width: compact ? 84 : undefined,
+      minWidth: compact ? 72 : 104,
       cell: (p) => (
         <Link
           to={`${basePath}?pass=${p.pass_number}`}
@@ -160,7 +162,8 @@ export function PassTable({
       id: 'errors',
       header: 'Errors',
       label: 'Errors',
-      minWidth: 56,
+      width: compact ? 62 : undefined,
+      minWidth: compact ? 44 : 56,
       align: 'end',
       mono: true,
       cell: (p) => (
@@ -232,7 +235,7 @@ export function PassTable({
         columns={columns}
         rows={passes}
         rowKey={(p) => p.pass_number}
-        density="regular"
+        density="compact"
         densityLocked
         columnMenu={false}
         zebra={false}

@@ -76,7 +76,7 @@ test.describe('open a run (J1, scenario 1)', () => {
     const hero = page.getByRole('region', { name: 'Run summary' });
     await expect(hero.getByRole('link', { name: 'rag_answer' })).toBeVisible();
     const h = await hero.boundingBox();
-    expect(h!.height).toBeLessThanOrEqual(520);
+    expect(h!.height).toBeLessThanOrEqual(570); // compact ceiling amended 520 -> 570 (run-detail.md P6-3)
     const overview = (await page.locator('#run-section-overview').boundingBox())!;
     expect(overview.y).toBeLessThan(1100);
   });

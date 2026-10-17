@@ -149,6 +149,10 @@ for (const width of [1440, 390]) {
       const box = c.locator('[data-mark-kind=box]').first();
       await box.hover({ position: { x: 3, y: 5 }, force: true });
       await expect(page.getByRole('tooltip')).toContainText('Middle 50%');
+      // the middle of the box body reads the box too: the mean hit area is the diamond only
+      const bb = (await box.boundingBox())!;
+      await page.mouse.move(bb.x + bb.width * 0.2, bb.y + bb.height / 2);
+      await expect(page.getByRole('tooltip')).toContainText('Middle 50%');
     });
 
     test('P7-9: Tab order box, low whisker, high whisker, min, max; Enter on the box filters; Enter on a dot opens the item; Escape closes a tooltip', async ({

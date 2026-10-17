@@ -94,7 +94,7 @@
 .row {
   position: relative;
   inline-size: 100%;
-  block-size: var(--row-regular);
+  block-size: var(--row-compact);
   padding: 0 var(--space-sm);
   border: 0;
   border-block-end: 1px solid var(--border-subtle);

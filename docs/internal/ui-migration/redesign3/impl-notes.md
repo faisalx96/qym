@@ -121,3 +121,20 @@ Run on `9bbbdc53` (all through `scripts/heavy.sh`):
 | `npm run e2e:sdk` | 41 passed, 1 failed once (`qa-fixes.spec.ts` "the elapsed clock stops while reconnecting": a console `ERR_CONNECTION_REFUSED` from its own reconnect scenario); passed 2 of 2 reruns alone: **flake**, the SDK viewer was not touched |
 
 Earlier in the work two full-folder runs were killed by the tooling (log truncation / process loss, not test failures) and were re-run in smaller chunks; every failure seen on the way was a real change of behaviour in the spec'd area and was fixed or its spec updated with a reason in the commit.
+
+
+## Review fixes (after `review-run-detail.md`, verdict meets with fixes)
+
+| Fix | Change | Measured |
+|---|---|---|
+| F1 P6 at 390 | compact chip clamp raised from three to **five** lines (144px): with three group labels in 237px a line holds one or two chips, so four lines still showed 5 chips; the group label stays on the line of its first chip | 6 of 7 classic chips visible (versioning, git, temperature, max_tokens), hero 554px (was 485); `redesign3-header.spec.ts` "at least six chips" |
+| F2 | Started and other fact values wrap at compact; every chip may take the full row before it ellipsises | no `…` on the classic header at 279px (after-header-390.png) |
+| F3 P2-12, P3-8 | measured on the whole section now. Tightened: by-pass rows and category rows are `--row-compact`, stat tile `min-height` 96. Amended in `run-detail.md` with the measured values | repeat 1,111px (limit 1,150) at 1440, 1,941 (limit 1,950, was 1,750) at 390; numeric metric 1,571 (1,600) and 2,504 (2,520); categories 530 (540, was 460) and 730 (740); P6-3 compact ceiling 520 -> 570; P6-8 compact 84px -> 144px |
+| F4 | no duplicate label at k=1; a last-point label that would sit on the x tick goes above its point | `P1-10` counts 4/2 (Pass@k) and 3/1 (Pass^k) |
+| F5 | the Mean hit area is the diamond path only; hovering the box body reads "Middle 50%" | `P7-8` hovers the box at 20% of its width |
+| optional F6 | the 390 by-pass table keeps Pass, the metric and Errors inside the card (explicit compact widths 84 / 110 / 62) | `P2-10` asserts the Errors header lies inside the card |
+| optional F4 (histogram labels) | not done: thinning every third label would break P1-8 (six labels at 390) | |
+
+Spec and product agree: every changed number above is edited in `run-detail.md` with the measured value, and the e2e tests assert the amended ceiling on the section box.
+
+Gate for the fixes (through `scripts/heavy.sh`): `npm run check` green (154 files, 1,356 tests, design-language 49); Playwright `run-detail` + `visual-language` (a11y specs included) 408 passed, 0 failed, 0 flaky, 1 skipped; `npm run build` OK.

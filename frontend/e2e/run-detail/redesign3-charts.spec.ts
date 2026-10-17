@@ -229,7 +229,7 @@ for (const width of WIDTHS) {
       }
     });
 
-    test('P1-10: the curve labels Pass@k above and Pass^k below each labelled point (4 per series wide, 2 narrow), with a halo', async ({
+    test('P1-10: the curve labels Pass@k above and Pass^k below each labelled point (3 to 4 per series wide, 1 to 2 narrow; the coincident k=1 label is printed once), with a halo', async ({
       page,
     }) => {
       await openRun(page, s.slug, wide, 'panel=repeat');
@@ -254,7 +254,7 @@ for (const width of WIDTHS) {
       });
       expect(info.halo).toBe(true);
       expect(info.bySeries['Pass@k']).toBe(width === 1440 ? 4 : 2);
-      expect(info.bySeries['Pass^k']).toBe(width === 1440 ? 4 : 2);
+      expect(info.bySeries['Pass^k']).toBe(width === 1440 ? 3 : 1);
       expect(info.aboveY).toBe(true);
     });
   });

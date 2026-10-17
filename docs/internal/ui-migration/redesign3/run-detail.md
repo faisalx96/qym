@@ -149,7 +149,7 @@ remaining height, so a card that a grid row stretches gives the extra height to 
 | P1-7 | Every chart (overview, latency, deep, repeat) lives in a `Card` with a title in a header slot; there is no chart title or legend outside a card. | every `svg[role=img]` and `[role=group][aria-label*=distribution]` has a `section` ancestor with a header |
 | P1-8 | At 390 the 11-bucket histograms show 6 axis labels (every second bucket) and no two labels overlap (boxes disjoint); counts up to 3 digits do not overlap their neighbours. | pairwise box intersection over `.axis` and `.count` |
 | P1-9 | A card never overflows its column: `scrollWidth <= clientWidth` at 1440, 1024, 768, 390. | assertion |
-| P1-10 | The curve labels Pass@k above and Pass^k below each labelled point; at 390 only the first and last points are labelled; every label has a halo (`stroke` present). | DOM query of `text.pointLabel` count (4 at 1440, 2 at 390 per series) |
+| P1-10 | The curve labels Pass@k above and Pass^k below each labelled point; at 390 only the first and last points are labelled; every label has a halo (`stroke` present). | DOM query of `text.pointLabel` count (4 at 1440, 2 at 390 for Pass@k; Pass^k one fewer because the coincident k=1 label is printed once). **Amended after review:** no duplicate label at k=1, and a last-point label that would sit on the x tick moves above its point. |
 | P1-11 | Grid cards are at least 260 px wide at every viewport. | min of card widths |
 | P1-12 | No colour is introduced: the CSS of the chart module contains no hex, `rgb(`, `rgba(`. Design-language test green. | existing test |
 | P1-13 | Under `prefers-reduced-motion` no bar or count animates (computed `animation-name: none`). | emulate reduced motion |
@@ -280,7 +280,7 @@ Pass@10 100.0%, Pass^10 4.2%: 96 pts of items pass at least once but not every t
 | P2-9 | At wide the curve card and the distribution card are side by side (curve about 2/3, distribution about 1/3: widths ratio 1.9 to 2.1) with equal heights (+-1 px); below 1100 they are stacked and each as wide as the column. | boxes |
 | P2-10 | The By-pass table card is as wide as the column; with default columns its table has at most 7 columns; `Metrics` multi-select lists all 24 metrics; selecting two more adds two columns and a scroll cue. | assertions |
 | P2-11 | Count labels on top of the distribution bars, zeros shown, no count more than 4 px from its bar (P1-1). | as P1 |
-| P2-12 | The section is at most 1,150 px high at 1440 for the wide-repeat run and at most 1,750 px at 390. | height |
+| P2-12 | The whole section (header included) is at most 1,150 px high at 1440 for the wide-repeat run with the boolean default metric (measured 1,111) and at most 1,950 px at 390 (measured 1,941; was 1,750). With a numeric metric the "{metric} by pass" card (P7) is added: at most 1,600 px at 1440 (measured 1,571) and 2,520 px at 390 (measured 2,504). **Amended after review:** the 390 numbers are measured values; the 279 px column wraps every tile, chart header and meaning line, and the by-pass rows are now `--row-compact`. | height of `#run-section-repeat` |
 | P2-13 | No horizontal page scroll at 390 (document scrollWidth <= innerWidth). | assertion |
 | P2-14 | Axe: zero serious or critical issues on the repeat section at both widths. | `a11y.spec.ts` |
 
@@ -371,7 +371,7 @@ Categories                                    Performance by item metadata. Clic
 | P3-5 | A tick marks the overall average on every bar, at the same x for every row of the card (+-1 px). | tick `left` equality |
 | P3-6 | Row click toggles the existing item filter and sets `aria-pressed`; a second click clears; a scope chip appears in the ScopeBar. | e2e |
 | P3-7 | `?category=<key>` selects the key on load; the default is the key with the largest spread. | e2e on `seedManyCategories` |
-| P3-8 | Section height with the 24-value key at 1440 is at most 460 px (was 623), at 390 at most 900 px (was 1351). | height |
+| P3-8 | Section height (header included) with the 24-value key at 1440 is at most 540 px (measured 530; was 623), at 390 at most 740 px (measured 730; was 1351). **Amended after review:** 460 assumed the mock's 393 px body without the 120 px section header; rows are now `--row-compact` (32 px) instead of `--row-regular`. | height of `#run-section-categories` |
 | P3-9 | No horizontal scroll at 390; at 390 each row has the bar full width on its own line. | boxes |
 | P3-10 | Average colours follow `metricBand`; a metric without direction renders neutral bars. | unit test |
 
@@ -697,12 +697,12 @@ and the rest up to the clamp); for a stopped or failed run the stop reason line;
 |---|---|---|
 | P6-1 | Every field in the list of 6.3 is visible (`toBeVisible()`) right after load, with no click, at 1440 and 390, for the classic run. | Playwright |
 | P6-2 | There is no chevron or "Show run details" control; the only disclosure in the header is "+ N more" and appears only when chips are hidden. | assertion |
-| P6-3 | Height ceilings of `[data-testid=run-hero]` (banners excluded): at 1440 (column 1193) **at most 200 px** (target 180); at 1280 at most 200; at 1024 (777) at most 260; at 768 (521) at most 520; at 390 (279) at most 520. With 20 chips the ceiling still holds (clamp). | boxes |
+| P6-3 | Height ceilings of `[data-testid=run-hero]` (banners excluded): at 1440 (column 1193) **at most 200 px** (target 180); at 1280 at most 200; at 1024 (777) at most 260; at 768 (521) at most 520; at 390 (279) at most 570 (**amended after review** from 520: the five-line chip clamp of P6-8 plus a wrapping Started value; measured 554). With 20 chips the ceiling still holds (clamp). | boxes |
 | P6-4 | The Overview section heading's top is at most 380 px from the viewport top at 1440 x 900 (was 247 px with 97 px header; it is about 330 now). | box |
 | P6-5 | Band 2 shows 7 labelled facts in one row at 1440 and 1280 (all `dd` tops within 2 px of each other) and in 2 columns at 390. | boxes |
 | P6-6 | Band 3 order is Versioning, Config, Metadata; a group label never ends a line (label and its first chip share a line). | boxes |
 | P6-7 | Chips are 24 px high; key text max 20 and value max 30 characters; the full value is in `title`; object values show `{ n keys }`. | assertions |
-| P6-8 | The clamp: with 20 chips band 3 is at most 54 px high (wide, mid, narrow) and 84 px (compact), "+ N more" reads the exact hidden count, and at least 6 chips are visible. | count `chips.offsetTop` |
+| P6-8 | The clamp: with 20 chips band 3 is at most 54 px high (wide, mid, narrow) and 144 px (compact: five lines, **amended after review** from 84 px / three lines, because three group labels in 237 px leave one or two chips per line), "+ N more" reads the exact hidden count, and at least 6 chips are visible (measured 6 of 7 at 279 px for the classic run). | count `chips.offsetTop` |
 | P6-9 | "+ N more" opens the rest: all chips visible, Run ID row visible, `aria-expanded=true`, state remembered after reload (`qym:run-hero-more`). | e2e |
 | P6-10 | A run with no config, metadata or versioning has no band 3 and is at most 125 px at 1440. | box |
 | P6-11 | The stop reason appears as one muted line under band 1 for a stopped run, not in a pass view. | e2e (existing stop-reason fixture) |

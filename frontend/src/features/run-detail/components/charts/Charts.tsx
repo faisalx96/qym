@@ -675,7 +675,12 @@ export function Curve({
                   const pos = ks.indexOf(p.k);
                   if (!labelled.has(pos)) return null;
                   // The first series reads above its points, the second below (Pass@k above, Pass^k below).
-                  const below = si === 1;
+                  let below = si === 1;
+                  // Coincident points (k = 1): one label, from the first series.
+                  const first = series[0]?.points.find((q) => q.k === p.k)?.value;
+                  if (si === 1 && first != null && Math.abs(first - p.value!) < 1e-9) return null;
+                  // A label below a point near the baseline would sit on the x tick: put it above instead.
+                  if (below && sy(p.value!) + 17 > H - pad.b + 6) below = false;
                   return (
                     <text
                       key={`l${p.k}`}

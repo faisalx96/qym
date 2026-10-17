@@ -158,9 +158,14 @@ for (const width of [1440, 390]) {
       await expect(grid.getByRole('row')).toHaveCount(11);
       const bars = panel.getByRole('group', { name: 'Items by number of passes that passed' });
       await expect(bars.locator('[data-part=count]')).toHaveCount(11);
-      const h = (await panel.boundingBox())!.height;
-      // P2-12 asks 1,750 at 390; the real 279px column needs about 1,900 (deviation recorded in redesign3/impl-notes.md)
-      expect(h).toBeLessThanOrEqual(width === 1440 ? 1150 : 1900);
+      // Errors stays inside the card on the phone column (the table does not scroll away from it)
+      const err = await grid.getByRole('columnheader', { name: /Errors/ }).boundingBox();
+      expect(err!.x + err!.width).toBeLessThanOrEqual(
+        (await card.boundingBox())!.x + (await card.boundingBox())!.width + 1,
+      );
+      // P2-12 is measured on the whole section (header included), as the review did
+      const h = (await page.locator('#run-section-repeat').boundingBox())!.height;
+      expect(h, 'section height').toBeLessThanOrEqual(width === 1440 ? 1150 : 1950);
     });
   });
 }
@@ -193,6 +198,21 @@ test('P2-3: choosing a metric writes ?metric=, survives a reload and keeps every
   const again = page.getByTestId('repeat-analysis');
   await expect(again.getByRole('button', { name: /Metric/ }).first()).toContainText('rubric_metric_03');
   await expect(again.getByRole('region', { name: 'Passes', exact: true }).getByRole('row')).toHaveCount(11);
+});
+
+test('P2-12 numeric: with the by-pass distribution card the section stays within the amended 1,600px (1440) / 2,520px (390)', async ({
+  page,
+}) => {
+  for (const [w, limit] of [
+    [1440, 1600],
+    [390, 2520],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: 1000 });
+    await openRun(page, s.slug, wide, 'panel=repeat&metric=rubric_metric_01');
+    await expect(page.getByRole('region', { name: 'rubric_metric_01 by pass' })).toBeVisible();
+    const h = (await page.locator('#run-section-repeat').boundingBox())!.height;
+    expect(h, `numeric section at ${w}`).toBeLessThanOrEqual(limit);
+  }
 });
 
 test('P2-4 numeric metric: three tiles', async ({ page }) => {

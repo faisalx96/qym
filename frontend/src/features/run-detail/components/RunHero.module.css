@@ -249,8 +249,20 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* five lines on a phone column: six chips (versioning, git and the config chips) show without "+ N more"
+     (spec amended from three lines: with three group labels in 237px a line holds one or two chips) */
   .flow {
-    max-block-size: calc(3 * var(--control-height) + 12px);
+    max-block-size: calc(5 * var(--control-height) + 24px);
+  }
+
+  .name {
+    font-size: var(--font-lg);
+  }
+
+  /* a Started value wraps instead of ending in an ellipsis */
+  .factValue {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .contextRow {
@@ -262,8 +274,8 @@
     align-self: flex-start;
   }
 
-  /* two chips per line: a long chip truncates instead of dropping off the clamp; a group label keeps its line with its first chip */
+  /* a chip may take the whole line before it ellipsises; a group label keeps its line with its first chip */
   .chipWrap {
-    max-inline-size: calc(50% - var(--space-xs));
+    max-inline-size: 100%;
   }
 }
