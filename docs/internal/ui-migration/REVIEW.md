@@ -223,6 +223,13 @@ reconnecting" flaked once under load and passed on rerun. Commits `aafb3516` to 
 | `pytest -q -n 2 tests/sdk` | 496 passed, 4 skipped |
 | `pytest -q -n 2 tests/platform` (4 chunks, `heavy.sh --cost 4`; `--cost 5` never admits while the desktop leaves under 8 GB free) | 2767 passed, 740 skipped, 0 failed |
 
+## Post-mortem
+
+The failures of the whole migration (two session kills, repeated feedback rounds, a finding fixed by hiding
+information, spec numbers from the wrong geometry, hue as identity, non-fixes accepted) and the rules they
+produced are in `POSTMORTEM.md`; the rules themselves live in `AGENTS.md`, `docs/DESIGN_LANGUAGE.md` section 7
+and `00-PLAYBOOK.md`.
+
 ## Known gaps to decide on
 
 Collected from every area's `decisions/<area>/OPEN_QUESTIONS.md`; read those for the full lists.

@@ -78,6 +78,41 @@ platform with uvicorn (`QYM_AUTH_MODE=none`), then `cd frontend && npm run dev` 
 open `http://127.0.0.1:5800/` (`/__ui` is the primitive gallery). Details in
 `frontend/README.md`.
 
+## Working on a shared or small machine (mandatory)
+Two sessions were killed in October 2026 (kernel OOM, then `systemd-oomd` on sustained memory pressure
+of the whole user slice; see `docs/internal/ui-migration/POSTMORTEM.md` section 1). Therefore:
+- Every full suite, build and `pytest -n` goes through `scripts/heavy.sh [--cost GB] [--name L] -- <cmd>`.
+  Never pass `--workers`; the script exports `VITEST_MAX_WORKERS` / `QYM_PW_WORKERS` from the budget.
+- Cost guide: 2 = Vitest subset, tsc, builds, one Playwright spec file; 3 = `npm run check`, one Playwright
+  folder, `pytest tests/sdk`; 4 = full `npm run e2e`, `pytest tests/platform` in chunks of about 48 files
+  (`ls tests/platform/test_*.py | split -l 48`). Cost + reserve (max of 2 GB and 20% of RAM) must fit under
+  what the desktop leaves free; the script lowers the cost by 1 GB after 5 minutes of waiting and logs it.
+- Heavy runs go to a log file; read the log for `heavy.sh [...]: waiting` before reporting progress. A run
+  that prints `waiting` for more than ten minutes has the wrong cost, not a slow test.
+- Light commands (one spec with `--workers 1`, one or two Vitest files, tsc, eslint) run directly.
+- Stop uvicorn, Vite and stub servers the moment a check ends; find your own PIDs by port (`ss -ltnp`).
+  Never `pkill -f` by pattern: it kills other agents' Playwright and servers.
+- Agents: at most one sub-agent each; `free -h` with at least 3 GB available before starting another agent;
+  one hand-back per task (an agent that re-sends the same report is stopped, not answered).
+- Environment for anything that boots the platform: `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"`
+  (Node 24), `source .venv/bin/activate`, `export PYTHONPATH=packages/sdk:packages/platform`
+  `QYM_PYTHON=$PWD/.venv/bin/python`. Playwright's webServer needs the venv active. Parallel agents use
+  their own `QYM_PLATFORM_PORT` / `QYM_VITE_PORT` (eval services +100/+101, stub LLM +1000).
+
+## UI product-feedback rounds (mandatory)
+A feedback round is three stages, each by a different agent (`docs/internal/ui-migration/00-PLAYBOOK.md`):
+1. **Design**: measure the current page and the legacy page at the real column widths, write a spec with
+   numbered acceptance criteria (each names the DOM element, the width and the number), static mocks in the
+   gallery (`/__ui`), screenshots. "Clear", "cluttered" and "refer to the old design" become numbers here.
+2. **Implement** criterion by criterion with a criterion -> change -> test table and after-screenshots;
+   full gate through `heavy.sh` before the hand-back; backend touched means `tests/platform` runs.
+3. **Review**: an independent agent measures every criterion in the browser and writes MEETS / MEETS WITH
+   FIXES / DOES NOT MEET with the numbers. A verdict without measurements is not a verdict. A fix must change
+   the measured value or the screenshot; otherwise it is a documented limitation, not a fix.
+The design standards behind this (density versus hiding, hue budget, amendment rule) are in
+`docs/DESIGN_LANGUAGE.md` section 7. Merges into the integration branch are plain `--no-ff`; nothing is pushed
+by agents; `ui/*` branches and worktrees are kept.
+
 ## Testing Guidelines
 - Framework: `pytest` with `pytest-asyncio` for async paths.
 - Place SDK tests in `tests/sdk/` and platform tests in `tests/platform/`.

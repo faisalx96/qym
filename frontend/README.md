@@ -212,6 +212,16 @@ so that, if memory does run short, the test run is what gets killed, not your
 shell. Without systemd it still gates and caps. Single test files and single
 specs are light enough to run directly.
 
+Cost guide: 2 GB for a Vitest subset, tsc, the builds or one Playwright spec
+file; 3 GB for `npm run check`, one Playwright folder or `pytest tests/sdk`;
+4 GB for the full `npm run e2e` or `pytest tests/platform` in chunks of about
+48 files (a whole-suite `pytest -n 2 tests/platform` at 3 GB is killed by its
+own cap). Cost plus the reserve must fit under what the desktop leaves free
+(about 7 GB on a 15 GB host with an editor and a browser open), so a cost of
+5 never admits there; after five minutes of waiting the script lowers the cost
+by 1 GB and logs it (`QYM_HEAVY_ADAPT=0` keeps it waiting). Send heavy runs to a
+log file and look for the `waiting` line before assuming a test is slow.
+
 ## Saved table layouts (localStorage / sessionStorage keys)
 
 | Key | Holds |

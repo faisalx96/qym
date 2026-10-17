@@ -3,6 +3,7 @@
 Authoritative process for rebuilding the qym frontends from scratch. Every
 component agent reads this file first, then its area brief (`NN-<area>.md`),
 then `02-shared-primitives-design-system.md`.
+Read `POSTMORTEM.md` for what went wrong the first time and why the rules below exist.
 
 ## Decisions already made (do not re-open)
 
@@ -103,6 +104,23 @@ is gitignored. Do not touch the main checkout.
    results (paste the Playwright summary), open questions logged in
    `docs/internal/ui-migration/decisions/<area>/OPEN_QUESTIONS.md`.
 
+## Feedback rounds after the first build (round-3 cycle, mandatory)
+
+The migration's first build followed the flow above. Product-feedback rounds use a stricter cycle, because
+rounds that went from a prose brief straight to code had to be redone (`POSTMORTEM.md` sections 2 to 4):
+
+1. **Design agent**: measures the current and the legacy page at the real column widths, writes
+   `redesign<N>/<area>.md` with the owner's words quoted, one section per point (Problem measured, Legacy
+   reference, Design per width, numbered acceptance criteria that name the element and the number, tests),
+   static mocks in the gallery (`/__ui#round<N>`), screenshots `legacy-*`, `current-*`, `mock-*`. One hand-back.
+2. **Implementation agent**: one branch and worktree per area, criterion -> change -> test table in
+   `impl-notes.md`, `after-*` screenshots, deviations with reasons, full gate through `scripts/heavy.sh`.
+3. **Review agent**: measures every criterion in the browser, `review-<area>.md` with the criterion table,
+   per-point verdict, findings by severity, required versus optional fixes, gate counts. Verdict MEETS /
+   MEETS WITH FIXES / DOES NOT MEET. Required fixes go back to the implementer, then a targeted re-review.
+4. **Orchestrator**: merges `--no-ff`, runs the full gate on the merged tip through `heavy.sh`, adds the round
+   to `REVIEW.md`. Looping agents are stopped with the task tool, not messaged. Hand-backs are one per task.
+
 ## Rules
 
 - Start from scratch: no copying of vanilla JS into TSX. Re-implement.
@@ -112,8 +130,12 @@ is gitignored. Do not touch the main checkout.
 - No hardcoded colors/sizes; tokens only. `--text-dim` never for readable text.
 - Accessibility: every interactive element keyboard-reachable with a visible
   focus ring; forms labelled; dialogs trap focus; tables have headers.
-- Never log or display credentials. Never commit `.env`, DBs, screenshots, or
-  `node_modules`.
+- Never log or display credentials. Never commit `.env`, DBs, screenshots (except
+  the curated `redesign*/shots/` folders), `node_modules`, `dist`, `*.tsbuildinfo`,
+  `test-results` or `playwright-report`.
+- Memory: every full suite, build and `pytest -n` through `scripts/heavy.sh` (cost
+  table in `AGENTS.md`); stop servers when done; never `pkill -f`; at most one
+  sub-agent; one hand-back.
 - If blocked by a foundation gap, add the primitive in `frontend/src/ui/` on
   your branch and note it in your report (the reviewer will dedupe).
 

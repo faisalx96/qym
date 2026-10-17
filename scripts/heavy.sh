@@ -21,8 +21,19 @@
 #      test run, never the terminal or the agent that launched it. Elsewhere the
 #      command runs directly, still gated by 1-4.
 #
+#   6. Adaptation: if the command is not admitted within QYM_HEAVY_ADAPT_AFTER seconds
+#      (default 300) while pressure is low, the cost drops by 1 GB (to a floor of 2) and the
+#      script says so; a --cost the host can never admit degrades instead of stalling.
+#
+# Cost guide (GB): 2 = Vitest subset, tsc, builds, one Playwright spec file; 3 = npm run check,
+# one Playwright folder, pytest tests/sdk; 4 = full Playwright, pytest tests/platform in chunks
+# of ~48 files (a whole-suite `pytest -n 2 tests/platform` at 3 GB is killed by its own cap).
+# cost + reserve must fit under what the desktop leaves free; on a 15 GB host with VS Code
+# and a browser open that is about 7 GB, so --cost 5 never admits.
+#
 # Environment overrides: QYM_HEAVY_RESERVE_GB, QYM_HEAVY_COST_GB, QYM_HEAVY_MAX_SLOTS,
-# QYM_HEAVY_NO_SCOPE=1 (skip systemd-run), QYM_HEAVY_LOCK_DIR.
+# QYM_HEAVY_NO_SCOPE=1 (skip systemd-run), QYM_HEAVY_LOCK_DIR, QYM_HEAVY_ADAPT=0 (never lower
+# the cost), QYM_HEAVY_ADAPT_AFTER (seconds).
 set -euo pipefail
 
 cost_gb="${QYM_HEAVY_COST_GB:-3}"
@@ -34,7 +45,7 @@ while [ $# -gt 0 ]; do
         --name) name="$2"; shift 2 ;;
         --timeout) timeout_s="$2"; shift 2 ;;
         --) shift; break ;;
-        -h|--help) sed -n 2,26p "$0"; exit 0 ;;
+        -h|--help) sed -n 2,36p "$0"; exit 0 ;;
         *) break ;;
     esac
 done
@@ -76,6 +87,8 @@ mkdir -p "$lock_dir"
 
 # --- admission + slot ------------------------------------------------------------
 deadline=$(( $(date +%s) + timeout_s ))
+adapt_every="${QYM_HEAVY_ADAPT_AFTER:-300}"   # seconds of waiting before the cost drops by 1 GB
+adapt_after="$adapt_every"
 slot=""
 waited=0
 while :; do
@@ -97,6 +110,15 @@ while :; do
     fi
     if [ $(( waited % 60 )) = 0 ]; then
         echo "heavy.sh [$name]: waiting (avail $((avail_kb/1024)) MB, need $(( (cost_kb+reserve_kb)/1024 )) MB, psi $pressure%, slots $slots)" >&2
+    fi
+    # Adapt: a cost the host cannot admit (desktop baseline leaves too little free) would
+    # wait until the timeout. After adapt_after seconds lower the cost by 1 GB (never below 2)
+    # and say so, so a wrong --cost degrades to a smaller budget instead of a silent stall.
+    if [ "$waited" -ge "$adapt_after" ] && [ "$ok_psi" = 1 ] && [ "$cost_gb" -gt 2 ] && [ "${QYM_HEAVY_ADAPT:-1}" = 1 ]; then
+        cost_gb=$(( cost_gb - 1 )); cost_kb=$(( cost_gb * 1048576 ))
+        slots=$(( (total_gb - reserve_gb) / cost_gb )); [ "$slots" -lt 1 ] && slots=1; [ "$slots" -gt "$max_slots" ] && slots="$max_slots"
+        echo "heavy.sh [$name]: not admitted after ${waited}s, lowering cost to ${cost_gb}G (set QYM_HEAVY_ADAPT=0 to keep waiting)" >&2
+        adapt_after=$(( waited + adapt_every ))
     fi
     sleep 10; waited=$(( waited + 10 ))
 done

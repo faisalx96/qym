@@ -554,6 +554,47 @@ needed. Set the document title with `useDocumentTitle`.
 
 ---
 
+## 7. Design and review standards for feedback rounds
+
+Learned in the October 2026 redesign rounds (`docs/internal/ui-migration/POSTMORTEM.md`). These rules decide
+how a product complaint becomes a spec and how a reviewer judges the result; the recipes in section 3 are what
+they produced.
+
+- **Numbers before code.** A complaint ("too cluttered", "not clear", "refer to the old design") is turned into
+  numbered acceptance criteria before anything is built. Each criterion names the element it measures (an id or a
+  component, never "the panel"), the width, and the value: heights, counts, gaps, what is visible without a click,
+  URL state, keyboard path, axe result. Mocks are drawn in the real column widths of the report pages (1193,
+  1033, 777, 521 and 279 px for 1440 to 390), never in a convenient width.
+- **Density, never disclosure, for default information.** A block that is too tall is made denser (chips, columns,
+  clamps with an exact "+ N more", compact rows) and never fixed by moving default-visible facts behind a chevron,
+  tab or hover. "Reachable" is not "visible". Criteria about information say "visible without interaction".
+- **Legacy is the usability baseline, not the design.** When the owner says "refer to the old design", the legacy
+  page defines what the user must be able to see and do in one glance (one metric from a dropdown, every
+  statistic in its own box, the inputs next to their labels); its faults (sideways scrolling chip rows, nested
+  boxes) are fixed, not copied. Every spec point carries a legacy screenshot and says what it keeps and what it
+  does differently.
+- **One idea per row, one control per choice.** A report section is a stack of full-width rows, each one visual
+  or one table; two visuals share a row only from 1100 px and only when they explain each other. A choice among
+  more than five values is a `Select` (URL-backed), not a chip row. Statistics are separate, equal, centred tiles;
+  groups and nested frames are not a way to organise them.
+- **Hue budget.** Eight series colours (`--chart-1..8`) is the limit, verified pairwise at CIE76 dE >= 20. Anything
+  with more identities than that (passes, steps, categories) is identified by text; colour on it means a state
+  (score band, verdict, kind), never "which one". Counts and values are drawn at rest, never hover-only.
+- **Distributions.** A quantity that used to print min / avg / max shows the box plot recipe (section 3) with the
+  six numbers visible; a total is shown only for additive quantities.
+- **Bidirectional text.** The layout of an item is one left-anchored grid; `dir` is set on value text only. Arabic
+  content never moves labels, keys or controls to the other side of the page.
+- **Reviewer method.** The reviewer measures every criterion in the browser (DOM geometry, computed styles,
+  counts, screenshots at 1440 and 390) and records the number next to met / not met, then judges each feedback
+  point as the owner would, against the mock and the legacy screenshot. "All features present" and "better than
+  before" are not verdicts.
+- **Amendments.** A criterion's number may change only with the measured value and a one-line reason in the
+  spec, and the e2e test must assert the amended number on the same element. Spec and product never disagree.
+- **A fix changes a measurement.** If a commit does not move the measured value or the screenshot (for example a
+  rendering property that does not alter the raster), it is recorded as a limitation, not accepted as a fix.
+
+---
+
 ## 6. Self-check before you finish (any LLM session: run these)
 
 ```bash
