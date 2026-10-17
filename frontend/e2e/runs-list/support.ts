@@ -165,12 +165,15 @@ export function failOnNativeDialogs(page: Page): { seen: () => string[] } {
   return { seen: () => seen };
 }
 
-/** Opens the row-actions menu of pass `n` inside a passes panel. */
+/** Opens the overflow menu of pass row `n` (its own row of the runs table; Open pass is in it). */
 export async function openPassMenu(panel: Locator, page: Page, n: number): Promise<void> {
-  await panel.locator(`tr[data-pass-row="${n}"]`).getByRole('button', { name: 'Row actions' }).click();
+  await panel
+    .locator(`tr[data-pass-row="${n}"]`)
+    .getByRole('button', { name: new RegExp(`^More actions for pass ${n}`) })
+    .click();
   await expect(page.getByRole('menu')).toBeVisible();
 }
-export async function deletePassFromMenu(panel: Locator, page: Page, n: number): Promise<void> {
-  await openPassMenu(panel, page, n);
-  await page.getByRole('menuitem', { name: new RegExp(`^Delete pass ${n}`) }).click();
+/** Pass rows carry a Delete pass icon button (redesign 4: no menu step). */
+export async function deletePassFromMenu(panel: Locator, _page: Page, n: number): Promise<void> {
+  await panel.locator(`tr[data-pass-row="${n}"]`).getByRole('button', { name: `Delete pass ${n}` }).click();
 }

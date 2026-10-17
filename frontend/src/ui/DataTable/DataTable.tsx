@@ -168,6 +168,8 @@ export interface DataTableProps<R> {
   childLabel?: (row: R, parent: R) => string;
   /** Accessible name of the full-width block after the children. */
   detailLabel?: (row: R) => string;
+  /** Card mode: accessible name of the list of a card's child lines. */
+  childGroupLabel?: (row: R) => string;
   /** Card mode: column ids shown on the second line of a child line (e.g. the selected metric). */
   cardChildColumns?: string[];
 
@@ -326,6 +328,7 @@ function DataTableInner<R>({
   childRows,
   childLabel,
   detailLabel,
+  childGroupLabel,
   cardChildColumns,
   groupBy,
   responsive = 'cards',
@@ -377,7 +380,8 @@ function DataTableInner<R>({
     if (onExpandedChange) onExpandedChange(next);
     if (!expandedProp) setOwnExpanded(next);
   };
-  const rowCanExpand = (r: R) => (Boolean(renderExpanded) || Boolean(childRows)) && (canExpand ? canExpand(r) : true);
+  const rowCanExpand = (r: R) =>
+    (Boolean(renderExpanded) || Boolean(childRows)) && (canExpand ? canExpand(r) : true);
   const toggleExpanded = (r: R) => {
     if (!rowCanExpand(r)) return;
     const key = rowKey(r);
@@ -1695,8 +1699,9 @@ function DataTableInner<R>({
               groupBy={groupBy}
               toggleGroupKey={toggleGroupKey}
               hasChildRows={Boolean(childRows)}
+              hostChevron={expandColumn}
               childLabel={childLabel}
-              detailLabel={detailLabel}
+              childGroupLabel={childGroupLabel}
               childColumns={cardChildColumns}
             />
           ) : (
@@ -1785,10 +1790,14 @@ function CardList<R>({
   groupBy,
   toggleGroupKey,
   hasChildRows,
+  hostChevron = true,
   childLabel,
-  detailLabel,
+  childGroupLabel,
   childColumns,
 }: {
+  /** The card draws the expand chevron itself (false when a cell hosts its own toggle). */
+  hostChevron?: boolean;
+  childGroupLabel?: (row: R) => string;
   hasChildRows?: boolean;
   childLabel?: (row: R, parent: R) => string;
   detailLabel?: (row: R) => string;
@@ -1945,12 +1954,13 @@ function CardList<R>({
                     aria-label={rowLabel?.(r) ?? 'Select row'}
                     hideLabel
                     isSelected={selected.has(d.key)}
+                    isIndeterminate={!selected.has(d.key) && Boolean(selection.isIndeterminate?.(r))}
                     isDisabled={selection.isDisabled?.(r)}
                     onChange={(on) => toggleSelect(r, on)}
                   />
                 ) : null}
                 <div className={styles.cardTitle}>{lead ? cellOf(lead) : String(rowKey(r))}</div>
-                {renderExpanded && rowCanExpand(r) ? (
+                {renderExpanded && hostChevron && rowCanExpand(r) ? (
                   <IconButton
                     label={
                       expandLabel
@@ -1996,59 +2006,68 @@ function CardList<R>({
                 </dl>
               ) : null}
               {kids.length ? (
-                <ul className={styles.cardPasses} role="group" aria-label={detailLabel?.(r)}>
-                  {kids.map((k) => {
-                    const kctx: CellCtx = { index: k.index, density: 'regular', card: true };
-                    const kcell = (c: Column<R>) => (c.cell ? c.cell(k.row, kctx) : defaultCell(c, k.row));
-                    const lineHead = headline.filter((c) => c.id !== 'actions');
-                    return (
-                      <li
-                        key={k.id}
-                        className={styles.cardPass}
-                        data-child=""
-                        data-selected={selected.has(k.key) ? '' : undefined}
-                        data-row-key={String(k.key)}
-                        aria-level={2}
-                        aria-posinset={k.posinset}
-                        aria-setsize={k.setsize}
-                        aria-label={childLabel?.(k.row, r)}
-                        {...(rowProps?.(k.row) ?? {})}
-                      >
-                        <span className={styles.cardPassHead}>
-                          {selection && (selection.mode ?? 'multiple') === 'multiple' ? (
-                            <Checkbox
-                              aria-label={rowLabel?.(k.row) ?? 'Select row'}
-                              hideLabel
-                              isSelected={selected.has(k.key)}
-                              isDisabled={selection.isDisabled?.(k.row)}
-                              onChange={(on) => toggleSelect(k.row, on)}
-                            />
-                          ) : null}
-                          {lineHead.map((c) => (
-                            <span key={c.id}>{kcell(c)}</span>
-                          ))}
-                        </span>
-                        <span className={styles.cardPassActions}>
-                          {headline.filter((c) => c.id === 'actions').map((c) => (
-                            <span key={c.id}>{kcell(c)}</span>
-                          ))}
-                        </span>
-                        {lineCols.length ? (
-                          <span className={styles.cardScore}>
-                            {lineCols.map((c) => (
-                              <Fragment key={c.id}>
-                                {c.id.startsWith('metric-') ? (
-                                  <span className={styles.cardScoreLabel}>{headerText(c)}</span>
-                                ) : null}
-                                {kcell(c)}
-                              </Fragment>
+                <div
+                  className={styles.cardPassesGroup}
+                  role="group"
+                  aria-label={childGroupLabel?.(r)}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ul className={styles.cardPasses}>
+                    {kids.map((k) => {
+                      const kctx: CellCtx = { index: k.index, density: 'regular', card: true };
+                      const kcell = (c: Column<R>) => (c.cell ? c.cell(k.row, kctx) : defaultCell(c, k.row));
+                      const lineHead = headline.filter((c) => c.id !== 'actions');
+                      return (
+                        <li
+                          key={k.id}
+                          className={styles.cardPass}
+                          data-child=""
+                          data-selected={selected.has(k.key) ? '' : undefined}
+                          data-row-key={String(k.key)}
+                          aria-level={2}
+                          aria-posinset={k.posinset}
+                          aria-setsize={k.setsize}
+                          aria-label={childLabel?.(k.row, r)}
+                          {...(rowProps?.(k.row) ?? {})}
+                        >
+                          <span className={styles.cardPassHead}>
+                            {selection && (selection.mode ?? 'multiple') === 'multiple' ? (
+                              <Checkbox
+                                aria-label={rowLabel?.(k.row) ?? 'Select row'}
+                                hideLabel
+                                isSelected={selected.has(k.key)}
+                                isDisabled={selection.isDisabled?.(k.row)}
+                                onChange={(on) => toggleSelect(k.row, on)}
+                              />
+                            ) : null}
+                            {lineHead.map((c) => (
+                              <span key={c.id}>{kcell(c)}</span>
                             ))}
                           </span>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
+                          <span className={styles.cardPassActions}>
+                            {headline
+                              .filter((c) => c.id === 'actions')
+                              .map((c) => (
+                                <span key={c.id}>{kcell(c)}</span>
+                              ))}
+                          </span>
+                          {lineCols.length ? (
+                            <span className={styles.cardScore}>
+                              {lineCols.map((c) => (
+                                <Fragment key={c.id}>
+                                  {c.id.startsWith('metric-') ? (
+                                    <span className={styles.cardScoreLabel}>{headerText(c)}</span>
+                                  ) : null}
+                                  {kcell(c)}
+                                </Fragment>
+                              ))}
+                            </span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               ) : null}
               {strip ? <div className={styles.cardStrip}>{renderExpanded?.(strip.row)}</div> : null}
               {detail.length ? (

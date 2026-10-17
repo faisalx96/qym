@@ -35,9 +35,10 @@ test.describe('archived project (read-only)', () => {
     await rowOf(page, 'rag-qa-gpt-4o-005')
       .getByRole('button', { name: /Expand 3 passes/ })
       .click();
-    const panel = page.getByRole('region', { name: /Passes of rag-qa-gpt-4o-005/ });
+    const panel = page.getByTestId('runs-table');
     await expect(panel.locator('tbody tr[data-pass-row]')).toHaveCount(3);
     await openPassMenu(panel, page, 1);
-    await expect(page.getByRole('menuitem', { name: /Delete pass/ })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: /Open pass 1/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Delete pass/ })).toHaveCount(0);
   });
 });

@@ -10,6 +10,7 @@ import { useDelayedPending } from '@/lib/pending';
 import { KEYS, readLocal, writeLocal } from '@/lib/storage';
 import { runHref } from '@/lib/runs-order';
 import { RunDialogs, type DialogState } from './RunDialogs';
+import { pruneExpanded, readExpanded, writeExpanded } from './passes/expandedStorage';
 import { RunsCtx, type RunsCtxValue } from './context';
 import { RunsTable } from './RunsTable';
 import { useRunsToolbarParts } from './RunsToolbar';
@@ -63,7 +64,7 @@ export function RunsPage() {
   const [selectMode, setSelectMode] = useState(
     () => selection.selected.size > 0 || selection.cohortA.length > 0,
   );
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(() => readExpanded(slug));
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [helpOpen, setHelpOpen] = useState(false);
   const [pageSize, setPageSizeState] = useState<number>(() => {
@@ -81,6 +82,8 @@ export function RunsPage() {
   );
   const d = useRunsData(slug, view, legacyVisible, pinnedIds, pageSize, hiddenIds);
   const { rows, columnSet } = d;
+  // Open pass groups are kept for the tab, so Back from a pass returns to the same groups.
+  useEffect(() => writeExpanded(slug, pruneExpanded(expanded, rows)), [slug, expanded, rows]);
   const analyzingRuns = useAnalyzingRuns(rows.map((r) => r.run_id));
   useKpiTopbar(d.overview?.kpis);
 
@@ -129,11 +132,8 @@ export function RunsPage() {
       modelIndex: d.overview?.chart_data?.modelIndex ?? {},
       owners,
       analyzing: analyzingRuns.data,
-      visibleMetrics: columnSet.visible
-        .filter((c) => c.id.startsWith('metric-'))
-        .map((c) => c.id.slice('metric-'.length)),
     }),
-    [slug, view, d.overview, owners, columnSet.visible, analyzingRuns.data],
+    [slug, view, d.overview, owners, analyzingRuns.data],
   );
 
   const perm = useMemo(

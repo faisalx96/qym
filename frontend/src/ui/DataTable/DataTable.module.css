@@ -1262,3 +1262,7 @@
   margin-inline: calc(-1 * var(--space-sm));
   margin-block-end: calc(-1 * var(--space-sm));
 }
+
+.cardPassesGroup {
+  display: block;
+}

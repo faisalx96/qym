@@ -71,7 +71,7 @@ test.describe('axe on the runs-list surfaces', () => {
     await rowOf(page, NAME)
       .getByRole('button', { name: /Expand 3 passes/ })
       .click();
-    await expect(page.getByRole('region', { name: `Passes of ${NAME}` }).getByRole('grid')).toBeVisible();
+    await expect(page.getByTestId('runs-table').getByRole('grid')).toBeVisible();
     await expectClean(page, 'expanded passes');
   });
 

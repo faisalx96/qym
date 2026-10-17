@@ -7,3 +7,13 @@
 .host > * {
   min-height: 0;
 }
+
+.childNote {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.childError {
+  font-size: var(--font-sm);
+  color: var(--error);
+}

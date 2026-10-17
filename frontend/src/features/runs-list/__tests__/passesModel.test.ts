@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { RunPass } from '@/api/dashboardTypes';
 import {
   issuesSummaryText,
-  mirroredMetrics,
   passIssues,
   passRowsView,
   readStoredMetric,
@@ -43,12 +42,5 @@ describe('remembered metric', () => {
     writeStoredMetric('a', 'accuracy');
     expect(readStoredMetric('a')).toBe('accuracy');
     expect(readStoredMetric('b')).toBeNull();
-  });
-});
-
-describe('mirroredMetrics', () => {
-  it('follows the parent: visible ones in its order, the rest behind "show all"', () => {
-    expect(mirroredMetrics(['a', 'b', 'c'], ['c', 'a'])).toEqual({ shown: ['c', 'a'], hidden: ['b'] });
-    expect(mirroredMetrics(['a', 'b'], undefined)).toEqual({ shown: ['a', 'b'], hidden: [] });
   });
 });
