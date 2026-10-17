@@ -223,3 +223,42 @@ Not run by me: `build`, `build:sdk`, `e2e:sdk`, full `e2e` (the brief's gate was
 `box-tokens_used-390.png`, `box-Tokens_per_item-1440.png`, `box-Cost_per_item-390.png`, `box-filter-1440.png`, `latency-1440.png`,
 `categories-1440.png`, `categories-390.png`, `item-ar-open-1440.png`, `item-ar-scroll1-1440.png`, `item-ar-scroll2-1440.png`,
 `item-ar-open-390.png`, `item-ar-scroll1-390.png`, `item-ar-scroll2-390.png`, `item-expandall-1440.png`.
+
+## 7. Re-review (commit `0be574e4`)
+
+Re-measured in the browser (8977 / 5977, fresh seeds) only what changed. Screenshots: `scratchpad/r3r/shots/re-*.png`.
+
+| Item | Measured now | Result |
+|---|---|---|
+| F1 P6-1 / P6-8 at 390 | classic hero 554 px (ceiling amended to 570); 7 of 8 chips visible (versioning x4 incl. git, config x2; "+ 2 more" holds `retriever` and metadata); 1440 still 188 px with all 8 chips and no "+ N more" | Y |
+| F2 truncation at 390 | versioning chips, git chip and "Started" (now wraps to two lines) show in full; no ellipsis on any visible chip or fact (the one clipped element is a chip inside the clamped, hidden part) | Y |
+| P2-12 (amended) | section 1,111 px at 1440 (limit 1,150); 390: 1,929 (limit 1,950); numeric metric 1,571 (1,600) and 2,504 (2,520) | Y |
+| P3-8 (amended) | 530 px at 1440 (limit 540), 730 at 390 (limit 740) | Y |
+| P1-10 | 1440: 4 Pass@k + 3 Pass^k labels, 0 coincident labels, last "0.0%" label no longer overlaps the "k=10" tick; 390: 2 + 1 | Y |
+| P7-8 | hover at 20% of the box reads "Middle 50%: 287 to 726 (IQR 439)"; the centre reads "Mean 506.8" because the diamond sits there (mean ~ median); the other 7 marks unchanged | Y |
+| F6 by-pass at 390 | default metric (`correct`): Pass, metric and Errors all inside the 279 px card (table 277). **Numeric metric with a long name (`rubric_metric_01`): table 306 px in a 277 px scroller, the Errors header is cut at the card edge** | partly (low) |
+
+Spec amendments judged against the user's words:
+
+- **P6-3 520 -> 570 and P6-8 84 -> 144 px (five lines):** justified. The user said "lost too many details"; the old 520 / three-line
+  numbers were the cause of the loss at 390. 554 px is still below the pre-F4 header on a phone (822 px expanded) and the legacy
+  header (about 570), and the clamp still holds with many chips. It strengthens the feedback rather than weakening it.
+- **P2-12 390: 1,750 -> 1,950 (and 1,600 / 2,520 for numeric metrics):** justified. Measured 1,929 and 2,504; the extra comes
+  from a 279 px column wrapping tiles and chart headers plus the new P7 by-pass box card, which the user asked for. 1440 is still
+  inside the original 1,150 for the default metric (1,111, tightened with compact rows and 96 px tiles), so the amendment only
+  touches the phone and the numeric case.
+- **P3-8 460 -> 540:** justified. 460 compared a section (with its header) against the mock's 393 px body; 393 + about 120 px of
+  section header is about 515. Rows went to 32 px and the section lost 48 px; it is a calm, six-row list.
+- **P1-10 wording (Pass^k one label fewer):** justified, it removes the duplicate rather than hiding information.
+- **Histogram labels (optional F4) not done:** accepted; thinning to every third label would break the "six labels at 390" rule.
+
+Open, optional: **F6 remains for long metric names** (Errors cut off at 390 when the picked metric name is long, e.g.
+`rubric_metric_01`); the e2e assertion only covers the default metric, so the impl-notes claim "keeps Errors inside the card" is
+true for `correct` only. A `min-width` on the metric column of 90 px with the header allowed to wrap (or truncate with a title)
+would fix it. Not blocking: the data is reachable by scrolling the card and the table's scroll cue shows.
+
+Gate (through `scripts/heavy.sh`): Playwright `e2e/run-detail` folder, 339 passed, 0 failed, 0 skipped (5.5 min). It ran with
+`--cost 3` because the machine never reached the 7 GB availability `--cost 4` waits for (6.6 GB free, other desktop load); workers are
+sized by the script either way. `npm run check` was not re-run (the implementer reports 154 files / 1,356 tests green).
+
+**Final verdict: MEETS** (one low, optional item open: F6 for long metric names at 390).
