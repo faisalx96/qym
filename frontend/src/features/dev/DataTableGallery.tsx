@@ -168,6 +168,32 @@ function VirtualDemo() {
   );
 }
 
+/** Child rows: rows of the same table under an open parent (round 4), with a full-width block after them. */
+function ChildRowsDemo() {
+  const [open, setOpen] = useState<Set<Key>>(new Set([RUNS[0]!.id]));
+  const cols = COLUMNS.filter((c) => ['name', 'status', 'acc', 'at'].includes(c.id));
+  const kids = (r: Run): Run[] =>
+    [1, 2, 3].map((n) => ({ ...r, id: `${r.id}::c${n}`, name: `Pass ${n}` }));
+  return (
+    <DataTable<Run>
+      aria-label="Child rows"
+      columns={cols}
+      rows={RUNS.slice(0, 3)}
+      rowKey={(r) => r.id}
+      density="compact"
+      expandColumn={false}
+      expanded={open}
+      onExpandedChange={setOpen}
+      canExpand={(r) => !r.id.includes('::')}
+      childRows={(r) => (r.id.includes('::') ? undefined : { rows: kids(r) })}
+      childLabel={(r, p) => `${r.name} of ${p.name}`}
+      detailLabel={(r) => `Summary of ${r.name}`}
+      renderExpanded={(r) => <div style={{ padding: 8 }}>Summary of {r.name}</div>}
+      zebra={false}
+    />
+  );
+}
+
 export function DataTableGallery() {
   const [selected, setSelected] = useState<Set<Key>>(new Set());
   const [q, setQ] = useState('');
@@ -259,6 +285,7 @@ export function DataTableGallery() {
         <DataTable.Toolbar columnsMenu />
       </DataTable>
       <VirtualDemo />
+      <ChildRowsDemo />
       <DataTable<Run>
         aria-label="Embedded"
         variant="embedded"

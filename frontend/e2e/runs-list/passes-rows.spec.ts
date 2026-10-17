@@ -281,14 +281,13 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
       expect(((await r.locator('td[data-col="status"]').innerText()) ?? '').trim()).toMatch(/^[A-Z ]+$/);
       await expect(r.locator('td[data-col="time"] time')).toBeVisible();
     }
-    const nameX = (el: Locator, sel: string) =>
-      el.locator(sel).evaluate((e) => e.getBoundingClientRect().left);
+    const leftOf = (el: Locator, sel: string) => el.locator(sel).evaluate((e) => e.getBoundingClientRect().left);
     expect(
       Math.abs(
-        (await nameX(rows.first(), 'td[data-col="run"] a')) -
-          (await nameX(rowOf(page, NAME), 'td[data-col="run"] a:not([aria-label*="Pass"])')),
+        (await leftOf(rows.first(), 'td[data-col="run"] a')) -
+          (await leftOf(rowOf(page, NAME), 'td[data-col="run"] a')),
       ),
-    ).toBeLessThanOrEqual(1 + 28); // the run name follows the chevron slot; "Pass n" sits at the same slot offset
+    ).toBeLessThanOrEqual(1); // "Pass n" starts where the run name starts
     await expect(rows.nth(1).getByRole('img', { name: '1 task error in this pass' })).toBeVisible();
     await expect(rows.nth(1).locator('td[data-col="signals"]')).toContainText('!1');
     await expect(rows.first().locator('td[data-col="signals"]')).toHaveText('–');
@@ -410,7 +409,7 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
         Math.round(e!.getBoundingClientRect().top + e!.getBoundingClientRect().height / 2),
       );
     });
-    expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(4);
+    expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(2); // amended Q15: centres, not tops
     await expect(st).toContainText('Passes');
     await expect(st).toContainText(/3 · \d+ items/);
     await expect(st.getByTestId('pass-threshold-chip')).toHaveText(/^Pass if [≥≤] \d+%$/);
