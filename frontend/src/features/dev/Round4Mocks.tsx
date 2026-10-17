@@ -506,7 +506,7 @@ const STATES_ROWS: MockRow[] = [
 
 function PassLine({ r, selected, selectMode }: { r: MockRow; selected?: boolean; selectMode?: boolean }) {
   return (
-    <li className={styles.cardPass} aria-level={2} data-selected={selected ? '' : undefined}>
+    <li className={styles.cardPass} data-selected={selected ? '' : undefined}>
       <span className={styles.cardPassHead}>
         {selectMode ? (
           <input
@@ -537,12 +537,7 @@ function PassLine({ r, selected, selectMode }: { r: MockRow; selected?: boolean;
 
 function CardMock({ selectMode = false }: { selectMode?: boolean }) {
   const card = (r: MockRow, open: boolean, passes?: MockRow[]) => (
-    <li
-      className={styles.runCard}
-      data-open={open ? '' : undefined}
-      aria-level={1}
-      aria-expanded={r.samples > 1 ? open : undefined}
-    >
+    <li className={styles.runCard} data-open={open ? '' : undefined}>
       <div className={styles.cardTop}>
         {selectMode ? <input type="checkbox" aria-label={`Select ${r.name}`} /> : null}
         <RunCell r={r} open={open} />
@@ -562,18 +557,20 @@ function CardMock({ selectMode = false }: { selectMode?: boolean }) {
       </dl>
       {open && passes ? (
         <>
-          <ul className={styles.cardPasses} role="group" aria-label={`Passes of ${r.name}`}>
-            {passes.map((p, i) => (
-              <PassLine key={p.key} r={p} selectMode={selectMode} selected={selectMode && i !== 1} />
-            ))}
-          </ul>
+          <div role="group" aria-label={`Passes of ${r.name}`}>
+            <ul className={styles.cardPasses}>
+              {passes.map((p, i) => (
+                <PassLine key={p.key} r={p} selectMode={selectMode} selected={selectMode && i !== 1} />
+              ))}
+            </ul>
+          </div>
           <Strip />
         </>
       ) : null}
     </li>
   );
   return (
-    <ul className={styles.cards} data-r4="cards" role="treegrid" aria-label="Runs">
+    <ul className={styles.cards} data-r4="cards" aria-label="Runs">
       {card(RUN_A, false)}
       {card(RUN_B, true, B_PASSES)}
       {card(RUN_C, false)}

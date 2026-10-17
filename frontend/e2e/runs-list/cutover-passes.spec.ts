@@ -69,7 +69,7 @@ test('deleting pass 2 keeps the other passes (renumbered) with their scores', as
   await expect(page.getByRole('status').filter({ hasText: 'Pass 2 deleted' })).toBeVisible();
   await expect(passRows(panel)).toHaveCount(2, { timeout: 15_000 });
   const after = await passRows(panel).allInnerTexts();
-  const cells = (text: string) => text.split(/\s+/).filter(Boolean).slice(1).join(' ');
+  const cells = (text: string) => text.split(/\s+/).filter(Boolean).slice(2).join(' '); // drops the leading "Pass n"
   expect(cells(after[0]!)).toBe(cells(before[0]!));
   expect(cells(after[1]!)).toBe(cells(before[2]!));
   const final = (await (await request.get(`/api/runs/${run.id}`)).json()) as { run: { samples: number } };
