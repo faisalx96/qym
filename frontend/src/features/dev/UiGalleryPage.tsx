@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { DataTableGallery } from './DataTableGallery';
 import { VisualLanguageGallery } from './VisualLanguageGallery';
 import { Round3Mocks } from './Round3Mocks';
+import { Round5Mocks } from './Round5Mocks';
 import type { Key } from 'react-aria-components';
 import {
   Badge,
@@ -909,6 +910,7 @@ export default function UiGalleryPage() {
       </Section>
 
       <Round3Mocks Section={Section} Case={Case} />
+      <Round5Mocks Section={Section} Case={Case} />
     </div>
   );
 }
