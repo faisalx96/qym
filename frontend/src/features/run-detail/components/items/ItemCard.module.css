@@ -1,10 +1,28 @@
 /* Expanded item card blocks. */
 .state {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   min-width: 0;
   padding: var(--space-md) var(--space-lg);
+  direction: ltr;
+  text-align: start;
+}
+
+/* Output and Metrics are separated by a full-width divider (1px --border-strong, 20px above). */
+.divider {
+  margin: var(--space-lg) 0 0;
+  border: 0;
+  border-block-start: 1px solid var(--border-strong);
+}
+
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding-block-start: var(--space-sm);
 }
 
 .fields {
@@ -35,31 +53,6 @@
 
 .outputBody {
   min-width: 0;
-}
-
-.dot {
-  display: inline-block;
-  inline-size: 6px;
-  block-size: 6px;
-  margin-inline-end: var(--space-xs);
-  border-radius: 50%;
-  background: var(--chart-1);
-}
-
-.dot[data-hue='2'] {
-  background: var(--chart-2);
-}
-
-.dot[data-hue='3'] {
-  background: var(--chart-3);
-}
-
-.dot[data-hue='4'] {
-  background: var(--chart-4);
-}
-
-.dot[data-hue='5'] {
-  background: var(--chart-5);
 }
 
 .blockHead {
@@ -139,4 +132,11 @@
 
 .warningLabel {
   font-weight: 600;
+}
+
+.metricsTitle {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
 }

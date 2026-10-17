@@ -1,25 +1,11 @@
-/** One chip per metric: value, judge metadata disclosure, edit pencil, edited badge (brief 04 §3j). */
-import { useState } from 'react';
+/** Judge metadata of a metric (reason, explanation, label, scalars, objects), the edited badge and the edit helpers the metric detail uses. */
 import { useUpdateMetric } from '@/api/runs';
 import { isInternalMetaKey, metricMetaDisplayKey } from '@/lib/metrics';
-import {
-  Collapse,
-  FieldRow,
-  Icon,
-  IconButton,
-  KeyValueGrid,
-  ScoreValue,
-  StructuredValue,
-  Tag,
-  TextBlock,
-  useToast,
-} from '@/ui';
+import { FieldRow, IconButton, KeyValueGrid, StructuredValue, Tag, TextBlock, useToast } from '@/ui';
 import { itemMetadataDisplayValue } from '../../lib/rowMeta';
-import { metricCell } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
 import type { Row } from '../../types';
-import { useItemsUi } from './ItemsUi';
-import { messageFor, ScoreEditor } from './ScoreEditor';
+import { messageFor } from './ScoreEditor';
 import styles from './MetricStrip.module.css';
 
 export function useCanEdit(row: Row): boolean {
@@ -34,7 +20,8 @@ export function MetaList({ meta, hidden }: { meta: Record<string, unknown>; hidd
   const entries = Object.entries(meta).filter(
     ([k, v]) => !isInternalMetaKey(k) && !hidden.has(k) && v !== null && v !== undefined && v !== '',
   );
-  if (!entries.length) return <div className={styles.metaEmpty}>No judge metadata recorded.</div>;
+  if (!entries.length)
+    return <div className={styles.metaEmpty}>No details were recorded for this metric.</div>;
   const name = (k: string) => metricMetaDisplayKey(k, meta);
   const isObj = ([, v]: [string, unknown]) => v !== null && typeof v === 'object';
   const prose = entries.filter(
@@ -48,7 +35,7 @@ export function MetaList({ meta, hidden }: { meta: Record<string, unknown>; hidd
   return (
     <div className={styles.metaBody}>
       {prose.map(([k, v]) => (
-        <FieldRow key={k} label={name(k)} text={String(v)}>
+        <FieldRow key={k} label={name(k)} text={String(v)} labelAnchor="start">
           <TextBlock text={String(v)} mode={undefined} />
         </FieldRow>
       ))}
@@ -66,7 +53,7 @@ export function MetaList({ meta, hidden }: { meta: Record<string, unknown>; hidd
         />
       ) : null}
       {objects.map(([k, v]) => (
-        <FieldRow key={k} label={name(k)} measure="full">
+        <FieldRow key={k} label={name(k)} measure="full" labelAnchor="start">
           <StructuredValue value={v} label={name(k)} defaultOpen="none" toolbar={false} />
         </FieldRow>
       ))}
@@ -114,7 +101,7 @@ export function editTooltip(meta: Record<string, unknown>): string {
   return lines.join('\n');
 }
 
-function EditedBadge({
+export function EditedBadge({
   row,
   metric,
   meta,
@@ -158,183 +145,5 @@ function EditedBadge({
         />
       ) : null}
     </>
-  );
-}
-
-export interface MetricChipsProps {
-  /** The row the editor writes to. */
-  row: Row;
-  /** The row whose metric values and meta are shown (the pass-scoped row in a pass column). */
-  scoped: Row;
-  /** Pass the values belong to (null: the single/final view). */
-  pass: number | null;
-  /** Show the edited badge with its reset action (single view only). */
-  canReset?: boolean;
-  canEdit: boolean;
-  label?: string;
-}
-
-/**
- * Metric chips: a wrapping row of outlined chips (caret, name, value, pencil). A chip with judge metadata toggles
- * a detail panel under the row that takes the full width; several can be open at once, in chip order. The score
- * editor opens in the same panel slot.
- */
-export function MetricChips({
-  row,
-  scoped,
-  pass,
-  canReset = false,
-  canEdit,
-  label = 'Metrics',
-}: MetricChipsProps) {
-  const { model, api, runId, payload } = useRunPage();
-  const ui = useItemsUi();
-  const [open, setOpen] = useState<Set<string>>(() => new Set());
-  const [editing, setEditing] = useState<string | null>(null);
-  const suffix = pass ? ` for pass ${pass}` : '';
-  const toggle = (metric: string) =>
-    setOpen((o) => {
-      const n = new Set(o);
-      if (n.has(metric)) n.delete(metric);
-      else n.add(metric);
-      return n;
-    });
-  const cells = model.metricNames.map((metric) => {
-    const cell = metricCell(api.ctx, scoped, metric);
-    const meta = (scoped.metric_meta?.[metric] ?? {}) as Record<string, unknown>;
-    return { metric, cell, meta, detail: hasMetaDetail(meta, ui.hiddenMetricFields) };
-  });
-  return (
-    <div className={styles.metrics} data-pass={pass ?? undefined}>
-      <div className={styles.strip} role="list" aria-label={label}>
-        {cells.map(({ metric, cell, meta, detail }) => {
-          const isOpen = open.has(metric) || editing === metric;
-          const direction = model.metricDirections[metric];
-          const nameTitle =
-            direction === 'minimize'
-              ? 'Lower is better'
-              : direction === 'maximize'
-                ? 'Higher is better'
-                : undefined;
-          const body = (
-            <>
-              {detail ? (
-                <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} className={styles.caret} />
-              ) : null}
-              <span className={styles.name} title={nameTitle}>
-                {metric}
-              </span>
-              <ScoreValue
-                value={cell.value}
-                type={cell.type}
-                direction={cell.direction}
-                error={cell.error}
-                text={cell.text}
-              />
-            </>
-          );
-          return (
-            <div
-              key={metric}
-              role="listitem"
-              className={styles.chip}
-              data-metric={metric}
-              data-pass={pass ?? undefined}
-              data-open={isOpen || undefined}
-              data-selected={metric === api.selectedMetric || undefined}
-            >
-              {detail ? (
-                <button
-                  type="button"
-                  className={styles.chipMain}
-                  aria-expanded={open.has(metric)}
-                  aria-controls={`metric-panel-${row.item_id}-${pass ?? 0}-${metric}`}
-                  aria-label={`${open.has(metric) ? 'Hide' : 'Show'} ${metric} details${suffix}`}
-                  onClick={() => toggle(metric)}
-                >
-                  {body}
-                </button>
-              ) : (
-                <span className={styles.chipMain} data-static="">
-                  {body}
-                </span>
-              )}
-              {cell.edited ? (
-                canReset ? (
-                  <EditedBadge row={row} metric={metric} meta={meta} canEdit={canEdit} />
-                ) : (
-                  <Tag tone="warning" title={editTooltip(meta)}>
-                    edited
-                  </Tag>
-                )
-              ) : null}
-              {canEdit ? (
-                <IconButton
-                  label={`Edit ${metric} score${suffix}`}
-                  icon="edit"
-                  onPress={() => setEditing(editing === metric ? null : metric)}
-                />
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-      {cells.map(({ metric, cell, meta, detail }) => {
-        const isEditing = editing === metric;
-        const isOpen = detail && open.has(metric);
-        return (
-          <Collapse key={metric} open={isEditing || isOpen}>
-            <section
-              id={`metric-panel-${row.item_id}-${pass ?? 0}-${metric}`}
-              className={styles.panel}
-              aria-label={`${isEditing ? 'Edit' : ''} ${metric} details${suffix}`.trim()}
-              data-metric={metric}
-              data-pass={pass ?? undefined}
-            >
-              <header className={styles.panelHead}>
-                <span className={styles.panelTitle}>{isEditing ? `Edit ${metric}` : metric}</span>
-              </header>
-              {isEditing ? (
-                <ScoreEditor
-                  runId={runId}
-                  filePath={payload.run.file_path ?? payload.run.run_id}
-                  row={row}
-                  metric={metric}
-                  spec={model.metricSpecs[metric]}
-                  initial={
-                    cell.value === null
-                      ? ''
-                      : cell.type === 'score'
-                        ? String(Math.round(cell.value * 1000) / 10) + '%'
-                        : String(cell.value)
-                  }
-                  passNumber={pass}
-                  passVersion={model.passRevision}
-                  edited={cell.edited}
-                  onDone={() => setEditing(null)}
-                />
-              ) : (
-                <MetaList meta={meta} hidden={ui.hiddenMetricFields} />
-              )}
-            </section>
-          </Collapse>
-        );
-      })}
-    </div>
-  );
-}
-
-export function MetricStrip({ row }: { row: Row }) {
-  const { model } = useRunPage();
-  const canEdit = useCanEdit(row);
-  const repeatAggregate = model.isRepeat && !model.viewPass;
-  return (
-    <MetricChips
-      row={row}
-      scoped={row}
-      pass={model.viewPass}
-      canReset
-      canEdit={canEdit && !repeatAggregate}
-    />
   );
 }

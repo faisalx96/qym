@@ -1,6 +1,6 @@
 /** UX review (group C): the inline score editor keeps focus, never posts twice and never posts a no-op. */
 import { test, expect, type Page } from '@playwright/test';
-import { openRun, seedClassic, seedProject, type Seeded } from './support';
+import { openRun, seedClassic, seedProject, type Seeded, openMetric } from './support';
 
 let s: Seeded;
 let classic: string;
@@ -14,7 +14,8 @@ async function openEditor(page: Page, item: string, metric = 'quality') {
   await openRun(page, s.slug, classic, `item=${item}`);
   const card = page.getByTestId('item-card');
   await expect(card).toBeVisible();
-  const edit = card.getByRole('button', { name: `Edit ${metric} score` });
+  const panel = await openMetric(card, metric);
+  const edit = panel.getByRole('button', { name: `Edit ${metric} score` });
   await edit.click();
   const box = card.getByRole('textbox', { name: `New ${metric} score` });
   await expect(box).toBeFocused();

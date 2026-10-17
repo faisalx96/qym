@@ -1,0 +1,96 @@
+/* Stat tiles: equal, separate, centred tiles; the grid fills the report column at every step. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.tiles[data-count='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  text-align: center;
+}
+
+/* Card renders header / body / footer wrappers: the tile content is its body. */
+.tile > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  width: 100%;
+  height: 100%;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-size: var(--font-stat);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+
+.value[data-band] {
+  color: var(--tone-text);
+}
+
+.value[data-danger] {
+  color: var(--error-text);
+}
+
+.meaning {
+  max-inline-size: 22ch;
+  font-size: var(--font-sm);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* Narrow (560 to 899 and down to 480): a 12-column grid, tiles 1 to 4 span 3 and tiles 5 to 7 span 4, so both rows fill the width. */
+@container (max-width: 899px) {
+  .tiles:not([data-count='3']) {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .tiles:not([data-count='3']) > :nth-child(-n + 4) {
+    grid-column: span 3;
+  }
+
+  .tiles:not([data-count='3']) > :nth-child(n + 5) {
+    grid-column: span 4;
+  }
+}
+
+/* Compact (under 480): three rows of two and a full-width last tile; three tiles stack. */
+@container (max-width: 479px) {
+  .tiles:not([data-count='3']) > :nth-child(-n + 6) {
+    grid-column: span 6;
+  }
+
+  .tiles:not([data-count='3']) > :nth-child(7) {
+    grid-column: span 12;
+  }
+
+  .tiles[data-count='3'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

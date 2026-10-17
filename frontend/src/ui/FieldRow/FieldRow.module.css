@@ -36,6 +36,20 @@
   --tone: var(--info);
 }
 
+.row[data-anchor='start'] .label {
+  text-align: left;
+}
+
+/* A prose value is as wide as its text up to the reading measure and sits next to its label; lines follow the text direction. */
+.value {
+  min-width: 0;
+}
+
+.value[data-measure='prose'] {
+  inline-size: fit-content;
+  max-inline-size: min(100%, var(--field-measure));
+}
+
 .label {
   grid-area: label;
   padding-block-start: var(--space-xs);

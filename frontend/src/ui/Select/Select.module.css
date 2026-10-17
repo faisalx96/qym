@@ -133,6 +133,11 @@
   min-width: 0;
 }
 
+/* The 24px trigger shows the name only; the description is for the option list. */
+.value .optionDesc {
+  display: none;
+}
+
 .optionDesc {
   font-size: var(--font-sm);
   color: var(--text-muted);

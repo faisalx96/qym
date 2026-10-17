@@ -1,69 +1,4 @@
 /* Marks for the analysis panel (tokens only, 2px surface gaps, rounded data ends). */
-.gauge {
-  width: 44px;
-  height: 44px;
-  flex: none;
-  transform: rotate(-90deg);
-}
-
-.gaugeTrack {
-  fill: none;
-  stroke: var(--bg-elevated);
-  stroke-width: 5;
-}
-
-.gaugeFill {
-  fill: none;
-  stroke-width: 5;
-  stroke-linecap: round;
-  transition: stroke-dasharray var(--motion-fill) var(--ease-out);
-}
-
-.gaugeFill[data-enter] {
-  animation: gauge-grow var(--motion-fill) var(--ease-out) backwards;
-}
-
-@keyframes gauge-grow {
-  from {
-    stroke-dasharray: 0 120;
-  }
-}
-
-.split {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.splitTrack {
-  display: flex;
-  gap: 2px;
-  height: 24px;
-}
-
-.seg {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-basis: 0;
-  min-width: 6px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-}
-
-.matrixCell:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 1px;
-}
-
-.segText {
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  font-weight: 700;
-  color: var(--bg-void);
-}
-
 .legend {
   display: flex;
   flex-wrap: wrap;
@@ -89,15 +24,25 @@
   align-items: center;
 }
 
-.hist {
+/* ───────── Bar plot (round 3 P1): every bar chart uses one column recipe ───────── */
+.plotBox {
   display: flex;
-  align-items: stretch;
-  gap: 2px;
-  height: 110px;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.col,
-.passCol {
+.plot {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  gap: 4px;
+  min-height: 146px;
+}
+
+/* A column is [spacer][count][bar][axis][sub]: the spacer takes (1 - p) and the bar p of the free height, so the
+   count always sits directly on top of its bar and a taller slot makes the bars taller, never leaves space under them. */
+.col {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -107,42 +52,113 @@
   border: 0;
   background: transparent;
   color: inherit;
+  font: inherit;
+}
+
+.col::before {
+  content: '';
+  flex: calc(1 - var(--p, 0)) 1 0%;
+}
+
+.count,
+.axis,
+.axisSub {
+  flex: none;
+  white-space: nowrap;
 }
 
 .count::before,
-.axis::before {
+.axis::before,
+.axisSub::before {
   content: attr(data-text);
 }
 
 .count {
-  height: 14px;
+  order: 1;
+  min-height: 16px;
+  margin-bottom: 2px;
   font-family: var(--font-mono);
   font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
   color: var(--text-secondary);
 }
 
-.barArea {
-  display: flex;
-  flex: 1;
-  align-items: flex-end;
-  width: 100%;
-  min-height: 0;
+.count[data-zero] {
+  color: var(--text-muted);
 }
 
 .bar {
+  order: 2;
   position: relative;
   display: flex;
-  align-items: flex-end;
-  width: 100%;
+  flex: var(--p, 0) 1 0%;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: min(100%, 44px);
+  min-height: 3px;
   border-radius: 4px 4px 0 0;
   overflow: hidden;
   transform-origin: bottom;
-  transition: height var(--motion-fill) var(--ease-out);
 }
 
-/* M2: bars rise from the baseline once per mount, staggered by bucket (--i). */
+/* A column with no items draws no bar (the count above it says 0, or nothing for a histogram bucket). */
+.col[data-zero] .bar {
+  min-height: 0;
+}
+
+.axis {
+  order: 3;
+  margin-top: var(--space-xs);
+  font-size: var(--font-sm);
+  line-height: 14px;
+  color: var(--text-muted);
+}
+
+.axisNote {
+  order: 3;
+  flex: none;
+  font-size: var(--font-sm);
+  line-height: 14px;
+  color: var(--text-muted);
+}
+
+.axisSub {
+  order: 4;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 14px;
+  color: var(--text-muted);
+}
+
+.col[data-out] {
+  opacity: 0.35;
+}
+
+.col:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.col:disabled .bar {
+  opacity: 0.6;
+}
+
+.barErr {
+  display: block;
+  width: 100%;
+  background: repeating-linear-gradient(45deg, var(--bg-void) 0 2px, transparent 2px 4px);
+}
+
+/* Entrance (M2): bars rise from the baseline and the count fades in with the same duration and stagger, so a count never
+   hangs over empty space. Nothing animates under prefers-reduced-motion. */
 .bar[data-enter] {
   animation: bar-rise var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+.count[data-enter] {
+  animation: count-in var(--motion-fill) var(--ease-out) backwards;
   animation-delay: calc(var(--i, 0) * var(--motion-stagger));
 }
 
@@ -152,15 +168,17 @@
   }
 }
 
-.barErr {
-  width: 100%;
-  background: repeating-linear-gradient(45deg, var(--bg-void) 0 2px, transparent 2px 4px);
+@keyframes count-in {
+  from {
+    opacity: 0;
+  }
 }
 
-.axis {
-  min-height: 14px;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
+@media (prefers-reduced-motion: reduce) {
+  .bar[data-enter],
+  .count[data-enter] {
+    animation: none;
+  }
 }
 
 .bandValue {
@@ -346,22 +364,27 @@
   stroke-width: 2;
 }
 
-.passBars {
-  display: flex;
-  gap: 2px;
-  height: 110px;
+/* A value label on a curve point: --font-sm mono with a 3px surface halo so it stays legible over the line. */
+.pointLabel {
+  paint-order: stroke;
+  stroke: var(--bg-surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  fill: var(--text-secondary);
 }
 
-.passCol:disabled {
-  cursor: default;
-  opacity: 0.6;
+/* Correlation matrix: square cells of clamp(20px, column / (n + 1), 44px); it scrolls inside its card, never wider than it. */
+.matrixBox {
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .matrixCell {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -372,13 +395,36 @@
   transition: outline-color var(--transition-fast);
 }
 
-.matrixCell:hover {
+.matrixCell:hover:not(:disabled) {
   outline: 1px solid var(--text-primary);
 }
 
-.axisNote {
-  display: block;
-  color: var(--text-muted);
+.matrixCell:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.matrixCell[aria-pressed='true'] {
+  outline: 2px solid var(--text-primary);
+}
+
+/* Column labels are rotated -60 degrees from the cell's bottom-left corner. */
+.matrixColHead {
+  position: relative;
+  min-width: 0;
+  height: 84px;
+}
+
+.matrixColText {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  max-width: 96px;
+  overflow: hidden;
   font-size: var(--font-sm);
-  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  transform: rotate(-60deg);
+  transform-origin: left bottom;
 }

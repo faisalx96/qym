@@ -82,8 +82,11 @@ export function ChartTooltipHost({
     setPos({ left, top: below ? active.bottom + 8 : active.top - hh - 8, below });
   }, [active]);
 
+  // Escape dismisses any open tooltip (hover, focus or pinned: WCAG 1.4.13); a tap elsewhere closes a pinned one.
+  const pinned = Boolean(active?.pinned);
+  const open = active !== null;
   useEffect(() => {
-    if (!active?.pinned) return undefined;
+    if (!open) return undefined;
     const close = () => setActive(null);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
@@ -92,12 +95,12 @@ export function ChartTooltipHost({
       if (!(e.target instanceof Element) || !e.target.closest('[data-mark]')) close();
     };
     document.addEventListener('keydown', onKey);
-    document.addEventListener('pointerdown', onDown);
+    if (pinned) document.addEventListener('pointerdown', onDown);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onDown);
     };
-  }, [active?.pinned]);
+  }, [open, pinned]);
 
   const api = useMemo(() => ({ active, tipId, show, hide }), [active, tipId, show, hide]);
   return (

@@ -8,9 +8,8 @@ import { runPath } from '@/app/routes';
 import { usePassesQuery } from '@/api/runs';
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { readJson, writeJson } from '@/lib/storage';
 import { ReportLayout, ScopeBar, Stack } from '@/ui';
-import { ExperimentPanel, ReviewHistory, RunNotices, VersioningDetails } from './components/RunPanels';
+import { ExperimentPanel, ReviewHistory, RunNotices } from './components/RunPanels';
 import { RunHero } from './components/RunHero';
 import { QuickFilters } from './components/QuickFilters';
 import { ReportSections, isSectionKey, sectionDomId } from './components/ReportSections';
@@ -31,7 +30,6 @@ import { RunContext, type RunPageValue } from './RunContext';
 import type { PassSummary, RunPayload } from './types';
 import styles from './RunBody.module.css';
 
-const HERO_KEY = 'qym:run-hero-expanded';
 export const WIDE_QUERY = '(min-width: 1200px)';
 
 /** Old anchors that name no section (`#summary`) or a retired alias. */
@@ -148,14 +146,6 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
     [api.ctx, api.view, api.defs, search.searchMatcher, search.outputMatcher],
   );
 
-  const [heroExpanded, setHeroExpanded] = useState(() => readJson<boolean>(HERO_KEY, false));
-  const toggleHero = useCallback(() => {
-    setHeroExpanded((v) => {
-      writeJson(HERO_KEY, !v);
-      return !v;
-    });
-  }, []);
-
   const basePath = runPath(slug, runId);
   const value: RunPageValue = {
     slug,
@@ -184,9 +174,6 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
             slug={slug}
             listParam={api.listParam}
             basePath={basePath}
-            expanded={heroExpanded}
-            onToggleExpanded={toggleHero}
-            extra={<VersioningDetails run={run} flat />}
           />
           <ExperimentPanel run={run} slug={slug} />
           <RunNotices run={run} readOnly={readOnly} />

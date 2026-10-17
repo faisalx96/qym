@@ -626,6 +626,14 @@ function DataTableInner<R>({
     head: (t) => (t as HTMLTableElement).tHead,
     parent: headParent,
     top: stickyTop ?? vcfg?.scrollPaddingStart ?? 0,
+    // an expanded detail is not laid out in the columns: the header is held above it (round 3 P4)
+    details: renderExpanded
+      ? (t) =>
+          Array.from(t.querySelectorAll('tr[data-detail-row]')).map((tr) => {
+            const r = tr.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom };
+          })
+      : undefined,
     enabled: stickyHeader && !embedded,
   });
 

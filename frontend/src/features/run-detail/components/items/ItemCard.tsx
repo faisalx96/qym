@@ -1,8 +1,8 @@
 /** Expanded item: bodies (lazy), metadata, output, trace chips, metrics; repeat items show one column per pass. */
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { isItemTaskError } from '@/lib/metrics';
-import { Button, CopyButton, FieldRow, Icon, LinkButton, StructuredValue, Tag, parseStructured } from '@/ui';
-import { bodyText, formatCompact, formatStartedAt, itemLink } from '../../lib/itemText';
+import { Button, CopyButton, FieldRow, StructuredValue, Tag, parseStructured, useStickyShift } from '@/ui';
+import { bodyText, formatCompact, itemLink } from '../../lib/itemText';
 import {
   HIDDEN_METADATA_KEYS,
   ITEM_METADATA_BADGE_KEYS,
@@ -10,30 +10,18 @@ import {
   itemMetadataDisplayValue,
 } from '../../lib/rowMeta';
 import { buildLangfuseTraceUrl } from '../../lib/traceTree';
-import { latencyLabel, rowStatus } from '../../lib/rowDisplay';
+import { scopeRowToPass } from '../../lib/passScope';
+import { defaultSelection, shownPasses, togglePass } from '../../lib/passSelection';
+import { useShellScroller, useStickyOffset } from '../../hooks/useScrollMargin';
+import { itemVerdict } from '../../lib/itemVerdict';
 import { useRunPage } from '../../RunContext';
 import type { MetricAnalysis, Row, RowTraceStats } from '../../types';
 import { MetricAnalysisCards } from '../analysis/MetricAnalysisCards';
+import { ItemBar } from './ItemBar';
 import { useItemsUi } from './ItemsUi';
-import { MetricStrip } from './MetricStrip';
-import { PassColumns } from './PassColumns';
+import { MetricMatrix, type MatrixPass } from './MetricMatrix';
+import { OutputRegion } from './OutputRegion';
 import styles from './ItemCard.module.css';
-
-/** A series hue per metadata key so tags scan by kind without filled tiles. */
-function hueOf(key: string): number {
-  let h = 0;
-  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) % 5;
-  return h + 1;
-}
-
-function MetaTag({ k, children, title }: { k: string; children: React.ReactNode; title?: string }) {
-  return (
-    <Tag kind="data" title={title}>
-      <span className={styles.dot} data-hue={hueOf(k)} aria-hidden="true" />
-      {children}
-    </Tag>
-  );
-}
 
 /** Plain strings pick their own direction; structured values read left to right with per-leaf direction. */
 function rowText(raw: unknown): string | undefined {
@@ -95,8 +83,32 @@ export function ItemCard({ row }: { row: Row }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, row.item_id]);
   const repeatAggregate = model.isRepeat && !model.viewPass;
-  const status = rowStatus(api.ctx, row, api.selectedMetric);
   void items;
+  const articleRef = useRef<HTMLElement>(null);
+  const scroller = useShellScroller();
+  const stickyOffset = useStickyOffset();
+  // the bar owns the sticky line while the table header is held above this detail
+  useStickyShift({
+    container: articleRef,
+    head: (c) => c.querySelector<HTMLElement>('[data-item-bar]'),
+    parent: scroller,
+    top: stickyOffset,
+    // the article only exists once the details have loaded
+    enabled: loaded,
+  });
+  // One entry per pass for a repeat item in the all-passes view; the row itself otherwise.
+  const passes = useMemo<MatrixPass[]>(
+    () =>
+      repeatAggregate
+        ? Array.from({ length: model.samples }, (_, i) => ({
+            pass: i + 1,
+            scoped: scopeRowToPass(row, model.metricNames, i + 1),
+          }))
+        : [{ pass: model.viewPass ?? 1, scoped: row }],
+    [repeatAggregate, model.samples, model.metricNames, model.viewPass, row],
+  );
+  const multi = repeatAggregate && model.samples > 1;
+  const [selected, setSelected] = useState<number[]>(() => defaultSelection(model.samples));
 
   if (!loaded && state?.status === 'error') {
     return (
@@ -120,9 +132,6 @@ export function ItemCard({ row }: { row: Row }) {
   const rawExpected = row.expected_full ?? row.expected;
   const input = bodyText(rawInput);
   const expected = bodyText(rawExpected);
-  const output = isItemTaskError(row)
-    ? `ERROR: ${row.error || row.__execution_error || 'The task failed'}`
-    : bodyText(row.output_full ?? row.output);
   const md = row.item_metadata ?? {};
   const badges = ITEM_METADATA_BADGE_KEYS.filter((k) => !ui.hiddenFields.has(k)).flatMap((k) =>
     itemMetadataBadgeValues(k, md[k]).map((v) => ({ k, v })),
@@ -139,23 +148,38 @@ export function ItemCard({ row }: { row: Row }) {
   );
   const langfuse =
     row.trace_url || buildLangfuseTraceUrl(run.langfuse_host, run.langfuse_project_id, row.trace_id);
+  const shownForMatrix = shownPasses(selected);
   return (
-    <div className={styles.state} data-testid="item-card" data-item-id={row.item_id}>
+    <article
+      ref={articleRef}
+      className={styles.state}
+      data-testid="item-card"
+      data-item-id={row.item_id}
+      aria-label={`Item #${row.index + 1}`}
+    >
+      <ItemBar
+        number={row.index + 1}
+        itemId={row.item_id}
+        verdict={itemVerdict(api.ctx, row, api.selectedMetric)}
+        preview={(input.split('\n')[0] ?? '').slice(0, 200)}
+        link={link}
+        onCollapse={() => {
+          ui.toggleExpanded(row.item_id, false);
+          requestAnimationFrame(() =>
+            document.querySelector<HTMLElement>(`tr[data-item-id="${CSS.escape(row.item_id)}"]`)?.focus(),
+          );
+        }}
+      />
       {run.items_restricted ? (
         <p className={styles.muted}>Item bodies are visible to admins only on a private test set.</p>
       ) : null}
       <div className={styles.fields}>
         <FieldRow
           label="Input"
+          labelAnchor="start"
           text={rowText(rawInput)}
-          dir={rowText(rawInput) === undefined ? 'ltr' : 'auto'}
           measure={isStructured(rawInput) ? 'full' : 'prose'}
-          actions={
-            <>
-              <CopyButton text={link} icon="link" label="Copy link" />
-              <CopyButton text={input} label="Copy input" />
-            </>
-          }
+          actions={<CopyButton text={input} label="Copy input" />}
         >
           <div data-kind="input">
             <StructuredValue value={rawInput} label="Input" textMode={ui.textMode} />
@@ -163,9 +187,9 @@ export function ItemCard({ row }: { row: Row }) {
         </FieldRow>
         {expected ? (
           <FieldRow
-            label="Expected output"
+            label="Expected"
+            labelAnchor="start"
             text={rowText(rawExpected)}
-            dir={rowText(rawExpected) === undefined ? 'ltr' : 'auto'}
             measure={isStructured(rawExpected) ? 'full' : 'prose'}
             actions={<CopyButton text={expected} label="Copy expected output" />}
           >
@@ -174,21 +198,23 @@ export function ItemCard({ row }: { row: Row }) {
             </div>
           </FieldRow>
         ) : null}
+        {badges.length || tags.length ? (
+          <FieldRow label="Tags" labelAnchor="start" measure="full">
+            <div className={styles.tags}>
+              {badges.map(({ k, v }) => (
+                <Tag key={`${k}:${v}`} kind="data" title={k}>
+                  {v}
+                </Tag>
+              ))}
+              {tags.map(([k, v]) => (
+                <Tag key={k} kind="data">
+                  {k}: {itemMetadataDisplayValue(v)}
+                </Tag>
+              ))}
+            </div>
+          </FieldRow>
+        ) : null}
       </div>
-      {badges.length || tags.length ? (
-        <div className={styles.tags}>
-          {badges.map(({ k, v }) => (
-            <MetaTag key={`${k}:${v}`} k={k} title={k}>
-              {v}
-            </MetaTag>
-          ))}
-          {tags.map(([k, v]) => (
-            <MetaTag key={k} k={k}>
-              {k}: {itemMetadataDisplayValue(v)}
-            </MetaTag>
-          ))}
-        </div>
-      ) : null}
       {warnings.length ? (
         <div className={styles.warning} role="status" data-testid="analysis-warning">
           <span className={styles.warningLabel}>
@@ -197,85 +223,31 @@ export function ItemCard({ row }: { row: Row }) {
           <span>{warnings.join('; ')}</span>
         </div>
       ) : null}
-      {repeatAggregate ? (
-        <PassColumns row={row} />
-      ) : (
-        <section
-          className={styles.output}
-          data-kind="output"
-          data-rail={
-            status.kind === 'pass'
-              ? 'success'
-              : status.kind === 'fail' || status.kind === 'error'
-                ? 'danger'
-                : undefined
-          }
-          aria-label="Output"
-        >
-          <header className={styles.blockHead}>
-            <span className={styles.label}>Output</span>
-            <Tag
-              tone={
-                status.kind === 'pass'
-                  ? 'success'
-                  : status.kind === 'fail' || status.kind === 'error'
-                    ? 'danger'
-                    : undefined
-              }
-            >
-              {status.label}
-            </Tag>
-            {row.latency_ms != null ? (
-              <span className={styles.meta}>{latencyLabel(row.latency_ms)}</span>
-            ) : null}
-            {row.task_started_at_ms ? (
-              <span className={styles.meta}>{formatStartedAt(row.task_started_at_ms)}</span>
-            ) : null}
-            <span className={styles.actions}>
-              {row.trace_id ? (
-                <Button
-                  size="sm"
-                  variant="neutral"
-                  icon={<Icon name="list" size={12} />}
-                  onPress={() => ui.openTrace(row.item_id, model.viewPass)}
-                >
-                  Trace
-                </Button>
-              ) : null}
-              {langfuse ? (
-                <LinkButton
-                  size="sm"
-                  variant="neutral"
-                  href={langfuse}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  icon={<Icon name="external" size={12} />}
-                >
-                  Open in Langfuse
-                </LinkButton>
-              ) : null}
-              <CopyButton text={output} label="Copy output" />
-            </span>
-          </header>
-          {row.output_received === false ? (
-            <p className={styles.note} role="note">
-              Output not received: this item’s outcome event never reached the platform. The item is left out
-              of Execution success and of the means.
-            </p>
-          ) : (
-            <div className={styles.outputBody}>
-              <StructuredValue
-                value={isItemTaskError(row) ? output : (row.output_full ?? row.output)}
-                label="Output"
-                textMode={ui.textMode}
-              />
-            </div>
-          )}
-        </section>
-      )}
+      <OutputRegion
+        row={row}
+        passes={passes}
+        multi={multi}
+        selected={selected}
+        onToggle={(p) => setSelected((cur) => togglePass(cur, p))}
+        langfuseUrl={langfuse}
+      />
       <TraceChips stats={row.trace_stats} retries={row.retry_count ?? 0} />
-      {repeatAggregate || noVerdict ? null : <MetricStrip row={row} />}
+      <hr className={styles.divider} />
+      <section className={styles.metrics} aria-label="Metrics">
+        {run.items_restricted || noVerdict ? (
+          <>
+            <h3 className={styles.metricsTitle}>Metrics</h3>
+            <p className={styles.muted}>
+              {run.items_restricted
+                ? 'Scores are visible to admins only'
+                : 'No scores: this item produced no output to score.'}
+            </p>
+          </>
+        ) : (
+          <MetricMatrix row={row} passes={passes} multi={multi} shown={shownForMatrix} />
+        )}
+      </section>
       <MetricAnalysisCards row={row} />
-    </div>
+    </article>
   );
 }

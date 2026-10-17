@@ -257,6 +257,9 @@ describe('filter rules', () => {
       'Edited metrics',
       'Retries',
       'Trace errors',
+      // round 3 P7: the box plot cards filter tokens and cost per item
+      'Tokens',
+      'Cost ($)',
       'Latency (ms)',
     ]);
     expect(defMap.get('cat:complexity')?.values).toEqual(['easy', 'hard']);

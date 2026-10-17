@@ -1,0 +1,299 @@
+/* Box plot marks: grey only (text tokens), the slow tail may take --score-2. No colour is introduced. */
+.plotBox {
+  min-width: 0;
+}
+
+.stack {
+  position: relative;
+}
+
+.box {
+  display: block;
+  max-inline-size: 100%;
+}
+
+/* Transparent marks over the picture: hover, focus, click. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  max-inline-size: 100%;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 146px;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.grid {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.tick {
+  font-size: var(--font-sm);
+  fill: var(--text-muted);
+}
+
+.iqr {
+  fill: color-mix(in srgb, var(--text-secondary) var(--tint-strong), var(--bg-surface));
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+}
+
+.whisker,
+.cap {
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+}
+
+.median {
+  stroke: var(--text-primary);
+  stroke-width: 2.5;
+}
+
+.meanMark {
+  fill: var(--bg-surface);
+  stroke: var(--text-primary);
+  stroke-width: 1.5;
+}
+
+.outlier {
+  fill: var(--text-muted);
+  fill-opacity: 0.75;
+}
+
+.outlier[data-tail] {
+  fill: var(--score-2);
+  fill-opacity: 0.9;
+}
+
+.arrow {
+  fill: var(--text-muted);
+}
+
+.arrow[data-tail] {
+  fill: var(--score-2);
+}
+
+.hit {
+  fill: transparent;
+  stroke: transparent;
+}
+
+.medianLabel,
+.clipLabel {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  fill: var(--text-primary);
+}
+
+.clipLabel {
+  fill: var(--text-muted);
+}
+
+/* Entrance (M2): the box grows from its median, dots fade in staggered. Nothing animates under reduced motion. */
+.iqr[data-enter] {
+  animation: box-grow var(--motion-fill) var(--ease-out) backwards;
+}
+
+.outlier[data-enter] {
+  animation: dot-fade var(--motion-fill) var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * var(--motion-stagger));
+}
+
+@keyframes box-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes dot-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iqr[data-enter],
+  .outlier[data-enter] {
+    animation: none;
+  }
+}
+
+/* Number row: six equal cells, labels over mono values, always visible. */
+.numsWrap {
+  margin-block-start: var(--space-sm);
+}
+
+.nums {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0;
+}
+
+.nums[data-wrap] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.num {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-inline-size: 0;
+  padding-block: var(--space-xs);
+}
+
+.num dt {
+  max-inline-size: 100%;
+  overflow: hidden;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-overflow: clip;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.num dd {
+  margin: 0;
+  max-inline-size: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: var(--space-xs) 0 0;
+  padding: var(--space-xs) var(--space-sm) 0;
+  border-block-start: 1px solid var(--border-default);
+}
+
+.total dt {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.total dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* Legend: the plot's own shapes, wraps. */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--space-md);
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.lgBox {
+  inline-size: 14px;
+  block-size: 9px;
+  border: 1.5px solid var(--text-secondary);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-secondary) var(--tint-strong), var(--bg-surface));
+}
+
+.lgWhisker {
+  inline-size: 14px;
+  block-size: 0;
+  border-block-start: 1.5px solid var(--text-secondary);
+}
+
+.lgMedian {
+  inline-size: 2px;
+  block-size: 11px;
+  background: var(--text-primary);
+}
+
+.lgMean {
+  inline-size: 8px;
+  block-size: 8px;
+  border: 1.5px solid var(--text-primary);
+  background: var(--bg-surface);
+  transform: rotate(45deg);
+}
+
+.lgDot {
+  inline-size: 5px;
+  block-size: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+/* The glyph as a positioned row (per-pass rows, Step timings). */
+.track {
+  position: relative;
+  display: block;
+  min-inline-size: 0;
+}
+
+.tWhisker {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: var(--a);
+  inline-size: calc(var(--b) - var(--a));
+  block-size: 0;
+  border-block-start: 1.5px solid var(--box-tone, var(--text-secondary));
+}
+
+.tBox {
+  position: absolute;
+  inset-block: 15%;
+  inset-inline-start: var(--a);
+  inline-size: max(3px, calc(var(--b) - var(--a)));
+  border: 1.5px solid var(--box-tone, var(--text-secondary));
+  border-radius: 3px;
+  background: color-mix(
+    in srgb,
+    var(--box-tone, var(--text-secondary)) var(--tint-strong),
+    var(--bg-surface)
+  );
+}
+
+.tMedian {
+  position: absolute;
+  inset-block: 15%;
+  inset-inline-start: var(--a);
+  inline-size: 2.5px;
+  background: var(--text-primary);
+}
+
+.tMean {
+  position: absolute;
+  inset-block-start: calc(50% - 4px);
+  inset-inline-start: calc(var(--a) - 4px);
+  inline-size: 8px;
+  block-size: 8px;
+  border: 1.5px solid var(--text-primary);
+  background: var(--bg-surface);
+  transform: rotate(45deg);
+}

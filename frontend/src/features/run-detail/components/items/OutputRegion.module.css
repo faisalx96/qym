@@ -1,0 +1,178 @@
+/* Output region: heading row, pass rail, up to three equal pass columns separated by a hairline, no pass colours. */
+.region {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--border-subtle);
+  direction: ltr;
+  text-align: start;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  min-block-size: var(--control-height);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.meta {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.headActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-inline-start: auto;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.railChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.railHelp {
+  margin-inline-start: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.grid[data-n='1'] {
+  --n: 1;
+}
+
+.grid[data-n='2'] {
+  --n: 2;
+}
+
+.grid[data-n='3'] {
+  --n: 3;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.col + .col {
+  padding-inline-start: var(--space-md);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+/* A one-pass item keeps the 2px verdict rail at the inline start of its output. */
+.col[data-rail] {
+  padding-inline-start: var(--space-md);
+  border-inline-start: 2px solid var(--tone-rail);
+}
+
+.col[data-rail='success'] {
+  --tone-rail: var(--success);
+}
+
+.col[data-rail='danger'] {
+  --tone-rail: var(--error);
+}
+
+.colHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-block-size: var(--control-height);
+}
+
+.latency {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.colActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.text {
+  inline-size: fit-content;
+  max-inline-size: min(100%, var(--field-measure));
+}
+
+.raw {
+  max-height: 360px;
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  overflow: auto;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+  color: var(--text-secondary);
+}
+
+.note {
+  margin: 0;
+  color: var(--warning);
+}
+
+.empty {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* Below 900px of detail the columns stack, separated by a hairline. */
+@container (max-width: 899px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .col + .col {
+    padding-inline-start: 0;
+    padding-block-start: var(--space-sm);
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--border-subtle);
+  }
+}
+
+@container (max-width: 639px) {
+  .headActions {
+    margin-inline-start: 0;
+  }
+}

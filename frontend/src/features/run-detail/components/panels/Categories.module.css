@@ -1,0 +1,223 @@
+/* Categories (round 3 P3): key switcher, one card of rows [value][bar + %][items][pass][latency]. */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.metricNote {
+  margin-inline-start: auto;
+}
+
+.catCard {
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+  min-block-size: var(--control-height);
+}
+
+.title {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sub {
+  margin-inline-start: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.headRight {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.tickKey {
+  display: inline-block;
+  inline-size: 2px;
+  block-size: 12px;
+  background: var(--text-primary);
+}
+
+.insight {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.cols,
+.row {
+  display: grid;
+  grid-template-columns: minmax(120px, 220px) minmax(0, 1fr) 64px 64px 72px;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.cols {
+  block-size: var(--table-header-height);
+  padding-inline: var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.row {
+  position: relative;
+  inline-size: 100%;
+  block-size: var(--row-compact);
+  padding: 0 var(--space-sm);
+  border: 0;
+  border-block-end: 1px solid var(--border-subtle);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.row[data-selected] {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+.name {
+  overflow: hidden;
+  font-size: var(--font-base);
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.barCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+}
+
+.track {
+  position: relative;
+  flex: 1;
+  block-size: 12px;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.fill {
+  display: block;
+  block-size: 100%;
+  border-radius: var(--control-radius);
+  background: var(--tone, var(--text-muted));
+}
+
+/* The overall average: a 2 x 18px tick at the same x on every bar of the card. */
+.tick {
+  position: absolute;
+  inset-block: -3px;
+  inline-size: 2px;
+  margin-inline-start: -1px;
+  background: var(--text-primary);
+}
+
+.pct {
+  flex: none;
+  inline-size: 40px;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 650;
+  text-align: end;
+  color: var(--tone-text, var(--text-secondary));
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.cols .num {
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+}
+
+.more {
+  padding-block-start: var(--space-sm);
+}
+
+/* Compact: two-line rows, the bar full width on its own line; latency stays in the tooltip. */
+@container (max-width: 639px) {
+  .cols {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name items pass'
+      'bar bar bar';
+    block-size: auto;
+    padding-block: var(--space-sm);
+    row-gap: var(--space-xs);
+  }
+
+  .row > :nth-child(1) {
+    grid-area: name;
+  }
+
+  .row > :nth-child(2) {
+    grid-area: bar;
+  }
+
+  .row > :nth-child(3) {
+    grid-area: items;
+  }
+
+  .row > :nth-child(4) {
+    grid-area: pass;
+  }
+
+  .row > :nth-child(5) {
+    display: none;
+  }
+}

@@ -7,7 +7,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { compareUrl, waitLoaded } from '../compare/support';
-import { itemButton, openRun, client, seedProject, seedRepeat, type Seeded } from './support';
+import { itemButton, openRun, client, seedProject, seedRepeat, type Seeded, openMetric } from './support';
 
 let s: Seeded;
 
@@ -34,13 +34,10 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
 
   // stale page: edit an item score
   await itemButton(page, 2).click();
-  const chip = page
-    .locator('[data-testid=item-card]')
-    .first()
-    .locator('[role=listitem][data-metric=quality]');
-  await expect(chip).toBeVisible();
-  const panel = page.locator('[data-testid=item-card]').first().locator('section[data-metric=quality]');
-  await chip.getByRole('button', { name: 'Edit quality score' }).click();
+  const firstCard = page.locator('[data-testid=item-card]').first();
+  await expect(firstCard.locator('tr[data-metric=quality]')).toBeVisible();
+  const panel = await openMetric(firstCard, 'quality');
+  await panel.getByRole('button', { name: 'Edit quality score' }).click();
   await panel.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
   const refused = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
   await panel.getByRole('button', { name: 'Save' }).click();
@@ -62,12 +59,9 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
   await pill.click();
   await expect(page).toHaveURL(/pass=1/);
   await itemButton(page, 2).click();
-  const fresh = page
-    .locator('[data-testid=item-card]')
-    .first()
-    .locator('[role=listitem][data-metric=quality]');
-  const freshPanel = page.locator('[data-testid=item-card]').first().locator('section[data-metric=quality]');
-  await fresh.getByRole('button', { name: 'Edit quality score' }).click();
+  const fresh = page.locator('[data-testid=item-card]').first().locator('tr[data-metric=quality]');
+  const freshPanel = await openMetric(page.locator('[data-testid=item-card]').first(), 'quality');
+  await freshPanel.getByRole('button', { name: 'Edit quality score' }).click();
   await freshPanel.getByRole('textbox', { name: 'New quality score' }).fill('0.25');
   const saved = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
   await freshPanel.getByRole('button', { name: 'Save' }).click();

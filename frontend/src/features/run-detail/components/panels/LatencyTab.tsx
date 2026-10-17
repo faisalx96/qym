@@ -14,7 +14,7 @@ import {
   SearchField,
   SegmentedControl,
   Skeleton,
-  useEntrance,
+  Tag,
 } from '@/ui';
 import { rowPassesFor, rowScoreFor } from '../../lib/filterRules';
 import {
@@ -38,9 +38,54 @@ import {
   type StepSortKey,
 } from '../../lib/latencyModel';
 import { useRunPage } from '../../RunContext';
-import { Scatter, type ScatterPoint, type ScatterQuadrants } from '../charts/Charts';
+import {
+  BarColumns,
+  Scatter,
+  ScatterLegend,
+  type BarSpec,
+  type ScatterPoint,
+  type ScatterQuadrants,
+} from '../charts/Charts';
+import { useBoxFilter } from '../charts/BoxCard';
+import { BoxPlot, BoxTrack, boxSentence } from '../charts/BoxPlot';
+import { ChartCard } from '../charts/ChartCard';
+import { selectedPart } from '../../lib/boxFilters';
+import { boxStats } from '../../lib/boxStats';
 import styles from './Latency.module.css';
 import panel from './Panels.module.css';
+
+/** The response-time box strip: same x scale as the histogram above it (round 3 P7). */
+function LatencyStrip({ items, lo, hi }: { items: LatencyItem[]; lo: number; hi: number }) {
+  const { active, onRange, openItem } = useBoxFilter('latency');
+  const stats = useMemo(() => boxStats(items.map((i) => i.latency)), [items]);
+  const byValue = useMemo(() => {
+    const m = new Map<number, string>();
+    items.forEach((i) => m.has(i.latency) || m.set(i.latency, i.itemId));
+    return m;
+  }, [items]);
+  const axis = useMemo(
+    () => ({ domain: [lo, hi] as [number, number], ticks: [], clipped: false, beyond: 0 }),
+    [lo, hi],
+  );
+  if (stats.n < 2) return null;
+  return (
+    <BoxPlot
+      variant="strip"
+      stats={stats}
+      axis={axis}
+      format={(v) => durText(v)}
+      tailTone
+      name={boxSentence('Response time', stats, (v) => durText(v))}
+      selected={selectedPart(active, stats)}
+      onRange={onRange}
+      onItem={(v) => {
+        const id = byValue.get(v);
+        if (id) openItem(id);
+      }}
+      itemLabel={(v) => byValue.get(v)}
+    />
+  );
+}
 
 function ResponseTime({ items }: { items: LatencyItem[] }) {
   const { api } = useRunPage();
@@ -48,7 +93,6 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
   const L = useMemo(() => latencySummary(items), [items]);
   const H = useMemo(() => (L ? latencyHistogram(items, L) : null), [items, L]);
   const [anchor, setAnchor] = useState<number | null>(null);
-  const enter = useEntrance();
   if (!L || !H) return <p className={panel.note}>No latency recorded for the current items.</p>;
   const apply = (a: number, b: number) => api.setFilters({ latency: { min: a, max: b } });
   const pickBin = (i: number, extend: boolean) => {
@@ -64,71 +108,72 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
     { key: 'p90', ms: L.p90, tone: 'var(--score-3)' },
     { key: 'p95', ms: L.p95, tone: 'var(--score-2)' },
   ];
+  const bars: BarSpec[] = H.bins.map((b, i) => {
+    const n = b.items.length;
+    const inRange = !filter || (b.b > filter.min && b.a < filter.max);
+    const tip = `${tickLabel(b.a)}–${tickLabel(b.b)}: ${n} items (${pct(n, items.length).toFixed(0)}%)${b.errors ? `, ${b.errors} task errors` : ''}`;
+    return {
+      key: i,
+      count: n,
+      label: tickLabel(b.a),
+      // Bulk is neutral but must stay visible on a phone (3:1 against the card); only the slow tail carries a tone.
+      color:
+        b.tone === 'p95'
+          ? 'var(--score-2)'
+          : b.tone === 'p90'
+            ? 'var(--score-3)'
+            : 'color-mix(in srgb, var(--text-secondary) 45%, var(--bg-surface))',
+      errShare: n ? b.errors / n : 0,
+      tip,
+      name: `${tickLabel(b.a)} to ${tickLabel(b.b)}: ${n} items`,
+      onPick: (e) => pickBin(i, Boolean((e as React.MouseEvent | undefined)?.shiftKey)),
+      selected: !!filter && inRange,
+      disabled: n === 0,
+      dim: !inRange,
+      zero: 'hide',
+      data: { 'data-bin': i, 'data-tone': b.tone ?? 'bulk' },
+    };
+  });
   return (
-    <section className={panel.stack} aria-label="Response time">
-      <h3 className={panel.groupTitle}>Response time</h3>
-      <div className={styles.kpis}>
-        <div>
-          <div className={styles.eyebrow}>Mean</div>
-          <div className={styles.hero}>{durText(L.mean)}</div>
-          <div className={panel.note}>across {L.count.toLocaleString('en-US')} items</div>
-        </div>
-        <div className={styles.pins} role="group" aria-label="Latency percentiles">
-          {pins.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              className={styles.pin}
-              style={{ borderColor: p.tone }}
-              onClick={() => apply(p.ms, Infinity)}
-              aria-label={`${p.key} ${durText(p.ms)}, filter to items at or above`}
-              title="Click to filter the page to items at or above"
-            >
-              <em>{p.key}</em> <b>{durText(p.ms)}</b>
-            </button>
-          ))}
-        </div>
-      </div>
-      <ChartTooltipHost
-        className={styles.hist}
-        role="group"
-        aria-label="Latency histogram, click a bar or shift-click to extend the range"
-      >
-        {H.bins.map((b, i) => {
-          const n = b.items.length;
-          const inRange = !filter || (b.b > filter.min && b.a < filter.max);
-          const tip = `${tickLabel(b.a)}–${tickLabel(b.b)}: ${n} items (${pct(n, items.length).toFixed(0)}%)${b.errors ? `, ${b.errors} task errors` : ''}`;
-          return (
-            <Mark
-              key={i}
-              as="button"
-              className={styles.bin}
-              data-tone={b.tone ?? undefined}
-              data-out={!inRange || undefined}
-              isDisabled={n === 0}
-              tip={tip}
-              aria-label={`${tickLabel(b.a)} to ${tickLabel(b.b)}: ${n} items`}
-              isSelected={!!filter && inRange}
-              onPick={(e) => pickBin(i, Boolean((e as React.MouseEvent | undefined)?.shiftKey))}
-            >
-              <span
-                className={styles.binBar}
-                data-enter={enter ? '' : undefined}
-                style={
-                  {
-                    height: n ? `${Math.max(4, (100 * n) / H.max)}%` : 0,
-                    '--i': Math.min(i, 10),
-                  } as React.CSSProperties
-                }
+    <ChartCard
+      title="Response time"
+      meta={<Tag kind="count">{L.count.toLocaleString('en-US')} items</Tag>}
+      intro={
+        <div className={styles.kpis}>
+          <div>
+            <div className={styles.eyebrow}>Mean</div>
+            <div className={styles.hero}>{durText(L.mean)}</div>
+          </div>
+          <div className={styles.pins} role="group" aria-label="Latency percentiles">
+            {pins.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                className={styles.pin}
+                style={{ borderColor: p.tone }}
+                onClick={() => apply(p.ms, Infinity)}
+                aria-label={`${p.key} ${durText(p.ms)}, filter to items at or above`}
+                title="Click to filter the page to items at or above"
               >
-                {b.errors ? (
-                  <span className={styles.binErr} style={{ height: `${(100 * b.errors) / n}%` }} />
-                ) : null}
-              </span>
-            </Mark>
-          );
-        })}
-      </ChartTooltipHost>
+                <em>{p.key}</em> <b>{durText(p.ms)}</b>
+              </button>
+            ))}
+            <span className={styles.pinStatic}>
+              fastest <b>{durText(L.min)}</b>
+            </span>
+            <span className={styles.pinStatic}>
+              slowest <b>{durText(L.max)}</b>
+            </span>
+          </div>
+        </div>
+      }
+    >
+      <BarColumns
+        bars={bars}
+        axis={false}
+        name="Latency histogram, click a bar or shift-click to extend the range"
+      />
+      <LatencyStrip items={items} lo={H.lo} hi={H.hi} />
       <div className={styles.axis} aria-hidden="true">
         {H.ticks.map((t) => (
           <span key={t} style={{ insetInlineStart: `${H.xPct(t)}%` }}>
@@ -145,7 +190,7 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
           {latencyFilterLabel(filter)}
         </Chip>
       ) : null}
-    </section>
+    </ChartCard>
   );
 }
 
@@ -180,13 +225,18 @@ function QualityLatency({ items, metric }: { items: LatencyItem[]; metric: strin
         }
       : undefined;
   return (
-    <section className={panel.stack} aria-label="Quality versus latency">
-      <h3 className={panel.groupTitle}>
-        Quality vs latency <span className={panel.note}>{metric}</span>
-      </h3>
-      <p className={panel.note}>
-        One dot per item; task errors sit on the axis as open rings. Select a dot to open the item.
-      </p>
+    <ChartCard
+      title="Quality vs latency"
+      ariaLabel="Quality versus latency"
+      slot={false}
+      meta={<Tag kind="count">{metric}</Tag>}
+      legend={<ScatterLegend points={points} quadrants={quadrants} />}
+      intro={
+        <p className={panel.note}>
+          One dot per item; task errors sit on the axis as open rings. Select a dot to open the item.
+        </p>
+      }
+    >
       <Scatter
         points={points}
         quadrants={quadrants}
@@ -197,7 +247,7 @@ function QualityLatency({ items, metric }: { items: LatencyItem[]; metric: strin
         fmtX={(v) => tickLabel(v)}
         fmtY={(v) => formatPercent(v, 0)}
       />
-    </section>
+    </ChartCard>
   );
 }
 
@@ -446,25 +496,19 @@ function Steps({ D }: { D: ReturnType<typeof normalizeLatency> }) {
                 }
               >
                 {Number.isFinite(st.med) ? (
-                  <>
-                    <span
-                      className={styles.whisker}
-                      style={{
-                        insetInlineStart: `${axis.x(st.p5)}%`,
-                        width: `${Math.max(0.5, axis.x(st.p95) - axis.x(st.p5))}%`,
-                        background: tone,
-                      }}
-                    />
-                    <span
-                      className={styles.box}
-                      style={{
-                        insetInlineStart: `${axis.x(st.p25)}%`,
-                        width: `${Math.max(0.8, axis.x(st.p75) - axis.x(st.p25))}%`,
-                        background: tone,
-                      }}
-                    />
-                    <span className={styles.median} style={{ insetInlineStart: `${axis.x(st.med)}%` }} />
-                  </>
+                  <BoxTrack
+                    stats={{
+                      p5: st.p5,
+                      p25: st.p25,
+                      median: st.med,
+                      mean: st.mean,
+                      p75: st.p75,
+                      p95: st.p95,
+                    }}
+                    x={(v) => axis.x(v) / 100}
+                    tone={tone}
+                    height={14}
+                  />
                 ) : null}
               </span>
             </div>

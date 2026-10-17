@@ -12,6 +12,7 @@ import {
   seedClassic,
   seedProject,
   seedRepeat,
+  seedWideRepeat,
   type Seeded,
 } from './support';
 
@@ -19,12 +20,15 @@ let s: Seeded;
 let classic: string;
 let repeat: string;
 let arabic: string;
+let wide: string;
 
 test.beforeAll(async () => {
+  test.setTimeout(120_000);
   s = await seedProject('rd-axe');
   classic = await seedClassic(s);
   repeat = await seedRepeat(s);
   arabic = await seedArabic(s);
+  wide = await seedWideRepeat(s);
 });
 
 async function audit(page: Page, label: string, context: string): Promise<void> {
@@ -113,6 +117,7 @@ test.describe('axe', () => {
   for (const [label, id] of [
     ['repeat run', () => repeat],
     ['Arabic multi-pass run', () => arabic],
+    ['wide repeat run (10 passes, 24 metrics)', () => wide],
   ] as const) {
     for (const width of [1440, 390]) {
       test(`${label} repeat panel has no serious violation at ${width}px`, async ({ page }) => {
@@ -120,6 +125,49 @@ test.describe('axe', () => {
         await openRun(page, s.slug, id(), 'panel=repeat');
         await expect(page.getByTestId('repeat-analysis')).toBeVisible();
         const violations = await axeSeriousViolations(page, '#shell-content');
+        const bad = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+        expect(bad, describeViolations(bad)).toEqual([]);
+      });
+    }
+  }
+
+  // Round 3 P5-16: expanded items (Arabic and the 10-pass x 24-metric item) have no serious violation at both widths.
+  for (const [label, item] of [
+    ['Arabic 10-pass item', 'big-002'],
+    ['wide repeat item', 'big-001'],
+  ] as const) {
+    for (const width of [1440, 390]) {
+      test(`${label} expanded has no serious violation at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await openRun(page, s.slug, wide, `item=${item}`);
+        await expect(page.locator(`[data-testid=item-card][data-item-id="${item}"]`)).toBeVisible();
+        const violations = await axeSeriousViolations(page, '#shell-content');
+        const bad = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+        expect(bad, describeViolations(bad)).toEqual([]);
+      });
+    }
+  }
+
+  // Round 3 P7-19: the box plot cards (Overview numeric and trace cards, Response time strip, repeat per-pass rows).
+  for (const width of [1440, 390]) {
+    for (const [label, run, panel, ctx] of [
+      ['Overview box plots', () => classic, 'overview', '#run-section-overview'],
+      ['Response time box strip', () => classic, 'latency', '#run-section-latency'],
+      ['Repeat by-pass box rows', () => wide, 'repeat', '#run-section-repeat'],
+    ] as const) {
+      test(`${label} have no serious violation at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await openRun(
+          page,
+          s.slug,
+          run(),
+          `panel=${panel}${panel === 'repeat' ? '&metric=rubric_metric_01' : ''}`,
+        );
+        await expect(page.locator(ctx)).toBeInViewport();
+        if (panel === 'repeat')
+          await expect(page.getByRole('region', { name: 'rubric_metric_01 by pass' })).toBeVisible();
+        if (panel === 'overview') await expect(page.locator('svg[role=img]').first()).toBeVisible();
+        const violations = await axeSeriousViolations(page, ctx);
         const bad = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
         expect(bad, describeViolations(bad)).toEqual([]);
       });

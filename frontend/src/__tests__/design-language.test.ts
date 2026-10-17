@@ -345,7 +345,6 @@ describe('primitive module contracts', () => {
       'features/experiments/detail/MatrixCard.tsx', // heatmap matrix
       'features/experiments/launch/settings/JsonFields.tsx', // key/value form rows
       'features/experiments/launch/settings/RoleTable.tsx', // role form table
-      'features/run-detail/components/panels/RepeatTab.tsx', // run-detail: second pass
       'features/runs-list/ShortcutsDialog.tsx', // key list in a dialog
       'sdk-viewer/components/RowList.tsx', // offline viewer, separate bundle
     ]);

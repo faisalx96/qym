@@ -238,6 +238,8 @@ export function metadataFieldDefs(rows: Row[]): FieldDef[] {
     });
 }
 
+const numberOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
 export function buildFieldDefs(ctx: FilterContext): FieldDef[] {
   const { model } = ctx;
   const defs: FieldDef[] = [];
@@ -303,6 +305,20 @@ export function buildFieldDefs(ctx: FilterContext): FieldDef[] {
     group: 'State',
     kind: 'number',
     get: (row) => rowTraceErrorCount(row),
+  });
+  defs.push({
+    id: 'tokens',
+    label: 'Tokens',
+    group: 'State',
+    kind: 'number',
+    get: (row) => numberOrNull(row.trace_stats?.tokens),
+  });
+  defs.push({
+    id: 'cost',
+    label: 'Cost ($)',
+    group: 'State',
+    kind: 'number',
+    get: (row) => numberOrNull(row.trace_stats?.cost),
   });
   defs.push({
     id: 'latency',

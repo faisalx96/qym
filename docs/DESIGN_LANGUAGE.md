@@ -433,7 +433,8 @@ is not allowed.
   `onPress` (div `role="button"`, Enter and Space), `href` or `to` (anchors) make it interactive: hover raises the
   border to `--border-default`, the fill to `--bg-elevated` and adds `--shadow-card-hover`; pressed is `--bg-active`;
   `isSelected` draws the accent border and a soft accent fill while the rail keeps its tone; focus is the 2px accent
-  outline. An interactive card holds no other interactive element. Never restyle a card per page: pass layout via
+  outline. `fill` makes the card a flex column whose body takes the remaining height (a card a grid row stretches gives
+  the extra height to its plot, never to empty space under it). An interactive card holds no other interactive element. Never restyle a card per page: pass layout via
   `className`, meaning via props.
 - **Chart kit** (`ui/Chart`, `styles/marks.css`): every data mark is a `Mark` inside a `ChartTooltipHost`. A mark
   carries `data-mark`; with `onPick` it is interactive (a `button`, or an SVG element with `role="button"`, Enter and
@@ -446,6 +447,53 @@ is not allowed.
   fail = band 1, task error = an open `--error` ring on the axis, latency bulk is `--bg-active` and only the tail is
   `--score-3` (p90) and `--score-2` (p95), series come from `--chart-1..8`. A scatter shows two faint quadrant washes
   (fast and passing, slow and failing) and a legend with the same swatches. Hit areas are at least 24px.
+- **Stat tiles** (`ui/StatTiles`, round 3 P2): seven or fewer equal, separate, centred tiles (the repeat analysis). Each is a
+  passive `Card compact rail="bottom"` (rail in the value's band; none for latency and errors): a `--font-sm` 600 uppercase
+  label with its `HelpMarker`, the value in `--font-stat` mono, one plain sentence in `--font-sm` muted (at most 22ch wide).
+  No groups, no hover. The grid answers to the report column: one row of N from 900px, a 12-column 4 + 3 split below that,
+  two per row and a full-width last tile under 480px. `StatStrip` stays for connected summary bands.
+- **Categories** (run detail, round 3 P3): one key at a time. A `SegmentedControl` "Category" (up to 5 keys that fit the column,
+  else a searchable `Select`; stored in `?category=`) over one `Card`: header with the key, the value count, the "Overall average"
+  tick legend and an Order control (worst first by default); rows `[value][bar + %][items][pass][latency]` as buttons that toggle the
+  item filter (`aria-pressed`, `--bg-selected` and an accent bar, never a band fill). The bar follows the value name (value column at
+  most 220px), is a 12px track in the average's band (neutral without a direction) with a 2 x 18px `--text-primary` tick at the
+  overall average. Six rows show first, then "Show all N values". Under 640px a row is two lines (name, items, pass / full-width bar).
+- **Items table header and ItemBar** (round 3 P4): the column header sticks at the sticky line only over collapsed rows. For an
+  expanded item it is held above the detail (it stops when its bottom touches the detail's top, scrolls away, and returns to the line
+  when the line crosses the detail's bottom; `useStickyShift` takes the detail spans, pure geometry in `stickyShift.ts`). The
+  expanded item starts with an `ItemBar` (`--row-compact`, opaque, number, verdict, input preview, Copy link, Collapse) that
+  takes the sticky line. The table scroller is an overflow container, so the bar is translated by the same hook, not CSS sticky.
+- **Item details** (round 3 P5): the expanded item is `direction: ltr` and left anchored: Input, Expected and Tags are
+  `FieldRow labelAnchor="start"` (label column `--field-label-width`, the value block as wide as its text up to
+  `--field-measure`; only the value carries `dir`), then the Output region, a full-width divider (1px `--border-strong`, 20px
+  above) and the Metrics region. Output keys are collapsed key rows (`StructuredValue variant="keys"` / `KeyTree`: chevron, key,
+  one-line preview; open: the value, Copy, per-key Expand all / Collapse all recursive; the region has global Expand all / Collapse
+  all and Sections | Raw). A repeat item has a pass rail (a chip per pass with number and verdict glyph, at most three read side by
+  side). **A pass has no colour**: its identity is text, colour on a pass is only its verdict. Metrics are one matrix
+  (metric rows by pass columns, Mean, 8 rows then "Show N more"), values are band-coloured text (no tinted cells) and open ONE
+  detail panel below; score edits happen in that panel.
+- **Run header** (round 3 P6): three bands, nothing behind a chevron. Band 1 identity and actions (name, passes tag, Copy run id,
+  status, Export, pager; a stop reason is one muted line under it). Band 2 seven labelled facts (`dl`, 7 / 4 / 2 columns by
+  column width). Band 3 `KeyValueTag` chips (24px passive key / value, key at most 20 characters, value at most 30) in the groups
+  Versioning, Config, Metadata, clamped to two lines (three on a phone) with an exact "+ N more" (`qym:run-hero-more`).
+- **Box plot** (`run-detail/components/charts/BoxPlot.tsx`, round 3 P7): the one glyph set for a distribution: box p25 to p75, a
+  2.5px median line, whiskers p5 to p95 with caps, a hollow mean diamond, dots outside the whiskers (at most 40 per side, min and max
+  always kept). Grey only (`--text-secondary` / `--text-primary` / `--text-muted`; the slow latency tail `--score-2`); no new
+  colour. A plot card holds the plot, a six-cell number row (Min, P25, Median, Mean, P75, Max; "Med" under 300px), a Total row for
+  additive quantities only (numeric metrics, tokens, cost; never latency, scores or negative values) and a legend. The picture
+  is one `role="img"` named by a sentence; the clickable marks (box, whiskers, min, max) are a transparent overlay in tab order.
+  Rows (`BoxTrack`) draw the same glyph per pass and per step.
+- **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
+  `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
+  of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`): each bucket is a
+  flex column `[spacer][count][bar][axis][sub]`, the spacer taking `1 - p` and the bar `p` of the free height
+  (`--p` = count / max), so the count always sits on the bar's top edge (a 16px line, 2px above it) and is visible at
+  rest, never hover-only (the tooltip only adds the longer sentence). Bars are at most 44px wide with a 4px gap and a
+  3px minimum when the count is above 0; an empty score bucket draws no count, pass/fail bars and "Passes passed"
+  draw `0` in `--text-muted`. A column narrower than 30px shows every second axis label (the full list stays in the
+  `aria-label`). Boolean metrics are the same plot (Pass, Fail, Error columns, percentage under the label), not a
+  horizontal split bar. Bars rise and counts fade in together on mount; nothing animates under
+  `prefers-reduced-motion` (`animation: none`). Overview cards flow in `repeat(auto-fit, minmax(260px, 1fr))`.
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
   (`--chart-1..8`, `runColor`/`runSeries` in `CompareContext`), the mono letter (the unique key beyond 8 runs and for
   colour-blind readers) and the name (`run_name`, label as fallback, truncated, full label in the tooltip). Run

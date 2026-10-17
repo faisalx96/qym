@@ -1,12 +1,19 @@
-/** Repeat-run analysis: pass@k / pass^k summary, per-pass table, curve and the "passes passed" distribution (brief 04 J4). */
+/** Repeat-run analysis (round 3 P2): one metric drives the tiles, the curve and the distribution; the table shows every pass. */
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useGroupMetricsQuery, usePassesQuery } from '@/api/runs';
-import { formatLatency, formatPercent, metricDirectionLabel } from '@/lib/metrics';
-import { ErrorState, SegmentedControl, Skeleton, Slider, StatStrip, Tag, type StatStripItem } from '@/ui';
-import { latencyLabel } from '../../lib/rowDisplay';
-import { useRunPage } from '../../RunContext';
-import { Curve, PassCountBars, type CurvePoint } from '../charts/Charts';
+import { formatPercent } from '@/lib/metrics';
+import {
+  DataTable,
+  EmptyState,
+  ErrorState,
+  SegmentedControl,
+  Select,
+  Skeleton,
+  Slider,
+  Tag,
+  type Column,
+} from '@/ui';
+import { useColumnStep } from '../../lib/columnStep';
 import {
   queuedLabel,
   repeatCopy,
@@ -14,33 +21,29 @@ import {
   verdictLine,
   type RepeatStatistic,
 } from '../../lib/repeatCopy';
-import styles from './Panels.module.css';
-
-/** Best and worst pass on the selected metric (null when fewer than two differ, or the metric has no direction). */
-function passExtremes(
-  passes: Array<{ pass_number: number; metric_means?: Record<string, number | null> | null }>,
-  metric: string,
-  direction: string | null,
-): { best: number | null; worst: number | null } {
-  if (!direction) return { best: null, worst: null };
-  const vals = passes
-    .map((p) => ({ n: p.pass_number, v: p.metric_means?.[metric] }))
-    .filter((p): p is { n: number; v: number } => typeof p.v === 'number');
-  if (vals.length < 2) return { best: null, worst: null };
-  const sorted = [...vals].sort((a, b) => (direction === 'minimize' ? a.v - b.v : b.v - a.v));
-  if (sorted[0]!.v === sorted[sorted.length - 1]!.v) return { best: null, worst: null };
-  return { best: sorted[0]!.n, worst: sorted[sorted.length - 1]!.n };
-}
+import { useRunPage } from '../../RunContext';
+import { Curve, CurveLegend, PassCountBars, type CurvePoint } from '../charts/Charts';
+import { ChartCard } from '../charts/ChartCard';
+import { PassDistribution } from './PassDistribution';
+import { PassTable } from './PassTable';
+import { RepeatTiles } from './RepeatTiles';
+import styles from './Repeat.module.css';
 
 export function RepeatTab() {
   const { runId, model, api, basePath } = useRunPage();
-  const [metric, setMetric] = useState<string>(() => api.selectedMetric ?? model.metricNames[0] ?? '');
+  const [rootRef, step, width] = useColumnStep<HTMLDivElement>();
+  // The page's analysis metric (?metric=, default the primary metric) is the one that drives this section.
+  const metric = api.selectedMetric ?? model.metricNames[0] ?? '';
   const boolean = !!model.metricIsBoolean[metric];
   const baseThreshold = boolean ? 1 : (model.defaultThresholds[metric] ?? 0.8);
-  const [threshold, setThreshold] = useState(baseThreshold);
-  const [committed, setCommitted] = useState(baseThreshold);
+  const [tState, setTState] = useState<{ metric: string; draft: number; committed: number } | null>(null);
+  const mine = tState?.metric === metric ? tState : null;
+  const threshold = mine?.draft ?? baseThreshold;
+  const committed = mine?.committed ?? baseThreshold;
   const [view, setView] = useState<'chart' | 'table'>('chart');
   const [statistic, setStatistic] = useState<RepeatStatistic>('compare');
+  const [extraMetrics, setExtraMetrics] = useState<Set<string>>(() => new Set());
+  const [extraStats, setExtraStats] = useState<Set<string>>(() => new Set());
   const passes = usePassesQuery(runId, true);
   const group = useGroupMetricsQuery(runId, metric, committed, true);
   const g = group.data;
@@ -99,88 +102,33 @@ export function RepeatTab() {
   const errors = donePasses.reduce((a, p) => a + (p.error_count ?? 0), 0);
   const latencies = donePasses.map((p) => p.avg_latency_ms).filter((v): v is number => typeof v === 'number');
   const avgLatency = latencies.length ? latencies.reduce((a, b) => a + b, 0) / latencies.length : null;
-
   const verdict = verdictLine(stats, k);
-  const statItems: StatStripItem[] = stats
-    ? [
-        {
-          key: 'pass_at_k',
-          label: `Pass@${k}`,
-          value: formatPercent(stats.pass_at_k ?? null, 1),
-          help: copy.passAtK,
-          group: 'Capability',
-        },
-        {
-          key: 'avg',
-          label: 'Avg score',
-          value:
-            model.metricTypes[metric] === 'numeric'
-              ? String(Math.round((stats.avg_at_k ?? 0) * 100) / 100)
-              : formatPercent(stats.avg_at_k ?? null, 1),
-          help: copy.avgScore,
-          group: 'Capability',
-        },
-        {
-          key: 'pass_hat_k',
-          label: `Pass^${k}`,
-          value: formatPercent(stats.pass_hat_k ?? null, 1),
-          help: copy.passHatK,
-          group: 'Consistency',
-        },
-        {
-          key: 'consistency',
-          label: 'Consistency',
-          value: formatPercent(stats.consistency ?? null, 1),
-          help: copy.consistency,
-          group: 'Consistency',
-        },
-        {
-          key: 'reliability',
-          label: 'Reliability',
-          value: formatPercent(stats.reliability ?? null, 1),
-          help: copy.reliability,
-          group: 'Consistency',
-        },
-        {
-          key: 'latency',
-          label: 'Avg latency',
-          value: formatLatency(avgLatency ?? undefined),
-          help: copy.avgLatency,
-          group: 'Speed and errors',
-        },
-        {
-          key: 'errors',
-          label: 'Errors',
-          value: String(errors),
-          help: copy.errors,
-          group: 'Speed and errors',
-          tone: errors > 0 ? 'danger' : undefined,
-        },
-      ]
-    : [];
-  const extremes = passExtremes(donePasses, metric, direction);
+  const metricItems = model.metricNames.map((m) => ({
+    key: m,
+    label: m,
+    description: model.metricIsBoolean[m] ? 'True / False' : undefined,
+  }));
   if (model.metricNames.length === 0) return null;
   return (
-    <div className={styles.stack} data-testid="repeat-analysis">
-      <p className={styles.note}>
-        Every item was evaluated {model.samples}× in this run.{' '}
-        {metricDirectionLabel(model.metricDirections[metric] ?? null)}. One metric drives the summary, the
-        curve and the distribution below.
-      </p>
-      <div className={styles.controls}>
+    <div className={styles.root} ref={rootRef} data-testid="repeat-analysis" data-step={step}>
+      <div className={styles.control}>
         {model.metricNames.length > 1 ? (
-          <SegmentedControl
+          <Select
             label="Metric"
-            options={model.metricNames.map((m) => ({ value: m, label: m }))}
+            items={metricItems}
             value={metric}
+            width={280}
             onChange={(m) => {
-              setMetric(m);
-              const t = model.metricIsBoolean[m] ? 1 : (model.defaultThresholds[m] ?? 0.8);
-              setThreshold(t);
-              setCommitted(t);
+              if (!m) return;
+              api.setView({ metric: String(m) === model.defaultMetric ? null : String(m), threshold: null });
             }}
           />
-        ) : null}
+        ) : (
+          <Tag kind="data">{metric}</Tag>
+        )}
+        <p className={styles.controlHelp}>
+          One metric drives the tiles, the curve and the distribution. The table below shows every pass.
+        </p>
         {!boolean ? (
           <Slider
             label="Pass if score"
@@ -189,8 +137,10 @@ export function RepeatTab() {
             maxValue={100}
             step={5}
             value={Math.round(threshold * 100)}
-            onChange={(v) => setThreshold((v as number) / 100)}
-            onChangeEnd={(v) => setCommitted((v as number) / 100)}
+            onChange={(v) => setTState({ metric, draft: (v as number) / 100, committed })}
+            onChangeEnd={(v) =>
+              setTState({ metric, draft: (v as number) / 100, committed: (v as number) / 100 })
+            }
             width="140px"
           />
         ) : null}
@@ -204,180 +154,185 @@ export function RepeatTab() {
           onRetry={() => void group.refetch()}
         />
       ) : null}
-      {g?.error ? <p className={styles.note}>{g.error}</p> : null}
+      {g?.error ? <p className={styles.empty}>{g.error}</p> : null}
       {stats ? (
-        <div className={styles.visuals + ' ' + styles.stack}>
+        <>
           {verdict ? (
             <p className={styles.verdict} data-testid="repeat-verdict">
               {verdict}
             </p>
           ) : null}
-          <StatStrip aria-label="Repeat run summary" items={statItems} />
+          <RepeatTiles
+            stats={stats}
+            k={k}
+            metric={metric}
+            metricType={model.metricTypes[metric]}
+            direction={direction}
+            passBased={passBased}
+            avgLatencyMs={avgLatency}
+            errors={errors}
+            copy={copy}
+          />
+        </>
+      ) : null}
+      {g?.band || g?.distribution?.length ? (
+        <div className={styles.twoUp}>
+          {g?.band ? (
+            <ChartCard
+              title="Across attempts"
+              ariaLabel="Performance across attempts"
+              slot={false}
+              legend={view === 'chart' && hasCurve ? <CurveLegend series={shownSeries} /> : undefined}
+              controls={
+                <>
+                  {options.length > 1 ? (
+                    <SegmentedControl
+                      label="Repeat performance view"
+                      options={options.map((o) => ({ value: o.key, label: o.label }))}
+                      value={selected.key}
+                      onChange={setStatistic}
+                    />
+                  ) : null}
+                  <SegmentedControl
+                    label="Curve view"
+                    options={[
+                      { value: 'chart', label: 'Chart' },
+                      { value: 'table', label: 'Table' },
+                    ]}
+                    value={view}
+                    onChange={setView}
+                  />
+                </>
+              }
+              intro={<p className={styles.introCopy}>{selected.copy}</p>}
+            >
+              {!hasCurve ? (
+                <p className={styles.empty} data-testid="curve-empty">
+                  Every pass errored, so there is no {selected.label.toLowerCase()} to show.
+                </p>
+              ) : view === 'chart' ? (
+                <Curve
+                  series={shownSeries}
+                  label={`${selected.label} for ${metric}`}
+                  domain={domain}
+                  format={numericAverage ? (v) => String(Math.round(v * 100) / 100) : undefined}
+                  xLabel={selected.key === 'cumulative_avg' ? 'n' : 'k'}
+                />
+              ) : (
+                <CurveTable
+                  series={shownSeries}
+                  selectedLabel={selected.label}
+                  passesAxis={selected.key === 'cumulative_avg'}
+                  numeric={numericAverage}
+                />
+              )}
+            </ChartCard>
+          ) : null}
+          {g?.distribution?.length ? (
+            <ChartCard
+              title="Passes passed"
+              ariaLabel="Distribution of passes passed"
+              meta={<span className={styles.empty}>Items by passes that passed</span>}
+              caption={`Passes passed, out of ${model.samples} (0 = always fail, ${model.samples} = always pass)`}
+            >
+              <PassCountBars
+                counts={g.distribution}
+                total={model.samples}
+                selected={
+                  api.view.filters.repeat?.metric === metric &&
+                  api.view.filters.repeat.threshold === (g.threshold ?? committed)
+                    ? api.view.filters.repeat.bucket
+                    : null
+                }
+                onPick={(bucket) =>
+                  api.setFilters({
+                    repeat: { metric, bucket, samples: model.samples, threshold: g.threshold ?? committed },
+                    score: null,
+                  })
+                }
+              />
+            </ChartCard>
+          ) : null}
         </div>
       ) : null}
-      <div className={styles.single + ' ' + styles.visuals}>
-        {g?.band ? (
-          <section className={styles.stack} aria-label="Performance across attempts">
-            <div className={styles.rowHead}>
-              <h3 className={styles.groupTitle}>Across attempts</h3>
-              <span className={styles.controls}>
-                {options.length > 1 ? (
-                  <SegmentedControl
-                    label="Repeat performance view"
-                    options={options.map((o) => ({ value: o.key, label: o.label }))}
-                    value={selected.key}
-                    onChange={setStatistic}
-                  />
-                ) : null}
-                <SegmentedControl
-                  label="Curve view"
-                  options={[
-                    { value: 'chart', label: 'Chart' },
-                    { value: 'table', label: 'Table' },
-                  ]}
-                  value={view}
-                  onChange={setView}
-                />
-              </span>
-            </div>
-            <p className={styles.note}>{selected.copy}</p>
-            {!hasCurve ? (
-              <p className={styles.note} data-testid="curve-empty">
-                Every pass errored, so there is no {selected.label.toLowerCase()} to show.
-              </p>
-            ) : view === 'chart' ? (
-              <Curve
-                series={shownSeries}
-                label={`${selected.label} for ${metric}`}
-                domain={domain}
-                format={numericAverage ? (v) => String(Math.round(v * 100) / 100) : undefined}
-                xLabel={selected.key === 'cumulative_avg' ? 'n' : 'k'}
-              />
-            ) : (
-              <table className={styles.table} aria-label={`${selected.label} values`}>
-                <thead>
-                  <tr>
-                    <th scope="col">{selected.key === 'cumulative_avg' ? 'Passes' : 'k'}</th>
-                    {shownSeries.map((sr) => (
-                      <th key={sr.name} scope="col">
-                        {sr.name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {shownSeries[0]!.points.map((p, i) => (
-                    <tr key={p.k}>
-                      <td>{p.k}</td>
-                      {shownSeries.map((sr) => (
-                        <td key={sr.name}>
-                          {numericAverage
-                            ? String(Math.round((sr.points[i]?.value ?? 0) * 100) / 100)
-                            : formatPercent(sr.points[i]?.value ?? null, 1)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </section>
-        ) : null}
-        {g?.distribution?.length ? (
-          <section className={styles.stack} aria-label="Distribution of passes passed">
-            <h3 className={styles.groupTitle}>Passes passed</h3>
-            <p className={styles.note}>
-              Items by number of passes that passed. Select a bar to filter the table.
-            </p>
-            <PassCountBars
-              counts={g.distribution}
-              total={model.samples}
-              selected={
-                api.view.filters.repeat?.metric === metric &&
-                api.view.filters.repeat.threshold === (g.threshold ?? committed)
-                  ? api.view.filters.repeat.bucket
-                  : null
-              }
-              onPick={(bucket) =>
-                api.setFilters({
-                  repeat: { metric, bucket, samples: model.samples, threshold: g.threshold ?? committed },
-                  score: null,
-                })
-              }
-            />
-          </section>
-        ) : null}
-      </div>
+      {donePasses.length && !boolean ? (
+        <PassDistribution
+          metric={metric}
+          passes={donePasses}
+          kind={model.metricTypes[metric] === 'numeric' ? 'numeric' : 'percent'}
+        />
+      ) : null}
       {donePasses.length ? (
-        <section className={styles.stack + ' ' + styles.visuals} aria-label="Passes">
-          <h3 className={styles.groupTitle}>By pass</h3>
-          <p className={styles.note}>
-            Each pass on its own. {metric} is the metric driving the summary above.
-          </p>
-          <div className={styles.tableScroll}>
-            <table className={styles.table} aria-label="Passes">
-              <thead>
-                <tr>
-                  <th scope="col">Pass</th>
-                  {model.metricNames.map((m) => (
-                    <th key={m} scope="col" data-selected={m === metric ? '' : undefined}>
-                      {m}
-                    </th>
-                  ))}
-                  <th scope="col">Avg latency</th>
-                  <th scope="col" title={copy.medianLatency}>
-                    Median latency
-                  </th>
-                  <th scope="col">Errors</th>
-                  <th scope="col">Items</th>
-                </tr>
-              </thead>
-              <tbody>
-                {donePasses.map((p) => (
-                  <tr key={p.pass_number}>
-                    <td>
-                      <Link
-                        to={`${basePath}?pass=${p.pass_number}`}
-                        aria-label={`Open pass ${p.pass_number}`}
-                      >
-                        Pass {p.pass_number}
-                      </Link>
-                    </td>
-                    {model.metricNames.map((m) => (
-                      <td key={m} data-selected={m === metric ? '' : undefined}>
-                        {p.metric_means?.[m] == null
-                          ? '—'
-                          : model.metricTypes[m] === 'numeric'
-                            ? String(Math.round(p.metric_means[m]! * 10) / 10)
-                            : formatPercent(p.metric_means[m]!, 1)}
-                        {m === metric && extremes.best === p.pass_number ? (
-                          <Tag tone="success" className={styles.cellTag}>
-                            best
-                          </Tag>
-                        ) : null}
-                        {m === metric && extremes.worst === p.pass_number ? (
-                          <Tag tone="danger" className={styles.cellTag}>
-                            worst
-                          </Tag>
-                        ) : null}
-                      </td>
-                    ))}
-                    <td>{p.avg_latency_ms != null ? latencyLabel(p.avg_latency_ms) : '—'}</td>
-                    <td>{p.median_latency_ms != null ? latencyLabel(p.median_latency_ms) : '—'}</td>
-                    <td data-tone={(p.error_count ?? 0) > 0 ? 'danger' : undefined}>{p.error_count ?? 0}</td>
-                    <td>{p.items_total ?? ''}</td>
-                  </tr>
-                ))}
-                {queued ? (
-                  <tr data-testid="queued-passes">
-                    <td colSpan={5 + model.metricNames.length}>{queued}</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <PassTable
+          passes={donePasses}
+          model={model}
+          metric={metric}
+          basePath={basePath}
+          extraMetrics={extraMetrics}
+          onExtraMetrics={setExtraMetrics}
+          extraStats={extraStats}
+          onExtraStats={setExtraStats}
+          compact={width < 640}
+          medianHint={copy.medianLatency}
+          queued={queued}
+        />
+      ) : !passes.isPending && !group.isPending ? (
+        <EmptyState
+          title="No completed pass yet"
+          body="The analysis appears once a pass has finished."
+          compact
+        />
       ) : null}
     </div>
+  );
+}
+
+/** The curve as a table (the Chart | Table switch of the Across attempts card). */
+function CurveTable({
+  series,
+  selectedLabel,
+  passesAxis,
+  numeric,
+}: {
+  series: Array<{ name: string; points: CurvePoint[] }>;
+  selectedLabel: string;
+  passesAxis: boolean;
+  numeric: boolean;
+}) {
+  const rows = (series[0]?.points ?? []).map((p, i) => ({ k: p.k, i }));
+  const columns: Column<{ k: number; i: number }>[] = [
+    {
+      id: 'k',
+      header: passesAxis ? 'Passes' : 'k',
+      label: passesAxis ? 'Passes' : 'k',
+      mono: true,
+      cell: (r) => r.k,
+    },
+    ...series.map((sr) => ({
+      id: sr.name,
+      header: sr.name,
+      label: sr.name,
+      align: 'end' as const,
+      mono: true,
+      cell: (r: { k: number; i: number }) =>
+        numeric
+          ? String(Math.round((sr.points[r.i]?.value ?? 0) * 100) / 100)
+          : formatPercent(sr.points[r.i]?.value ?? null, 1),
+    })),
+  ];
+  return (
+    <DataTable<{ k: number; i: number }>
+      aria-label={`${selectedLabel} values`}
+      columns={columns}
+      rows={rows}
+      rowKey={(r) => r.k}
+      density="compact"
+      densityLocked
+      columnMenu={false}
+      zebra={false}
+      variant="embedded"
+      stickyHeader={false}
+      responsive="scroll"
+    />
   );
 }

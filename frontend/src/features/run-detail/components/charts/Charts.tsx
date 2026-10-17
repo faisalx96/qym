@@ -3,12 +3,13 @@
  * gaps, 4px rounded data ends, every mark a real button with an accessible
  * name, a text legend next to colour). All colours are design tokens.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { MetricDirection } from '@/lib/metrics';
 import { metricBand } from '@/lib/metrics';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { staggerIndex, useEntrance } from '@/ui/motion';
-import { bucketTone, scoreTone, type BoolSegment, type ScoreBucket } from '../../lib/overviewModel';
+import { bucketTone, type BoolSegment, type ScoreBucket } from '../../lib/overviewModel';
+import { countText, thinAxisLabels } from './chartLabels';
 import styles from './Charts.module.css';
 
 /** Width of an element in CSS px (ResizeObserver); `fallback` until measured. Charts draw at this width so text and marks keep their size. */
@@ -38,28 +39,166 @@ const SEGMENT_TONE: Record<BoolSegment['tone'], string> = {
   error: 'var(--metric-error)',
 };
 
-export function Gauge({ score, direction }: { score: number; direction: MetricDirection }) {
-  const r = 18;
-  const circ = 2 * Math.PI * r;
-  const fill = score >= 1 ? circ : circ * Math.max(0, score - 0.03);
-  const tone = direction ? scoreTone(score, direction) : 'var(--text-muted)';
+/** One column of the bar plot: a count on top of a bar, an axis label under it, an optional sub label. */
+export interface BarSpec {
+  key: string | number;
+  count: number;
+  /** Axis label under the baseline. */
+  label: string;
+  /** Second line under the axis label (mono, muted): a percentage. */
+  sub?: string;
+  /** Bar fill: a token expression such as `var(--score-5)`. */
+  color: string;
+  /** Share (0..1) of the bar drawn as the error hatch. */
+  errShare?: number;
+  tip?: ReactNode;
+  /** Accessible name of the column (button or image). */
+  name: string;
+  onPick?: (e?: React.SyntheticEvent) => void;
+  selected?: boolean;
+  /** A button that cannot act (nothing to filter): drawn disabled, count still printed. */
+  disabled?: boolean;
+  /** Print `0` (pass/fail bars, passes passed) or nothing (score histogram) for an empty column. */
+  zero: 'hide' | 'show';
+  /** Small note under the axis label that is part of the label, e.g. "always fail". */
+  note?: string;
+  /** Drawn faded (outside the active range filter). */
+  dim?: boolean;
+  /** Not a button even when `onPick` is set (an empty histogram bucket). */
+  passive?: boolean;
+  data?: Record<`data-${string}`, string | number>;
+}
+
+const COLUMN_GAP = 4;
+
+/**
+ * The one column recipe of every bar chart (round 3 P1). Each column is a flex column
+ * `[spacer][count][bar][axis][sub]`; the spacer takes `1 - p` and the bar `p` of the free height (`--p` = count / max),
+ * so the count always sits on the top edge of its bar and a taller slot makes the bars taller, never leaves space under them.
+ * The count and axis text come from `data-text` (drawn by CSS) so the column's accessible name stays its `name`.
+ */
+export function BarColumns({
+  bars,
+  name,
+  axis = true,
+  thin = true,
+  className,
+}: {
+  bars: BarSpec[];
+  name: string;
+  /** Per-column axis labels; false when the plot has its own axis (latency bins). */
+  axis?: boolean;
+  /** Apply the thinning rule (every second label under 30px per column); false for short labels (0..k) that cannot collide. */
+  thin?: boolean;
+  className?: string;
+}) {
+  const [boxRef, width] = useMeasuredWidth<HTMLDivElement>(280);
   const enter = useEntrance();
+  const max = Math.max(1, ...bars.map((b) => b.count));
+  const colWidth = bars.length ? (width - COLUMN_GAP * (bars.length - 1)) / bars.length : width;
+  const showAxis = thinAxisLabels(bars.length, thin ? colWidth : Infinity);
   return (
-    <svg className={styles.gauge} viewBox="0 0 48 48" aria-hidden="true">
-      <circle className={styles.gaugeTrack} cx="24" cy="24" r={r} />
-      <circle
-        className={styles.gaugeFill}
-        data-enter={enter ? '' : undefined}
-        cx="24"
-        cy="24"
-        r={r}
-        style={{ stroke: tone, strokeDasharray: `${fill.toFixed(2)} ${circ.toFixed(2)}` }}
-      />
-    </svg>
+    <div ref={boxRef} className={styles.plotBox}>
+      <ChartTooltipHost
+        className={[styles.plot, className].filter(Boolean).join(' ')}
+        role="group"
+        aria-label={name}
+      >
+        {bars.map((b, i) => {
+          const text = countText(b.count, colWidth, b.zero);
+          const inner = (
+            <>
+              <span
+                className={styles.count}
+                data-part="count"
+                aria-hidden="true"
+                data-text={text}
+                data-zero={b.count === 0 ? '' : undefined}
+                data-enter={enter ? '' : undefined}
+                style={{ '--i': staggerIndex(i) } as React.CSSProperties}
+              />
+              <span
+                className={styles.bar}
+                data-part="bar"
+                data-enter={enter ? '' : undefined}
+                style={{ background: b.color, '--i': staggerIndex(i) } as React.CSSProperties}
+              >
+                {b.errShare ? (
+                  <span className={styles.barErr} style={{ height: `${Math.min(1, b.errShare) * 100}%` }} />
+                ) : null}
+              </span>
+              {axis ? (
+                <span
+                  className={styles.axis}
+                  data-part="axis"
+                  aria-hidden="true"
+                  data-text={showAxis[i] ? b.label : ''}
+                />
+              ) : null}
+              {axis && b.note ? <small className={styles.axisNote}>{b.note}</small> : null}
+              {axis && b.sub ? (
+                <span className={styles.axisSub} data-part="sub" aria-hidden="true" data-text={b.sub} />
+              ) : null}
+            </>
+          );
+          const style = { '--p': b.count / max } as React.CSSProperties;
+          const zero = b.count === 0 ? '' : undefined;
+          const dim = b.dim ? '' : undefined;
+          if (b.onPick && !b.passive) {
+            return (
+              <Mark
+                key={b.key}
+                as="button"
+                className={styles.col}
+                style={style}
+                data-zero={zero}
+                data-out={dim}
+                tip={b.tip}
+                aria-label={b.name}
+                isSelected={b.selected}
+                isDisabled={b.disabled}
+                onPick={b.onPick}
+                {...b.data}
+              >
+                {inner}
+              </Mark>
+            );
+          }
+          return b.tip !== undefined && !b.passive ? (
+            <Mark
+              key={b.key}
+              className={styles.col}
+              style={style}
+              data-zero={zero}
+              data-out={dim}
+              tip={b.tip}
+              role="img"
+              aria-label={b.name}
+              {...b.data}
+            >
+              {inner}
+            </Mark>
+          ) : (
+            <span
+              key={b.key}
+              className={styles.col}
+              style={style}
+              data-zero={zero}
+              data-out={dim}
+              data-empty="true"
+              {...b.data}
+            >
+              {inner}
+            </span>
+          );
+        })}
+      </ChartTooltipHost>
+    </div>
   );
 }
 
-export function SplitBar({
+/** Pass / Fail / Error columns of a boolean metric (replaces the thin split bar): same plot as the histograms. */
+export function BoolBars({
   segments,
   total,
   metric,
@@ -70,54 +209,23 @@ export function SplitBar({
   metric: string;
   onPick: (seg: BoolSegment) => void;
 }) {
-  const live = segments.filter((s) => s.count > 0);
-  return (
-    <div className={styles.split}>
-      <ChartTooltipHost
-        className={styles.splitTrack}
-        role="group"
-        aria-label={`${metric} pass and fail split`}
-      >
-        {live.map((s) => {
-          const clickable = s.key === 'passed' || s.key === 'failed' || s.key === 'metric_errors';
-          const label = `${s.label}: ${s.count} of ${total} items${clickable ? ', filter the table' : ''}`;
-          return clickable ? (
-            <Mark
-              key={s.key}
-              as="button"
-              className={styles.seg}
-              style={{ flexGrow: s.count, background: SEGMENT_TONE[s.tone] }}
-              tip={s.title}
-              aria-label={label}
-              onPick={() => onPick(s)}
-              data-segment={s.key}
-            >
-              <span className={styles.segText}>{s.count > 1 ? s.count : ''}</span>
-            </Mark>
-          ) : (
-            <Mark
-              key={s.key}
-              className={styles.seg}
-              style={{ flexGrow: s.count, background: SEGMENT_TONE[s.tone] }}
-              tip={s.title}
-              role="img"
-              aria-label={label}
-            >
-              <span className={styles.segText}>{s.count > 1 ? s.count : ''}</span>
-            </Mark>
-          );
-        })}
-      </ChartTooltipHost>
-      <ul className={styles.legend}>
-        {segments.map((s) => (
-          <li key={s.key}>
-            <span className={styles.dot} style={{ background: SEGMENT_TONE[s.tone] }} aria-hidden="true" />
-            {s.label} {total ? Math.round((s.count / total) * 100) : 0}%
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+  const bars: BarSpec[] = segments.map((s) => {
+    const clickable = s.key === 'passed' || s.key === 'failed' || s.key === 'metric_errors';
+    return {
+      key: s.key,
+      count: s.count,
+      label: s.label,
+      sub: `${total ? Math.round((s.count / total) * 100) : 0}%`,
+      color: SEGMENT_TONE[s.tone],
+      tip: s.title,
+      name: `${s.label}: ${s.count} of ${total} items${clickable ? ', filter the table' : ''}`,
+      onPick: clickable ? () => onPick(s) : undefined,
+      disabled: clickable && s.count === 0,
+      zero: 'show',
+      data: { 'data-segment': s.key },
+    };
+  });
+  return <BarColumns bars={bars} name={`${metric} pass and fail split`} />;
 }
 
 export function Histogram({
@@ -131,64 +239,26 @@ export function Histogram({
   metric: string;
   onPick: (b: ScoreBucket) => void;
 }) {
-  const max = Math.max(1, ...buckets.map((b) => b.count));
   const total = buckets.reduce((a, b) => a + b.count, 0);
-  const enter = useEntrance();
-  return (
-    <ChartTooltipHost className={styles.hist} role="group" aria-label={`${metric} score distribution`}>
-      {buckets.map((b) => {
-        const h = b.count ? Math.max(3, Math.round((b.count / max) * 100)) : 0;
-        const errH =
-          b.count && b.scorerErrors + b.taskErrors > 0
-            ? Math.max(2, Math.round(((b.scorerErrors + b.taskErrors) / b.count) * h))
-            : 0;
-        const pct = total ? Math.round((b.count / total) * 100) : 0;
-        const title = `${b.label}: ${b.count} items (${pct}%)${b.note}`;
-        const bar = (
-          <>
-            {/* The numerals are drawn from data-* by CSS: the button's name is the aria-label, and text
-                that duplicates it would have to match it (axe label-content-name-mismatch). */}
-            <span className={styles.count} aria-hidden="true" data-text={b.count || ''} />
-            <span className={styles.barArea}>
-              <span
-                className={styles.bar}
-                data-enter={enter ? '' : undefined}
-                style={
-                  {
-                    height: `${h}%`,
-                    background: bucketTone(b.index, direction),
-                    '--i': staggerIndex(b.index),
-                  } as React.CSSProperties
-                }
-              >
-                {errH ? (
-                  <span className={styles.barErr} style={{ height: `${(errH / Math.max(h, 1)) * 100}%` }} />
-                ) : null}
-              </span>
-            </span>
-            <span className={styles.axis} aria-hidden="true" data-text={b.label} />
-          </>
-        );
-        return b.count > 0 ? (
-          <Mark
-            key={b.index}
-            as="button"
-            className={styles.col}
-            tip={`${title} · click to filter`}
-            aria-label={`${title}, filter the table`}
-            onPick={() => onPick(b)}
-            data-bucket={b.index}
-          >
-            {bar}
-          </Mark>
-        ) : (
-          <span key={b.index} className={styles.col} data-empty>
-            {bar}
-          </span>
-        );
-      })}
-    </ChartTooltipHost>
-  );
+  const bars: BarSpec[] = buckets.map((b) => {
+    const pct = total ? Math.round((b.count / total) * 100) : 0;
+    const title = `${b.label}: ${b.count} items (${pct}%)${b.note}`;
+    const errors = b.scorerErrors + b.taskErrors;
+    return {
+      key: b.index,
+      count: b.count,
+      label: b.label,
+      color: bucketTone(b.index, direction),
+      errShare: b.count && errors > 0 ? errors / b.count : 0,
+      tip: b.count > 0 ? `${title} · click to filter` : undefined,
+      name: `${title}, filter the table`,
+      onPick: b.count > 0 ? () => onPick(b) : undefined,
+      passive: b.count === 0,
+      zero: 'hide',
+      data: { 'data-bucket': b.index },
+    };
+  });
+  return <BarColumns bars={bars} name={`${metric} score distribution`} />;
 }
 
 export function BandValue({
@@ -285,6 +355,45 @@ export interface ScatterQuadrants {
 
 const OUTCOME_LABEL: Record<ScatterOutcome, string> = { pass: 'Pass', fail: 'Fail', error: 'Task error' };
 
+/** Plot height of a scatter: `clamp(220px, width / 1.78, 320px)`. */
+export function scatterHeight(width: number): number {
+  return Math.round(Math.min(320, Math.max(220, width / 1.78)));
+}
+
+/** The dot-colour (and quadrant) legend of a scatter: lives in the header of the card that holds the plot. */
+export function ScatterLegend({
+  points,
+  quadrants,
+}: {
+  points: ScatterPoint[];
+  quadrants?: ScatterQuadrants;
+}) {
+  const outcomes = (['pass', 'fail', 'error'] as const).filter((o) => points.some((p) => p.outcome === o));
+  if (!outcomes.length && !quadrants) return null;
+  return (
+    <ul className={styles.legend} aria-label="Dot colours">
+      {quadrants ? (
+        <>
+          <li>
+            <span className={styles.quadKey} data-q="good" aria-hidden="true" />
+            {quadrants.goodLabel}
+          </li>
+          <li>
+            <span className={styles.quadKey} data-q="bad" aria-hidden="true" />
+            {quadrants.badLabel}
+          </li>
+        </>
+      ) : null}
+      {outcomes.map((o) => (
+        <li key={o}>
+          <span className={styles.outcomeKey} data-outcome={o} aria-hidden="true" />
+          {OUTCOME_LABEL[o]}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function Scatter({
   points,
   xLabel,
@@ -294,7 +403,6 @@ export function Scatter({
   fmtX,
   fmtY,
   quadrants,
-  aspect,
 }: {
   points: ScatterPoint[];
   xLabel: string;
@@ -304,11 +412,9 @@ export function Scatter({
   fmtX?: (v: number) => string;
   fmtY?: (v: number) => string;
   quadrants?: ScatterQuadrants;
-  /** Width / height of the plot (clamped to 220..420 px high); default a fixed 220 px. */
-  aspect?: number;
 }) {
   const [boxRef, W] = useMeasuredWidth<HTMLDivElement>(300);
-  const H = aspect ? Math.round(Math.min(420, Math.max(220, W / aspect))) : 220;
+  const H = scatterHeight(W);
   const pad = { l: 46, r: 8, t: 8, b: 28 };
   const enter = useEntrance();
   const shown = useMemo(
@@ -323,7 +429,6 @@ export function Scatter({
   const sx = (v: number) => pad.l + ((v - x0) / (x1 - x0 || 1)) * (W - pad.l - pad.r);
   const sy = (v: number) => H - pad.b - ((v - y0) / (y1 - y0 || 1)) * (H - pad.t - pad.b);
   const ticks = [0, 0.5, 1];
-  const outcomes = (['pass', 'fail', 'error'] as const).filter((o) => shown.some((p) => p.outcome === o));
   const fx = fmtX ?? fmt;
   const fy = fmtY ?? fmt;
   const qx = quadrants ? Math.max(pad.l, Math.min(W - pad.r, sx(quadrants.x))) : 0;
@@ -427,28 +532,6 @@ export function Scatter({
             {yLabel}
           </text>
         </svg>
-        {outcomes.length || quadrants ? (
-          <ul className={styles.legend} aria-label="Dot colours">
-            {quadrants ? (
-              <>
-                <li>
-                  <span className={styles.quadKey} data-q="good" aria-hidden="true" />
-                  {quadrants.goodLabel}
-                </li>
-                <li>
-                  <span className={styles.quadKey} data-q="bad" aria-hidden="true" />
-                  {quadrants.badLabel}
-                </li>
-              </>
-            ) : null}
-            {outcomes.map((o) => (
-              <li key={o}>
-                <span className={styles.outcomeKey} data-outcome={o} aria-hidden="true" />
-                {OUTCOME_LABEL[o]}
-              </li>
-            ))}
-          </ul>
-        ) : null}
       </div>
     </ChartTooltipHost>
   );
@@ -461,6 +544,41 @@ export interface CurvePoint {
   high?: number;
 }
 
+export interface CurveSeries {
+  name: string;
+  tone: string;
+  dash?: boolean;
+  points: CurvePoint[];
+}
+
+/** Legend of a curve card: one swatch per series. Lives in the header of the card that holds the plot. */
+export function CurveLegend({ series }: { series: CurveSeries[] }) {
+  return (
+    <ul className={styles.legend} aria-label="Series">
+      {series.map((s) => (
+        <li key={s.name} className={styles.legendItem}>
+          <span className={styles.swatch} style={{ background: s.tone }} aria-hidden="true" />
+          {s.name}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Positions (0-based, within the sorted ks) that carry a value label: first, 3rd, 5th and last; the first and the last when narrow. */
+export function labelledPositions(count: number, narrow: boolean): Set<number> {
+  const out = new Set<number>([0, count - 1]);
+  if (!narrow) [2, 4].forEach((i) => i < count && out.add(i));
+  return out;
+}
+
+/** X ticks that are drawn: every one, or (narrow) every third and the last. */
+export function tickPositions(count: number, narrow: boolean): Set<number> {
+  const out = new Set<number>();
+  for (let i = 0; i < count; i++) if (!narrow || i % 3 === 0 || i === count - 1) out.add(i);
+  return out;
+}
+
 export function Curve({
   series,
   label,
@@ -468,7 +586,7 @@ export function Curve({
   format = (v: number) => `${(v * 100).toFixed(1)}%`,
   xLabel = 'k',
 }: {
-  series: Array<{ name: string; tone: string; dash?: boolean; points: CurvePoint[] }>;
+  series: CurveSeries[];
   label: string;
   /** Y range; a score is 0..1, a raw numeric average needs its own. */
   domain?: [number, number];
@@ -476,9 +594,10 @@ export function Curve({
   /** X tick prefix: `k` for attempts allowed, `n` for passes observed. */
   xLabel?: string;
 }) {
-  const [boxRef, W] = useMeasuredWidth<HTMLElement>(320);
-  const H = 260;
-  const pad = { l: 34, r: 12, t: 8, b: 24 };
+  const [boxRef, W] = useMeasuredWidth<HTMLElement>(480);
+  const narrow = W < 500;
+  const H = narrow ? 220 : 240;
+  const pad = { l: 40, r: narrow ? 16 : 24, t: 20, b: 30 };
   const ks = Array.from(new Set(series.flatMap((s) => s.points.map((p) => p.k)))).sort((a, b) => a - b);
   const sx = (k: number) =>
     pad.l +
@@ -487,6 +606,8 @@ export function Curve({
       : (W - pad.l - pad.r) / 2);
   const span = domain[1] - domain[0] || 1;
   const sy = (v: number) => H - pad.b - ((v - domain[0]) / span) * (H - pad.t - pad.b);
+  const labelled = labelledPositions(ks.length, narrow);
+  const ticks = tickPositions(ks.length, narrow);
   return (
     <ChartTooltipHost>
       <figure ref={boxRef} className={styles.curve}>
@@ -498,7 +619,7 @@ export function Curve({
                 <line className={styles.grid} x1={pad.l} x2={W - pad.r} y1={sy(t)} y2={sy(t)} />
                 <text
                   className={styles.tick}
-                  x={pad.l - 4}
+                  x={pad.l - 6}
                   y={sy(t)}
                   textAnchor="end"
                   dominantBaseline="middle"
@@ -508,12 +629,14 @@ export function Curve({
               </g>
             );
           })}
-          {ks.map((k) => (
-            <text key={k} className={styles.tick} x={sx(k)} y={H - pad.b + 14} textAnchor="middle">
-              {xLabel}={k}
-            </text>
-          ))}
-          {series.map((s) => {
+          {ks.map((k, i) =>
+            ticks.has(i) ? (
+              <text key={k} className={styles.tick} x={sx(k)} y={H - 8} textAnchor="middle">
+                {xLabel}={k}
+              </text>
+            ) : null,
+          )}
+          {series.map((s, si) => {
             const pts = s.points.filter((p) => p.value !== null);
             const band = pts.filter((p) => p.low !== undefined && p.high !== undefined);
             return (
@@ -548,18 +671,40 @@ export function Curve({
                     aria-label={`${s.name} @${xLabel}=${p.k}: ${format(p.value!)}`}
                   />
                 ))}
+                {pts.map((p) => {
+                  const pos = ks.indexOf(p.k);
+                  if (!labelled.has(pos)) return null;
+                  // The first series reads above its points, the second below (Pass@k above, Pass^k below).
+                  let below = si === 1;
+                  // Coincident points (k = 1): one label, from the first series.
+                  const first = series[0]?.points.find((q) => q.k === p.k)?.value;
+                  if (si === 1 && first != null && Math.abs(first - p.value!) < 1e-9) return null;
+                  // A label below a point near the baseline would sit on the x tick: put it above instead.
+                  if (below && sy(p.value!) + 17 > H - pad.b + 6) below = false;
+                  return (
+                    <text
+                      key={`l${p.k}`}
+                      className={styles.pointLabel}
+                      data-point-label={s.name}
+                      x={sx(p.k)}
+                      y={below ? sy(p.value!) + 17 : sy(p.value!) - 9}
+                      textAnchor={
+                        ks.length > 1 && pos === ks.length - 1
+                          ? 'end'
+                          : pos === 0 && ks.length > 1
+                            ? 'start'
+                            : 'middle'
+                      }
+                      aria-hidden="true"
+                    >
+                      {format(p.value!)}
+                    </text>
+                  );
+                })}
               </g>
             );
           })}
         </svg>
-        <figcaption className={styles.legend}>
-          {series.map((s) => (
-            <span key={s.name} className={styles.legendItem}>
-              <span className={styles.swatch} style={{ background: s.tone }} aria-hidden="true" />
-              {s.name}
-            </span>
-          ))}
-        </figcaption>
       </figure>
     </ChartTooltipHost>
   );
@@ -576,46 +721,19 @@ export function PassCountBars({
   onPick: (bucket: number) => void;
   selected: number | null;
 }) {
-  const max = Math.max(1, ...counts);
-  return (
-    <ChartTooltipHost
-      className={styles.passBars}
-      role="group"
-      aria-label="Items by number of passes that passed"
-    >
-      {counts.map((c, i) => (
-        <Mark
-          key={i}
-          as="button"
-          className={styles.passCol}
-          isDisabled={c === 0}
-          isSelected={selected === i}
-          tip={`${i} of ${total} passes passed: ${c} items`}
-          aria-label={`${c} ${i}/${total}${
-            i === 0 ? ' always fail' : i === counts.length - 1 ? ' always pass' : ''
-          }: ${i} of ${total} passes passed, ${c} items, filter the table`}
-          onPick={() => onPick(i)}
-        >
-          <span className={styles.count}>{c}</span>{' '}
-          <span className={styles.barArea}>
-            <span
-              className={styles.bar}
-              style={{
-                height: `${(c / max) * 100}%`,
-                background:
-                  i === counts.length - 1 ? 'var(--score-5)' : i === 0 ? 'var(--score-1)' : 'var(--score-3)',
-              }}
-            />
-          </span>{' '}
-          <span className={styles.axis}>
-            {i}/{total}
-            {i === 0 || i === counts.length - 1 ? ' ' : null}
-            {i === 0 || i === counts.length - 1 ? (
-              <small className={styles.axisNote}>{i === 0 ? 'always fail' : 'always pass'}</small>
-            ) : null}
-          </span>
-        </Mark>
-      ))}
-    </ChartTooltipHost>
-  );
+  const last = counts.length - 1;
+  const bars: BarSpec[] = counts.map((c, i) => ({
+    key: i,
+    count: c,
+    label: String(i),
+    color: i === last ? 'var(--score-5)' : i === 0 ? 'var(--score-1)' : 'var(--score-3)',
+    tip: `${i} of ${total} passes passed: ${c} items`,
+    name: `${c} ${i}/${total}${i === 0 ? ' always fail' : i === last ? ' always pass' : ''}: ${i} of ${total} passes passed, ${c} items, filter the table`,
+    onPick: () => onPick(i),
+    selected: selected === i,
+    disabled: c === 0,
+    zero: 'show',
+    data: { 'data-passes': i },
+  }));
+  return <BarColumns bars={bars} name="Items by number of passes that passed" thin={false} />;
 }

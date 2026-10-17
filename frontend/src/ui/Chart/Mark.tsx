@@ -1,7 +1,7 @@
 import { createElement, type KeyboardEvent, type ReactNode, type SVGProps } from 'react';
 import { useMarkTip } from './ChartTooltip';
 
-export type MarkElement = 'button' | 'span' | 'div' | 'li' | 'g' | 'circle' | 'rect' | 'path';
+export type MarkElement = 'button' | 'span' | 'div' | 'li' | 'g' | 'circle' | 'rect' | 'path' | 'line';
 
 export interface MarkProps {
   as?: MarkElement;
@@ -30,6 +30,11 @@ export interface MarkProps {
   width?: number;
   height?: number;
   d?: string;
+  /** SVG geometry for as='line'. */
+  x1?: number;
+  y1?: number;
+  x2?: number;
+  y2?: number;
   children?: ReactNode;
   [attr: `aria-${string}`]: string | boolean | number | undefined;
   [attr: `data-${string}`]: string | boolean | number | undefined;
@@ -106,7 +111,7 @@ export function Mark({
     };
   } else if (tip !== undefined) {
     // A passive HTML mark with a tooltip is still reachable by keyboard (SVG marks live inside a role=img plot).
-    if (rest.tabIndex === undefined && !['g', 'circle', 'rect', 'path'].includes(as)) props.tabIndex = 0;
+    if (rest.tabIndex === undefined && !['g', 'circle', 'rect', 'path', 'line'].includes(as)) props.tabIndex = 0;
     props.onClick = handlers.onClick;
   }
   return createElement(as, props as SVGProps<SVGElement>, children);

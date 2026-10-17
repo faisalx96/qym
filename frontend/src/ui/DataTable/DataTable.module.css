@@ -168,6 +168,17 @@
 .table[data-shift] .thead th[data-pin] {
   z-index: 4;
 }
+/* The line left an expanded detail: the header is back at once; the opacity fade is the only motion (none under reduced motion). */
+.table[data-resumed] .thead th {
+  animation: head-resume 150ms var(--ease-out);
+}
+
+@keyframes head-resume {
+  from {
+    opacity: 0;
+  }
+}
+
 .table[data-stuck] .thead th {
   border-bottom-color: var(--border-default);
 }

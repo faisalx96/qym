@@ -16,6 +16,7 @@ import {
   seedClassicRun,
   seedManyCategories,
   seedRepeatRun,
+  seedWideRepeatRun,
   submitRun,
   type ClassicOptions,
   type SeedClient,
@@ -51,6 +52,11 @@ export async function seedRepeat(s: Seeded): Promise<string> {
 /** 12 items x 3 passes, Arabic prose, JSON inputs and outputs, a trace per pass. */
 export async function seedArabic(s: Seeded): Promise<string> {
   return seedArabicRepeatRun(client, s.token);
+}
+
+/** 10 passes x 24 items x 24 metrics, Arabic and English items, nested JSON outputs (round 3). */
+export async function seedWideRepeat(s: Seeded): Promise<string> {
+  return seedWideRepeatRun(client, s.token);
 }
 
 /** 300 items with metadata keys of 24 / 14 / 9 / 6 / 4 values. */
@@ -111,6 +117,20 @@ export function itemRow(page: Page, n: number): Locator {
 
 export function itemButton(page: Page, n: number): Locator {
   return page.getByRole('button', { name: `Open item #${n}`, exact: true });
+}
+
+/** The matrix row of a metric inside an expanded item (round 3 P5 replaced the metric chips). */
+export function metricRow(card: Locator, metric: string): Locator {
+  return card.locator(`tr[data-metric="${metric}"]`);
+}
+
+/** Open a metric's detail panel by clicking its (first, or the given pass's) matrix value; returns the panel. */
+export async function openMetric(card: Locator, metric: string, pass?: number): Promise<Locator> {
+  const re = new RegExp(`^${metric}, pass ${pass ?? '\\d+'}:`);
+  await card.getByRole('button', { name: re }).first().click();
+  const panel = card.locator(`[data-testid=metric-detail][data-metric="${metric}"]`);
+  await expect(panel).toBeVisible();
+  return panel;
 }
 
 export function metricCard(page: Page, metric: string): Locator {

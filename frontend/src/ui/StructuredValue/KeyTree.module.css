@@ -1,0 +1,138 @@
+/* Key rows: one 32px row per key, hairline between top-level keys, depth guide lines for nested levels. */
+.tree {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  direction: ltr;
+  text-align: start;
+}
+
+.row {
+  min-width: 0;
+}
+
+.tree > .row {
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--row-compact);
+}
+
+.toggle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: var(--row-compact);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  color: var(--text-muted);
+  cursor: pointer;
+  direction: ltr;
+}
+
+.toggle:hover {
+  color: var(--text-primary);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.chevron {
+  flex: none;
+}
+
+.key {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.preview {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-base);
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.type {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.bulk {
+  display: inline-flex;
+  gap: var(--space-xs);
+}
+
+.body {
+  margin-inline-start: 7px;
+  padding: var(--space-xs) 0 var(--space-sm) var(--space-md);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.row .row .head {
+  min-height: var(--row-compact);
+}
+
+.leaf {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+/* A text value: left anchored, fit-content up to the reading measure; its lines follow the text direction. */
+.value {
+  inline-size: fit-content;
+  max-inline-size: min(100%, var(--field-measure));
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.value[data-code] {
+  inline-size: 100%;
+  max-inline-size: none;
+}
+
+.clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 12;
+  overflow: hidden;
+}
+
+.showFull {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.showFull:focus-visible {
+  outline: 2px solid var(--accent-primary);
+}
+
+.more {
+  padding-block: var(--space-xs);
+}

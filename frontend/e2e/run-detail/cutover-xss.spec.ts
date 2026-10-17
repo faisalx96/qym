@@ -73,7 +73,13 @@ test('Charts render task, dataset and model names as text', async ({ page }) => 
 
 test('the run page shows text as stored, with opt-in safe rendering', async ({ page }) => {
   await openRun(page, s.slug, runA);
-  await expect(page.getByRole('region', { name: 'Run summary' })).toContainText(payload('run_name_a'));
+  // the header chip clips long values to 30 characters; the full stored text is its tooltip (text, never markup)
+  await expect(
+    page.getByRole('region', { name: 'Run summary' }).locator('[data-chip] > [title]').first(),
+  ).toHaveAttribute('title', new RegExp('run_name'));
+  await expect(
+    page.getByRole('region', { name: 'Run summary' }).locator('[title*="data-xss=run_name_a"]'),
+  ).toHaveCount(1);
   await page.getByRole('button', { name: 'Open item #1', exact: true }).click();
   const card = page.locator('[data-testid=item-card][data-item-id="item-0"]');
   await expect(card).toContainText(SQL);
