@@ -189,14 +189,11 @@ for (const width of WIDTHS) {
         const hs = row.map((r) => r.plot);
         expect(Math.max(...hs) - Math.min(...hs), JSON.stringify(row)).toBeLessThanOrEqual(16);
       }
-      // round 3 P7 replaced the Min / Avg / Max / Total cells: a numeric card holds a box plot and its number row
+      // round 3 P7 replaced the Min / Avg / Max / Total cells with a box plot; round 5 R2 removed its number row too
+      // (the six numbers are in the box tooltip, the median and the ends are printed on the plot)
       const card = page.locator('[data-testid=metric-card][data-metric=tokens_used]');
       await expect(card.getByRole('img', { name: /^tokens_used/ })).toBeVisible();
-      await expect(
-        card
-          .getByRole('group', { name: 'Distribution values' })
-          .or(card.locator('dl[aria-label="Distribution values"]')),
-      ).toBeVisible();
+      await expect(card.locator('dl[aria-label="Distribution values"]')).toHaveCount(0);
     });
 
     test('P1-5: a boolean metric is a three column bar chart, no horizontal split bar remains', async ({

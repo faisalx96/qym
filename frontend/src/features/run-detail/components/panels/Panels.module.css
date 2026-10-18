@@ -212,6 +212,12 @@
 
 /* Chart cards (round 3 P1): auto-fit grid, a card is never narrower than 260px (4 / 3 / 2 / 1 per row from wide to compact),
    and a row's cards share one height (the plot inside takes the spare). */
+.overviewStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
 .chartGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

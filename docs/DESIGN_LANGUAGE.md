@@ -476,13 +476,18 @@ is not allowed.
   status, Export, pager; a stop reason is one muted line under it). Band 2 seven labelled facts (`dl`, 7 / 4 / 2 columns by
   column width). Band 3 `KeyValueTag` chips (24px passive key / value, key at most 20 characters, value at most 30) in the groups
   Versioning, Config, Metadata, clamped to two lines (three on a phone) with an exact "+ N more" (`qym:run-hero-more`).
-- **Box plot** (`run-detail/components/charts/BoxPlot.tsx`, round 3 P7): the one glyph set for a distribution: box p25 to p75, a
+- **Box plot** (`run-detail/components/charts/BoxPlot.tsx`, round 3 P7, round 5 R2): the one glyph set for a distribution: box p25 to p75, a
   2.5px median line, whiskers p5 to p95 with caps, a hollow mean diamond, dots outside the whiskers (at most 40 per side, min and max
-  always kept). Grey only (`--text-secondary` / `--text-primary` / `--text-muted`; the slow latency tail `--score-2`); no new
-  colour. A plot card holds the plot, a six-cell number row (Min, P25, Median, Mean, P75, Max; "Med" under 300px), a Total row for
-  additive quantities only (numeric metrics, tokens, cost; never latency, scores or negative values) and a legend. The picture
-  is one `role="img"` named by a sentence; the clickable marks (box, whiskers, min, max) are a transparent overlay in tab order.
-  Rows (`BoxTrack`) draw the same glyph per pass and per step.
+  always kept). **One tone per plot** (`data-band` of the median for a score with a direction, so a failing pass is red; `data-series="1"`,
+  `--chart-1`, for latency, tokens, cost, undirected numerics and step rows; the slow latency tail keeps `--score-2`); stroke, box fill
+  (`--tint-strong` over the surface), whiskers, median and mean all take `--tone`. **No number row**: the median is printed above its line,
+  the data minimum and maximum under a 1px baseline at the ends of the data (one merged "a to b" label when they would collide), and all six
+  numbers plus the IQR are in the box tooltip and the `aria-label` (which ends with "band n of 5" for a band tone). Total is the one fact the
+  plot cannot show: plain text "Total **64.0K**" in the card header, additive quantities only (numeric metrics, tokens, cost; never latency,
+  scores or negative values). The key is a `HelpMarker` "How to read the box plot" in the header; cards that stack rows (per pass, Steps) keep
+  one muted key line. The picture is one `role="img"` named by a sentence; the clickable marks (box, whiskers, min, max) are a transparent
+  overlay in tab order. Rows (`BoxTrack`) draw the same glyph per pass and per step. Box plot cards flow in their own grid rows under the
+  histograms (`slot="box"`: 80px plot, no 146px minimum).
 - **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
   `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
   of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`, round 5 R1 "well and foot"): each bucket is a
@@ -585,8 +590,8 @@ they produced.
 - **Hue budget.** Eight series colours (`--chart-1..8`) is the limit, verified pairwise at CIE76 dE >= 20. Anything
   with more identities than that (passes, steps, categories) is identified by text; colour on it means a state
   (score band, verdict, kind), never "which one". Counts and values are drawn at rest, never hover-only.
-- **Distributions.** A quantity that used to print min / avg / max shows the box plot recipe (section 3) with the
-  six numbers visible; a total is shown only for additive quantities.
+- **Distributions.** A quantity that used to print min / avg / max shows the box plot recipe (section 3): median, minimum and
+  maximum visible on the plot, all six numbers in the tooltip; a total (card header) only for additive quantities.
 - **Bidirectional text.** The layout of an item is one left-anchored grid; `dir` is set on value text only. Arabic
   content never moves labels, keys or controls to the other side of the page.
 - **Reviewer method.** The reviewer measures every criterion in the browser (DOM geometry, computed styles,

@@ -20,7 +20,13 @@ export function niceStepFor(span: number, maxTicks: number): number {
 /** `maxTicks` is 5, or 3 under 320px of plot width. */
 export function boxAxis(
   stats: BoxStats,
-  opts: { maxTicks?: number; fixed?: [number, number]; values?: number[] } = {},
+  opts: {
+    maxTicks?: number;
+    fixed?: [number, number];
+    values?: number[];
+    /** `data`: the domain is [min, max] so the end labels sit at the ends of the data (round 5 R2); default `zero`. */
+    fit?: 'zero' | 'data';
+  } = {},
 ): BoxAxis {
   const maxTicks = opts.maxTicks ?? 5;
   if (opts.fixed) {
@@ -35,6 +41,15 @@ export function boxAxis(
   }
   const clipped = stats.percentiles && stats.p95 > 0 && stats.max > 4 * stats.p95;
   const top = clipped ? stats.p95 * 1.15 : stats.max;
+  if (opts.fit === 'data' && stats.max > stats.min) {
+    const span = top - stats.min;
+    const dstep = niceStepFor(span, maxTicks);
+    const dticks: number[] = [];
+    for (let t = Math.ceil(stats.min / dstep) * dstep; t <= top + dstep * 1e-6; t += dstep)
+      dticks.push(Number(t.toPrecision(12)));
+    const dbeyond = clipped ? (opts.values ?? stats.high).filter((x) => x > top).length : 0;
+    return { domain: [stats.min, top], ticks: dticks, clipped: !!clipped, beyond: dbeyond };
+  }
   const bottom = stats.min < 0 ? stats.min : 0;
   const step = niceStepFor(top - bottom, maxTicks);
   const lo = bottom < 0 ? Math.floor(bottom / step) * step : 0;
