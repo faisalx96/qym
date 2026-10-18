@@ -83,7 +83,8 @@ for (const width of [1440, 390]) {
           name === 'trace-tokens' ? page.getByTestId('trace-card').first() : card(page, 'tokens_used');
         const info = await c.evaluate((el) => {
           const slot = el.querySelector('[data-slot]')!.getBoundingClientRect();
-          const svg = el.querySelector('svg[role=img]')!.getBoundingClientRect();
+          // round 5 review: an all-equal distribution (Tokens per item in this seed) is a compact note, not an svg
+          const svg = el.querySelector('svg[role=img], [role=img]')!.getBoundingClientRect();
           const ticks = Array.from(el.querySelectorAll('svg text')).map((t) => t.getBoundingClientRect());
           ticks.sort((a, b) => a.left - b.left);
           const overlap = ticks.some(
@@ -108,7 +109,7 @@ for (const width of [1440, 390]) {
           };
         });
         expect(info.svgW, name).toBeLessThanOrEqual(info.slotW + 1);
-        if (width === 390) expect(info.svgW).toBeGreaterThanOrEqual(220);
+        if (width === 390 && name !== 'trace-tokens') expect(info.svgW).toBeGreaterThanOrEqual(220);
         expect(info.overlap, name).toBe(false);
         expect(info.gap, name).toBeLessThanOrEqual(16);
       }

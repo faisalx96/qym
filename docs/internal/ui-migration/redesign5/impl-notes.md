@@ -52,3 +52,7 @@ Tests: `R3-9b` (metric panel), `R4-2` (one row), `R4-3e`, `R1-9` tolerance 1, Vi
 - Playwright `run-detail` + `visual-language` (cost 4): 462 passed after fixing R3-22 (axe: Edit button name); the six specs touched by the button rename rerun: 83 passed.
 - `npm run build` and `build:sdk` (cost 2): green. `pytest tests/platform/test_design_language.py`: 1 passed.
 - Full `npm run e2e` (cost 4, once): 1,289 passed, 4 failed (environments.spec:220, queue.spec:256, filters.spec:221, hover-audit wizard-models); rerun alone: all pass (load flakes under a shared machine, none in code this round changed).
+
+### Gate after the review fixes
+- `npm run check` (cost 3): Vitest 159 files / 1,380 tests, design-language 49, eslint, stylelint, tsc: green.
+- Playwright `run-detail` (cost 3): 394 passed, 2 failed (`redesign3-box-plots` P7-6 expected an svg in the now compact all-equal card); spec updated, then the box specs rerun: 26 passed.
