@@ -10,8 +10,9 @@ import { useDelayedPending } from '@/lib/pending';
 import { ErrorState, LinkButton, Skeleton } from '@/ui';
 import { RunBody } from './RunBody';
 
-// The Overview is the first thing the rows paint: its chunk starts with this page, in step with the rows request.
+// The Overview and the Items table are what the rows paint: their chunks start with this page, in step with the rows request.
 void import('./components/panels/OverviewTab');
+void import('./components/ItemsSection');
 
 /** Name the failure: a missing run, no access, an ended session or a server problem each say so. */
 const RUN_ERROR_TITLES: Record<string, string> = {

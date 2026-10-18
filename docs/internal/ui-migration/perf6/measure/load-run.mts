@@ -30,9 +30,8 @@ window.__watch = (t0) => {
     if (W.skeleton == null && q('[aria-busy="true"]')) W.skeleton = now;
     const hero = q('[data-testid="run-hero"]');
     if (W.hero == null && hero && /\\S/.test(hero.textContent || '')) W.hero = now;
-    const ov = q('#run-section-overview');
-    const body = ov && ov.querySelector(':scope > div:last-child');
-    if (W.overview == null && body && body.children.length > 0) W.overview = now;
+    // Overview painted = the first metric card (the staged page shows a skeleton in the Overview body first)
+    if (W.overview == null && q('#run-section-overview [data-testid="metric-card"]')) W.overview = now;
     if (W.rows == null && q('tbody tr[data-item-id]')) W.rows = now;
     if (W.hero != null && W.overview != null && W.rows != null) return;
     if (now < 60000) requestAnimationFrame(tick);
@@ -41,7 +40,7 @@ window.__watch = (t0) => {
 };
 window.__sections = () => Array.from(document.querySelectorAll('[data-report-section]')).map((s) => {
   const body = s.querySelector(':scope > div:last-child');
-  return { id: s.getAttribute('data-report-section'), mounted: !!body && body.children.length > 0 };
+  return { id: s.getAttribute('data-report-section'), mounted: !!body && body.children.length > 0 && !body.querySelector(':scope > [role="status"]') };
 });
 `;
 

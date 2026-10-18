@@ -51,18 +51,16 @@ export function prefetchRunChunkWhenIdle(): void {
   else globalThis.setTimeout(run, 1200);
 }
 
-const RUN_URL = /\/projects\/[^/]+\/runs\/(.+?)(?:\/analyzer)?\/?$/;
+let boundClient: QueryClient | null = null;
+/** The app's query client, for the route loader below (routes are module-level, the client is created by App). */
+export function bindPrefetchClient(qc: QueryClient): void {
+  boundClient = qc;
+}
 
-/** A deep link to a run: its data and its chunk start with the entry bundle, before React renders the route. */
-export function prefetchDeepLink(qc: QueryClient): void {
-  const match = RUN_URL.exec(window.location.pathname);
-  if (!match) return;
-  let runId = match[1]!;
-  try {
-    runId = decodeURIComponent(runId);
-  } catch {
-    /* keep the raw id */
-  }
-  prefetchRun(qc, runId);
+/** Route loader of the run page: starts the rows and the summary the moment the navigation starts (link, key, deep link). */
+export function runRouteLoader({ params }: { params: { '*'?: string } }): null {
+  const runId = (params['*'] ?? '').replace(/\/analyzer$/, '');
+  if (boundClient && runId) prefetchRun(boundClient, runId);
   void loadRunDetailPage();
+  return null;
 }

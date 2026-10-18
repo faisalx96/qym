@@ -5,14 +5,15 @@ import { RouterProvider } from 'react-router-dom';
 import { I18nProvider } from 'react-aria-components';
 import { ToastProvider } from '@/ui/Toast';
 import { createQueryClient } from './queryClient';
-import { prefetchDeepLink } from './prefetch';
+import { bindPrefetchClient } from './prefetch';
 import { createAppRouter } from './router';
 
 export function App() {
-  const [queryClient] = useState(createQueryClient);
-  // A deep link to a run asks for its data and its chunk at once (an effect: no side effect in a state initializer,
-  // which StrictMode runs twice; the second prefetch of the same key shares the first request).
-  useEffect(() => prefetchDeepLink(queryClient), [queryClient]);
+  const [queryClient] = useState(() => {
+    const client = createQueryClient();
+    bindPrefetchClient(client); // the run route's loader prefetches into this client
+    return client;
+  });
   const [router] = useState(createAppRouter);
   useEffect(() => initRunStatusBus(), []);
   return (

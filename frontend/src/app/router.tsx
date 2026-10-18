@@ -16,7 +16,7 @@ import { DocsRedirect } from '@/features/docs/DocsRedirect';
 import { RunsPage } from '@/features/runs-list';
 import { RunAnalyzerRedirect } from '@/features/analyzer/RunAnalyzerRedirect';
 import { lazyPage } from './lazyPage';
-import { loadRunDetailPage } from './prefetch';
+import { loadRunDetailPage, runRouteLoader } from './prefetch';
 
 // Heavy pages are fetched on first visit so the entry chunk stays small (see frontend/README.md).
 const OverviewPage = lazyPage(() => import('@/features/runs-list/OverviewPage'), 'OverviewPage');
@@ -65,6 +65,7 @@ const projectChildren: RouteObject[] = [
   { path: C.settings, element: <ProjectSettingsPage /> },
   {
     path: C.runs_detail,
+    loader: runRouteLoader,
     element: (
       <RunAnalyzerRedirect>
         <RunDetailPage />
