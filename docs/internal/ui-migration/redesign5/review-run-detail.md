@@ -152,3 +152,36 @@ Totals: R1 12/13, R2 15/15, R3 22/23, R4 2/3 (counting R4-3 once): 51 of 54.
 `vp-rubric_judge-390.png`, `table-Criteria-*.png`, `table-Evidence-1440/390.png`, `corr-1440/1024/390.png`,
 `toolbar-1440/1024/390.png`, `trace-deeplink-1440/390.png`. (Element screenshots of the tall panel show sticky-header
 artefacts; the `vp-*` viewport shots are the reliable ones.)
+
+## Re-review (fixes 07caf57a and 56d2f7cc)
+
+Re-measured only what changed, in the browser (ports 8995 / 5995, own DB, freshly seeded; seeds differ in ids only).
+
+| Item | Measured now | Result |
+|---|---|---|
+| F1 table padding, 1440 / 1024 / 640 | cell padding 8 px = header padding on all four tables at all three widths; minimum gap between adjacent cell texts 16 px; first cell and header both start at x = 8 in `rr-table-Evidence-1440.png`; at 640 the quote column truncates with an ellipsis instead of touching the next column | met |
+| R4-2 toolbar, 1440 / 1280 / 1100 / 1024 | one row (bar 43.4 px), centre spread 0 at all four; the "Show" Select is present at 1024 and 700; below about 900 it wraps to 2 lines (not required) | met |
+| R1-9 axis overshoot | wells span the plot exactly: 0 px left and right on the four 11-column plots and on passes19 (20 columns), 1440 and 390; bar bottoms still 0 px from the axis | met |
+| R3-17 matrix at 390 | name 12 px, value 12 px, rows 32 px | met |
+| Compact single-value card | "Tokens per item" and "Cost per item" are a header, the value and one 32 px `All 55 values are X` line, no SVG; card height is the grid row's (212.2 at 1440, 182.4 at 390), no lone mark (`rr-flat-1440.png`) | met |
+| 390 trace rows | 7 rows of 32 px, 0 children outside their row, 0 overlapping text pairs, duration column intact (also 0 / 0 at 1440) | met |
+| Count tiers, sweep 1..20 at 1440 and 390 | 0 bars off the axis, 0 colliding counts (text-width boxes), count 2 px above its bar, tallest count clear of the plot top; N=15..20 listed explicitly including N=17 | met |
+
+**R1-8 amendment (`countTiers` instead of parity): accepted.** It is a measured cause, not a convenience: parity alternation cannot separate a
+rising neighbour, the implementer's sweep showed a collision at N=17, and a left-to-right "lowest tier that clears the earlier counts"
+rule is the correct general rule (Vitest `countTiers` covers it). Observation: with the sweep's counts, every count lands on tier 1 at
+1440 and 390 (neighbours differ by more than 16 px in height), so the browser sweep proves "no collision" but no longer exercises a raised
+tier; only the Vitest case does. Optional: add one sweep plot with near-equal neighbouring counts.
+
+**New finding (required, trivial):** commit 07caf57a added `.qym-e2e-r5r.db` (my 26.9 MB e2e SQLite file, `Bin 0 -> 26918912 bytes`) to the
+branch. Remove it from the tree (`git rm --cached .qym-e2e-r5r.db`, and ignore `.qym-e2e-*.db`) before merging; it should not enter the
+integration branch. I did not touch it (my brief allows committing only this document); it is tracked and shows as modified in the working tree because my servers wrote to it.
+
+Gate: Playwright `run-detail` folder through heavy.sh cost 3 (own ports and DB): **396 passed, 9 skipped, 0 failed** (was 394 passed; the
+two new review-fix specs added). All servers stopped.
+
+### Final verdict: MEETS (after the committed database file is removed from the branch)
+
+All earlier required fixes are fixed and measured (tables, 1024 toolbar), the optional ones are fixed too (axis, 12 px, flat cards, trace
+rows), and the owner's points hold: bars on the axis, coloured box plots without a number row, clear metric tables and panel, full-width
+correlation matrix, aligned toolbar, traces on content. Criteria: R1 13/13, R2 15/15, R3 23/23, R4 3/3 (54 of 54).
