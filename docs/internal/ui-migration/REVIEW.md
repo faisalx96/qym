@@ -254,6 +254,46 @@ other." First round run under the design, implement, measured-review cycle from 
 | `npm run e2e:sdk` | 42 passed |
 | `tests/platform` | not run (backend untouched) |
 
+## Redesign round 5 (2026-10-17/18, `ui/redesign5-run-detail`)
+
+Run-detail feedback: bars of a 10-bucket histogram dropped below the x axis; box plots should be coloured and lose the
+number row; item metric details "so ugly", with a clicked score to show its details like the legacy block (tables
+presented clearly) and a value text that started inside its label on the `reasoning` key. Added mid-round: the metric
+correlation chart did not use the full width, the items toolbar controls were not vertically centred, and traces must
+open on content, not metadata.
+
+- Design (`redesign5/run-detail.md`, 54 criteria R1..R4, mocks `/__ui#round5`): the bar defect is a thinned axis label
+  written as an empty `data-text`, which collapses its 14 px line and gives the height to the bar (odd columns ended 14 px
+  lower than even ones); the overlap is a fixed 7.5rem label column with uppercase tracked snake_case keys and no wrap or
+  truncation (long keys overflowed into the value by 42 to 73 px; a key literally named `reasoning` fit).
+- Implementation: `BarColumns` becomes a well plus a constant-height foot with a drawn axis line and left-to-right count
+  tiers (`countTiers`); `BoxPlot` is coloured by the median's score band (series 1 otherwise), the number row is gone and
+  all six values live in the tooltip, the axis ends and the `aria-label`, Total moved to the card header, an all-equal
+  distribution is one compact line; the metric panel stacks prose under its label, humanises and truncates fact keys, and
+  renders `{columns, rows}`, arrays of arrays and uniform object arrays as embedded sortable tables; the correlation grid
+  fills its card (1151 px at 1440, was a fixed 304); the items toolbar aligns to one row at 1440 and 1024 (the segmented
+  filter becomes a Select between 641 and 1099 px); every trace entry point opens on a content tab and a Metrics pick is
+  never remembered. Round-3 P7-1/5/6/17/20 are marked superseded by the owner's words.
+- Review (`redesign5/review-run-detail.md`): first pass MEETS WITH FIXES, 51 of 54 (table cells had zero padding from
+  640 px up because the items table's `.detailRow td { padding: 0 }` leaked into the nested panel table; the toolbar wrapped
+  at 1024; axis overshoot 2 px). Fixes 07caf57a, 56d2f7cc; re-review MEETS, 54 of 54 (cell padding 8 px equal to the
+  header, text gaps >= 16 px; one toolbar row with spread 0 at 1440, 1280, 1100 and 1024; overshoot 0; no colliding
+  counts on the 1..20 sweep). A committed e2e database was removed before the merge (`.qym-e2e-*.db` ignored). Merged
+  98135ef2 (one conflict, the gallery registration, kept both mock sets).
+- Deferred: the R1-8 browser sweep no longer raises a tier (only the Vitest case does); the toolbar wraps below about
+  900 px; the compact single-value box card follows the grid row height.
+
+### Gate on `UI-redesign` 98135ef2
+
+| Suite | Result |
+|---|---|
+| `npm run check` | clean; Vitest 1398 tests, design-language 49 |
+| `npm run build`, `npm run build:sdk` | ok |
+| `pytest tests/platform/test_design_language.py` | 1 passed |
+| Full Playwright (`heavy.sh --cost 4`) | 1312 passed, 21 skipped, 0 failed (28.8 min) |
+| `npm run e2e:sdk` | 42 passed |
+| `tests/platform` | not run (backend untouched) |
+
 ## Post-mortem
 
 The failures of the whole migration (two session kills, repeated feedback rounds, a finding fixed by hiding
