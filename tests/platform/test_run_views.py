@@ -207,6 +207,7 @@ def test_summary_carries_neighbors_and_the_review_event_count(client):
     data = client.get("/api/runs/run-1?view=summary", headers=OWNER).json()
     assert data["snapshot"]["rows"] == []
     assert data["review_event_count"] == 0
+    assert data["snapshot"]["rows_total"] == 3
     neighbors = data["neighbors"]
     assert neighbors["run_id"] == "run-1"
     # the same answer the endpoint gives for the default order (this run is not in the dashboard projection)
@@ -219,3 +220,9 @@ def test_summary_carries_neighbors_and_the_review_event_count(client):
         headers=OWNER,
     )
     assert old.status_code == 200
+
+
+def test_summary_of_a_live_run_carries_the_live_revision(client):
+    summary = client.get("/api/runs/run-1?view=summary", headers=OWNER).json()
+    probe = client.get("/api/runs/run-1/live-status", headers=OWNER).json()
+    assert summary["run"]["live_revision"] == probe["revision"]

@@ -4,7 +4,7 @@
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useShellScroller, useStickyOffset } from '../../hooks/useScrollMargin';
-import { DataTable, IconButton, ScoreBar, Tag, type Column, type Key, type SortState } from '@/ui';
+import { DataTable, IconButton, ScoreBar, Skeleton, Tag, type Column, type Key, type SortState } from '@/ui';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { textDirAttrs } from '@/lib/text';
 import { useItemReasons, rowReason } from '../../hooks/useItemReasons';
@@ -106,7 +106,8 @@ export interface ItemsTableProps {
 }
 
 export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: ItemsTableProps) {
-  const { api, model, runId, payload } = useRunPage();
+  const { api, model, runId, payload, hasGroup } = useRunPage();
+  const textLoaded = hasGroup('text');
   const ui = useItemsUi();
   const { ctx, selectedMetric } = api;
   const [pageSize, setPageSize] = usePageSize(items.length);
@@ -181,6 +182,8 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       cell: ({ row }) => {
         const title = row.input_full ?? row.input ?? row.input_preview ?? '';
         const text = (typeof title === 'string' ? title : JSON.stringify(title)).replace(/\s+/g, ' ').trim();
+        // the item texts are a later row group: a bone holds the place until it arrives
+        if (!text && !textLoaded) return <Skeleton kind="value" width="70%" label="Loading input" />;
         return (
           <span title={text} {...textDirAttrs(text)}>
             {text || '—'}

@@ -18,6 +18,7 @@ import {
 } from '@/ui';
 import { formatDateParts, formatDurationMs, formatLatency, formatNumericValue } from '@/lib/format';
 import { errorsLeftOut, formatPercent, metricDirection } from '@/lib/metrics';
+import { useRunIntent } from '@/app/prefetch';
 import { projectPath, runPath } from '@/app/routes';
 import { runHref } from '@/lib/runs-order';
 import { textDirAttrs } from '@/lib/text';
@@ -342,6 +343,7 @@ export function RunNameCell({
   onToggleExpand?: () => void;
 }) {
   const { slug, listContext } = useRunsCtx();
+  const intent = useRunIntent(row.run_id);
   const repeat = row.samples > 1;
   const name = row.external_run_id || row.run_name || row.run_id.slice(0, 8);
   return (
@@ -364,6 +366,7 @@ export function RunNameCell({
         name={name}
         runId={row.run_id}
         onClick={() => rememberRunFile(row.run_id)}
+        {...intent}
         {...textDirAttrs(name)}
       />
       {repeat ? <Tag kind="count">×{row.samples}</Tag> : null}

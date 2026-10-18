@@ -94,10 +94,13 @@ function ContextBand({
   groups,
   runId,
   stopReason,
+  provisional,
 }: {
   groups: ReturnType<typeof headerChips>;
   runId: string;
   stopReason: string;
+  /** The header is the runs-list row (no config or metadata chips yet): hold the room the full chip band will take. */
+  provisional?: boolean;
 }) {
   const [open, setOpen] = useState(() => readJson<boolean>(MORE_KEY, false));
   const [hidden, setHidden] = useState(0);
@@ -146,6 +149,7 @@ function ContextBand({
           className={styles.flow}
           data-open={open ? '' : undefined}
           data-total={total}
+          data-provisional={provisional ? '' : undefined}
         >
           {groups.map((g) => (
             <div key={g.label} role="list" aria-label={g.label} className={styles.group}>
@@ -411,6 +415,7 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
             groups={groups}
             runId={run.run_id}
             stopReason={viewPass ? '' : (run.status_reason_label ?? '')}
+            provisional={run.config === undefined}
           />
         ) : null}
       </div>

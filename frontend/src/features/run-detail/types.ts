@@ -217,8 +217,15 @@ export interface SnapshotStats {
   success_rate?: number;
 }
 
+/** Row field groups of `?view=compact&fields=` (packages/platform api/runs.py ROW_FIELD_GROUPS). */
+export type RowGroup = 'scores' | 'reasons' | 'categories' | 'traces' | 'text' | 'review';
+
 export interface Snapshot {
   rows: Row[];
+  /** The groups the rows carry; absent means every group (a payload loaded without `fields`). */
+  row_fields?: RowGroup[];
+  /** `?view=summary` only: how many items the run has (the rows themselves come later). */
+  rows_total?: number;
   stats?: SnapshotStats;
   metric_names?: string[];
   metric_specs?: Record<string, MetricSpec>;
@@ -232,6 +239,9 @@ export interface Snapshot {
 export interface RunPayload {
   run: Run;
   snapshot: Snapshot;
+  /** `?view=summary` only: the runs around this one in the default list order, and the Reviews badge count. */
+  neighbors?: NeighborsPayload | null;
+  review_event_count?: number;
 }
 
 export interface LiveStatus {

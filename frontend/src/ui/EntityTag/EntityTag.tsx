@@ -6,7 +6,7 @@
  * and the run's own name (RunName): sans, a link when it has a target, mono only when the label is a bare id.
  * Long names truncate with an ellipsis and show in full as a tooltip.
  */
-import type { MouseEventHandler, ReactNode } from 'react';
+import type { FocusEventHandler, MouseEventHandler, PointerEventHandler, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '../Icon';
 import { Tag } from '../Tag';
@@ -101,6 +101,11 @@ export function RunName({
   to,
   title,
   onClick,
+  onPointerEnter,
+  onPointerLeave,
+  onPointerDown,
+  onFocus,
+  onBlur,
   className,
   ...rest
 }: EntityTagBase & {
@@ -109,6 +114,11 @@ export function RunName({
   to?: string;
   title?: string;
   onClick?: MouseEventHandler<HTMLAnchorElement>;
+  onPointerEnter?: PointerEventHandler<HTMLAnchorElement>;
+  onPointerLeave?: PointerEventHandler<HTMLAnchorElement>;
+  onPointerDown?: PointerEventHandler<HTMLAnchorElement>;
+  onFocus?: FocusEventHandler<HTMLAnchorElement>;
+  onBlur?: FocusEventHandler<HTMLAnchorElement>;
   dir?: 'auto' | 'ltr' | 'rtl';
   lang?: string;
 }) {
@@ -124,7 +134,19 @@ export function RunName({
     );
   }
   return (
-    <Link to={to} className={cls} data-id={id} title={tip} onClick={onClick} {...rest}>
+    <Link
+      to={to}
+      className={cls}
+      data-id={id}
+      title={tip}
+      onClick={onClick}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      onPointerDown={onPointerDown}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      {...rest}
+    >
       {label}
     </Link>
   );

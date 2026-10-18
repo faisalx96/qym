@@ -16,11 +16,12 @@ import { DocsRedirect } from '@/features/docs/DocsRedirect';
 import { RunsPage } from '@/features/runs-list';
 import { RunAnalyzerRedirect } from '@/features/analyzer/RunAnalyzerRedirect';
 import { lazyPage } from './lazyPage';
+import { loadRunDetailPage } from './prefetch';
 
 // Heavy pages are fetched on first visit so the entry chunk stays small (see frontend/README.md).
 const OverviewPage = lazyPage(() => import('@/features/runs-list/OverviewPage'), 'OverviewPage');
 const ChartsPage = lazyPage(() => import('@/features/runs-list/ChartsPage'), 'ChartsPage');
-const RunDetailPage = lazyPage(() => import('@/features/run-detail/RunDetailPage'), 'RunDetailPage');
+const RunDetailPage = lazyPage(loadRunDetailPage, 'RunDetailPage');
 const ComparePage = lazyPage(() => import('@/features/compare/ComparePage'), 'ComparePage');
 const AnalyzerPage = lazyPage(() => import('@/features/analyzer/AnalyzerPage'), 'AnalyzerPage');
 const DatasetsRoutes = lazyPage(() => import('@/features/datasets/DatasetsRoutes'), 'DatasetsRoutes');

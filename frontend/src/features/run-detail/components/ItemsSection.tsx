@@ -1,6 +1,7 @@
 /** The Items section: header, filter bar, filter banner, virtualized table or heatmap, deep link to ?item=. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTextMode, type TextMode } from '@/lib/text';
+import { useInView } from '@/lib/useInView';
 import { Button, HelpMarker, Icon, LinkButton, SectionHeader } from '@/ui';
 import { useItemDetails } from '../hooks/useItemDetails';
 import { REASON_ORDER } from '../lib/itemReasons';
@@ -18,7 +19,7 @@ const HIGHLIGHT_MS = 2600;
 void PAGE_SIZES;
 
 export function ItemsSection() {
-  const { runId, model, api, items, payload, basePath, readOnly } = useRunPage();
+  const { runId, model, api, items, payload, basePath, readOnly, needGroup } = useRunPage();
   const { view } = api;
   const sectionRef = useRef<HTMLElement>(null);
   const details = useItemDetails(runId);
@@ -29,6 +30,13 @@ export function ItemsSection() {
   const hiddenFields = useMemo(() => new Set(view.hideFields), [view.hideFields]);
   const hiddenMetricFields = useMemo(() => new Set(view.hideMetricFields), [view.hideMetricFields]);
   const { itemParam, setItemParam, setTraceParam } = api;
+
+  // The item texts (the `text` row group) load when the table is within a viewport of the screen, or a deep link,
+  // a search or a rule needs them.
+  const near = useInView(sectionRef, { rootMargin: '100% 0px' });
+  useEffect(() => {
+    if (near || itemParam) needGroup('text');
+  }, [near, itemParam, needGroup]);
 
   const handled = useRef<string | null>(null);
   const toggleExpanded = useCallback(

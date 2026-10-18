@@ -5,10 +5,15 @@ import { RouterProvider } from 'react-router-dom';
 import { I18nProvider } from 'react-aria-components';
 import { ToastProvider } from '@/ui/Toast';
 import { createQueryClient } from './queryClient';
+import { prefetchDeepLink } from './prefetch';
 import { createAppRouter } from './router';
 
 export function App() {
-  const [queryClient] = useState(createQueryClient);
+  const [queryClient] = useState(() => {
+    const client = createQueryClient();
+    prefetchDeepLink(client); // a deep link to a run asks for its data and its chunk before the route renders
+    return client;
+  });
   const [router] = useState(createAppRouter);
   useEffect(() => initRunStatusBus(), []);
   return (

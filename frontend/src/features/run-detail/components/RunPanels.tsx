@@ -47,8 +47,17 @@ function HistoryEntry({ event }: { event: ReviewHistoryEvent }) {
 }
 
 /** Hidden when the run was never submitted (no events) or the request failed. */
-export function ReviewHistory({ runId, status }: { runId: string; status: string }) {
-  const { data } = useReviewHistoryQuery(runId, true);
+export function ReviewHistory({
+  runId,
+  status,
+  enabled = true,
+}: {
+  runId: string;
+  status: string;
+  /** False when the run summary says there are no review events: no request. */
+  enabled?: boolean;
+}) {
+  const { data } = useReviewHistoryQuery(runId, enabled);
   const events = data?.events ?? [];
   void status;
   if (!events.length) return null;

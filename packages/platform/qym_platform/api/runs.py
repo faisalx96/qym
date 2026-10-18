@@ -4917,12 +4917,14 @@ ROW_FIELD_GROUPS: Dict[str, frozenset] = {
             "pass_scores",
             "pass_attempts",
             "__execution_error",
+            # a boolean the counts need ("not received"); it rides with the scores, not the text
+            "__has_output",
         }
     ),
     "reasons": frozenset({"metric_meta", "pass_metric_meta", "pass_metric_analyses"}),
     "categories": frozenset({"item_metadata"}),
     "traces": frozenset({"trace_stats", "trace_id", "trace_url", "task_started_at_ms"}),
-    "text": frozenset({"input_preview", "output_digest", "__has_output", "output_received"}),
+    "text": frozenset({"input_preview", "output_digest", "output_received"}),
     "review": frozenset(
         {
             "review_correction_id",
@@ -5014,14 +5016,22 @@ def legacy_run_data(
     if view == "summary":
         # The run header (names, metrics, samples) without any item rows:
         # what a page needs before it chooses the rows it loads (C027).
+        live_revision = (
+            _live_revision(db, run) if run.status in _LIVE_RUN_STATUSES else None
+        )
         data = _with_item_visibility(
             db,
             principal,
             run,
             _build_run_data(db, run, item_ids=[], compact=True, principal=principal),
         )
+        if live_revision is not None and isinstance(data.get("run"), dict):
+            data["run"]["live_revision"] = live_revision
         # Folded in so the first paint needs no further request: the pager's
         # neighbours (default order) and the Reviews badge count.
+        data["snapshot"]["rows_total"] = (
+            db.query(func.count(RunItem.id)).filter(RunItem.run_id == run.id).scalar() or 0
+        )
         data["neighbors"] = _summary_neighbors(db, principal, run)
         data["review_event_count"] = len(review_history(db, run))
         return data

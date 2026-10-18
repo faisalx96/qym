@@ -1,5 +1,5 @@
 /** Previous / next run in the Runs-list order the reader came from (brief 04 J9). */
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { runKeys, fetchNeighbors } from '@/api/runs';
@@ -8,10 +8,17 @@ import { Icon, Kbd } from '@/ui';
 import { formatIsoDateTime } from '../lib/heroModel';
 import { singleKeyShortcutsEnabled } from '@/features/runs-list/useRunsKeyboard';
 import { collation, neighborQuery, normalizeContext, runHref } from '../lib/runsOrder';
-import type { NeighborRun } from '../types';
+import { RunContext } from '../RunContext';
+import type { NeighborRun, NeighborsPayload } from '../types';
 import styles from './RunPager.module.css';
 
-export function useRunNeighbors(runId: string, slug: string, listParam: string | null) {
+export function useRunNeighbors(
+  runId: string,
+  slug: string,
+  listParam: string | null,
+  /** The neighbours the run summary carried (default list order): answers without a request. */
+  seed?: NeighborsPayload | null,
+) {
   const context = useMemo(() => normalizeContext(listParam), [listParam]);
   return useQuery({
     queryKey: runKeys.neighbors(runId, slug, context),
@@ -25,6 +32,7 @@ export function useRunNeighbors(runId: string, slug: string, listParam: string |
       return first;
     },
     enabled: !!slug && !!runId,
+    initialData: context === '' && seed && seed.context ? seed : undefined,
     staleTime: 60_000,
     retry: false,
   });
@@ -106,7 +114,8 @@ export function RunPager({
   slug: string;
   listParam: string | null;
 }) {
-  const { data, isError } = useRunNeighbors(runId, slug, listParam);
+  const seed = useContext(RunContext)?.summaryNeighbors;
+  const { data, isError } = useRunNeighbors(runId, slug, listParam, seed);
   const navigate = useNavigate();
   const context = normalizeContext(listParam);
   const listContext = data?.context === 'list' ? context : '';
