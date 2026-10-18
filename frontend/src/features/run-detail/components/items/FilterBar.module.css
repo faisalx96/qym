@@ -12,6 +12,24 @@
   gap: var(--space-sm);
 }
 
+.showSegmented {
+  display: contents;
+}
+
+.showSelect {
+  display: none;
+}
+
+@media (min-width: 641px) and (max-width: 1099px) {
+  .showSegmented {
+    display: none;
+  }
+
+  .showSelect {
+    display: block;
+  }
+}
+
 .chips {
   display: flex;
   align-items: center;
@@ -31,10 +49,12 @@
     height: var(--bar-action-h);
   }
 
+  /* Controls with a label above (analysis metric, threshold, sort) and controls without share one bottom edge: every
+     24px control box then has the same vertical centre (round 5 R4-2). */
   .row {
     flex: none;
     flex-wrap: nowrap;
-    align-items: center;
+    align-items: flex-end;
   }
 
   .chips {

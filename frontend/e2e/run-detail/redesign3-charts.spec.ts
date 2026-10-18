@@ -52,9 +52,18 @@ async function plots(page: Page) {
             const axis = c.querySelector('[data-part=axis]');
             return {
               tag: c.tagName,
+              tier: c.getAttribute('data-tier'),
               count: { text: content(count), data: count.getAttribute('data-text'), box: box(count) },
               bar: box(bar),
-              axis: axis ? { text: content(axis), box: box(axis) } : null,
+              // round 5: a thinned label is a blank line (U+00A0), not a missing one
+              axis: axis
+                ? {
+                    text: content(axis)
+                      .replace(/\u00a0/g, '')
+                      .trim(),
+                    box: box(axis),
+                  }
+                : null,
             };
           }),
       }));
@@ -99,7 +108,11 @@ for (const width of WIDTHS) {
       await expect(page.getByRole('group', { name: /Latency histogram/ })).toBeVisible();
       for (const p of (await plots(page)).filter((q) => /Latency histogram/.test(q.name)))
         for (const c of p.cols)
-          if (c.bar.height > 0) expect(c.bar.top - c.count.box.bottom).toBeLessThanOrEqual(4);
+          if (c.bar.height > 0)
+            // round 5 R1-5: a raised-tier count of a dense plot sits up to 20px above its bar
+            expect(c.bar.top - c.count.box.bottom).toBeLessThanOrEqual(
+              c.tier === '3' ? 38.5 : c.tier === '2' ? 20.5 : 4,
+            );
     });
 
     test('P1-3, P1-7, P1-9, P1-11: charts live in cards, no dead space under the plot, nothing overflows, cards are 260px or wider', async ({
@@ -178,14 +191,11 @@ for (const width of WIDTHS) {
         const hs = row.map((r) => r.plot);
         expect(Math.max(...hs) - Math.min(...hs), JSON.stringify(row)).toBeLessThanOrEqual(16);
       }
-      // round 3 P7 replaced the Min / Avg / Max / Total cells: a numeric card holds a box plot and its number row
+      // round 3 P7 replaced the Min / Avg / Max / Total cells with a box plot; round 5 R2 removed its number row too
+      // (the six numbers are in the box tooltip, the median and the ends are printed on the plot)
       const card = page.locator('[data-testid=metric-card][data-metric=tokens_used]');
       await expect(card.getByRole('img', { name: /^tokens_used/ })).toBeVisible();
-      await expect(
-        card
-          .getByRole('group', { name: 'Distribution values' })
-          .or(card.locator('dl[aria-label="Distribution values"]')),
-      ).toBeVisible();
+      await expect(card.locator('dl[aria-label="Distribution values"]')).toHaveCount(0);
     });
 
     test('P1-5: a boolean metric is a three column bar chart, no horizontal split bar remains', async ({
@@ -201,7 +211,7 @@ for (const width of WIDTHS) {
       await expect(split.locator('[data-part=sub]').first()).toHaveAttribute('data-text', /%$/);
     });
 
-    test('P1-8: the 11 bucket histograms thin their axis to 6 labels at narrow columns and nothing overlaps', async ({
+    test('P1-8 (round 5: label rule k = ceil(labelWidth / pitch), blank lines keep the foot): the 11 bucket histograms thin their axis to 6 labels at narrow columns and nothing overlaps', async ({
       page,
     }) => {
       await openRun(page, s.slug, classic);

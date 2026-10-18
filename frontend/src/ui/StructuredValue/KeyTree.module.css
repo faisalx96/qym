@@ -53,7 +53,12 @@
 }
 
 .key {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-inline-size: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: var(--font-base);
   font-weight: 600;

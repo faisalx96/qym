@@ -1,0 +1,599 @@
+/* Round 5 run-detail mocks (visual contract for docs/internal/ui-migration/redesign5/run-detail.md). Tokens only. */
+
+/* The real report column: 1193px at a 1440 viewport, 279px at 390. */
+.frame {
+  inline-size: min(100%, 1193px);
+  margin-inline: 0;
+}
+
+@media (width <= 480px) {
+  .frame {
+    inline-size: min(100%, 279px);
+  }
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-md);
+}
+
+.w279 {
+  inline-size: min(100%, 279px);
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+  min-block-size: var(--control-height);
+}
+
+.cardTitle {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.headRight {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  margin-inline-start: auto;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: 700;
+}
+
+.slot {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-inline-size: 0;
+  margin-block-start: var(--space-sm);
+}
+
+.hero {
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.heroSub {
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* ───────── R1: bar columns ───────── */
+.plotBox {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.plot {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  min-block-size: 146px;
+}
+
+.plot[data-dense] {
+  padding-block-start: 18px;
+}
+
+/* A column is two grid rows: the well (spacer, count, bar) and a foot of constant height. */
+.col {
+  display: grid;
+  flex: 1;
+  grid-template-rows: minmax(0, 1fr) var(--foot);
+  min-inline-size: 0;
+}
+
+/* The well's bottom border is the x axis; the inline margins make the borders of neighbouring wells touch. */
+.well {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-block-size: 0;
+  margin-inline: -2px;
+  padding-inline: 2px;
+  border-block-end: 1px solid var(--border-default);
+}
+
+.well::before {
+  content: '';
+  flex: calc(1 - var(--p, 0)) 1 0%;
+}
+
+.count {
+  flex: none;
+  min-block-size: 16px;
+  margin-block-end: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.col[data-zero] .count {
+  color: var(--text-muted);
+}
+
+/* Dense plots (columns narrower than their counts): every second count sits one tier higher, still above its own bar. */
+.col[data-tier='2'] .count {
+  position: relative;
+  inset-block-start: -18px;
+}
+
+.bar {
+  flex: var(--p, 0) 1 0%;
+  inline-size: min(100%, 44px);
+  min-block-size: 3px;
+  border-radius: 4px 4px 0 0;
+  background: var(--tone, var(--text-dim));
+}
+
+.col[data-zero] .bar {
+  min-block-size: 0;
+}
+
+.foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-block-start: var(--space-xs);
+  font-size: var(--font-sm);
+  line-height: 14px;
+  white-space: pre;
+  color: var(--text-muted);
+}
+
+.sub {
+  font-family: var(--font-mono);
+}
+
+/* R1-3 sweep: one plot per column count. */
+.sweep {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.sweepPlot {
+  display: flex;
+  min-block-size: 160px;
+}
+
+/* ───────── R2: coloured box plots ───────── */
+.boxGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-md);
+}
+
+.rowsWide {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: var(--space-md);
+}
+
+.glyphBox {
+  min-inline-size: 0;
+}
+
+.glyph {
+  display: block;
+  max-inline-size: 100%;
+}
+
+.axisLine {
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+
+.axisTick {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.whisker {
+  stroke: var(--tone, var(--text-secondary));
+  stroke-width: 1.5;
+}
+
+.iqr {
+  fill: color-mix(in srgb, var(--tone, var(--text-secondary)) var(--tint-strong), var(--bg-surface));
+  stroke: var(--tone, var(--text-secondary));
+  stroke-width: 1.5;
+}
+
+.median {
+  stroke: var(--tone, var(--text-primary));
+  stroke-width: 2.5;
+}
+
+.mean {
+  fill: var(--bg-surface);
+  stroke: var(--tone, var(--text-primary));
+  stroke-width: 1.5;
+}
+
+.dot {
+  fill: var(--tone, var(--text-muted));
+  fill-opacity: 0.75;
+}
+
+.dot[data-tail] {
+  fill: var(--score-2);
+  fill-opacity: 0.9;
+}
+
+.medLabel,
+.endLabel {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  fill: var(--text-primary);
+}
+
+.endLabel {
+  fill: var(--text-muted);
+}
+
+.total {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.total b {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.key {
+  margin: var(--space-sm) 0 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.tip {
+  align-self: flex-start;
+  margin-block-start: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.tipTitle {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tipGrid {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 2px var(--space-md);
+  margin: var(--space-xs) 0 0;
+}
+
+.tipGrid dt {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.tipGrid dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+}
+
+.tipGrid > div {
+  display: flex;
+  gap: var(--space-xs);
+  justify-content: space-between;
+}
+
+.passRows {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.passRow {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 52px;
+  gap: var(--space-sm);
+  align-items: center;
+  min-block-size: var(--row-compact);
+}
+
+.passRow[data-wide] {
+  grid-template-columns: 96px minmax(0, 1fr) 52px;
+}
+
+.stepName {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.passMed {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  text-align: end;
+  color: var(--text-muted);
+}
+
+.passAxis {
+  position: relative;
+  block-size: 18px;
+  margin-inline: 80px 60px;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.passAxis span {
+  position: absolute;
+  inset-inline-start: calc(var(--x) * 100%);
+  translate: -50% 0;
+}
+
+@media (width <= 480px) {
+  .passAxis {
+    margin-inline: 80px 60px;
+  }
+}
+
+.track {
+  position: relative;
+  display: block;
+  block-size: 20px;
+  min-inline-size: 0;
+}
+
+.tWhisker {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: var(--a);
+  inline-size: calc(var(--b) - var(--a));
+  block-size: 0;
+  border-block-start: 1.5px solid var(--tone, var(--text-secondary));
+}
+
+.tBox {
+  position: absolute;
+  inset-block: 15%;
+  inset-inline-start: var(--a);
+  inline-size: max(3px, calc(var(--b) - var(--a)));
+  border: 1.5px solid var(--tone, var(--text-secondary));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--tone, var(--text-secondary)) var(--tint-strong), var(--bg-surface));
+}
+
+.tMedian {
+  position: absolute;
+  inset-block: 15%;
+  inset-inline-start: var(--a);
+  inline-size: 2.5px;
+  background: var(--tone, var(--text-primary));
+}
+
+.tMean {
+  position: absolute;
+  inset-block-start: calc(50% - 4px);
+  inset-inline-start: calc(var(--a) - 4px);
+  inline-size: 8px;
+  block-size: 8px;
+  border: 1.5px solid var(--tone, var(--text-primary));
+  background: var(--bg-surface);
+  transform: rotate(45deg);
+}
+
+/* ───────── R3: metric detail panel ───────── */
+.panel {
+  container-type: inline-size;
+  min-inline-size: 0;
+  padding: var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  direction: ltr;
+  text-align: start;
+}
+
+.pHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-block-size: var(--row-compact);
+  padding-block-end: var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.pName {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pScore {
+  font-family: var(--font-mono);
+  font-size: var(--font-lg);
+  font-weight: 700;
+}
+
+.pActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.pBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+  padding-block-start: var(--space-md);
+}
+
+.prose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.eyebrow {
+  max-inline-size: 100%;
+  overflow: hidden;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.eyebrowRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.muted {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.proseText {
+  inline-size: fit-content;
+  max-inline-size: min(100%, 76ch);
+  margin: 0;
+  font-size: var(--font-md);
+  line-height: 1.6;
+  text-align: start;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.proseText[data-primary] {
+  color: var(--text-primary);
+}
+
+/* Key / value facts: label column of --field-label-width, a label never wider than its column (ellipsis, title carries the key). */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  column-gap: var(--space-lg);
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: var(--field-label-width) minmax(0, 1fr);
+  column-gap: var(--space-md);
+  align-items: baseline;
+  padding-block: var(--space-xs);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.fact dt {
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.fact dd {
+  justify-self: start;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  margin: 0;
+  font-size: var(--font-base);
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.fact dd[data-mono] {
+  font-family: var(--font-mono);
+}
+
+@container (max-width: 420px) {
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+  }
+}
+
+.tableBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.tree {
+  display: flex;
+  flex-direction: column;
+}
+
+.treeRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: var(--row-compact);
+  padding: 0;
+  border: 0;
+  border-block-end: 1px solid var(--border-subtle);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  color: var(--text-muted);
+}
+
+.treeKey {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.treeType {
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

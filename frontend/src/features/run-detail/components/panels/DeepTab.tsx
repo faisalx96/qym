@@ -131,11 +131,18 @@ function CorrelationMatrix({
   const [boxRef, W] = useMeasuredWidth<HTMLDivElement>(600);
   const side = matrixCellSide(W, names.length);
   const label = 120;
+  // round 5 R4-1: the grid fills the card body; cells are as wide as their column (at least 20px) and `side` high
+  const colWidth = (W - label - 2 * names.length) / names.length;
+  const minWidth = label + names.length * 22;
   return (
     <div ref={boxRef} className={chart.matrixBox} data-testid="correlation-matrix">
       <div
         className={styles.matrix}
-        style={{ gridTemplateColumns: `${label}px repeat(${names.length}, ${side}px)` }}
+        style={{
+          gridTemplateColumns: `${label}px repeat(${names.length}, minmax(20px, 1fr))`,
+          width: '100%',
+          minWidth,
+        }}
         role="grid"
         aria-label="Pearson correlation matrix"
       >
@@ -159,13 +166,13 @@ function CorrelationMatrix({
                   <button
                     type="button"
                     className={chart.matrixCell}
-                    style={{ width: side, height: side, background: tone(v) }}
+                    style={{ width: '100%', height: side, background: tone(v) }}
                     aria-label={`${rowName} versus ${colName}: ${v === null ? 'not enough data' : v.toFixed(2)}`}
                     aria-pressed={i === selected[0] && j === selected[1]}
                     disabled={i === j}
                     onClick={() => onPick(j, i)}
                   >
-                    {side >= MATRIX_NUMBER_MIN ? (v === null ? '—' : v.toFixed(2)) : null}
+                    {colWidth >= MATRIX_NUMBER_MIN ? (v === null ? '—' : v.toFixed(2)) : null}
                   </button>
                 </span>
               );

@@ -8,7 +8,8 @@ import { boxStats, type BoxStats } from '../../lib/boxStats';
 import { axisPosition } from '../../lib/boxAxis';
 import { useRunPage } from '../../RunContext';
 import type { PassSummary } from '../../types';
-import { BoxLegend, BoxTrack } from '../charts/BoxPlot';
+import { BoxKey, BoxTrack } from '../charts/BoxPlot';
+import { boxTone } from '../../lib/boxTone';
 import styles from './Repeat.module.css';
 
 /** The per-pass values of one metric over the filtered items (`row.pass_scores[metric][pass - 1]`). */
@@ -42,7 +43,9 @@ export function PassDistribution({
   passes: PassSummary[];
   kind: BoxKind;
 }) {
-  const { items, basePath } = useRunPage();
+  const { items, basePath, api } = useRunPage();
+  const direction = api.ctx.model.metricDirections[metric] ?? null;
+  const type = api.ctx.model.metricTypes[metric];
   const navigate = useNavigate();
   const rows = useMemo(() => items.map((i) => i.row), [items]);
   const perPass = useMemo(
@@ -90,7 +93,11 @@ export function PassDistribution({
             <span className={styles.passTag}>
               <Tag kind="count">Pass {pass}</Tag>
             </span>
-            {stats.n ? <BoxTrack stats={stats} x={x} /> : <span />}
+            {stats.n ? (
+              <BoxTrack stats={stats} x={x} tone={boxTone(stats.median, type, direction)} />
+            ) : (
+              <span />
+            )}
             <span
               className={styles.passMed}
               aria-hidden="true"
@@ -106,7 +113,7 @@ export function PassDistribution({
           ))}
         </div>
       </div>
-      <BoxLegend />
+      <BoxKey />
     </Card>
   );
 }

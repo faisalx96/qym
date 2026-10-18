@@ -234,7 +234,7 @@ test('P5-12: a matrix value opens one detail with the reason; another replaces i
   await expect(detail).toHaveCount(1);
   await expect(detail).toHaveAttribute('data-metric', 'rubric_metric_02');
   await grid.getByRole('button', { name: /^rubric_metric_01, pass 3:/ }).click();
-  await detail.getByRole('button', { name: 'Edit rubric_metric_01 score for pass 3' }).click();
+  await detail.getByRole('button', { name: 'Edit score', exact: true }).click();
   await expect(detail.getByRole('textbox', { name: 'New rubric_metric_01 score' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(detail.getByRole('textbox')).toHaveCount(0);

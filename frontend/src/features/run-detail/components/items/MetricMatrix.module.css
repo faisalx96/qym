@@ -46,6 +46,7 @@
   background: transparent;
   font-family: var(--font-mono);
   font-size: var(--font-base);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--tone-text, var(--text-primary));
   cursor: pointer;
@@ -64,9 +65,28 @@
   outline-offset: 1px;
 }
 
-.cell[data-selected] {
-  outline: 2px solid var(--text-primary);
-  outline-offset: -2px;
+/* A single pass: the Score column is left aligned with a 12px start padding. */
+.gridHost[data-single] .cell {
+  padding-inline-start: var(--space-md);
+  text-align: start;
+}
+
+/* Selected row: whole row tinted with a 2px accent bar at its inline start (no outline box around a number). */
+.gridHost [data-row-selected] {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+.gridHost [data-row-selected] > * {
+  background: transparent;
+}
+
+.gridHost [data-metric]:hover {
+  background: var(--bg-hover);
+}
+
+.gridHost [data-row-selected]:hover {
+  background: var(--bg-selected);
 }
 
 .mean {
@@ -77,14 +97,22 @@
 }
 
 .reason {
-  display: block;
+  display: flex;
+  justify-content: flex-start;
   min-width: 0;
-  overflow: hidden;
   font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+/* The text is a block as wide as itself, anchored at the column's inline start whatever its direction. */
+.reasonText {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  overflow: hidden;
   text-align: start;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-secondary);
+  justify-self: start;
 }
 
 .more {
@@ -92,7 +120,10 @@
 }
 
 .detail {
-  padding: var(--space-sm) var(--space-md);
+  container-type: inline-size;
+  direction: ltr;
+  text-align: start;
+  padding: var(--space-md);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
@@ -102,18 +133,31 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-sm);
-  min-block-size: var(--control-height);
+  gap: var(--space-xs) var(--space-sm);
+  min-block-size: var(--row-compact);
+  margin-block-end: var(--space-md);
+  padding-block-end: var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
 }
 
 .detailTitle {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
-  font-size: var(--font-base);
+  font-size: var(--font-md);
+  font-weight: 600;
   color: var(--text-primary);
+}
+
+.detailScore {
+  font-size: var(--font-lg);
+  font-weight: 700;
 }
 
 .detailActions {
   display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   margin-inline-start: auto;
 }
 
@@ -123,20 +167,14 @@
   color: var(--text-muted);
 }
 
-/* Under 640px the cells and names shrink so the shown passes and Mean fit without sideways scrolling. */
+/* Under 640px the cells and names shrink in width, never below the 12px type of the rest of the matrix (round 5 R3-17). */
 .gridHost[data-compact] .cell {
   min-inline-size: 0;
-  font-size: var(--font-sm);
-}
-
-.gridHost[data-compact] .mean {
-  font-size: var(--font-sm);
 }
 
 .gridHost[data-compact] .metricName {
   display: block;
   overflow: hidden;
-  font-size: var(--font-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

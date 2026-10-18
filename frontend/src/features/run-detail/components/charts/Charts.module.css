@@ -37,16 +37,30 @@
   flex: 1;
   align-items: stretch;
   gap: 4px;
+  /* the wells overshoot their column by 2px to bridge the gaps; this padding keeps the drawn axis inside the plot box */
+  padding-inline: 2px;
   min-height: 146px;
 }
 
-/* A column is [spacer][count][bar][axis][sub]: the spacer takes (1 - p) and the bar p of the free height, so the
-   count always sits directly on top of its bar and a taller slot makes the bars taller, never leaves space under them. */
+/* Dense plot (columns narrower than their counts): room for the raised count tier. */
+.plot[data-dense] {
+  padding-block-start: 18px;
+}
+
+.plot[data-dense='3'] {
+  padding-block-start: 36px;
+}
+
+/* Round 5 R1, well and foot. A column is two grid rows: the well (spacer, count, bar) and a foot of one constant height
+   (--foot, set per plot), so a thinned axis label can never make a column end higher than its neighbour. */
 .col {
-  display: flex;
+  display: grid;
   flex: 1;
-  flex-direction: column;
-  align-items: center;
+  grid-template-columns: minmax(
+    0,
+    1fr
+  ); /* a label wider than its column must not widen the well (the axis would overshoot the plot) */
+  grid-template-rows: minmax(0, 1fr) var(--foot, 18px);
   min-width: 0;
   padding: 0;
   border: 0;
@@ -55,9 +69,28 @@
   font: inherit;
 }
 
-.col::before {
+/* The well's bottom border IS the x axis; the inline margins make neighbouring borders touch across the 4px gaps.
+   The spacer takes (1 - p) and the bar p of the free height, so the count sits directly on top of its bar. */
+.well {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  margin-inline: -2px;
+  padding-inline: 2px;
+  border-block-end: 1px solid var(--border-default);
+}
+
+.well::before {
   content: '';
   flex: calc(1 - var(--p, 0)) 1 0%;
+}
+
+.foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-block-start: var(--space-xs);
 }
 
 .count,
@@ -74,7 +107,6 @@
 }
 
 .count {
-  order: 1;
   min-height: 16px;
   margin-bottom: 2px;
   font-family: var(--font-mono);
@@ -88,8 +120,18 @@
   color: var(--text-muted);
 }
 
+/* Dense plots: every second count sits one tier higher (no layout change, bars keep their height). */
+.col[data-tier='2'] .count {
+  position: relative;
+  inset-block-start: -18px;
+}
+
+.col[data-tier='3'] .count {
+  position: relative;
+  inset-block-start: -36px;
+}
+
 .bar {
-  order: 2;
   position: relative;
   display: flex;
   flex: var(--p, 0) 1 0%;
@@ -108,15 +150,12 @@
 }
 
 .axis {
-  order: 3;
-  margin-top: var(--space-xs);
   font-size: var(--font-sm);
   line-height: 14px;
   color: var(--text-muted);
 }
 
 .axisNote {
-  order: 3;
   flex: none;
   font-size: var(--font-sm);
   line-height: 14px;
@@ -124,7 +163,6 @@
 }
 
 .axisSub {
-  order: 4;
   font-family: var(--font-mono);
   font-size: var(--font-sm);
   line-height: 14px;

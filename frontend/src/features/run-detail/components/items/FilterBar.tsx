@@ -89,7 +89,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
           value={query}
           onChange={setQuery}
           onClear={() => setQuery('')}
-          width="22ch"
+          width="clamp(18ch, 14vw, 22ch)"
         />
         {metricItems.length > 1 ? (
           <Select
@@ -100,7 +100,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
               k &&
               api.setView({ metric: String(k) === model.defaultMetric ? null : String(k), threshold: null })
             }
-            width="16ch"
+            width="clamp(14ch, 11vw, 16ch)"
           />
         ) : null}
         {hasThreshold ? (
@@ -113,15 +113,27 @@ export function FilterBar({ display }: { display: DisplayState }) {
             value={thr}
             onChange={(v) => setThr(v as number)}
             onChangeEnd={(v) => api.setView({ threshold: (v as number) / 100 })}
-            width="140px"
+            width="clamp(120px, 10vw, 140px)"
           />
         ) : null}
-        <SegmentedControl
-          label="Show items"
-          options={showOptions}
-          value={view.show}
-          onChange={(show) => api.setView({ show })}
-        />
+        <span className={styles.showSegmented}>
+          <SegmentedControl
+            label="Show items"
+            options={showOptions}
+            value={view.show}
+            onChange={(show) => api.setView({ show })}
+          />
+        </span>
+        {/* Between 641 and 1099px the segmented filter would not fit the row: the same choice as a Select (round 5 R4-2). */}
+        <span className={styles.showSelect}>
+          <Select
+            label="Show"
+            items={showOptions.map((o) => ({ key: o.value, label: o.label }))}
+            value={view.show}
+            onChange={(k) => k && api.setView({ show: String(k) as ItemShow })}
+            width="9ch"
+          />
+        </span>
         <Popover
           label="Filter rules"
           placement="bottom start"
@@ -158,7 +170,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
           )}
           value={view.sort}
           onChange={(k) => k && api.setView({ sort: String(k) as SortBy })}
-          width="12ch"
+          width="clamp(10ch, 8vw, 12ch)"
         />
         <Popover
           label="Display"

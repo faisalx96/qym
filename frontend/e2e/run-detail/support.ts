@@ -15,6 +15,8 @@ import {
   seedArabicRepeatRun,
   seedClassicRun,
   seedManyCategories,
+  seedR5DetailsRun,
+  seedR5Passes19Run,
   seedRepeatRun,
   seedWideRepeatRun,
   submitRun,
@@ -57,6 +59,14 @@ export async function seedArabic(s: Seeded): Promise<string> {
 /** 10 passes x 24 items x 24 metrics, Arabic and English items, nested JSON outputs (round 3). */
 export async function seedWideRepeat(s: Seeded): Promise<string> {
   return seedWideRepeatRun(client, s.token);
+}
+
+/** Round 5 runs: `details` (86 items, 11 score buckets, long judge metadata) and `passes19` (19 passes). */
+export async function seedR5(s: Seeded): Promise<{ details: string; passes19: string }> {
+  return {
+    details: await seedR5DetailsRun(client, s.token),
+    passes19: await seedR5Passes19Run(client, s.token),
+  };
 }
 
 /** 300 items with metadata keys of 24 / 14 / 9 / 6 / 4 values. */

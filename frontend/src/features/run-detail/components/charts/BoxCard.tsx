@@ -1,11 +1,13 @@
-/** The body of a box plot card (round 3 P7): plot, number row, Total (additive quantities only) and legend. */
+/** The body of a box plot card (round 5 R2): the coloured plot only. Total moved to the card header (`boxTotalText`), the key to a help marker. */
 import { useMemo } from 'react';
 import { boxAxis } from '../../lib/boxAxis';
-import { boxStats, hasNegative } from '../../lib/boxStats';
-import { boxFormatter, boxTickFormatter, showsTotal, type BoxKind } from '../../lib/boxFormat';
+import { boxStats } from '../../lib/boxStats';
+import { boxFormatter, boxTotalText, type BoxKind } from '../../lib/boxFormat';
+import { SERIES_TONE, type BoxTone } from '../../lib/boxTone';
 import { rangeOf, selectedPart, withRangeRule, inclusiveMax } from '../../lib/boxFilters';
 import { useRunPage } from '../../RunContext';
-import { BoxLegend, BoxNumbers, BoxPlot, boxSentence, type BoxPart } from './BoxPlot';
+import styles from './ChartCard.module.css';
+import { BoxPlot, HOW_TO_READ, boxSentence, type BoxPart } from './BoxPlot';
 
 export interface BoxEntry {
   /** Item the value belongs to (a dot opens it). */
@@ -49,6 +51,7 @@ export function BoxCardBody({
   field,
   tailTone,
   fixedDomain,
+  tone: toneIn,
 }: {
   entries: BoxEntry[];
   kind: BoxKind;
@@ -58,14 +61,18 @@ export function BoxCardBody({
   field: string;
   tailTone?: boolean;
   fixedDomain?: [number, number];
+  /** Band of the median for a directed score, else series 1 (default). */
+  tone?: BoxTone;
 }) {
   const values = useMemo(() => entries.map((e) => e.v), [entries]);
   const stats = useMemo(() => boxStats(values), [values]);
-  const axis = useMemo(() => boxAxis(stats, { fixed: fixedDomain, values }), [stats, fixedDomain, values]);
+  const axis = useMemo(
+    () => boxAxis(stats, { fixed: fixedDomain, values, fit: kind === 'percent' ? 'zero' : 'data' }),
+    [stats, fixedDomain, values, kind],
+  );
   const fmt = boxFormatter(kind);
-  const tick = boxTickFormatter(kind);
-  const negative = useMemo(() => hasNegative(values), [values]);
-  const total = showsTotal(kind, negative) && stats.n ? fmt(stats.sum) : undefined;
+  const total = useMemo(() => boxTotalText(values, kind), [values, kind]);
+  const tone = toneIn ?? SERIES_TONE;
   const ids = useMemo(() => {
     const m = new Map<number, string>();
     for (const e of entries) if (!m.has(e.v)) m.set(e.v, e.id);
@@ -73,27 +80,39 @@ export function BoxCardBody({
   }, [entries]);
   const { active, onRange, openItem } = useBoxFilter(field);
   return (
-    <>
-      <BoxPlot
-        stats={stats}
-        axis={axis}
-        format={fmt}
-        tickFormat={tick}
-        name={boxSentence(name, stats, fmt, { total })}
-        tailTone={tailTone}
-        selected={selectedPart(
-          active && field === 'latency' ? { min: active.min, max: active.max } : active,
-          stats,
-        )}
-        onRange={stats.n > 1 ? onRange : undefined}
-        onItem={(v) => {
-          const id = ids.get(v);
-          if (id) openItem(id);
-        }}
-        itemLabel={(v) => ids.get(v)}
-      />
-      <BoxNumbers stats={stats} format={fmt} total={total} />
-      {stats.n ? <BoxLegend /> : null}
-    </>
+    <BoxPlot
+      stats={stats}
+      axis={axis}
+      format={fmt}
+      tone={tone}
+      name={boxSentence(name, stats, fmt, { total, band: tone.band })}
+      tailTone={tailTone}
+      selected={selectedPart(
+        active && field === 'latency' ? { min: active.min, max: active.max } : active,
+        stats,
+      )}
+      onRange={stats.n > 1 ? onRange : undefined}
+      onItem={(v) => {
+        const id = ids.get(v);
+        if (id) openItem(id);
+      }}
+      itemLabel={(v) => ids.get(v)}
+    />
   );
 }
+
+/** "Total 64.0K" in a card header (round 5 R2): additive quantities only, the one fact the plot cannot show. */
+export function BoxTotal({ values, kind }: { values: number[]; kind: BoxKind }) {
+  const text = useMemo(() => boxTotalText(values, kind), [values, kind]);
+  if (text === undefined) return null;
+  return (
+    <span className={styles.total} title="Sum of all values across all items" data-testid="box-total">
+      Total <b>{text}</b>
+    </span>
+  );
+}
+
+export const BOX_HELP = {
+  label: 'How to read the box plot',
+  text: HOW_TO_READ,
+};

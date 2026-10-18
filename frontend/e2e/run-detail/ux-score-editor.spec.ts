@@ -15,7 +15,7 @@ async function openEditor(page: Page, item: string, metric = 'quality') {
   const card = page.getByTestId('item-card');
   await expect(card).toBeVisible();
   const panel = await openMetric(card, metric);
-  const edit = panel.getByRole('button', { name: `Edit ${metric} score` });
+  const edit = panel.getByRole('button', { name: 'Edit score', exact: true });
   await edit.click();
   const box = card.getByRole('textbox', { name: `New ${metric} score` });
   await expect(box).toBeFocused();

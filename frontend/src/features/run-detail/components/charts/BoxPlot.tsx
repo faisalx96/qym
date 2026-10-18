@@ -1,14 +1,16 @@
 /**
  * The box plot mark (round 3 P7): one glyph set across the page. Box p25..p75, median line, whiskers p5..p95 with caps, a hollow
  * mean diamond, dots for the values outside the whiskers. `BoxPlot` is the SVG plot drawn at the measured width; `BoxTrack` is the
- * same glyph as a positioned row (per-pass rows, Step timings); `BoxNumbers` the readable number row; `BoxLegend` the key.
+ * same glyph as a positioned row (per-pass rows, Step timings). Round 5 R2: one tone per plot (`data-band` of the median for a
+ * directed score, else `data-series="1"`), no number row; the median is printed above its line, the data minimum and maximum
+ * under the baseline ends, all six numbers are in the box tooltip and the `aria-label`.
  */
-import { useId, type CSSProperties, type ReactNode } from 'react';
+import { useId, type CSSProperties } from 'react';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
-import { HelpMarker } from '@/ui';
 import { useEntrance, staggerIndex } from '@/ui/motion';
 import { axisPosition, type BoxAxis } from '../../lib/boxAxis';
 import type { BoxStats } from '../../lib/boxStats';
+import { SERIES_TONE, type BoxTone } from '../../lib/boxTone';
 import { useMeasuredWidth } from './Charts';
 import styles from './BoxPlot.module.css';
 
@@ -19,7 +21,7 @@ export function boxSentence(
   name: string,
   s: BoxStats,
   fmt: (v: number) => string,
-  opts: { total?: string; unit?: string } = {},
+  opts: { total?: string; unit?: string; band?: number } = {},
 ): string {
   if (!s.n) return `${name}: no values`;
   const head = `${name}, ${s.n} ${opts.unit ?? 'items'}`;
@@ -34,20 +36,21 @@ export function boxSentence(
   ];
   if (opts.total) parts.push(`total ${opts.total}`);
   const tail = s.highCount ? `; ${s.highCount} values above the 95th percentile` : '';
-  return `${head}: ${parts.join(', ')}${tail}.`;
+  const band = opts.band ? `; band ${opts.band} of 5` : '';
+  return `${head}: ${parts.join(', ')}${tail}${band}.`;
 }
 
 export interface BoxPlotProps {
   stats: BoxStats;
   axis: BoxAxis;
   format: (v: number) => string;
-  /** Axis tick labels (coarser than `format`); default `format`. */
-  tickFormat?: (v: number) => string;
   /** Values above p95 take the slow-tail tone (latency). */
   tailTone?: boolean;
   /** Accessible name of the plot (a sentence from `boxSentence`). */
   name: string;
-  /** `strip`: 40px, no ticks and no median label (the response-time strip under its histogram). */
+  /** One tone for the whole glyph: a score band or series 1 (default). */
+  tone?: BoxTone;
+  /** `strip`: 40px, no axis and no median label (the response-time strip under its histogram). */
   variant?: 'full' | 'strip';
   /** Horizontal padding; the strip uses 0 so it lines up with the histogram above. */
   padX?: number;
@@ -65,9 +68,9 @@ export function BoxPlot({
   stats: s,
   axis,
   format: fmt,
-  tickFormat,
   tailTone,
   name,
+  tone = SERIES_TONE,
   variant = 'full',
   padX,
   selected,
@@ -80,9 +83,10 @@ export function BoxPlot({
   const enter = useEntrance();
   const uid = useId();
   const strip = variant === 'strip';
-  const H = strip ? 40 : 84;
+  const H = strip ? 40 : 80;
   const px = padX ?? (strip ? 0 : 14);
-  const cy = strip ? 20 : 36;
+  const cy = strip ? 20 : 34;
+  const base = 62;
   const bh = strip ? 16 : 24;
   const sx = (v: number) => px + axisPosition(v, axis.domain) * (W - 2 * px);
   const inside = (v: number) => v <= axis.domain[1];
@@ -93,11 +97,24 @@ export function BoxPlot({
       </div>
     );
   }
+  // every value equal: no plot to draw, a compact note the height of a stat line (round 5 review)
+  const flatMany = s.n > 1 && s.min === s.max;
+  if (flatMany) {
+    return (
+      <div
+        ref={ref}
+        className={[styles.flatNote, className].filter(Boolean).join(' ')}
+        role="img"
+        aria-label={name}
+        data-variant={variant}
+      >
+        {`All ${s.n} values are ${fmt(s.median)}`}
+      </div>
+    );
+  }
   const medX = sx(s.median);
   const meanX = sx(s.mean);
   const labelAnchor = medX < 40 ? 'start' : medX > W - 40 ? 'end' : 'middle';
-  const ticks =
-    W < 320 ? axis.ticks.filter((_, i) => i % 2 === 0 || i === axis.ticks.length - 1) : axis.ticks;
   const single = s.n === 1;
   const flat = s.min === s.max;
   const p95x = sx(Math.min(s.p95, axis.domain[1]));
@@ -107,8 +124,19 @@ export function BoxPlot({
   const lowDots = s.low.filter((v) => v !== s.min);
   const highDots = s.high.filter((v) => v !== s.max && inside(v));
   const interactive = !single && !flat;
+  // data minimum and maximum, printed under the baseline at the ends of the data (one merged label when they would collide)
+  const minX = sx(s.min);
+  const maxX = clipMax ? W - px : sx(Math.min(s.max, axis.domain[1]));
+  const minText = fmt(s.min);
+  const maxText = clipMax ? `→ ${fmt(s.max)}` : fmt(s.max);
+  const merged = maxX + 3 - maxText.length * 6.6 - (Math.max(0, minX - 3) + minText.length * 6.6) < 8;
   return (
-    <div ref={ref} className={[styles.plotBox, className].filter(Boolean).join(' ')}>
+    <div
+      ref={ref}
+      className={[styles.plotBox, className].filter(Boolean).join(' ')}
+      data-band={tone.band}
+      data-series={tone.band ? undefined : (tone.series ?? 1)}
+    >
       <ChartTooltipHost className={styles.stack}>
         {/* The picture: one image named by a sentence. It has no focusable children (nested-interactive). */}
         <svg
@@ -120,21 +148,31 @@ export function BoxPlot({
           aria-label={name}
           data-variant={variant}
         >
-          {strip
-            ? null
-            : ticks.map((t) => (
-                <g key={t}>
-                  <line className={styles.grid} x1={sx(t)} x2={sx(t)} y1={cy - 22} y2={H - 22} />
-                  <text
-                    className={styles.tick}
-                    x={sx(t)}
-                    y={H - 6}
-                    textAnchor={t === axis.domain[0] ? 'start' : t === axis.domain[1] ? 'end' : 'middle'}
-                  >
-                    {(tickFormat ?? fmt)(t)}
-                  </text>
-                </g>
-              ))}
+          {strip || single || flat ? null : (
+            <>
+              <line
+                className={styles.axisLine}
+                x1={sx(axis.domain[0])}
+                x2={sx(axis.domain[1])}
+                y1={base}
+                y2={base}
+              />
+              <line
+                className={styles.axisTick}
+                x1={sx(axis.domain[0])}
+                x2={sx(axis.domain[0])}
+                y1={base - 3}
+                y2={base + 3}
+              />
+              <line
+                className={styles.axisTick}
+                x1={sx(axis.domain[1])}
+                x2={sx(axis.domain[1])}
+                y1={base - 3}
+                y2={base + 3}
+              />
+            </>
+          )}
           {single ? (
             <>
               <path className={styles.meanMark} d={diamond(meanX, cy)} />
@@ -206,11 +244,25 @@ export function BoxPlot({
                   {fmt(s.median)}
                 </text>
               )}
-              {clipMax && !strip ? (
-                <text className={styles.clipLabel} x={W - px - 12} y={cy + 20} textAnchor="end">
-                  {`→ ${fmt(s.max)}`}
+              {strip ? null : merged ? (
+                <text className={styles.endLabel} x={(minX + maxX) / 2} y={base + 16} textAnchor="middle">
+                  {`${minText} to ${maxText}`}
                 </text>
-              ) : null}
+              ) : (
+                <>
+                  <text
+                    className={styles.endLabel}
+                    x={Math.max(0, minX - 3)}
+                    y={base + 16}
+                    textAnchor="start"
+                  >
+                    {minText}
+                  </text>
+                  <text className={styles.endLabel} x={Math.min(W, maxX + 3)} y={base + 16} textAnchor="end">
+                    {maxText}
+                  </text>
+                </>
+              )}
             </>
           )}
         </svg>
@@ -227,7 +279,7 @@ export function BoxPlot({
             <Mark
               as="rect"
               className={styles.hit}
-              tip={`Middle 50%: ${fmt(s.p25)} to ${fmt(s.p75)} (IQR ${fmt(s.p75 - s.p25)}${s.p75 === s.p25 ? ', IQR 0' : ''})${s.percentiles ? '' : '. Percentiles need 20 or more values.'}`}
+              tip={<BoxTip s={s} fmt={fmt} />}
               aria-label={`Middle half, ${fmt(s.p25)} to ${fmt(s.p75)}, filter the items`}
               isSelected={selected === 'box'}
               onPick={onRange ? () => onRange('box', s.p25, s.p75) : undefined}
@@ -332,89 +384,44 @@ export function BoxPlot({
 
 const diamond = (x: number, cy: number) => `M${x},${cy - 5}L${x + 5},${cy}L${x},${cy + 5}L${x - 5},${cy}Z`;
 
-/** Six equal cells (Min, P25, Median, Mean, P75, Max) and, for additive quantities, a Total row. Visible text, never hover-only. */
-export function BoxNumbers({
-  stats: s,
-  format: fmt,
-  total,
-}: {
-  stats: BoxStats;
-  format: (v: number) => string;
-  /** Formatted total; undefined when the quantity is not additive. */
-  total?: string;
-}) {
-  const [ref, width] = useMeasuredWidth<HTMLDListElement>(300);
-  const abbreviate = width < 300;
-  const one = s.n === 1;
-  // two rows of three when the longest value cannot fit a sixth of the width (mono, about 8px a character)
-  const longest = Math.max(...[s.min, s.p25, s.median, s.mean, s.p75, s.max].map((v) => fmt(v).length));
-  const wrap = width / 6 < longest * 8 + 6;
-  const cells: Array<[string, string, string]> = [
-    ['Min', fmt(s.min), 'Min'],
-    ['P25', one ? '-' : fmt(s.p25), 'P25'],
-    [abbreviate ? 'Med' : 'Median', fmt(s.median), 'Median'],
-    ['Mean', fmt(s.mean), 'Mean'],
-    ['P75', one ? '-' : fmt(s.p75), 'P75'],
-    ['Max', fmt(s.max), 'Max'],
+/** The tooltip of the box: the middle half and all six numbers (the number row's replacement, round 5 R2). */
+function BoxTip({ s, fmt }: { s: BoxStats; fmt: (v: number) => string }) {
+  const cells: Array<[string, number]> = [
+    ['Min', s.min],
+    ['P25', s.p25],
+    ['Median', s.median],
+    ['Mean', s.mean],
+    ['P75', s.p75],
+    ['Max', s.max],
   ];
-  if (!s.n) return null;
   return (
-    <div className={styles.numsWrap}>
-      <dl
-        ref={ref}
-        className={styles.nums}
-        data-wrap={wrap ? '' : undefined}
-        aria-label="Distribution values"
-      >
-        {cells.map(([label, value, full]) => (
-          <div key={full} className={styles.num}>
-            <dt title={full}>{label}</dt>
-            <dd>{value}</dd>
+    <div className={styles.tip}>
+      <div className={styles.tipTitle}>
+        {`Middle 50%: ${fmt(s.p25)} to ${fmt(s.p75)} (IQR ${fmt(s.p75 - s.p25)})`}
+      </div>
+      <dl className={styles.tipGrid}>
+        {cells.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{fmt(v)}</dd>
           </div>
         ))}
       </dl>
-      {total !== undefined ? (
-        <dl className={styles.total} aria-label="Total">
-          <dt title="Sum of all values across all items and runs">Total</dt>
-          <dd>{total}</dd>
-        </dl>
-      ) : null}
+      {s.percentiles ? null : <div className={styles.tipNote}>Percentiles need 20 or more values.</div>}
     </div>
   );
 }
 
-const HOW_TO_READ =
-  'The box is the middle half of the items, the line is the median, the diamond the mean. Whiskers reach the 5th and 95th percentile; dots are items outside them.';
+/** The sentence behind the "How to read the box plot" help marker in a card header. */
+export const HOW_TO_READ =
+  'The box is the middle half of the items, the line is the median, the diamond the mean. Whiskers reach the 5th and 95th percentile; dots are items outside them. Hover or focus the box for all six numbers.';
 
-/** The one-line key under every plot (same shapes as the plot) with the "How to read" help. */
-export function BoxLegend({ children }: { children?: ReactNode }) {
+/** One muted key line under a card that stacks rows (per pass, step timings). */
+export function BoxKey() {
   return (
-    <ul className={styles.legend} aria-label="How to read the box plot">
-      <li>
-        <span className={styles.lgBox} aria-hidden="true" />
-        middle 50%
-      </li>
-      <li>
-        <span className={styles.lgWhisker} aria-hidden="true" />
-        p5 to p95
-      </li>
-      <li>
-        <span className={styles.lgMedian} aria-hidden="true" />
-        median
-      </li>
-      <li>
-        <span className={styles.lgMean} aria-hidden="true" />
-        mean
-      </li>
-      <li>
-        <span className={styles.lgDot} aria-hidden="true" />
-        outside p5 to p95
-      </li>
-      <li>
-        <HelpMarker label="How to read the box plot">{HOW_TO_READ}</HelpMarker>
-      </li>
-      {children}
-    </ul>
+    <p className={styles.key}>
+      Box: middle 50%. Line: median. Diamond: mean. Whiskers: p5 to p95. Dots: outside the whiskers.
+    </p>
   );
 }
 
@@ -422,15 +429,15 @@ export function BoxLegend({ children }: { children?: ReactNode }) {
 export function BoxTrack({
   stats,
   x,
-  tone,
+  tone = SERIES_TONE,
   height = 20,
   className,
 }: {
   stats: Pick<BoxStats, 'p5' | 'p25' | 'median' | 'mean' | 'p75' | 'p95'>;
   /** Value to a 0..1 position. */
   x: (v: number) => number;
-  /** Colour token for the glyph in the slow tail (`--score-*`); default neutral grey. */
-  tone?: string;
+  /** One tone for the row: the band of its own median, or series 1. */
+  tone?: BoxTone;
   height?: number;
   className?: string;
 }) {
@@ -438,7 +445,9 @@ export function BoxTrack({
   return (
     <span
       className={[styles.track, className].filter(Boolean).join(' ')}
-      style={{ blockSize: height, ...(tone ? { '--box-tone': tone } : {}) } as CSSProperties}
+      style={{ blockSize: height } as CSSProperties}
+      data-band={tone.band}
+      data-series={tone.band ? undefined : (tone.series ?? 1)}
       data-box-track=""
     >
       <span

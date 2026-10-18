@@ -111,7 +111,8 @@ export function Mark({
     };
   } else if (tip !== undefined) {
     // A passive HTML mark with a tooltip is still reachable by keyboard (SVG marks live inside a role=img plot).
-    if (rest.tabIndex === undefined && !['g', 'circle', 'rect', 'path', 'line'].includes(as)) props.tabIndex = 0;
+    if (rest.tabIndex === undefined && !['g', 'circle', 'rect', 'path', 'line'].includes(as))
+      props.tabIndex = 0;
     props.onClick = handlers.onClick;
   }
   return createElement(as, props as SVGProps<SVGElement>, children);

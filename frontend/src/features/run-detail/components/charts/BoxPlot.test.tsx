@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { boxAxis } from '../../lib/boxAxis';
 import { boxStats } from '../../lib/boxStats';
-import { BoxLegend, BoxNumbers, BoxPlot, boxSentence } from './BoxPlot';
+import { BoxKey, BoxPlot, boxSentence } from './BoxPlot';
 
 const fmt = (v: number) => String(Math.round(v * 100) / 100);
 const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
@@ -98,83 +98,57 @@ describe('BoxPlot accessibility and interaction', () => {
   });
 });
 
-describe('BoxNumbers and legend', () => {
-  it('lists Min, P25, Median, Mean, P75, Max and a Total row only when given', () => {
-    const stats = boxStats(range(100));
-    const { rerender } = render(<BoxNumbers stats={stats} format={fmt} />);
+describe('no number row (round 5 R2)', () => {
+  it('draws no dl of values, no Total row and no legend list', () => {
+    const { container } = plot(range(100));
+    expect(container.querySelector('dl')).toBeNull();
     expect(screen.queryByText('Total')).toBeNull();
-    for (const label of ['Min', 'P25', 'Mean', 'P75', 'Max'])
-      expect(screen.getByText(label)).toBeInTheDocument();
-    rerender(<BoxNumbers stats={stats} format={fmt} total="5050" />);
-    expect(screen.getByText('Total')).toBeInTheDocument();
-    expect(screen.getByText('5050')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'How to read the box plot' })).toBeNull();
   });
 
-  it('shows "-" for P25 and P75 with a single value', () => {
-    render(<BoxNumbers stats={boxStats([7])} format={fmt} />);
-    expect(screen.getAllByText('-')).toHaveLength(2);
+  it('prints the median above the line and the data min and max under the baseline, nothing else', () => {
+    const { container } = plot(range(100), { name: 'm' });
+    const texts = [...container.querySelectorAll('svg[role=img] text')].map((t) => t.textContent);
+    expect(texts).toEqual(['50.5', '1', '100']);
   });
 
-  it('the legend names the five glyphs', () => {
-    render(<BoxLegend />);
-    const list = screen.getByRole('list', { name: 'How to read the box plot' });
-    expect(within(list).getByText('middle 50%')).toBeInTheDocument();
-    expect(within(list).getByText('outside p5 to p95')).toBeInTheDocument();
-  });
-});
-
-describe('BoxNumbers at the 279px column (the "Med" abbreviation)', () => {
-  const measure = (width: number) => {
-    class RO {
-      constructor(private cb: () => void) {}
-      observe() {
-        this.cb();
-      }
-      disconnect() {}
-      unobserve() {}
-    }
-    vi.stubGlobal('ResizeObserver', RO);
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
-      width,
-      height: 40,
-      top: 0,
-      left: 0,
-      right: width,
-      bottom: 40,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-  };
-
-  it('abbreviates Median to Med in a 237px card body and keeps the other labels', () => {
-    measure(237);
-    render(<BoxNumbers stats={boxStats(range(100))} format={fmt} />);
-    expect(screen.getByText('Med')).toBeInTheDocument();
-    expect(screen.queryByText('Median')).toBeNull();
-    for (const label of ['Min', 'P25', 'Mean', 'P75', 'Max'])
-      expect(screen.getByText(label)).toBeInTheDocument();
-    // the full name stays in the title (and the dl is a list of term / definition pairs)
-    expect(screen.getByText('Med').getAttribute('title')).toBe('Median');
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+  it('merges the end labels into "a to b" when the data span is too narrow for two labels', () => {
+    const { container } = plot([1, 1.01, 1.02, 1.03, 1.04], { name: 'm' });
+    const texts = [...container.querySelectorAll('svg[role=img] text')].map((t) => t.textContent);
+    expect(texts.some((t) => / to /.test(t ?? ''))).toBe(true);
+    expect(texts).toHaveLength(2);
   });
 
-  it('keeps Median at 300px and wider', () => {
-    measure(340);
-    render(<BoxNumbers stats={boxStats(range(100))} format={fmt} />);
-    expect(screen.getByText('Median')).toBeInTheDocument();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+  it('puts all six numbers and the IQR in the box tooltip', async () => {
+    const user = userEvent.setup();
+    plot(range(100), { onRange: () => {}, onItem: () => {} });
+    await user.tab();
+    const tip = await screen.findByRole('tooltip');
+    for (const label of ['Min', 'P25', 'Median', 'Mean', 'P75', 'Max'])
+      expect(within(tip).getByText(label)).toBeInTheDocument();
+    expect(tip).toHaveTextContent('IQR 49.5');
   });
 
-  it('wraps to two rows of three when the longest value cannot fit a sixth of the width', () => {
-    measure(237);
-    const { container } = render(
-      <BoxNumbers stats={boxStats([0.0012, 0.0013, 0.0014])} format={(v) => `$${v.toFixed(4)}`} />,
+  it('takes series 1 by default and a band when asked; the sentence ends with the band', () => {
+    const { container, rerender } = plot(range(100));
+    expect(container.firstElementChild?.getAttribute('data-series')).toBe('1');
+    const stats = boxStats(range(100));
+    rerender(
+      <BoxPlot
+        stats={stats}
+        axis={boxAxis(stats)}
+        format={fmt}
+        tone={{ band: 3 }}
+        name={boxSentence('m', stats, fmt, { band: 3 })}
+      />,
     );
-    expect(container.querySelector('dl[data-wrap]')).not.toBeNull();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+    expect(container.firstElementChild?.getAttribute('data-band')).toBe('3');
+    expect(container.firstElementChild?.hasAttribute('data-series')).toBe(false);
+    expect(boxSentence('m', stats, fmt, { band: 3 })).toMatch(/; band 3 of 5\.$/);
+  });
+
+  it('the key line names the glyphs', () => {
+    render(<BoxKey />);
+    expect(screen.getByText(/Box: middle 50%/)).toBeInTheDocument();
   });
 });

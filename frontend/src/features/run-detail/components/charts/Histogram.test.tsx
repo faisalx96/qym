@@ -26,7 +26,7 @@ describe('Histogram', () => {
     const cols = container.querySelectorAll('[data-zero], [data-empty], button');
     expect(container.querySelectorAll('[data-text]').length).toBeGreaterThan(0);
     const first = container.querySelector('button[data-bucket="0"]')!;
-    const kids = [...first.children];
+    const kids = [...first.children[0]!.children];
     expect(kids[0]!.getAttribute('data-text')).toBe('7');
     expect(kids[1]!.className).toMatch(/bar/);
     expect(cols.length).toBeGreaterThan(0);
@@ -38,7 +38,7 @@ describe('Histogram', () => {
     );
     expect(container.querySelectorAll('button[data-bucket]')).toHaveLength(2);
     const empty = container.querySelector('[data-empty]')!;
-    expect(empty.children[0]!.getAttribute('data-text')).toBe('');
+    expect(empty.children[0]!.children[0]!.getAttribute('data-text')).toBe('');
   });
 
   it('sets --p on each column to count / max', () => {
@@ -93,7 +93,7 @@ describe('BoolBars', () => {
       />,
     );
     const fail = container.querySelector('[data-segment="failed"]')!;
-    expect(fail.children[0]!.getAttribute('data-text')).toBe('0');
+    expect(fail.children[0]!.children[0]!.getAttribute('data-text')).toBe('0');
     expect(fail).toBeDisabled();
   });
 });

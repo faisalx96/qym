@@ -39,3 +39,9 @@ export function boxTickFormatter(kind: BoxKind): (v: number) => string {
 export function showsTotal(kind: BoxKind, negative: boolean): boolean {
   return !negative && (kind === 'numeric' || kind === 'tokens' || kind === 'cost');
 }
+
+/** The formatted total of an additive quantity, or undefined (latency, scores, percentages, negative values, no values). */
+export function boxTotalText(values: number[], kind: BoxKind): string | undefined {
+  if (!values.length || values.some((v) => v < 0) || !showsTotal(kind, false)) return undefined;
+  return boxFormatter(kind)(values.reduce((a, v) => a + v, 0));
+}
