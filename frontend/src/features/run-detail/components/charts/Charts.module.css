@@ -214,8 +214,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .bar[data-enter],
-  .count[data-enter],
-  .dot2[data-enter] {
+  .count[data-enter] {
     animation: none;
   }
 }
@@ -327,6 +326,13 @@
 @keyframes dot-in {
   from {
     fill-opacity: 0;
+  }
+}
+
+/* after the rule it overrides: equal specificity, the later one wins */
+@media (prefers-reduced-motion: reduce) {
+  .dot2[data-enter] {
+    animation: none;
   }
 }
 

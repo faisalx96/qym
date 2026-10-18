@@ -148,3 +148,11 @@ New criterion **B13, Items rows painted**: cold chunk Fast 3G <= 2.6 s (baseline
 
 **A5/A6 items at 4x**: 24-25 dropped frames, 23-31 long tasks in my runs (37 once, by the reviewer, on a loaded machine). The long-task number is noise-bound; the amended target is set to reality: dropped <= 26, long tasks <= 40.
 Items handler 0.59 / 2.51 ms, 26 / 27 commits (unchanged).
+
+### 7.1 Gate after the review fixes
+
+`npm run check` (cost 3): 164 files / 1,404 tests, tsc, eslint, stylelint green. `npm run build` (cost 2): green. Full `npm run e2e` (cost 4, includes perf, runs-list, run-detail): 1,312 passed, 21 skipped,
+10 failed in the one full run. Eight were `database is locked` 500s of the shared SQLite file under a busy machine (shell, trash, visual-language) and passed when re-run (the two re-runs of
+shell + trash + visual-language + perf + the two run-detail specs: 216 passed with 2 load-related timeouts, then 218 passed, 0 failed). Two were real: the box-plot reduced-motion rule for `.dot2[data-enter]` sat before
+the rule it overrides (equal specificity, the later wins): fixed by moving it after; `redesign2-items` (Raw radio outside the viewport while the table re-flows) passed in both re-runs. `pytest tests/platform` was not re-run:
+the backend is unchanged since the 2,781-passed run.
