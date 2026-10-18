@@ -19,7 +19,7 @@ function Cards({ count, height }: { count: number; height: number }) {
   return (
     <div className={panels.chartGrid} data-count={count}>
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className={styles.card} style={{ height }} />
+        <div key={i} className={styles.block} style={{ height }} />
       ))}
     </div>
   );

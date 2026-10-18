@@ -1,4 +1,4 @@
-.card {
+.block {
   border-radius: var(--radius-md);
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
