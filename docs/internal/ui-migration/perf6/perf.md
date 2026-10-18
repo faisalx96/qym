@@ -521,6 +521,6 @@ and `review_event_count` folded into `?view=summary`; `reasons` in stage 2; hero
 |---|---|---|---|
 | A5/A6 runs | <= 16 dropped frames, <= 22 long tasks at 4x (50 rows) | 14 / 19 | one sticky layer per frozen cell; the 25-row default (8 / 9) was reverted |
 | A5/A6 items | <= 26 dropped frames, <= 40 long tasks at 4x | 24-25 / 23-31 (37 once) | Paint, Raster and hit-testing under 4x CPU; the number is noise-bound |
-| A8 | one table commit, <= 90 ms (1x), <= 300 ms (4x) | 80 / 289 ms | cells are memoised; the rest is native layout and paint of 50 x 68 cells. The original <= 40 / <= 120 ms is not met |
+| A8 | one table commit, <= 90 ms (1x), <= 300 ms (4x) | 80 / 289 ms | cells are memoised; the rest is native layout and paint of 50 x 68 cells. The original <= 40 / <= 120 ms is not met. The e2e (`table-freeze.spec.ts`) asserts the 1x number and the commit count; the 4x number is asserted by `measure/freeze-toggle.mts` only (review O5) |
 | A9 | sticky <= 270; Layerize <= 650 ms (1x), <= 2,300 ms (4x) at 50 rows | 260; 596 / 2,141 | default page size back to 50; E2/E3 not built; 25 rows is an owner option |
 | B13 (new) | Items rows painted: cold Fast 3G <= 2.6 s, deep link Fast 3G <= 6.7 s, local <= 350 ms | 2,567 ms; 6,464 ms; 170-316 ms | Items chunk starts with the page and before the texts; tiny chunks merged |
