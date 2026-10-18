@@ -16,6 +16,7 @@ const RUN = (process.env.RUN ?? 'big') as 'big' | 'wide';
 const NET = (process.env.NET ?? 'none') as 'none' | 'fast3g';
 const KIND = (process.env.PATHKIND ?? 'nav') as 'nav' | 'deep';
 const REPS = Number(process.env.REPS ?? 3);
+const COLD = process.env.COLDCHUNK === '1'; // nav only: the reader clicks before the idle prefetch of the page chunk (saveData disables it)
 const WARM = process.env.WARMCHUNK === '1'; // nav only: the route chunk was already fetched (what idle prefetch from the list would give)
 const PLOT = process.env.PLOT ?? '';
 const runId = RUN === 'big' ? seed.big : seed.wide;
@@ -50,7 +51,7 @@ const browser = await launch();
 const results: Array<Record<string, unknown>> = [];
 let lastReqs: Req[] = [];
 for (let rep = 0; rep < REPS; rep++) {
-  const { page, cdp } = await newPage(browser, { width: 1440, height: 900, init: [WATCH] });
+  const { page, cdp } = await newPage(browser, { width: 1440, height: 900, init: [WATCH, ...(COLD ? ["Object.defineProperty(navigator, 'connection', { get: () => ({ saveData: true }), configurable: true });"] : [])] });
   await cdp.send('Network.enable');
   await cdp.send('Network.setCacheDisabled', { cacheDisabled: false });
   const reqs = new Map<string, Req>();
@@ -166,4 +167,4 @@ if (PLOT) {
   await svgToPng(b2, `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}"><text x="4" y="14" fill="#e6e9ef" font-size="12" font-family="monospace">${PLOT}: ${RUN} run, ${KIND}, ${NET} (median of ${REPS}); orange = /api, blue = JS</text>${mk}${bars}<text x="${W / 2}" y="${h - 6}" fill="#9aa3b2" font-size="10" text-anchor="middle" font-family="monospace">ms since navigation (last rep, 0..${Math.round(tmax)})</text></svg>`, `${PLOT}.png`, W, h);
   await b2.close();
 }
-save(`load-${RUN}-${KIND}-${NET}${WARM ? '-warmchunk' : ''}`, { run: RUN, kind: KIND, net: NET, median: summary, runs: results });
+save(`load-${RUN}-${KIND}-${NET}${WARM ? '-warmchunk' : ''}${COLD ? '-coldchunk' : ''}`, { run: RUN, kind: KIND, net: NET, median: summary, runs: results });

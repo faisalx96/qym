@@ -8,11 +8,13 @@ import { fullWidth } from '@/features/shell/layout';
 import { useRunQuery, useRunSummaryQuery } from '@/api/runs';
 import { useDelayedPending } from '@/lib/pending';
 import { ErrorState, LinkButton, Skeleton } from '@/ui';
+import { loadItemsSection, loadOverviewTab } from './chunks';
 import { RunBody } from './RunBody';
 
-// The Overview and the Items table are what the rows paint: their chunks start with this page, in step with the rows request.
-void import('./components/panels/OverviewTab');
-void import('./components/ItemsSection');
+// The Overview and the Items table are what the rows paint: their chunks start with this page, in step with the rows
+// request. (Started with the page's own chunk they would share a slow link with it: header 2.3 s instead of 1.2 s on Fast 3G.)
+// The Items chunk follows the Overview's.
+void loadOverviewTab().then(() => loadItemsSection());
 
 /** Name the failure: a missing run, no access, an ended session or a server problem each say so. */
 const RUN_ERROR_TITLES: Record<string, string> = {

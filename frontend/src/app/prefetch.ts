@@ -5,9 +5,10 @@
 import { useMemo, useRef } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { prefetchRun } from '@/api/runs';
+import { once } from '@/lib/once';
 
 /** The run page's route chunk; the router's lazy page and every prefetch share this one import. */
-export const loadRunDetailPage = () => import('@/features/run-detail/RunDetailPage');
+export const loadRunDetailPage = once(() => import('@/features/run-detail/RunDetailPage'));
 
 const INTENT_DELAY_MS = 80;
 

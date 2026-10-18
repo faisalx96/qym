@@ -15,6 +15,7 @@ import { QuickFilters } from './components/QuickFilters';
 import { ReportSections, isSectionKey, sectionDomId } from './components/ReportSections';
 import { SectionNav, type SectionId } from './components/SectionNav';
 import { ItemsSkeleton } from './components/StageSkeletons';
+import { loadItemsSection, loadTraceHost } from './chunks';
 import { useItemSearch } from './hooks/useItemSearch';
 import { useLiveRun } from './hooks/useLiveRun';
 import { alignToElement } from '@/lib/scrollToElement';
@@ -37,10 +38,8 @@ function rulesNeedText(node: FilterNode): boolean {
 }
 
 // The Items table and the trace drawer are separate chunks: the header and the Overview do not wait for them.
-const ItemsSection = lazy(() =>
-  import('./components/ItemsSection').then((m) => ({ default: m.ItemsSection })),
-);
-const TraceHost = lazy(() => import('./components/TraceHost').then((m) => ({ default: m.TraceHost })));
+const ItemsSection = lazy(() => loadItemsSection().then((m) => ({ default: m.ItemsSection })));
+const TraceHost = lazy(() => loadTraceHost().then((m) => ({ default: m.TraceHost })));
 
 export const WIDE_QUERY = '(min-width: 1200px)';
 

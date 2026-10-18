@@ -1,5 +1,7 @@
 /** The analysis sections of the run report, stacked at full width (legacy order), plus the nav entries that point at them. */
 import { lazy, Suspense, useMemo } from 'react';
+import { once } from '@/lib/once';
+import { loadOverviewTab } from '../chunks';
 import { useReviewHistoryQuery } from '@/api/runs';
 import { metricDirectionLabel } from '@/lib/metrics';
 import { ReportSection, StatStrip } from '@/ui';
@@ -12,13 +14,31 @@ import { BlockSkeleton, ErrorsSkeleton, OverviewSkeleton } from './StageSkeleton
 // Every analysis panel is its own chunk, fetched when its section mounts (the Overview's starts with the page, below).
 const panel = <K extends string>(load: () => Promise<Record<K, React.ComponentType>>, name: K) =>
   lazy(() => load().then((m) => ({ default: m[name] })));
-const OverviewTab = panel(() => import('./panels/OverviewTab'), 'OverviewTab');
-const RepeatTab = panel(() => import('./panels/RepeatTab'), 'RepeatTab');
-const LatencyTab = panel(() => import('./panels/LatencyTab'), 'LatencyTab');
-const DeepTab = panel(() => import('./panels/DeepTab'), 'DeepTab');
-const CategoriesTab = panel(() => import('./panels/CategoriesTab'), 'CategoriesTab');
-const ErrorsTab = panel(() => import('./panels/ErrorsTab'), 'ErrorsTab');
-const RootCauseTab = panel(() => import('./panels/RootCauseTab'), 'RootCauseTab');
+const OverviewTab = panel(loadOverviewTab, 'OverviewTab');
+const RepeatTab = panel(
+  once(() => import('./panels/RepeatTab')),
+  'RepeatTab',
+);
+const LatencyTab = panel(
+  once(() => import('./panels/LatencyTab')),
+  'LatencyTab',
+);
+const DeepTab = panel(
+  once(() => import('./panels/DeepTab')),
+  'DeepTab',
+);
+const CategoriesTab = panel(
+  once(() => import('./panels/CategoriesTab')),
+  'CategoriesTab',
+);
+const ErrorsTab = panel(
+  once(() => import('./panels/ErrorsTab')),
+  'ErrorsTab',
+);
+const RootCauseTab = panel(
+  once(() => import('./panels/RootCauseTab')),
+  'RootCauseTab',
+);
 
 /** A panel's body: its skeleton while the rows (or the panel's chunk) are on the way. */
 function Staged({
