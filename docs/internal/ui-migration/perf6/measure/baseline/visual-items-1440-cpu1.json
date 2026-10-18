@@ -1,0 +1,19 @@
+{
+  "table": "items",
+  "width": 1440,
+  "cpu": 1,
+  "target": {
+    "line": 245.859375,
+    "x": 216,
+    "headH": 24
+  },
+  "refPos": 151,
+  "compositedFrames": 122,
+  "framesWithMarker": 122,
+  "judged": 92,
+  "medianLagPx": 0,
+  "p95LagPx": 0,
+  "maxLagPx": 0,
+  "framesLagOver1px": 0,
+  "presentedFps": 30
+}

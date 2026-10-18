@@ -6,6 +6,7 @@
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/http';
+import type { RunRow, RunsPage } from '@/api/dashboardTypes';
 import type {
   CategoryCatalog,
   GroupMetricsPayload,
@@ -18,6 +19,7 @@ import type {
   PassesPayload,
   ReviewHistoryPayload,
   Row,
+  RowGroup,
   RowMutationResult,
   RunPayload,
   StepLatencyPayload,
@@ -30,7 +32,11 @@ const runUrl = (runId: string, suffix = '') => `/api/runs/${encodeRunId(runId)}$
 
 export const runKeys = {
   all: (runId: string) => ['run', runId] as const,
+  summary: (runId: string) => ['run', runId, 'summary'] as const,
+  /** The rows store: stage 2 (CORE_GROUPS) plus every group merged in later. */
   compact: (runId: string) => ['run', runId, 'compact'] as const,
+  /** One extra group on its way into the store. */
+  rows: (runId: string, group: RowGroup) => ['run', runId, 'rows', group] as const,
   live: (runId: string) => ['run', runId, 'live-status'] as const,
   passes: (runId: string) => ['run', runId, 'passes'] as const,
   groupMetrics: (runId: string, metric: string, threshold: number) =>
@@ -69,17 +75,195 @@ export async function fetchRunCompact(runId: string): Promise<RunPayload> {
   return classifyEnvelope(data);
 }
 
-export function useRunQuery(runId: string, opts: { refetchInterval?: number | false } = {}) {
-  const qc = useQueryClient();
-  return useQuery({
+/* ── staged loading (perf round 6) ─────────────────────────────────────────────────────────────
+ * Stage 0: the header from the runs list cache (placeholder). Stage 1: `?view=summary` (about 1.5 kB gzip).
+ * Stage 2: the rows of CORE_GROUPS (everything the report sections read except the item texts). Stage 3: the
+ * `text` group, when the Items section is near. Every response is merged into one rows store by item id. */
+
+/** Row groups of the first rows request: scores, reasons (metric meta), item metadata, trace stats and review state. */
+export const CORE_GROUPS: RowGroup[] = ['scores', 'reasons', 'categories', 'traces', 'review'];
+/** Groups loaded on demand, when a section that reads them is near. */
+export const LATE_GROUPS: RowGroup[] = ['text'];
+
+export async function fetchRunSummary(runId: string, signal?: AbortSignal): Promise<RunPayload> {
+  const data = await api.get<RunPayload & { error?: string }>(runUrl(runId, '?view=summary'), { signal });
+  return classifyEnvelope(data);
+}
+
+export async function fetchRunRows(
+  runId: string,
+  groups: RowGroup[],
+  signal?: AbortSignal,
+): Promise<RunPayload> {
+  const data = await api.get<RunPayload & { error?: string }>(
+    runUrl(runId, `?view=compact&fields=${groups.join(',')}`),
+    { signal },
+  );
+  return classifyEnvelope(data);
+}
+
+/** The groups a payload's rows carry (a full payload carries all of them). */
+export function loadedGroups(payload: RunPayload | undefined): RowGroup[] {
+  return payload?.snapshot.row_fields ?? [...CORE_GROUPS, ...LATE_GROUPS];
+}
+
+/** A run header from a row of the runs list: what stage 0 paints before any request answers. */
+export function runFromListRow(row: RunRow, project?: RunPayload['run']['project']): RunPayload['run'] {
+  return {
+    provisional: true,
+    project,
+    run_id: row.run_id,
+    file_path: row.file_path,
+    task_name: row.task_name,
+    dataset_name: row.dataset_name,
+    dataset_version: row.dataset_version,
+    dataset_aliases: row.dataset_aliases,
+    dataset_slug: row.dataset_slug,
+    model_name: row.model_name,
+    run_name: row.run_name,
+    external_run_id: row.external_run_id,
+    metric_names: row.metrics,
+    metric_specs: row.metric_specs,
+    status: row.status,
+    status_reason: row.status_reason,
+    stop_requested: row.stop_requested,
+    owner: row.owner,
+    started_at: row.started_at,
+    git_branch: row.git_branch,
+    git_commit: row.git_commit,
+    trace_stats: row.trace_stats as RunPayload['run']['trace_stats'],
+    samples: row.samples,
+    last_completed_pass: row.last_completed_pass ?? undefined,
+    experiment: row.experiment as RunPayload['run']['experiment'],
+    versioning_details: row.versioning_details,
+    origin: row.origin,
+    error_count: row.error_count,
+    execution_count: row.execution_count,
+    execution_error_count: row.execution_error_count,
+    execution_success_count: row.execution_success_count,
+    duration_ms: row.duration_ms,
+  };
+}
+
+/** The run in any cached page of the runs list of this project (stage 0), or undefined on a cold start. */
+export function runRowFromListCache(qc: QueryClient, slug: string, runId: string): RunRow | undefined {
+  for (const [, page] of qc.getQueriesData<RunsPage>({ queryKey: ['dashboard', slug, 'runs'] })) {
+    const hit =
+      page?.rows?.find((r) => r.run_id === runId) ?? page?.pinned_rows?.find((r) => r.run_id === runId);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** Merge the rows of another group request over the store: by item id, new keys added, order of `next`. */
+export function mergeRowGroups(previous: RunPayload | undefined, next: RunPayload): RunPayload {
+  if (!previous) return next;
+  const prevById = new Map(previous.snapshot.rows.map((row) => [row.item_id, row]));
+  const rows = next.snapshot.rows.map((row) => {
+    const old = prevById.get(row.item_id);
+    return old ? { ...old, ...row } : row;
+  });
+  const groups = [...new Set([...loadedGroups(previous), ...loadedGroups(next)])];
+  return { run: next.run, snapshot: { ...next.snapshot, rows, row_fields: groups } };
+}
+
+/**
+ * Merge a late group into the store. Only the rows' new keys come over: `run` and the rest of the snapshot stay as
+ * the page loaded them (a page that is stale must stay stale, e.g. its pass revision, until it reloads the core rows).
+ */
+export function mergeLateGroup(previous: RunPayload, late: RunPayload): RunPayload {
+  const lateById = new Map(late.snapshot.rows.map((row) => [row.item_id, row]));
+  const rows = previous.snapshot.rows.map((row) => {
+    const more = lateById.get(row.item_id);
+    return more ? { ...row, ...more } : row;
+  });
+  const groups = [...new Set([...loadedGroups(previous), ...loadedGroups(late)])];
+  return { ...previous, snapshot: { ...previous.snapshot, rows, row_fields: groups } };
+}
+
+export function runSummaryOptions(runId: string) {
+  return {
+    queryKey: runKeys.summary(runId),
+    queryFn: ({ signal }: { signal?: AbortSignal }) => fetchRunSummary(runId, signal),
+    staleTime: 10_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  };
+}
+
+/** Stage 2. A refetch (a live run) asks for the core groups and every late group already in the store. */
+export function runRowsOptions(
+  qc: QueryClient,
+  runId: string,
+  opts: { refetchInterval?: number | false } = {},
+) {
+  return {
     queryKey: runKeys.compact(runId),
-    queryFn: async () =>
-      reuseRows(qc.getQueryData<RunPayload>(runKeys.compact(runId)), await fetchRunCompact(runId)),
+    queryFn: async ({ signal }: { signal?: AbortSignal }) => {
+      const prev = qc.getQueryData<RunPayload>(runKeys.compact(runId));
+      const late = prev ? loadedGroups(prev).filter((g) => LATE_GROUPS.includes(g)) : [];
+      const next = await fetchRunRows(runId, [...CORE_GROUPS, ...late], signal);
+      return reuseRows(prev, mergeRowGroups(prev, next));
+    },
     staleTime: 10_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
     structuralSharing: false,
     refetchInterval: opts.refetchInterval ?? false,
+    retry: false,
+  } as const;
+}
+
+/** Stage 1 and 2 of a run, requested before the page that reads them has loaded (pointer intent, deep link). */
+export function prefetchRun(qc: QueryClient, runId: string): void {
+  void qc.prefetchQuery(runSummaryOptions(runId));
+  void qc.prefetchQuery(runRowsOptions(qc, runId));
+}
+
+export function useRunQuery(runId: string, opts: { refetchInterval?: number | false } = {}) {
+  const qc = useQueryClient();
+  return useQuery(runRowsOptions(qc, runId, opts));
+}
+
+export function useRunSummaryQuery(runId: string, slug: string, project?: RunPayload['run']['project']) {
+  const qc = useQueryClient();
+  return useQuery({
+    ...runSummaryOptions(runId),
+    // Stage 0: the list row paints the header at once; it is never treated as fresh data.
+    placeholderData: () => {
+      const row = runRowFromListCache(qc, slug, runId);
+      return row
+        ? ({
+            run: runFromListRow(row, project),
+            snapshot: {
+              rows: [],
+              stats: {},
+              rows_total: row.total_items,
+              metric_names: row.metrics,
+              metric_specs: row.metric_specs,
+            },
+          } as unknown as RunPayload)
+        : undefined;
+    },
+  });
+}
+
+/** One late group on its way into the rows store (stage 3). Aborted when its section leaves the page. */
+export function useRowGroupQuery(runId: string, group: RowGroup, enabled: boolean) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: runKeys.rows(runId, group),
+    queryFn: async ({ signal }) => {
+      const data = await fetchRunRows(runId, [group], signal);
+      qc.setQueryData<RunPayload>(runKeys.compact(runId), (prev) =>
+        prev ? mergeLateGroup(prev, data) : prev,
+      );
+      return true;
+    },
+    enabled,
+    staleTime: Infinity,
+    gcTime: 60_000,
     retry: false,
   });
 }

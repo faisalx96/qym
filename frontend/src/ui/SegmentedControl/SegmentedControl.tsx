@@ -31,6 +31,8 @@ export function SegmentedControl<K extends string>({
   isDisabled,
 }: SegmentedControlProps<K>) {
   const groupRef = useRef<HTMLDivElement>(null);
+  // a fresh `options` array on every parent render must not re-measure (a forced layout inside scroll commits)
+  const optionsKey = options.map((o) => o.value).join('\u0001');
   const [indicator, setIndicator] = useState<{ x: number; w: number } | null>(null);
   useLayoutEffect(() => {
     const group = groupRef.current;
@@ -38,13 +40,15 @@ export function SegmentedControl<K extends string>({
     const update = () => {
       const active = group.querySelector<HTMLElement>('[data-selected]');
       if (!active) return setIndicator(null);
-      setIndicator({ x: active.offsetLeft, w: active.offsetWidth });
+      const x = active.offsetLeft;
+      const w = active.offsetWidth;
+      setIndicator((p) => (p && p.x === x && p.w === w ? p : { x, w }));
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(group);
     return () => ro.disconnect();
-  }, [value, options]);
+  }, [value, optionsKey]);
   return (
     <RadioGroup
       ref={groupRef}

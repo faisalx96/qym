@@ -4899,6 +4899,97 @@ def search_run_items(
 
 
 
+# ``view=compact&fields=...``: the row keys of each group, so a page loads the
+# columns a section needs when the section is near (staged run-detail loading).
+# ``item_id`` and ``index`` ride with every group. A key that no group names
+# (a newer row field) is served with ``scores``, so the union of all groups is
+# always the whole compact row.
+ROW_FIELD_GROUPS: Dict[str, frozenset] = {
+    "scores": frozenset(
+        {
+            "status",
+            "error",
+            "execution_error_count",
+            "latency_ms",
+            "retry_count",
+            "time",
+            "metric_values",
+            "pass_scores",
+            "pass_attempts",
+            "__execution_error",
+            # a boolean the counts need ("not received"); it rides with the scores, not the text
+            "__has_output",
+        }
+    ),
+    "reasons": frozenset({"metric_meta", "pass_metric_meta", "pass_metric_analyses"}),
+    "categories": frozenset({"item_metadata"}),
+    "traces": frozenset({"trace_stats", "trace_id", "trace_url", "task_started_at_ms"}),
+    "text": frozenset({"input_preview", "output_digest", "output_received"}),
+    "review": frozenset(
+        {
+            "review_correction_id",
+            "review_correction_status",
+            "review_corrections",
+            "review_issue_statuses",
+            "pass_review_issue_statuses",
+            "compare_item_id",
+            "compare_alignment_source",
+            "__details_loaded",
+        }
+    ),
+}
+_ROW_IDENTITY = frozenset({"index", "item_id"})
+_ALL_GROUPED_KEYS = frozenset().union(*ROW_FIELD_GROUPS.values()) | _ROW_IDENTITY
+
+
+def parse_row_fields(fields: Optional[str]) -> Optional[List[str]]:
+    """The requested groups of ``fields`` (comma list), or None when absent."""
+    if fields is None:
+        return None
+    groups = [part.strip() for part in fields.split(",") if part.strip()]
+    unknown = [group for group in groups if group not in ROW_FIELD_GROUPS]
+    if not groups or unknown:
+        raise HTTPException(
+            422,
+            "fields must be a comma list of " + ", ".join(sorted(ROW_FIELD_GROUPS)),
+        )
+    return list(dict.fromkeys(groups))
+
+
+def project_row_fields(row: Dict[str, Any], groups: List[str]) -> Dict[str, Any]:
+    """One compact row cut down to the keys of ``groups`` (plus its identity)."""
+    keep = set(_ROW_IDENTITY)
+    for group in groups:
+        keep |= ROW_FIELD_GROUPS[group]
+    with_scores = "scores" in groups
+    return {
+        key: value
+        for key, value in row.items()
+        if key in keep or (with_scores and key not in _ALL_GROUPED_KEYS)
+    }
+
+
+def _summary_neighbors(db: Session, principal: Principal, run: Run) -> Optional[Dict[str, Any]]:
+    """The runs around this one in the default Runs order (newest first, no
+    filters), folded into the summary so the header needs no second request. A
+    page showing a filtered or sorted list asks ``/api/dashboard/neighbors``.
+    """
+    try:
+        from qym_platform.api.dashboard_stats import dashboard_neighbors
+
+        project = db.get(Project, run.project_id)
+        if project is None:
+            return None
+        result = dashboard_neighbors(
+            payload={"project_slug": project.slug, "run_id": run.id},
+            db=db,
+            principal=principal,
+        )
+        return result if isinstance(result, dict) else None
+    except HTTPException:
+        return None
+
+
 @router.get("/api/runs/{run_id}")
 def legacy_run_data(
     run_id: str,
@@ -4906,6 +4997,7 @@ def legacy_run_data(
     principal: Principal = Depends(require_ui_principal),
     view: Optional[str] = None,
     pass_number: Optional[int] = None,
+    fields: Optional[str] = None,
 ) -> Dict[str, Any]:
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
@@ -4918,15 +5010,31 @@ def legacy_run_data(
         raise HTTPException(422, "view must be full, compact or summary")
     if pass_number is not None and (view != "compact" or pass_number < 1):
         raise HTTPException(422, "pass_number (1 or more) needs view=compact")
+    row_groups = parse_row_fields(fields)
+    if row_groups is not None and view != "compact":
+        raise HTTPException(422, "fields needs view=compact")
     if view == "summary":
         # The run header (names, metrics, samples) without any item rows:
         # what a page needs before it chooses the rows it loads (C027).
-        return _with_item_visibility(
+        live_revision = (
+            _live_revision(db, run) if run.status in _LIVE_RUN_STATUSES else None
+        )
+        data = _with_item_visibility(
             db,
             principal,
             run,
             _build_run_data(db, run, item_ids=[], compact=True, principal=principal),
         )
+        if live_revision is not None and isinstance(data.get("run"), dict):
+            data["run"]["live_revision"] = live_revision
+        # Folded in so the first paint needs no further request: the pager's
+        # neighbours (default order) and the Reviews badge count.
+        data["snapshot"]["rows_total"] = (
+            db.query(func.count(RunItem.id)).filter(RunItem.run_id == run.id).scalar() or 0
+        )
+        data["neighbors"] = _summary_neighbors(db, principal, run)
+        data["review_event_count"] = len(review_history(db, run))
+        return data
     # Read before the rows are built: a page that follows a live run starts
     # from this revision (at worst one reload too many, never one missed).
     live_revision = (
@@ -4947,7 +5055,14 @@ def legacy_run_data(
             scope_row_to_pass(row, pass_number) for row in data["snapshot"]["rows"]
         ]
         data["snapshot"]["pass_number"] = pass_number
-    return _with_item_visibility(db, principal, run, data)
+    data = _with_item_visibility(db, principal, run, data)
+    if row_groups is not None:
+        # Cut after the visibility pass so a restricted viewer gets the same rows minus text.
+        data["snapshot"]["rows"] = [
+            project_row_fields(row, row_groups) for row in data["snapshot"]["rows"]
+        ]
+        data["snapshot"]["row_fields"] = row_groups
+    return data
 
 
 def _live_revision(db: Session, run: Run) -> str:

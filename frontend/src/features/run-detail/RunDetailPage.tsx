@@ -5,10 +5,16 @@ import { classifyError } from '@/lib/http';
 import { NotFound } from '@/features/shell/NotFound';
 import { useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
-import { useRunQuery } from '@/api/runs';
+import { useRunQuery, useRunSummaryQuery } from '@/api/runs';
 import { useDelayedPending } from '@/lib/pending';
 import { ErrorState, LinkButton, Skeleton } from '@/ui';
+import { loadItemsSection, loadOverviewTab } from './chunks';
 import { RunBody } from './RunBody';
+
+// The Overview and the Items table are what the rows paint: their chunks start with this page (with the summary and
+// the core rows already in flight), before the item texts and every other chunk. The Items table is read most.
+void loadOverviewTab();
+void loadItemsSection();
 
 /** Name the failure: a missing run, no access, an ended session or a server problem each say so. */
 const RUN_ERROR_TITLES: Record<string, string> = {
@@ -30,20 +36,33 @@ function RunSkeleton() {
 }
 
 function RunLoader({ runId }: { runId: string }) {
-  const query = useRunQuery(runId);
-  const { slug } = useProjectContext();
+  const { slug, project } = useProjectContext();
   const location = useLocation();
-  const showSkeleton = useDelayedPending(query.isPending);
-  if (query.isPending) return showSkeleton ? <RunSkeleton /> : null;
-  if (query.isError || !query.data) {
-    const kind = classifyError(query.error).kind;
+  // Staged loading (perf round 6): the header paints from the runs list cache (stage 0) and the summary (stage 1)
+  // while the rows (stage 2) are on their way in parallel; the late row groups load when their section nears.
+  const summary = useRunSummaryQuery(runId, slug, {
+    id: project.id,
+    slug: project.slug,
+    name: project.name,
+  });
+  const rows = useRunQuery(runId);
+  const payload = rows.data ?? summary.data;
+  const failed = !payload && (rows.isError || summary.isError);
+  const error = rows.error ?? summary.error;
+  const showSkeleton = useDelayedPending(!payload && !failed);
+  if (!payload && !failed) return showSkeleton ? <RunSkeleton /> : null;
+  if (failed || !payload) {
+    const kind = classifyError(error).kind;
     return (
       <div className={fullWidth}>
         <ErrorState
-          error={query.error}
+          error={error}
           title={RUN_ERROR_TITLES[kind] ?? 'Couldn’t load this run'}
           notFoundMessage="Run not found. It may have been deleted, or the link is wrong."
-          onRetry={() => void query.refetch()}
+          onRetry={() => {
+            void summary.refetch();
+            void rows.refetch();
+          }}
           action={
             <LinkButton to={projectPath(slug)} variant="neutral">
               ← Back to runs
@@ -54,11 +73,21 @@ function RunLoader({ runId }: { runId: string }) {
     );
   }
   // A link carrying the wrong project (old bookmark, hand-edited URL) lands under the run's own project.
-  const ownSlug = query.data.run.project?.slug;
+  const ownSlug = payload.run.project?.slug;
   if (ownSlug && ownSlug !== slug) {
     return <Navigate to={runPath(ownSlug, runId) + location.search + location.hash} replace />;
   }
-  return <RunBody runId={runId} payload={query.data} />;
+  // A summary that is only the list row (stage 0) has no review count or neighbours yet.
+  const summaryData = summary.isPlaceholderData ? undefined : summary.data;
+  return (
+    <RunBody
+      runId={runId}
+      payload={payload}
+      rowsPending={!rows.data}
+      summary={summaryData}
+      summaryPending={summary.isPlaceholderData || summary.isPending}
+    />
+  );
 }
 
 export function RunDetailPage() {

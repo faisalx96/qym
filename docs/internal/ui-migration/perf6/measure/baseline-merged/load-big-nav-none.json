@@ -1,0 +1,152 @@
+{
+  "run": "big",
+  "kind": "nav",
+  "net": "none",
+  "median": {
+    "heroMs": 246,
+    "overviewMs": 246,
+    "rowsMs": 246,
+    "ttiMs": 246,
+    "tbtMs": 52,
+    "cls": 0.0057,
+    "requests": 15,
+    "jsChunks": 6,
+    "jsKB": 103.3,
+    "apiRequests": 3,
+    "apiKB": 89.6,
+    "compactKB": 88.2,
+    "compactTtfbMs": 87,
+    "compactDoneMs": 143
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 246,
+      "skeletonMs": 39,
+      "overviewMs": 246,
+      "rowsMs": 246,
+      "ttiMs": 246,
+      "tbtMs": 51,
+      "cls": 0.0057,
+      "reactCommits": 291,
+      "requests": 15,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 87,
+      "compactDoneMs": 143,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @20-44ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @21-43ms",
+        "TextBlock-DBLChdZy.js 0.9kB @21-43ms",
+        "Collapse-POnQeTmm.js 1.0kB @21-43ms",
+        "structured-Bv4atLAx.js 1.4kB @22-43ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @22-43ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact 88.2kB @46-143ms",
+        "/api/dashboard/neighbors 1.1kB @209-277ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7/review-history 0.3kB @209-277ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 320,
+      "skeletonMs": 33,
+      "overviewMs": 320,
+      "rowsMs": 320,
+      "ttiMs": 320,
+      "tbtMs": 60,
+      "cls": 0.0057,
+      "reactCommits": 285,
+      "requests": 15,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 159,
+      "compactDoneMs": 208,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @10-35ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @10-35ms",
+        "TextBlock-DBLChdZy.js 0.9kB @10-35ms",
+        "Collapse-POnQeTmm.js 1.0kB @11-35ms",
+        "structured-Bv4atLAx.js 1.4kB @11-35ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @11-35ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact 88.2kB @38-208ms",
+        "/api/dashboard/neighbors 1.1kB @281-349ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7/review-history 0.3kB @281-349ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 229,
+      "skeletonMs": 38,
+      "overviewMs": 229,
+      "rowsMs": 229,
+      "ttiMs": 229,
+      "tbtMs": 52,
+      "cls": 0.0057,
+      "reactCommits": 286,
+      "requests": 15,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 72,
+      "compactDoneMs": 124,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @12-39ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @12-38ms",
+        "TextBlock-DBLChdZy.js 0.9kB @13-38ms",
+        "Collapse-POnQeTmm.js 1.0kB @13-38ms",
+        "structured-Bv4atLAx.js 1.4kB @13-39ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @14-39ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact 88.2kB @42-124ms",
+        "/api/dashboard/neighbors 1.1kB @191-255ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7/review-history 0.3kB @191-255ms"
+      ]
+    }
+  ]
+}

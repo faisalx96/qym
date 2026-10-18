@@ -98,6 +98,8 @@ test('many metrics never scroll the page sideways', async ({ page }) => {
     expect(overflow, `${width}px`).toBeLessThanOrEqual(0);
     // the displayed (first) metric stays among the shown columns and the input stays readable
     await expect(page.getByRole('columnheader', { name: new RegExp(names[0]!) }).first()).toBeVisible();
+    // the item texts load when the table is near (staged loading): bring it into view first
+    await showItems(page);
     const input = await page
       .getByRole('gridcell', { name: /^question 0 about/ })
       .first()

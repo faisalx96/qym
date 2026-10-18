@@ -1,0 +1,144 @@
+{
+  "run": "big",
+  "kind": "nav",
+  "net": "fast3g",
+  "median": {
+    "heroMs": 28,
+    "overviewMs": 969,
+    "rowsMs": 969,
+    "ttiMs": 969,
+    "tbtMs": 12,
+    "cls": 0.0089,
+    "requests": 9,
+    "jsChunks": 2,
+    "jsKB": 11.7,
+    "apiRequests": 4,
+    "apiKB": 87.7,
+    "compactKB": 55.9,
+    "compactTtfbMs": 573,
+    "compactDoneMs": 903
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 27,
+      "skeletonMs": 27,
+      "overviewMs": 968,
+      "rowsMs": 968,
+      "ttiMs": 968,
+      "tbtMs": 11,
+      "cls": 0.0089,
+      "reactCommits": 61,
+      "requests": 9,
+      "jsChunks": 2,
+      "jsKB": 11.7,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 573,
+      "compactDoneMs": 903,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "LatencyTab-DobyeR1z.js 5.1kB @917-1526ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @996-1665ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @2-584ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @2-903ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @996-1617ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @1006-1793ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 28,
+      "skeletonMs": 28,
+      "overviewMs": 982,
+      "rowsMs": 982,
+      "ttiMs": 982,
+      "tbtMs": 17,
+      "cls": 0.0089,
+      "reactCommits": 58,
+      "requests": 9,
+      "jsChunks": 2,
+      "jsKB": 11.7,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 580,
+      "compactDoneMs": 912,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "LatencyTab-DobyeR1z.js 5.1kB @928-1543ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @1014-1681ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @3-593ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @3-912ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @1014-1637ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @1024-1810ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 28,
+      "skeletonMs": 28,
+      "overviewMs": 969,
+      "rowsMs": 969,
+      "ttiMs": 969,
+      "tbtMs": 12,
+      "cls": 0.0089,
+      "reactCommits": 63,
+      "requests": 5,
+      "jsChunks": 0,
+      "jsKB": 0,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 573,
+      "compactDoneMs": 903,
+      "mountedAtOverview": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @2-584ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @2-903ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @1026-1592ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @1170-1900ms"
+      ]
+    }
+  ]
+}

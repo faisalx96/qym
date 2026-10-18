@@ -33,6 +33,7 @@ import {
   rememberRunFile,
   useRunsSelection,
 } from './selection';
+import { prefetchRunChunkWhenIdle } from '@/app/prefetch';
 import {
   contextForView,
   countActiveFilters,
@@ -151,6 +152,11 @@ export function RunsPage() {
 
   useTableScrollRestoration(pageRef, Boolean(d.data) && rows.length > 0);
   const sortSpec = parseSort(d.sort);
+  // Once the list is on screen and idle, the run page's chunk is fetched (not its data).
+  const haveRows = rows.length > 0;
+  useEffect(() => {
+    if (haveRows) prefetchRunChunkWhenIdle();
+  }, [haveRows]);
   const setPageSize = (size: number) => {
     writeLocal(KEYS.runsPageSize, String(size));
     setPageSizeState(size);

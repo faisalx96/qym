@@ -2,10 +2,19 @@
  * Report layout: hero on top, the sticky section nav, then every analysis section stacked at full width and the
  * Items table last. While the reader has narrowed the item set (a scope), a quick-filter sidebar appears.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { runPath } from '@/app/routes';
-import { usePassesQuery } from '@/api/runs';
+import { api as http } from '@/lib/http';
+import {
+  loadedGroups,
+  LATE_GROUPS,
+  runKeys,
+  stepLatencyUrl,
+  useRowGroupQuery,
+  usePassesQuery,
+} from '@/api/runs';
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { ReportLayout, ScopeBar, Stack } from '@/ui';
@@ -14,21 +23,32 @@ import { RunHero } from './components/RunHero';
 import { QuickFilters } from './components/QuickFilters';
 import { ReportSections, isSectionKey, sectionDomId } from './components/ReportSections';
 import { SectionNav, type SectionId } from './components/SectionNav';
-import { ItemsSection } from './components/ItemsSection';
-import { TraceHost } from './components/TraceHost';
+import { ItemsSkeleton } from './components/StageSkeletons';
+import { loadItemsSection, loadTraceHost, preloadPanels } from './chunks';
 import { useItemSearch } from './hooks/useItemSearch';
 import { useLiveRun } from './hooks/useLiveRun';
 import { alignToElement } from '@/lib/scrollToElement';
 import { useSidebarHidden } from '@/lib/useSidebarHidden';
 import { useScope } from './hooks/useScope';
 import { readPassParam, useRunView } from './hooks/useRunView';
-import { applyItemFilters } from './lib/filterRules';
+import { applyItemFilters, isFilterGroup, type FilterNode } from './lib/filterRules';
 import { inferPassSummary } from './lib/passScope';
 import { buildRunModel } from './lib/runModel';
 import { scoresLocked } from './lib/heroModel';
-import { RunContext, type RunPageValue } from './RunContext';
-import type { PassSummary, RunPayload } from './types';
+import { RunContext, useRunPage, type RunPageValue } from './RunContext';
+import type { PassSummary, RowGroup, RunPayload, StepLatencyPayload } from './types';
 import styles from './RunBody.module.css';
+
+/** A rule that reads item text (input, output or expected). */
+function rulesNeedText(node: FilterNode): boolean {
+  return isFilterGroup(node)
+    ? node.children.some(rulesNeedText)
+    : ['input', 'output', 'expected'].includes(String(node.field));
+}
+
+// The Items table and the trace drawer are separate chunks: the header and the Overview do not wait for them.
+const ItemsSection = lazy(() => loadItemsSection().then((m) => ({ default: m.ItemsSection })));
+const TraceHost = lazy(() => loadTraceHost().then((m) => ({ default: m.TraceHost })));
 
 export const WIDE_QUERY = '(min-width: 1200px)';
 
@@ -49,6 +69,7 @@ function scrollToSection(id: SectionId, host: HTMLElement | null) {
 
 /** Everything below the hero: nav, scope bar, sidebar, sections and items (needs the run context). */
 function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null> }) {
+  const { rowsPending } = useRunPage();
   const [params] = useSearchParams();
   const location = useLocation();
   const wide = useMediaQuery(WIDE_QUERY);
@@ -106,13 +127,33 @@ function RunReport({ pageRef }: { pageRef: React.RefObject<HTMLDivElement | null
           />
         ) : null}
         <ReportSections scopeNote={scopeNote} />
-        <ItemsSection />
+        {rowsPending ? (
+          <ItemsSkeleton />
+        ) : (
+          <Suspense fallback={<ItemsSkeleton />}>
+            <ItemsSection />
+          </Suspense>
+        )}
       </ReportLayout>
     </>
   );
 }
 
-export function RunBody({ runId, payload }: { runId: string; payload: RunPayload }) {
+export function RunBody({
+  runId,
+  payload,
+  rowsPending = false,
+  summary,
+  summaryPending = false,
+}: {
+  runId: string;
+  payload: RunPayload;
+  rowsPending?: boolean;
+  /** The run summary (stage 1), once it has answered: carries the review count and the pager's neighbours. */
+  summary?: RunPayload;
+  /** The summary has not answered (the header is the list row): hold the requests it makes unnecessary. */
+  summaryPending?: boolean;
+}) {
   const { slug, readOnly } = useProjectContext();
   const [params] = useSearchParams();
   const passParam = readPassParam(params);
@@ -146,6 +187,52 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
     [api.ctx, api.view, api.defs, search.searchMatcher, search.outputMatcher],
   );
 
+  // Late row groups (the item texts): requested by the section that reads them when it nears the viewport.
+  const [wanted, setWanted] = useState<ReadonlySet<RowGroup>>(() => new Set());
+  const needGroup = useCallback((group: RowGroup) => {
+    setWanted((prev) => (prev.has(group) ? prev : new Set(prev).add(group)));
+  }, []);
+  const loaded = loadedGroups(rowsPending ? undefined : payload);
+  const hasGroup = useCallback(
+    (group: RowGroup) => !rowsPending && loaded.includes(group),
+    [rowsPending, loaded],
+  );
+  // Search and rules read the item texts: a search box or a rule asks for them.
+  const wantsText = Boolean(api.view.q) || rulesNeedText(api.view.filters.rules);
+  for (const group of LATE_GROUPS)
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- LATE_GROUPS is a constant list
+    useRowGroupQuery(
+      runId,
+      group,
+      (wanted.has(group) || (group === 'text' && wantsText)) && !rowsPending && !loaded.includes(group),
+    );
+
+  // Everything else loads by itself once the core rows have painted, with no scroll or click: the item texts and the
+  // remaining panel chunks and section data, in the browser's idle time (aborted when the page is left).
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (rowsPending) return undefined;
+    const run = () => {
+      // the Items table's chunk first: the table does not need the texts to paint, and on a slow link the texts and
+      // the other chunks would share the bandwidth with it
+      void loadItemsSection().finally(() => {
+        needGroup('text');
+        preloadPanels();
+      });
+      void qc.prefetchQuery({
+        queryKey: runKeys.stepLatency(runId, null),
+        queryFn: ({ signal }) => http.get<StepLatencyPayload>(stepLatencyUrl(runId, null), { signal }),
+        staleTime: 60_000,
+      });
+    };
+    if (typeof window.requestIdleCallback !== 'function') {
+      const id = globalThis.setTimeout(run, 50);
+      return () => globalThis.clearTimeout(id);
+    }
+    const id = window.requestIdleCallback(run, { timeout: 300 });
+    return () => window.cancelIdleCallback(id);
+  }, [rowsPending, needGroup, qc, runId]);
+
   const basePath = runPath(slug, runId);
   const value: RunPageValue = {
     slug,
@@ -159,6 +246,12 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
     readOnly,
     scoresLocked: scoresLocked(payload.run),
     basePath,
+    reviewEventCount: summary?.review_event_count,
+    summaryPending,
+    summaryNeighbors: summary?.neighbors,
+    rowsPending,
+    hasGroup,
+    needGroup,
   };
   const run = payload.run;
   const pageRef = useRef<HTMLDivElement>(null);
@@ -178,12 +271,20 @@ export function RunBody({ runId, payload }: { runId: string; payload: RunPayload
           <ExperimentPanel run={run} slug={slug} />
           <RunNotices run={run} readOnly={readOnly} />
           <div id={sectionDomId('reviews')} className={styles.reviews}>
-            <ReviewHistory runId={runId} status={run.status} />
+            <ReviewHistory
+              runId={runId}
+              status={run.status}
+              enabled={summary ? summary.review_event_count !== 0 : !summaryPending}
+            />
           </div>
         </Stack>
         <RunReport pageRef={pageRef} />
       </div>
-      <TraceHost />
+      {rowsPending ? null : (
+        <Suspense fallback={null}>
+          <TraceHost />
+        </Suspense>
+      )}
     </RunContext.Provider>
   );
 }

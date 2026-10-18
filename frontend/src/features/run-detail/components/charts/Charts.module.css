@@ -329,6 +329,13 @@
   }
 }
 
+/* after the rule it overrides: equal specificity, the later one wins */
+@media (prefers-reduced-motion: reduce) {
+  .dot2[data-enter] {
+    animation: none;
+  }
+}
+
 .dotMark[data-interactive]:hover .dot2,
 .dotMark:focus-visible .dot2 {
   fill-opacity: 1;

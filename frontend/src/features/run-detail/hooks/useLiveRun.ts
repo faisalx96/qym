@@ -56,6 +56,11 @@ export function useLiveRun(runId: string, payload: RunPayload | undefined): Live
   const liveRef = useRef(initiallyLive);
   const backoff = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The header may paint from the list row (no revision yet); the summary or the rows bring it a moment later.
+  const payloadRevision = payload?.run.live_revision ?? null;
+  useEffect(() => {
+    if (revision.current === null && payloadRevision) revision.current = payloadRevision;
+  }, [payloadRevision]);
   const rowsTimesPasses = (payload?.snapshot.rows.length ?? 0) * Math.max(1, payload?.run.samples ?? 1);
 
   const reload = useCallback(

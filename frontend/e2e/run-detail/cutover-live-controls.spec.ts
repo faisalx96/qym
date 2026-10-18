@@ -94,7 +94,13 @@ test.describe('live follow', () => {
     const reloads: string[] = [];
     page.on('request', (r) => {
       const u = new URL(r.url());
-      if (u.pathname === `/api/runs/${seeded.runId}` && r.method() === 'GET') reloads.push(u.search);
+      // the item texts (a late row group) are not a reload of the run
+      if (
+        u.pathname === `/api/runs/${seeded.runId}` &&
+        r.method() === 'GET' &&
+        !u.search.includes('fields=text')
+      )
+        reloads.push(u.search);
     });
     await openRun(page, s.slug, seeded.runId);
     const initial = reloads.length;

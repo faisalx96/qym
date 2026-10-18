@@ -1,3 +1,4 @@
+import { unstable_batchedUpdates } from 'react-dom';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 /** How long a mark keeps `data-enter` (longest entrance: fill 360ms + 10 staggered marks of 24ms, rounded up). */
@@ -8,13 +9,38 @@ export const ENTER_MS = 700;
  * so the grow-in keyframes run once; a re-render, sort or filter never replays them (the attribute is gone
  * and the keyframes only run when the element is created with it).
  */
-export function useFirstMount(): boolean {
-  const [first, setFirst] = useState(true);
+export function useFirstMount(active = true): boolean {
+  // `active = false` (a container whose entrance is over) starts false and sets no timer: a virtualised table
+  // mounts a mark per cell as rows scroll in, and each of those timers used to cost a React commit.
+  const [first, setFirst] = useState(active);
   useEffect(() => {
-    const id = window.setTimeout(() => setFirst(false), ENTER_MS);
-    return () => window.clearTimeout(id);
-  }, []);
-  return first;
+    if (!active) return undefined;
+    return afterEntrance(() => setFirst(false));
+  }, [active]);
+  return active && first;
+}
+
+/**
+ * One timer per 100 ms bucket of mounts instead of one per mark: a table paints hundreds of marks in a commit, and a
+ * timer each meant hundreds of separate commits ENTER_MS later. The callbacks of a bucket run in one batch.
+ */
+const BUCKET_MS = 100;
+const buckets = new Map<number, Set<() => void>>();
+function afterEntrance(cb: () => void): () => void {
+  const key = Math.floor(performance.now() / BUCKET_MS);
+  let set = buckets.get(key);
+  if (!set) {
+    const mine = new Set<() => void>();
+    set = mine;
+    buckets.set(key, mine);
+    window.setTimeout(() => {
+      buckets.delete(key);
+      unstable_batchedUpdates(() => mine.forEach((f) => f()));
+    }, ENTER_MS + BUCKET_MS);
+  }
+  set.add(cb);
+  const mine = set;
+  return () => void mine.delete(cb);
 }
 
 /**
@@ -26,7 +52,7 @@ export const EnterContext = createContext(true);
 /** Entrance flag for a data mark: its own first mount AND its container still in its entrance window. */
 export function useEntrance(): boolean {
   const container = useContext(EnterContext);
-  const first = useFirstMount();
+  const first = useFirstMount(container);
   return container && first;
 }
 

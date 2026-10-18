@@ -12,6 +12,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  memo,
   useMemo,
   useRef,
   useState,
@@ -20,7 +21,6 @@ import {
   type ReactNode,
 } from 'react';
 import { Button as AriaButton } from 'react-aria-components';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { Checkbox } from '../Checkbox';
 import { DropdownMenu, type MenuItemSpec } from '../DropdownMenu';
@@ -55,6 +55,7 @@ import { ScoreBar } from './cells';
 import { RelativeTime, DurationCell, NumberCell } from './cells';
 import { useDataTableModel, type DataTableModel } from './useDataTableModel';
 import { useStickyShift } from './useStickyShift';
+import { useWindowedRows } from './useWindowedRows';
 import type {
   CellCtx,
   Column,
@@ -242,6 +243,71 @@ const VIRTUAL_FALLBACK = 30;
 
 const INTERACTIVE =
   'a, button, input, label, select, textarea, [role="button"], [role="checkbox"], [role="menuitem"]';
+
+interface DataCellProps<R> {
+  col: Column<R>;
+  row: R;
+  index: number;
+  density: Density;
+  pin: 'start' | 'end' | null;
+  offset: number | undefined;
+  edge: 'start' | 'end' | undefined;
+  header: boolean;
+}
+
+/**
+ * One data cell. Memoised on (column, row, index, density, pin, offset, edge): freezing a column re-renders only the
+ * cells whose pin state or offset changed, and a re-render of the table for any other reason skips every cell whose
+ * inputs are the same (perf round 6, A8). A column whose `cell` closes over changing state must change identity
+ * (memoise the column list with that state in its dependencies), as for any memoised column list.
+ */
+const DataCell = memo(function DataCell<R>({
+  col,
+  row,
+  index,
+  density,
+  pin,
+  offset,
+  edge,
+  header,
+}: DataCellProps<R>) {
+  const ctx: CellCtx = { index, density, card: false };
+  const content = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
+  const sec = col.secondary?.(row);
+  return (
+    <td
+      className={styles.td}
+      data-col={col.id}
+      data-pin={pin ?? undefined}
+      data-pin-edge={edge}
+      style={{
+        insetInlineStart: pin === 'start' ? offset : undefined,
+        insetInlineEnd: pin === 'end' ? offset : undefined,
+      }}
+      role={header ? 'rowheader' : 'gridcell'}
+      data-align={alignOf(col)}
+      data-mono={isMono(col) ? '' : undefined}
+      data-type={col.type}
+    >
+      <div
+        className={styles.cell}
+        data-cell=""
+        data-wrap={col.wrap ? '' : undefined}
+        data-truncate={col.truncate}
+        style={col.wrap ? ({ '--lines': col.wrap } as React.CSSProperties) : undefined}
+      >
+        {sec ? (
+          <span className={styles.twoLine}>
+            <span className={styles.primaryLine}>{content}</span>
+            <span className={styles.secondaryLine}>{sec}</span>
+          </span>
+        ) : (
+          content
+        )}
+      </div>
+    </td>
+  );
+}) as <R>(props: DataCellProps<R>) => React.ReactElement;
 
 function defaultCell<R>(col: Column<R>, row: R): ReactNode {
   const raw = col.accessor ? col.accessor(row) : (row as Record<string, unknown>)[col.id];
@@ -442,8 +508,7 @@ function DataTableInner<R>({
     const id = window.setTimeout(() => setEntering(false), ENTER_MS);
     return () => window.clearTimeout(id);
   }, [hasDisplayRows]);
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const virtualizer = useVirtualizer({
+  const virtualizer = useWindowedRows<HTMLElement, HTMLElement>({
     enabled: virtual,
     count: virtual ? display.length : 0,
     getScrollElement: () => scrollParent ?? scrollerRef.current,
@@ -512,11 +577,21 @@ function DataTableInner<R>({
   const pseudoOf = (c: Column<R>) => (c as unknown as PseudoColumn).pseudo;
   const hasBands = visible.some((c) => c.group);
   const tall = visible.some((c) => c.secondary || c.wrap);
+  const cardMode =
+    useMedia('(max-width: 639px)') && responsive !== 'scroll' && visible.some((c) => c.priority);
 
   /* pin offsets from measured header widths */
   const [measured, setMeasured] = useState<Record<string, number>>({});
-  const [suspended, setSuspended] = useState<string[]>([]);
   const [scrollerWidth, setScrollerWidth] = useState(0);
+  // The set of columns, whatever their order: freezing a column reorders them but changes no width, so it needs no new measure.
+  const colSig = useMemo(
+    () =>
+      renderCols
+        .map((c) => c.id)
+        .sort()
+        .join('\u0001'),
+    [renderCols],
+  );
   useLayoutEffect(() => {
     const table = tableRef.current;
     if (!table) return undefined;
@@ -525,19 +600,8 @@ function DataTableInner<R>({
       table.querySelectorAll<HTMLElement>('thead th[data-col]').forEach((th) => {
         next[th.dataset.col!] = th.getBoundingClientRect().width;
       });
-      // Freeze cap: trailing frozen columns that would take more than `maxPinShare` of the scroller scroll instead.
       const sw = scrollerRef.current?.clientWidth ?? 0;
       setScrollerWidth((p) => (p === sw ? p : sw));
-      const starts = renderCols.filter((c) => effectivePin(c, model.pins) === 'start');
-      const lead = starts.filter((c) => (c as unknown as PseudoColumn).pseudo);
-      const sus = suspendedPins(
-        starts.filter((c) => !(c as unknown as PseudoColumn).pseudo).map((c) => c.id),
-        (id) => next[id] ?? 0,
-        sw,
-        maxPinShare,
-        lead.reduce((n, c) => n + (next[c.id] ?? 0), 0),
-      );
-      setSuspended((p) => (p.length === sus.length && p.every((id, i) => id === sus[i]) ? p : sus));
       setMeasured((prev) => {
         const keys = Object.keys(next);
         if (
@@ -553,7 +617,20 @@ function DataTableInner<R>({
     const ro = new ResizeObserver(measure);
     ro.observe(table);
     return () => ro.disconnect();
-  }, [renderCols, model.widths, model.pins, model.density, maxPinShare]);
+  }, [colSig, model.widths, model.density]);
+  // Freeze cap: trailing frozen columns that would take more than `maxPinShare` of the scroller scroll instead.
+  // Computed from the measured widths in the same render as the pin change (no second pass).
+  const suspended = useMemo(() => {
+    const starts = renderCols.filter((c) => effectivePin(c, model.pins) === 'start');
+    const lead = starts.filter((c) => (c as unknown as PseudoColumn).pseudo);
+    return suspendedPins(
+      starts.filter((c) => !(c as unknown as PseudoColumn).pseudo).map((c) => c.id),
+      (id) => measured[id] ?? 0,
+      scrollerWidth,
+      maxPinShare,
+      lead.reduce((n, c) => n + (measured[c.id] ?? 0), 0),
+    );
+  }, [renderCols, model.pins, measured, scrollerWidth, maxPinShare]);
   const pins = useMemo(
     () =>
       suspended.length
@@ -575,34 +652,51 @@ function DataTableInner<R>({
   const lastStart = [...renderCols].reverse().find((c) => effectivePin(c, pins) === 'start')?.id;
   const firstEnd = renderCols.find((c) => effectivePin(c, pins) === 'end')?.id;
 
-  /* scroll state */
-  const [scrollX, setScrollX] = useState({ start: false, end: false, overflow: false });
+  /* scroll state: only `overflow` is React state (it changes with layout, rarely); the scrolled-at-start /
+     scrolled-at-end flags are data attributes written straight from the scroll event, so scrolling never renders. */
+  const [overflow, setOverflow] = useState(false);
+  const hostRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (!el) return undefined;
-    const update = () => {
-      const overflow = el.scrollWidth > el.clientWidth + 1;
+    let sw = 0;
+    let cw = 0;
+    let start = false;
+    let end = false;
+    const flags = () => {
+      const over = sw > cw + 1;
       const abs = Math.abs(el.scrollLeft);
-      setScrollX((p) => {
-        const n = {
-          overflow,
-          start: overflow && abs > 1,
-          end: overflow && abs + el.clientWidth < el.scrollWidth - 1,
-        };
-        return p.overflow === n.overflow && p.start === n.start && p.end === n.end ? p : n;
-      });
+      const nStart = over && abs > 1;
+      const nEnd = over && abs + cw < sw - 1;
+      if (nStart !== start) {
+        start = nStart;
+        el.toggleAttribute('data-scrolled-x', nStart);
+        hostRef.current?.toggleAttribute('data-scroll-start', nStart);
+      }
+      if (nEnd !== end) {
+        end = nEnd;
+        el.toggleAttribute('data-scrolled-end', nEnd);
+        hostRef.current?.toggleAttribute('data-scroll-end', nEnd);
+      }
     };
-    update();
-    el.addEventListener('scroll', update, { passive: true });
-    if (typeof ResizeObserver === 'undefined') return () => el.removeEventListener('scroll', update);
-    const ro = new ResizeObserver(update);
+    // Sizes are read where layout is already clean (here and in the ResizeObserver), never per scroll event.
+    const measureSizes = () => {
+      sw = el.scrollWidth;
+      cw = el.clientWidth;
+      setOverflow((p) => (p === sw > cw + 1 ? p : sw > cw + 1));
+      flags();
+    };
+    measureSizes();
+    el.addEventListener('scroll', flags, { passive: true });
+    if (typeof ResizeObserver === 'undefined') return () => el.removeEventListener('scroll', flags);
+    const ro = new ResizeObserver(measureSizes);
     ro.observe(el);
     if (tableRef.current) ro.observe(tableRef.current);
     return () => {
-      el.removeEventListener('scroll', update);
+      el.removeEventListener('scroll', flags);
       ro.disconnect();
     };
-  }, [renderCols, rows.length]);
+  }, [renderCols, rows.length, cardMode]);
 
   /* mirrored horizontal scrollbar rail */
   const railRef = useRef<HTMLDivElement>(null);
@@ -632,7 +726,7 @@ function DataTableInner<R>({
       sc.removeEventListener('scroll', fromScroller);
       rail.removeEventListener('scroll', fromRail);
     };
-  }, [scrollX.overflow, measured]);
+  }, [overflow, measured]);
 
   /* focus */
   const [ownFocus, setOwnFocus] = useState<Key | null>(null);
@@ -660,12 +754,9 @@ function DataTableInner<R>({
     top: stickyTop ?? vcfg?.scrollPaddingStart ?? 0,
     // an expanded detail is not laid out in the columns: the header is held above it (round 3 P4)
     details: renderExpanded
-      ? (t) =>
-          Array.from(t.querySelectorAll('tr[data-detail-row]')).map((tr) => {
-            const r = tr.getBoundingClientRect();
-            return { top: r.top, bottom: r.bottom };
-          })
+      ? (t) => Array.from(t.querySelectorAll<HTMLElement>('tr[data-detail-row]'))
       : undefined,
+    shiftTarget: (t) => (t as HTMLTableElement).tHead,
     enabled: stickyHeader && !embedded,
   });
 
@@ -1107,9 +1198,6 @@ function DataTableInner<R>({
   const zebraOn =
     zebra === 'auto' ? !embedded && model.density !== 'comfortable' && dataRows.length > 8 : zebra;
 
-  const cardMode =
-    useMedia('(max-width: 639px)') && responsive !== 'scroll' && visible.some((c) => c.priority);
-
   /* visible width of the scroller, for detailFit="viewport" */
   const [scrollerW, setScrollerW] = useState(0);
   useLayoutEffect(() => {
@@ -1379,36 +1467,18 @@ function DataTableInner<R>({
         </td>
       );
     }
-    const ctx: CellCtx = { index: entry.index, density: model.density, card: false };
-    const content = col.cell ? col.cell(r, ctx) : defaultCell(col, r);
-    const sec = col.secondary?.(r);
-    const header = ci === 0 && !selection && !renderExpanded && !childRows;
     return (
-      <td
+      <DataCell<R>
         key={col.id}
-        {...common}
-        role={header ? 'rowheader' : 'gridcell'}
-        data-align={alignOf(col)}
-        data-mono={isMono(col) ? '' : undefined}
-        data-type={col.type}
-      >
-        <div
-          className={styles.cell}
-          data-cell=""
-          data-wrap={col.wrap ? '' : undefined}
-          data-truncate={col.truncate}
-          style={col.wrap ? ({ '--lines': col.wrap } as React.CSSProperties) : undefined}
-        >
-          {sec ? (
-            <span className={styles.twoLine}>
-              <span className={styles.primaryLine}>{content}</span>
-              <span className={styles.secondaryLine}>{sec}</span>
-            </span>
-          ) : (
-            content
-          )}
-        </div>
-      </td>
+        col={col}
+        row={r}
+        index={entry.index}
+        density={model.density}
+        pin={pin}
+        offset={pin === 'start' || pin === 'end' ? offsets[col.id] : undefined}
+        edge={col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined}
+        header={ci === 0 && !selection && !renderExpanded && !childRows}
+      />
     );
   };
 
@@ -1664,9 +1734,10 @@ function DataTableInner<R>({
         {otherKids}
         {banner}
         <div
+          ref={hostRef}
           className={styles.bodyHost}
-          data-scroll-start={scrollX.start ? '' : undefined}
-          data-scroll-end={scrollX.end ? '' : undefined}
+          data-pin-start={pinSum('start') > 0 ? '' : undefined}
+          data-pin-end={pinSum('end') > 0 ? '' : undefined}
           data-cues={scrollCues ? '' : undefined}
           style={
             {
@@ -1676,6 +1747,12 @@ function DataTableInner<R>({
           }
         >
           {progress ? <div className={styles.progress} role="progressbar" aria-label="Refreshing" /> : null}
+          {cardMode ? null : (
+            <>
+              <span className={styles.edge} data-edge="start" aria-hidden="true" />
+              <span className={styles.edge} data-edge="end" aria-hidden="true" />
+            </>
+          )}
           {cardMode ? (
             <CardList
               display={display}
@@ -1715,13 +1792,11 @@ function DataTableInner<R>({
               ref={scrollerRef}
               data-dt-scroller=""
               className={styles.scroller}
-              data-rail={scrollX.overflow && scrollCues ? '' : undefined}
-              data-scrolled-x={scrollX.start ? '' : undefined}
-              data-scrolled-end={scrollX.end ? '' : undefined}
+              data-rail={overflow && scrollCues ? '' : undefined}
               style={{ '--dt-scroller-width': `${scrollerWidth}px` } as React.CSSProperties}
-              tabIndex={scrollX.overflow ? 0 : undefined}
-              role={scrollX.overflow ? 'region' : undefined}
-              aria-label={scrollX.overflow ? `${tableLabel} (scrollable)` : undefined}
+              tabIndex={overflow ? 0 : undefined}
+              role={overflow ? 'region' : undefined}
+              aria-label={overflow ? `${tableLabel} (scrollable)` : undefined}
             >
               {tableEl}
               {stateBlock}
@@ -1729,7 +1804,7 @@ function DataTableInner<R>({
           )}
           {cardMode ? stateBlock : null}
         </div>
-        {scrollX.overflow && scrollCues && !cardMode ? (
+        {overflow && scrollCues && !cardMode ? (
           <div ref={railRef} className={styles.rail} aria-hidden="true" data-testid="table-scroll-rail">
             <div ref={railInnerRef} className={styles.railInner} />
           </div>

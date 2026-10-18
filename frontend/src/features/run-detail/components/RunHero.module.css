@@ -190,6 +190,11 @@
   overflow: hidden;
 }
 
+.flow[data-provisional] {
+  /* stage 0 (header from the runs list): the config and metadata chips are not here yet; keep their two lines */
+  min-block-size: calc(2 * var(--control-height) + 6px);
+}
+
 .flow[data-open] {
   max-block-size: none;
   overflow: visible;

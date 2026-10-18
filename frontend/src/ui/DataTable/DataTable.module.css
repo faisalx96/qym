@@ -131,19 +131,18 @@
   user-select: none;
 }
 
-.table[data-sticky] .thead th {
+.table[data-sticky] .thead {
+  /* one sticky element for the whole header (it held a sticky layer per cell: 60+ on a wide table);
+     only the frozen cells stay sticky, and only horizontally */
   position: sticky;
   top: 0;
+  z-index: 5;
+}
+.table[data-sticky] .thead th {
   z-index: 3;
 }
 .table[data-sticky] .thead th[data-pin] {
   z-index: 4;
-}
-.table[data-sticky] .thead .bandRow + tr th {
-  top: var(--table-group-height);
-}
-.table[data-sticky] .thead .bandCell {
-  top: 0;
 }
 
 /* Page-scroller sticky header: cells are translated by --head-shift (set from the scroll handler). */
@@ -161,8 +160,17 @@
   --head-shift: 0px;
 }
 
-.table[data-shift] .thead th {
+.table[data-shift] .thead {
+  /* one moving element instead of every header cell, and --head-shift is written on it, so a scroll event
+     re-styles the header cells only, not the table body */
+  position: relative;
+  z-index: 4;
   transform: translateY(var(--head-shift, 0px));
+}
+.table[data-shift][data-stuck] .thead {
+  will-change: transform;
+}
+.table[data-shift] .thead th {
   z-index: 3;
 }
 .table[data-shift] .thead th[data-pin] {
@@ -471,18 +479,42 @@
   box-shadow: inset 1px 0 0 var(--border-subtle);
 }
 
-/* Pinned edge gains a soft shadow only when content scrolls under it. */
-.scroller[data-scrolled-x] .td[data-pin-edge='start'],
-.scroller[data-scrolled-x] .th[data-pin-edge='start'] {
-  box-shadow:
-    inset -1px 0 0 var(--border-strong),
-    8px 0 10px -6px var(--bg-void);
+/* Pinned edge gains a soft shadow only when content scrolls under it. It is one element per edge, faded by
+   opacity on the compositor: no cell repaints when the scroll starts, and nothing animates while scrolling. */
+.edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inline-size: 11px;
+  z-index: 3; /* over the plain cells the shadow falls on; it never overlaps a pinned cell */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out);
+  will-change: opacity;
 }
-.scroller[data-scrolled-end] .td[data-pin-edge='end'],
-.scroller[data-scrolled-end] .th[data-pin-edge='end'] {
-  box-shadow:
-    inset 1px 0 0 var(--border-strong),
-    -8px 0 10px -6px var(--bg-void);
+.edge[data-edge='start'] {
+  inset-inline-start: calc(var(--pin-start, 0px) - 1px);
+  border-inline-start: 1px solid var(--border-strong);
+  background: linear-gradient(to right, var(--bg-void), transparent);
+}
+.edge[data-edge='end'] {
+  inset-inline-end: calc(var(--pin-end, 0px) - 1px);
+  border-inline-end: 1px solid var(--border-strong);
+  background: linear-gradient(to left, var(--bg-void), transparent);
+}
+.bodyHost:dir(rtl) .edge[data-edge='start'] {
+  background: linear-gradient(to left, var(--bg-void), transparent);
+}
+.bodyHost:dir(rtl) .edge[data-edge='end'] {
+  background: linear-gradient(to right, var(--bg-void), transparent);
+}
+.bodyHost[data-scroll-start] .edge[data-edge='start'],
+.bodyHost[data-scroll-end] .edge[data-edge='end'] {
+  opacity: 0.85;
+}
+.bodyHost:not([data-pin-start]) .edge[data-edge='start'],
+.bodyHost:not([data-pin-end]) .edge[data-edge='end'] {
+  display: none; /* nothing frozen on that side: nothing to shade */
 }
 
 .tr {
@@ -993,6 +1025,7 @@
   .kebab,
   .rowActions,
   .resizer::after,
+  .edge,
   .bodyHost::before,
   .bodyHost::after {
     transition: none;

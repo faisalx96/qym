@@ -1,0 +1,160 @@
+{
+  "run": "big",
+  "kind": "nav",
+  "net": "fast3g",
+  "median": {
+    "heroMs": 19,
+    "overviewMs": 991,
+    "rowsMs": 991,
+    "ttiMs": 991,
+    "tbtMs": 12,
+    "cls": 0.0089,
+    "requests": 13,
+    "jsChunks": 4,
+    "jsKB": 15.6,
+    "apiRequests": 6,
+    "apiKB": 89.1,
+    "compactKB": 55.9,
+    "compactTtfbMs": 573,
+    "compactDoneMs": 919
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 18,
+      "skeletonMs": 18,
+      "overviewMs": 993,
+      "rowsMs": 993,
+      "ttiMs": 993,
+      "tbtMs": 12,
+      "cls": 0.0089,
+      "reactCommits": 67,
+      "requests": 13,
+      "jsChunks": 4,
+      "jsKB": 15.6,
+      "apiRequests": 6,
+      "apiKB": 89.1,
+      "compactKB": 55.9,
+      "compactTtfbMs": 581,
+      "compactDoneMs": 927,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "LatencyTab-BmikoFl4.js 5.1kB @942-1550ms",
+        "DeepTab-Dbic1vfF.js 2.0kB @1551-2126ms",
+        "RepeatTab-BjJk5WnC.js 6.7kB @2126-2742ms",
+        "RootCauseTab-CU1R5WYQ.js 1.7kB @2742-3317ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @2-591ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @2-927ms",
+        "/api/dashboard/neighbors 1.1kB @17-616ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7/review-history 0.3kB @17-600ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @1015-1633ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @1026-1751ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 19,
+      "skeletonMs": 19,
+      "overviewMs": 991,
+      "rowsMs": 991,
+      "ttiMs": 991,
+      "tbtMs": 19,
+      "cls": 0.0089,
+      "reactCommits": 63,
+      "requests": 13,
+      "jsChunks": 4,
+      "jsKB": 15.6,
+      "apiRequests": 6,
+      "apiKB": 89.1,
+      "compactKB": 55.9,
+      "compactTtfbMs": 573,
+      "compactDoneMs": 919,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "LatencyTab-BmikoFl4.js 5.1kB @936-1551ms",
+        "DeepTab-Dbic1vfF.js 2.0kB @1551-2127ms",
+        "RepeatTab-BjJk5WnC.js 6.7kB @2127-2751ms",
+        "RootCauseTab-CU1R5WYQ.js 1.7kB @2752-3326ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @2-584ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @3-919ms",
+        "/api/dashboard/neighbors 1.1kB @18-617ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7/review-history 0.3kB @18-600ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @1013-1633ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @1023-1751ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 24,
+      "skeletonMs": 24,
+      "overviewMs": 983,
+      "rowsMs": 983,
+      "ttiMs": 983,
+      "tbtMs": 0,
+      "cls": 0.0089,
+      "reactCommits": 69,
+      "requests": 20,
+      "jsChunks": 8,
+      "jsKB": 28.9,
+      "apiRequests": 6,
+      "apiKB": 89.1,
+      "compactKB": 55.9,
+      "compactTtfbMs": 573,
+      "compactDoneMs": 919,
+      "mountedAtOverview": [
+        "overview"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "LatencyTab-BmikoFl4.js 5.1kB @928-1609ms",
+        "CategoriesTab-BroX0Mu_.js 2.9kB @928-1576ms",
+        "ErrorsTab-BpdVkgqa.js 1.5kB @928-1559ms",
+        "TraceHost-BclRaSRE.js 5.2kB @928-1622ms",
+        "SpanDetail-BSAnQkvO.js 3.8kB @928-2162ms",
+        "DeepTab-Dbic1vfF.js 2.0kB @1609-2208ms",
+        "RepeatTab-BjJk5WnC.js 6.7kB @2209-2826ms",
+        "RootCauseTab-CU1R5WYQ.js 1.7kB @2826-3402ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @2-584ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @2-919ms",
+        "/api/dashboard/neighbors 1.1kB @23-617ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7/review-history 0.3kB @23-600ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @1013-2150ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @1023-2351ms"
+      ]
+    }
+  ]
+}
