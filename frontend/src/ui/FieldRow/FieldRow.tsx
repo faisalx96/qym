@@ -20,6 +20,10 @@ export interface FieldRowProps {
    * left to right, so the label never moves; only the value block carries the text direction (round 3 P5).
    */
   labelAnchor?: 'auto' | 'start';
+  /** Tooltip of the label; defaults to the label text. A long key is cut with an ellipsis, never painted over the value. */
+  labelTitle?: string;
+  /** `upper` (default) is the eyebrow style; `sentence` keeps the key's case (round 5 R3 fact keys). */
+  labelCase?: 'upper' | 'sentence';
   className?: string;
   children: ReactNode;
 }
@@ -38,6 +42,8 @@ export function FieldRow({
   measure = 'prose',
   rail,
   labelAnchor = 'auto',
+  labelTitle,
+  labelCase = 'upper',
   className,
   children,
 }: FieldRowProps) {
@@ -55,7 +61,12 @@ export function FieldRow({
         data-anchor={start ? 'start' : undefined}
         {...(start ? { dir: 'ltr' as const } : attrs)}
       >
-        <div id={id} className={styles.label}>
+        <div
+          id={id}
+          className={styles.label}
+          data-case={labelCase === 'sentence' ? 'sentence' : undefined}
+          title={labelTitle ?? (typeof label === 'string' ? label : undefined)}
+        >
           {label}
         </div>
         <div className={styles.body}>
