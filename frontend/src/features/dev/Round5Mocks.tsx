@@ -5,7 +5,7 @@
  */
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Button, Card, DataTable, HelpMarker, Icon, IconButton, ScoreValue, Tag, type Column } from '@/ui';
-import { useMeasuredWidth } from '@/features/run-detail/components/charts/Charts';
+import { BarColumns, useMeasuredWidth, type BarSpec } from '@/features/run-detail/components/charts/Charts';
 import styles from './Round5Mocks.module.css';
 
 const style = (vars: Record<string, string | number>) => vars as CSSProperties;
@@ -99,7 +99,12 @@ function ChartCard({
       header={
         <div className={styles.cardHead}>
           <span className={styles.cardTitle}>{title}</span>
-          {meta ? <span className={styles.headRight}>{meta}{help ? <HelpMarker label="How to read the box plot">{HOW}</HelpMarker> : null}</span> : null}
+          {meta ? (
+            <span className={styles.headRight}>
+              {meta}
+              {help ? <HelpMarker label="How to read the box plot">{HOW}</HelpMarker> : null}
+            </span>
+          ) : null}
         </div>
       }
     >
@@ -187,6 +192,34 @@ export function BarsMock20() {
   );
 }
 
+/** R1-3: the real `BarColumns` with N = 1..20 columns, counts 0..120, a few with a sub line (one plot per N). */
+export function BarsSweep() {
+  return (
+    <div className={styles.sweep} data-r5="bars-sweep">
+      {Array.from({ length: 20 }, (_, k) => k + 1).map((n) => {
+        const bars: BarSpec[] = Array.from({ length: n }, (_, i) => {
+          const count = (i * 37 + n * 11) % 121;
+          return {
+            key: i,
+            count,
+            label: String(i * (n > 10 ? 1 : 10)),
+            sub: n % 3 === 0 && i % 2 === 0 ? `${count}%` : undefined,
+            color: 'var(--score-3)',
+            name: `bar ${i} of ${n}`,
+            zero: 'show',
+            tip: `bar ${i}`,
+          };
+        });
+        return (
+          <div key={n} className={styles.sweepPlot}>
+            <BarColumns bars={bars} name={`sweep ${n} columns`} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ───────────────────────────── R2: coloured box plots ───────────────────────────── */
 
 interface Stats {
@@ -206,12 +239,57 @@ const fmtPct = (v: number) => `${Math.round(v * 100)}%`;
 const fmtInt = (v: number) => Math.round(v).toLocaleString('en-US');
 const fmtMs = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(2)}s` : `${Math.round(v)}ms`);
 
-const QUALITY: Stats = { min: 0.08, p5: 0.18, p25: 0.52, med: 0.71, mean: 0.66, p75: 0.84, p95: 0.96, max: 1, low: [0.08, 0.12, 0.15], high: [] };
-const QUALITY_LOW: Stats = { min: 0.0, p5: 0.04, p25: 0.15, med: 0.31, mean: 0.34, p75: 0.52, p95: 0.78, max: 0.9, low: [], high: [0.84, 0.9] };
-const LATENCY_STATS: Stats = { min: 501, p5: 760, p25: 1500, med: 2300, mean: 3300, p75: 4500, p95: 9700, max: 11800, low: [], high: [10100, 10600, 11800] };
-const TOKENS: Stats = { min: 321, p5: 410, p25: 549.5, med: 724, mean: 743.9, p75: 958, p95: 1140, max: 1193, low: [], high: [1170, 1193] };
+const QUALITY: Stats = {
+  min: 0.08,
+  p5: 0.18,
+  p25: 0.52,
+  med: 0.71,
+  mean: 0.66,
+  p75: 0.84,
+  p95: 0.96,
+  max: 1,
+  low: [0.08, 0.12, 0.15],
+  high: [],
+};
+const QUALITY_LOW: Stats = {
+  min: 0.0,
+  p5: 0.04,
+  p25: 0.15,
+  med: 0.31,
+  mean: 0.34,
+  p75: 0.52,
+  p95: 0.78,
+  max: 0.9,
+  low: [],
+  high: [0.84, 0.9],
+};
+const LATENCY_STATS: Stats = {
+  min: 501,
+  p5: 760,
+  p25: 1500,
+  med: 2300,
+  mean: 3300,
+  p75: 4500,
+  p95: 9700,
+  max: 11800,
+  low: [],
+  high: [10100, 10600, 11800],
+};
+const TOKENS: Stats = {
+  min: 321,
+  p5: 410,
+  p25: 549.5,
+  med: 724,
+  mean: 743.9,
+  p75: 958,
+  p95: 1140,
+  max: 1193,
+  low: [],
+  high: [1170, 1193],
+};
 
-const bandOfMedian = (v: number): 1 | 2 | 3 | 4 | 5 => (v < 0.4 ? 1 : v < 0.6 ? 2 : v < 0.75 ? 3 : v < 0.9 ? 4 : 5);
+const bandOfMedian = (v: number): 1 | 2 | 3 | 4 | 5 =>
+  v < 0.4 ? 1 : v < 0.6 ? 2 : v < 0.75 ? 3 : v < 0.9 ? 4 : 5;
 
 /**
  * The coloured glyph: box, median, mean and whiskers share one tone (`--tone`, set by data-band or data-series); no number
@@ -248,7 +326,14 @@ function BoxGlyph({
   const diamond = `M${sx(s.mean)},${cy - 5}L${sx(s.mean) + 5},${cy}L${sx(s.mean)},${cy + 5}L${sx(s.mean) - 5},${cy}Z`;
   return (
     <div ref={ref} className={styles.glyphBox} data-band={tone.band} data-series={tone.series}>
-      <svg width={W} height={80} viewBox={`0 0 ${W} 80`} role="img" aria-label={name} className={styles.glyph}>
+      <svg
+        width={W}
+        height={80}
+        viewBox={`0 0 ${W} 80`}
+        role="img"
+        aria-label={name}
+        className={styles.glyph}
+      >
         <line className={styles.axisLine} x1={sx(domain[0])} x2={sx(domain[1])} y1={base} y2={base} />
         <line className={styles.axisTick} x1={sx(domain[0])} x2={sx(domain[0])} y1={base - 3} y2={base + 3} />
         <line className={styles.axisTick} x1={sx(domain[1])} x2={sx(domain[1])} y1={base - 3} y2={base + 3} />
@@ -265,7 +350,14 @@ function BoxGlyph({
             r={v === s.min || v === s.max ? 3 : 2.5}
           />
         ))}
-        <rect className={styles.iqr} x={sx(s.p25)} y={cy - bh / 2} width={Math.max(3, sx(s.p75) - sx(s.p25))} height={bh} rx={3} />
+        <rect
+          className={styles.iqr}
+          x={sx(s.p25)}
+          y={cy - bh / 2}
+          width={Math.max(3, sx(s.p75) - sx(s.p25))}
+          height={bh}
+          rx={3}
+        />
         <line className={styles.median} x1={medX} x2={medX} y1={cy - bh / 2} y2={cy + bh / 2} />
         <path className={styles.mean} d={diamond} />
         <text className={styles.medLabel} x={medX} y={cy - bh / 2 - 6} textAnchor="middle">
@@ -301,7 +393,9 @@ function Tip({ s, fmt }: { s: Stats; fmt: (v: number) => string }) {
   ];
   return (
     <div className={styles.tip}>
-      <div className={styles.tipTitle}>Middle 50%: {fmt(s.p25)} to {fmt(s.p75)} (IQR {fmt(s.p75 - s.p25)})</div>
+      <div className={styles.tipTitle}>
+        Middle 50%: {fmt(s.p25)} to {fmt(s.p75)} (IQR {fmt(s.p75 - s.p25)})
+      </div>
       <dl className={styles.tipGrid}>
         {rows.map(([k, v]) => (
           <div key={k}>
@@ -314,10 +408,13 @@ function Tip({ s, fmt }: { s: Stats; fmt: (v: number) => string }) {
   );
 }
 
-const HOW = 'The box is the middle half of the items, the line is the median, the diamond the mean. Whiskers reach the 5th and 95th percentile; dots are items outside them. Hover or focus the box for all six numbers.';
+const HOW =
+  'The box is the middle half of the items, the line is the median, the diamond the mean. Whiskers reach the 5th and 95th percentile; dots are items outside them. Hover or focus the box for all six numbers.';
 
 const Key = () => (
-  <p className={styles.key}>Box: middle 50%. Line: median. Diamond: mean. Whiskers: p5 to p95. Dots: outside the whiskers.</p>
+  <p className={styles.key}>
+    Box: middle 50%. Line: median. Diamond: mean. Whiskers: p5 to p95. Dots: outside the whiskers.
+  </p>
 );
 
 interface PassRow {
@@ -352,7 +449,16 @@ function Track({ r, band, series }: { r: PassRow; band?: number; series?: number
 
 function PassRows() {
   return (
-    <Card as="section" aria-label="quality by pass" header={<div className={styles.cardHead}><span className={styles.cardTitle}>quality by pass</span><Tag kind="count">6 passes · 20 items each</Tag></div>}>
+    <Card
+      as="section"
+      aria-label="quality by pass"
+      header={
+        <div className={styles.cardHead}>
+          <span className={styles.cardTitle}>quality by pass</span>
+          <Tag kind="count">6 passes · 20 items each</Tag>
+        </div>
+      }
+    >
       <div className={styles.passRows} role="group" aria-label="quality distribution by pass">
         {PASS_ROWS.map((r) => (
           <div key={r.pass} className={styles.passRow}>
@@ -363,7 +469,9 @@ function PassRows() {
         ))}
         <div className={styles.passAxis} aria-hidden="true">
           {[0, 0.25, 0.5, 0.75, 1].map((t) => (
-            <span key={t} style={style({ '--x': t })}>{fmtPct(t)}</span>
+            <span key={t} style={style({ '--x': t })}>
+              {fmtPct(t)}
+            </span>
           ))}
         </div>
       </div>
@@ -380,7 +488,16 @@ const STEPS: Array<[string, PassRow]> = [
 
 function StepRows() {
   return (
-    <Card as="section" aria-label="Step timings" header={<div className={styles.cardHead}><span className={styles.cardTitle}>Step timings</span><Tag kind="count">3 steps</Tag></div>}>
+    <Card
+      as="section"
+      aria-label="Step timings"
+      header={
+        <div className={styles.cardHead}>
+          <span className={styles.cardTitle}>Step timings</span>
+          <Tag kind="count">3 steps</Tag>
+        </div>
+      }
+    >
       <div className={styles.passRows} role="group" aria-label="Step timing distribution">
         {STEPS.map(([name, r]) => (
           <div key={name} className={styles.passRow} data-wide="">
@@ -391,7 +508,9 @@ function StepRows() {
         ))}
         <div className={styles.passAxis} aria-hidden="true">
           {[0, 1, 2, 3, 4].map((t) => (
-            <span key={t} style={style({ '--x': t / 4 })}>{t}s</span>
+            <span key={t} style={style({ '--x': t / 4 })}>
+              {t}s
+            </span>
           ))}
         </div>
       </div>
@@ -410,7 +529,13 @@ export function BoxColouredMock() {
         meta={<Tag kind="count">217 scored</Tag>}
         intro={<ScoreValue value={QUALITY.mean} type="percentage" direction="maximize" variant="text" />}
       >
-        <BoxGlyph s={QUALITY} domain={[0, 1]} fmt={fmtPct} tone={{ band: bandOfMedian(QUALITY.med) }} name="quality, 217 scored: minimum 8%, 25th percentile 52%, median 71%, mean 66%, 75th percentile 84%, maximum 100%; band 3 of 5." />
+        <BoxGlyph
+          s={QUALITY}
+          domain={[0, 1]}
+          fmt={fmtPct}
+          tone={{ band: bandOfMedian(QUALITY.med) }}
+          name="quality, 217 scored: minimum 8%, 25th percentile 52%, median 71%, mean 66%, 75th percentile 84%, maximum 100%; band 3 of 5."
+        />
         <Tip s={QUALITY} fmt={fmtPct} />
       </ChartCard>
       <ChartCard
@@ -420,15 +545,32 @@ export function BoxColouredMock() {
         meta={<Tag kind="count">217 scored</Tag>}
         intro={<ScoreValue value={QUALITY_LOW.mean} type="percentage" direction="maximize" variant="text" />}
       >
-        <BoxGlyph s={QUALITY_LOW} domain={[0, 1]} fmt={fmtPct} tone={{ band: bandOfMedian(QUALITY_LOW.med) }} name="completeness, 217 scored: median 31%; band 1 of 5." />
+        <BoxGlyph
+          s={QUALITY_LOW}
+          domain={[0, 1]}
+          fmt={fmtPct}
+          tone={{ band: bandOfMedian(QUALITY_LOW.med) }}
+          name="completeness, 217 scored: median 31%; band 1 of 5."
+        />
       </ChartCard>
       <ChartCard
         title="Response time"
         help
         meta={<Tag kind="count">86 items</Tag>}
-        intro={<span className={styles.hero}>3.3 s <span className={styles.heroSub}>mean</span></span>}
+        intro={
+          <span className={styles.hero}>
+            3.3 s <span className={styles.heroSub}>mean</span>
+          </span>
+        }
       >
-        <BoxGlyph s={LATENCY_STATS} domain={[LATENCY_STATS.min, LATENCY_STATS.max]} fmt={fmtMs} tone={{ series: 1 }} tail name="Response time, 86 items: minimum 501ms, median 2.30s, mean 3.30s, maximum 11.80s." />
+        <BoxGlyph
+          s={LATENCY_STATS}
+          domain={[LATENCY_STATS.min, LATENCY_STATS.max]}
+          fmt={fmtMs}
+          tone={{ series: 1 }}
+          tail
+          name="Response time, 86 items: minimum 501ms, median 2.30s, mean 3.30s, maximum 11.80s."
+        />
       </ChartCard>
       <ChartCard
         title="tokens_used"
@@ -443,7 +585,13 @@ export function BoxColouredMock() {
         }
         intro={<span className={styles.hero}>743.9</span>}
       >
-        <BoxGlyph s={TOKENS} domain={[TOKENS.min, TOKENS.max]} fmt={fmtInt} tone={{ series: 1 }} name="tokens_used, 86 items: minimum 321, median 724, mean 743.9, maximum 1,193, total 64.0K." />
+        <BoxGlyph
+          s={TOKENS}
+          domain={[TOKENS.min, TOKENS.max]}
+          fmt={fmtInt}
+          tone={{ series: 1 }}
+          name="tokens_used, 86 items: minimum 321, median 724, mean 743.9, maximum 1,193, total 64.0K."
+        />
       </ChartCard>
       <div className={styles.rowsWide}>
         <PassRows />
@@ -468,13 +616,28 @@ const EN_PROSE: Prose[] = [
     label: 'Reason',
     text: 'The answer identifies the correct policy (clause 4.2) and quotes the approval threshold, but it never mentions the exception for existing customers that the reference answer calls out. The tone is appropriate and the length is acceptable. Two of the three required steps are present; the escalation step is missing.',
   },
-  { label: 'Detailed reasoning trace', text: 'Step 1 matched the question to clause 4.2. Step 2 compared the quoted threshold with the reference. Step 3 looked for the exception and did not find it.' },
+  {
+    label: 'Detailed reasoning trace',
+    text: 'Step 1 matched the question to clause 4.2. Step 2 compared the quoted threshold with the reference. Step 3 looked for the exception and did not find it.',
+  },
 ];
 
 const AR_PROSE: Prose[] = [
-  { label: 'Reason', ar: true, text: 'الإجابة تغطي معظم النقاط المطلوبة وتستشهد بالسياسة الصحيحة، لكنها لا تذكر الاستثناء الخاص بالعملاء الحاليين.' },
-  { label: 'Reasoning', ar: true, text: 'حللت السؤال أولاً ثم قارنت الإجابة بالمرجع. الإجابة تذكر الحد الأدنى للموافقة لكنها لا تذكر الاستثناء الخاص بالعملاء الحاليين، لذلك خُفضت الدرجة. يُنصح بمراجعة الحالة يدوياً قبل الاعتماد على النتيجة.' },
-  { label: 'Step by step reasoning notes', ar: true, text: 'الخطوة الأولى: قراءة السؤال. الخطوة الثانية: مطابقة الإجابة مع المرجع. الخطوة الثالثة: البحث عن الاستثناء ولم يُعثر عليه.' },
+  {
+    label: 'Reason',
+    ar: true,
+    text: 'الإجابة تغطي معظم النقاط المطلوبة وتستشهد بالسياسة الصحيحة، لكنها لا تذكر الاستثناء الخاص بالعملاء الحاليين.',
+  },
+  {
+    label: 'Reasoning',
+    ar: true,
+    text: 'حللت السؤال أولاً ثم قارنت الإجابة بالمرجع. الإجابة تذكر الحد الأدنى للموافقة لكنها لا تذكر الاستثناء الخاص بالعملاء الحاليين، لذلك خُفضت الدرجة. يُنصح بمراجعة الحالة يدوياً قبل الاعتماد على النتيجة.',
+  },
+  {
+    label: 'Step by step reasoning notes',
+    ar: true,
+    text: 'الخطوة الأولى: قراءة السؤال. الخطوة الثانية: مطابقة الإجابة مع المرجع. الخطوة الثالثة: البحث عن الاستثناء ولم يُعثر عليه.',
+  },
 ];
 
 const FACTS_EN: Array<[string, string, boolean]> = [
@@ -499,9 +662,33 @@ const CRIT: CritRow[] = [
   { criterion: 'Escalation step is present', weight: 0.2, score: 0.5, note: 'Mentioned without an owner' },
 ];
 const CRIT_COLS: Column<CritRow>[] = [
-  { id: 'criterion', header: 'Criterion', sort: 'criterion', accessor: (r) => r.criterion, flex: true, minWidth: 200, wrap: 3 },
-  { id: 'weight', header: 'Weight', sort: 'weight', accessor: (r) => r.weight, width: 80, align: 'end', mono: true },
-  { id: 'score', header: 'Score', sort: 'score', accessor: (r) => r.score, width: 80, align: 'end', mono: true },
+  {
+    id: 'criterion',
+    header: 'Criterion',
+    sort: 'criterion',
+    accessor: (r) => r.criterion,
+    flex: true,
+    minWidth: 200,
+    wrap: 3,
+  },
+  {
+    id: 'weight',
+    header: 'Weight',
+    sort: 'weight',
+    accessor: (r) => r.weight,
+    width: 80,
+    align: 'end',
+    mono: true,
+  },
+  {
+    id: 'score',
+    header: 'Score',
+    sort: 'score',
+    accessor: (r) => r.score,
+    width: 80,
+    align: 'end',
+    mono: true,
+  },
   { id: 'note', header: 'Note', sort: 'note', accessor: (r) => r.note, minWidth: 200, wrap: 3 },
 ];
 
@@ -512,15 +699,36 @@ interface EvRow {
   quote: string;
 }
 const EVID: EvRow[] = [
-  { doc: 'policy-handbook.pdf', page: 12, relevance: 0.93, quote: 'Approvals above SAR 50,000 require a second reviewer.' },
+  {
+    doc: 'policy-handbook.pdf',
+    page: 12,
+    relevance: 0.93,
+    quote: 'Approvals above SAR 50,000 require a second reviewer.',
+  },
   { doc: 'faq.md', page: 3, relevance: 0.61, quote: 'Existing customers follow the fast track.' },
   { doc: 'guide.pdf', page: 7, relevance: 0.48, quote: 'Escalate to the regional owner within two days.' },
 ];
 const EV_COLS: Column<EvRow>[] = [
   { id: 'doc', header: 'Doc', sort: 'doc', accessor: (r) => r.doc, width: 170 },
   { id: 'page', header: 'Page', sort: 'page', accessor: (r) => r.page, width: 70, align: 'end', mono: true },
-  { id: 'relevance', header: 'Relevance', sort: 'relevance', accessor: (r) => r.relevance, width: 100, align: 'end', mono: true },
-  { id: 'quote', header: 'Quote', sort: 'quote', accessor: (r) => r.quote, flex: true, minWidth: 260, wrap: 3 },
+  {
+    id: 'relevance',
+    header: 'Relevance',
+    sort: 'relevance',
+    accessor: (r) => r.relevance,
+    width: 100,
+    align: 'end',
+    mono: true,
+  },
+  {
+    id: 'quote',
+    header: 'Quote',
+    sort: 'quote',
+    accessor: (r) => r.quote,
+    flex: true,
+    minWidth: 260,
+    wrap: 3,
+  },
 ];
 
 interface ChkRow {
@@ -535,13 +743,23 @@ const CHK: ChkRow[] = [
 const CHK_COLS: Column<ChkRow>[] = [
   { id: 'name', header: 'Name', sort: 'name', accessor: (r) => r.name, flex: true, minWidth: 140 },
   { id: 'passed', header: 'Passed', sort: 'passed', accessor: (r) => r.passed, width: 90 },
-  { id: 'weight', header: 'Weight', sort: 'weight', accessor: (r) => r.weight, width: 80, align: 'end', mono: true },
+  {
+    id: 'weight',
+    header: 'Weight',
+    sort: 'weight',
+    accessor: (r) => r.weight,
+    width: 80,
+    align: 'end',
+    mono: true,
+  },
 ];
 
 function ProseBlock({ p, primary }: { p: Prose; primary?: boolean }) {
   return (
     <div className={styles.prose}>
-      <div className={styles.eyebrow} title={p.label}>{p.label}</div>
+      <div className={styles.eyebrow} title={p.label}>
+        {p.label}
+      </div>
       <p
         className={styles.proseText}
         data-primary={primary ? '' : undefined}
@@ -553,7 +771,17 @@ function ProseBlock({ p, primary }: { p: Prose; primary?: boolean }) {
   );
 }
 
-function TableBlock<R extends object>({ title, count, columns, rows }: { title: string; count: string; columns: Column<R>[]; rows: R[] }) {
+function TableBlock<R extends object>({
+  title,
+  count,
+  columns,
+  rows,
+}: {
+  title: string;
+  count: string;
+  columns: Column<R>[];
+  rows: R[];
+}) {
   return (
     <div className={styles.tableBlock}>
       <div className={styles.eyebrowRow}>
@@ -612,7 +840,11 @@ export function MetricPanelMock({ variant }: { variant: Variant }) {
           <ScoreValue value={value} type="percentage" direction="maximize" variant="text" digits={1} />
         </span>
         {table ? <Tag kind="count">Pass 3</Tag> : null}
-        {table ? <Tag tone="warning" title="Edited by a reviewer: 0.48 to 0.62">edited</Tag> : null}
+        {table ? (
+          <Tag tone="warning" title="Edited by a reviewer: 0.48 to 0.62">
+            edited
+          </Tag>
+        ) : null}
         <span className={styles.pActions}>
           <Button size="sm" variant="neutral" icon={<Icon name="edit" size={14} />} onPress={() => undefined}>
             Edit score
@@ -645,7 +877,9 @@ export function MetricPanelMock({ variant }: { variant: Variant }) {
             </div>
             <div className={styles.fact}>
               <dt title="explanation">Explanation</dt>
-              <dd dir="rtl" lang="ar">درجة جيدة مع نقص في الاستثناءات</dd>
+              <dd dir="rtl" lang="ar">
+                درجة جيدة مع نقص في الاستثناءات
+              </dd>
             </div>
           </dl>
         )}
@@ -656,10 +890,19 @@ export function MetricPanelMock({ variant }: { variant: Variant }) {
             <TableBlock title="Evidence" count="3 rows" columns={EV_COLS} rows={EVID} />
           </>
         ) : null}
-        {!table && !ar ? <TableBlock title="Criteria" count="4 rows" columns={CRIT_COLS} rows={CRIT} /> : null}
+        {!table && !ar ? (
+          <TableBlock title="Criteria" count="4 rows" columns={CRIT_COLS} rows={CRIT} />
+        ) : null}
         {!ar ? (
           <Collapsed
-            keys={table ? [['breakdown', 'object · 2 keys'], ['flags', 'array · 2 items']] : [['breakdown', 'object · 2 keys']]}
+            keys={
+              table
+                ? [
+                    ['breakdown', 'object · 2 keys'],
+                    ['flags', 'array · 2 items'],
+                  ]
+                : [['breakdown', 'object · 2 keys']]
+            }
           />
         ) : null}
       </div>
@@ -679,22 +922,39 @@ export function Round5Mocks({
   return (
     <Section id="round5" title="Round 5 run-detail mocks (design contract)">
       <Case wide label="r5-bars-10 (R1: 11 score buckets and a boolean; every bar bottom on the axis)">
-        <div className={styles.frame}><BarsMock10 /></div>
+        <div className={styles.frame}>
+          <BarsMock10 />
+        </div>
       </Case>
       <Case wide label="r5-bars-20 (R1: 20 columns, dense counts, thinned labels)">
-        <div className={styles.frame}><BarsMock20 /></div>
+        <div className={styles.frame}>
+          <BarsMock20 />
+        </div>
+      </Case>
+      <Case wide label="r5-bars-sweep (R1-3: the real BarColumns, 1 to 20 columns)">
+        <div className={styles.frame}>
+          <BarsSweep />
+        </div>
       </Case>
       <Case wide label="r5-box-coloured (R2: score band, series 1, per-pass rows, step rows; no number row)">
-        <div className={styles.frame}><BoxColouredMock /></div>
+        <div className={styles.frame}>
+          <BoxColouredMock />
+        </div>
       </Case>
       <Case wide label="r5-metric-panel-en (R3: one pass, English)">
-        <div className={styles.frame}><MetricPanelMock variant="en" /></div>
+        <div className={styles.frame}>
+          <MetricPanelMock variant="en" />
+        </div>
       </Case>
       <Case wide label="r5-metric-panel-ar (R3: Arabic reasoning, long keys)">
-        <div className={styles.frame}><MetricPanelMock variant="ar" /></div>
+        <div className={styles.frame}>
+          <MetricPanelMock variant="ar" />
+        </div>
       </Case>
       <Case wide label="r5-metric-panel-table (R3: table-shaped details, pass 3)">
-        <div className={styles.frame}><MetricPanelMock variant="table" /></div>
+        <div className={styles.frame}>
+          <MetricPanelMock variant="table" />
+        </div>
       </Case>
     </Section>
   );

@@ -9,7 +9,7 @@ import { metricBand } from '@/lib/metrics';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { staggerIndex, useEntrance } from '@/ui/motion';
 import { bucketTone, type BoolSegment, type ScoreBucket } from '../../lib/overviewModel';
-import { countText, thinAxisLabels } from './chartLabels';
+import { COLUMN_GAP, axisLabelShown, columnPitch, countText, isDenseCounts } from './chartLabels';
 import styles from './Charts.module.css';
 
 /** Width of an element in CSS px (ResizeObserver); `fallback` until measured. Charts draw at this width so text and marks keep their size. */
@@ -69,81 +69,97 @@ export interface BarSpec {
   data?: Record<`data-${string}`, string | number>;
 }
 
-const COLUMN_GAP = 4;
-
 /**
- * The one column recipe of every bar chart (round 3 P1). Each column is a flex column
- * `[spacer][count][bar][axis][sub]`; the spacer takes `1 - p` and the bar `p` of the free height (`--p` = count / max),
- * so the count always sits on the top edge of its bar and a taller slot makes the bars taller, never leaves space under them.
+ * The one column recipe of every bar chart (round 5 R1: well and foot). A column is a two-row grid:
+ * the well (spacer `1 - p`, count, bar `p`; its bottom border is the x axis) and a foot of one constant height
+ * (axis label, note, sub label). The foot is rendered for every column, a thinned label as a blank line, so no column
+ * can end higher or lower than its neighbours and every bar bottom is the axis line.
  * The count and axis text come from `data-text` (drawn by CSS) so the column's accessible name stays its `name`.
  */
 export function BarColumns({
   bars,
   name,
   axis = true,
-  thin = true,
   className,
 }: {
   bars: BarSpec[];
   name: string;
   /** Per-column axis labels; false when the plot has its own axis (latency bins). */
   axis?: boolean;
-  /** Apply the thinning rule (every second label under 30px per column); false for short labels (0..k) that cannot collide. */
-  thin?: boolean;
   className?: string;
 }) {
   const [boxRef, width] = useMeasuredWidth<HTMLDivElement>(280);
   const enter = useEntrance();
   const max = Math.max(1, ...bars.map((b) => b.count));
-  const colWidth = bars.length ? (width - COLUMN_GAP * (bars.length - 1)) / bars.length : width;
-  const showAxis = thinAxisLabels(bars.length, thin ? colWidth : Infinity);
+  const pitch = columnPitch(bars.length, width);
+  const colWidth = pitch - COLUMN_GAP;
+  const showAxis = axisLabelShown(
+    bars.map((b) => b.label),
+    width,
+  );
+  const digits = Math.max(1, ...bars.map((b) => countText(b.count, colWidth, b.zero).length));
+  const dense = isDenseCounts(pitch, digits);
+  const rows = axis ? 1 + (bars.some((b) => b.note) ? 1 : 0) + (bars.some((b) => b.sub) ? 1 : 0) : 0;
+  const foot = axis ? 4 + 14 * rows : 4;
   return (
     <div ref={boxRef} className={styles.plotBox}>
       <ChartTooltipHost
         className={[styles.plot, className].filter(Boolean).join(' ')}
         role="group"
         aria-label={name}
+        data-dense={dense ? '' : undefined}
+        style={{ '--foot': `${foot}px` } as React.CSSProperties}
       >
         {bars.map((b, i) => {
           const text = countText(b.count, colWidth, b.zero);
           const inner = (
             <>
-              <span
-                className={styles.count}
-                data-part="count"
-                aria-hidden="true"
-                data-text={text}
-                data-zero={b.count === 0 ? '' : undefined}
-                data-enter={enter ? '' : undefined}
-                style={{ '--i': staggerIndex(i) } as React.CSSProperties}
-              />
-              <span
-                className={styles.bar}
-                data-part="bar"
-                data-enter={enter ? '' : undefined}
-                style={{ background: b.color, '--i': staggerIndex(i) } as React.CSSProperties}
-              >
-                {b.errShare ? (
-                  <span className={styles.barErr} style={{ height: `${Math.min(1, b.errShare) * 100}%` }} />
+              <span className={styles.well} data-part="well">
+                <span
+                  className={styles.count}
+                  data-part="count"
+                  aria-hidden="true"
+                  data-text={text}
+                  data-zero={b.count === 0 ? '' : undefined}
+                  data-enter={enter ? '' : undefined}
+                  style={{ '--i': staggerIndex(i) } as React.CSSProperties}
+                />
+                <span
+                  className={styles.bar}
+                  data-part="bar"
+                  data-enter={enter ? '' : undefined}
+                  style={{ background: b.color, '--i': staggerIndex(i) } as React.CSSProperties}
+                >
+                  {b.errShare ? (
+                    <span className={styles.barErr} style={{ height: `${Math.min(1, b.errShare) * 100}%` }} />
+                  ) : null}
+                </span>
+              </span>
+              <span className={styles.foot} data-part="foot" aria-hidden="true">
+                {axis ? (
+                  <>
+                    <span
+                      className={styles.axis}
+                      data-part="axis"
+                      data-text={showAxis[i] ? b.label : '\u00a0'}
+                    />
+                    {bars.some((x) => x.note) ? (
+                      <small className={styles.axisNote} data-part="note">
+                        {b.note ?? '\u00a0'}
+                      </small>
+                    ) : null}
+                    {bars.some((x) => x.sub) ? (
+                      <span className={styles.axisSub} data-part="sub" data-text={b.sub ?? '\u00a0'} />
+                    ) : null}
+                  </>
                 ) : null}
               </span>
-              {axis ? (
-                <span
-                  className={styles.axis}
-                  data-part="axis"
-                  aria-hidden="true"
-                  data-text={showAxis[i] ? b.label : ''}
-                />
-              ) : null}
-              {axis && b.note ? <small className={styles.axisNote}>{b.note}</small> : null}
-              {axis && b.sub ? (
-                <span className={styles.axisSub} data-part="sub" aria-hidden="true" data-text={b.sub} />
-              ) : null}
             </>
           );
           const style = { '--p': b.count / max } as React.CSSProperties;
           const zero = b.count === 0 ? '' : undefined;
           const dim = b.dim ? '' : undefined;
+          const tier = dense && i % 2 === 1 ? '2' : undefined;
           if (b.onPick && !b.passive) {
             return (
               <Mark
@@ -153,6 +169,7 @@ export function BarColumns({
                 style={style}
                 data-zero={zero}
                 data-out={dim}
+                data-tier={tier}
                 tip={b.tip}
                 aria-label={b.name}
                 isSelected={b.selected}
@@ -171,6 +188,7 @@ export function BarColumns({
               style={style}
               data-zero={zero}
               data-out={dim}
+              data-tier={tier}
               tip={b.tip}
               role="img"
               aria-label={b.name}
@@ -185,6 +203,7 @@ export function BarColumns({
               style={style}
               data-zero={zero}
               data-out={dim}
+              data-tier={tier}
               data-empty="true"
               {...b.data}
             >
@@ -735,5 +754,5 @@ export function PassCountBars({
     zero: 'show',
     data: { 'data-passes': i },
   }));
-  return <BarColumns bars={bars} name="Items by number of passes that passed" thin={false} />;
+  return <BarColumns bars={bars} name="Items by number of passes that passed" />;
 }

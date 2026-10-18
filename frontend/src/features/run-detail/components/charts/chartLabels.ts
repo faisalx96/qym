@@ -1,21 +1,39 @@
 /** Pure label rules of the bar plot (round 3 P1): which axis labels show, how a count is written. */
 
-/** A column narrower than this (CSS px) shows the label of every second bucket. */
-export const THIN_AXIS_BELOW = 30;
+/** Gap between two columns of a bar plot (CSS px). */
+export const COLUMN_GAP = 4;
 
-/** Rough width of one mono digit at `--font-sm` (px), used to decide when `1234` must become `1.2k`. */
-const DIGIT_PX = 7;
+/** Rough width of one mono character at `--font-sm` (px). */
+export const CHAR_PX = 7;
 
-/** Which axis labels are shown: all of them, or every second one (0, 2, 4, ...) when the columns are narrower than 30px. */
-export function thinAxisLabels(n: number, columnWidth: number): boolean[] {
-  const thin = columnWidth < THIN_AXIS_BELOW;
-  return Array.from({ length: n }, (_, i) => !thin || i % 2 === 0);
+/** Column pitch (column width plus gap) for `n` columns in a plot `width` px wide. */
+export function columnPitch(n: number, width: number): number {
+  if (n <= 0) return width + COLUMN_GAP;
+  return (width - COLUMN_GAP * (n - 1)) / n + COLUMN_GAP;
+}
+
+/** Show the label of every k-th column (0, k, 2k ...): the smallest k whose labels do not touch (round 5 R1). */
+export function labelEvery(pitch: number, labelWidth: number): number {
+  if (!Number.isFinite(pitch) || pitch <= 0) return 1;
+  return Math.max(1, Math.ceil(labelWidth / pitch));
+}
+
+/** Which axis labels are shown: every k-th, k from the longest label; column 0 is always shown. */
+export function axisLabelShown(labels: string[], width: number): boolean[] {
+  const longest = labels.reduce((m, l) => Math.max(m, l.length), 0);
+  const every = labelEvery(columnPitch(labels.length, width), longest * CHAR_PX + 6);
+  return labels.map((_, i) => i % every === 0);
+}
+
+/** Counts of two or more digits in columns narrower than the text: the plot raises every second count one tier. */
+export function isDenseCounts(pitch: number, digits: number): boolean {
+  return pitch < digits * CHAR_PX + 2;
 }
 
 /** `1234` -> `1.2k` (and `12000` -> `12k`) when the plain text would be wider than the column; other counts stay whole. */
 export function abbreviateCount(count: number, columnWidth: number = Infinity): string {
   const plain = String(count);
-  if (count < 1000 || plain.length * DIGIT_PX <= columnWidth) return plain;
+  if (count < 1000 || plain.length * CHAR_PX <= columnWidth) return plain;
   const k = count / 1000;
   return `${k < 10 ? (Math.round(k * 10) / 10).toString() : Math.round(k).toString()}k`;
 }

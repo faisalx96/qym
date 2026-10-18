@@ -168,6 +168,17 @@
   font-family: var(--font-mono);
 }
 
+/* R1-3 sweep: one plot per column count. */
+.sweep {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.sweepPlot {
+  display: flex;
+  min-block-size: 160px;
+}
+
 /* ───────── R2: coloured box plots ───────── */
 .boxGrid {
   display: grid;

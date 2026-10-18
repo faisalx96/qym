@@ -52,9 +52,18 @@ async function plots(page: Page) {
             const axis = c.querySelector('[data-part=axis]');
             return {
               tag: c.tagName,
+              tier: c.getAttribute('data-tier'),
               count: { text: content(count), data: count.getAttribute('data-text'), box: box(count) },
               bar: box(bar),
-              axis: axis ? { text: content(axis), box: box(axis) } : null,
+              // round 5: a thinned label is a blank line (U+00A0), not a missing one
+              axis: axis
+                ? {
+                    text: content(axis)
+                      .replace(/\u00a0/g, '')
+                      .trim(),
+                    box: box(axis),
+                  }
+                : null,
             };
           }),
       }));
@@ -99,7 +108,9 @@ for (const width of WIDTHS) {
       await expect(page.getByRole('group', { name: /Latency histogram/ })).toBeVisible();
       for (const p of (await plots(page)).filter((q) => /Latency histogram/.test(q.name)))
         for (const c of p.cols)
-          if (c.bar.height > 0) expect(c.bar.top - c.count.box.bottom).toBeLessThanOrEqual(4);
+          if (c.bar.height > 0)
+            // round 5 R1-5: a raised-tier count of a dense plot sits up to 20px above its bar
+            expect(c.bar.top - c.count.box.bottom).toBeLessThanOrEqual(c.tier === '2' ? 20.5 : 4);
     });
 
     test('P1-3, P1-7, P1-9, P1-11: charts live in cards, no dead space under the plot, nothing overflows, cards are 260px or wider', async ({
@@ -201,7 +212,7 @@ for (const width of WIDTHS) {
       await expect(split.locator('[data-part=sub]').first()).toHaveAttribute('data-text', /%$/);
     });
 
-    test('P1-8: the 11 bucket histograms thin their axis to 6 labels at narrow columns and nothing overlaps', async ({
+    test('P1-8 (round 5: label rule k = ceil(labelWidth / pitch), blank lines keep the foot): the 11 bucket histograms thin their axis to 6 labels at narrow columns and nothing overlaps', async ({
       page,
     }) => {
       await openRun(page, s.slug, classic);

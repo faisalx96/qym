@@ -485,13 +485,18 @@ is not allowed.
   Rows (`BoxTrack`) draw the same glyph per pass and per step.
 - **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
   `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
-  of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`): each bucket is a
-  flex column `[spacer][count][bar][axis][sub]`, the spacer taking `1 - p` and the bar `p` of the free height
-  (`--p` = count / max), so the count always sits on the bar's top edge (a 16px line, 2px above it) and is visible at
-  rest, never hover-only (the tooltip only adds the longer sentence). Bars are at most 44px wide with a 4px gap and a
+  of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`, round 5 R1 "well and foot"): each bucket is a
+  two-row grid, the well (flex column `[spacer][count][bar]`, the spacer taking `1 - p` and the bar `p` of the free
+  height, `--p` = count / max) and a foot of one constant height per plot (`--foot` = 4px + 14px per line: axis label,
+  optional note and sub line). The well's bottom border (1px `--border-default`, bridged across the 4px gaps) is the drawn
+  x axis and every bar bottom stands on it; a thinned axis label is a blank line (U+00A0), never a missing one, so no
+  column can end higher than its neighbour. The count sits on the bar's top edge (a 16px line, 2px above it) and is visible
+  at rest, never hover-only (the tooltip only adds the longer sentence). Bars are at most 44px wide with a 4px gap and a
   3px minimum when the count is above 0; an empty score bucket draws no count, pass/fail bars and "Passes passed"
-  draw `0` in `--text-muted`. A column narrower than 30px shows every second axis label (the full list stays in the
-  `aria-label`). Boolean metrics are the same plot (Pass, Fail, Error columns, percentage under the label), not a
+  draw `0` in `--text-muted`. Axis labels follow one rule for every plot: every k-th label with
+  `k = ceil(labelWidth / pitch)` (`pitch` = column + gap, `labelWidth` = characters x 7 + 6), column 0 always; the full list
+  stays in the `aria-label`. When counts are wider than the pitch the plot is `data-dense`: every second count is raised
+  one 18px tier (no layout change). Boolean metrics are the same plot (Pass, Fail, Error columns, percentage under the label), not a
   horizontal split bar. Bars rise and counts fade in together on mount; nothing animates under
   `prefers-reduced-motion` (`animation: none`). Overview cards flow in `repeat(auto-fit, minmax(260px, 1fr))`.
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour

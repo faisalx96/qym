@@ -1,20 +1,43 @@
 /** Round 3 P1: the pure label rules of the bar plot. */
 import { describe, expect, it } from 'vitest';
-import { THIN_AXIS_BELOW, abbreviateCount, countText, matrixCellSide, thinAxisLabels } from './chartLabels';
+import {
+  abbreviateCount,
+  axisLabelShown,
+  countText,
+  isDenseCounts,
+  labelEvery,
+  matrixCellSide,
+} from './chartLabels';
 import { labelledPositions, tickPositions } from './Charts';
 
-describe('thinAxisLabels', () => {
-  it('shows every label when the columns are 30px or wider', () => {
-    expect(thinAxisLabels(11, 30)).toEqual(Array(11).fill(true));
-    expect(thinAxisLabels(3, 80)).toEqual([true, true, true]);
+describe('labelEvery', () => {
+  it('shows every second label of 11 four-character labels in a 22px pitch', () => {
+    expect(labelEvery(22, 4 * 7 + 6)).toBe(2);
   });
 
-  it('shows every second label (0%, 20% ... 100%) under 30px, so 6 of 11', () => {
-    const shown = thinAxisLabels(11, THIN_AXIS_BELOW - 1);
+  it('shows every second label of 20 two-character labels in a 12px pitch', () => {
+    expect(labelEvery(12, 2 * 7 + 6)).toBe(2);
+  });
+
+  it('shows all labels when the pitch is wide', () => {
+    expect(labelEvery(70, 4 * 7 + 6)).toBe(1);
+  });
+});
+
+describe('axisLabelShown', () => {
+  it('labels columns 0, 2 ... 10 of an 11-bucket histogram in a 280px plot, and column 0 always', () => {
+    const labels = Array.from({ length: 11 }, (_, i) => `${i * 10}%`);
+    const shown = axisLabelShown(labels, 280);
+    expect(shown[0]).toBe(true);
     expect(shown.filter(Boolean)).toHaveLength(6);
-    expect(shown.map((v, i) => (v ? i * 10 : null)).filter((v) => v !== null)).toEqual([
-      0, 20, 40, 60, 80, 100,
-    ]);
+  });
+});
+
+describe('isDenseCounts', () => {
+  it('is dense when two-digit counts do not fit the pitch', () => {
+    expect(isDenseCounts(12, 2)).toBe(true);
+    expect(isDenseCounts(17, 2)).toBe(false);
+    expect(isDenseCounts(22, 1)).toBe(false);
   });
 });
 
