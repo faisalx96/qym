@@ -144,12 +144,15 @@ export function RunBody({
   payload,
   rowsPending = false,
   summary,
+  summaryPending = false,
 }: {
   runId: string;
   payload: RunPayload;
   rowsPending?: boolean;
   /** The run summary (stage 1), once it has answered: carries the review count and the pager's neighbours. */
   summary?: RunPayload;
+  /** The summary has not answered (the header is the list row): hold the requests it makes unnecessary. */
+  summaryPending?: boolean;
 }) {
   const { slug, readOnly } = useProjectContext();
   const [params] = useSearchParams();
@@ -240,6 +243,7 @@ export function RunBody({
     scoresLocked: scoresLocked(payload.run),
     basePath,
     reviewEventCount: summary?.review_event_count,
+    summaryPending,
     summaryNeighbors: summary?.neighbors,
     rowsPending,
     hasGroup,
@@ -263,7 +267,11 @@ export function RunBody({
           <ExperimentPanel run={run} slug={slug} />
           <RunNotices run={run} readOnly={readOnly} />
           <div id={sectionDomId('reviews')} className={styles.reviews}>
-            <ReviewHistory runId={runId} status={run.status} enabled={summary?.review_event_count !== 0} />
+            <ReviewHistory
+              runId={runId}
+              status={run.status}
+              enabled={summary ? summary.review_event_count !== 0 : !summaryPending}
+            />
           </div>
         </Stack>
         <RunReport pageRef={pageRef} />

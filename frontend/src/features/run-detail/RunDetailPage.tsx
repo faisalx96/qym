@@ -79,7 +79,15 @@ function RunLoader({ runId }: { runId: string }) {
   }
   // A summary that is only the list row (stage 0) has no review count or neighbours yet.
   const summaryData = summary.isPlaceholderData ? undefined : summary.data;
-  return <RunBody runId={runId} payload={payload} rowsPending={!rows.data} summary={summaryData} />;
+  return (
+    <RunBody
+      runId={runId}
+      payload={payload}
+      rowsPending={!rows.data}
+      summary={summaryData}
+      summaryPending={summary.isPlaceholderData || summary.isPending}
+    />
+  );
 }
 
 export function RunDetailPage() {

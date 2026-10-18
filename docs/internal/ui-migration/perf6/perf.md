@@ -509,7 +509,7 @@ value and the reason, and each asserted by `frontend/e2e/perf/*.spec.ts`:
 | A8 | <= 3 commits; <= 110 ms (1x), <= 400 ms (4x) | 3; 99 / 399 ms | the menu's press state, the pin and 1,700 cells re-rendering on a reorder |
 | A9 | Layerize <= 350 ms (1x), <= 1,200 ms (4x); sticky <= 170 unchanged | 325 / 1,134 ms; 135 | E1 and a single sticky header; E2/E3 not shipped |
 | B5 | header and Overview <= 5,100 ms | 5,020 ms | entry bundle bound |
-| B8 | before Items is near: no `fields=` beyond `scores,reasons,categories,traces,review` | exactly that, then one `text` | every section reads item metadata, trace stats and review keys |
+| B8 | after the Overview paints, every row group, panel chunk and section data is requested without scroll or click; full data <= 1.5 s local / <= 4 s Fast 3G after the Overview (1,200 items); scrolling afterwards fires 0 requests; <= 3 run requests | +0.25 s; +0.76 to +3.0 s | owner correction: viewport gating is out (section 4.3 "Stage 3 per section, on demand" and the idle-prefetch limits there are superseded) |
 
 Decisions taken for the open points of section 7: edge shadow faded over 120 ms; E1 shipped, E2/E3 not; entry split out of scope (follow-up); `neighbors`
-and `review_event_count` folded into `?view=summary`; `reasons` in stage 2; hero font preload skipped.
+and `review_event_count` folded into `?view=summary`; `reasons` in stage 2; hero font preload skipped. Owner correction after review of B8: stage 3 loads by default right after the core rows paint, never on intersection.

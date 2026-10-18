@@ -22,6 +22,8 @@ export interface RunPageValue {
   basePath: string;
   /** From the run summary: how many review events there are (0 = no review-history request) and the pager's neighbours (default list order). */
   reviewEventCount: number | undefined;
+  /** The summary (stage 1) has not answered yet. */
+  summaryPending: boolean;
   summaryNeighbors: NeighborsPayload | null | undefined;
   /** Stage 2 has not answered yet: the payload is the run header (summary or list row) with no rows. */
   rowsPending: boolean;

@@ -18,6 +18,8 @@ export function useRunNeighbors(
   listParam: string | null,
   /** The neighbours the run summary carried (default list order): answers without a request. */
   seed?: NeighborsPayload | null,
+  /** False while the summary that may carry the neighbours is on its way. */
+  ready = true,
 ) {
   const context = useMemo(() => normalizeContext(listParam), [listParam]);
   return useQuery({
@@ -31,7 +33,7 @@ export function useRunNeighbors(
       }
       return first;
     },
-    enabled: !!slug && !!runId,
+    enabled: !!slug && !!runId && ready,
     initialData: context === '' && seed && seed.context ? seed : undefined,
     staleTime: 60_000,
     retry: false,
@@ -114,8 +116,14 @@ export function RunPager({
   slug: string;
   listParam: string | null;
 }) {
-  const seed = useContext(RunContext)?.summaryNeighbors;
-  const { data, isError } = useRunNeighbors(runId, slug, listParam, seed);
+  const page = useContext(RunContext);
+  const { data, isError } = useRunNeighbors(
+    runId,
+    slug,
+    listParam,
+    page?.summaryNeighbors,
+    !page?.summaryPending,
+  );
   const navigate = useNavigate();
   const context = normalizeContext(listParam);
   const listContext = data?.context === 'list' ? context : '';

@@ -88,8 +88,11 @@ export function useHasRootCause(): boolean {
 
 /** The sections this run shows, in page order, with the counts the nav displays. */
 export function useSectionEntries(): SectionEntry[] {
-  const { runId, model, items, payload, rowsPending, reviewEventCount } = useRunPage();
-  const reviews = useReviewHistoryQuery(runId, reviewEventCount !== 0);
+  const { runId, model, items, payload, rowsPending, reviewEventCount, summaryPending } = useRunPage();
+  const reviews = useReviewHistoryQuery(
+    runId,
+    reviewEventCount === undefined ? !summaryPending : reviewEventCount !== 0,
+  );
   const reviewCount = reviews.data?.events.length ?? 0;
   // Until the rows arrive the nav shows the sections the summary knows about, without counts.
   const errorCount = rowsPending ? 0 : errorBucketCount(model.rows, model.isRepeat && !model.viewPass);
