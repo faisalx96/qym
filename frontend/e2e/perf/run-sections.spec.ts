@@ -12,33 +12,47 @@ test.use({ viewport: { width: 1440, height: 900 } });
 const rowRequests = (log: ReturnType<typeof logRequests>) =>
   log.filter((r) => /\/api\/runs\/[^/]+\?view=compact/.test(r.url));
 
-test('the item texts load when Items is near, once; the first request is the core groups', async ({
+test('after the Overview paints every group and chunk loads by itself; scrolling later requests nothing', async ({
   page,
 }) => {
   const s = await seedProject('perf-groups');
   const runId = await seedClassic(s, { items: 300, traced: 3 });
   const log = logRequests(page);
+  const chunks: string[] = [];
+  page.on('request', (r) => {
+    if (/\/(assets|src)\/.*\.(js|ts|tsx)/.test(new URL(r.url()).pathname)) chunks.push(r.url());
+  });
   await page.goto(runUrl(s.slug, runId));
   await expect(page.getByTestId('metric-card').first()).toBeVisible();
-  await page.waitForTimeout(1500);
-
-  // B8: before any scroll: the summary and one core request, no text group
+  // B8: no scroll, no click: the core request first, the texts right after, nothing else for the rows
+  await expect.poll(() => rowRequests(log).length, { timeout: 10_000 }).toBe(2);
+  const urls = rowRequests(log).map((r) => r.url);
+  expect(urls[0]).toContain('fields=scores,reasons,categories,traces,review');
+  expect(urls[1]).toContain('fields=text');
   expect(log.filter((r) => r.url.includes('view=summary')).length).toBe(1);
-  const first = rowRequests(log);
-  expect(first.length).toBe(1);
-  expect(first[0]!.url).toContain('fields=scores,reasons,categories,traces,review');
-  expect(first.some((r) => r.url.includes('text'))).toBe(false);
-
-  // scroll to the table: exactly one text request
-  await showItems(page);
-  await expect.poll(() => rowRequests(log).filter((r) => r.url.includes('fields=text')).length).toBe(1);
-  await page.waitForTimeout(800);
-  await expect(page.getByRole('row').nth(1)).toContainText(/\S+/);
-  expect(rowRequests(log).filter((r) => r.url.includes('fields=text')).length).toBe(1);
-
-  // B9: a run without reviews: summary + core rows + text, and no review-history or neighbours request
+  // B9: a run without reviews: no review-history request; summary + core + text = 3 run requests
   expect(log.some((r) => r.url.includes('review-history'))).toBe(false);
   expect(log.filter((r) => /\/api\/runs\/[^/]+\?view=/.test(r.url)).length).toBeLessThanOrEqual(3);
+  // every panel chunk is requested without a scroll
+  await expect
+    .poll(
+      () =>
+        ['LatencyTab', 'DeepTab', 'CategoriesTab', 'ErrorsTab', 'ItemsSection'].every((n) =>
+          chunks.some((c) => c.includes(n)),
+        ),
+      {
+        timeout: 10_000,
+      },
+    )
+    .toBe(true);
+  await page.waitForTimeout(800);
+
+  // scrolling to any section after that fires no request (and shows no loading state for the texts)
+  const before = log.length;
+  await showItems(page);
+  await page.waitForTimeout(800);
+  await expect(page.getByRole('row').nth(1)).toContainText(/\S+/);
+  expect(log.length).toBe(before);
 });
 
 test('switching sections and tabs causes no run request; leaving mid-load aborts the request', async ({
@@ -59,9 +73,7 @@ test('switching sections and tabs causes no run request; leaving mid-load aborts
     await page.waitForTimeout(250);
   }
   // B10: only the lazy sections' own data (step latency) may load; never the run rows again
-  expect(
-    log.filter((r) => /\/api\/runs\/[^/]+\?view=/.test(r.url) && !r.url.includes('fields=text')),
-  ).toEqual([]);
+  expect(log.filter((r) => /\/api\/runs\/[^/]+\?view=/.test(r.url))).toEqual([]);
 
   // a second run, left while its rows are held
   const other = await seedClassic(s, { items: 60 });

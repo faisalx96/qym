@@ -2,10 +2,19 @@
  * Report layout: hero on top, the sticky section nav, then every analysis section stacked at full width and the
  * Items table last. While the reader has narrowed the item set (a scope), a quick-filter sidebar appears.
  */
+import { useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { runPath } from '@/app/routes';
-import { loadedGroups, LATE_GROUPS, useRowGroupQuery, usePassesQuery } from '@/api/runs';
+import { api as http } from '@/lib/http';
+import {
+  loadedGroups,
+  LATE_GROUPS,
+  runKeys,
+  stepLatencyUrl,
+  useRowGroupQuery,
+  usePassesQuery,
+} from '@/api/runs';
 import { useDocumentTitle, useMediaQuery, useProjectContext } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import { ReportLayout, ScopeBar, Stack } from '@/ui';
@@ -15,7 +24,7 @@ import { QuickFilters } from './components/QuickFilters';
 import { ReportSections, isSectionKey, sectionDomId } from './components/ReportSections';
 import { SectionNav, type SectionId } from './components/SectionNav';
 import { ItemsSkeleton } from './components/StageSkeletons';
-import { loadItemsSection, loadTraceHost } from './chunks';
+import { loadItemsSection, loadTraceHost, preloadPanels } from './chunks';
 import { useItemSearch } from './hooks/useItemSearch';
 import { useLiveRun } from './hooks/useLiveRun';
 import { alignToElement } from '@/lib/scrollToElement';
@@ -27,7 +36,7 @@ import { inferPassSummary } from './lib/passScope';
 import { buildRunModel } from './lib/runModel';
 import { scoresLocked } from './lib/heroModel';
 import { RunContext, useRunPage, type RunPageValue } from './RunContext';
-import type { PassSummary, RowGroup, RunPayload } from './types';
+import type { PassSummary, RowGroup, RunPayload, StepLatencyPayload } from './types';
 import styles from './RunBody.module.css';
 
 /** A rule that reads item text (input, output or expected). */
@@ -194,6 +203,28 @@ export function RunBody({
       group,
       (wanted.has(group) || (group === 'text' && wantsText)) && !rowsPending && !loaded.includes(group),
     );
+
+  // Everything else loads by itself once the core rows have painted, with no scroll or click: the item texts and the
+  // remaining panel chunks and section data, in the browser's idle time (aborted when the page is left).
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (rowsPending) return undefined;
+    const run = () => {
+      needGroup('text');
+      preloadPanels();
+      void qc.prefetchQuery({
+        queryKey: runKeys.stepLatency(runId, null),
+        queryFn: ({ signal }) => http.get<StepLatencyPayload>(stepLatencyUrl(runId, null), { signal }),
+        staleTime: 60_000,
+      });
+    };
+    if (typeof window.requestIdleCallback !== 'function') {
+      const id = globalThis.setTimeout(run, 50);
+      return () => globalThis.clearTimeout(id);
+    }
+    const id = window.requestIdleCallback(run, { timeout: 300 });
+    return () => window.cancelIdleCallback(id);
+  }, [rowsPending, needGroup, qc, runId]);
 
   const basePath = runPath(slug, runId);
   const value: RunPageValue = {
