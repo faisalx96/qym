@@ -5,7 +5,7 @@ build of `UI-redesign` (b88036cc) on 5999 over the same seeded DB. Seeds and scr
 paths in the scratchpad, see section 7). Medians of 3, 1440 x 900, dark; "4x" = `setCPUThrottlingRate(4)`; Fast 3G = DevTools preset.
 Raw numbers of this review: scratchpad `p6r/out`, `p6r/out25`, `p6r/shots` (not committed).
 
-## Verdict: MEETS WITH FIXES
+## Verdict (first pass, 5932b20b/8a4e0717): MEETS WITH FIXES. Final verdict after the fix pass (7074602e): MEETS, see section 10.
 
 Scrolling (the "non natural" half of the first complaint) and the one-step-at-a-time loading (second complaint) are delivered and reproduce.
 Two things the owner would still notice are not: **freezing or unfreezing a column still jumps after 0.35 s (1x) / 0.65 s (4x)**, and **on a
@@ -178,3 +178,99 @@ the current implementation, not a user-visible standard; revert it to the origin
 `shots/cast-{hscroll,hback,freeze,unfreeze}-cpu{1,4}/` (screencast frames, file names carry ms); `shots/vis-{runs,run,wide,items}-{1440,390}-{new,ref}.png`, `diff-*.png`, `cmp-items*.png`;
 `out/` (scroll, freeze, align, load JSON of the committed scripts), `out25/` (runs scroll with the page size unpinned); `m/` (patched copies of the scripts plus `stages.mts`, `cast.mts`, `cast2.mts`, `vis.mts`);
 `check.log`, `e2e.log`, `build.log`.
+
+## 10. Re-review of the fix pass (HEAD 7074602e, commits 6fd52d3e and 7074602e)
+
+Targeted. Fresh production build (`heavy.sh --cost 2`), platform on 8999 over the same seeded DB, committed scripts from `measure/` (page size pinned to 50 by the script, as
+committed), medians of 3 (freeze: 5), machine quiet at the time (`free -h` 5.7 GB free, no other servers on my ports). Raw JSON in scratchpad `p6r/r2/out`.
+
+### Final verdict: **MEETS**
+
+R1 and R3 are fixed as asked. R2 is fixed to a state a user cannot call laggy (click to new layout 76 to 93 ms at 1x); the original A8 numbers are still not met and I accept the
+amendment (below) on the condition of one test alignment that is not blocking. No E2/E3 and no column virtualisation required.
+
+### Correction to my first pass
+
+My first-pass screencast reading of the freeze ("one jump after 0.35 to 0.5 s", "0.65 to 1.1 s at 4x") included the 300 ms idle wait I leave between starting the recorder and the click
+(frame 0 is the recorder start). The corrected pre-fix figure is about 0.2 s (1x) and 0.77 s (4x). The verdict on that build (still visibly late at 4x, 3 commits, 98 / 409 ms frame) stands, but the
+number in section 2 was inflated by 0.3 s. The measurement below uses the click event's own timestamp against the frame timestamps (`m/cast3.mts`), so it has no such offset.
+
+### R1 / B13 (Items rows painted), big-1200, median of 3
+
+| Case | Before fix | Implementer | Mine | Target | Result |
+|---|---|---|---|---|---|
+| Nav, Fast 3G, cold chunk: Items rows | 4,220 ms | 2,567 | **2,571** | <= 2,600 | MEETS (29 ms margin; same-machine run to run spread is about 20 ms) |
+| same: header / Overview | 1,228 / 1,905 | | **1,129 / 1,847** | <= 1,700 / <= 2,000 | MEETS (better) |
+| Deep link, Fast 3G: Items rows (header / Overview) | 7,941 (4,841 / 5,016) | 6,464 | **6,523 (4,404 / 4,960)** | <= 6,700 (Overview <= 5,100) | MEETS |
+| Nav, Fast 3G, warm chunk: Items / Overview | 977 | | **973 / 973** | | no regression |
+| No throttle, cold / idle-prefetched (default) / warm: Items | 262 / 362 / 258 | 251 / 316 / 170 | **248 / 287 / 174** | <= 350 | MEETS |
+| Deep link, no throttle | 311 | | **307** | | no regression |
+| CLS | 0.0089 | | **0.0087** (warm none 0.0172, inside <= 0.02; was 0.015) | <= 0.02 | MEETS |
+| API requests / kB | 4 / 87.7 | | **4 / 87.7** | <= 3 run requests | unchanged |
+| JS on the cold navigation | 24 files / 122.9 kB | | **10 files / 117.1 kB**; deep link 14 files / 441 kB (was 28 / 440 kB) | | fewer round trips |
+
+Request order on the cold Fast 3G navigation (last rep, `jsList` and `apiList`): summary and core rows at 5 ms; `RunDetailPage` chunks; at 1,112 ms the Overview, Deep and **Items chunks
+start together** (ItemsSection lands at 1,918 ms); the texts request starts at 2,560 ms, after the Items chunk; step-latency at 1,254 ms (1.1 kB); Latency and TraceHost at 1,238 ms,
+Repeat at 2,526 ms. So the Items chunk is requested before the texts and before every other panel except the Overview and Deep chunks that go out in the same tick. The e2e assertion
+(`run-sections.spec.ts`: ItemsSection before `fields=text`, and not after Latency, Deep, Errors, Categories) agrees with it. All sections still load by themselves; the earlier
+whole-page scroll check (0 requests) is unaffected by this change and the perf folder asserts it (green).
+
+### R2 (freeze and unfreeze), 50 rows, 2 pinned columns -> 3, then one more frozen
+
+| | Baseline | First pass | Implementer | Mine, 1x | Mine, 4x |
+|---|---|---|---|---|---|
+| Freeze: longest frame | 131 / 452 ms | 98 / 409 | 80 / 289 | **81 ms** (73 to 83) | **296 ms** (289 to 299) |
+| Unfreeze: longest frame | 92 / 387 | 78 / 321 | 51 / 207 | **52 ms** (3 of 5 reps 51 to 66; one rep 0) | **213 ms** |
+| Script time, freeze | 76 / 252 | 52 / 235 | 32 | **34 ms** | **115 ms** |
+| Harness commits (menu press state included) | 3 | 3 / 4 | 3 | **3** (freeze), 3 | 4 / 2 |
+| Click to the first frame that shows the new layout (screencast, click timestamp) | n/m | ~200 ms (see correction) | not measured | **76 to 93 ms** (6 clicks: 93, 76, 76, 78, 77, 78) | **247 to 346 ms** (346, 272, 256, 260, 247, 257) |
+
+My own acceptance (click to new layout <= 150 ms at 1x): **met, 76 to 93 ms**; at 4x CPU 250 to 350 ms, which is the 4x CPU cost and about 2x the implementer's longest-frame figure
+because it includes the input task and the commit, not only the long frame. Still one frame, no intermediate state, no frozen-in-between layout.
+
+### Amendment A8 (one table commit, <= 90 ms at 1x, <= 300 ms at 4x), judged under the amendment rule (measured value + reason + matching test)
+
+**Accepted.** Value: 81 ms and 296 ms measured, 6 to 9% under the ceilings; the 4x figure is tight (296 against 300; five reps 289 to 299), so treat 300 as the floor and not a target to tighten. Reason:
+the cells are memoised (script 34 ms, the harness counts the Columns button's own press-state commits), what remains is native style, layout and paint of 50 x 68 cells, which no React change removes.
+The user-facing criterion I set (new layout within 150 ms of the click at 1x) is met with margin (about 80 ms, under the usual 100 ms "instant" threshold), so the complaint is answered, and the screencast
+of the wheel scroll shows no gap over 100 ms. E2/E3 (fewer layers) and column virtualisation are **not required**: they target scroll Layerize cost, and the freeze cost is no longer script. Condition (not blocking, optional fix O5):
+the spec and `perf.md` 8.1 do not say the same thing. `perf.md` says "one table commit, <= 300 ms at 4x"; `table-freeze.spec.ts` asserts the 1x number only (`limit(400, 90)`, so CI 400, strict 90), the commit count as `<= limit(4, 3)` (menu included) and has no 4x
+case. Make the spec assert the 90 ms strict number it asserts and state in 8.1 that 4x (<= 300) is asserted by `measure/freeze-toggle.mts` only, or add a 4x case.
+
+### R3 and A9 (50 rows is the default again), A5 / A6
+
+Default confirmed 50 (`RunsPage.tsx` back to `PAGE_SIZE`; saved choice wins; `AUTO_PAGE_SIZE`, `WIDE_COLUMNS` and the auto key removed; one sticky `thead` kept). Committed scripts at 50 rows:
+
+| Measure | Baseline | First pass (same script) | Implementer | Mine | Amended target | Result |
+|---|---|---|---|---|---|---|
+| Runs sticky elements | 329 | 260 | 260 | **260** | <= 270 | MEETS |
+| Runs Layerize 1x / 4x | 592 / 2,299 ms | 597 / 2,160 | 596 / 2,141 | **604 / 2,220** | <= 650 / <= 2,300 | MEETS (4x 3% under: measured reality, noise-bound) |
+| Runs 4x dropped frames / long tasks | 20 / 22 | 12 / 19 | 14 / 19 | **13 / 20** (12, 13, 13 / 19, 20, 20) | <= 16 / <= 22 | MEETS |
+| Runs 1x commits in scroll / handler | 2 / 0.08 ms | 0 / 0.057 | | **0 / 0.056 ms**, in-scroll layouts 0 | 0 | MEETS |
+| Items 4x dropped frames / long tasks | 132 / 138 | 21 / 37 | 24-25 / 23-31 (37 once) | **22 / 23** (22, 22, 25 / 23, 22, 27) | <= 26 / <= 40 | MEETS |
+| Items 1x commits / handler / in-scroll layouts | 323 / 6.78 / 121 | 26 / 0.61 / 4 | | **26 / 0.60 ms / 4** | A1, A2, A4 | MEETS |
+| Items 4x handler / commits | 29.97 ms / 310 | 2.48 / 27 | | **2.45 ms / 27** | <= 4 ms | MEETS |
+
+A9 judgment: the amendment records the honest number (the one-element header cut sticky elements 329 to 260 and left Layerize at the baseline). The 25-row default is gone, so the owner-visible page size
+did not change from `UI-redesign`, which was the point of R3. Accepted as measured reality; the script and `perf.md` now agree because the run at 50 rows reproduces from the committed script (R3 closed).
+Page-size diff against `UI-redesign` is therefore nil again.
+
+### Extra fix: box-plot dots under `prefers-reduced-motion`
+
+Browser check on the big run (1,197 `dot2` elements, `reducedMotion: reduce` against `no-preference`): reduced: `animation-name: none`, longest transition or animation duration **1e-6 s** (the global reduced-motion
+rule); normal: 0.15 s transition. So the dots do not animate under reduced motion. Closed.
+
+### Gate for this pass
+
+`e2e/perf` (cost 3, heavy.sh, ports 8999 / 5999): **10 passed, 0 failed** (43 s), on the review worktree at 7074602e; no database left or committed, servers stopped, ports free. `npm run check`, the full e2e
+and `pytest tests/platform` were not repeated by me (coordinator runs them on the merged tip). Not touched: SDK viewer.
+
+### Open items (all optional)
+
+- O5: align the A8 spec and `perf.md` 8.1 (above).
+- O6: B13 cold has a 29 ms margin (2,571 / 2,600): the first thing to move on a slower runner; the spec's strict number is local only.
+- O7: step-latency (1.1 kB) goes out at 1,254 ms, before the texts, and takes about 1.7 s on the cold link because of 562 ms RTT sharing; harmless, listed for completeness.
+
+### Review artefacts of this pass (scratchpad `p6r/r2/`)
+
+`out/*.json` (load, scroll, freeze, 1x and 4x), `build.log`, `e2e.log`, `uv.log`; scripts `m/cast3.mts` (click timestamp against screencast frames), `m/rm.mts` (reduced motion), `m/cast.mts`, `m/stages.mts`.
