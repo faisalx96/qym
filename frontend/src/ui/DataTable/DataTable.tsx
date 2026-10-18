@@ -58,6 +58,7 @@ import { useStickyShift } from './useStickyShift';
 import type {
   CellCtx,
   Column,
+  ChildRows,
   Density,
   DisplayRow,
   GroupByConfig,
@@ -69,7 +70,7 @@ import type {
 } from './types';
 import styles from './DataTable.module.css';
 
-export type { Column, Density, SortState, RowAction, CellType, CellCtx, Key } from './types';
+export type { Column, Density, SortState, RowAction, CellType, CellCtx, Key, ChildRows } from './types';
 
 export interface DataTableProps<R> {
   'aria-label': string;
@@ -157,6 +158,20 @@ export interface DataTableProps<R> {
   expandColumn?: boolean;
   /** Rows that cannot expand (no chevron). */
   canExpand?: (row: R) => boolean;
+  /**
+   * Child rows of an expanded row. They are rows of this table (same columns, order, widths, frozen set and
+   * scroll), emitted right after their parent in the display list; `renderExpanded` follows them as one
+   * full-width row. Return undefined for a row without children.
+   */
+  childRows?: (row: R) => ChildRows<R> | undefined;
+  /** Accessible name of a child row. */
+  childLabel?: (row: R, parent: R) => string;
+  /** Accessible name of the full-width block after the children. */
+  detailLabel?: (row: R) => string;
+  /** Card mode: accessible name of the list of a card's child lines. */
+  childGroupLabel?: (row: R) => string;
+  /** Card mode: column ids shown on the second line of a child line (e.g. the selected metric). */
+  cardChildColumns?: string[];
 
   groupBy?: GroupByConfig<R>;
 
@@ -191,6 +206,8 @@ export interface DataTableProps<R> {
   children?: ReactNode;
 }
 
+type TableEntry<R> = Extract<DisplayRow<R>, { kind: 'row' | 'child' }>;
+
 type PseudoColumn = Column<never> & { pseudo: 'select' | 'expand' | 'actions' };
 
 const OpenHref = createContext<(href: string) => void>((href) => window.location.assign(href));
@@ -217,6 +234,10 @@ function useMedia(query: string): boolean {
 }
 
 const VIRTUAL_AFTER = 200;
+const ROW_PX: Record<Density, number> = { compact: 32, regular: 40, comfortable: 52 };
+/** First-guess height of a display row before it is measured: the density height, 45 for a full-width block. */
+const estimateHeight = (kind: DisplayRow<unknown>['kind'] | undefined, density: Density): number =>
+  kind === 'detail' ? 45 : ROW_PX[density];
 const VIRTUAL_FALLBACK = 30;
 
 const INTERACTIVE =
@@ -308,6 +329,11 @@ function DataTableInner<R>({
   expandLabel,
   expandColumn = true,
   canExpand,
+  childRows,
+  childLabel,
+  detailLabel,
+  childGroupLabel,
+  cardChildColumns,
   groupBy,
   responsive = 'cards',
   virtualize,
@@ -358,7 +384,8 @@ function DataTableInner<R>({
     if (onExpandedChange) onExpandedChange(next);
     if (!expandedProp) setOwnExpanded(next);
   };
-  const rowCanExpand = (r: R) => Boolean(renderExpanded) && (canExpand ? canExpand(r) : true);
+  const rowCanExpand = (r: R) =>
+    (Boolean(renderExpanded) || Boolean(childRows)) && (canExpand ? canExpand(r) : true);
   const toggleExpanded = (r: R) => {
     if (!rowCanExpand(r)) return;
     const key = rowKey(r);
@@ -394,8 +421,9 @@ function DataTableInner<R>({
         collapsed: collapsedGroups,
         expanded,
         canExpand: Boolean(renderExpanded),
+        children: childRows,
       }),
-    [sortedRows, rowKey, groupBy, collapsedGroups, expanded, renderExpanded],
+    [sortedRows, rowKey, groupBy, collapsedGroups, expanded, renderExpanded, childRows],
   );
   const vcfg = typeof virtualize === 'object' ? virtualize : null;
   const virtual =
@@ -403,6 +431,8 @@ function DataTableInner<R>({
   const scrollParent = vcfg?.scrollParent ?? null;
   const [scrollMargin, setScrollMargin] = useState(0);
   const dataRows = display.filter((d): d is Extract<DisplayRow<R>, { kind: 'row' }> => d.kind === 'row');
+  // Selectable / focusable entries: run rows and their child rows, in display order.
+  const entries = display.filter((d): d is TableEntry<R> => d.kind === 'row' || d.kind === 'child');
   // Data marks (ScoreBar fills) grow in once, during the table's first paint of data; rows that scroll in
   // later (virtualised remounts), sort or page never replay the entrance.
   const [entering, setEntering] = useState(true);
@@ -417,9 +447,11 @@ function DataTableInner<R>({
     enabled: virtual,
     count: virtual ? display.length : 0,
     getScrollElement: () => scrollParent ?? scrollerRef.current,
-    estimateSize: () => vcfg?.estimateRowHeight ?? 40,
+    estimateSize: (i) => vcfg?.estimateRowHeight ?? estimateHeight(display[i]?.kind, model.density),
     overscan: vcfg?.overscan ?? 8,
     scrollMargin,
+    // turning virtualisation on mid-session (a long list opens) must not reset the scroller to the top
+    initialOffset: () => (scrollParent ?? scrollerRef.current)?.scrollTop ?? 0,
     scrollPaddingStart: vcfg?.scrollPaddingStart ?? 0,
     getItemKey: (i) => display[i]?.id ?? i,
   });
@@ -679,7 +711,7 @@ function DataTableInner<R>({
   /* selection */
   const selected = selection?.selected ?? new Set<Key>();
   const selectable = (r: R) => !selection?.isDisabled?.(r);
-  const orderKeys = dataRows.filter((d) => selectable(d.row)).map((d) => d.key);
+  const orderKeys = entries.filter((d) => selectable(d.row)).map((d) => d.key);
   const anchor = useRef<Key | null>(null);
   const shiftRef = useRef(false);
   const toggleSelect = (r: R, on?: boolean) => {
@@ -742,7 +774,7 @@ function DataTableInner<R>({
       return;
     }
     const els = rowEls();
-    const rowDisplayIdx = display.flatMap((d, ix) => (d.kind === 'row' ? [ix] : []));
+    const rowDisplayIdx = display.flatMap((d, ix) => (d.kind === 'row' || d.kind === 'child' ? [ix] : []));
     const i = virtual ? rowDisplayIdx.indexOf(Number(tr.dataset.index)) : els.indexOf(tr);
     const total = virtual ? rowDisplayIdx.length : els.length;
     const goto = (n: number, edge = false) => {
@@ -782,7 +814,7 @@ function DataTableInner<R>({
     };
     const k = e.key;
     const vim = Boolean(rowHref) && !e.metaKey && !e.ctrlKey && !e.altKey;
-    const entry = dataRows.find((d) => `${uid}:${String(d.key)}` === tr.dataset.rowId);
+    const entry = entries.find((d) => `${uid}:${String(d.key)}` === tr.dataset.rowId);
     if (k === 'ArrowDown' || (vim && k === 'j')) goto(i + 1);
     else if (k === 'ArrowUp' || (vim && k === 'k')) goto(i - 1);
     else if (k === 'Home') goto(0, true);
@@ -799,9 +831,18 @@ function DataTableInner<R>({
       e.preventDefault();
       shiftRef.current = e.shiftKey;
       toggleSelect(entry.row);
+    } else if (entry?.kind === 'child' && (k === 'ArrowLeft' || k === 'ArrowRight')) {
+      // treegrid: Left on a child row returns to its parent row
+      const rtl = getComputedStyle(tr).direction === 'rtl';
+      if ((k === 'ArrowLeft') !== rtl) {
+        const pdi = display.findIndex((d) => d.kind === 'row' && d.key === entry.parentKey);
+        const target = rowDisplayIdx.indexOf(pdi);
+        if (target >= 0) goto(target);
+      }
     } else if (
       entry &&
-      renderExpanded &&
+      entry.kind === 'row' &&
+      (renderExpanded || childRows) &&
       rowCanExpand(entry.row) &&
       (k === 'ArrowRight' || k === 'ArrowLeft')
     ) {
@@ -1251,7 +1292,7 @@ function DataTableInner<R>({
     );
   };
 
-  const renderTd = (col: Column<R>, r: R, entry: Extract<DisplayRow<R>, { kind: 'row' }>, ci: number) => {
+  const renderTd = (col: Column<R>, r: R, entry: TableEntry<R>, ci: number) => {
     const pseudo = (col as unknown as PseudoColumn).pseudo;
     const pin = effectivePin(col, pins);
     const style = {
@@ -1341,7 +1382,7 @@ function DataTableInner<R>({
     const ctx: CellCtx = { index: entry.index, density: model.density, card: false };
     const content = col.cell ? col.cell(r, ctx) : defaultCell(col, r);
     const sec = col.secondary?.(r);
-    const header = ci === 0 && !selection && !renderExpanded;
+    const header = ci === 0 && !selection && !renderExpanded && !childRows;
     return (
       <td
         key={col.id}
@@ -1382,16 +1423,16 @@ function DataTableInner<R>({
   const padBottom = virtual
     ? vItems.length
       ? Math.max(0, virtualizer.getTotalSize() - (vItems[vItems.length - 1]!.end - scrollMargin))
-      : Math.max(0, display.length - 1 - winTo) * (vcfg?.estimateRowHeight ?? 40)
+      : Math.max(0, display.length - 1 - winTo) * (vcfg?.estimateRowHeight ?? ROW_PX[model.density])
     : 0;
   const renderedKeys = new Set<Key>();
   for (let i = winFrom; i <= winTo; i += 1) {
     const d = display[i];
-    if (d?.kind === 'row') renderedKeys.add(d.key);
+    if (d?.kind === 'row' || d?.kind === 'child') renderedKeys.add(d.key);
   }
   const firstRenderedKey = [...renderedKeys][0];
   const bodyRows: ReactNode[] = [];
-  const rowStyleMeta = (d: Extract<DisplayRow<R>, { kind: 'row' }>) => {
+  const rowStyleMeta = (d: TableEntry<R>) => {
     const st = rowState?.(d.row);
     return st;
   };
@@ -1441,7 +1482,16 @@ function DataTableInner<R>({
     }
     if (d.kind === 'detail') {
       bodyRows.push(
-        <tr key={d.id} className={styles.detailRow} data-detail-row="" {...measure}>
+        <tr
+          key={d.id}
+          className={[styles.detailRow, childRows ? styles.detailGroup : ''].filter(Boolean).join(' ')}
+          data-detail-row=""
+          data-strip-row={childRows ? '' : undefined}
+          aria-level={childRows ? 2 : undefined}
+          aria-label={childRows ? detailLabel?.(d.row) : undefined}
+          aria-rowindex={di + 2}
+          {...measure}
+        >
           <td colSpan={colCount} role="gridcell" className={styles.detailCell}>
             {detailFit === 'viewport' && scrollerW > 0 ? (
               <div
@@ -1460,8 +1510,9 @@ function DataTableInner<R>({
       return;
     }
     const r = d.row;
+    const isChild = d.kind === 'child';
     const isSel = selected.has(d.key);
-    const isOpen = expanded.has(d.key) && rowCanExpand(r);
+    const isOpen = !isChild && expanded.has(d.key) && rowCanExpand(r);
     const st = rowStyleMeta(d);
     const rid = `${uid}:${String(d.key)}`;
     const isFocusStop =
@@ -1471,17 +1522,23 @@ function DataTableInner<R>({
       <tr
         key={d.id}
         role="row"
-        className={[styles.tr, rowClassName?.(r)].filter(Boolean).join(' ')}
+        className={[styles.tr, isChild ? styles.childRow : '', rowClassName?.(r)].filter(Boolean).join(' ')}
         data-row-id={rid}
         data-row-key={String(d.key)}
-        data-zebra={zebraOn && d.index % 2 === 1 ? '' : undefined}
+        data-zebra={zebraOn && !isChild && d.index % 2 === 1 ? '' : undefined}
+        data-child={isChild ? '' : undefined}
+        data-group-open={isOpen && childRows ? '' : undefined}
+        aria-level={childRows ? (isChild ? 2 : 1) : undefined}
+        aria-posinset={isChild ? d.posinset : undefined}
+        aria-setsize={isChild ? d.setsize : undefined}
+        aria-label={isChild ? childLabel?.(r, d.parentRow) : undefined}
         data-selected={isSel ? '' : undefined}
         data-focused={focusedKey === d.key ? '' : undefined}
         data-state={st}
         data-href={rowHref?.(r) ? '' : undefined}
         data-clickable={openable || selectOnRowClick || expandOnRowClick ? '' : undefined}
         aria-selected={selection ? isSel : undefined}
-        aria-expanded={renderExpanded && rowCanExpand(r) ? isOpen : undefined}
+        aria-expanded={(renderExpanded || childRows) && rowCanExpand(r) ? isOpen : undefined}
         aria-rowindex={di + 2}
         {...measure}
         tabIndex={isFocusStop ? 0 : -1}
@@ -1515,7 +1572,7 @@ function DataTableInner<R>({
     <table
       ref={tableRef}
       className={styles.table}
-      role={renderExpanded ? 'treegrid' : 'grid'}
+      role={renderExpanded || childRows ? 'treegrid' : 'grid'}
       aria-label={tableLabel}
       aria-rowcount={display.length + 1}
       aria-busy={loading ? true : undefined}
@@ -1647,6 +1704,11 @@ function DataTableInner<R>({
               expandOnRowClick={expandOnRowClick}
               groupBy={groupBy}
               toggleGroupKey={toggleGroupKey}
+              hasChildRows={Boolean(childRows)}
+              hostChevron={expandColumn}
+              childLabel={childLabel}
+              childGroupLabel={childGroupLabel}
+              childColumns={cardChildColumns}
             />
           ) : (
             <div
@@ -1733,7 +1795,19 @@ function CardList<R>({
   expandOnRowClick,
   groupBy,
   toggleGroupKey,
+  hasChildRows,
+  hostChevron = true,
+  childLabel,
+  childGroupLabel,
+  childColumns,
 }: {
+  /** The card draws the expand chevron itself (false when a cell hosts its own toggle). */
+  hostChevron?: boolean;
+  childGroupLabel?: (row: R) => string;
+  hasChildRows?: boolean;
+  childLabel?: (row: R, parent: R) => string;
+  detailLabel?: (row: R) => string;
+  childColumns?: string[];
   display: DisplayRow<R>[];
   columns: Column<R>[];
   rowKey: (r: R) => Key;
@@ -1807,7 +1881,8 @@ function CardList<R>({
         </div>
       ) : null}
       <ul className={styles.cards} aria-label={ariaLabel}>
-        {display.map((d) => {
+        {display.map((d, di) => {
+          if (d.kind === 'child') return null; // drawn inside its parent's card
           if (d.kind === 'group') {
             const sums = columns.filter((c) => c.summary && c.priority && c.priority <= 2);
             return (
@@ -1838,6 +1913,7 @@ function CardList<R>({
               </li>
             );
           }
+          if (d.kind === 'detail' && hasChildRows) return null; // the strip is drawn inside its card
           if (d.kind === 'detail')
             return (
               <li key={d.id} className={styles.cardDetail}>
@@ -1845,6 +1921,18 @@ function CardList<R>({
               </li>
             );
           const r = d.row;
+          const kids: Array<Extract<DisplayRow<R>, { kind: 'child' }>> = [];
+          let strip: Extract<DisplayRow<R>, { kind: 'detail' }> | null = null;
+          if (hasChildRows) {
+            let j = di + 1;
+            for (; display[j]?.kind === 'child'; j += 1)
+              kids.push(display[j] as Extract<DisplayRow<R>, { kind: 'child' }>);
+            const after = display[j];
+            if (after?.kind === 'detail') strip = after;
+          }
+          const lineCols = (childColumns ?? [])
+            .map((id) => columns.find((c) => c.id === id))
+            .filter((c): c is Column<R> => Boolean(c));
           const acts = rowActions?.(r) ?? [];
           const isMore = more.has(d.key);
           const ctx: CellCtx = { index: d.index, density: 'regular', card: true };
@@ -1856,6 +1944,8 @@ function CardList<R>({
               data-selected={selected.has(d.key) ? '' : undefined}
               data-state={rowState?.(r)}
               data-row-key={String(d.key)}
+              data-group-open={kids.length || strip ? '' : undefined}
+              aria-level={hasChildRows ? 1 : undefined}
               {...(rowProps?.(r) ?? {})}
               data-clickable={openable ? '' : undefined}
               onClick={(e) => {
@@ -1870,12 +1960,13 @@ function CardList<R>({
                     aria-label={rowLabel?.(r) ?? 'Select row'}
                     hideLabel
                     isSelected={selected.has(d.key)}
+                    isIndeterminate={!selected.has(d.key) && Boolean(selection.isIndeterminate?.(r))}
                     isDisabled={selection.isDisabled?.(r)}
                     onChange={(on) => toggleSelect(r, on)}
                   />
                 ) : null}
                 <div className={styles.cardTitle}>{lead ? cellOf(lead) : String(rowKey(r))}</div>
-                {renderExpanded && rowCanExpand(r) ? (
+                {renderExpanded && hostChevron && rowCanExpand(r) ? (
                   <IconButton
                     label={
                       expandLabel
@@ -1920,6 +2011,71 @@ function CardList<R>({
                   ))}
                 </dl>
               ) : null}
+              {kids.length ? (
+                <div
+                  className={styles.cardPassesGroup}
+                  role="group"
+                  aria-label={childGroupLabel?.(r)}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ul className={styles.cardPasses}>
+                    {kids.map((k) => {
+                      const kctx: CellCtx = { index: k.index, density: 'regular', card: true };
+                      const kcell = (c: Column<R>) => (c.cell ? c.cell(k.row, kctx) : defaultCell(c, k.row));
+                      const lineHead = headline.filter((c) => c.id !== 'actions');
+                      return (
+                        <li
+                          key={k.id}
+                          className={styles.cardPass}
+                          data-child=""
+                          data-selected={selected.has(k.key) ? '' : undefined}
+                          data-row-key={String(k.key)}
+                          aria-level={2}
+                          aria-posinset={k.posinset}
+                          aria-setsize={k.setsize}
+                          aria-label={childLabel?.(k.row, r)}
+                          {...(rowProps?.(k.row) ?? {})}
+                        >
+                          <span className={styles.cardPassHead}>
+                            {selection && (selection.mode ?? 'multiple') === 'multiple' ? (
+                              <Checkbox
+                                aria-label={rowLabel?.(k.row) ?? 'Select row'}
+                                hideLabel
+                                isSelected={selected.has(k.key)}
+                                isDisabled={selection.isDisabled?.(k.row)}
+                                onChange={(on) => toggleSelect(k.row, on)}
+                              />
+                            ) : null}
+                            {lineHead.map((c) => (
+                              <span key={c.id}>{kcell(c)}</span>
+                            ))}
+                          </span>
+                          <span className={styles.cardPassActions}>
+                            {headline
+                              .filter((c) => c.id === 'actions')
+                              .map((c) => (
+                                <span key={c.id}>{kcell(c)}</span>
+                              ))}
+                          </span>
+                          {lineCols.length ? (
+                            <span className={styles.cardScore}>
+                              {lineCols.map((c) => (
+                                <Fragment key={c.id}>
+                                  {c.id.startsWith('metric-') ? (
+                                    <span className={styles.cardScoreLabel}>{headerText(c)}</span>
+                                  ) : null}
+                                  {kcell(c)}
+                                </Fragment>
+                              ))}
+                            </span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
+              {strip ? <div className={styles.cardStrip}>{renderExpanded?.(strip.row)}</div> : null}
               {detail.length ? (
                 <>
                   {isMore ? (

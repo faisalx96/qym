@@ -7,6 +7,7 @@ import {
   useInfiniteQuery,
   useMutation,
   useQuery,
+  useQueries,
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
@@ -234,6 +235,19 @@ export function useRunPasses(
     enabled: opts.enabled ?? true,
     refetchInterval: opts.refetchInterval ?? false,
     refetchIntervalInBackground: false,
+  });
+}
+
+/** The passes of several runs at once (the open groups of the runs table); same cache entries as `useRunPasses`. */
+export function useRunPassesMany(runs: Array<{ runId: string; refetchInterval?: number | false }>) {
+  return useQueries({
+    queries: runs.map((r) => ({
+      queryKey: runKeys.passes(r.runId),
+      queryFn: async ({ signal }: { signal: AbortSignal }) =>
+        unwrapLegacy(await api.get<RunPasses>(`/api/runs/${encodeRunId(r.runId)}/passes`, { signal })),
+      refetchInterval: r.refetchInterval ?? false,
+      refetchIntervalInBackground: false,
+    })),
   });
 }
 

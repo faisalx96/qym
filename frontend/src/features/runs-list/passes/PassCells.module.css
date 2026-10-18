@@ -1,0 +1,81 @@
+.mono {
+  font-family: var(--font-mono);
+}
+
+.none {
+  color: var(--text-muted);
+}
+
+.muted {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* the pass name starts at the run name's x: the chevron slot plus the gap */
+.passName {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+  padding-inline-start: calc(var(--control-height) + var(--space-xs));
+}
+
+.passLink {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  text-decoration: none;
+  border-radius: 2px;
+}
+
+.passLink:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
+.passLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.issues {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.issue {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--tone-text);
+}
+
+.metric {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.metricError {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-sm);
+  line-height: 1;
+  color: var(--metric-error);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+@media (max-width: 639px) {
+  /* card lines: no indent, the line itself is the child */
+  .passName {
+    padding-inline-start: 0;
+  }
+}

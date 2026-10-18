@@ -297,6 +297,11 @@ The recipes, by intent:
   renders the pill outside the noise band. Cell kit (`ScoreBar`, `DeltaCell`, `TwoLine`, `IdCell`,
   `RelativeTime`, `TagsCell`, `UserCell`, `ProgressCell`, `StatusCell`, `NumberCell`) lives in `ui/DataTable/cells`.
   Pages never restyle table cells; they supply columns.
+  **Child rows** (`childRows`, round 4): the children of an open row are rows of the same table, rendered by the same
+  column model (so reorder, freeze, hide and resize apply to them at once); they sit on `--bg-void` with the open parent and
+  the full-width block that follows them carrying one 3px `--accent-primary` rail (`--rail-width`), no wash, no opacity, no
+  zebra, one density height, `aria-level` 2 with `aria-posinset` / `aria-setsize`. Card mode draws them as lines inside the
+  parent's card (`cardChildColumns` names the second-line columns).
   **Column layout** (`reorderable`, `storageScope`, `maxPinShare`, `Column.lockOrder`): the Columns menu lists every column in
   display order, one row each: drag handle (pointer, touch, or keyboard: Space lifts, arrows move, Space drops, Esc
   cancels), visibility checkbox, muted group tag and a freeze toggle (`aria-pressed`, "Freeze Status"); the line between

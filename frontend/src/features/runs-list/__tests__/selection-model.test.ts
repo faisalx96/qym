@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { RunPass } from '@/api/dashboardTypes';
-import { passRowsView } from '../PassesPanel';
+import { passRowsView } from '../passes/model';
 import { cohortGuidance } from '../SelectionBar';
 import { expandComparisonRefs, passRef, refsExclusive, useRunsSelection } from '../selection';
 

@@ -26,7 +26,7 @@ async function seedRepeat(page: Page, request: APIRequestContext, samples = 3) {
   await rowOf(page, NAME)
     .getByRole('button', { name: `Expand ${samples} passes of ${NAME}` })
     .click();
-  const panel = page.getByRole('region', { name: `Passes of ${NAME}` });
+  const panel = page.getByTestId('runs-table');
   await expect(panel.locator('tbody tr[data-pass-row]')).toHaveCount(samples);
   return { s, run, panel };
 }
@@ -69,7 +69,7 @@ test('deleting pass 2 keeps the other passes (renumbered) with their scores', as
   await expect(page.getByRole('status').filter({ hasText: 'Pass 2 deleted' })).toBeVisible();
   await expect(passRows(panel)).toHaveCount(2, { timeout: 15_000 });
   const after = await passRows(panel).allInnerTexts();
-  const cells = (text: string) => text.split(/\s+/).filter(Boolean).slice(1).join(' ');
+  const cells = (text: string) => text.split(/\s+/).filter(Boolean).slice(2).join(' '); // drops the leading "Pass n"
   expect(cells(after[0]!)).toBe(cells(before[0]!));
   expect(cells(after[1]!)).toBe(cells(before[2]!));
   const final = (await (await request.get(`/api/runs/${run.id}`)).json()) as { run: { samples: number } };
@@ -104,7 +104,7 @@ test('a second pass delete on the same run still works', async ({ page, request 
 test("deleting a pass clears the picks of that run's passes", async ({ page, request }) => {
   const { panel } = await seedRepeat(page, request);
   await page.getByRole('button', { name: 'Select', exact: true }).click();
-  await clickBox(panel.getByRole('checkbox', { name: new RegExp(`^Select pass 3 of ${NAME}$`) }));
+  await clickBox(panel.getByRole('checkbox', { name: new RegExp(`^Select pass 3 of 3 of run ${NAME}$`) }));
   await expect(page.getByTestId('selection-bar')).toContainText('1 execution selected');
   await deletePassFromMenu(panel, page, 2);
   await page

@@ -109,4 +109,28 @@ export interface GroupByConfig<R> {
 export type DisplayRow<R> =
   | { kind: 'group'; id: string; groupKey: string; rows: R[]; collapsed: boolean }
   | { kind: 'row'; id: string; key: Key; row: R; index: number }
+  | {
+      kind: 'child';
+      id: string;
+      key: Key;
+      row: R;
+      /** Index of the parent row among data rows (cells read it as their row index). */
+      index: number;
+      parentKey: Key;
+      parentRow: R;
+      /** 1-based position among the parent's children and the number of children (aria-posinset / setsize). */
+      posinset: number;
+      setsize: number;
+    }
   | { kind: 'detail'; id: string; key: Key; row: R };
+
+/**
+ * Child rows of an expanded row: ordinary rows of the same table (same columns, order, widths, frozen set).
+ * `detail` (default true) also draws the row's `renderExpanded` block after the last child.
+ */
+export interface ChildRows<R> {
+  rows: R[];
+  /** aria-setsize of the children when it is not rows.length (queued passes count). */
+  setsize?: number;
+  detail?: boolean;
+}
