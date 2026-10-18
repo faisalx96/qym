@@ -294,6 +294,51 @@ open on content, not metadata.
 | `npm run e2e:sdk` | 42 passed |
 | `tests/platform` | not run (backend untouched) |
 
+## Performance round 6 (2026-10-17/18, `ui/perf6-tables-run-detail`)
+
+Owner feedback: freezing a column or the header row "feels too laggy and non natural", and run detail should load faster
+"by smartly loading segments one step at a time". Clarified mid-round: every section loads by default, one stage at a
+time or in parallel after the core paints; never viewport-gated lazy loading (B8 was rewritten to say so).
+
+- Design (`perf6/perf.md`, A1..A14 tables and B1..B13 run detail, measured with the committed scripts in
+  `perf6/measure/` on a 1,200-item run at 1x and 4x CPU, no throttle and Fast 3G): the items scroll handler ran 6 ms per
+  event with 121 forced layouts and about 300 React commits per 2 s scroll; a freeze was 3 commits and 106 / 411 ms;
+  the runs table carried 329 sticky elements; run detail fetched everything in one request and painted the header at
+  2.6 s cold on Fast 3G.
+- Implementation (`perf6/impl-notes.md`): windowed rows (`useWindowedRows`) with one layout per row-window commit and no
+  rect reads in handlers; pinned offsets, freeze cap and width measuring in one pass; memoised `DataCell`; one sticky
+  `thead`; route-loader prefetch, `?view=summary` extended and `?view=compact&fields=` groups (backend,
+  `tests/platform/test_run_views.py`); staged loading that paints the header, then Overview, then preloads every row
+  group and panel chunk through an idle callback; the Items chunk and the Overview chunk start with the route and the
+  panels preload in parallel; Rollup `experimentalMinChunkSize` merges tiny chunks (24 JS files became 10 on a cold
+  navigation). The box-plot reduced-motion rule was moved after the rule it overrides.
+- Review (`perf6/review-perf.md`): first pass MEETS WITH FIXES (R1 a user on a slow link was worse off for the Items
+  table, 4,220 ms cold Fast 3G against the 2,607 baseline; R2 a freeze still hitched; R3 an unrequested 25-row page
+  default). Fix pass 6fd52d3e, 7074602e; re-review MEETS: B13 Items rows painted 2,571 ms cold Fast 3G (<= 2,600),
+  6,523 ms deep link (<= 6,700), 248 / 287 / 174 ms unthrottled; freeze 81 ms at 1x and 296 ms at 4x with one table
+  commit (baseline 106 / 411; click to new layout 76 to 93 ms at 1x); items scroll handler 0.60 ms (was 6.78), 26 commits
+  (was 323), 4 layouts (was 121); runs scroll 0 commits; 50-row default restored with 260 sticky elements (was 329) and
+  Layerize 604 / 2,220 ms. Merged 866ba358.
+- Amendments (measured value, reason and a matching test, `perf.md` section 8): A2 <= 8 layouts; A5/A6 items <= 26
+  dropped frames and <= 40 long tasks at 4x; A8 one table commit, <= 90 ms (1x) / <= 300 ms (4x) instead of 40 / 120,
+  because the rest is native layout and paint of 50 x 68 cells (the 4x number is asserted by `measure/freeze-toggle.mts`
+  only); A9 sticky <= 270, Layerize <= 650 / <= 2,300 ms; B5 <= 5,100 ms (entry bundle bound).
+- Deferred: entry-bundle split, column virtualisation or E2/E3 (one sticky cell per row) for a freeze under 40 ms, hero
+  font preload; the 25-row page default is an owner option recorded in `impl-notes.md`, not shipped. B13 cold has a
+  29 ms margin and will be the first number to move on a slower runner.
+
+### Gate on `UI-redesign` 866ba358
+
+| Suite | Result |
+|---|---|
+| `npm run check` | clean; Vitest 164 files, 1404 tests, design-language 50 |
+| `npm run build`, `npm run build:sdk` | ok |
+| `pytest tests/platform/test_design_language.py` | 1 passed |
+| `pytest tests/platform` (4 chunks, `heavy.sh --cost 4`, `-n 2`) | 2781 passed, 740 skipped, 0 failed |
+| `pytest tests/sdk` | 496 passed, 4 skipped |
+| Full Playwright (`heavy.sh --cost 4`) | 1319 passed, 21 skipped, 3 failed under load (a click timeout in `experiments/launch/tables`, a disposed response at test end in `redesign3-header`, a focus assertion in `passes-rows` Q24); the three spec files re-run alone: 49 passed, 0 failed (28.8 min) |
+| `npm run e2e:sdk` | 42 passed |
+
 ## Post-mortem
 
 The failures of the whole migration (two session kills, repeated feedback rounds, a finding fixed by hiding
