@@ -96,6 +96,9 @@ of the whole user slice; see `docs/internal/ui-migration/POSTMORTEM.md` section 
   repository and its parent directory one level up (`..`, where the `qym-wt-*` worktrees and the legacy checkout
   live), plus its own scratchpad. Nothing above that parent (home, other projects, system paths) is opened,
   listed, searched or written; the project venv and nvm are used through their documented commands only.
+- Per-agent files: each agent keeps its own env file, e2e DB (`QYM_E2E_DB=<worktree>/.qym-e2e-<branch>.db`) and
+  ports; never share a scratchpad file name such as `env.sh` across agents (one overwrote another's and ran
+  Playwright against the other agent's database).
 - Agents: at most one sub-agent each; `free -h` with at least 3 GB available before starting another agent;
   one hand-back per task (an agent that re-sends the same report is stopped, not answered).
 - Environment for anything that boots the platform: `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"`
