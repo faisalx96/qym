@@ -198,8 +198,10 @@ test('P6-8, P6-9: the clamp keeps 54px (84 compact), "+ N more" is exact, openin
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   // 20 chips: stub the run payload with many metadata entries
-  await page.route(new RegExp(`/api/runs/${classic}\\?view=compact`), async (route) => {
-    const res = await route.fetch();
+  await page.route(new RegExp(`/api/runs/${classic}\\?view=compact(&fields=scores|$)`), async (route) => {
+    // (a request the dev server's StrictMode repeats after the test ended has nothing left to answer)
+    const res = await route.fetch().catch(() => null);
+    if (!res) return;
     const body = await res.json();
     const extra: Record<string, string> = {};
     for (let i = 0; i < 20; i++) extra[`meta_key_${String(i).padStart(2, '0')}`] = `value number ${i}`;
@@ -240,8 +242,10 @@ test('P6-8, P6-9: the clamp keeps 54px (84 compact), "+ N more" is exact, openin
 
 test('P6-8 compact: five lines (144px, spec amended) and at least six chips at 279px', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.route(new RegExp(`/api/runs/${classic}\\?view=compact`), async (route) => {
-    const res = await route.fetch();
+  await page.route(new RegExp(`/api/runs/${classic}\\?view=compact(&fields=scores|$)`), async (route) => {
+    // (a request the dev server's StrictMode repeats after the test ended has nothing left to answer)
+    const res = await route.fetch().catch(() => null);
+    if (!res) return;
     const body = await res.json();
     const extra: Record<string, string> = {};
     for (let i = 0; i < 20; i++) extra[`meta_key_${String(i).padStart(2, '0')}`] = `value number ${i}`;
@@ -277,8 +281,10 @@ test('P6-11: a stopped run shows its reason as one muted line under band 1, not 
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.route(new RegExp(`/api/runs/${classic}\\?view=compact`), async (route) => {
-    const res = await route.fetch();
+  await page.route(new RegExp(`/api/runs/${classic}\\?view=compact(&fields=scores|$)`), async (route) => {
+    // (a request the dev server's StrictMode repeats after the test ended has nothing left to answer)
+    const res = await route.fetch().catch(() => null);
+    if (!res) return;
     const body = await res.json();
     body.run.status = 'STOPPED';
     body.run.status_reason_label = 'Stopped by an administrator';

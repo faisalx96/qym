@@ -104,4 +104,13 @@ so times carry the CI margin there; counts are exact).
 
 ## 5. Gate
 
-See section 6 (filled in after the run).
+All through `scripts/heavy.sh`, from the worktree root, on the final tree:
+
+- `npm run check`: tsc, eslint, stylelint, Vitest 164 files / 1,404 tests, design-language 50 tests: green.
+- `npm run build` and `npm run build:sdk`: green. `npm run e2e:sdk`: 42 passed.
+- `pytest tests/platform` in 4 chunks of <= 48 files (backend touched): 915 + 696 + 536 + 634 = 2,781 passed, 740 skipped, 0 failed.
+- Full `npm run e2e` (1,312 passed, 21 skipped, 9 failed in the one full run). The nine were fixed and re-run alone twice: the perf specs (a Layout observer installed too late, dev-server StrictMode double requests,
+  geometry cached in `useStickyShift` going stale when a section above the table grows: now every ancestor up to the scroller is observed), `cutover-live-controls` (the late `text` request is not a reload),
+  `cutover-pass-revision` (a late group no longer replaces `run`), `redesign2-items`, `redesign3-header` (route handlers tolerate a request the dev server repeats), `redesign3-box-plots`
+  (`.dot2[data-enter]` was missing from the reduced-motion rule: a real bug the new timing exposed), `runs-list/passes-rows` Q20. After the fixes run-detail + perf + `passes-rows`: 431 passed, 0 failed
+  (the two stragglers, header and box plots, 26 passed twice). Specs changed for behaviour that moved on purpose: three runs-list specs that assume 50 rows pin the page size, `cutover-layout` brings the table into view.

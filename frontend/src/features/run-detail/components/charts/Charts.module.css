@@ -214,7 +214,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .bar[data-enter],
-  .count[data-enter] {
+  .count[data-enter],
+  .dot2[data-enter] {
     animation: none;
   }
 }

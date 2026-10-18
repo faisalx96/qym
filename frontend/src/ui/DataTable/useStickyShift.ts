@@ -131,6 +131,9 @@ export function useStickyShift({
     window.addEventListener('resize', schedule);
     ro?.observe(el);
     ro?.observe(parent);
+    // Content above the table can grow (a section above mounts, its data arrives) and move the table without
+    // resizing it: observe every ancestor up to the scroller, whose size changes then.
+    for (let n = el.parentElement; n && n !== parent; n = n.parentElement) ro?.observe(n);
     mo?.observe(el, { childList: true, subtree: true });
     void document.fonts?.ready.then(schedule);
     return () => {

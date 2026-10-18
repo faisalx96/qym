@@ -28,9 +28,9 @@ test('from the runs list the header paints at once, the sections hold their heig
   // a run reachable from the list (its row is the stage-0 header)
   const s = await seedProjectWithRuns(request, { count: 6 });
   await waitForProjection(request, s.project.slug, s.runs.length);
+  await page.addInitScript(SHIFT_OBSERVER);
   await openRuns(page, s.project.slug);
   const target = s.runs[0]!;
-  await page.addInitScript(SHIFT_OBSERVER);
 
   // hold the rows (stage 2) for 1.2 s; the summary (stage 1) answers at once
   let rowsAnswered = 0;
