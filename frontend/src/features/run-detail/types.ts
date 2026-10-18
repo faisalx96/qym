@@ -42,6 +42,8 @@ export interface RunExperiment {
 }
 
 export interface Run {
+  /** Set on the header built from a runs-list row (stage 0); the summary and the rows replace it. */
+  provisional?: boolean;
   run_id: string;
   file_path?: string;
   task_name?: string;

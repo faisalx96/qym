@@ -110,6 +110,7 @@ export function loadedGroups(payload: RunPayload | undefined): RowGroup[] {
 /** A run header from a row of the runs list: what stage 0 paints before any request answers. */
 export function runFromListRow(row: RunRow, project?: RunPayload['run']['project']): RunPayload['run'] {
   return {
+    provisional: true,
     project,
     run_id: row.run_id,
     file_path: row.file_path,
@@ -164,6 +165,20 @@ export function mergeRowGroups(previous: RunPayload | undefined, next: RunPayloa
   });
   const groups = [...new Set([...loadedGroups(previous), ...loadedGroups(next)])];
   return { run: next.run, snapshot: { ...next.snapshot, rows, row_fields: groups } };
+}
+
+/**
+ * Merge a late group into the store. Only the rows' new keys come over: `run` and the rest of the snapshot stay as
+ * the page loaded them (a page that is stale must stay stale, e.g. its pass revision, until it reloads the core rows).
+ */
+export function mergeLateGroup(previous: RunPayload, late: RunPayload): RunPayload {
+  const lateById = new Map(late.snapshot.rows.map((row) => [row.item_id, row]));
+  const rows = previous.snapshot.rows.map((row) => {
+    const more = lateById.get(row.item_id);
+    return more ? { ...row, ...more } : row;
+  });
+  const groups = [...new Set([...loadedGroups(previous), ...loadedGroups(late)])];
+  return { ...previous, snapshot: { ...previous.snapshot, rows, row_fields: groups } };
 }
 
 export function runSummaryOptions(runId: string) {
@@ -242,7 +257,7 @@ export function useRowGroupQuery(runId: string, group: RowGroup, enabled: boolea
     queryFn: async ({ signal }) => {
       const data = await fetchRunRows(runId, [group], signal);
       qc.setQueryData<RunPayload>(runKeys.compact(runId), (prev) =>
-        prev ? mergeRowGroups(prev, data) : prev,
+        prev ? mergeLateGroup(prev, data) : prev,
       );
       return true;
     },

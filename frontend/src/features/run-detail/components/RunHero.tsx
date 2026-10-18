@@ -415,7 +415,7 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
             groups={groups}
             runId={run.run_id}
             stopReason={viewPass ? '' : (run.status_reason_label ?? '')}
-            provisional={run.config === undefined}
+            provisional={run.provisional === true}
           />
         ) : null}
       </div>

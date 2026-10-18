@@ -165,6 +165,13 @@ Enforced by `npm run test:design` (vitest), ESLint (TSX rules) and Stylelint.
     `scale` in a `:hover` / `[data-hovered]` rule.
 15. **`LinkButton` shares Button's states**: `a.button:hover`, `:active` and
     `:focus-visible` exist in `Button.module.css`.
+16. **Scroll- and pin-driven geometry never transitions** (`ui/DataTable`): no
+    `transition` or `animation` on `left`, `right`, `top`, `bottom`, `inset-*`,
+    `transform`, `box-shadow`, `width`, `inline-size` or `all` (a frozen cell or sticky
+    header follows the scroll position directly; a transition would trail it). The
+    one permitted fade is `opacity` (the frozen-edge shadow and the scroll cues), and it
+    is off under `prefers-reduced-motion`. Scroll handlers write refs, data attributes and
+    styles only: no React state and no layout read (`getBoundingClientRect`) per scroll event.
 
 ---
 
@@ -619,6 +626,10 @@ they produced.
   before" are not verdicts.
 - **Amendments.** A criterion's number may change only with the measured value and a one-line reason in the
   spec, and the e2e test must assert the amended number on the same element. Spec and product never disagree.
+- **Performance is a number too.** "Laggy" and "slow" become counts that do not depend on the machine (React commits,
+  forced layouts, requests and bytes, layout shift) asserted exactly in `frontend/e2e/perf/`, and times with a CI margin
+  (the strict local target runs under `QYM_PERF_STRICT=1`); each is the median of three passes
+  (`docs/internal/ui-migration/perf6/perf.md`).
 - **A fix changes a measurement.** If a commit does not move the measured value or the screenshot (for example a
   rendering property that does not alter the raster), it is recorded as a limitation, not accepted as a fix.
 

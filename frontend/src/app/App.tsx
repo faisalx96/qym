@@ -9,11 +9,10 @@ import { prefetchDeepLink } from './prefetch';
 import { createAppRouter } from './router';
 
 export function App() {
-  const [queryClient] = useState(() => {
-    const client = createQueryClient();
-    prefetchDeepLink(client); // a deep link to a run asks for its data and its chunk before the route renders
-    return client;
-  });
+  const [queryClient] = useState(createQueryClient);
+  // A deep link to a run asks for its data and its chunk at once (an effect: no side effect in a state initializer,
+  // which StrictMode runs twice; the second prefetch of the same key shares the first request).
+  useEffect(() => prefetchDeepLink(queryClient), [queryClient]);
   const [router] = useState(createAppRouter);
   useEffect(() => initRunStatusBus(), []);
   return (
