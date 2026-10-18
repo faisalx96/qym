@@ -470,8 +470,22 @@ is not allowed.
   one-line preview; open: the value, Copy, per-key Expand all / Collapse all recursive; the region has global Expand all / Collapse
   all and Sections | Raw). A repeat item has a pass rail (a chip per pass with number and verdict glyph, at most three read side by
   side). **A pass has no colour**: its identity is text, colour on a pass is only its verdict. Metrics are one matrix
-  (metric rows by pass columns, Mean, 8 rows then "Show N more"), values are band-coloured text (no tinted cells) and open ONE
-  detail panel below; score edits happen in that panel.
+  (metric rows by pass columns, Mean, 8 rows then "Show N more"), values are mono 600 band-coloured text (no tinted cells, no
+  outline: the selected row takes `--bg-selected` and a 2px `--accent-primary` bar at its inline start; a single pass's Reason is a
+  `fit-content` block anchored at the column's inline start, whatever its direction) and open ONE detail panel below (round 5 R3).
+  The panel (`--bg-elevated`, `container-type: inline-size`, `direction: ltr`) has a one-row header (mono name, `ScoreValue`, "Pass n",
+  "edited", then the text button "Edit score" and Close), a hairline, then: **prose blocks** (reason, reasoning, explanation, label,
+  then any string over 60 characters) with the eyebrow label stacked above the text (13px, line 1.6, 76ch, `dir` on the text only) so a
+  label can never overlap its text; **facts** (`dl`: humanized sentence-case key `--font-sm` 650 in a `--field-label-width` column,
+  ellipsis + raw key in `title`, value next to it; the row stacks under 420px); **tables** for `{columns, rows}`, arrays of arrays and
+  arrays of two or more uniform plain objects (`detectTable`; eyebrow with the row count over an embedded `DataTable`, every header
+  sortable, 12 rows then "Show N more rows", scrolls inside); and collapsed key rows for everything else. Label roles are exactly
+  three: eyebrow (11px 650 uppercase), fact key (11px 650 sentence case), tree key (12px 600 mono). `FieldRow` labels and `KeyTree`
+  keys are cut at their column (ellipsis, title) instead of painting over the value. Score edits happen in that panel.
+- **Items toolbar and correlation matrix** (round 5 R4): the toolbar row aligns its controls to one bottom edge, so a control with a
+  label above (analysis metric, threshold, sort) and one without share a vertical centre; the metric correlation grid is as wide as its
+  card body and its cells are as wide as their column (at least 20px, scrolling inside the card beyond that). A trace opens on its
+  content tab (messages, response, input / output, documents), never on Metrics, Scores or Raw; only a content pick is remembered.
 - **Run header** (round 3 P6): three bands, nothing behind a chevron. Band 1 identity and actions (name, passes tag, Copy run id,
   status, Export, pager; a stop reason is one muted line under it). Band 2 seven labelled facts (`dl`, 7 / 4 / 2 columns by
   column width). Band 3 `KeyValueTag` chips (24px passive key / value, key at most 20 characters, value at most 30) in the groups

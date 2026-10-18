@@ -4,7 +4,14 @@
  * opens. R3-1 .. R3-21 on run `details` item r5-005 (English `rubric_judge`, Arabic `arabic_judge`) at 1440 and 390.
  */
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openRun, seedProject, seedR5, type Seeded } from './support';
+import {
+  axeSeriousViolations,
+  describeViolations,
+  openRun,
+  seedProject,
+  seedR5,
+  type Seeded,
+} from './support';
 
 let s: Seeded;
 let details: string;
@@ -265,6 +272,18 @@ for (const width of [1440, 390] as const) {
       expect(m.rowShadow).not.toBe('none');
       expect(m.rowBg).not.toBe('rgba(0, 0, 0, 0)');
       if (width === 1440) expect(m.reasonOffset!).toBeLessThanOrEqual(12.5);
+    });
+
+    test('R3-22: axe finds no serious or critical violation with the panel open (English and Arabic)', async ({
+      page,
+    }) => {
+      for (const metric of ['rubric_judge', 'arabic_judge']) {
+        await openPanel(page, metric, width);
+        const v = (await axeSeriousViolations(page, '[data-testid=metric-detail]')).filter(
+          (x) => x.impact === 'serious' || x.impact === 'critical',
+        );
+        expect(v, `${metric}\n${describeViolations(v)}`).toEqual([]);
+      }
     });
 
     test('R3-21: FieldRow labels (Input, Expected, Tags) never overflow their column', async ({ page }) => {

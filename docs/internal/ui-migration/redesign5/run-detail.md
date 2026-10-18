@@ -362,3 +362,24 @@ Fixtures: run `details` item `r5-005` (English rubric_judge, Arabic `arabic_judg
 ## 6. Hand-off for the implementer
 
 Order (each step keeps `npm run check` green and ends with the matching criteria): (1) R1 (`BarColumns`, labels, dense, axis line) with R1-1 to R1-13; (2) R2 (`BoxPlot` tone, axis labels, tooltip, header Total, delete `BoxNumbers`) with R2-1 to R2-15; (3) R3 in this order: `FieldRow` truncation (R3-3, R3-21), `humanizeKey` + `detectTable`, panel body (prose, facts, tables, trees), header with Edit text button, matrix typography and selection (R3-16 to R3-18). Update the round-3 specs named above in the same commits; update DESIGN_LANGUAGE in the commit that changes the recipe. The gallery mocks stay as cases until the real components exist; add `r5-bars-sweep` for R1-3.
+
+
+## R4 (added by the owner mid-round)
+
+Owner words (verbatim): "1- metric correlation graph doesn't utilize the full available width. 2- the boxes above the items (search,
+analysis metric, filters..) are not aligned to the center some are lower than the others." and "for run analysis traces make sure the
+content is the default not the metadata." Measured on the e2e `classic` run (Deep, correlation) and `details` run (Items toolbar), seeds
+unchanged. Before shots `shots/before-r4-*.png`, after shots `shots/after-r4-*.png`.
+
+| # | Element and width | Criterion | Before | After |
+|---|---|---|---|---|
+| R4-1 | `[data-testid=correlation-matrix] [role=grid]` against its box content width, 1440 / 1024 / 390 | grid width equals the box width within 1 px (at 390 the grid is at least `label + 22 px x n` wide and scrolls inside the card); the last cell's right edge is within 2.5 px of the grid's right edge; cells are as wide as their column | 304 px grid in 1151 / 735 / 237 px boxes (847 px empty at 1440), cells 44 px | grid = box at 1440 (1151) and 1024 (735); cells 255.8 / 151.8 px wide; 390: 237 px grid, cells 27.3 px |
+| R4-2 | search, analysis metric, threshold, show items, Filters, Sort, Display in the Items bar, 1440 and 1024 | controls of one row share a vertical centre within 1 px (a wrapped control forms its own row); the cause was `align-items: center` on the sticky row with labels above only some controls, so labelled fields sat 9.7 px lower: the row now aligns to one bottom edge | spread 9.7 px at 1440 (search / show / filters / display 2669.5, metric / sort 2679.2); at 1024 the Display button wrapped to a second line (+32 px) | spread 0 px at 1440; 1024: first line spread 0, Display alone on line 2 |
+| R4-3 | trace drawer, Messages / Response / Input / Output / Documents vs Metrics / Scores / Raw, 1440 and 390 | every step opens on a content tab when it has one; a step with no recorded content opens on an "Input / Output" tab with an empty state; a Metrics pick is not remembered, a content pick is remembered for the page session only | on the seeded traces every step already opened on content (6 of 6 steps at 1440 from the items row, 7 of 7 from a deep link, 390 deep link 7 of 7); a step with no input, output, messages or documents opened on Metrics | unchanged for the seed (content on all steps); a contentless step opens on Input / Output |
+| R4-3a | the Trace button of an items row (1440) | as R4-3 | content on 6 of 6 steps | content on 6 of 6 |
+| R4-3b | deep link `?trace=ITEM` (1440 and 390) | as R4-3 | content on 7 of 7 | content on 7 of 7 |
+| R4-3c | the Trace button of an expanded item (1440 and 390) | as R4-3 | content on 7 of 7 | content on 7 of 7 |
+
+Tests: `e2e/run-detail/redesign5-spacing-trace.spec.ts` (R4-1, R4-2, R4-3a to R4-3d), Vitest `traces/SpanDetail.test.tsx`.
+Observation, not fixed (outside the owner's words): at 390 the trace tree rows overlap the retry label and error tag
+(`before-r4-trace-*`, `after-r4-trace-390.png`).

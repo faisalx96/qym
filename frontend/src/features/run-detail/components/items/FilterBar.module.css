@@ -31,10 +31,12 @@
     height: var(--bar-action-h);
   }
 
+  /* Controls with a label above (analysis metric, threshold, sort) and controls without share one bottom edge: every
+     24px control box then has the same vertical centre (round 5 R4-2). */
   .row {
     flex: none;
     flex-wrap: nowrap;
-    align-items: center;
+    align-items: flex-end;
   }
 
   .chips {

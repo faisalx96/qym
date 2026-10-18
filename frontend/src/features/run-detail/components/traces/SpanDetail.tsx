@@ -34,6 +34,11 @@ import { bodyText } from '../../lib/itemText';
 import { KIND_ICON, KIND_LABEL, KIND_TONE } from './spanKinds';
 import styles from './TraceDrawer.module.css';
 
+/** Tabs that show what the step did; the others (Metrics, Scores, Raw) describe it. */
+const CONTENT_TABS = ['messages', 'response', 'io', 'docs'];
+/** The content tab picked last in this page session; never persisted, never a metadata tab. */
+let sessionContentTab: string | null = null;
+
 type LabelTone = 'info' | 'success' | 'muted';
 
 /** Labelled block: the label row carries copy and expand-to-dialog; the body is hairline separated, never boxed. */
@@ -202,13 +207,22 @@ export function SpanDetail({ node }: { node: SpanNode }) {
       if (inputMsgs) t.push({ id: 'messages', label: 'Messages' });
     }
     if (docs.length) t.push({ id: 'docs', label: 'Documents', count: docs.length });
+    // a step with no recorded content still opens on a content tab (with an empty state), never on its metadata
+    if (!t.length) t.push({ id: 'io', label: 'Input / Output' });
     t.push({ id: 'metrics', label: 'Metrics' });
     if (scores.length) t.push({ id: 'scores', label: 'Scores', count: scores.length });
     t.push({ id: 'raw', label: 'Raw' });
     return t;
   }, [a, kind, docs.length, inputMsgs, scores.length]);
-  const [pick, setPick] = useState('messages');
-  const current = tabs.some((t) => t.id === pick) ? pick : tabs[0]!.id;
+  // Round 5 R4-3: a span opens on its content (messages, response, input / output, documents), never on its metadata.
+  // The last content tab picked is remembered for the session (module scope, not storage); a metadata pick is not.
+  const firstContent = tabs.find((t) => CONTENT_TABS.includes(t.id))?.id ?? tabs[0]!.id;
+  const [pick, setPick] = useState<string | null>(sessionContentTab);
+  const current = pick && tabs.some((t) => t.id === pick) ? pick : firstContent;
+  const select = (id: string) => {
+    setPick(id);
+    if (CONTENT_TABS.includes(id)) sessionContentTab = id;
+  };
   const errorEvents = (node.events ?? []).filter((e) => e?.name === 'exception');
   const tokens = spanTokens(node);
   const cost = formatCost(spanCost(node));
@@ -223,6 +237,9 @@ export function SpanDetail({ node }: { node: SpanNode }) {
           <Payload value={a['output.value']} label="Response" />
         </Block>
       );
+    }
+    if (id === 'io' && a['input.value'] == null && a['output.value'] == null) {
+      return <p className={styles.empty}>No input or output was recorded for this step.</p>;
     }
     if (id === 'io') {
       return (
@@ -342,7 +359,7 @@ export function SpanDetail({ node }: { node: SpanNode }) {
           {String(e.attributes?.['exception.message'] ?? '')}
         </div>
       ))}
-      <Tabs label="Span details" items={tabs} selected={current} onSelect={setPick}>
+      <Tabs label="Span details" items={tabs} selected={current} onSelect={select}>
         {tabs.map((t) => (
           <TabPanel key={t.id} id={t.id} forceMount>
             <div className={styles.pane}>{content(t.id)}</div>
