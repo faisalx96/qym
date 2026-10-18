@@ -36,7 +36,10 @@ export function loadingCount(samples: number): number {
   return Math.max(1, Math.min(10, samples));
 }
 
-export function childRowsOf(run: RunRow, q: PassesState | undefined): { rows: ChildOf[]; detail: boolean } {
+export function childRowsOf(
+  run: RunRow,
+  q: PassesState | undefined,
+): { rows: ChildOf[]; detail: boolean; setsize?: number } {
   if (!q || (q.isPending && !q.data))
     return {
       rows: Array.from({ length: loadingCount(run.samples) }, (_, i) => ({
@@ -68,7 +71,8 @@ export function childRowsOf(run: RunRow, q: PassesState | undefined): { rows: Ch
       ? { kind: 'pass', key: passRef(run.run_id, v.pass.pass_number), run, pass: v.pass, status: v.status }
       : { kind: 'queued', key: `${run.run_id}${QUEUED_SUFFIX}`, run, queued: v },
   );
-  return { rows, detail: true };
+  // the posinset/setsize of a pass is its place among the run's passes, queued ones included
+  return { rows, detail: true, setsize: data.samples || run.samples };
 }
 
 /** The metric the strip (and the card lines) show: the remembered one if this run has it, else the run's default. */

@@ -242,7 +242,7 @@ export function buildDisplayRows<R>(
         parentKey: key,
         parentRow: row,
         posinset: i + 1,
-        setsize: kids.rows.length,
+        setsize: kids.setsize ?? kids.rows.length,
       });
     });
     if (opts.canExpand && (!kids || kids.detail !== false))

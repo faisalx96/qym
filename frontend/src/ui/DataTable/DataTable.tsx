@@ -234,6 +234,10 @@ function useMedia(query: string): boolean {
 }
 
 const VIRTUAL_AFTER = 200;
+const ROW_PX: Record<Density, number> = { compact: 32, regular: 40, comfortable: 52 };
+/** First-guess height of a display row before it is measured: the density height, 45 for a full-width block. */
+const estimateHeight = (kind: DisplayRow<unknown>['kind'] | undefined, density: Density): number =>
+  kind === 'detail' ? 45 : ROW_PX[density];
 const VIRTUAL_FALLBACK = 30;
 
 const INTERACTIVE =
@@ -443,9 +447,11 @@ function DataTableInner<R>({
     enabled: virtual,
     count: virtual ? display.length : 0,
     getScrollElement: () => scrollParent ?? scrollerRef.current,
-    estimateSize: () => vcfg?.estimateRowHeight ?? 40,
+    estimateSize: (i) => vcfg?.estimateRowHeight ?? estimateHeight(display[i]?.kind, model.density),
     overscan: vcfg?.overscan ?? 8,
     scrollMargin,
+    // turning virtualisation on mid-session (a long list opens) must not reset the scroller to the top
+    initialOffset: () => (scrollParent ?? scrollerRef.current)?.scrollTop ?? 0,
     scrollPaddingStart: vcfg?.scrollPaddingStart ?? 0,
     getItemKey: (i) => display[i]?.id ?? i,
   });
@@ -1417,7 +1423,7 @@ function DataTableInner<R>({
   const padBottom = virtual
     ? vItems.length
       ? Math.max(0, virtualizer.getTotalSize() - (vItems[vItems.length - 1]!.end - scrollMargin))
-      : Math.max(0, display.length - 1 - winTo) * (vcfg?.estimateRowHeight ?? 40)
+      : Math.max(0, display.length - 1 - winTo) * (vcfg?.estimateRowHeight ?? ROW_PX[model.density])
     : 0;
   const renderedKeys = new Set<Key>();
   for (let i = winFrom; i <= winTo; i += 1) {

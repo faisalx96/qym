@@ -1164,7 +1164,8 @@
   box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
 }
 
-.tr[data-group-open] > td {
+.tr[data-group-open] > td,
+.tr[data-group-open] > td a {
   font-weight: 600;
 }
 

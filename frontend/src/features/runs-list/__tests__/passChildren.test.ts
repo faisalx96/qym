@@ -70,3 +70,13 @@ describe('resolveMetric / runKeyOf', () => {
     expect(runKeyOf('r1')).toBe('r1');
   });
 });
+
+describe('childRowsOf setsize', () => {
+  it('is the run sample count, not the number of started passes', () => {
+    const out = childRowsOf(
+      run(5, 'RUNNING'),
+      q({ data: data([pass(1, 'completed'), pass(2, 'running')], 5) }),
+    );
+    expect(out.setsize).toBe(5);
+  });
+});

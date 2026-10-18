@@ -89,3 +89,18 @@ Measured 2026-10-17 on the r4-seed project (1440 x 900, compact) and by the spec
 | `pytest tests/platform/test_design_language.py` | 1 passed |
 | full `npm run e2e` (cost 4), once | 1253 passed, 12 skipped, 2 failed; `Q1` raced the table render (count before the chevron existed; now `toHaveCount`), `run-detail/redesign2-items` "JSON output ... Raw" is outside this area (viewport click); both passed on two reruns alone |
 | backend | not touched, `tests/platform` not run |
+
+## Review fixes (review-runs-passes.md, MEETS WITH FIXES)
+
+- F1 (required): `Q20` now seeds 20 ten-pass runs among 50 (30 + 20 x 12 = 270 display rows), asserts `aria-rowcount` > 200,
+  DOM `tr[data-index]` count below half of it, `data-index` continuous, the opened run row keeps its y (<= 1 px) and 0 console
+  errors. The criterion's arithmetic is corrected: 12 groups give 182 rows (under the 200 threshold), 18 or more are needed.
+  The stronger test found a real bug the old one could not reach: when the list passes 200 rows mid-session, turning
+  virtualisation on reset the scroller to the top (scrollTop 5433 -> 0 at the 14th expansion). Fix: `initialOffset` of the
+  virtualizer reads the scroller's current `scrollTop`; row estimates now follow the density (32 / 40 / 52, 45 for a full-width
+  block) instead of a flat 40. Measured after the fix: scrollTop 5802..7627 kept over expansions 14..19, DOM 36 to 37 rows for
+  249 to 260 display rows.
+- F3: `aria-setsize` of a pass row is the run's sample count (`ChildRows.setsize`; 5 with two started passes), tested in `Q23`
+  and `passChildren.test.ts`.
+- F5: the open run's name link is weight 600 like its cells (`.tr[data-group-open] > td a`).
+- F2 (`group-metrics` requested twice on first expand): not changed, optional; the second request is the same cached query.

@@ -569,6 +569,7 @@ test.describe('runs table: passes are rows of the table (1440)', () => {
     await expect(chevron(page)).toBeVisible();
     await chevron(page).click();
     await expect(passRows(page)).toHaveCount(2);
+    await expect(passRows(page).first()).toHaveAttribute('aria-setsize', '5'); // samples, not started passes
     const q = table(page).locator('tr[data-queued-row]');
     await expect(q).toHaveCount(1);
     await expect(q).toContainText(/Passes 3[–-]5 waiting to start/);
@@ -742,10 +743,10 @@ test.describe('runs table: 1024 strip', () => {
 test.describe('runs table: virtualised groups (1440)', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
   test('Q20 many open groups stay continuous', async ({ page, request }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(300_000);
     const s = await freshProject(request, 3, { running: false });
     for (let i = 0; i < 47; i++) {
-      const rep = i % 4 === 0 && i < 48; // 12 repeat runs
+      const rep = i < 20; // 20 ten-pass runs: 30 + 20 x 12 = 270 display rows once all are open
       await seedRun(request, s.token, {
         name: `bulk-${String(i).padStart(2, '0')}`,
         task: 'summarize',
@@ -764,7 +765,7 @@ test.describe('runs table: virtualised groups (1440)', () => {
     await openRuns(page, s.project.slug);
     const chevs = page.getByRole('button', { name: /^Expand 10 passes of / });
     const n = await chevs.count();
-    expect(n).toBeGreaterThanOrEqual(5);
+    expect(n).toBe(20);
     for (let i = 0; i < n; i++) {
       const c = page.getByRole('button', { name: /^Expand 10 passes of / }).first();
       await c.scrollIntoViewIfNeeded();
@@ -772,12 +773,12 @@ test.describe('runs table: virtualised groups (1440)', () => {
       const row = table(page).locator(`tbody tr[data-run-id="${id}"]`);
       const before = (await row.boundingBox())!.y;
       await c.click();
-      await expect(row.locator('xpath=following-sibling::tr[1]')).toHaveAttribute('data-parent-run', /.+/);
+      await expect(row).toHaveAttribute('aria-expanded', 'true'); // children may be outside the mounted window
       expect(Math.abs((await row.boundingBox())!.y - before)).toBeLessThanOrEqual(1);
     }
-    expect(Number(await table(page).locator('table').getAttribute('aria-rowcount'))).toBeGreaterThan(
-      n * 11 + 30,
-    );
+    const rowcount = Number(await table(page).locator('table').getAttribute('aria-rowcount'));
+    expect(rowcount).toBeGreaterThan(200); // past VIRTUAL_AFTER: the window is mounted, not the list
+    expect(await table(page).locator('tbody tr[data-index]').count()).toBeLessThan(rowcount / 2);
     const continuous = async () => {
       const idx = await table(page)
         .locator('tbody tr[data-index]')

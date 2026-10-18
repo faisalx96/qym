@@ -130,5 +130,7 @@ export type DisplayRow<R> =
  */
 export interface ChildRows<R> {
   rows: R[];
+  /** aria-setsize of the children when it is not rows.length (queued passes count). */
+  setsize?: number;
   detail?: boolean;
 }
