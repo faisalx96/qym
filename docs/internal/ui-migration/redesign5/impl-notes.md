@@ -40,6 +40,12 @@ R4-1: grid 1151 / 735 / 237 px = box (was 304); R4-2 spread 0 (was 9.7); R4-3 co
 7. Observation, not fixed: at 390 the trace tree rows overlap the retry label and error tag.
 8. `stepTone` in `latencyModel.ts` is no longer used (step rows are series 1); left in place.
 
+## Review fixes (after `review-run-detail.md`)
+
+F1 table cell padding (`.detailRow > td`), R4-2 one row at 1024 ("Show" Select 641 to 1099 px, clamp widths), axis overshoot (grid
+`minmax(0, 1fr)` + plot padding), matrix 12 px at 390, flat distributions as one line, 390 trace rows; dense count tiers by `countTiers`.
+Tests: `R3-9b` (metric panel), `R4-2` (one row), `R4-3e`, `R1-9` tolerance 1, Vitest `countTiers`. See the review fixes table in `run-detail.md`.
+
 ## Gate
 
 - `npm run check` (heavy.sh cost 3): tsc, eslint, stylelint, Vitest 159 files / 1,378 tests, design-language 49 tests, all green.

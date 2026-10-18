@@ -97,6 +97,21 @@ export function BoxPlot({
       </div>
     );
   }
+  // every value equal: no plot to draw, a compact note the height of a stat line (round 5 review)
+  const flatMany = s.n > 1 && s.min === s.max;
+  if (flatMany) {
+    return (
+      <div
+        ref={ref}
+        className={[styles.flatNote, className].filter(Boolean).join(' ')}
+        role="img"
+        aria-label={name}
+        data-variant={variant}
+      >
+        {`All ${s.n} values are ${fmt(s.median)}`}
+      </div>
+    );
+  }
   const medX = sx(s.median);
   const meanX = sx(s.mean);
   const labelAnchor = medX < 40 ? 'start' : medX > W - 40 ? 'end' : 'middle';

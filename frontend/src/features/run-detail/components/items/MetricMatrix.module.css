@@ -167,20 +167,14 @@
   color: var(--text-muted);
 }
 
-/* Under 640px the cells and names shrink so the shown passes and Mean fit without sideways scrolling. */
+/* Under 640px the cells and names shrink in width, never below the 12px type of the rest of the matrix (round 5 R3-17). */
 .gridHost[data-compact] .cell {
   min-inline-size: 0;
-  font-size: var(--font-sm);
-}
-
-.gridHost[data-compact] .mean {
-  font-size: var(--font-sm);
 }
 
 .gridHost[data-compact] .metricName {
   display: block;
   overflow: hidden;
-  font-size: var(--font-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

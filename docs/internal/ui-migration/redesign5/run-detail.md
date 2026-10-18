@@ -128,7 +128,7 @@ counts on two tiers, labels every second.
 | R1-5 | `[data-part=count]` and its `[data-part=bar]`, bars with count > 0 | bar top minus count bottom is 2 px (<= 4) in a normal plot and 20 px (<= 20) for raised-tier counts in a `data-dense` plot; the count is never below its bar | boxes |
 | R1-6 | the tallest bar's count in any plot | count top >= plot top (nothing clipped) and `card.scrollHeight <= card.clientHeight`; the plot slot is >= 146 px | boxes |
 | R1-7 | axis labels shown (`[data-part=axis]` with text), 11 and 20 columns, 1440 and 390 | the gap between any two shown labels' text boxes is >= 4 px (current at 390 with 20 columns: -2 px); label k follows `ceil(labelWidth / pitch)`; column 0 is labelled | pairwise boxes of text ranges |
-| R1-8 | counts, 20 columns at 390 (dense; **amended**: asserted on the gallery sweep, whose counts reach 120; the `passes19` fixture has 6 items per pass, one-digit counts, pitch 12 >= 9, so it is correctly not dense) | no two count boxes intersect; counts alternate tier 1 / tier 2 by column index parity; every count is within 20 px above its own bar | pairwise boxes |
+| R1-8 | counts, 20 columns at 390 (dense; **amended**: asserted on the gallery sweep, whose counts reach 120; the `passes19` fixture has 6 items per pass, one-digit counts, pitch 12 >= 9, so it is correctly not dense) | no two count boxes intersect; tiers are assigned left to right (`countTiers`: the lowest of 3 tiers whose box clears the earlier counts it overlaps; **amended** from parity alternation, which could not separate a rising neighbour, found by the sweep at N=17); every count is within 20 px (tier 2) or 38 px (tier 3) above its own bar | pairwise boxes |
 | R1-9 | the plot's x axis | exists as a 1 px `--border-default` line under every well, continuous across the 4 px gaps (the union of well borders spans plot left to plot right within 1 px) | computed border and boxes |
 | R1-10 | bar widths and zero rule | bars <= 44 px wide; count 0 draws no bar (height 0) and prints `0` only for pass/fail and passes-passed | boxes and text |
 | R1-11 | chart cards | `card.bottom - lowest plot element bottom <= 16` (round 3 P1-3 stays) | boxes |
@@ -374,7 +374,7 @@ unchanged. Before shots `shots/before-r4-*.png`, after shots `shots/after-r4-*.p
 | # | Element and width | Criterion | Before | After |
 |---|---|---|---|---|
 | R4-1 | `[data-testid=correlation-matrix] [role=grid]` against its box content width, 1440 / 1024 / 390 | grid width equals the box width within 1 px (at 390 the grid is at least `label + 22 px x n` wide and scrolls inside the card); the last cell's right edge is within 2.5 px of the grid's right edge; cells are as wide as their column | 304 px grid in 1151 / 735 / 237 px boxes (847 px empty at 1440), cells 44 px | grid = box at 1440 (1151) and 1024 (735); cells 255.8 / 151.8 px wide; 390: 237 px grid, cells 27.3 px |
-| R4-2 | search, analysis metric, threshold, show items, Filters, Sort, Display in the Items bar, 1440 and 1024 | controls of one row share a vertical centre within 1 px (a wrapped control forms its own row); the cause was `align-items: center` on the sticky row with labels above only some controls, so labelled fields sat 9.7 px lower: the row now aligns to one bottom edge | spread 9.7 px at 1440 (search / show / filters / display 2669.5, metric / sort 2679.2); at 1024 the Display button wrapped to a second line (+32 px) | spread 0 px at 1440; 1024: first line spread 0, Display alone on line 2 |
+| R4-2 | search, analysis metric, threshold, show items, Filters, Sort, Display in the Items bar, 1440 and 1024 | controls of one row share a vertical centre within 1 px (a wrapped control forms its own row); the cause was `align-items: center` on the sticky row with labels above only some controls, so labelled fields sat 9.7 px lower: the row now aligns to one bottom edge | spread 9.7 px at 1440 (search / show / filters / display 2669.5, metric / sort 2679.2); at 1024 the Display button wrapped to a second line (+32 px) | spread 0 px at 1440; **review fix**: at 1024 all seven controls fit ONE row (segmented filter becomes a "Show" Select between 641 and 1099 px, search / Select / slider / sort use `clamp()` widths), spread 0, row height 43.4 px |
 | R4-3 | trace drawer, Messages / Response / Input / Output / Documents vs Metrics / Scores / Raw, 1440 and 390 | every step opens on a content tab when it has one; a step with no recorded content opens on an "Input / Output" tab with an empty state; a Metrics pick is not remembered, a content pick is remembered for the page session only | on the seeded traces every step already opened on content (6 of 6 steps at 1440 from the items row, 7 of 7 from a deep link, 390 deep link 7 of 7); a step with no input, output, messages or documents opened on Metrics | unchanged for the seed (content on all steps); a contentless step opens on Input / Output |
 | R4-3a | the Trace button of an items row (1440) | as R4-3 | content on 6 of 6 steps | content on 6 of 6 |
 | R4-3b | deep link `?trace=ITEM` (1440 and 390) | as R4-3 | content on 7 of 7 | content on 7 of 7 |
@@ -383,3 +383,17 @@ unchanged. Before shots `shots/before-r4-*.png`, after shots `shots/after-r4-*.p
 Tests: `e2e/run-detail/redesign5-spacing-trace.spec.ts` (R4-1, R4-2, R4-3a to R4-3d), Vitest `traces/SpanDetail.test.tsx`.
 Observation, not fixed (outside the owner's words): at 390 the trace tree rows overlap the retry label and error tag
 (`before-r4-trace-*`, `after-r4-trace-390.png`).
+
+
+### Review fixes (independent review `review-run-detail.md`, MEETS WITH FIXES)
+
+| # | Finding | Fix | Measured after |
+|---|---|---|---|
+| F1 | metric-panel tables had 0 px cell padding at >= 640 px: the items table's `.detailRow td` rule reached the nested table's cells | selector is now `.detailRow > td` (`DataTable.module.css`) | cell padding 8 px = header padding; text gaps 16 px or more between adjacent cells; first cell text left = header text left (delta 0) at 1440, 1024 and 640 (`R3-9b`) |
+| F2 | R4-2 Display wrapped at 1024 | see R4-2 | one row at 1024 |
+| F3 (R1-9) | drawn axis overshot the plot by 2 px; the real cause was a label wider than its column widening the well (grid track `auto`) | `grid-template-columns: minmax(0, 1fr)` on the column, 2 px inline padding on the plot | union of wells = plot box within 1 px (asserted at 1) |
+| F4 (R3-17) | 11 px names / values at 390 | compact rule keeps the 12 px base size | computed 12 px |
+| F5 | single-value box cards were tall with a lone mark | all-equal distributions render one `All N values are X` line (`.flatNote`, 32 px) | card height of a stat line |
+| F6 | 390 trace rows overlapped retry label and error tag | `rowMain` clips, model and tokens shrink with ellipsis, narrow grid columns 52 / 48 px | no child outside its row, no row over its duration (`R4-3e`) |
+
+Amendment found on the way: the dense count tiers are assigned by `countTiers` (see R1-8), because parity alternation let a rising neighbour collide (sweep N=17).

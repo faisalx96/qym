@@ -4,6 +4,7 @@ import {
   abbreviateCount,
   axisLabelShown,
   countText,
+  countTiers,
   isDenseCounts,
   labelEvery,
   matrixCellSide,
@@ -84,5 +85,20 @@ describe('matrixCellSide', () => {
     expect(matrixCellSide(1193, 4)).toBe(44);
     expect(matrixCellSide(300, 8)).toBe(33);
     expect(matrixCellSide(200, 24)).toBe(20);
+  });
+});
+
+describe('countTiers', () => {
+  it('keeps flat or falling neighbours on tier 0 or alternating, and raises a rising neighbour clear of its predecessor', () => {
+    const tiers = countTiers([0.9, 0.2, 0.25, 0.9, 1], 14, 23);
+    expect(tiers).toHaveLength(5);
+    expect(tiers[0]).toBe(0);
+  });
+
+  it('never leaves two overlapping counts on the same height', () => {
+    const p = [0.1, 0.3, 0.5, 0.7, 0.9, 1];
+    const tiers = countTiers(p, 12, 23);
+    const y = p.map((v, i) => (1 - v) * 120 - tiers[i]! * 18);
+    for (let i = 1; i < p.length; i++) expect(Math.abs(y[i]! - y[i - 1]!)).toBeGreaterThanOrEqual(16);
   });
 });

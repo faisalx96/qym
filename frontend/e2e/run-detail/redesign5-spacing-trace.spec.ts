@@ -74,6 +74,7 @@ test('R4-2: every control of the items toolbar shares one vertical centre at 144
         { label: 'metric', r: fieldOf('Analysis metric')?.getBoundingClientRect() },
         pick('slider', '[role=group][class*=track], [class*=Slider] [class*=track]'),
         pick('show', '[role=radiogroup]'),
+        { label: 'show-select', r: fieldOf('Show')?.getBoundingClientRect() },
         pick('filters', '[data-testid=open-filters]'),
         { label: 'sort', r: fieldOf('Sort')?.getBoundingClientRect() },
         {
@@ -82,7 +83,7 @@ test('R4-2: every control of the items toolbar shares one vertical centre at 144
             .find((b) => /Display/.test(b.textContent ?? ''))
             ?.getBoundingClientRect(),
         },
-      ].filter((c): c is { label: string; r: DOMRect } => !!c && !!c.r);
+      ].filter((c): c is { label: string; r: DOMRect } => !!c && !!c.r && c.r.height > 0);
       return {
         rowH: row.getBoundingClientRect().height,
         controls: controls.map((c) => ({ label: c.label, cy: c.r.top + c.r.height / 2, h: c.r.height })),
@@ -97,6 +98,8 @@ test('R4-2: every control of the items toolbar shares one vertical centre at 144
       if (last && cy - last[last.length - 1]! < 14) last.push(cy);
       else rows.push([cy]);
     }
+    // round 5 review: at 1440 and 1024 every control fits ONE row
+    expect.soft(rows.length).toBe(1);
     for (const r of rows) expect.soft(Math.max(...r) - Math.min(...r)).toBeLessThanOrEqual(1);
     expect(m.controls.length).toBeGreaterThanOrEqual(6);
     await bar.screenshot({
@@ -193,3 +196,28 @@ for (const width of [1440, 390]) {
     });
   });
 }
+
+test('R4-3e (review): trace tree rows never paint over their duration column at 390', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openRun(page, s.slug, classic, 'trace=item-0006');
+  const dialog = page.getByRole('dialog', { name: 'Trace' });
+  await expect(dialog.getByRole('treeitem').first()).toBeVisible();
+  const bad = await dialog.getByRole('treeitem').evaluateAll((rows) =>
+    rows
+      .map((r) => {
+        const main = r.children[0]!;
+        const dur = r.children[1]!.getBoundingClientRect();
+        const m = main.getBoundingClientRect();
+        const kids = Array.from(main.children).map((k) => k.getBoundingClientRect());
+        const overflow = kids.filter((k) => k.width > 0 && k.right > m.right + 0.5).length;
+        return {
+          name: r.textContent,
+          over: m.right - dur.left,
+          overflow,
+          tall: Math.max(...kids.map((k) => k.height)),
+        };
+      })
+      .filter((r) => r.over > 0.5 || r.overflow > 0 || r.tall > 40),
+  );
+  expect(bad).toEqual([]);
+});

@@ -156,6 +156,16 @@
   align-items: center;
   gap: var(--space-xs);
   min-width: 0;
+  overflow: hidden; /* tags and the model never paint over the duration column (round 5 review) */
+}
+
+.rowMain > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.split[data-narrow] .row {
+  grid-template-columns: minmax(0, 1fr) 52px 48px;
 }
 
 .toggle {
@@ -181,8 +191,16 @@
   color: var(--tone);
 }
 
-.name {
+.rowMain > .name,
+.rowMain > .sub {
+  flex-shrink: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.name {
+  min-width: 24px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

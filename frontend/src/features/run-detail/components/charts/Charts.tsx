@@ -9,7 +9,7 @@ import { metricBand } from '@/lib/metrics';
 import { ChartTooltipHost, Mark } from '@/ui/Chart';
 import { staggerIndex, useEntrance } from '@/ui/motion';
 import { bucketTone, type BoolSegment, type ScoreBucket } from '../../lib/overviewModel';
-import { COLUMN_GAP, axisLabelShown, columnPitch, countText, isDenseCounts } from './chartLabels';
+import { COLUMN_GAP, axisLabelShown, columnPitch, countText, countTiers, isDenseCounts } from './chartLabels';
 import styles from './Charts.module.css';
 
 /** Width of an element in CSS px (ResizeObserver); `fallback` until measured. Charts draw at this width so text and marks keep their size. */
@@ -91,14 +91,23 @@ export function BarColumns({
   const [boxRef, width] = useMeasuredWidth<HTMLDivElement>(280);
   const enter = useEntrance();
   const max = Math.max(1, ...bars.map((b) => b.count));
-  const pitch = columnPitch(bars.length, width);
+  const plotW = width - 4; // the plot's 2px inline padding
+  const pitch = columnPitch(bars.length, plotW);
   const colWidth = pitch - COLUMN_GAP;
   const showAxis = axisLabelShown(
     bars.map((b) => b.label),
-    width,
+    plotW,
   );
   const digits = Math.max(1, ...bars.map((b) => countText(b.count, colWidth, b.zero).length));
   const dense = isDenseCounts(pitch, digits);
+  const digitsW = digits * 7 + 2;
+  const tiers = dense
+    ? countTiers(
+        bars.map((b) => b.count / max),
+        pitch,
+        digitsW,
+      )
+    : [];
   const rows = axis ? 1 + (bars.some((b) => b.note) ? 1 : 0) + (bars.some((b) => b.sub) ? 1 : 0) : 0;
   const foot = axis ? 4 + 14 * rows : 4;
   return (
@@ -107,7 +116,7 @@ export function BarColumns({
         className={[styles.plot, className].filter(Boolean).join(' ')}
         role="group"
         aria-label={name}
-        data-dense={dense ? '' : undefined}
+        data-dense={dense ? (tiers.includes(2) ? '3' : '2') : undefined}
         style={{ '--foot': `${foot}px` } as React.CSSProperties}
       >
         {bars.map((b, i) => {
@@ -159,7 +168,7 @@ export function BarColumns({
           const style = { '--p': b.count / max } as React.CSSProperties;
           const zero = b.count === 0 ? '' : undefined;
           const dim = b.dim ? '' : undefined;
-          const tier = dense && i % 2 === 1 ? '2' : undefined;
+          const tier = tiers[i] ? String(tiers[i]! + 1) : undefined;
           if (b.onPick && !b.passive) {
             return (
               <Mark

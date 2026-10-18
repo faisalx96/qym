@@ -12,6 +12,24 @@
   gap: var(--space-sm);
 }
 
+.showSegmented {
+  display: contents;
+}
+
+.showSelect {
+  display: none;
+}
+
+@media (min-width: 641px) and (max-width: 1099px) {
+  .showSegmented {
+    display: none;
+  }
+
+  .showSelect {
+    display: block;
+  }
+}
+
 .chips {
   display: flex;
   align-items: center;

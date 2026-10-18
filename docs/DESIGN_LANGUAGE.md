@@ -514,8 +514,8 @@ is not allowed.
   3px minimum when the count is above 0; an empty score bucket draws no count, pass/fail bars and "Passes passed"
   draw `0` in `--text-muted`. Axis labels follow one rule for every plot: every k-th label with
   `k = ceil(labelWidth / pitch)` (`pitch` = column + gap, `labelWidth` = characters x 7 + 6), column 0 always; the full list
-  stays in the `aria-label`. When counts are wider than the pitch the plot is `data-dense`: every second count is raised
-  one 18px tier (no layout change). Boolean metrics are the same plot (Pass, Fail, Error columns, percentage under the label), not a
+  stays in the `aria-label`. When counts are wider than the pitch the plot is `data-dense`: each count takes the lowest of three 18px tiers whose box clears
+  the earlier counts it overlaps (`countTiers`; no layout change). Boolean metrics are the same plot (Pass, Fail, Error columns, percentage under the label), not a
   horizontal split bar. Bars rise and counts fade in together on mount; nothing animates under
   `prefers-reduced-motion` (`animation: none`). Overview cards flow in `repeat(auto-fit, minmax(260px, 1fr))`.
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour

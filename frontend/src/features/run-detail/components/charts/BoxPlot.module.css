@@ -218,3 +218,13 @@
   background: var(--bg-surface);
   transform: rotate(45deg);
 }
+
+/* All values equal: one muted line instead of a plot with a lone mark. */
+.flatNote {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--row-compact);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}

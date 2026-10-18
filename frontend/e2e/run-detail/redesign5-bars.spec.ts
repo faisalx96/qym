@@ -174,8 +174,8 @@ for (const width of WIDTHS) {
             p.cols[i]!.well.left - p.cols[i - 1]!.well.right,
             `${p.name} gap in the axis line`,
           ).toBeLessThanOrEqual(1);
-        expect(lefts[0]! - p.box.left).toBeLessThanOrEqual(3);
-        expect(p.box.right - rights[rights.length - 1]!).toBeLessThanOrEqual(3);
+        expect(Math.abs(lefts[0]! - p.box.left)).toBeLessThanOrEqual(1);
+        expect(Math.abs(p.box.right - rights[rights.length - 1]!)).toBeLessThanOrEqual(1);
         // R1-11
         expect(p.card!.bottom - p.card!.lowest, `${p.name} space under the plot`).toBeLessThanOrEqual(16);
       }
@@ -199,8 +199,8 @@ for (const width of WIDTHS) {
       for (const c of p!.cols) {
         if (c.barHeight <= 0 || c.count.text === '') continue;
         const gap = c.bar.top - c.count.bottom;
-        if (c.count.tier === '2') {
-          expect(gap).toBeLessThanOrEqual(20.5);
+        if (c.count.tier === '2' || c.count.tier === '3') {
+          expect(gap).toBeLessThanOrEqual(c.count.tier === '3' ? 38.5 : 20.5);
           expect(gap).toBeGreaterThanOrEqual(-0.5);
         } else {
           expect(gap).toBeLessThanOrEqual(4);
@@ -301,12 +301,13 @@ test('R1-3: the real BarColumns with 1 to 20 columns (counts 0..120) stands on i
       expectCountsApart(p);
       // R1-8 / R1-5: when the plot is dense, tiers alternate by column parity and every count is within 20px above its bar
       if (p.dense) {
-        p.cols.forEach((c, k) => expect(c.count.tier).toBe(k % 2 === 1 ? '2' : null));
+        // tiers are chosen so that no two counts collide (amended R1-8: parity alternation cannot separate a rising neighbour)
+        for (const c of p.cols) expect([null, '2', '3']).toContain(c.count.tier);
         for (const c of p.cols) {
           if (c.barHeight <= 0 || c.count.text === '') continue;
           const gap = c.bar.top - c.count.bottom;
           expect(gap).toBeGreaterThanOrEqual(-0.5);
-          expect(gap).toBeLessThanOrEqual(c.count.tier === '2' ? 20.5 : 4);
+          expect(gap).toBeLessThanOrEqual(c.count.tier === '3' ? 38.5 : c.count.tier === '2' ? 20.5 : 4);
         }
       }
     });

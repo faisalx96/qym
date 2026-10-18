@@ -594,7 +594,7 @@
   }
 }
 
-.detailRow td {
+.detailRow > td {
   padding: 0;
   height: auto;
   white-space: normal;

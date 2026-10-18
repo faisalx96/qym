@@ -54,3 +54,28 @@ export function matrixCellSide(columnWidth: number, n: number): number {
 
 /** A matrix cell prints its number only when it is this wide (px) or wider. */
 export const MATRIX_NUMBER_MIN = 32;
+
+/**
+ * Count tiers of a dense plot (counts wider than the pitch). A count sits on its bar, so neighbours at similar heights
+ * collide: left to right each count takes the lowest tier (0, 1, 2) whose 16px box clears every earlier count it overlaps
+ * horizontally. `p` is count / max per column; `plotH` the free height the bars share (about 120px).
+ */
+export function countTiers(p: number[], pitch: number, countW: number, plotH = 120, tierH = 18): number[] {
+  const reach = Math.max(1, Math.ceil(countW / Math.max(pitch, 1)) - 1 + 1);
+  const tiers: number[] = [];
+  p.forEach((v, i) => {
+    const top = (1 - v) * plotH;
+    for (let t = 0; t < 3; t++) {
+      const y = top - t * tierH;
+      const clash = tiers.slice(Math.max(0, i - reach), i).some((pt, k) => {
+        const j = Math.max(0, i - reach) + k;
+        return Math.abs(y - ((1 - p[j]!) * plotH - pt * tierH)) < 16;
+      });
+      if (!clash || t === 2) {
+        tiers.push(t);
+        return;
+      }
+    }
+  });
+  return tiers;
+}

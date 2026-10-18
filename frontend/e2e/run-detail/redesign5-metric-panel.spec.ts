@@ -321,3 +321,43 @@ for (const width of [1440, 390] as const) {
     });
   });
 }
+
+test('R3-9b (review fix): table cells have the header padding; adjacent texts are at least 12px apart; the first column lines up with its header', async ({
+  page,
+}) => {
+  for (const width of [1440, 1024, 640]) {
+    const { panel } = await openPanel(page, 'rubric_judge', width);
+    for (const name of ['Evidence', 'Criteria', 'Log table']) {
+      const m = await panel.getByRole('grid', { name }).evaluate((g) => {
+        const textBox = (el: Element) => {
+          const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+            acceptNode: (n) => (n.textContent?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+          });
+          const node = w.nextNode()!;
+          const r = document.createRange();
+          r.selectNodeContents(node);
+          return r.getBoundingClientRect();
+        };
+        const head = Array.from(g.querySelectorAll('[role=columnheader]'));
+        const row = g.querySelector('tr:has([role=gridcell])')!;
+        const cells = Array.from(row.children);
+        // a clipped (ellipsised) text ends at its cell's inner edge
+        const boxes = cells.map((c) => {
+          const b = textBox(c.querySelector('[data-cell]') ?? c);
+          return { left: b.left, right: Math.min(b.right, c.getBoundingClientRect().right - 8) };
+        });
+        const gaps = boxes.slice(1).map((b, i) => b.left - boxes[i]!.right);
+        const headText = textBox(head[0]!);
+        return {
+          pad: getComputedStyle(cells[0]!).paddingLeft,
+          gaps,
+          firstDelta: Math.abs(boxes[0]!.left - headText.left),
+        };
+      });
+      console.log(`R3-9b ${width}px ${name} ${JSON.stringify(m)}`);
+      expect(parseFloat(m.pad), `${name} ${width} padding`).toBeGreaterThanOrEqual(8);
+      for (const g of m.gaps) expect(g, `${name} ${width} gap`).toBeGreaterThanOrEqual(12);
+      expect(m.firstDelta, `${name} ${width} first column vs header`).toBeLessThanOrEqual(1.5);
+    }
+  }
+});

@@ -110,7 +110,9 @@ for (const width of WIDTHS) {
         for (const c of p.cols)
           if (c.bar.height > 0)
             // round 5 R1-5: a raised-tier count of a dense plot sits up to 20px above its bar
-            expect(c.bar.top - c.count.box.bottom).toBeLessThanOrEqual(c.tier === '2' ? 20.5 : 4);
+            expect(c.bar.top - c.count.box.bottom).toBeLessThanOrEqual(
+              c.tier === '3' ? 38.5 : c.tier === '2' ? 20.5 : 4,
+            );
     });
 
     test('P1-3, P1-7, P1-9, P1-11: charts live in cards, no dead space under the plot, nothing overflows, cards are 260px or wider', async ({
