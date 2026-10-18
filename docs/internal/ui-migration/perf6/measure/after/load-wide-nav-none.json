@@ -1,0 +1,152 @@
+{
+  "run": "wide",
+  "kind": "nav",
+  "net": "none",
+  "median": {
+    "heroMs": 39,
+    "overviewMs": 211,
+    "rowsMs": 211,
+    "ttiMs": 211,
+    "tbtMs": 46,
+    "cls": 0.0059,
+    "requests": 12,
+    "jsChunks": 4,
+    "jsKB": 13.4,
+    "apiRequests": 5,
+    "apiKB": 39.3,
+    "compactKB": 34.5,
+    "compactTtfbMs": 91,
+    "compactDoneMs": 97
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 40,
+      "skeletonMs": 18,
+      "overviewMs": 294,
+      "rowsMs": 294,
+      "ttiMs": 294,
+      "tbtMs": 46,
+      "cls": 0.0059,
+      "reactCommits": 38,
+      "requests": 12,
+      "jsChunks": 4,
+      "jsKB": 13.4,
+      "apiRequests": 5,
+      "apiKB": 39.3,
+      "compactKB": 34.5,
+      "compactTtfbMs": 162,
+      "compactDoneMs": 171,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "CategoriesTab-DVkeXf4o.js 2.9kB @176-184ms",
+        "ErrorsTab-CQt5boSF.js 1.5kB @176-184ms",
+        "TraceHost-fuoNL-L5.js 5.2kB @177-184ms",
+        "SpanDetail-DS2Uu0s-.js 3.8kB @177-184ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=summary 1.5kB @6-38ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=scores,reasons,categ 34.5kB @7-171ms",
+        "/api/dashboard/neighbors 0.7kB @34-68ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @34-67ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @37-184ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 39,
+      "skeletonMs": 17,
+      "overviewMs": 210,
+      "rowsMs": 210,
+      "ttiMs": 210,
+      "tbtMs": 46,
+      "cls": 0.0059,
+      "reactCommits": 45,
+      "requests": 12,
+      "jsChunks": 4,
+      "jsKB": 13.4,
+      "apiRequests": 5,
+      "apiKB": 39.3,
+      "compactKB": 34.5,
+      "compactTtfbMs": 91,
+      "compactDoneMs": 97,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "CategoriesTab-DVkeXf4o.js 2.9kB @102-223ms",
+        "ErrorsTab-CQt5boSF.js 1.5kB @103-223ms",
+        "TraceHost-fuoNL-L5.js 5.2kB @103-224ms",
+        "SpanDetail-DS2Uu0s-.js 3.8kB @103-224ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=summary 1.5kB @5-34ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=scores,reasons,categ 34.5kB @5-97ms",
+        "/api/dashboard/neighbors 0.7kB @31-47ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @31-42ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @34-98ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 35,
+      "skeletonMs": 26,
+      "overviewMs": 211,
+      "rowsMs": 211,
+      "ttiMs": 211,
+      "tbtMs": 49,
+      "cls": 0.0059,
+      "reactCommits": 42,
+      "requests": 12,
+      "jsChunks": 4,
+      "jsKB": 13.4,
+      "apiRequests": 5,
+      "apiKB": 39.3,
+      "compactKB": 34.5,
+      "compactTtfbMs": 87,
+      "compactDoneMs": 95,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "CategoriesTab-DVkeXf4o.js 2.9kB @99-229ms",
+        "ErrorsTab-CQt5boSF.js 1.5kB @100-229ms",
+        "TraceHost-fuoNL-L5.js 5.2kB @100-229ms",
+        "SpanDetail-DS2Uu0s-.js 3.8kB @100-229ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=summary 1.5kB @5-33ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=scores,reasons,categ 34.5kB @5-95ms",
+        "/api/dashboard/neighbors 0.7kB @30-44ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @30-43ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @33-95ms"
+      ]
+    }
+  ]
+}

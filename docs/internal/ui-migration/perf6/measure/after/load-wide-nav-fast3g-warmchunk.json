@@ -1,0 +1,124 @@
+{
+  "run": "wide",
+  "kind": "nav",
+  "net": "fast3g",
+  "median": {
+    "heroMs": 151,
+    "overviewMs": 152,
+    "rowsMs": 152,
+    "ttiMs": 152,
+    "tbtMs": 67,
+    "cls": 0.0057,
+    "requests": 0,
+    "jsChunks": 0,
+    "jsKB": 0,
+    "apiRequests": 0,
+    "apiKB": 0,
+    "compactKB": null,
+    "compactTtfbMs": null,
+    "compactDoneMs": null
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 18,
+      "skeletonMs": 18,
+      "overviewMs": 869,
+      "rowsMs": 869,
+      "ttiMs": 869,
+      "tbtMs": 16,
+      "cls": 0.0059,
+      "reactCommits": 45,
+      "requests": 8,
+      "jsChunks": 4,
+      "jsKB": 13.4,
+      "apiRequests": 1,
+      "apiKB": 34.5,
+      "compactKB": 34.5,
+      "compactTtfbMs": 573,
+      "compactDoneMs": 769,
+      "mountedAtOverview": [
+        "overview"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "CategoriesTab-DVkeXf4o.js 2.9kB @774-1423ms",
+        "ErrorsTab-CQt5boSF.js 1.5kB @774-1401ms",
+        "TraceHost-fuoNL-L5.js 5.2kB @774-1454ms",
+        "SpanDetail-DS2Uu0s-.js 3.8kB @774-1449ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=scores,reasons,categ 34.5kB @3-769ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 152,
+      "skeletonMs": 152,
+      "overviewMs": 152,
+      "rowsMs": 152,
+      "ttiMs": 152,
+      "tbtMs": 69,
+      "cls": 0.0057,
+      "reactCommits": 45,
+      "requests": 0,
+      "jsChunks": 0,
+      "jsKB": 0,
+      "apiRequests": 0,
+      "apiKB": 0,
+      "compactKB": null,
+      "compactTtfbMs": null,
+      "compactDoneMs": null,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [],
+      "apiList": []
+    },
+    {
+      "rep": 2,
+      "heroMs": 151,
+      "skeletonMs": 151,
+      "overviewMs": 151,
+      "rowsMs": 151,
+      "ttiMs": 151,
+      "tbtMs": 67,
+      "cls": 0.0057,
+      "reactCommits": 43,
+      "requests": 0,
+      "jsChunks": 0,
+      "jsKB": 0,
+      "apiRequests": 0,
+      "apiKB": 0,
+      "compactKB": null,
+      "compactTtfbMs": null,
+      "compactDoneMs": null,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [],
+      "apiList": []
+    }
+  ]
+}

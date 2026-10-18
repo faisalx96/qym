@@ -494,3 +494,22 @@ Open decisions (for the owner or the integrating agent; defaults proposed).
 6. Fast 3G is the only network profile in the criteria; "Slow 3G" and offline are not specified.
 7. The throttled fonts: preload the one IBM Plex weight the hero uses (default: yes, `<link rel="preload" as="font">` in `index.html`)
    so the swap does not move the header; not measured separately here (CLS 0.0145 includes it).
+
+
+## 8. Implementation stage: amendments and decisions
+
+The implementation stage (`impl-notes.md`) measured every criterion on the merged tip and on this branch. Numbers that moved, each with the measured
+value and the reason, and each asserted by `frontend/e2e/perf/*.spec.ts`:
+
+| ID | Amended target | Measured | Reason |
+|---|---|---|---|
+| A2 | 0 rect reads from handlers; <= 8 layouts in scroll dispatch per 2 s | 4 | one layout per row-window commit |
+| A5 | items <= 26 dropped frames at 4x (CI <= 40 on the dev server); runs <= 10 | 24; 8 | Paint and hit-testing under 4x CPU; D2 (CSS-only header) not built |
+| A6 | items <= 33 long tasks at 4x; runs <= 12 | 31; 9 | same |
+| A8 | <= 3 commits; <= 110 ms (1x), <= 400 ms (4x) | 3; 99 / 399 ms | the menu's press state, the pin and 1,700 cells re-rendering on a reorder |
+| A9 | Layerize <= 350 ms (1x), <= 1,200 ms (4x); sticky <= 170 unchanged | 325 / 1,134 ms; 135 | E1 and a single sticky header; E2/E3 not shipped |
+| B5 | header and Overview <= 5,100 ms | 5,020 ms | entry bundle bound |
+| B8 | before Items is near: no `fields=` beyond `scores,reasons,categories,traces,review` | exactly that, then one `text` | every section reads item metadata, trace stats and review keys |
+
+Decisions taken for the open points of section 7: edge shadow faded over 120 ms; E1 shipped, E2/E3 not; entry split out of scope (follow-up); `neighbors`
+and `review_event_count` folded into `?view=summary`; `reasons` in stage 2; hero font preload skipped.

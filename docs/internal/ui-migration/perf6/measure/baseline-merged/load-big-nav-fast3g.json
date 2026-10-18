@@ -1,0 +1,152 @@
+{
+  "run": "big",
+  "kind": "nav",
+  "net": "fast3g",
+  "median": {
+    "heroMs": 2607,
+    "overviewMs": 2607,
+    "rowsMs": 2607,
+    "ttiMs": 2607,
+    "tbtMs": 55,
+    "cls": 0.0057,
+    "requests": 15,
+    "jsChunks": 6,
+    "jsKB": 103.3,
+    "apiRequests": 3,
+    "apiKB": 89.6,
+    "compactKB": 88.2,
+    "compactTtfbMs": 564,
+    "compactDoneMs": 2499
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 2616,
+      "skeletonMs": 35,
+      "overviewMs": 2616,
+      "rowsMs": 2616,
+      "ttiMs": 2616,
+      "tbtMs": 64,
+      "cls": 0.0057,
+      "reactCommits": 294,
+      "requests": 15,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 564,
+      "compactDoneMs": 2499,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @13-1227ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @13-859ms",
+        "TextBlock-DBLChdZy.js 0.9kB @14-584ms",
+        "Collapse-POnQeTmm.js 1.0kB @14-617ms",
+        "structured-Bv4atLAx.js 1.4kB @14-1217ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @14-1426ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact 88.2kB @1427-2499ms",
+        "/api/dashboard/neighbors 1.1kB @2578-3167ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7/review-history 0.3kB @2579-3151ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 2607,
+      "skeletonMs": 31,
+      "overviewMs": 2607,
+      "rowsMs": 2607,
+      "ttiMs": 2607,
+      "tbtMs": 55,
+      "cls": 0.0057,
+      "reactCommits": 295,
+      "requests": 15,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 564,
+      "compactDoneMs": 2499,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @12-1237ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @13-861ms",
+        "TextBlock-DBLChdZy.js 0.9kB @13-609ms",
+        "Collapse-POnQeTmm.js 1.0kB @13-585ms",
+        "structured-Bv4atLAx.js 1.4kB @13-1210ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @14-1427ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact 88.2kB @1428-2499ms",
+        "/api/dashboard/neighbors 1.1kB @2569-3152ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7/review-history 0.3kB @2569-3143ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 2599,
+      "skeletonMs": 34,
+      "overviewMs": 2599,
+      "rowsMs": 2599,
+      "ttiMs": 2599,
+      "tbtMs": 55,
+      "cls": 0.0057,
+      "reactCommits": 295,
+      "requests": 15,
+      "jsChunks": 6,
+      "jsKB": 103.3,
+      "apiRequests": 3,
+      "apiKB": 89.6,
+      "compactKB": 88.2,
+      "compactTtfbMs": 565,
+      "compactDoneMs": 2491,
+      "mountedAtOverview": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "RunDetailPage-BSM3yvqY.js 77.6kB @12-1236ms",
+        "useSidebarHidden-Dg5FrhA_.js 21.1kB @12-851ms",
+        "TextBlock-DBLChdZy.js 0.9kB @13-601ms",
+        "Collapse-POnQeTmm.js 1.0kB @13-585ms",
+        "structured-Bv4atLAx.js 1.4kB @13-1209ms",
+        "Disclosure-DbRMQAMD.js 1.2kB @14-1417ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact 88.2kB @1418-2491ms",
+        "/api/dashboard/neighbors 1.1kB @2561-3151ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7/review-history 0.3kB @2562-3135ms"
+      ]
+    }
+  ]
+}

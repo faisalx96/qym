@@ -1,0 +1,146 @@
+{
+  "run": "wide",
+  "kind": "nav",
+  "net": "fast3g",
+  "median": {
+    "heroMs": 36,
+    "overviewMs": 921,
+    "rowsMs": 921,
+    "ttiMs": 921,
+    "tbtMs": 23,
+    "cls": 0.006,
+    "requests": 12,
+    "jsChunks": 4,
+    "jsKB": 13.4,
+    "apiRequests": 5,
+    "apiKB": 39.3,
+    "compactKB": 34.5,
+    "compactTtfbMs": 578,
+    "compactDoneMs": 810
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 36,
+      "skeletonMs": 17,
+      "overviewMs": 920,
+      "rowsMs": 920,
+      "ttiMs": 920,
+      "tbtMs": 23,
+      "cls": 0.006,
+      "reactCommits": 44,
+      "requests": 12,
+      "jsChunks": 4,
+      "jsKB": 13.4,
+      "apiRequests": 5,
+      "apiKB": 39.3,
+      "compactKB": 34.5,
+      "compactTtfbMs": 578,
+      "compactDoneMs": 809,
+      "mountedAtOverview": [
+        "overview"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "CategoriesTab-DVkeXf4o.js 2.9kB @814-1451ms",
+        "ErrorsTab-CQt5boSF.js 1.5kB @815-1434ms",
+        "TraceHost-fuoNL-L5.js 5.2kB @815-1493ms",
+        "SpanDetail-DS2Uu0s-.js 3.8kB @815-1485ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=summary 1.5kB @5-576ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=scores,reasons,categ 34.5kB @6-809ms",
+        "/api/dashboard/neighbors 0.7kB @32-617ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @32-608ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @35-641ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 33,
+      "skeletonMs": 21,
+      "overviewMs": 921,
+      "rowsMs": 921,
+      "ttiMs": 921,
+      "tbtMs": 23,
+      "cls": 0.006,
+      "reactCommits": 44,
+      "requests": 12,
+      "jsChunks": 4,
+      "jsKB": 13.4,
+      "apiRequests": 5,
+      "apiKB": 39.3,
+      "compactKB": 34.5,
+      "compactTtfbMs": 578,
+      "compactDoneMs": 810,
+      "mountedAtOverview": [
+        "overview"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "CategoriesTab-DVkeXf4o.js 2.9kB @815-1476ms",
+        "ErrorsTab-CQt5boSF.js 1.5kB @816-1440ms",
+        "TraceHost-fuoNL-L5.js 5.2kB @816-1498ms",
+        "SpanDetail-DS2Uu0s-.js 3.8kB @816-1476ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=summary 1.5kB @5-576ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=scores,reasons,categ 34.5kB @6-810ms",
+        "/api/dashboard/neighbors 0.7kB @31-626ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @31-609ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @34-642ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 36,
+      "skeletonMs": 17,
+      "overviewMs": 923,
+      "rowsMs": 923,
+      "ttiMs": 923,
+      "tbtMs": 25,
+      "cls": 0.006,
+      "reactCommits": 44,
+      "requests": 12,
+      "jsChunks": 4,
+      "jsKB": 13.4,
+      "apiRequests": 5,
+      "apiKB": 39.3,
+      "compactKB": 34.5,
+      "compactTtfbMs": 577,
+      "compactDoneMs": 810,
+      "mountedAtOverview": [
+        "overview"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 6,
+      "jsList": [
+        "CategoriesTab-DVkeXf4o.js 2.9kB @815-1434ms",
+        "ErrorsTab-CQt5boSF.js 1.5kB @815-1468ms",
+        "TraceHost-fuoNL-L5.js 5.2kB @816-1494ms",
+        "SpanDetail-DS2Uu0s-.js 3.8kB @816-1483ms"
+      ],
+      "apiList": [
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=summary 1.5kB @6-577ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da?view=compact&fields=scores,reasons,categ 34.5kB @6-810ms",
+        "/api/dashboard/neighbors 0.7kB @32-617ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/review-history 0.3kB @33-609ms",
+        "/api/runs/9b10bd03-3d3b-42be-a00c-4b754921f5da/passes 2.4kB @36-643ms"
+      ]
+    }
+  ]
+}

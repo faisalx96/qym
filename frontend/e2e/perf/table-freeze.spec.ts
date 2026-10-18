@@ -46,7 +46,8 @@ test('first horizontal tick renders nothing; freezing a column is a few commits 
     });
     // the menu's own press state commits too: the table itself does one
     expect((await commits(page)) - before, step).toBeLessThanOrEqual(limit(4, 3));
-    expect(f.worst, step).toBeLessThanOrEqual(limit(400, 120));
+    // A8, amended: <= 110 ms local (measured 99 on the production build)
+    expect(f.worst, step).toBeLessThanOrEqual(limit(400, 110));
   }
 
   // A13: under prefers-reduced-motion the shadow appears without a transition
