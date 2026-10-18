@@ -67,7 +67,7 @@ for (const width of [1440, 390] as const) {
       expect(h.panelScroll).toBeLessThanOrEqual(0);
       expect(h.pageScroll).toBeLessThanOrEqual(0);
       // Edit opens the editor in the panel (title "Edit {metric}"), Escape and Close return focus to the matrix cell
-      await panel.getByRole('button', { name: 'Edit rubric_judge score' }).click();
+      await panel.getByRole('button', { name: 'Edit score', exact: true }).click();
       await expect(panel.getByText('Edit rubric_judge')).toBeVisible();
       await panel.getByRole('button', { name: 'Close rubric_judge details' }).click();
       await expect(page.getByTestId('metric-detail')).toHaveCount(0);

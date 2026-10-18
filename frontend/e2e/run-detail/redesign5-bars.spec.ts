@@ -68,7 +68,10 @@ async function plots(page: Page, nameRe: string): Promise<PlotInfo[]> {
       return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height };
     };
     const text = (el: Element) =>
-      getComputedStyle(el, '::before').content.replace(/^"|"$/g, '').replace(/ /g, '').trim();
+      getComputedStyle(el, '::before')
+        .content.replace(/^"|"$/g, '')
+        .replace(/\u00a0/g, '')
+        .trim();
     return Array.from(document.querySelectorAll('[role=group]'))
       .filter(
         (g) => g.querySelector('[data-part=bar]') && new RegExp(re).test(g.getAttribute('aria-label') ?? ''),
@@ -242,7 +245,7 @@ for (const width of WIDTHS) {
             return Array.from(g.querySelectorAll('[data-part=axis]')).map((el) => {
               const content = getComputedStyle(el, '::before')
                 .content.replace(/^"|"$/g, '')
-                .replace(/ /g, '')
+                .replace(/\u00a0/g, '')
                 .trim();
               if (!content) return null;
               const r2 = el.getBoundingClientRect(); // shrink-to-fit in the foot, so the box is the text

@@ -334,12 +334,7 @@ export function MetricMatrix({
             ) : null}
             <span className={styles.detailActions}>
               {editable ? (
-                <Button
-                  size="sm"
-                  icon={<Icon name="edit" size={12} />}
-                  aria-label={`Edit ${pick.metric} score${suffix}`}
-                  onPress={() => setEditing((v) => !v)}
-                >
+                <Button size="sm" icon={<Icon name="edit" size={12} />} onPress={() => setEditing((v) => !v)}>
                   Edit score
                 </Button>
               ) : null}

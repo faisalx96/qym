@@ -68,7 +68,7 @@ export function BoxCardBody({
   const stats = useMemo(() => boxStats(values), [values]);
   const axis = useMemo(
     () => boxAxis(stats, { fixed: fixedDomain, values, fit: kind === 'percent' ? 'zero' : 'data' }),
-    [stats, fixedDomain, values],
+    [stats, fixedDomain, values, kind],
   );
   const fmt = boxFormatter(kind);
   const total = useMemo(() => boxTotalText(values, kind), [values, kind]);
