@@ -104,3 +104,6 @@ Measured 2026-10-17 on the r4-seed project (1440 x 900, compact) and by the spec
   and `passChildren.test.ts`.
 - F5: the open run's name link is weight 600 like its cells (`.tr[data-group-open] > td a`).
 - F2 (`group-metrics` requested twice on first expand): not changed, optional; the second request is the same cached query.
+- Gate after the fixes: `npm run check` (cost 3) green, 157 Vitest files / 1374 tests, design test 49; Playwright `runs-list`
+  (cost 3) 221 passed of 222, the one failure was Q20 itself (it waited for a chevron outside the mounted window; the test now
+  scrolls the table to it and ends by checking the 20 open groups in `sessionStorage`), which then passed alone (30 s).

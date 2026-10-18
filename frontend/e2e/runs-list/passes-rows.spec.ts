@@ -766,8 +766,16 @@ test.describe('runs table: virtualised groups (1440)', () => {
     const chevs = page.getByRole('button', { name: /^Expand 10 passes of / });
     const n = await chevs.count();
     expect(n).toBe(20);
-    for (let i = 0; i < n; i++) {
+    for (let done = 0, guard = 0; done < n; guard++) {
+      expect(guard).toBeLessThan(400);
       const c = page.getByRole('button', { name: /^Expand 10 passes of / }).first();
+      if (!(await c.count())) {
+        // the next repeat run is outside the mounted window: scroll the table to it
+        await scroller(page).evaluate((e) => (e.scrollTop += 300));
+        await page.waitForTimeout(100);
+        continue;
+      }
+      done++;
       await c.scrollIntoViewIfNeeded();
       const id = await c.locator('xpath=ancestor::tr[1]').getAttribute('data-run-id');
       const row = table(page).locator(`tbody tr[data-run-id="${id}"]`);
@@ -793,7 +801,14 @@ test.describe('runs table: virtualised groups (1440)', () => {
     await page.mouse.wheel(0, -40000);
     await page.waitForTimeout(400);
     await continuous();
-    await expect(page.getByRole('button', { name: /^Collapse 10 passes of / })).not.toHaveCount(0);
+    // the groups stay open after scrolling away and back (the open ones sit at the bottom of the date order)
+    await scroller(page).evaluate((e) => (e.scrollTop = e.scrollHeight));
+    await expect(page.getByRole('button', { name: /^Collapse 10 passes of / }).first()).toBeVisible();
+    const open = await page.evaluate(
+      (slug) => sessionStorage.getItem(`qym:runs:expanded:${slug}`),
+      s.project.slug,
+    );
+    expect(JSON.parse(open!)).toHaveLength(20);
     expect(errors).toEqual([]);
   });
 });
