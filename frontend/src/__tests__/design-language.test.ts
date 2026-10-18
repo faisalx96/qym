@@ -501,6 +501,33 @@ describe('visual language (redesign round 2)', () => {
     expect(problems).toEqual([]);
   });
 
+  it('never transitions scroll- or pin-driven geometry in ui/DataTable (perf round 6, A12)', () => {
+    // Frozen cells, sticky headers and the edge shadow follow the scroll position directly. Only `opacity` may
+    // transition there (the edge shadow and cues fade on the compositor); a transition on `left`, `inset-*`,
+    // `transform`, `box-shadow`, `width` or `all` would trail the scroll.
+    const problems: string[] = [];
+    // (cells/ holds the one-time data-mark entrance, not scroll-driven geometry)
+    for (const file of cssFiles.filter(
+      (f) => rel(f).startsWith('ui/DataTable/') && !rel(f).includes('/cells/'),
+    )) {
+      for (const block of read(file).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        for (const d of block[2]!.matchAll(
+          /\b(transition(?:-property)?|animation(?:-name)?)\s*:\s*([^;]+);/g,
+        )) {
+          const value = d[2]!;
+          if (/^\s*(none|0s)\b/.test(value)) continue;
+          if (
+            /\b(left|right|top|bottom|inset[\w-]*|transform|translate|box-shadow|width|inline-size|all)\b/.test(
+              value,
+            )
+          )
+            problems.push(`${rel(file)}: '${block[1]!.trim().split('\n').pop()}' ${d[1]}: ${value.trim()}`);
+        }
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
   it('animates data marks only through the shared motion tokens', () => {
     const cells = read(join(SRC, 'ui/DataTable/cells/cells.module.css'));
     expect(cells).toContain('var(--motion-fill)');

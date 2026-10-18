@@ -24,6 +24,9 @@ export const NONE = '__none__';
 export const EMPTY = '__empty__';
 export const VERSIONING_PREFIX = 'v.';
 export const PAGE_SIZE = 50;
+/** Wide tables (more shown columns than this) default to AUTO_PAGE_SIZE rows: fewer sticky layers per frame. */
+export const WIDE_COLUMNS = 12;
+export const AUTO_PAGE_SIZE = 25;
 export const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
 
 export interface RunsView {

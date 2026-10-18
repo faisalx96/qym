@@ -17,6 +17,7 @@ export type SectionId = 'summary' | SectionKey;
 export function useScrollSpy(navRef: React.RefObject<HTMLElement | null>, ids: SectionKey[]): SectionId {
   const scroller = useShellScroller();
   const [active, setActive] = useState<SectionId>('summary');
+  const lastActive = useRef<SectionId>('summary');
   const key = ids.join(',');
   useEffect(() => {
     if (!scroller) return undefined;
@@ -36,17 +37,26 @@ export function useScrollSpy(navRef: React.RefObject<HTMLElement | null>, ids: S
           const el = document.getElementById(sectionDomId(id));
           if (el && el.getBoundingClientRect().top <= navBox.bottom + 24) current = id;
         }
-      setActive(current);
+      // a same-value setState still re-renders once (React's bail-out happens after the render): skip it
+      if (current !== lastActive.current) {
+        lastActive.current = current;
+        setActive(current);
+      }
     };
-    const onScroll = () => {
+    // Scrolling measures synchronously, in the capture phase: layout is still clean at the start of the frame's
+    // scroll dispatch (no table or virtual-row write has happened yet), so these reads force no layout.
+    const onScroll = (e: Event) => {
+      if (e.target === scroller) measure(); // capture also sees the scrolls of inner scrollers
+    };
+    const onResize = () => {
       if (!frame) frame = requestAnimationFrame(measure);
     };
     measure();
-    scroller.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
+    scroller.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    window.addEventListener('resize', onResize);
     return () => {
-      scroller.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
+      scroller.removeEventListener('scroll', onScroll, { capture: true });
+      window.removeEventListener('resize', onResize);
       if (frame) cancelAnimationFrame(frame);
     };
   }, [scroller, navRef, key]);

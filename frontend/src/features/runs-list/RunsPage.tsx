@@ -39,6 +39,8 @@ import {
   filterSummary,
   DEFAULT_VIEW,
   PAGE_SIZE,
+  AUTO_PAGE_SIZE,
+  WIDE_COLUMNS,
   PAGE_SIZE_OPTIONS,
   parseSort,
 } from './urlState';
@@ -67,9 +69,14 @@ export function RunsPage() {
   const [expanded, setExpanded] = useState<Set<string>>(() => readExpanded(slug));
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [helpOpen, setHelpOpen] = useState(false);
+  // A saved choice wins. Otherwise a wide table (more than WIDE_COLUMNS shown) pages by AUTO_PAGE_SIZE: every
+  // row costs one sticky layer per frozen column (perf round 6, E1). The auto choice is remembered per project so the
+  // next visit asks for the right page at once.
+  const chosenSize = Number(readLocal(KEYS.runsPageSize));
+  const userChoseSize = useRef(PAGE_SIZE_OPTIONS.includes(chosenSize));
   const [pageSize, setPageSizeState] = useState<number>(() => {
-    const n = Number(readLocal(KEYS.runsPageSize));
-    return PAGE_SIZE_OPTIONS.includes(n) ? n : PAGE_SIZE;
+    if (PAGE_SIZE_OPTIONS.includes(chosenSize)) return chosenSize;
+    return Number(readLocal(KEYS.runsAutoPageSize(slug))) === AUTO_PAGE_SIZE ? AUTO_PAGE_SIZE : PAGE_SIZE;
   });
   const [dialog, setDialog] = useState<DialogState>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -151,7 +158,15 @@ export function RunsPage() {
 
   useTableScrollRestoration(pageRef, Boolean(d.data) && rows.length > 0);
   const sortSpec = parseSort(d.sort);
+  const wide = d.overview ? d.columnSet.visible.length > WIDE_COLUMNS : null;
+  useEffect(() => {
+    if (wide === null || userChoseSize.current) return;
+    const auto = wide ? AUTO_PAGE_SIZE : PAGE_SIZE;
+    writeLocal(KEYS.runsAutoPageSize(slug), String(auto));
+    setPageSizeState(auto);
+  }, [wide, slug]);
   const setPageSize = (size: number) => {
+    userChoseSize.current = true;
     writeLocal(KEYS.runsPageSize, String(size));
     setPageSizeState(size);
     setPage(1);
