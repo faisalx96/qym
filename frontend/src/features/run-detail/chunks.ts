@@ -15,16 +15,18 @@ export const loadCategoriesTab = once(() => import('./components/panels/Categori
 export const loadErrorsTab = once(() => import('./components/panels/ErrorsTab'));
 export const loadRootCauseTab = once(() => import('./components/panels/RootCauseTab'));
 
-/** Every panel chunk, one after the other in page order (they share the link with the data requests). */
+/**
+ * The panel chunks other than the Overview and the Items table (those two go first and have their own calls), all at
+ * once: on a slow link a one-after-the-other chain costs a round trip per chunk.
+ */
 export function preloadPanels(): void {
-  void loadOverviewTab()
-    .then(loadCategoriesTab)
-    .then(loadErrorsTab)
-    .then(loadItemsSection)
-    .then(loadLatencyTab)
-    .then(loadDeepTab)
-    .then(loadRepeatTab)
-    .then(loadRootCauseTab)
-    .then(loadTraceHost)
-    .catch(() => undefined);
+  void Promise.all([
+    loadCategoriesTab(),
+    loadErrorsTab(),
+    loadLatencyTab(),
+    loadDeepTab(),
+    loadRepeatTab(),
+    loadRootCauseTab(),
+    loadTraceHost(),
+  ]).catch(() => undefined);
 }

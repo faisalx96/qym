@@ -34,16 +34,16 @@ test.describe('runs table: frozen columns', () => {
     await expect.poll(() => scroller.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeGreaterThan(200);
     await page.waitForTimeout(900);
 
-    // A9: a wide table pages by 25 rows and holds well under 170 sticky layers (the header is one sticky element)
+    // A9: the header is one sticky element (not one per cell); amended at 50 rows: <= 270 sticky layers
     const rows = await page.locator('[data-testid="runs-table"] tbody tr[data-run-id]').count();
-    expect(rows).toBeLessThanOrEqual(25);
+    expect(rows).toBeLessThanOrEqual(50);
     const sticky = await page.evaluate(
       () =>
         Array.from(document.querySelectorAll('[data-testid="runs-table"] *')).filter(
           (e) => getComputedStyle(e).position === 'sticky',
         ).length,
     );
-    expect(sticky).toBeLessThanOrEqual(170);
+    expect(sticky).toBeLessThanOrEqual(270);
 
     // A12: nothing but opacity transitions while scrolling
     await page.evaluate(() => {

@@ -19,8 +19,13 @@ test('after the Overview paints every group and chunk loads by itself; scrolling
   const runId = await seedClassic(s, { items: 300, traced: 3 });
   const log = logRequests(page);
   const chunks: string[] = [];
+  const order: string[] = []; // every chunk and run request, in the order they were issued
   page.on('request', (r) => {
-    if (/\/(assets|src)\/.*\.(js|ts|tsx)/.test(new URL(r.url()).pathname)) chunks.push(r.url());
+    const u = new URL(r.url());
+    if (/\/(assets|src)\/.*\.(js|ts|tsx)/.test(u.pathname)) {
+      chunks.push(r.url());
+      order.push(u.pathname);
+    } else if (u.pathname.startsWith('/api/runs/')) order.push(u.pathname + u.search);
   });
   await page.goto(runUrl(s.slug, runId));
   await expect(page.getByTestId('metric-card').first()).toBeVisible();
@@ -32,6 +37,13 @@ test('after the Overview paints every group and chunk loads by itself; scrolling
   expect(urls.some((u) => u.includes('fields=scores,reasons,categories,traces,review'))).toBe(true);
   expect(urls.filter((u) => u.includes('fields=text')).length).toBeLessThanOrEqual(2);
   expect(log.filter((r) => r.url.includes('view=summary')).length).toBeLessThanOrEqual(2); // 1 in production
+  // B13: the Items table's chunk is asked for before the item texts and before the other panels' chunks
+  await expect.poll(() => order.some((o) => o.includes('fields=text'))).toBe(true);
+  const at = (needle: string) => order.findIndex((o) => o.includes(needle));
+  expect(at('ItemsSection')).toBeGreaterThanOrEqual(0);
+  expect(at('ItemsSection')).toBeLessThan(at('fields=text'));
+  for (const later of ['LatencyTab', 'DeepTab', 'ErrorsTab', 'CategoriesTab'])
+    if (at(later) >= 0) expect(at('ItemsSection'), later).toBeLessThanOrEqual(at(later));
   // B9: a run without reviews: no review-history request; summary + core + text = 3 run requests
   expect(log.some((r) => r.url.includes('review-history'))).toBe(false);
   expect(log.filter((r) => /\/api\/runs\/[^/]+\?view=/.test(r.url)).length).toBeLessThanOrEqual(6); // (3 in the production build; the dev server's StrictMode repeats some)

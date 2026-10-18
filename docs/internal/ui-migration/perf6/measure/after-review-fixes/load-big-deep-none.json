@@ -1,0 +1,185 @@
+{
+  "run": "big",
+  "kind": "deep",
+  "net": "none",
+  "median": {
+    "heroMs": 102,
+    "overviewMs": 315,
+    "rowsMs": 315,
+    "ttiMs": 315,
+    "tbtMs": 22,
+    "cls": 0.0031,
+    "requests": 38,
+    "jsChunks": 14,
+    "jsKB": 441.1,
+    "apiRequests": 4,
+    "apiKB": 87.7,
+    "compactKB": 55.9,
+    "compactTtfbMs": 110,
+    "compactDoneMs": 157
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "heroMs": 116,
+      "skeletonMs": 116,
+      "overviewMs": 318,
+      "rowsMs": 318,
+      "ttiMs": 318,
+      "tbtMs": 29,
+      "cls": 0.0031,
+      "reactCommits": 31,
+      "requests": 38,
+      "jsChunks": 14,
+      "jsKB": 441.1,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 118,
+      "compactDoneMs": 163,
+      "mountedAtOverview": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "index-PNmd5vjo.js 149.6kB @7-25ms",
+        "query-DIxyvbKV.js 14.5kB @8-18ms",
+        "react-Dy3GpWEd.js 73.4kB @8-21ms",
+        "aria-DlC_sIEk.js 86.6kB @8-23ms",
+        "RootCauseTab-DYmq7Oa3.js 36.0kB @41-53ms",
+        "ScoreEditor-C_mmWXx8.js 9.4kB @41-58ms",
+        "OverviewTab-Cfc4WoZD.js 6.6kB @58-66ms",
+        "DeepTab-BXCrBWXK.js 7.1kB @60-65ms",
+        "ItemsSection-FbLeIdWq.js 21.6kB @60-95ms",
+        "SpanDetail-DkJzhta-.js 11.7kB @60-95ms",
+        "run-detail-ADHfvyxJ.js 7.9kB @60-95ms",
+        "LatencyTab-DobyeR1z.js 5.1kB @174-183ms",
+        "TraceHost-BLpXiPI4.js 5.2kB @175-183ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @484-513ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @40-97ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @41-163ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @299-375ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @506-696ms"
+      ]
+    },
+    {
+      "rep": 1,
+      "heroMs": 102,
+      "skeletonMs": 84,
+      "overviewMs": 315,
+      "rowsMs": 315,
+      "ttiMs": 315,
+      "tbtMs": 22,
+      "cls": 0.0031,
+      "reactCommits": 33,
+      "requests": 38,
+      "jsChunks": 14,
+      "jsKB": 441.1,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 110,
+      "compactDoneMs": 157,
+      "mountedAtOverview": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "index-PNmd5vjo.js 149.6kB @6-25ms",
+        "query-DIxyvbKV.js 14.5kB @6-17ms",
+        "react-Dy3GpWEd.js 73.4kB @6-18ms",
+        "aria-DlC_sIEk.js 86.6kB @6-21ms",
+        "RootCauseTab-DYmq7Oa3.js 36.0kB @43-56ms",
+        "ScoreEditor-C_mmWXx8.js 9.4kB @43-56ms",
+        "OverviewTab-Cfc4WoZD.js 6.6kB @57-61ms",
+        "DeepTab-BXCrBWXK.js 7.1kB @58-84ms",
+        "ItemsSection-FbLeIdWq.js 21.6kB @59-86ms",
+        "SpanDetail-DkJzhta-.js 11.7kB @59-86ms",
+        "run-detail-ADHfvyxJ.js 7.9kB @59-86ms",
+        "LatencyTab-DobyeR1z.js 5.1kB @169-177ms",
+        "TraceHost-BLpXiPI4.js 5.2kB @169-176ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @483-507ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @42-87ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @43-157ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @292-369ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @506-585ms"
+      ]
+    },
+    {
+      "rep": 2,
+      "heroMs": 98,
+      "skeletonMs": 98,
+      "overviewMs": 304,
+      "rowsMs": 304,
+      "ttiMs": 304,
+      "tbtMs": 17,
+      "cls": 0.0031,
+      "reactCommits": 33,
+      "requests": 38,
+      "jsChunks": 14,
+      "jsKB": 441.1,
+      "apiRequests": 4,
+      "apiKB": 87.7,
+      "compactKB": 55.9,
+      "compactTtfbMs": 107,
+      "compactDoneMs": 153,
+      "mountedAtOverview": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "mountedAfter3s": [
+        "overview",
+        "latency",
+        "categories",
+        "errors"
+      ],
+      "sectionsTotal": 5,
+      "jsList": [
+        "index-PNmd5vjo.js 149.6kB @5-23ms",
+        "query-DIxyvbKV.js 14.5kB @5-16ms",
+        "react-Dy3GpWEd.js 73.4kB @6-20ms",
+        "aria-DlC_sIEk.js 86.6kB @6-20ms",
+        "RootCauseTab-DYmq7Oa3.js 36.0kB @41-56ms",
+        "ScoreEditor-C_mmWXx8.js 9.4kB @41-49ms",
+        "OverviewTab-Cfc4WoZD.js 6.6kB @56-80ms",
+        "DeepTab-BXCrBWXK.js 7.1kB @57-80ms",
+        "ItemsSection-FbLeIdWq.js 21.6kB @58-81ms",
+        "SpanDetail-DkJzhta-.js 11.7kB @58-81ms",
+        "run-detail-ADHfvyxJ.js 7.9kB @58-81ms",
+        "LatencyTab-DobyeR1z.js 5.1kB @163-172ms",
+        "TraceHost-BLpXiPI4.js 5.2kB @164-172ms",
+        "RepeatTab-Bdve30iW.js 6.6kB @459-491ms"
+      ],
+      "apiList": [
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=summary 1.6kB @40-82ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=scores,reasons,categ 55.9kB @41-153ms",
+        "/api/runs/step-latency?run_ids=2359aba7-896c-499a-92d6-955ac6d0 1.1kB @281-358ms",
+        "/api/runs/2359aba7-896c-499a-92d6-955ac6d07bb7?view=compact&fields=text 29.0kB @481-656ms"
+      ]
+    }
+  ]
+}

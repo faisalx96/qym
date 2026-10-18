@@ -43,6 +43,8 @@ export default defineConfig({
     target: 'es2022',
     rollupOptions: {
       output: {
+        // Merge chunks under 20 kB into a neighbour: on a high-latency link every request is a round trip (perf round 6).
+        experimentalMinChunkSize: 20_000,
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
           query: ['@tanstack/react-query'],

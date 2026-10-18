@@ -55,6 +55,8 @@ test('from the runs list the header paints at once, the sections hold their heig
   // B3: then the Overview content and the Items table arrive
   await expect(page.getByTestId('metric-card').first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId('items-count')).toBeVisible({ timeout: 20_000 });
+  // B13: the Items rows paint with the Overview's data, not after the texts (the production numbers are in impl-notes.md)
+  await expect(page.locator('tbody tr[data-item-id]').first()).toBeVisible({ timeout: limit(8000, 3000) });
   await page.waitForTimeout(600);
   // one rows request (core groups); the dev server's StrictMode remount may answer a cancelled first one too,
   // the production build asks once (impl-notes.md, load-run.mts)

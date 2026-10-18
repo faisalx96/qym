@@ -196,8 +196,6 @@ test.describe('runs list: keyboard', () => {
     request,
   }) => {
     const s = await sharedProject(request, 55, 'big');
-    // paging mechanics at 50 rows (a wide table pages by 25 unless a size was chosen; see e2e/perf)
-    await page.addInitScript(() => localStorage.setItem('qym:runs:page-size', '50'));
     await openRuns(page, s.project.slug);
     await blurToBody(page);
     await page.keyboard.press('G'); // last run of the whole list
@@ -208,8 +206,6 @@ test.describe('runs list: keyboard', () => {
 
   test('g from page 2 returns to the first row of page 1 with focus on it', async ({ page, request }) => {
     const s = await sharedProject(request, 55, 'big');
-    // paging mechanics at 50 rows (a wide table pages by 25 unless a size was chosen; see e2e/perf)
-    await page.addInitScript(() => localStorage.setItem('qym:runs:page-size', '50'));
     await openRuns(page, s.project.slug);
     await blurToBody(page);
     await page.keyboard.press('G');

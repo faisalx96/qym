@@ -8,8 +8,6 @@ export const KEYS = {
   dataTableState: (storageKey: string, scope?: string) =>
     scope ? `qym:data-table:v2:${storageKey}:${scope}` : `qym:data-table:v2:${storageKey}`,
   runsPageSize: 'qym:runs:page-size',
-  /** Page size picked automatically for a wide table (perf round 6, E1), per project; never overrides a user choice. */
-  runsAutoPageSize: (slug: string) => `qym:runs:auto-page-size:${slug}`,
   textMode: 'qym.textMode',
   singleKeyShortcuts: 'qym:single-key-shortcuts',
 } as const;

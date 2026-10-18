@@ -213,8 +213,12 @@ export function RunBody({
   useEffect(() => {
     if (rowsPending) return undefined;
     const run = () => {
-      needGroup('text');
-      preloadPanels();
+      // the Items table's chunk first: the table does not need the texts to paint, and on a slow link the texts and
+      // the other chunks would share the bandwidth with it
+      void loadItemsSection().finally(() => {
+        needGroup('text');
+        preloadPanels();
+      });
       void qc.prefetchQuery({
         queryKey: runKeys.stepLatency(runId, null),
         queryFn: ({ signal }) => http.get<StepLatencyPayload>(stepLatencyUrl(runId, null), { signal }),

@@ -46,8 +46,9 @@ test('first horizontal tick renders nothing; freezing a column is a few commits 
     });
     // the menu's own press state commits too: the table itself does one
     expect((await commits(page)) - before, step).toBeLessThanOrEqual(limit(4, 3));
-    // A8, amended: <= 110 ms local (measured 99 on the production build)
-    expect(f.worst, step).toBeLessThanOrEqual(limit(400, 110));
+    // A8: the table renders one commit and re-renders only the changed columns (cells are memoised); the rest of the
+    // frame is native layout and paint of 50 x 68 cells: <= 90 ms local at 50 rows (measured 82)
+    expect(f.worst, step).toBeLessThanOrEqual(limit(400, 90));
   }
 
   // A13: under prefers-reduced-motion the shadow appears without a transition

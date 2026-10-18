@@ -23,8 +23,6 @@ test.describe('runs list: filters, sort, search (J2)', () => {
     request,
   }) => {
     const s = await sharedProject(request, 55, 'big');
-    // These checks are about paging mechanics at 50 rows; a wide table's automatic 25 is covered in e2e/perf.
-    await page.addInitScript(() => localStorage.setItem('qym:runs:page-size', '50'));
     const qs = `task=rag-qa&task=summarize&task=text2sql&${ALL_STATUS}&origin=local&sort=model-asc&page=2`;
     const cap = capture(page, 'runs');
     await openRuns(page, s.project.slug, qs);

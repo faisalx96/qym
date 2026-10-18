@@ -744,8 +744,6 @@ test.describe('runs table: virtualised groups (1440)', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
   test('Q20 many open groups stay continuous', async ({ page, request }) => {
     test.setTimeout(300_000);
-    // the groups are meant to pass the virtualisation threshold on one page: 50 rows (a wide table's automatic 25 is in e2e/perf)
-    await page.addInitScript(() => localStorage.setItem('qym:runs:page-size', '50'));
     const s = await freshProject(request, 3, { running: false });
     for (let i = 0; i < 47; i++) {
       const rep = i < 20; // 20 ten-pass runs: 30 + 20 x 12 = 270 display rows once all are open
