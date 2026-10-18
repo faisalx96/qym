@@ -129,7 +129,7 @@ function KeyRow({
           onClick={toggle}
         >
           <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={14} className={styles.chevron} />
-          <span className={styles.key} dir="ltr">
+          <span className={styles.key} dir="ltr" title={name}>
             {name}
           </span>
           {!isOpen ? (

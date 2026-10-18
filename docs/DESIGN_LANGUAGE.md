@@ -297,6 +297,11 @@ The recipes, by intent:
   renders the pill outside the noise band. Cell kit (`ScoreBar`, `DeltaCell`, `TwoLine`, `IdCell`,
   `RelativeTime`, `TagsCell`, `UserCell`, `ProgressCell`, `StatusCell`, `NumberCell`) lives in `ui/DataTable/cells`.
   Pages never restyle table cells; they supply columns.
+  **Child rows** (`childRows`, round 4): the children of an open row are rows of the same table, rendered by the same
+  column model (so reorder, freeze, hide and resize apply to them at once); they sit on `--bg-void` with the open parent and
+  the full-width block that follows them carrying one 3px `--accent-primary` rail (`--rail-width`), no wash, no opacity, no
+  zebra, one density height, `aria-level` 2 with `aria-posinset` / `aria-setsize`. Card mode draws them as lines inside the
+  parent's card (`cardChildColumns` names the second-line columns).
   **Column layout** (`reorderable`, `storageScope`, `maxPinShare`, `Column.lockOrder`): the Columns menu lists every column in
   display order, one row each: drag handle (pointer, touch, or keyboard: Space lifts, arrows move, Space drops, Esc
   cancels), visibility checkbox, muted group tag and a freeze toggle (`aria-pressed`, "Freeze Status"); the line between
@@ -470,28 +475,52 @@ is not allowed.
   one-line preview; open: the value, Copy, per-key Expand all / Collapse all recursive; the region has global Expand all / Collapse
   all and Sections | Raw). A repeat item has a pass rail (a chip per pass with number and verdict glyph, at most three read side by
   side). **A pass has no colour**: its identity is text, colour on a pass is only its verdict. Metrics are one matrix
-  (metric rows by pass columns, Mean, 8 rows then "Show N more"), values are band-coloured text (no tinted cells) and open ONE
-  detail panel below; score edits happen in that panel.
+  (metric rows by pass columns, Mean, 8 rows then "Show N more"), values are mono 600 band-coloured text (no tinted cells, no
+  outline: the selected row takes `--bg-selected` and a 2px `--accent-primary` bar at its inline start; a single pass's Reason is a
+  `fit-content` block anchored at the column's inline start, whatever its direction) and open ONE detail panel below (round 5 R3).
+  The panel (`--bg-elevated`, `container-type: inline-size`, `direction: ltr`) has a one-row header (mono name, `ScoreValue`, "Pass n",
+  "edited", then the text button "Edit score" and Close), a hairline, then: **prose blocks** (reason, reasoning, explanation, label,
+  then any string over 60 characters) with the eyebrow label stacked above the text (13px, line 1.6, 76ch, `dir` on the text only) so a
+  label can never overlap its text; **facts** (`dl`: humanized sentence-case key `--font-sm` 650 in a `--field-label-width` column,
+  ellipsis + raw key in `title`, value next to it; the row stacks under 420px); **tables** for `{columns, rows}`, arrays of arrays and
+  arrays of two or more uniform plain objects (`detectTable`; eyebrow with the row count over an embedded `DataTable`, every header
+  sortable, 12 rows then "Show N more rows", scrolls inside); and collapsed key rows for everything else. Label roles are exactly
+  three: eyebrow (11px 650 uppercase), fact key (11px 650 sentence case), tree key (12px 600 mono). `FieldRow` labels and `KeyTree`
+  keys are cut at their column (ellipsis, title) instead of painting over the value. Score edits happen in that panel.
+- **Items toolbar and correlation matrix** (round 5 R4): the toolbar row aligns its controls to one bottom edge, so a control with a
+  label above (analysis metric, threshold, sort) and one without share a vertical centre; the metric correlation grid is as wide as its
+  card body and its cells are as wide as their column (at least 20px, scrolling inside the card beyond that). A trace opens on its
+  content tab (messages, response, input / output, documents), never on Metrics, Scores or Raw; only a content pick is remembered.
 - **Run header** (round 3 P6): three bands, nothing behind a chevron. Band 1 identity and actions (name, passes tag, Copy run id,
   status, Export, pager; a stop reason is one muted line under it). Band 2 seven labelled facts (`dl`, 7 / 4 / 2 columns by
   column width). Band 3 `KeyValueTag` chips (24px passive key / value, key at most 20 characters, value at most 30) in the groups
   Versioning, Config, Metadata, clamped to two lines (three on a phone) with an exact "+ N more" (`qym:run-hero-more`).
-- **Box plot** (`run-detail/components/charts/BoxPlot.tsx`, round 3 P7): the one glyph set for a distribution: box p25 to p75, a
+- **Box plot** (`run-detail/components/charts/BoxPlot.tsx`, round 3 P7, round 5 R2): the one glyph set for a distribution: box p25 to p75, a
   2.5px median line, whiskers p5 to p95 with caps, a hollow mean diamond, dots outside the whiskers (at most 40 per side, min and max
-  always kept). Grey only (`--text-secondary` / `--text-primary` / `--text-muted`; the slow latency tail `--score-2`); no new
-  colour. A plot card holds the plot, a six-cell number row (Min, P25, Median, Mean, P75, Max; "Med" under 300px), a Total row for
-  additive quantities only (numeric metrics, tokens, cost; never latency, scores or negative values) and a legend. The picture
-  is one `role="img"` named by a sentence; the clickable marks (box, whiskers, min, max) are a transparent overlay in tab order.
-  Rows (`BoxTrack`) draw the same glyph per pass and per step.
+  always kept). **One tone per plot** (`data-band` of the median for a score with a direction, so a failing pass is red; `data-series="1"`,
+  `--chart-1`, for latency, tokens, cost, undirected numerics and step rows; the slow latency tail keeps `--score-2`); stroke, box fill
+  (`--tint-strong` over the surface), whiskers, median and mean all take `--tone`. **No number row**: the median is printed above its line,
+  the data minimum and maximum under a 1px baseline at the ends of the data (one merged "a to b" label when they would collide), and all six
+  numbers plus the IQR are in the box tooltip and the `aria-label` (which ends with "band n of 5" for a band tone). Total is the one fact the
+  plot cannot show: plain text "Total **64.0K**" in the card header, additive quantities only (numeric metrics, tokens, cost; never latency,
+  scores or negative values). The key is a `HelpMarker` "How to read the box plot" in the header; cards that stack rows (per pass, Steps) keep
+  one muted key line. The picture is one `role="img"` named by a sentence; the clickable marks (box, whiskers, min, max) are a transparent
+  overlay in tab order. Rows (`BoxTrack`) draw the same glyph per pass and per step. Box plot cards flow in their own grid rows under the
+  histograms (`slot="box"`: 80px plot, no 146px minimum).
 - **Chart card and bar recipe** (`run-detail/components/charts`, round 3 P1): every chart on the run page lives in one
   `ChartCard` (a `Card fill` with a header: title left, then meta, legend and the card's own controls right; a plot slot
-  of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`): each bucket is a
-  flex column `[spacer][count][bar][axis][sub]`, the spacer taking `1 - p` and the bar `p` of the free height
-  (`--p` = count / max), so the count always sits on the bar's top edge (a 16px line, 2px above it) and is visible at
-  rest, never hover-only (the tooltip only adds the longer sentence). Bars are at most 44px wide with a 4px gap and a
+  of at least 146px that grows with a stretched grid row). Bars use one column recipe (`BarColumns`, round 5 R1 "well and foot"): each bucket is a
+  two-row grid, the well (flex column `[spacer][count][bar]`, the spacer taking `1 - p` and the bar `p` of the free
+  height, `--p` = count / max) and a foot of one constant height per plot (`--foot` = 4px + 14px per line: axis label,
+  optional note and sub line). The well's bottom border (1px `--border-default`, bridged across the 4px gaps) is the drawn
+  x axis and every bar bottom stands on it; a thinned axis label is a blank line (U+00A0), never a missing one, so no
+  column can end higher than its neighbour. The count sits on the bar's top edge (a 16px line, 2px above it) and is visible
+  at rest, never hover-only (the tooltip only adds the longer sentence). Bars are at most 44px wide with a 4px gap and a
   3px minimum when the count is above 0; an empty score bucket draws no count, pass/fail bars and "Passes passed"
-  draw `0` in `--text-muted`. A column narrower than 30px shows every second axis label (the full list stays in the
-  `aria-label`). Boolean metrics are the same plot (Pass, Fail, Error columns, percentage under the label), not a
+  draw `0` in `--text-muted`. Axis labels follow one rule for every plot: every k-th label with
+  `k = ceil(labelWidth / pitch)` (`pitch` = column + gap, `labelWidth` = characters x 7 + 6), column 0 always; the full list
+  stays in the `aria-label`. When counts are wider than the pitch the plot is `data-dense`: each count takes the lowest of three 18px tiers whose box clears
+  the earlier counts it overlaps (`countTiers`; no layout change). Boolean metrics are the same plot (Pass, Fail, Error columns, percentage under the label), not a
   horizontal split bar. Bars rise and counts fade in together on mount; nothing animates under
   `prefers-reduced-motion` (`animation: none`). Overview cards flow in `repeat(auto-fit, minmax(260px, 1fr))`.
 - **Run identity (compare)**: a run is always `RunTag`: a 10px `--radius-sm` swatch in its series colour
@@ -580,8 +609,8 @@ they produced.
 - **Hue budget.** Eight series colours (`--chart-1..8`) is the limit, verified pairwise at CIE76 dE >= 20. Anything
   with more identities than that (passes, steps, categories) is identified by text; colour on it means a state
   (score band, verdict, kind), never "which one". Counts and values are drawn at rest, never hover-only.
-- **Distributions.** A quantity that used to print min / avg / max shows the box plot recipe (section 3) with the
-  six numbers visible; a total is shown only for additive quantities.
+- **Distributions.** A quantity that used to print min / avg / max shows the box plot recipe (section 3): median, minimum and
+  maximum visible on the plot, all six numbers in the tooltip; a total (card header) only for additive quantities.
 - **Bidirectional text.** The layout of an item is one left-anchored grid; `dir` is set on value text only. Arabic
   content never moves labels, keys or controls to the other side of the page.
 - **Reviewer method.** The reviewer measures every criterion in the browser (DOM geometry, computed styles,

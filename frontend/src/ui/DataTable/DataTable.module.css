@@ -594,7 +594,7 @@
   }
 }
 
-.detailRow td {
+.detailRow > td {
   padding: 0;
   height: auto;
   white-space: normal;
@@ -1141,4 +1141,129 @@
 }
 .toolbarRows:empty {
   display: none;
+}
+
+/* Child rows (round 4): rows of the same table under an open parent; one 3 px group rail, surface step, no wash. */
+.childRow {
+  --row-base: var(--bg-void);
+  animation: child-in 120ms var(--ease-out);
+  transition: opacity 120ms var(--ease-out);
+}
+
+.childRow:hover,
+.childRow[data-focused] {
+  --row-base: var(--bg-hover);
+}
+
+.childRow > td {
+  color: var(--text-secondary);
+}
+
+.tr[data-group-open]:not([data-state]) > td:first-child,
+.childRow > td:first-child {
+  box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
+}
+
+.tr[data-group-open] > td,
+.tr[data-group-open] > td a {
+  font-weight: 600;
+}
+
+.childRow > td[data-pin-edge='start']:first-child,
+.tr[data-group-open]:not([data-state]) > td[data-pin-edge='start']:first-child {
+  box-shadow:
+    inset var(--rail-width) 0 0 var(--accent-primary),
+    inset -1px 0 0 var(--border-subtle);
+}
+
+.childRow[data-selected] > td:first-child,
+.childRow[data-selected] > td[data-pseudo='select'] {
+  box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
+}
+
+@keyframes child-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The full-width block after the children carries its own rail and surface. */
+.detailGroup td {
+  background: var(--bg-void);
+}
+
+.detailGroup .detailCell::before {
+  content: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .childRow {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Card mode: pass lines inside the run card */
+.card2[data-group-open] {
+  box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
+}
+
+.cardPasses {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.cardPass {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0 var(--space-sm);
+  min-block-size: var(--row-compact);
+  max-block-size: 56px;
+  box-sizing: border-box;
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
+  background: var(--bg-void);
+}
+
+.cardPass[data-selected] {
+  background: var(--bg-selected);
+}
+
+.cardPassHead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+}
+
+.cardPassActions {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cardScore {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: var(--space-sm);
+  white-space: nowrap;
+  min-inline-size: 0;
+}
+
+.cardScoreLabel {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.cardStrip {
+  margin-inline: calc(-1 * var(--space-sm));
+  margin-block-end: calc(-1 * var(--space-sm));
+}
+
+.cardPassesGroup {
+  display: block;
 }

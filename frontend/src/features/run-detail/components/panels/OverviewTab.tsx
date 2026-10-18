@@ -6,7 +6,7 @@ import { metricEntries, traceEntries, MIN_TRACE_ITEMS } from '../../lib/boxEntri
 import { metricCardModel, type MetricCardModel } from '../../lib/overviewModel';
 import { formatCost } from '../../lib/boxFormat';
 import { BandValue, BoolBars, Histogram } from '../charts/Charts';
-import { BoxCardBody, type BoxEntry } from '../charts/BoxCard';
+import { BOX_HELP, BoxCardBody, BoxTotal, type BoxEntry } from '../charts/BoxCard';
 import { ChartCard } from '../charts/ChartCard';
 import { useChartFilters } from './useChartFilters';
 import styles from './Panels.module.css';
@@ -22,7 +22,16 @@ function MetricCard({ card, entries }: { card: MetricCardModel; entries?: BoxEnt
       title={card.metric}
       titleHint={card.directionLabel}
       band={band ?? undefined}
-      meta={<Tag kind="count">{card.badge}</Tag>}
+      meta={
+        <>
+          {card.kind === 'numeric' ? (
+            <BoxTotal values={(entries ?? []).map((e) => e.v)} kind="numeric" />
+          ) : null}
+          <Tag kind="count">{card.badge}</Tag>
+        </>
+      }
+      help={card.kind === 'numeric' && card.numeric ? BOX_HELP : undefined}
+      slot={card.kind === 'numeric' ? 'box' : true}
       data-testid="metric-card"
       data-metric={card.metric}
       intro={
@@ -85,7 +94,14 @@ function TraceCard({
   return (
     <ChartCard
       title={title}
-      meta={<Tag kind="count">{entries.length} items</Tag>}
+      meta={
+        <>
+          <BoxTotal values={entries.map((e) => e.v)} kind={kind} />
+          <Tag kind="count">{entries.length} items</Tag>
+        </>
+      }
+      help={BOX_HELP}
+      slot="box"
       data-testid="trace-card"
       data-metric={kind}
       intro={
@@ -124,15 +140,30 @@ export function OverviewTab() {
   const tokens = useMemo(() => traceEntries(rows, 'tokens'), [rows]);
   const cost = useMemo(() => traceEntries(rows, 'cost'), [rows]);
   if (!cards.length) return <p className={styles.note}>No scored items for the current filters.</p>;
+  // Box plot cards (numeric metrics, tokens, cost) share their own rows: a short plot never sits beside a tall histogram,
+  // so no card stretches over dead space (round 5 R2).
+  const scoreCards = cards.filter((c) => c.kind !== 'numeric');
+  const numericCards = cards.filter((c) => c.kind === 'numeric');
+  const showTokens = tokens.length >= MIN_TRACE_ITEMS;
+  const showCost = cost.length >= MIN_TRACE_ITEMS;
   return (
-    <div className={styles.chartGrid} data-count={cards.length}>
-      {cards.map((c) => (
-        <MetricCard key={c.metric} card={c} entries={numeric.get(c.metric)} />
-      ))}
-      {tokens.length >= MIN_TRACE_ITEMS ? (
-        <TraceCard title="Tokens per item" kind="tokens" entries={tokens} />
+    <div className={styles.overviewStack}>
+      {scoreCards.length ? (
+        <div className={styles.chartGrid} data-count={scoreCards.length}>
+          {scoreCards.map((c) => (
+            <MetricCard key={c.metric} card={c} entries={numeric.get(c.metric)} />
+          ))}
+        </div>
       ) : null}
-      {cost.length >= MIN_TRACE_ITEMS ? <TraceCard title="Cost per item" kind="cost" entries={cost} /> : null}
+      {numericCards.length || showTokens || showCost ? (
+        <div className={styles.chartGrid} data-count={numericCards.length + +showTokens + +showCost}>
+          {numericCards.map((c) => (
+            <MetricCard key={c.metric} card={c} entries={numeric.get(c.metric)} />
+          ))}
+          {showTokens ? <TraceCard title="Tokens per item" kind="tokens" entries={tokens} /> : null}
+          {showCost ? <TraceCard title="Cost per item" kind="cost" entries={cost} /> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

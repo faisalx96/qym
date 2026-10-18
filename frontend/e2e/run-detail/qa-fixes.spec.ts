@@ -248,7 +248,7 @@ test.describe('scores', () => {
   }) => {
     await openRun(page, s.slug, classic, 'item=item-0006');
     const panel = await openMetric(card(page, 'item-0006'), 'quality');
-    await panel.getByRole('button', { name: 'Edit quality score' }).click();
+    await panel.getByRole('button', { name: 'Edit score', exact: true }).click();
     await panel.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
     await panel.getByRole('button', { name: 'Save' }).click();
     const badge = panel.getByText('edited', { exact: true });

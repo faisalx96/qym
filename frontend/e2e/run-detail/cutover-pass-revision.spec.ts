@@ -37,7 +37,7 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
   const firstCard = page.locator('[data-testid=item-card]').first();
   await expect(firstCard.locator('tr[data-metric=quality]')).toBeVisible();
   const panel = await openMetric(firstCard, 'quality');
-  await panel.getByRole('button', { name: 'Edit quality score' }).click();
+  await panel.getByRole('button', { name: 'Edit score', exact: true }).click();
   await panel.getByRole('textbox', { name: 'New quality score' }).fill('0.5');
   const refused = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
   await panel.getByRole('button', { name: 'Save' }).click();
@@ -61,7 +61,7 @@ test('run page: a stale page is refused after a pass was deleted; a fresh page e
   await itemButton(page, 2).click();
   const fresh = page.locator('[data-testid=item-card]').first().locator('tr[data-metric=quality]');
   const freshPanel = await openMetric(page.locator('[data-testid=item-card]').first(), 'quality');
-  await freshPanel.getByRole('button', { name: 'Edit quality score' }).click();
+  await freshPanel.getByRole('button', { name: 'Edit score', exact: true }).click();
   await freshPanel.getByRole('textbox', { name: 'New quality score' }).fill('0.25');
   const saved = page.waitForResponse((r) => r.url().endsWith('/api/runs/update_metric'));
   await freshPanel.getByRole('button', { name: 'Save' }).click();

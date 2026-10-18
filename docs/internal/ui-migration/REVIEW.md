@@ -223,6 +223,37 @@ reconnecting" flaked once under load and passed on rerun. Commits `aafb3516` to 
 | `pytest -q -n 2 tests/sdk` | 496 passed, 4 skipped |
 | `pytest -q -n 2 tests/platform` (4 chunks, `heavy.sh --cost 4`; `--cost 5` never admits while the desktop leaves under 8 GB free) | 2767 passed, 740 skipped, 0 failed |
 
+## Redesign round 4 (2026-10-17/18, `ui/redesign4-runs-passes`)
+
+One runs-page point: "per pass table should be part of the main table but hidden unless the user clicks the drop down
+button to ensure that table navigation will move the main and per pass results to compare their metrics against each
+other." First round run under the design, implement, measured-review cycle from the post-mortem.
+
+- Design (`redesign4/runs-passes.md`, 32 criteria, mocks at `/__ui#round4`): measured the defect (a pass score cell stayed
+  at x 711 while the run's moved from 1240 to 840 on a 400 px scroll; reorder not mirrored; a frozen column put the pass
+  value 227 px from the run's) and the legacy page, which inserted pass rows into the same table body.
+- Implementation: `DataTable` gains `childRows`; passes are `<tr>` of the same tbody rendered by the same cell renderer, so
+  reorder, freeze, hide, resize, scroll, density, selection, keyboard and virtualisation apply with no mirror. The group
+  metrics strip (metric, threshold, five stats) is one full-width row under the passes. The embedded `PassesTable` and the
+  mirrored column model are deleted. Open groups persist per session. Run-level cells are blank in pass rows.
+- Review (`redesign4/review-runs-passes.md`): 32 of 32 met in the product, measured after 400 and 1000 px scrolls, a
+  six-place reorder, freeze, hide, resize, every density and a sort: pass cells equal the run cells to 0.0 px in all 24
+  columns. MEETS WITH FIXES for one test that never virtualised; the stronger test then exposed and fixed a real bug (the
+  scroller reset to the top when the row count first crossed the 200-row virtualisation threshold). Merged df9d0a1a.
+- Deferred: `group-metrics` is requested twice on first expand (served from cache); open pass lines inside the phone cards
+  host; j/k on the runs page still step between runs only.
+
+### Gate on `UI-redesign` df9d0a1a
+
+| Suite | Result |
+|---|---|
+| `npm run check` | clean; Vitest 1374 tests (157 files), design-language 49 |
+| `npm run build`, `npm run build:sdk` | ok |
+| `pytest tests/platform/test_design_language.py` | 1 passed |
+| Full Playwright (`heavy.sh --cost 4`) | 1232 passed, 12 skipped, 2 failed (`experiments/launch/evaluation.spec.ts:89`, `runs-list/cutover-overview.spec.ts:53`); both rerun alone twice: 18 passed, load flakes |
+| `npm run e2e:sdk` | 42 passed |
+| `tests/platform` | not run (backend untouched) |
+
 ## Post-mortem
 
 The failures of the whole migration (two session kills, repeated feedback rounds, a finding fixed by hiding

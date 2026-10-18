@@ -4,7 +4,7 @@
  * is at least 146px high and grows with a grid-stretched card, so extra height goes to the plot, never to empty space.
  */
 import type { ReactNode } from 'react';
-import { Card, type CardBand, type CardSeries, type CardTone } from '@/ui';
+import { Card, HelpMarker, type CardBand, type CardSeries, type CardTone } from '@/ui';
 import styles from './ChartCard.module.css';
 
 export interface ChartCardProps {
@@ -16,6 +16,8 @@ export interface ChartCardProps {
   titleHint?: string;
   /** Right of the title: a count Tag, a caption. */
   meta?: ReactNode;
+  /** Right of the title, after `meta`: a help marker with this text ("How to read the box plot"). */
+  help?: { label: string; text: string };
   /** Right of the title: a legend. */
   legend?: ReactNode;
   /** Right of the title: the card's own controls (a 24px SegmentedControl). */
@@ -27,8 +29,8 @@ export interface ChartCardProps {
   band?: CardBand;
   tone?: CardTone;
   series?: CardSeries;
-  /** The slot is a bar plot (min-height 146px, centred); false for a plot that sizes itself. */
-  slot?: boolean;
+  /** The slot is a bar plot (min-height 146px, centred); `box` for a box plot (80px, centred, no minimum); false for a plot that sizes itself. */
+  slot?: boolean | 'box';
   className?: string;
   children: ReactNode;
   'data-testid'?: string;
@@ -40,6 +42,7 @@ export function ChartCard({
   ariaLabel,
   titleHint,
   meta,
+  help,
   legend,
   controls,
   intro,
@@ -66,11 +69,12 @@ export function ChartCard({
           <span className={styles.title} title={titleHint}>
             {title}
           </span>
-          {legend || controls || meta ? (
+          {legend || controls || meta || help ? (
             <span className={styles.headRight}>
               {legend}
               {controls}
               {meta}
+              {help ? <HelpMarker label={help.label}>{help.text}</HelpMarker> : null}
             </span>
           ) : null}
         </div>
@@ -78,7 +82,7 @@ export function ChartCard({
       {...rest}
     >
       {intro ? <div className={styles.intro}>{intro}</div> : null}
-      <div className={styles.slot} data-slot={slot ? 'plot' : 'free'}>
+      <div className={styles.slot} data-slot={slot === 'box' ? 'box' : slot ? 'plot' : 'free'}>
         {children}
       </div>
       {caption ? <div className={styles.caption}>{caption}</div> : null}

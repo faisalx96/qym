@@ -6,7 +6,7 @@
  */
 import { useMemo, useRef, useState } from 'react';
 import { formatNumericValue, formatPercent, metricBand } from '@/lib/metrics';
-import { Button, DataTable, IconButton, Tag, type Column } from '@/ui';
+import { Button, DataTable, Icon, IconButton, ScoreValue, Tag, type Column } from '@/ui';
 import { useColumnStep } from '../../lib/columnStep';
 import {
   DEFAULT_METRIC_ROWS,
@@ -20,7 +20,7 @@ import { metricPassesFor } from '../../lib/filterRules';
 import { metricCell, type MetricCell } from '../../lib/rowDisplay';
 import { useRunPage } from '../../RunContext';
 import type { Row } from '../../types';
-import { EditedBadge, editTooltip, hasMetaDetail, MetaList, useCanEdit } from './MetricStrip';
+import { EditedBadge, editTooltip, hasMetaDetail, MetricDetailBody, useCanEdit } from './MetricStrip';
 import { useItemsUi } from './ItemsUi';
 import { ScoreEditor } from './ScoreEditor';
 import styles from './MetricMatrix.module.css';
@@ -228,8 +228,10 @@ export function MetricMatrix({
               const meta = (passes[0]!.scoped.metric_meta?.[r.metric] ?? {}) as Record<string, unknown>;
               const text = String(meta.reason ?? meta.explanation ?? meta.label ?? '');
               return (
-                <span className={styles.reason} dir="auto" title={text || undefined}>
-                  {text || '—'}
+                <span className={styles.reason} title={text || undefined}>
+                  <span className={styles.reasonText} dir="auto">
+                    {text || '—'}
+                  </span>
                 </span>
               );
             },
@@ -257,7 +259,12 @@ export function MetricMatrix({
           })}
         </span>
       </div>
-      <div ref={gridRef} className={styles.gridHost} data-compact={compact ? '' : undefined}>
+      <div
+        ref={gridRef}
+        className={styles.gridHost}
+        data-compact={compact ? '' : undefined}
+        data-single={multi ? undefined : ''}
+      >
         <DataTable<MatrixRow>
           // the column widths are seeded once: a new layout (compact or not) is a new table
           key={compact ? 'compact' : 'wide'}
@@ -272,7 +279,10 @@ export function MetricMatrix({
           variant="embedded"
           stickyHeader={false}
           responsive="scroll"
-          rowProps={(r) => ({ 'data-metric': r.metric })}
+          rowProps={(r) => ({
+            'data-metric': r.metric,
+            'data-row-selected': pick?.metric === r.metric ? '' : undefined,
+          })}
         />
       </div>
       {rows.length > DEFAULT_METRIC_ROWS ? (
@@ -304,6 +314,14 @@ export function MetricMatrix({
         >
           <header className={styles.detailHead}>
             <span className={styles.detailTitle}>{editing ? `Edit ${pick.metric}` : pick.metric}</span>
+            <ScoreValue
+              className={styles.detailScore}
+              value={pickCell.value}
+              type={pickCell.type}
+              direction={pickCell.direction}
+              error={pickCell.error}
+              text={cellText(pickCell)}
+            />
             {multi ? <Tag kind="count">Pass {pick.pass}</Tag> : null}
             {pickCell.edited ? (
               !multi ? (
@@ -316,11 +334,9 @@ export function MetricMatrix({
             ) : null}
             <span className={styles.detailActions}>
               {editable ? (
-                <IconButton
-                  label={`Edit ${pick.metric} score${suffix}`}
-                  icon="edit"
-                  onPress={() => setEditing((v) => !v)}
-                />
+                <Button size="sm" icon={<Icon name="edit" size={12} />} onPress={() => setEditing((v) => !v)}>
+                  Edit score
+                </Button>
               ) : null}
               <IconButton
                 label={`Close ${pick.metric} details`}
@@ -353,7 +369,7 @@ export function MetricMatrix({
               onDone={() => setEditing(false)}
             />
           ) : hasMetaDetail(meta, ui.hiddenMetricFields) ? (
-            <MetaList meta={meta} hidden={ui.hiddenMetricFields} />
+            <MetricDetailBody meta={meta} hidden={ui.hiddenMetricFields} />
           ) : (
             <p className={styles.empty}>No details were recorded for this metric.</p>
           )}

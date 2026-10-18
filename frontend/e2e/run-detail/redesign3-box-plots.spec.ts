@@ -54,27 +54,25 @@ for (const width of [1440, 390]) {
   test.describe(`${width}px`, () => {
     test.use({ viewport: { width, height: 900 } });
 
-    test('P7-1, P7-5: a numeric card is a box plot with a number row and a Total; score and latency cards have no Total', async ({
+    test('P7-1, P7-5 (round 5 R2: no number row, Total moved to the card header): a numeric card is a box plot with a Total in its header; score and latency cards have no Total', async ({
       page,
     }) => {
       await openRun(page, s.slug, classic);
       const c = card(page, 'tokens_used');
       await expect(c.getByRole('img', { name: /^tokens_used/ })).toBeVisible();
-      const row = c.locator('dl[aria-label="Distribution values"]');
-      for (const label of ['Min', 'P25', /^Med(ian)?$/, 'Mean', 'P75', 'Max'])
-        await expect(row.getByText(label, { exact: typeof label === 'string' }).first()).toBeVisible();
-      await expect(c.locator('dl[aria-label="Total"]')).toContainText('Total');
-      await expect(card(page, 'quality').locator('dl[aria-label="Total"]')).toHaveCount(0);
+      await expect(c.locator('dl[aria-label="Distribution values"]')).toHaveCount(0);
+      await expect(c.getByTestId('box-total')).toContainText('Total');
+      await expect(card(page, 'quality').getByTestId('box-total')).toHaveCount(0);
       await expect(page.locator('[data-cells], [class*=_cells_]')).toHaveCount(0);
       // no Min / Avg / Max / Total cell group any more
       await expect(c.getByText('Avg', { exact: true })).toHaveCount(0);
       await page.locator('#run-section-latency').scrollIntoViewIfNeeded();
       const rt = page.getByRole('region', { name: 'Response time' });
       await expect(rt).toBeVisible();
-      await expect(rt.locator('dl[aria-label="Total"]')).toHaveCount(0);
+      await expect(rt.getByTestId('box-total')).toHaveCount(0);
     });
 
-    test('P7-6, P7-7, P7-20: nothing clipped or overlapping; the plot fits its card; no dead space under it', async ({
+    test('P7-6, P7-7, P7-20 (round 5 R2: no cells; the plot labels do not overlap; card gap <= 16px): nothing clipped or overlapping; the plot fits its card; no dead space under it', async ({
       page,
     }) => {
       await openRun(page, s.slug, classic);
@@ -85,14 +83,8 @@ for (const width of [1440, 390]) {
           name === 'trace-tokens' ? page.getByTestId('trace-card').first() : card(page, 'tokens_used');
         const info = await c.evaluate((el) => {
           const slot = el.querySelector('[data-slot]')!.getBoundingClientRect();
-          const svg = el.querySelector('svg[role=img]')!.getBoundingClientRect();
-          const cells = Array.from(el.querySelectorAll('dl[aria-label="Distribution values"] > div'));
-          const clipped = cells.filter((cell) =>
-            Array.from(cell.children).some(
-              (n) => (n as HTMLElement).scrollWidth > (n as HTMLElement).clientWidth + 1,
-            ),
-          ).length;
-          const widths = cells.map((cell) => cell.getBoundingClientRect().width);
+          // round 5 review: an all-equal distribution (Tokens per item in this seed) is a compact note, not an svg
+          const svg = el.querySelector('svg[role=img], [role=img]')!.getBoundingClientRect();
           const ticks = Array.from(el.querySelectorAll('svg text')).map((t) => t.getBoundingClientRect());
           ticks.sort((a, b) => a.left - b.left);
           const overlap = ticks.some(
@@ -112,17 +104,13 @@ for (const width of [1440, 390]) {
           return {
             slotW: slot.width,
             svgW: svg.width,
-            clipped,
-            minCell: Math.min(...widths),
             overlap,
             gap: card.bottom - lowest,
           };
         });
         expect(info.svgW, name).toBeLessThanOrEqual(info.slotW + 1);
-        if (width === 390) expect(info.svgW).toBeGreaterThanOrEqual(220);
-        expect(info.clipped, name).toBe(0);
+        if (width === 390 && name !== 'trace-tokens') expect(info.svgW).toBeGreaterThanOrEqual(220);
         expect(info.overlap, name).toBe(false);
-        expect(info.minCell).toBeGreaterThanOrEqual(width === 390 ? 36 : 36);
         expect(info.gap, name).toBeLessThanOrEqual(16);
       }
     });

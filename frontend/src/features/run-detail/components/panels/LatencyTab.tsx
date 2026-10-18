@@ -32,7 +32,6 @@ import {
   normalizeLatency,
   pct,
   stepsAxis,
-  stepTone,
   tickLabel,
   type LatencyItem,
   type StepSortKey,
@@ -47,7 +46,8 @@ import {
   type ScatterQuadrants,
 } from '../charts/Charts';
 import { useBoxFilter } from '../charts/BoxCard';
-import { BoxPlot, BoxTrack, boxSentence } from '../charts/BoxPlot';
+import { BoxKey, BoxPlot, BoxTrack, boxSentence } from '../charts/BoxPlot';
+import { BOX_HELP } from '../charts/BoxCard';
 import { ChartCard } from '../charts/ChartCard';
 import { selectedPart } from '../../lib/boxFilters';
 import { boxStats } from '../../lib/boxStats';
@@ -137,6 +137,7 @@ function ResponseTime({ items }: { items: LatencyItem[] }) {
   return (
     <ChartCard
       title="Response time"
+      help={BOX_HELP}
       meta={<Tag kind="count">{L.count.toLocaleString('en-US')} items</Tag>}
       intro={
         <div className={styles.kpis}>
@@ -453,7 +454,6 @@ function Steps({ D }: { D: ReturnType<typeof normalizeLatency> }) {
         </div>
         {rows.map(({ node, depth, isGroup, open: isOpen }) => {
           const st = node.stats;
-          const tone = stepTone(node);
           return (
             <div
               key={node.id}
@@ -506,7 +506,6 @@ function Steps({ D }: { D: ReturnType<typeof normalizeLatency> }) {
                       p95: st.p95,
                     }}
                     x={(v) => axis.x(v) / 100}
-                    tone={tone}
                     height={14}
                   />
                 ) : null}
@@ -522,6 +521,7 @@ function Steps({ D }: { D: ReturnType<typeof normalizeLatency> }) {
           ))}
         </div>
       </div>
+      <BoxKey />
     </section>
   );
 }

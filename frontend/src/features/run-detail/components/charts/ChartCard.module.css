@@ -47,9 +47,27 @@
   margin-top: var(--space-sm);
 }
 
+.slot[data-slot='box'] {
+  justify-content: center;
+  margin-top: var(--space-sm);
+}
+
 .caption {
   margin-top: var(--space-sm);
   font-size: var(--font-sm);
   text-align: center;
   color: var(--text-muted);
+}
+
+/* "Total 64.0K" in a box plot card header. */
+.total {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.total b {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
 }

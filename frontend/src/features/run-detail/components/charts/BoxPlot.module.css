@@ -1,4 +1,5 @@
-/* Box plot marks: grey only (text tokens), the slow tail may take --score-2. No colour is introduced. */
+/* Box plot marks (round 5 R2): one tone per plot. --tone comes from tones.css (data-band of the median, or data-series 1);
+   the slow latency tail keeps --score-2. No new token. */
 .plotBox {
   min-width: 0;
 }
@@ -28,41 +29,41 @@
   color: var(--text-muted);
 }
 
-.grid {
-  stroke: var(--border-subtle);
+.axisLine {
+  stroke: var(--border-default);
   stroke-width: 1;
 }
 
-.tick {
-  font-size: var(--font-sm);
-  fill: var(--text-muted);
+.axisTick {
+  stroke: var(--border-strong);
+  stroke-width: 1;
 }
 
 .iqr {
-  fill: color-mix(in srgb, var(--text-secondary) var(--tint-strong), var(--bg-surface));
-  stroke: var(--text-secondary);
+  fill: color-mix(in srgb, var(--tone, var(--chart-1)) var(--tint-strong), var(--bg-surface));
+  stroke: var(--tone, var(--chart-1));
   stroke-width: 1.5;
 }
 
 .whisker,
 .cap {
-  stroke: var(--text-secondary);
+  stroke: var(--tone, var(--chart-1));
   stroke-width: 1.5;
 }
 
 .median {
-  stroke: var(--text-primary);
+  stroke: var(--tone, var(--chart-1));
   stroke-width: 2.5;
 }
 
 .meanMark {
   fill: var(--bg-surface);
-  stroke: var(--text-primary);
+  stroke: var(--tone, var(--chart-1));
   stroke-width: 1.5;
 }
 
 .outlier {
-  fill: var(--text-muted);
+  fill: var(--tone, var(--chart-1));
   fill-opacity: 0.75;
 }
 
@@ -72,7 +73,7 @@
 }
 
 .arrow {
-  fill: var(--text-muted);
+  fill: var(--tone, var(--chart-1));
 }
 
 .arrow[data-tail] {
@@ -85,13 +86,13 @@
 }
 
 .medianLabel,
-.clipLabel {
+.endLabel {
   font-family: var(--font-mono);
   font-size: var(--font-sm);
   fill: var(--text-primary);
 }
 
-.clipLabel {
+.endLabel {
   fill: var(--text-muted);
 }
 
@@ -124,129 +125,53 @@
   }
 }
 
-/* Number row: six equal cells, labels over mono values, always visible. */
-.numsWrap {
-  margin-block-start: var(--space-sm);
-}
-
-.nums {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  margin: 0;
-}
-
-.nums[data-wrap] {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.num {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
+/* Tooltip of the box: the middle half and all six numbers. */
+.tip {
   min-inline-size: 0;
-  padding-block: var(--space-xs);
 }
 
-.num dt {
-  max-inline-size: 100%;
-  overflow: hidden;
+.tipTitle {
   font-size: var(--font-sm);
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-overflow: clip;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--text-muted);
-}
-
-.num dd {
-  margin: 0;
-  max-inline-size: 100%;
-  font-family: var(--font-mono);
-  font-size: var(--font-base);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
   color: var(--text-primary);
 }
 
-.total {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin: var(--space-xs) 0 0;
-  padding: var(--space-xs) var(--space-sm) 0;
-  border-block-start: 1px solid var(--border-default);
-}
-
-.total dt {
-  font-size: var(--font-sm);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.total dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: var(--font-base);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-primary);
-}
-
-/* Legend: the plot's own shapes, wraps. */
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+.tipGrid {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
   gap: 2px var(--space-md);
-  margin: var(--space-sm) 0 0;
-  padding: 0;
-  list-style: none;
+  margin: var(--space-xs) 0 0;
+}
+
+.tipGrid > div {
+  display: flex;
+  gap: var(--space-xs);
+  justify-content: space-between;
+}
+
+.tipGrid dt {
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
 
-.legend li {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
+.tipGrid dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-primary);
 }
 
-.lgBox {
-  inline-size: 14px;
-  block-size: 9px;
-  border: 1.5px solid var(--text-secondary);
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--text-secondary) var(--tint-strong), var(--bg-surface));
+.tipNote {
+  margin-block-start: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
 }
 
-.lgWhisker {
-  inline-size: 14px;
-  block-size: 0;
-  border-block-start: 1.5px solid var(--text-secondary);
-}
-
-.lgMedian {
-  inline-size: 2px;
-  block-size: 11px;
-  background: var(--text-primary);
-}
-
-.lgMean {
-  inline-size: 8px;
-  block-size: 8px;
-  border: 1.5px solid var(--text-primary);
-  background: var(--bg-surface);
-  transform: rotate(45deg);
-}
-
-.lgDot {
-  inline-size: 5px;
-  block-size: 5px;
-  border-radius: 50%;
-  background: var(--text-muted);
+/* One key line under a card that stacks rows. */
+.key {
+  margin: var(--space-sm) 0 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
 }
 
 /* The glyph as a positioned row (per-pass rows, Step timings). */
@@ -262,7 +187,7 @@
   inset-inline-start: var(--a);
   inline-size: calc(var(--b) - var(--a));
   block-size: 0;
-  border-block-start: 1.5px solid var(--box-tone, var(--text-secondary));
+  border-block-start: 1.5px solid var(--tone, var(--chart-1));
 }
 
 .tBox {
@@ -270,13 +195,9 @@
   inset-block: 15%;
   inset-inline-start: var(--a);
   inline-size: max(3px, calc(var(--b) - var(--a)));
-  border: 1.5px solid var(--box-tone, var(--text-secondary));
+  border: 1.5px solid var(--tone, var(--chart-1));
   border-radius: 3px;
-  background: color-mix(
-    in srgb,
-    var(--box-tone, var(--text-secondary)) var(--tint-strong),
-    var(--bg-surface)
-  );
+  background: color-mix(in srgb, var(--tone, var(--chart-1)) var(--tint-strong), var(--bg-surface));
 }
 
 .tMedian {
@@ -284,7 +205,7 @@
   inset-block: 15%;
   inset-inline-start: var(--a);
   inline-size: 2.5px;
-  background: var(--text-primary);
+  background: var(--tone, var(--chart-1));
 }
 
 .tMean {
@@ -293,7 +214,17 @@
   inset-inline-start: calc(var(--a) - 4px);
   inline-size: 8px;
   block-size: 8px;
-  border: 1.5px solid var(--text-primary);
+  border: 1.5px solid var(--tone, var(--chart-1));
   background: var(--bg-surface);
   transform: rotate(45deg);
+}
+
+/* All values equal: one muted line instead of a plot with a lone mark. */
+.flatNote {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--row-compact);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
 }

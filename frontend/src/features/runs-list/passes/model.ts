@@ -1,4 +1,4 @@
-/** Pure model of the passes panel: row view, issue summaries, remembered metric. */
+/** Pure model of the pass rows: row view, issue summaries, remembered metric. */
 import type { RunPass } from '@/api/dashboardTypes';
 
 export type PassView = { kind: 'pass'; pass: RunPass; status: string };
@@ -108,16 +108,4 @@ export function writeStoredMetric(slug: string, metric: string): void {
   } catch {
     /* storage unavailable: the choice just is not remembered */
   }
-}
-
-/** Metrics shown in the pass table: the parent's visible ones in its order, else every metric of the run. */
-export function mirroredMetrics(
-  all: string[],
-  visible: string[] | undefined,
-): { shown: string[]; hidden: string[] } {
-  if (!visible) return { shown: all, hidden: [] };
-  const set = new Set(all);
-  const shown = visible.filter((m) => set.has(m));
-  const shownSet = new Set(shown);
-  return { shown, hidden: all.filter((m) => !shownSet.has(m)) };
 }

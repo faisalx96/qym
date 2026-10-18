@@ -112,8 +112,121 @@
 .metaBody {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: var(--space-md);
   min-width: 0;
+}
+
+/* Label stacked above the text: no side by side columns, so a label can never overlap its text. */
+.prose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.eyebrow {
+  max-inline-size: 100%;
+  overflow: hidden;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.eyebrowRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.muted {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.proseText {
+  inline-size: fit-content;
+  max-inline-size: min(100%, 76ch);
+  font-size: var(--font-md);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.proseText[data-primary] {
+  color: var(--text-primary);
+}
+
+.proseText .proseInner {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+.proseText:has([lang='ar']) {
+  line-height: 1.7;
+}
+
+/* Facts: key | value rows, the key is never wider than its column (ellipsis, the title carries the raw key). */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  column-gap: var(--space-lg);
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: var(--field-label-width) minmax(0, 1fr);
+  column-gap: var(--space-md);
+  align-items: baseline;
+  padding-block: var(--space-xs);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.fact dt {
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.fact dd {
+  justify-self: start;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  margin: 0;
+  font-size: var(--font-base);
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.fact dd[data-mono] {
+  font-family: var(--font-mono);
+}
+
+@container (max-width: 420px) {
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+  }
+}
+
+.tableBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.moreRows {
+  align-self: flex-start;
 }
 
 .editor {
