@@ -409,3 +409,10 @@ ending in an ellipsis, and a value never starts inside or under it (round 7, `re
 section 5 above ("the 28ch cap is a guard, not a reproduced bug") is superseded too: the cap is what hid the keys (measured round 7: 4 to 13 truncated
 key rows per item at 1440 / 390, and at 390 an open nested key lost its whole name, key box 0 px wide). The implementation commit of round 7
 changes `DESIGN_LANGUAGE.md` ("Item details": "`FieldRow` labels and `KeyTree` keys are cut at their column (ellipsis, title)") in the same commit.
+
+Implemented in round 7 (step D2, `redesign7/impl-notes.md`): `KeyTree`, the `StructuredValue` sections and the metric panel's facts and Tags now wrap
+their keys; the specs above are rewritten to the new rule (R3-3: no overflow and no ellipsis on a fact key or an eyebrow; R3-7: no 28ch cap, no
+`title`, 8 px before the preview; R3-21: a `FieldRow` label wraps). Two consequences for numbers of this document: a fact key shows the judge key as
+written (decision 2 of round 7: `self_consistency_check_result`, not "Self consistency check result"; the uppercase prose eyebrow still humanizes
+its key and keeps the raw key in its `title`), and **R3-14 at 390 is amended from 1,530 to 1,540 px** (measured 1,539 px: long fact keys now take
+two or three lines instead of one cut line).

@@ -486,7 +486,13 @@ is not allowed.
   `--field-measure`; only the value carries `dir`), then the Output region, a full-width divider (1px `--border-strong`, 20px
   above) and the Metrics region. Output keys are collapsed key rows (`StructuredValue variant="keys"` / `KeyTree`: chevron, key,
   one-line preview; open: the value, Copy, per-key Expand all / Collapse all recursive; the region has global Expand all / Collapse
-  all and Sections | Raw). A repeat item has a pass rail (a chip per pass with number and verdict glyph, at most three read side by
+  all and Sections | Raw). **A data key is a name: it is shown exactly as written (case included, `text-transform: none`), wraps
+  (`overflow-wrap: anywhere`) and is never cut, clipped or ellipsised; whatever follows it (its preview, its actions) starts after
+  its last line, so a key never overlaps its content** (round 7, D2; tree keys, `StructuredValue` section keys, fact keys, Tag
+  keys; the key element carries `data-part="key"` and its own script direction, `textDirAttrs`, the row stays left to right). The
+  preview follows the key's last line (8px) when 12ch fit there, else starts the next line under it; the row's actions wrap under
+  the name when the whole name does not fit beside them. Fixed UI labels (Input, Expected, Output, the prose eyebrow) keep the
+  uppercase tracked eyebrow style. A repeat item has a pass rail (a chip per pass with number and verdict glyph, at most three read side by
   side). **A pass has no colour**: its identity is text, colour on a pass is only its verdict. Metrics are one matrix
   (metric rows by pass columns, Mean, 8 rows then "Show N more"), values are mono 600 band-coloured text (no tinted cells, no
   outline: the selected row takes `--bg-selected` and a 2px `--accent-primary` bar at its inline start; a single pass's Reason is a
@@ -494,12 +500,12 @@ is not allowed.
   The panel (`--bg-elevated`, `container-type: inline-size`, `direction: ltr`) has a one-row header (mono name, `ScoreValue`, "Pass n",
   "edited", then the text button "Edit score" and Close), a hairline, then: **prose blocks** (reason, reasoning, explanation, label,
   then any string over 60 characters) with the eyebrow label stacked above the text (13px, line 1.6, 76ch, `dir` on the text only) so a
-  label can never overlap its text; **facts** (`dl`: humanized sentence-case key `--font-sm` 650 in a `--field-label-width` column,
-  ellipsis + raw key in `title`, value next to it; the row stacks under 420px); **tables** for `{columns, rows}`, arrays of arrays and
+  label can never overlap its text; **facts** (`dl`: the judge key as written, `--font-sm` 650, in a key column of
+  `fit-content(40%)` at least `--field-label-width` where a long key wraps, value next to it; the row stacks under 420px); **tables** for `{columns, rows}`, arrays of arrays and
   arrays of two or more uniform plain objects (`detectTable`; eyebrow with the row count over an embedded `DataTable`, every header
   sortable, 12 rows then "Show N more rows", scrolls inside); and collapsed key rows for everything else. Label roles are exactly
-  three: eyebrow (11px 650 uppercase), fact key (11px 650 sentence case), tree key (12px 600 mono). `FieldRow` labels and `KeyTree`
-  keys are cut at their column (ellipsis, title) instead of painting over the value. Score edits happen in that panel.
+  three: eyebrow (11px 650 uppercase), fact key (11px 650, case as written), tree key (12px 600 mono). `FieldRow` labels wrap in
+  their column; no key is cut. Score edits happen in that panel.
 - **Items toolbar and correlation matrix** (round 5 R4): the toolbar row aligns its controls to one bottom edge, so a control with a
   label above (analysis metric, threshold, sort) and one without share a vertical centre; the metric correlation grid is as wide as its
   card body and its cells are as wide as their column (at least 20px, scrolling inside the card beyond that). A trace opens on its

@@ -107,7 +107,7 @@
 
 .toggle {
   display: grid;
-  flex: 1 1 12rem;
+  flex: 1 1 auto;
   grid-template-columns: 14px minmax(0, 1fr);
   column-gap: 6px;
   align-items: start;
@@ -205,10 +205,8 @@
   max-inline-size: 100%;
   font-size: var(--font-sm);
   font-weight: 650;
-  letter-spacing: 0.05em;
   line-height: 1.5;
   overflow-wrap: anywhere;
-  text-transform: uppercase;
   color: var(--text-primary);
   unicode-bidi: isolate;
 }

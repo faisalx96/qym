@@ -291,20 +291,18 @@ function SpecTags() {
 
 /* ───────────────────────────── D2: metric facts ───────────────────────────── */
 
+/** Judge keys as written (round 7 decision 2: a data key is never reformatted, uppercased or cut). */
 const FACTS: Array<[string, string, boolean?]> = [
-  ['Confidence', '0.82', true],
-  ['Customer eligibility assessment result a', '0.9', true],
-  [
-    'Customer eligibility assessment result after policy review step with exceptionsx',
-    'stable across the three rescored samples',
-  ],
-  ['Retrieved policy document identifiers used to', '4', true],
-  ['Self consistency check result across rescored samples', 'agree'],
+  ['confidence', '0.82', true],
+  [K40, '0.9', true],
+  [K80, 'stable across the three rescored samples'],
+  [C40, '4', true],
+  ['self_consistency_check_result_across_rescored_samples', 'agree'],
 ];
 
 const AR_FACTS: Array<[string, string, boolean?]> = [
   ['الثقة', '0.8', true],
-  ['تحليل أهلية العميل بعد مراجعة السياسة والاستثناءات', 'مؤهل'],
+  ['تحليل_أهلية_العميل_بعد_مراجعة_السياسة_والاستثناءات', 'مؤهل'],
   ['الشرح', 'درجة جيدة مع نقص في الاستثناءات'],
 ];
 
@@ -561,7 +559,8 @@ export function Round7Mocks({
             specified={<SpecTree nodes={EN_TREE} label="Output key tree, open (specified)" openAll />}
           />
           <p className={styles.label} data-kind="spec">
-            Specified: Expected and Tags
+            Specified: Expected and Tags (decision 2 / D2-15: every key renders exactly as written, case
+            included; no uppercase transform on a data key)
           </p>
           <div className={styles.detail}>
             <SpecSections />

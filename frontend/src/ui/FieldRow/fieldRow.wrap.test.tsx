@@ -1,10 +1,10 @@
-/** Round 5 R3: a long key is cut at its column (ellipsis, title = the key), never painted over the value. */
+/** Round 7 D2 (reversing round 5 R3): a long key wraps in its column; it is never cut and never painted over the value. */
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { FieldRow } from './FieldRow';
 
 describe('FieldRow label', () => {
-  it('carries the raw key as its title and a truncation class', () => {
+  it('shows the whole key as its text and keeps it as the title', () => {
     render(
       <FieldRow label="self_consistency_check_result" labelAnchor="start">
         <p>value</p>
@@ -12,6 +12,7 @@ describe('FieldRow label', () => {
     );
     const label = screen.getByText('self_consistency_check_result');
     expect(label).toHaveAttribute('title', 'self_consistency_check_result');
+    expect(label).toHaveTextContent('self_consistency_check_result');
     expect(label.className).toMatch(/label/);
   });
 

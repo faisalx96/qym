@@ -20,7 +20,7 @@ export interface FieldRowProps {
    * left to right, so the label never moves; only the value block carries the text direction (round 3 P5).
    */
   labelAnchor?: 'auto' | 'start';
-  /** Tooltip of the label; defaults to the label text. A long key is cut with an ellipsis, never painted over the value. */
+  /** Tooltip of the label; defaults to the label text. A long key wraps in its column, it is never cut (round 7, D2). */
   labelTitle?: string;
   /** `upper` (default) is the eyebrow style; `sentence` keeps the key's case (round 5 R3 fact keys). */
   labelCase?: 'upper' | 'sentence';

@@ -58,11 +58,10 @@
   font-weight: 650;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  /* A key has no break point: cut it at its column instead of painting it over the value (round 5 R3). */
+  /* A key has no break point: it wraps inside its column (never cut, never painted over the value; round 7, D2). */
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .label[data-case='sentence'] {

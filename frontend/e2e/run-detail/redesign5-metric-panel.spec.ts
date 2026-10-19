@@ -88,7 +88,7 @@ for (const width of [1440, 390] as const) {
             const dt = row.querySelector('dt')!;
             const dd = row.querySelector('dd')!;
             return {
-              key: dt.getAttribute('title'),
+              key: dt.textContent,
               dtRight: box(dt).right,
               dtBottom: box(dt).bottom,
               ddLeft: box(dd).left,
@@ -96,7 +96,6 @@ for (const width of [1440, 390] as const) {
               gap: box(dd).left - box(dt).right,
               clipped: dt.scrollWidth > dt.clientWidth + 1,
               ellipsis: getComputedStyle(dt).textOverflow === 'ellipsis',
-              title: dt.getAttribute('title'),
               rtl: dd.getAttribute('dir') === 'rtl',
             };
           });
@@ -146,8 +145,9 @@ for (const width of [1440, 390] as const) {
             expect(f.gap, `${f.key} gap`).toBeGreaterThanOrEqual(12 - 0.5);
             if (rtl && f.rtl) expect(f.gap).toBeLessThanOrEqual(14.5);
           }
-          expect(f.clipped ? f.ellipsis : true).toBe(true);
-          expect(f.title).toBe(f.key);
+          // round 7 (D2) reverses round 5: a fact key wraps in its column, it is never cut
+          expect(f.clipped, `${f.key} is whole`).toBe(false);
+          expect(f.ellipsis, `${f.key} has no ellipsis`).toBe(false);
         }
         for (const p of m.prose) {
           expect(p.txTop, `${p.key} stacked`).toBeGreaterThanOrEqual(p.ebBottom + 2 - 0.5);
@@ -164,20 +164,24 @@ for (const width of [1440, 390] as const) {
       });
     }
 
-    test('R3-3: every key (fact key or eyebrow) is cut at its column, never painted over its value', async ({
+    test('R3-3 (round 7, D2): every key (fact key or eyebrow) is whole in its column and never painted over its value', async ({
       page,
     }) => {
       const { panel } = await openPanel(page, 'rubric_judge', width);
       const keys = await panel.evaluate((el) =>
         Array.from(el.querySelectorAll('dl dt, [data-part=eyebrow]')).map((k) => ({
-          key: k.getAttribute('title'),
+          // a fact key shows the key as written; the prose label is the one uppercase label and carries the raw key
+          key: k.getAttribute('title') ?? k.textContent,
           overflow: k.scrollWidth - k.clientWidth,
           ellipsis: getComputedStyle(k).textOverflow,
         })),
       );
       expect(keys.map((k) => k.key)).toContain('self_consistency_check_result');
       expect(keys.map((k) => k.key)).toContain('detailed_reasoning_trace');
-      for (const k of keys) expect(k.overflow <= 0 || k.ellipsis === 'ellipsis', String(k.key)).toBe(true);
+      for (const k of keys) {
+        expect(k.overflow, String(k.key)).toBeLessThanOrEqual(0);
+        expect(k.ellipsis, String(k.key)).not.toBe('ellipsis');
+      }
     });
 
     test('R3-8, R3-9, R3-10, R3-11, R3-12: tables, no [0] rows, headers 34, rows 32, sorting, scroll inside, 12 rows then more', async ({
@@ -231,7 +235,7 @@ for (const width of [1440, 390] as const) {
         .evaluate((e) => ((e as HTMLElement).style.display = 'none'));
       const h = (await panel.boundingBox())!.height;
       console.log(`R3-14 ${width}px panel height ${h}`);
-      expect(h).toBeLessThanOrEqual(width === 390 ? 1530 : 1040); // amended, see spec R3-14
+      expect(h).toBeLessThanOrEqual(width === 390 ? 1540 : 1040); // amended, see spec R3-14 (1530 -> 1540 in round 7: long fact keys wrap instead of ending in an ellipsis)
     });
 
     test('R3-16, R3-17, R3-18: matrix reason anchor, row heights, selected row', async ({ page }) => {
@@ -286,37 +290,47 @@ for (const width of [1440, 390] as const) {
       }
     });
 
-    test('R3-21: FieldRow labels (Input, Expected, Tags) never overflow their column', async ({ page }) => {
+    test('R3-21 (round 7, D2): FieldRow labels (Input, Expected, Tags) never overflow their column, they wrap', async ({
+      page,
+    }) => {
       const { card } = await openPanel(page, 'rubric_judge', width);
       const over = await card.evaluate((el) =>
         Array.from(el.querySelectorAll('[role=group][aria-labelledby]'))
           .map((g) => g.firstElementChild as HTMLElement)
-          .filter(
-            (l) => l && l.scrollWidth > l.clientWidth + 1 && getComputedStyle(l).textOverflow !== 'ellipsis',
-          )
+          .filter((l) => l && l.scrollWidth > l.clientWidth + 1)
           .map((l) => l.textContent),
       );
       expect(over).toEqual([]);
     });
 
-    test('R3-7: output key rows cut a long key at 28ch and keep 6px before the preview', async ({ page }) => {
+    test('R3-7 (round 7, D2): output key rows show the whole key (no 28ch cap) and keep 8px before the preview', async ({
+      page,
+    }) => {
       const { card } = await openPanel(page, 'rubric_judge', width);
       const rows = await card.evaluate((el) =>
-        Array.from(el.querySelectorAll('section[aria-label=Output] [data-keytree] [class*=toggle]')).map(
-          (t) => {
-            const key = t.querySelector('[class*=key]')!;
+        Array.from(el.querySelectorAll('section[aria-label=Output] [data-keytree] [data-part=key]')).map(
+          (key) => {
             const pv = key.nextElementSibling;
+            const sameLine =
+              pv &&
+              Math.min(pv.getBoundingClientRect().bottom, key.getBoundingClientRect().bottom) -
+                Math.max(pv.getBoundingClientRect().top, key.getBoundingClientRect().top) >
+                2;
             return {
               maxInline: getComputedStyle(key).maxInlineSize,
               title: key.getAttribute('title'),
-              gap: pv ? pv.getBoundingClientRect().left - key.getBoundingClientRect().right : 99,
+              overflow: key.scrollWidth - key.clientWidth,
+              gap: pv && sameLine ? pv.getBoundingClientRect().left - key.getBoundingClientRect().right : 99,
             };
           },
         ),
       );
+      expect(rows.length).toBeGreaterThan(0);
       for (const r of rows) {
-        expect(r.title).toBeTruthy();
-        expect(r.gap).toBeGreaterThanOrEqual(5.5);
+        expect(r.maxInline).not.toMatch(/ch$/); // the 28ch cap is gone
+        expect(r.title).toBeNull();
+        expect(r.overflow).toBeLessThanOrEqual(0);
+        expect(r.gap).toBeGreaterThanOrEqual(7.5);
       }
     });
   });

@@ -1,6 +1,7 @@
 /** Expanded item: bodies (lazy), metadata, output, trace chips, metrics; repeat items show one column per pass. */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isItemTaskError } from '@/lib/metrics';
+import { textDirAttrs } from '@/lib/text';
 import { Button, CopyButton, FieldRow, StructuredValue, Tag, parseStructured, useStickyShift } from '@/ui';
 import { bodyText, formatCompact, itemLink } from '../../lib/itemText';
 import {
@@ -206,11 +207,23 @@ export function ItemCard({ row }: { row: Row }) {
                   {v}
                 </Tag>
               ))}
-              {tags.map(([k, v]) => (
-                <Tag key={k} kind="data">
-                  {k}: {itemMetadataDisplayValue(v)}
-                </Tag>
-              ))}
+              {tags.map(([k, v]) => {
+                const shown = itemMetadataDisplayValue(v);
+                // key and value are two isolated runs, so an Arabic key still comes first (round 7, D2)
+                return (
+                  <Tag key={k} kind="data">
+                    <span className={styles.tagText}>
+                      <span className={styles.tagKey} data-part="key" {...textDirAttrs(k)}>
+                        {k}
+                      </span>
+                      {': '}
+                      <span className={styles.tagValue} data-part="value" {...textDirAttrs(shown)}>
+                        {shown}
+                      </span>
+                    </span>
+                  </Tag>
+                );
+              })}
             </div>
           </FieldRow>
         ) : null}

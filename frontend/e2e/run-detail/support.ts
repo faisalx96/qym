@@ -15,6 +15,7 @@ import {
   seedArabicRepeatRun,
   seedClassicRun,
   seedManyCategories,
+  seedR7JsonKeys,
   seedR5DetailsRun,
   seedR5Passes19Run,
   seedRepeatRun,
@@ -67,6 +68,11 @@ export async function seedR5(s: Seeded): Promise<{ details: string; passes19: st
     details: await seedR5DetailsRun(client, s.token),
     passes19: await seedR5Passes19Run(client, s.token),
   };
+}
+
+/** Round 7: twelve items with JSON keys of 10 / 40 / 80 characters, nesting and Arabic keys (j-01 English, j-03 Arabic). */
+export async function seedJsonKeys(s: Seeded): Promise<string> {
+  return seedR7JsonKeys(client, s.token);
 }
 
 /** 300 items with metadata keys of 24 / 14 / 9 / 6 / 4 values. */

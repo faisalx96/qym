@@ -86,7 +86,7 @@ function DetailTable({ title, rawKey, table }: { title: string; rawKey: string; 
 
 /**
  * The body of the metric detail panel (round 5 R3): prose blocks with the label stacked above the text, facts as key / value
- * rows (humanized, ellipsised keys), tables for table-shaped values, collapsed key rows for everything else.
+ * rows (the key as written, wrapped; round 7 D2), tables for table-shaped values, collapsed key rows for everything else.
  */
 export function MetricDetailBody({ meta, hidden }: { meta: Record<string, unknown>; hidden: Set<string> }) {
   const entries = Object.entries(meta).filter(
@@ -129,8 +129,11 @@ export function MetricDetailBody({ meta, hidden }: { meta: Record<string, unknow
             const mono = typeof v === 'number' || typeof v === 'boolean';
             return (
               <div key={k} className={styles.fact}>
-                <dt title={k}>{humanizeKey(name(k))}</dt>
-                <dd data-mono={mono ? '' : undefined} {...(mono ? {} : textDirAttrs(text))}>
+                {/* a judge key is a data key: shown as written (exact case), wrapped in its column, never cut */}
+                <dt data-part="key">
+                  <span {...textDirAttrs(name(k))}>{name(k)}</span>
+                </dt>
+                <dd data-part="value" data-mono={mono ? '' : undefined} {...(mono ? {} : textDirAttrs(text))}>
                   {text}
                 </dd>
               </div>

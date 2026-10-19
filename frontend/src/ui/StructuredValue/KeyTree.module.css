@@ -15,21 +15,26 @@
   border-block-end: 1px solid var(--border-subtle);
 }
 
+/* The head: [toggle: chevron | name line] then the row's actions. The toggle keeps the width its content wants
+   (`flex-basis: auto`), so when the actions do not fit beside the whole name they wrap under it: the key never has to
+   give up its width for them (round 7, D2). */
 .head {
   display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-height: var(--row-compact);
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: var(--space-xs);
+  min-block-size: var(--row-compact);
 }
 
 .toggle {
-  display: flex;
+  display: grid;
   flex: 1 1 auto;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  min-height: var(--row-compact);
-  padding: 0;
+  grid-template-columns: 14px minmax(0, 1fr);
+  column-gap: 6px;
+  align-items: start;
+  min-inline-size: 0;
+  padding-block: 7px;
+  padding-inline: 0;
   border: 0;
   background: transparent;
   font: inherit;
@@ -49,50 +54,70 @@
 }
 
 .chevron {
-  flex: none;
+  margin-block-start: 2px;
 }
 
+/* One flex line: the key, then its preview. The key never shrinks below its text: it wraps (anywhere) inside the line;
+   the preview takes the rest of the key's last line when at least 12ch fit there (8px gap) and otherwise starts a new line. */
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-sm);
+  min-inline-size: 0;
+}
+
+/* A key is a name: exact case, wrapped, never truncated. `dir` comes from the key's own script. */
 .key {
   flex: 0 1 auto;
-  min-width: 0;
-  max-inline-size: 28ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-inline-size: 0;
+  max-inline-size: 100%;
   font-family: var(--font-mono);
   font-size: var(--font-base);
   font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
   color: var(--text-primary);
+  unicode-bidi: isolate;
 }
 
+/* A preview may be cut (it is a summary of the value, the value is one click away); a key never is. */
 .preview {
-  min-width: 0;
+  flex: 1 1 12ch;
+  min-inline-size: 0;
+  max-inline-size: max-content;
   overflow: hidden;
   font-size: var(--font-base);
+  line-height: 1.5;
   text-align: start;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-muted);
+  unicode-bidi: isolate;
 }
 
 .type {
+  flex: 0 0 auto;
   font-size: var(--font-sm);
+  line-height: 1.5;
+  white-space: nowrap;
   color: var(--text-muted);
 }
 
-.bulk {
+.actions {
   display: inline-flex;
+  flex: none;
+  align-items: center;
   gap: var(--space-xs);
+  margin-inline-start: auto;
+  min-block-size: var(--row-compact);
 }
 
 .body {
   margin-inline-start: 7px;
   padding: var(--space-xs) 0 var(--space-sm) var(--space-md);
   border-inline-start: 1px solid var(--border-subtle);
-}
-
-.row .row .head {
-  min-height: var(--row-compact);
 }
 
 .leaf {

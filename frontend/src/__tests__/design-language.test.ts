@@ -560,6 +560,34 @@ describe('visual language (redesign round 2)', () => {
     expect(read(join(SRC, 'ui/DataTable/DataTable.tsx'))).not.toContain('styles.edge');
   });
 
+  it('never truncates, clips or uppercases the name of a data key (round 7, D2)', () => {
+    // [file, selector, uppercase allowed]: the eyebrow is the one fixed UI label that keeps the uppercase tracked style
+    const keyRules: Array<[string, string, boolean]> = [
+      ['ui/StructuredValue/KeyTree.module.css', '.key', false],
+      ['ui/StructuredValue/StructuredValue.module.css', '.key', false],
+      ['features/run-detail/components/items/MetricStrip.module.css', '.fact dt', false],
+      ['features/run-detail/components/items/MetricStrip.module.css', '.eyebrow', true],
+      ['ui/FieldRow/FieldRow.module.css', '.label', true],
+    ];
+    const problems: string[] = [];
+    for (const [file, selector, upper] of keyRules) {
+      const css = read(join(SRC, file));
+      const escaped = selector.replace(/[.]/g, '\\.');
+      const block = css.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))?.[1];
+      if (block === undefined) {
+        problems.push(`${file}: no ${selector} rule`);
+        continue;
+      }
+      if (/text-overflow:\s*ellipsis/.test(block)) problems.push(`${file} ${selector}: ellipsis`);
+      if (/white-space:\s*nowrap/.test(block)) problems.push(`${file} ${selector}: nowrap`);
+      if (/max-inline-size:\s*[\d.]+ch/.test(block)) problems.push(`${file} ${selector}: a ch cap`);
+      if (!upper && /text-transform:\s*uppercase/.test(block))
+        problems.push(`${file} ${selector}: uppercase`);
+      if (!/overflow-wrap:\s*anywhere/.test(block)) problems.push(`${file} ${selector}: does not wrap`);
+    }
+    expect(problems).toEqual([]);
+  });
+
   it('animates data marks only through the shared motion tokens', () => {
     const cells = read(join(SRC, 'ui/DataTable/cells/cells.module.css'));
     expect(cells).toContain('var(--motion-fill)');

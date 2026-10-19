@@ -36,24 +36,28 @@
 
 .head {
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-height: var(--row-compact);
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: var(--space-xs);
+  min-block-size: var(--row-compact);
 }
 
 .head > .spacer {
   flex: none;
   inline-size: 12px;
+  margin-inline-end: var(--space-sm);
 }
 
+/* [chevron | name line]: the actions wrap under the name instead of pushing it out of its row (round 7, D2). */
 .toggle {
-  display: flex;
+  display: grid;
   flex: 1 1 auto;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-  min-height: var(--row-compact);
-  padding: 0;
+  grid-template-columns: 12px minmax(0, 1fr);
+  column-gap: var(--space-sm);
+  align-items: start;
+  min-inline-size: 0;
+  padding-block: 7px;
+  padding-inline: 0;
   border: 0;
   border-radius: var(--control-radius);
   background: transparent;
@@ -61,6 +65,7 @@
   font-family: var(--font-sans);
   text-align: start;
   cursor: pointer;
+  direction: ltr;
 }
 
 .toggle:hover .key {
@@ -73,7 +78,7 @@
 }
 
 .chevron {
-  flex: none;
+  margin-block-start: 3px;
   color: var(--text-muted);
   transition: transform var(--transition-fast);
 }
@@ -86,28 +91,57 @@
   transform: rotate(90deg);
 }
 
+/* The name line: the key, then its summary on the key's last line when 12ch fit there, else on the next line. */
+.line {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-sm);
+  min-inline-size: 0;
+  padding-block: 7px;
+  direction: ltr;
+}
+
+.toggle .line {
+  padding-block: 0;
+}
+
+/* A data key: exact case (never uppercased), wrapped, never truncated. `dir` follows the key's own script. */
 .key {
-  flex: none;
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  max-inline-size: 100%;
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-sm);
   font-weight: 650;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
   unicode-bidi: isolate;
 }
 
 .summary {
-  min-width: 0;
+  flex: 1 1 12ch;
+  min-inline-size: 0;
+  max-inline-size: max-content;
   overflow: hidden;
   color: var(--text-muted);
   font-size: var(--font-sm);
+  line-height: 1.5;
+  text-align: start;
   text-overflow: ellipsis;
   white-space: nowrap;
+  unicode-bidi: isolate;
 }
 
-.copy {
+.actions {
+  display: inline-flex;
   flex: none;
+  align-items: center;
+  margin-inline-start: auto;
+  min-block-size: var(--row-compact);
 }
 
 .body {
