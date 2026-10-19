@@ -1,0 +1,140 @@
+{
+  "net": "none",
+  "width": 1024,
+  "settle": true,
+  "open": 1,
+  "run": "r300",
+  "median": {
+    "firstGroupPlaceholdersMs": 42,
+    "firstGroupRowsMs": 130,
+    "firstGroupStripMs": 130,
+    "requestsAfterClick": 2,
+    "apiKB": 2.34,
+    "cls": 0.2111
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "9ae93258-7352-4dd9-bebe-f3a4204ce656",
+          "placeholdersMs": 42,
+          "rowsMs": 240,
+          "stripMs": 240,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2034.390625,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 56.390625,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 2,
+      "passesRequests": 1,
+      "groupMetricsRequests": 1,
+      "apiKB": 2.34,
+      "passesKB": 1.26,
+      "passesTtfbMs": [
+        181
+      ],
+      "passesDoneMs": [
+        225
+      ],
+      "groupTtfbMs": [
+        18
+      ],
+      "groupDoneMs": [
+        102
+      ],
+      "cls": 0.2201,
+      "requestList": [
+        "7352-4dd9-bebe-f3a4204ce656/passes @43-225ms ttfb 181 1.3kB",
+        "d9-bebe-f3a4204ce656/group-metrics?metric=correct&threshold=0.8 @43-102ms ttfb 18 1.1kB"
+      ]
+    },
+    {
+      "rep": 1,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "9ae93258-7352-4dd9-bebe-f3a4204ce656",
+          "placeholdersMs": 42,
+          "rowsMs": 130,
+          "stripMs": 130,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2034.390625,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 56.390625,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 2,
+      "passesRequests": 1,
+      "groupMetricsRequests": 1,
+      "apiKB": 2.34,
+      "passesKB": 1.26,
+      "passesTtfbMs": [
+        72
+      ],
+      "passesDoneMs": [
+        114
+      ],
+      "groupTtfbMs": [
+        14
+      ],
+      "groupDoneMs": [
+        95
+      ],
+      "cls": 0.2111,
+      "requestList": [
+        "7352-4dd9-bebe-f3a4204ce656/passes @41-114ms ttfb 72 1.3kB",
+        "d9-bebe-f3a4204ce656/group-metrics?metric=correct&threshold=0.8 @41-95ms ttfb 14 1.1kB"
+      ]
+    },
+    {
+      "rep": 2,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "9ae93258-7352-4dd9-bebe-f3a4204ce656",
+          "placeholdersMs": 41,
+          "rowsMs": 128,
+          "stripMs": 128,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2034.390625,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 56.390625,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 2,
+      "passesRequests": 1,
+      "groupMetricsRequests": 1,
+      "apiKB": 2.34,
+      "passesKB": 1.26,
+      "passesTtfbMs": [
+        72
+      ],
+      "passesDoneMs": [
+        115
+      ],
+      "groupTtfbMs": [
+        14
+      ],
+      "groupDoneMs": [
+        95
+      ],
+      "cls": 0.2086,
+      "requestList": [
+        "7352-4dd9-bebe-f3a4204ce656/passes @42-115ms ttfb 72 1.3kB",
+        "d9-bebe-f3a4204ce656/group-metrics?metric=correct&threshold=0.8 @42-95ms ttfb 14 1.1kB"
+      ]
+    }
+  ]
+}

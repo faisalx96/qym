@@ -1,0 +1,1134 @@
+{
+  "table": "runs",
+  "width": 1024,
+  "states": {
+    "rest": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 3684,
+      "clientW": 787,
+      "pinStart": 260,
+      "pinEnd": 104,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 995,
+          "t": 58,
+          "b": 868,
+          "w": 789,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 994,
+          "t": 59,
+          "b": 156,
+          "w": 787,
+          "h": 97
+        },
+        "footer": {
+          "l": 207,
+          "r": 994,
+          "t": 802,
+          "b": 867,
+          "w": 787,
+          "h": 65
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 994,
+          "t": 156,
+          "b": 796.75,
+          "w": 787,
+          "h": 640.75
+        },
+        "scroller": {
+          "l": 207,
+          "r": 994,
+          "t": 156,
+          "b": 796.75,
+          "w": 787,
+          "h": 640.75
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 467,
+          "t": 156,
+          "b": 180,
+          "w": 260,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 207,
+          "r": 3891.15625,
+          "t": 1782,
+          "b": 1814,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 994,
+          "t": 796.75,
+          "b": 802,
+          "w": 787,
+          "h": 5.25
+        },
+        "details": [],
+        "pinStart": 260,
+        "pinEnd": 104
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1017.2,
+          "heightPx": 641,
+          "tableRowsBoxPx": 1658,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1017.2,
+          "heightPx": 641,
+          "tableRowsBoxPx": 1658,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1017.2,
+          "heightPx": 641,
+          "tableRowsBoxPx": 1658,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1017.2,
+          "heightPx": 641,
+          "tableRowsBoxPx": 1658,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": []
+    },
+    "few-rows": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 3684,
+      "clientW": 787,
+      "pinStart": 260,
+      "pinEnd": 104,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 995,
+          "t": 58,
+          "b": 358,
+          "w": 789,
+          "h": 300
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 994,
+          "t": 59,
+          "b": 190,
+          "w": 787,
+          "h": 131
+        },
+        "footer": {
+          "l": 207,
+          "r": 994,
+          "t": 292,
+          "b": 357,
+          "w": 787,
+          "h": 65
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 994,
+          "t": 190,
+          "b": 280,
+          "w": 787,
+          "h": 90
+        },
+        "scroller": {
+          "l": 207,
+          "r": 994,
+          "t": 190,
+          "b": 280,
+          "w": 787,
+          "h": 90
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 467,
+          "t": 190,
+          "b": 214,
+          "w": 260,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 207,
+          "r": 3891.15625,
+          "t": 248,
+          "b": 280,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 994,
+          "t": 280,
+          "b": 292,
+          "w": 787,
+          "h": 12
+        },
+        "details": [],
+        "pinStart": 260,
+        "pinEnd": 104
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 0,
+          "heightPx": 90,
+          "tableRowsBoxPx": 90,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 0,
+          "heightPx": 90,
+          "tableRowsBoxPx": 90,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 0,
+          "heightPx": 90,
+          "tableRowsBoxPx": 90,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 0,
+          "heightPx": 90,
+          "tableRowsBoxPx": 90,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": []
+    },
+    "group-open": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 3684,
+      "clientW": 787,
+      "pinStart": 260,
+      "pinEnd": 104,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 995,
+          "t": 58,
+          "b": 868,
+          "w": 789,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 994,
+          "t": 59,
+          "b": 156,
+          "w": 787,
+          "h": 97
+        },
+        "footer": {
+          "l": 207,
+          "r": 994,
+          "t": 802,
+          "b": 867,
+          "w": 787,
+          "h": 65
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 994,
+          "t": 156,
+          "b": 797.53125,
+          "w": 787,
+          "h": 641.53125
+        },
+        "scroller": {
+          "l": 207,
+          "r": 994,
+          "t": 156,
+          "b": 797.53125,
+          "w": 787,
+          "h": 641.53125
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 467,
+          "t": 156,
+          "b": 180,
+          "w": 260,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 207,
+          "r": 3891.15625,
+          "t": 2158.390625,
+          "b": 2190.390625,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 994,
+          "t": 797.53125,
+          "b": 802,
+          "w": 787,
+          "h": 4.46875
+        },
+        "details": [
+          {
+            "l": 207,
+            "r": 3891.15625,
+            "t": 566,
+            "b": 622.390625,
+            "w": 3684.15625,
+            "h": 56.390625,
+            "strip": true
+          }
+        ],
+        "pinStart": 260,
+        "pinEnd": 104
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 56
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 56
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(0, 212, 170) 3px 0px 0px 0px inset, rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 1,
+        "totalPx": 25,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "strip": 1
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Reliability",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 6.9,
+          "contrastShaded": 1.1,
+          "rowKind": "strip",
+          "pinned": false
+        }
+      ]
+    },
+    "group-open-scrolled": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end",
+        "data-scroll-start"
+      ],
+      "scrollLeft": 600,
+      "scrollW": 3684,
+      "clientW": 787,
+      "pinStart": 260,
+      "pinEnd": 104,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 995,
+          "t": 58,
+          "b": 868,
+          "w": 789,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 994,
+          "t": 59,
+          "b": 156,
+          "w": 787,
+          "h": 97
+        },
+        "footer": {
+          "l": 207,
+          "r": 994,
+          "t": 802,
+          "b": 867,
+          "w": 787,
+          "h": 65
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 994,
+          "t": 156,
+          "b": 797.53125,
+          "w": 787,
+          "h": 641.53125
+        },
+        "scroller": {
+          "l": 207,
+          "r": 994,
+          "t": 156,
+          "b": 797.53125,
+          "w": 787,
+          "h": 641.53125
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 467,
+          "t": 156,
+          "b": 180,
+          "w": 260,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": -393,
+          "r": 3291.15625,
+          "t": 2158.390625,
+          "b": 2190.390625,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 994,
+          "t": 797.53125,
+          "b": 802,
+          "w": 787,
+          "h": 4.46875
+        },
+        "details": [
+          {
+            "l": -393,
+            "r": 3291.15625,
+            "t": 566,
+            "b": 622.390625,
+            "w": 3684.15625,
+            "h": 56.390625,
+            "strip": true
+          }
+        ],
+        "pinStart": 260,
+        "pinEnd": 104
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 56
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 56
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 56
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 56
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(0, 212, 170) 3px 0px 0px 0px inset, rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 47,
+        "totalPx": 599.5,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "strip": 6,
+          "row": 21,
+          "pass": 20
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Reliability",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 6.9,
+          "contrastShaded": 1.1,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Share of items solved by at ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.1,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Pass^k over Pass@k: how much",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.1,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "80.0%",
+          "overlapPx": 20.5,
+          "alpha": 0.79,
+          "contrastBase": 10.9,
+          "contrastShaded": 1.5,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "·",
+          "overlapPx": 20,
+          "alpha": 0.77,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.5,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "·",
+          "overlapPx": 20,
+          "alpha": 0.77,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.5,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "·",
+          "overlapPx": 20,
+          "alpha": 0.77,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.5,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "·",
+          "overlapPx": 20,
+          "alpha": 0.77,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.5,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "·",
+          "overlapPx": 20,
+          "alpha": 0.77,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.5,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "·",
+          "overlapPx": 20,
+          "alpha": 0.77,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.5,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "·",
+          "overlapPx": 20,
+          "alpha": 0.77,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.5,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "·",
+          "overlapPx": 20,
+          "alpha": 0.77,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.5,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "·",
+          "overlapPx": 20,
+          "alpha": 0.77,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.5,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "·",
+          "overlapPx": 20,
+          "alpha": 0.77,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.5,
+          "rowKind": "pass",
+          "pinned": false
+        }
+      ]
+    },
+    "group-open-end": {
+      "attrs": [
+        "data-cues",
+        "data-pin-start",
+        "data-pin-end",
+        "data-scroll-start"
+      ],
+      "scrollLeft": 2897,
+      "scrollW": 3684,
+      "clientW": 787,
+      "pinStart": 260,
+      "pinEnd": 104,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 995,
+          "t": 58,
+          "b": 868,
+          "w": 789,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 994,
+          "t": 59,
+          "b": 156,
+          "w": 787,
+          "h": 97
+        },
+        "footer": {
+          "l": 207,
+          "r": 994,
+          "t": 802,
+          "b": 867,
+          "w": 787,
+          "h": 65
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 994,
+          "t": 156,
+          "b": 797.53125,
+          "w": 787,
+          "h": 641.53125
+        },
+        "scroller": {
+          "l": 207,
+          "r": 994,
+          "t": 156,
+          "b": 797.53125,
+          "w": 787,
+          "h": 641.53125
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 467,
+          "t": 156,
+          "b": 180,
+          "w": 260,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": -2690,
+          "r": 994.15625,
+          "t": 2158.390625,
+          "b": 2190.390625,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 994,
+          "t": 797.53125,
+          "b": 802,
+          "w": 787,
+          "h": 4.46875
+        },
+        "details": [
+          {
+            "l": -2690,
+            "r": 994.15625,
+            "t": 566,
+            "b": 622.390625,
+            "w": 3684.15625,
+            "h": 56.390625,
+            "strip": true
+          }
+        ],
+        "pinStart": 260,
+        "pinEnd": 104
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 56
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 56
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1392.9,
+          "heightPx": 642,
+          "tableRowsBoxPx": 2034,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(0, 212, 170) 3px 0px 0px 0px inset, rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 23,
+        "totalPx": 228,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "header": 1,
+          "strip": 5,
+          "row": 7,
+          "pass": 10
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-start+fade-start",
+          "text": "⚡ LLM calls",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 5.7,
+          "contrastShaded": 1.1,
+          "rowKind": "header",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Share of items solved by at ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.1,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Pass^k over Pass@k: how much",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.1,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "80.0%",
+          "overlapPx": 20.5,
+          "alpha": 0.79,
+          "contrastBase": 10.9,
+          "contrastShaded": 1.5,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "fade-start",
+          "text": "—",
+          "overlapPx": 8.5,
+          "alpha": 0.24,
+          "contrastBase": 7.3,
+          "contrastShaded": 4.8,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "fade-start",
+          "text": "—",
+          "overlapPx": 8.5,
+          "alpha": 0.24,
+          "contrastBase": 7.3,
+          "contrastShaded": 4.8,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "fade-start",
+          "text": "—",
+          "overlapPx": 8.5,
+          "alpha": 0.24,
+          "contrastBase": 7.8,
+          "contrastShaded": 5,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "fade-start",
+          "text": "—",
+          "overlapPx": 8.5,
+          "alpha": 0.24,
+          "contrastBase": 7.3,
+          "contrastShaded": 4.8,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "fade-start",
+          "text": "—",
+          "overlapPx": 8.5,
+          "alpha": 0.24,
+          "contrastBase": 7.8,
+          "contrastShaded": 5,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "fade-start",
+          "text": "—",
+          "overlapPx": 8.5,
+          "alpha": 0.24,
+          "contrastBase": 7.3,
+          "contrastShaded": 4.8,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "fade-start",
+          "text": "—",
+          "overlapPx": 8.5,
+          "alpha": 0.24,
+          "contrastBase": 7.8,
+          "contrastShaded": 5,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Agreement between passes on ",
+          "overlapPx": 7,
+          "alpha": 0.93,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.1,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "fade-start",
+          "text": "0",
+          "overlapPx": 6,
+          "alpha": 0.18,
+          "contrastBase": 8.1,
+          "contrastShaded": 5.8,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "fade-start",
+          "text": "0",
+          "overlapPx": 6,
+          "alpha": 0.18,
+          "contrastBase": 8.1,
+          "contrastShaded": 5.8,
+          "rowKind": "pass",
+          "pinned": false
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,368 @@
+{
+  "net": "none",
+  "width": 1440,
+  "settle": true,
+  "open": 5,
+  "run": "r300",
+  "median": {
+    "firstGroupPlaceholdersMs": 43,
+    "firstGroupRowsMs": 134,
+    "firstGroupStripMs": 134,
+    "requestsAfterClick": 10,
+    "apiKB": 11.61,
+    "cls": 0.2092
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "9ae93258-7352-4dd9-bebe-f3a4204ce656",
+          "placeholdersMs": 41,
+          "rowsMs": 139,
+          "stripMs": 139,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "0bdf2ec6-f74b-4481-8737-548d833f4999",
+          "placeholdersMs": 53,
+          "rowsMs": 2814,
+          "stripMs": 2814,
+          "heightBefore": 2023,
+          "heightPlaceholders": 2388,
+          "heightAfterRows": 2388,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "7d863b3b-f187-4311-98e6-2e66b586ae7b",
+          "placeholdersMs": 50,
+          "rowsMs": 2805,
+          "stripMs": 2805,
+          "heightBefore": 2388,
+          "heightPlaceholders": 2753,
+          "heightAfterRows": 2753,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "f37df5fd-38ab-451c-b9e9-8b0c9e8e4249",
+          "placeholdersMs": 71,
+          "rowsMs": 2910,
+          "stripMs": 2910,
+          "heightBefore": 2753,
+          "heightPlaceholders": 3118,
+          "heightAfterRows": 3118,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "416ed894-0a6c-4fb7-848e-0252aee40143",
+          "placeholdersMs": 56,
+          "rowsMs": 2807,
+          "stripMs": 2807,
+          "heightBefore": 3118,
+          "heightPlaceholders": 3483,
+          "heightAfterRows": 3483,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 10,
+      "passesRequests": 5,
+      "groupMetricsRequests": 5,
+      "apiKB": 11.61,
+      "passesKB": 6.22,
+      "passesTtfbMs": [
+        80,
+        2749,
+        2739,
+        2819,
+        2731
+      ],
+      "passesDoneMs": [
+        124,
+        2963,
+        5785,
+        8720,
+        11548
+      ],
+      "groupTtfbMs": [
+        16,
+        2692,
+        2675,
+        2758,
+        2676
+      ],
+      "groupDoneMs": [
+        96,
+        2907,
+        5722,
+        8659,
+        11494
+      ],
+      "cls": 0.2149,
+      "requestList": [
+        "7352-4dd9-bebe-f3a4204ce656/passes @43-124ms ttfb 80 1.3kB",
+        "d9-bebe-f3a4204ce656/group-metrics?metric=correct&threshold=0.8 @44-96ms ttfb 16 1.1kB",
+        "f74b-4481-8737-548d833f4999/passes @213-2963ms ttfb 2749 1.2kB",
+        "81-8737-548d833f4999/group-metrics?metric=correct&threshold=0.8 @213-2907ms ttfb 2692 1.1kB",
+        "f187-4311-98e6-2e66b586ae7b/passes @3046-5785ms ttfb 2739 1.3kB",
+        "11-98e6-2e66b586ae7b/group-metrics?metric=correct&threshold=0.8 @3046-5722ms ttfb 2675 1.1kB",
+        "38ab-451c-b9e9-8b0c9e8e4249/passes @5900-8720ms ttfb 2819 1.2kB",
+        "1c-b9e9-8b0c9e8e4249/group-metrics?metric=correct&threshold=0.8 @5900-8659ms ttfb 2758 1.1kB",
+        "0a6c-4fb7-848e-0252aee40143/passes @8816-11548ms ttfb 2731 1.2kB",
+        "b7-848e-0252aee40143/group-metrics?metric=correct&threshold=0.8 @8816-11494ms ttfb 2676 1.1kB"
+      ]
+    },
+    {
+      "rep": 1,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "9ae93258-7352-4dd9-bebe-f3a4204ce656",
+          "placeholdersMs": 44,
+          "rowsMs": 132,
+          "stripMs": 132,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "0bdf2ec6-f74b-4481-8737-548d833f4999",
+          "placeholdersMs": 51,
+          "rowsMs": 158,
+          "stripMs": 158,
+          "heightBefore": 2023,
+          "heightPlaceholders": 2388,
+          "heightAfterRows": 2388,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "7d863b3b-f187-4311-98e6-2e66b586ae7b",
+          "placeholdersMs": 47,
+          "rowsMs": 246,
+          "stripMs": 246,
+          "heightBefore": 2388,
+          "heightPlaceholders": 2753,
+          "heightAfterRows": 2753,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "f37df5fd-38ab-451c-b9e9-8b0c9e8e4249",
+          "placeholdersMs": 56,
+          "rowsMs": 148,
+          "stripMs": 148,
+          "heightBefore": 2753,
+          "heightPlaceholders": 3118,
+          "heightAfterRows": 3118,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "416ed894-0a6c-4fb7-848e-0252aee40143",
+          "placeholdersMs": 60,
+          "rowsMs": 177,
+          "stripMs": 177,
+          "heightBefore": 3118,
+          "heightPlaceholders": 3483,
+          "heightAfterRows": 3483,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 10,
+      "passesRequests": 5,
+      "groupMetricsRequests": 5,
+      "apiKB": 11.61,
+      "passesKB": 6.22,
+      "passesTtfbMs": [
+        76,
+        76,
+        183,
+        74,
+        73
+      ],
+      "passesDoneMs": [
+        118,
+        292,
+        555,
+        723,
+        910
+      ],
+      "groupTtfbMs": [
+        18,
+        14,
+        15,
+        15,
+        14
+      ],
+      "groupDoneMs": [
+        107,
+        265,
+        432,
+        712,
+        890
+      ],
+      "cls": 0.2092,
+      "requestList": [
+        "7352-4dd9-bebe-f3a4204ce656/passes @41-118ms ttfb 76 1.3kB",
+        "d9-bebe-f3a4204ce656/group-metrics?metric=correct&threshold=0.8 @42-107ms ttfb 18 1.1kB",
+        "f74b-4481-8737-548d833f4999/passes @206-292ms ttfb 76 1.2kB",
+        "81-8737-548d833f4999/group-metrics?metric=correct&threshold=0.8 @206-265ms ttfb 14 1.1kB",
+        "f187-4311-98e6-2e66b586ae7b/passes @371-555ms ttfb 183 1.3kB",
+        "11-98e6-2e66b586ae7b/group-metrics?metric=correct&threshold=0.8 @371-432ms ttfb 15 1.1kB",
+        "38ab-451c-b9e9-8b0c9e8e4249/passes @647-723ms ttfb 74 1.2kB",
+        "1c-b9e9-8b0c9e8e4249/group-metrics?metric=correct&threshold=0.8 @648-712ms ttfb 15 1.1kB",
+        "0a6c-4fb7-848e-0252aee40143/passes @823-910ms ttfb 73 1.2kB",
+        "b7-848e-0252aee40143/group-metrics?metric=correct&threshold=0.8 @823-890ms ttfb 14 1.1kB"
+      ]
+    },
+    {
+      "rep": 2,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "9ae93258-7352-4dd9-bebe-f3a4204ce656",
+          "placeholdersMs": 43,
+          "rowsMs": 134,
+          "stripMs": 134,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "0bdf2ec6-f74b-4481-8737-548d833f4999",
+          "placeholdersMs": 51,
+          "rowsMs": 240,
+          "stripMs": 240,
+          "heightBefore": 2023,
+          "heightPlaceholders": 2388,
+          "heightAfterRows": 2388,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "7d863b3b-f187-4311-98e6-2e66b586ae7b",
+          "placeholdersMs": 47,
+          "rowsMs": 137,
+          "stripMs": 137,
+          "heightBefore": 2388,
+          "heightPlaceholders": 2753,
+          "heightAfterRows": 2753,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "f37df5fd-38ab-451c-b9e9-8b0c9e8e4249",
+          "placeholdersMs": 55,
+          "rowsMs": 143,
+          "stripMs": 143,
+          "heightBefore": 2753,
+          "heightPlaceholders": 3118,
+          "heightAfterRows": 3118,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        },
+        {
+          "runId": "416ed894-0a6c-4fb7-848e-0252aee40143",
+          "placeholdersMs": 59,
+          "rowsMs": 179,
+          "stripMs": 179,
+          "heightBefore": 3118,
+          "heightPlaceholders": 3483,
+          "heightAfterRows": 3483,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 10,
+      "passesRequests": 5,
+      "groupMetricsRequests": 5,
+      "apiKB": 11.61,
+      "passesKB": 6.22,
+      "passesTtfbMs": [
+        76,
+        176,
+        74,
+        70,
+        74
+      ],
+      "passesDoneMs": [
+        121,
+        379,
+        538,
+        702,
+        873
+      ],
+      "groupTtfbMs": [
+        16,
+        14,
+        14,
+        14,
+        15
+      ],
+      "groupDoneMs": [
+        101,
+        260,
+        523,
+        692,
+        865
+      ],
+      "cls": 0.2092,
+      "requestList": [
+        "7352-4dd9-bebe-f3a4204ce656/passes @44-121ms ttfb 76 1.3kB",
+        "d9-bebe-f3a4204ce656/group-metrics?metric=correct&threshold=0.8 @44-101ms ttfb 16 1.1kB",
+        "f74b-4481-8737-548d833f4999/passes @202-379ms ttfb 176 1.2kB",
+        "81-8737-548d833f4999/group-metrics?metric=correct&threshold=0.8 @203-260ms ttfb 14 1.1kB",
+        "f187-4311-98e6-2e66b586ae7b/passes @463-538ms ttfb 74 1.3kB",
+        "11-98e6-2e66b586ae7b/group-metrics?metric=correct&threshold=0.8 @463-523ms ttfb 14 1.1kB",
+        "38ab-451c-b9e9-8b0c9e8e4249/passes @630-702ms ttfb 70 1.2kB",
+        "1c-b9e9-8b0c9e8e4249/group-metrics?metric=correct&threshold=0.8 @630-692ms ttfb 14 1.1kB",
+        "0a6c-4fb7-848e-0252aee40143/passes @798-873ms ttfb 74 1.2kB",
+        "b7-848e-0252aee40143/group-metrics?metric=correct&threshold=0.8 @799-865ms ttfb 15 1.1kB"
+      ]
+    }
+  ]
+}
