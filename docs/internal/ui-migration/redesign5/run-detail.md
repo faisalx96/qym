@@ -397,3 +397,15 @@ Observation, not fixed (outside the owner's words): at 390 the trace tree rows o
 | F6 | 390 trace rows overlapped retry label and error tag | `rowMain` clips, model and tokens shrink with ellipsis, narrow grid columns 52 / 48 px | no child outside its row, no row over its duration (`R4-3e`) |
 
 Amendment found on the way: the dense count tiers are assigned by `countTiers` (see R1-8), because parity alternation let a rising neighbour collide (sweep N=17).
+
+
+## Round 7 note: owner reversal of the key truncation rule (2026-10-19)
+
+Owner words (round 7, run details 2): "the name of keys for json values output is overlapping with the content, the name should always
+be fully visible." This **reverses** the R3 rule that long keys truncate with a title: R3.4 item 3 (fact keys cut with an ellipsis, raw key in
+`title`), R3-3 (`dt.scrollWidth <= dt.clientWidth` **or** an ellipsis with a title), R3-7 (output keys truncated at 28ch with an ellipsis and a
+title) and R3-21 (`FieldRow` labels cut at their column) no longer hold for keys of data. A key is now always fully visible: it wraps instead of
+ending in an ellipsis, and a value never starts inside or under it (round 7, `redesign7/qa.md` section D2 and decision R7-D1). Decision 10 of
+section 5 above ("the 28ch cap is a guard, not a reproduced bug") is superseded too: the cap is what hid the keys (measured round 7: 4 to 13 truncated
+key rows per item at 1440 / 390, and at 390 an open nested key lost its whole name, key box 0 px wide). The implementation commit of round 7
+changes `DESIGN_LANGUAGE.md` ("Item details": "`FieldRow` labels and `KeyTree` keys are cut at their column (ellipsis, title)") in the same commit.
