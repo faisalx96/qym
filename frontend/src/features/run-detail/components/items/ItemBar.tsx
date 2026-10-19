@@ -1,7 +1,7 @@
 /**
  * The sticky bar that opens an expanded item (round 3 P4): number, verdict, an input preview, Copy link and Collapse.
  * It owns the sticky line while the table header is held above the detail. Its position is a translate set by
- * `useStickyShift` on the item article (the table's scroller is an overflow container, so CSS sticky cannot work here).
+ * `useStickyShift` on the bar itself (the table's scroller is an overflow container, so CSS sticky cannot work here).
  */
 import { Button, CopyButton, Icon, Tag } from '@/ui';
 import type { ItemVerdict } from '../../lib/itemVerdict';

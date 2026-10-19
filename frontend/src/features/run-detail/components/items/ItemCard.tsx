@@ -88,10 +88,15 @@ export function ItemCard({ row }: { row: Row }) {
   const articleRef = useRef<HTMLElement>(null);
   const scroller = useShellScroller();
   const stickyOffset = useStickyOffset();
-  // the bar owns the sticky line while the table header is held above this detail
+  // The bar owns the sticky line while the table header is held above this detail. Native `position: sticky` cannot do it:
+  // the bar sits inside the table's scroller (`overflow: auto`) and `.bodyHost` (`overflow: hidden`), the nearest scroll
+  // containers, so it never sticks to the page scroller (measured round 7: 1,700 px off the line at most). The shift is
+  // therefore written on the bar itself, not on the article: a custom property is inherited, and written on the article it
+  // restyled all of the open item's descendants on every scroll event (25,616 elements styled in 2 s, 78 ms; round 7 D1).
   useStickyShift({
     container: articleRef,
     head: (c) => c.querySelector<HTMLElement>('[data-item-bar]'),
+    shiftTarget: (c) => c.querySelector<HTMLElement>('[data-item-bar]'),
     parent: scroller,
     top: stickyOffset,
     // the article only exists once the details have loaded

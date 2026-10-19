@@ -6,6 +6,12 @@
  *   WIDTH=1440 CPU=1|4 JANK=0|50 (ms of main-thread block every PERIOD ms) PERIOD=120 node d1-bar-jank.mts
  * Fixture: the seeded `jsonKeys` run, item j-01 opened with every output key expanded (a detail about 1,900 px tall), page scroller
  * (`#shell-content`) driven by 120 wheel events of 40 px over 2 s.
+ *   D1-3b (round 7 implementation): BLOCK=400 PRESTUCK=1 node d1-bar-jank.mts. A synchronous main-thread block of BLOCK ms is started with page.evaluate
+ *   (not awaited), then one compositor scroll gesture (Input.synthesizeScrollGesture) runs while the screencast and a trace record. The bar starts stuck
+ *   (PRESTUCK=1: the item begins 100 px above the line). A plain, non-sticky yellow marker in the scroller tells which presented frames moved the page.
+ *   Result: for every presented frame in which the page moved, |bar y - control y| (the control is the compositor's sticky truth); how many of those frames
+ *   fall inside the block window (did headless scroll on the compositor while the main thread was blocked?), and the `ScrollTree::ScrollBy` compositor events
+ *   that the trace holds inside the window.
  * Result: per presented frame offset of the bar and of the control from their reference (the control's y is the compositor's sticky line),
  * frames with |offset| > 1 px, worst offset, presented fps; plus the DOM view (rAF) for comparison.
  */
@@ -18,6 +24,9 @@ const PERIOD = Number(process.env.PERIOD ?? 120);
 const REPS = Number(process.env.REPS ?? 1);
 /** SYNTH=1: one continuous synthesized scroll gesture (a trackpad flick; the compositor resolves the scroll target once and then scrolls on its own thread) instead of 120 separate wheel notches. */
 const SYNTH = process.env.SYNTH === '1';
+/** BLOCK=<ms>: D1-3b, see above. PRESTUCK=1: the item starts above the line so the bar is stuck for the whole gesture. */
+const BLOCK = Number(process.env.BLOCK ?? 0);
+const PRESTUCK = process.env.PRESTUCK === '1' || BLOCK > 0;
 /** TOUCH=1: a touch drag (Input.dispatchTouchEvent): the compositor starts one scroll gesture and keeps scrolling while the main thread is busy, as a trackpad or a phone does. */
 const TOUCH = process.env.TOUCH === '1';
 
@@ -25,7 +34,7 @@ const css = `[data-item-bar]{background:#ff00ff !important;border-color:#ff00ff 
 const browser = await launch();
 const reps: Array<Record<string, unknown>> = [];
 for (let rep = 0; rep < REPS; rep++) {
-  const { ctx, page, cdp } = await (TOUCH ? newPageTouch : newPage)(browser, {
+  const { ctx, page, cdp } = await (TOUCH || BLOCK > 0 ? newPageTouch : newPage)(browser, {
     width: WIDTH, height: 900,
     init: [STORAGE_INIT, `addEventListener('DOMContentLoaded',()=>{const s=document.createElement('style');s.textContent=${JSON.stringify(css)};document.head.appendChild(s);});`],
   });
@@ -34,7 +43,7 @@ for (let rep = 0; rep < REPS; rep++) {
   await card.waitFor();
   await card.getByRole('button', { name: 'Expand all output keys' }).click();
   await page.waitForTimeout(800);
-  const setup = await page.evaluate(() => {
+  const setup = await page.evaluate((pre) => {
     const sc = document.getElementById('shell-content')!;
     const nav = document.querySelector('[data-run-nav]') as HTMLElement | null;
     const filters = document.querySelector('[data-run-filters]') as HTMLElement | null;
@@ -49,10 +58,19 @@ for (let rep = 0; rep < REPS; rep++) {
     const bar = document.querySelector('[data-item-bar]') as HTMLElement;
     const article = bar.closest('article') as HTMLElement;
     const ar = article.getBoundingClientRect();
-    // scroll so the item starts 150 px under the line
-    sc.scrollTop += ar.top - line - 150;
-    return { line, itemH: Math.round(ar.height), barX: Math.round(ar.left + 220), ctlX: Math.round(ctl.getBoundingClientRect().left + 5), scrollMax: sc.scrollHeight - sc.clientHeight };
-  });
+    // scroll so the item starts 150 px under the line (PRESTUCK: 100 px above it, the bar is stuck from the first frame)
+    sc.scrollTop += ar.top - line - (pre ? -100 : 150);
+    if (pre) {
+      // a plain marker (not sticky) tells which presented frames moved the page
+      const mk = document.createElement('div');
+      mk.id = 'r7-mark';
+      mk.style.cssText = `position:absolute;left:${sc.getBoundingClientRect().width - 120}px;top:${sc.scrollTop + 500}px;width:60px;height:12px;background:#ffff00;z-index:60;pointer-events:none`;
+      sc.style.position = 'relative';
+      sc.appendChild(mk);
+    }
+    const mkr = document.getElementById('r7-mark');
+    return { line, itemH: Math.round(ar.height), barX: Math.round(ar.left + 220), ctlX: Math.round(ctl.getBoundingClientRect().left + 5), markX: mkr ? Math.round(mkr.getBoundingClientRect().left + 30) : 0, scrollMax: sc.scrollHeight - sc.clientHeight };
+  }, PRESTUCK);
   await page.waitForTimeout(500);
   if (CPU > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU });
   if (JANK > 0) await page.evaluate(([j, p]) => { setInterval(() => { const t = performance.now(); while (performance.now() - t < j) { /* block */ } }, p); }, [JANK, PERIOD] as const);
@@ -70,7 +88,31 @@ for (let rep = 0; rep < REPS; rep++) {
   });
   await page.mouse.move(Math.min(WIDTH / 2, 700), 500);
   await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 92, maxWidth: WIDTH, maxHeight: 900, everyNthFrame: 1 });
-  if (TOUCH) {
+  let blockWindow: [number, number] | null = null;
+  const traceEv: Array<{ name?: string; ts?: number; dur?: number; ph?: string; tid?: number; args?: Record<string, unknown> }> = [];
+  if (BLOCK > 0) {
+    cdp.on('Tracing.dataCollected', (e: { value: typeof traceEv }) => traceEv.push(...e.value));
+    const tdone = new Promise<void>((r) => cdp.once('Tracing.tracingComplete', () => r()));
+    await cdp.send('Tracing.start', { traceConfig: { includedCategories: ['cc', 'input', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-cc.debug'] }, transferMode: 'ReportEvents' });
+    // a synchronous block started now; the gesture below is dispatched while it runs
+    const blocked = page.evaluate((ms) => { const s = Date.now(); const t = performance.now(); while (performance.now() - t < ms) { /* block */ } return [s, Date.now()] as [number, number]; }, BLOCK);
+    // GESTURE=mouse (default, the brief): Input.synthesizeScrollGesture. A mouse-wheel gesture needs one main-thread hit test, so a blocked main
+    // thread delays its first step (headless shell: the page does not move until the block ends; touch gestures are not synthesized at all here).
+    // GESTURE=touchevents: a touch drag of raw Input.dispatchTouchEvent calls (30 moves x 40 px every 16 ms), the one path the compositor can scroll on its own.
+    if ((process.env.GESTURE ?? 'mouse') === 'touchevents') {
+      const x0 = Math.min(WIDTH / 2, 700);
+      let y = 820;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y }] });
+      for (let i = 0; i < 30; i++) { y -= 24; await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0, y }] }); await page.waitForTimeout(16); }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } else {
+      await cdp.send('Input.synthesizeScrollGesture', { x: Math.min(WIDTH / 2, 700), y: 500, yDistance: -1400, speed: 2800, gestureSourceType: 'mouse', preventFling: true });
+    }
+    blockWindow = await blocked;
+    await page.waitForTimeout(300);
+    await cdp.send('Tracing.end');
+    await tdone;
+  } else if (TOUCH) {
     // 8 touch drags of 15 moves x 40 px (600 px each): every drag is one scroll gesture the compositor can run ahead of the main thread
     const x0 = Math.min(WIDTH / 2, 700);
     for (let g = 0; g < 8; g++) {
@@ -90,9 +132,9 @@ for (let rep = 0; rep < REPS; rep++) {
   // decode: top edge of the magenta bar at barX and of the cyan control at ctlX in every presented frame
   const dec = await ctx.newPage();
   await dec.setContent('<canvas id=c></canvas>');
-  const series: Array<{ t: number; bar: number | null; ctl: number | null }> = await dec.evaluate(
-    async ({ frames, bx, cx }) => {
-      const out: Array<{ t: number; bar: number | null; ctl: number | null }> = [];
+  const series: Array<{ t: number; bar: number | null; ctl: number | null; mark?: number | null }> = await dec.evaluate(
+    async ({ frames, bx, cx, mx }) => {
+      const out: Array<{ t: number; bar: number | null; ctl: number | null; mark?: number | null }> = [];
       const c = document.getElementById('c') as HTMLCanvasElement;
       for (const f of frames) {
         const img = new Image();
@@ -105,11 +147,11 @@ for (let rep = 0; rep < REPS; rep++) {
           for (let y = 0; y < img.height; y++) if (test(d[y * 4]!, d[y * 4 + 1]!, d[y * 4 + 2]!)) return y;
           return null;
         };
-        out.push({ t: f.ts, bar: find(bx, (r, gg, b) => r > 200 && gg < 70 && b > 200), ctl: find(cx, (r, gg, b) => r < 70 && gg > 200 && b > 200) });
+        out.push({ t: f.ts, bar: find(bx, (r, gg, b) => r > 200 && gg < 70 && b > 200), ctl: find(cx, (r, gg, b) => r < 70 && gg > 200 && b > 200), mark: mx ? find(mx, (r, gg, b) => r > 200 && gg > 200 && b < 90) : undefined });
       }
       return out;
     },
-    { frames: shots, bx: setup.barX, cx: setup.ctlX },
+    { frames: shots, bx: setup.barX, cx: setup.ctlX, mx: setup.markX },
   );
   const withBar = series.filter((s) => s.bar != null && s.ctl != null);
   // frames after the bar first reaches the control line (stuck) until it leaves it
@@ -118,8 +160,35 @@ for (let rep = 0; rep < REPS; rep++) {
   const offs = stuckFrames.map((s) => (s.bar as number) - (s.ctl as number));
   const domStuck = (dom as Array<{ bar: number; ctl: number }>).filter((f) => Math.abs(f.bar - f.ctl) <= 1 || f.bar < f.ctl + 400).filter((f) => f.bar < f.ctl + 400 && f.bar > -50);
   const dts = series.slice(1).map((s, i) => (s.t - series[i]!.t) * 1000);
+  let block: Record<string, unknown> | undefined;
+  if (BLOCK > 0 && blockWindow) {
+    const [bs, be] = blockWindow;
+    // frames in which the page moved: the plain marker changed y against the previous presented frame
+    const judged: Array<{ ts: number; off: number; inBlock: boolean }> = [];
+    for (let i = 1; i < series.length; i++) {
+      const a = series[i - 1]!, b = series[i]!;
+      if (b.mark == null || a.mark == null || b.bar == null || b.ctl == null || a.mark === b.mark) continue;
+      judged.push({ ts: b.t, off: b.bar - b.ctl, inBlock: b.t * 1000 >= bs && b.t * 1000 <= be });
+    }
+    // the block in the trace's own clock: the longest main-thread task of about BLOCK ms
+    const long = traceEv.filter((e) => e.ph === 'X' && (e.dur ?? 0) >= BLOCK * 900).sort((x, y) => (y.dur ?? 0) - (x.dur ?? 0))[0];
+    const w0 = long?.ts ?? 0, w1 = long ? long.ts! + long.dur! : 0;
+    const scrollBy = traceEv.filter((e) => e.name && /ScrollBy/.test(e.name) && e.ts != null);
+    const inWin = scrollBy.filter((e) => e.ts! >= w0 && e.ts! <= w1 && e.tid !== long?.tid);
+    block = {
+      blockMs: BLOCK, blockWindowMs: Math.round(be - bs),
+      // screencast timestamps relative to the block's start (ms): the frames presented before, during and after it, and when the page first moved
+      framesBeforeBlock: series.filter((x) => x.t * 1000 < bs).length, framesInBlock: series.filter((x) => x.t * 1000 >= bs && x.t * 1000 <= be).length, framesAfterBlock: series.filter((x) => x.t * 1000 > be).length,
+      firstPageMoveMsAfterBlockStart: judged.length ? Math.round(judged[0]!.ts * 1000 - bs) : null,
+      framesPageMoved: judged.length, framesPageMovedDuringBlock: judged.filter((j) => j.inBlock).length,
+      barOffsetOver1px: judged.filter((j) => Math.abs(j.off) > 1).length, maxBarOffsetPx: Math.max(0, ...judged.map((j) => Math.abs(j.off))),
+      maxBarOffsetDuringBlockPx: Math.max(0, ...judged.filter((j) => j.inBlock).map((j) => Math.abs(j.off))),
+      traceScrollByEvents: scrollBy.length, traceScrollByNames: Array.from(new Set(scrollBy.map((e) => e.name))).slice(0, 4), traceScrollByOffMainThreadDuringBlock: inWin.length, traceBlockFound: Boolean(long),
+      offsets: judged.map((j) => Math.round(j.off)),
+    };
+  }
   reps.push({
-    rep, setup, presentedFrames: series.length, framesWithBothMarkers: withBar.length, stuckFramesJudged: stuckFrames.length,
+    rep, setup, block, presentedFrames: series.length, framesWithBothMarkers: withBar.length, stuckFramesJudged: stuckFrames.length,
     barOffsetPx: { median: Number(median(offs.map(Math.abs)).toFixed(2)), p95: Number(pct(offs.map(Math.abs), 95).toFixed(2)), max: Number(Math.max(0, ...offs.map(Math.abs)).toFixed(2)) },
     framesBarOffsetOver1px: offs.filter((o) => Math.abs(o) > 1).length,
     framesBarOffsetOver8px: offs.filter((o) => Math.abs(o) > 8).length,
@@ -130,4 +199,4 @@ for (let rep = 0; rep < REPS; rep++) {
   await ctx.close();
 }
 await browser.close();
-save(`d1-bar-jank-${WIDTH}-cpu${CPU}-jank${JANK}${TOUCH ? '-touch' : SYNTH ? '-synth' : '-wheel'}`, { width: WIDTH, cpu: CPU, jankMs: JANK, periodMs: PERIOD, reps });
+save(`d1-bar-jank-${WIDTH}-cpu${CPU}-jank${JANK}${BLOCK ? '-block' + BLOCK : TOUCH ? '-touch' : SYNTH ? '-synth' : '-wheel'}`, { width: WIDTH, cpu: CPU, jankMs: JANK, periodMs: PERIOD, reps });

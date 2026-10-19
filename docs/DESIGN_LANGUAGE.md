@@ -480,7 +480,9 @@ is not allowed.
   expanded item it is held above the detail (it stops when its bottom touches the detail's top, scrolls away, and returns to the line
   when the line crosses the detail's bottom; `useStickyShift` takes the detail spans, pure geometry in `stickyShift.ts`). The
   expanded item starts with an `ItemBar` (`--row-compact`, opaque, number, verdict, input preview, Copy link, Collapse) that
-  takes the sticky line. The table scroller is an overflow container, so the bar is translated by the same hook, not CSS sticky.
+  takes the sticky line. The table scroller is an overflow container, so the bar is translated by the same hook, not CSS sticky;
+  the hook writes `--head-shift` on the bar itself (a custom property is inherited: written on the item it restyled every descendant on every
+  scroll event), and the bar is its own layer only while it is shifted (round 7, D1).
 - **Item details** (round 3 P5): the expanded item is `direction: ltr` and left anchored: Input, Expected and Tags are
   `FieldRow labelAnchor="start"` (label column `--field-label-width`, the value block as wide as its text up to
   `--field-measure`; only the value carries `dir`), then the Output region, a full-width divider (1px `--border-strong`, 20px
