@@ -12,6 +12,7 @@ import {
   openRuns,
   rowOf,
   table,
+  withoutPrefetch,
 } from './support';
 
 const NAME = 'rag-answer-v7';
@@ -47,6 +48,8 @@ const settle = (page: Page) =>
 
 async function open(page: Page, request: APIRequestContext, opts: Parameters<typeof seedRepeat>[1] = {}) {
   const s = await seedRepeat(request, opts);
+  // the loading and request-count cases below are the click-before-prefetch path; the prefetch has its own spec (e2e/perf)
+  await withoutPrefetch(page);
   await openRuns(page, s.project.slug);
   return s;
 }

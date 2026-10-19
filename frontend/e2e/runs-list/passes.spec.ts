@@ -1,7 +1,15 @@
 /** J6 / §8.7: expanding a repeat run: passes, group metrics, select mode, pass delete. */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { BOOL, LOWER, SCORE, seedRun } from './seed';
-import { clickBox, freshProject, openRuns, rowOf, openPassMenu, deletePassFromMenu } from './support';
+import {
+  clickBox,
+  freshProject,
+  openRuns,
+  rowOf,
+  openPassMenu,
+  deletePassFromMenu,
+  withoutPrefetch,
+} from './support';
 
 const NAME = 'summarize-repeat-done';
 
@@ -17,6 +25,7 @@ async function seedRepeat(page: Page, request: APIRequestContext) {
     samples: 3,
     status: 'COMPLETED',
   });
+  await withoutPrefetch(page); // these tests count the requests an open makes: the prefetch has its own spec (e2e/perf)
   await openRuns(page, s.project.slug);
   return s;
 }

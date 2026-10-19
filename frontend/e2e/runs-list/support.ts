@@ -49,6 +49,17 @@ export const dataRows = (page: Page) =>
     '[data-testid="runs-table"] tbody tr[data-run-id], [data-testid="runs-table"] li[data-run-id]',
   );
 
+/**
+ * Turn the runs page's background prefetch of passes off (`navigator.connection.saveData`, the reader's own switch), so a
+ * click on a chevron is the first request for that run: the path of a run whose prefetch has not started (round 7, Q2).
+ * Call it before `openRuns` / `page.goto`.
+ */
+export async function withoutPrefetch(page: Page): Promise<void> {
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'connection', { configurable: true, value: { saveData: true } }),
+  );
+}
+
 export async function openRuns(page: Page, slug: string, qs = ''): Promise<void> {
   await page.goto(runsUrl(slug, qs));
   await expect(table(page)).toBeVisible();

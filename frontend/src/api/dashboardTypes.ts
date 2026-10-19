@@ -355,7 +355,10 @@ export interface GroupMetrics {
     consistency: number | null;
     reliability: number | null;
   } | null;
+  /** The bootstrap curve: only the default view carries these three (the strip asks for `view=group`). */
   band?: Record<string, unknown>;
+  distribution?: number[];
+  uncertainty?: Record<string, unknown>;
   error?: string;
 }
 

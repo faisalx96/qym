@@ -41,6 +41,7 @@ import type { ColumnDef } from './columns';
 import { useRunsCtx } from './context';
 import { isActiveRun } from './polling';
 import { PassGroupStrip } from './passes/PassGroupStrip';
+import { usePassesPrefetch } from './passes/usePassesPrefetch';
 import {
   ErrorRetry,
   IssuesCell,
@@ -261,7 +262,7 @@ const runName = (r: RunRow) => r.external_run_id || r.run_name || r.run_id.slice
 
 export function RunsTable(p: RunsTableProps) {
   const wide = useWideDefault();
-  const { slug: ctxSlug, listContext } = useRunsCtx();
+  const { slug: ctxSlug, listContext, metricTypes: prefetchMetricTypes } = useRunsCtx();
   const navigate = useNavigate();
   const toast = useToast();
   const del = useDeletePasses(p.slug);
@@ -273,6 +274,8 @@ export function RunsTable(p: RunsTableProps) {
     setChoice(m);
     writeStoredMetric(memSlug, m);
   };
+  // Warm the passes and the strip statistics of the page's finished repeat runs once the list has settled (round 7, Q2)
+  usePassesPrefetch(p.rows, choice, prefetchMetricTypes);
 
   const runRows = useMemo<TableRow[]>(
     () => p.rows.map((row) => ({ kind: 'run' as const, key: row.run_id, row })),

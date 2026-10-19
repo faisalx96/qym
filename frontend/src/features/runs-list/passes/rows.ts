@@ -31,9 +31,13 @@ export interface PassesState {
   refetch: () => unknown;
 }
 
-/** The loading placeholders: as many as the run has passes (1..10), so the table does not change height. */
+/**
+ * The loading placeholders: as many as the run has passes (1..20), so the table does not change height when the rows
+ * arrive. A run of more than 20 passes (rare) gains the difference then; 19 passes no longer jump by 288 px (round 7, Q2-9).
+ */
+export const LOADING_ROWS_MAX = 20;
 export function loadingCount(samples: number): number {
-  return Math.max(1, Math.min(10, samples));
+  return Math.max(1, Math.min(LOADING_ROWS_MAX, samples));
 }
 
 export function childRowsOf(

@@ -6,12 +6,10 @@ import { useState } from 'react';
 import type { RunRow } from '@/api/dashboardTypes';
 import { useGroupMetrics, useRunPasses } from '@/api/dashboard';
 import { HelpMarker, Select, Text } from '@/ui';
-import { metricDirection } from '@/lib/metrics';
-import { defaultMetricName, defaultPassThreshold, groupStatRule, toChartRun } from '../chartModel';
 import { useRunsCtx } from '../context';
+import { groupChoiceFor } from './groupQuery';
 import { PassStats, statDefinitions } from './PassStats';
 import { PassThreshold } from './PassThreshold';
-import { resolveMetric } from './rows';
 import styles from './PassGroupStrip.module.css';
 
 export function PassGroupStrip({
@@ -26,34 +24,29 @@ export function PassGroupStrip({
 }) {
   const { metricTypes } = useRunsCtx();
   const passesQ = useRunPasses(row.run_id);
-  const scoreMetrics = (passesQ.data?.metrics ?? row.metrics).filter((m) => metricTypes[m] !== 'numeric');
-  const activeMetric = resolveMetric(
-    remembered,
+  // the metric and threshold a fresh strip opens with come from the row alone (the page prefetches the same request)
+  const {
     scoreMetrics,
-    defaultMetricName(scoreMetrics, row.metric_specs) ?? null,
-  );
-  const rule = activeMetric ? groupStatRule([toChartRun(row)], activeMetric) : null;
+    metric: activeMetric,
+    direction: dir,
+    threshold: defaultThreshold,
+  } = groupChoiceFor(row, remembered, metricTypes, passesQ.data?.metrics);
   const [thresholds, setThresholds] = useState<Record<string, number>>({});
-  const dir = metricDirection(row.metric_specs[activeMetric ?? '']);
-  const defaultThreshold =
-    rule?.threshold ?? defaultPassThreshold(activeMetric ? row.metric_specs[activeMetric] : undefined, dir);
   const activeThreshold = (activeMetric ? thresholds[activeMetric] : undefined) ?? defaultThreshold;
+  // `view=group`: the five statistics this strip shows, none of the bootstrap curve the run page reads (round 7, Q2)
+  const wantsGroup = Boolean(activeMetric) && row.samples > 1;
   const groupQ = useGroupMetrics(row.run_id, activeMetric, activeThreshold, {
-    enabled: Boolean(activeMetric) && row.samples > 1,
+    enabled: wantsGroup,
+    view: 'group',
   });
   const g = groupQ.data?.group ?? null;
-  if (passesQ.isPending)
-    return (
-      <div className={styles.strip} role="group" aria-label="Group metrics" aria-busy="true">
-        <Text variant="sm" tone="muted" as="span">
-          Loading group metrics…
-        </Text>
-      </div>
-    );
+  // The frame is always the strip's own layout (round 7, Q2-9): while the passes or the statistics are on their way the
+  // labels, the select and the threshold are real and the values are skeletons, so the group never changes height.
+  const loading = g === null && !groupQ.isError && (passesQ.isPending || (wantsGroup && groupQ.isPending));
   const k = g?.k ?? row.samples;
   const items = g?.total_items ?? row.total_items;
   return (
-    <div className={styles.strip} role="group" aria-label="Group metrics">
+    <div className={styles.strip} role="group" aria-label="Group metrics" aria-busy={loading || undefined}>
       <span className={styles.title}>
         <Text variant="md" as="span">
           Passes
@@ -99,7 +92,7 @@ export function PassGroupStrip({
           {groupQ.error instanceof Error ? groupQ.error.message : 'request failed'}
         </Text>
       ) : (
-        <PassStats group={g} k={k} dir={dir} busy={groupQ.isFetching} />
+        <PassStats group={g} k={k} dir={dir} busy={groupQ.isFetching} loading={loading} />
       )}
       <HelpMarker label="group metrics">
         <dl className={styles.defs}>
