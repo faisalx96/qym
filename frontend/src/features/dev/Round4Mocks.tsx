@@ -356,7 +356,7 @@ function columnsFor(opts: {
 
 /* ─────────────── the group metrics strip: ONE full-width row under the passes ─────────────── */
 
-function Strip({ k = 3, dim = false }: { k?: number; dim?: boolean }) {
+export function Strip({ k = 3, dim = false }: { k?: number; dim?: boolean }) {
   const stats: Array<[string, number | null, string]> = [
     [`Pass@${k}`, 0.875, 'Share of items solved by at least one of the k passes at the threshold.'],
     [`Pass^${k}`, 0.625, 'Share of items solved by every pass.'],
@@ -407,7 +407,7 @@ function Strip({ k = 3, dim = false }: { k?: number; dim?: boolean }) {
 
 /* ───────────────────────────── desktop table mock ───────────────────────────── */
 
-function TableMock({
+export function TableMock({
   rows,
   stripOn,
   open,
