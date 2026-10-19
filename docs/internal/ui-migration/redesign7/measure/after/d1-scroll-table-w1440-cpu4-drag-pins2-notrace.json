@@ -1,0 +1,199 @@
+{
+  "target": "table",
+  "width": 1440,
+  "cpu": 4,
+  "mode": "drag",
+  "pins": 2,
+  "median": {
+    "droppedFrames": 12,
+    "worstFrameMs": 183.4000000000001,
+    "longTasksOver50ms": 6,
+    "reactCommits": 11,
+    "barMaxErrPx": 0,
+    "barFramesOver1px": 0,
+    "pinnedMaxYErrPx": 0,
+    "pinnedFramesOver1px": 0
+  },
+  "runs": [
+    {
+      "rep": 0,
+      "probe": {
+        "range": 28693,
+        "scrollTop": 3195,
+        "stickyElements": 110,
+        "pinnedCellsInDom": 110,
+        "rowsMounted": 20,
+        "detailElements": 0
+      },
+      "frames": 274,
+      "elapsedMs": 5185,
+      "droppedFrames": 16,
+      "worstFrameMs": 166.5999999999999,
+      "fpsMedian": 59.9,
+      "longTasksOver50ms": 7,
+      "reactCommits": 11,
+      "barFramesJudged": 0,
+      "barMaxErrPx": 0,
+      "barFramesOver1px": 0,
+      "pinnedFramesJudged": 274,
+      "pinnedMaxYErrPx": 0,
+      "pinnedFramesOver1px": 0,
+      "cdp": {
+        "recalcStyle": 34,
+        "recalcStyleMs": 182.9,
+        "layouts": 8,
+        "layoutMs": 10,
+        "scriptMs": 384.4,
+        "taskMs": 1438.2
+      },
+      "trace": {
+        "updateLayoutTree": {
+          "n": 0,
+          "ms": 0,
+          "elementsStyled": 0,
+          "maxElementsOneRecalc": 0
+        },
+        "layout": {
+          "n": 0,
+          "ms": 0
+        },
+        "paint": {
+          "n": 0,
+          "ms": 0,
+          "areaMpx": 0
+        },
+        "layerize": 0,
+        "prePaint": 0,
+        "commit": 0,
+        "scrollDispatch": {
+          "n": 0,
+          "medianMs": null
+        }
+      },
+      "layers": {
+        "total": 69,
+        "drawing": 65
+      }
+    },
+    {
+      "rep": 1,
+      "probe": {
+        "range": 28693,
+        "scrollTop": 3195,
+        "stickyElements": 110,
+        "pinnedCellsInDom": 110,
+        "rowsMounted": 20,
+        "detailElements": 0
+      },
+      "frames": 272,
+      "elapsedMs": 5136,
+      "droppedFrames": 12,
+      "worstFrameMs": 183.4000000000001,
+      "fpsMedian": 59.9,
+      "longTasksOver50ms": 6,
+      "reactCommits": 11,
+      "barFramesJudged": 0,
+      "barMaxErrPx": 0,
+      "barFramesOver1px": 0,
+      "pinnedFramesJudged": 272,
+      "pinnedMaxYErrPx": 0,
+      "pinnedFramesOver1px": 0,
+      "cdp": {
+        "recalcStyle": 28,
+        "recalcStyleMs": 177.8,
+        "layouts": 8,
+        "layoutMs": 8.3,
+        "scriptMs": 309.7,
+        "taskMs": 1230.6
+      },
+      "trace": {
+        "updateLayoutTree": {
+          "n": 0,
+          "ms": 0,
+          "elementsStyled": 0,
+          "maxElementsOneRecalc": 0
+        },
+        "layout": {
+          "n": 0,
+          "ms": 0
+        },
+        "paint": {
+          "n": 0,
+          "ms": 0,
+          "areaMpx": 0
+        },
+        "layerize": 0,
+        "prePaint": 0,
+        "commit": 0,
+        "scrollDispatch": {
+          "n": 0,
+          "medianMs": null
+        }
+      },
+      "layers": {
+        "total": 69,
+        "drawing": 65
+      }
+    },
+    {
+      "rep": 2,
+      "probe": {
+        "range": 28693,
+        "scrollTop": 3195,
+        "stickyElements": 110,
+        "pinnedCellsInDom": 110,
+        "rowsMounted": 20,
+        "detailElements": 0
+      },
+      "frames": 271,
+      "elapsedMs": 5068,
+      "droppedFrames": 11,
+      "worstFrameMs": 183.4000000000001,
+      "fpsMedian": 59.9,
+      "longTasksOver50ms": 6,
+      "reactCommits": 11,
+      "barFramesJudged": 0,
+      "barMaxErrPx": 0,
+      "barFramesOver1px": 0,
+      "pinnedFramesJudged": 271,
+      "pinnedMaxYErrPx": 0,
+      "pinnedFramesOver1px": 0,
+      "cdp": {
+        "recalcStyle": 29,
+        "recalcStyleMs": 191.9,
+        "layouts": 8,
+        "layoutMs": 11.3,
+        "scriptMs": 295.1,
+        "taskMs": 1121.5
+      },
+      "trace": {
+        "updateLayoutTree": {
+          "n": 0,
+          "ms": 0,
+          "elementsStyled": 0,
+          "maxElementsOneRecalc": 0
+        },
+        "layout": {
+          "n": 0,
+          "ms": 0
+        },
+        "paint": {
+          "n": 0,
+          "ms": 0,
+          "areaMpx": 0
+        },
+        "layerize": 0,
+        "prePaint": 0,
+        "commit": 0,
+        "scrollDispatch": {
+          "n": 0,
+          "medianMs": null
+        }
+      },
+      "layers": {
+        "total": 69,
+        "drawing": 65
+      }
+    }
+  ]
+}

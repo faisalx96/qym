@@ -1,0 +1,53 @@
+{
+  "width": 1024,
+  "states": {
+    "header-stuck": {
+      "line": 165,
+      "stuck": true,
+      "held": false,
+      "shift": "",
+      "headerTop": 165,
+      "headerAboveLinePx": 0,
+      "headerLeftBeyondCardPx": 0,
+      "headerRightBeyondScrollerPx": 620.5,
+      "headerBottomBorder": "0px none rgb(59, 59, 84)",
+      "barLeftBeyondCardPx": null,
+      "barRightBeyondCardPx": null,
+      "barTop": null,
+      "overToolbarPx": 0,
+      "overFooterPx": 0,
+      "card": {
+        "l": 212,
+        "r": 989
+      },
+      "scroller": {
+        "l": 213,
+        "r": 988
+      }
+    },
+    "item-bar-stuck": {
+      "line": 165,
+      "stuck": true,
+      "held": true,
+      "shift": "",
+      "headerTop": -238,
+      "headerAboveLinePx": 402.5,
+      "headerLeftBeyondCardPx": 0,
+      "headerRightBeyondScrollerPx": 620.5,
+      "headerBottomBorder": "0px none rgb(59, 59, 84)",
+      "barLeftBeyondCardPx": 0,
+      "barRightBeyondCardPx": 0,
+      "barTop": 165,
+      "overToolbarPx": 0,
+      "overFooterPx": 0,
+      "card": {
+        "l": 212,
+        "r": 989
+      },
+      "scroller": {
+        "l": 213,
+        "r": 988
+      }
+    }
+  }
+}

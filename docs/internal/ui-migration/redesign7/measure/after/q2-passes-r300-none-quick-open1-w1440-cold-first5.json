@@ -1,0 +1,206 @@
+{
+  "net": "none",
+  "width": 1440,
+  "settle": false,
+  "open": 1,
+  "run": "r300",
+  "median": {
+    "firstGroupPlaceholdersMs": 58,
+    "firstGroupRowsMs": 201,
+    "firstGroupStripMs": 171,
+    "requestsAfterClick": 9,
+    "apiKB": 3.4,
+    "cls": 0.1373
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "7ae93f40-b222-4363-978c-d02ce1795d01",
+          "placeholdersMs": 57,
+          "rowsMs": 206,
+          "stripMs": 171,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 10,
+      "passesRequests": 5,
+      "groupMetricsRequests": 5,
+      "apiKB": 4.64,
+      "passesKB": 2.49,
+      "passesTtfbMs": [
+        85,
+        null,
+        401,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        275,
+        null,
+        778,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        13,
+        81,
+        58,
+        57,
+        null
+      ],
+      "groupDoneMs": [
+        259,
+        452,
+        436,
+        515,
+        null
+      ],
+      "cls": 0.1402,
+      "requestList": [
+        "b222-4363-978c-d02ce1795d01/passes @171-275ms ttfb 85 1.2kB",
+        "63-978c-d02ce1795d01/group-metrics?metric=correct&threshold=0.8&view=group @171-259ms ttfb 13 0.6kB",
+        "60a3-43a0-94f0-00a24e1094a4/passes @371-NaNms ttfb NaN 0.0kB",
+        "a0-94f0-00a24e1094a4/group-metrics?metric=correct&threshold=0.8&view=group @371-452ms ttfb 81 0.5kB",
+        "8c35-4099-9077-bb54b2c6ad69/passes @371-778ms ttfb 401 1.2kB",
+        "99-9077-bb54b2c6ad69/group-metrics?metric=correct&threshold=0.8&view=group @371-436ms ttfb 58 0.5kB",
+        "5bf9-47fa-a5b1-fdc30a3fb939/passes @436-NaNms ttfb NaN 0.0kB",
+        "fa-a5b1-fdc30a3fb939/group-metrics?metric=correct&threshold=0.8&view=group @453-515ms ttfb 57 0.5kB",
+        "e5b2-4039-b25d-1e074b8d14d2/passes @515-NaNms ttfb NaN 0.0kB",
+        "39-b25d-1e074b8d14d2/group-metrics?metric=correct&threshold=0.8&view=group @779-NaNms ttfb NaN 0.0kB"
+      ]
+    },
+    {
+      "rep": 1,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "7ae93f40-b222-4363-978c-d02ce1795d01",
+          "placeholdersMs": 58,
+          "rowsMs": 201,
+          "stripMs": 168,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 9,
+      "passesRequests": 5,
+      "groupMetricsRequests": 4,
+      "apiKB": 3.4,
+      "passesKB": 1.25,
+      "passesTtfbMs": [
+        81,
+        null,
+        null,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        226,
+        null,
+        null,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        13,
+        73,
+        63,
+        37
+      ],
+      "groupDoneMs": [
+        208,
+        411,
+        408,
+        458
+      ],
+      "cls": 0.1373,
+      "requestList": [
+        "b222-4363-978c-d02ce1795d01/passes @124-226ms ttfb 81 1.2kB",
+        "63-978c-d02ce1795d01/group-metrics?metric=correct&threshold=0.8&view=group @124-208ms ttfb 13 0.6kB",
+        "60a3-43a0-94f0-00a24e1094a4/passes @338-NaNms ttfb NaN 0.0kB",
+        "a0-94f0-00a24e1094a4/group-metrics?metric=correct&threshold=0.8&view=group @338-411ms ttfb 73 0.5kB",
+        "8c35-4099-9077-bb54b2c6ad69/passes @339-NaNms ttfb NaN 0.0kB",
+        "99-9077-bb54b2c6ad69/group-metrics?metric=correct&threshold=0.8&view=group @339-408ms ttfb 63 0.5kB",
+        "5bf9-47fa-a5b1-fdc30a3fb939/passes @409-NaNms ttfb NaN 0.0kB",
+        "fa-a5b1-fdc30a3fb939/group-metrics?metric=correct&threshold=0.8&view=group @412-458ms ttfb 37 0.5kB",
+        "e5b2-4039-b25d-1e074b8d14d2/passes @458-NaNms ttfb NaN 0.0kB"
+      ]
+    },
+    {
+      "rep": 2,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "7ae93f40-b222-4363-978c-d02ce1795d01",
+          "placeholdersMs": 60,
+          "rowsMs": 173,
+          "stripMs": 173,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 2
+        }
+      ],
+      "requestsAfterClick": 9,
+      "passesRequests": 5,
+      "groupMetricsRequests": 4,
+      "apiKB": 3.4,
+      "passesKB": 1.25,
+      "passesTtfbMs": [
+        87,
+        null,
+        null,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        216,
+        null,
+        null,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        18,
+        38,
+        30,
+        192
+      ],
+      "groupDoneMs": [
+        201,
+        417,
+        402,
+        611
+      ],
+      "cls": 0.1307,
+      "requestList": [
+        "b222-4363-978c-d02ce1795d01/passes @115-216ms ttfb 87 1.2kB",
+        "63-978c-d02ce1795d01/group-metrics?metric=correct&threshold=0.8&view=group @115-201ms ttfb 18 0.6kB",
+        "60a3-43a0-94f0-00a24e1094a4/passes @350-NaNms ttfb NaN 0.0kB",
+        "a0-94f0-00a24e1094a4/group-metrics?metric=correct&threshold=0.8&view=group @350-417ms ttfb 38 0.5kB",
+        "8c35-4099-9077-bb54b2c6ad69/passes @350-NaNms ttfb NaN 0.0kB",
+        "99-9077-bb54b2c6ad69/group-metrics?metric=correct&threshold=0.8&view=group @351-402ms ttfb 30 0.5kB",
+        "5bf9-47fa-a5b1-fdc30a3fb939/passes @418-NaNms ttfb NaN 0.0kB",
+        "fa-a5b1-fdc30a3fb939/group-metrics?metric=correct&threshold=0.8&view=group @418-611ms ttfb 192 0.5kB",
+        "e5b2-4039-b25d-1e074b8d14d2/passes @612-NaNms ttfb NaN 0.0kB"
+      ]
+    }
+  ]
+}

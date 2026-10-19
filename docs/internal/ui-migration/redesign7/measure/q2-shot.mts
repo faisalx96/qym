@@ -9,5 +9,5 @@ await page.goto(`${BASE}/projects/${r7.slug}`);
 await page.locator('[data-testid="runs-table"] tbody tr[data-run-id]').first().waitFor();
 await page.getByRole('button', { name: /^Expand 10 passes of/ }).first().click();
 await page.waitForTimeout(600);
-await page.screenshot({ path: path.join(shotsDir, `current-q2-loading-${WIDTH}.png`), clip: { x: 200, y: 120, width: WIDTH - 200, height: 520 } });
+await page.screenshot({ path: path.join(shotsDir, `${process.env.SHOTS ?? 'current'}-q2-loading-${WIDTH}.png`), clip: { x: 200, y: 120, width: WIDTH - 200, height: 520 } });
 await browser.close();

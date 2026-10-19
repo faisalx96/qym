@@ -1,0 +1,107 @@
+{
+  "net": "none",
+  "width": 1440,
+  "settle": true,
+  "open": 1,
+  "run": "r1200",
+  "median": {
+    "firstGroupPlaceholdersMs": 52,
+    "firstGroupRowsMs": 174,
+    "firstGroupStripMs": 52,
+    "requestsAfterClick": 0,
+    "apiKB": 0,
+    "cls": 0.0887
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "listApiAtLoad": 36,
+      "groups": [
+        {
+          "runId": "883c6f05-adc3-47a4-ba92-e998ef9f1e67",
+          "placeholdersMs": 52,
+          "rowsMs": 263,
+          "stripMs": 52,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.083,
+      "requestList": []
+    },
+    {
+      "rep": 1,
+      "listApiAtLoad": 36,
+      "groups": [
+        {
+          "runId": "883c6f05-adc3-47a4-ba92-e998ef9f1e67",
+          "placeholdersMs": 49,
+          "rowsMs": 122,
+          "stripMs": 49,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.0926,
+      "requestList": []
+    },
+    {
+      "rep": 2,
+      "listApiAtLoad": 36,
+      "groups": [
+        {
+          "runId": "883c6f05-adc3-47a4-ba92-e998ef9f1e67",
+          "placeholdersMs": 52,
+          "rowsMs": 174,
+          "stripMs": 52,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.0887,
+      "requestList": []
+    }
+  ]
+}

@@ -30,6 +30,8 @@ window.__edge = (hostSel) => {
   if (bodyHost && bodyHost.hasAttribute('data-cues')) {
     for (const p of ['::before', '::after']) {
       const cs = getComputedStyle(bodyHost, p);
+      // round 7: the fades are gone, a pseudo-element with no content is not a cue (its computed opacity would read 1)
+      if (cs.content === 'none' || cs.content === 'normal') continue;
       const w = parseFloat(cs.width) || 0;
       const left = p === '::before' ? hb.l + pinStart : hb.r - pinEnd - w;
       cues.push({ kind: 'fade-' + (p === '::before' ? 'start' : 'end'), rect: { l: left, r: left + w, t: hb.t, b: hb.b, w, h: hb.b - hb.t }, opacity: parseFloat(cs.opacity), display: cs.display, zIndex: cs.zIndex, bg: cs.backgroundImage.slice(0, 80), borderInline: '0/0', shade: true, line: false });
@@ -92,7 +94,8 @@ window.__edge = (hostSel) => {
   }
   // the line the pinned cells draw themselves: coverage of the pinned-edge cells of each side, and the gaps in it (rows with no pinned cell)
   const lineOf = (side) => {
-    const cells = edgeCells.filter((c) => c.getAttribute('data-pin-edge') === side).map((c) => c.getBoundingClientRect()).filter((r) => r.height > 0).sort((a, b) => a.top - b.top);
+    // (round 7: tables nested in an expanded item draw their own line; the line of THIS table is the cells outside the detail rows)
+    const cells = edgeCells.filter((c) => c.getAttribute('data-pin-edge') === side && !c.closest('tr[data-detail-row]')).map((c) => c.getBoundingClientRect()).filter((r) => r.height > 0).sort((a, b) => a.top - b.top);
     if (!cells.length) return null;
     const gaps = [];
     for (let i = 1; i < cells.length; i++) { const g = cells[i].top - cells[i - 1].bottom; if (g > 1) gaps.push(Math.round(g)); }
