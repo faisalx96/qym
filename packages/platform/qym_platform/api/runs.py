@@ -5,7 +5,7 @@ import os
 import re
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
@@ -4439,6 +4439,7 @@ def run_group_metrics(
     run_id: str,
     metric: Optional[str] = Query(None),
     threshold: Optional[float] = Query(None),
+    view: Optional[Literal["group"]] = Query(None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
@@ -4446,6 +4447,13 @@ def run_group_metrics(
 
     All passes are stored, so any pass@k / pass^k for k <= samples is computed
     on demand — reduction is a display concern, never a data commitment.
+
+    ``view=group`` returns only the group set (Pass@k, Pass^k, Avg@k, Consistency,
+    Reliability): what the runs-table strip shows. It never calls
+    ``cached_repeat_analysis``, so it is a plain read of the stored passes: no
+    bootstrap runs and no ``run_metric_analyses`` row is written (round 7, Q2).
+    Without ``view`` the response is the full one (band, distribution,
+    uncertainty) the run page uses; ``group`` is the same in both.
     """
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
@@ -4553,6 +4561,16 @@ def run_group_metrics(
         # Every pass errored: no average or best score, as the run mean (0
         # would read as this lower-is-better metric's best value).
         stats["avg_at_k"] = stats["max_at_k"] = None
+    if view == "group":
+        return {
+            "run_id": run.id,
+            "metric": metric_name,
+            "direction": direction,
+            "threshold": threshold,
+            "samples": samples,
+            "report_k": report_k,
+            "group": stats,
+        }
     analysis = cached_repeat_analysis(
         db,
         run_id=run.id,
