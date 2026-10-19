@@ -72,7 +72,11 @@ export interface PrefetchUnit {
   cancel: () => void;
 }
 
-/** A queue of requests started in order, `concurrency` at a time; pure (no React, no query client). */
+/**
+ * A queue of requests started in order, `concurrency` at a time; pure (no React, no query client). While `gate()` says no it
+ * starts nothing: the page uses it to let a click's own request through (a reader waiting on a group must not share the server
+ * with a queue that keeps refilling; measured round 7: a 1,200-item run opened right after the list took 1.8 s instead of 0.5 s).
+ */
 export class PrefetchQueue {
   private pending: PrefetchUnit[];
   private active = new Set<PrefetchUnit>();
@@ -84,6 +88,7 @@ export class PrefetchQueue {
   constructor(
     units: PrefetchUnit[],
     private readonly concurrency = PREFETCH_CONCURRENCY,
+    private readonly gate: () => boolean = () => true,
   ) {
     this.pending = [...units];
   }
@@ -100,6 +105,11 @@ export class PrefetchQueue {
     this.pump();
   }
 
+  /** The gate may have opened: start what fits. */
+  poke(): void {
+    this.pump();
+  }
+
   /** Drops what has not started; cancels what is in flight for runs that are not in `keep`. */
   cancel(keep?: ReadonlySet<string>): void {
     if (!keep) this.stopped = true;
@@ -108,7 +118,7 @@ export class PrefetchQueue {
   }
 
   private pump(): void {
-    while (!this.stopped && this.active.size < this.concurrency && this.pending.length) {
+    while (!this.stopped && this.active.size < this.concurrency && this.pending.length && this.gate()) {
       const unit = this.pending.shift()!;
       this.active.add(unit);
       this.started += 1;
@@ -148,13 +158,14 @@ export function usePassesPrefetch(
   useEffect(() => {
     latest.current = { jobs, pageIds: new Set(rows.map((r) => r.run_id)) };
   });
-  const queue = useRef<{ key: string; queue: PrefetchQueue } | null>(null);
+  const queue = useRef<{ key: string; queue: PrefetchQueue; unsubscribe: () => void } | null>(null);
   const cancelIdle = useRef<(() => void) | null>(null);
 
   // a new plan (page, filter, sort, time range, metric) replaces the old one at once
   useEffect(() => {
     if (queue.current && queue.current.key !== planKey) {
       queue.current.queue.cancel(latest.current.pageIds);
+      queue.current.unsubscribe();
       queue.current = null;
     }
     cancelIdle.current?.();
@@ -187,8 +198,16 @@ export function usePassesPrefetch(
           : [];
         return [passes, ...group];
       });
-      const q = new PrefetchQueue(units);
-      queue.current = { key: planKey, queue: q };
+      // A request somebody is waiting for (a query with an observer: a group the reader opened) goes first: the queue starts
+      // nothing while one is in flight and picks up again when it ends.
+      const interactive = () =>
+        qc
+          .getQueryCache()
+          .findAll({ queryKey: ['run'] })
+          .some((query) => query.state.fetchStatus === 'fetching' && query.getObserversCount() > 0);
+      const q = new PrefetchQueue(units, PREFETCH_CONCURRENCY, () => !interactive());
+      const unsubscribe = qc.getQueryCache().subscribe(() => q.poke());
+      queue.current = { key: planKey, queue: q, unsubscribe };
       q.start();
     });
     return () => {
@@ -202,6 +221,7 @@ export function usePassesPrefetch(
   useEffect(
     () => () => {
       queue.current?.queue.cancel();
+      queue.current?.unsubscribe();
       queue.current = null;
     },
     [],

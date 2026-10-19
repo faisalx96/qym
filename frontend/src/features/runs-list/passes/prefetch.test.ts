@@ -190,6 +190,20 @@ describe('PrefetchQueue', () => {
     expect(started).toEqual(['a', 'b', 'c', 'd']); // nothing new starts after the cancel
   });
 
+  it('starts nothing while its gate is closed and picks up again when poked', async () => {
+    const started: string[] = [];
+    let open = false;
+    const units = ['a', 'b', 'c'].map((id) => unit(id, started, []));
+    const q = new PrefetchQueue(units, PREFETCH_CONCURRENCY, () => open);
+    q.start();
+    await flush();
+    expect(started).toEqual([]);
+    open = true;
+    q.poke();
+    await flush();
+    expect(started).toEqual(['a', 'b', 'c']);
+  });
+
   it('cancel() with no keep set stops the queue for good', async () => {
     const started: string[] = [];
     const units = ['a', 'b', 'c', 'd', 'e'].map((id) => unit(id, started, []));
@@ -283,6 +297,24 @@ describe('usePassesPrefetch', () => {
     await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
     expect(log.filter((u) => u.startsWith('/api/runs/r1/group-metrics'))).toHaveLength(1);
     strip.unmount();
+  });
+
+  it('lets a click through: while a reader waits on a group the queue starts nothing, then carries on', async () => {
+    const { wrapper } = setup(rows(8));
+    await idle();
+    expect(requests).toHaveLength(4); // r1 and r2
+    // the reader opens r7 (not prefetched yet): its own request goes out at once
+    const open = renderHook(() => useRunPasses('r7'), { wrapper });
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    const own = requests.find((r) => r.url === '/api/runs/r7/passes')!;
+    expect(own).toBeDefined();
+    // the four prefetch requests finish: the queue must not start r3.. while r7's request is in flight
+    for (const r of requests.slice(0, 4)) await settle(r);
+    expect(log.some((u) => /\/r[3-6]\//.test(u))).toBe(false);
+    await settle(own, { passes: [], samples: 10, metrics: [] });
+    expect(open.result.current.data).toBeDefined();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(log.some((u) => u === '/api/runs/r3/passes')).toBe(true); // the queue resumes
   });
 
   it('a change of the page drops the queue and cancels the requests of runs that left it', async () => {
