@@ -75,7 +75,7 @@ test('a deleted reasoning-model run carries the reasoning badge and Task/Dataset
   expect(fits).toBe(true);
 });
 
-test('the table fits at 1440 and shows scroll cues (rail, end fade) where it cannot, at 1024', async ({
+test('the table fits at 1440 and shows the scroll rail where it cannot, at 1024', async ({
   page,
   request,
 }) => {

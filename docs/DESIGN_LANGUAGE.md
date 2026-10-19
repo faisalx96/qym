@@ -168,10 +168,11 @@ Enforced by `npm run test:design` (vitest), ESLint (TSX rules) and Stylelint.
 16. **Scroll- and pin-driven geometry never transitions** (`ui/DataTable`): no
     `transition` or `animation` on `left`, `right`, `top`, `bottom`, `inset-*`,
     `transform`, `box-shadow`, `width`, `inline-size` or `all` (a frozen cell or sticky
-    header follows the scroll position directly; a transition would trail it). The
-    one permitted fade is `opacity` (the frozen-edge shadow and the scroll cues), and it
-    is off under `prefers-reduced-motion`. Scroll handlers write refs, data attributes and
-    styles only: no React state and no layout read (`getBoundingClientRect`) per scroll event.
+    header follows the scroll position directly; a transition would trail it). Nothing in the
+    table fades while scrolling: the frozen boundary is a static line drawn by the frozen cells
+    (see "Data table"), so no `opacity` transition exists either. Scroll handlers write refs,
+    data attributes and styles only: no React state and no layout read (`getBoundingClientRect`)
+    per scroll event.
 
 ---
 
@@ -297,8 +298,13 @@ The recipes, by intent:
   new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are right-aligned; a column
   whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
   `--table-group-height` band above the header. Sort glyph, header menu and resize divider show on hover/focus only;
-  pinned columns (start/end) are opaque, with an edge shadow while content scrolls under them. Wide tables expose only
-  the persistent mirrored horizontal scrollbar rail (never both native and mirror). Below 640px tables that declare
+  pinned columns (start/end) are opaque, and the boundary is a 1px `--border-strong` line on the inner edge of the
+  pinned cells themselves (the last start cell and the first end cell of the header, the group band and every body row; the
+  sides swap under `dir="rtl"`). **A table's boundary is drawn by its own cells: nothing is painted over scrolling
+  content or over a row that is not in the columns** (no gradient, no shadow, no overlay element), so a row without a
+  pinned cell (the passes strip, an expanded item) has no line and a glyph is never covered (round 7, owner rule). Wide
+  tables expose only the persistent mirrored horizontal scrollbar rail (never both native and mirror), which is the
+  overflow cue. Below 640px tables that declare
   column `priority` become stacked cards. Chrome parts (`DataTable.Toolbar`, `DataTable.Footer`, selection bar, Columns
   and Density menus) sit inside the card on `--bg-surface`. `ScoreBar` takes `size='lg'` (14 to 16px track, value inside the bar), `series` and `index`; `DeltaCell emphasis`
   renders the pill outside the noise band. Cell kit (`ScoreBar`, `DeltaCell`, `TwoLine`, `IdCell`,

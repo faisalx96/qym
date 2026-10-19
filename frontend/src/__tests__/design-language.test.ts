@@ -502,9 +502,8 @@ describe('visual language (redesign round 2)', () => {
   });
 
   it('never transitions scroll- or pin-driven geometry in ui/DataTable (perf round 6, A12)', () => {
-    // Frozen cells, sticky headers and the edge shadow follow the scroll position directly. Only `opacity` may
-    // transition there (the edge shadow and cues fade on the compositor); a transition on `left`, `inset-*`,
-    // `transform`, `box-shadow`, `width` or `all` would trail the scroll.
+    // Frozen cells and sticky headers follow the scroll position directly; a transition on `left`, `inset-*`,
+    // `transform`, `box-shadow`, `width` or `all` would trail the scroll (the edge fade that used `opacity` is gone, round 7).
     const problems: string[] = [];
     // (cells/ holds the one-time data-mark entrance, not scroll-driven geometry)
     for (const file of cssFiles.filter(
@@ -526,6 +525,39 @@ describe('visual language (redesign round 2)', () => {
       }
     }
     expect(problems).toEqual([]);
+  });
+
+  it("draws a table's boundary with its own cells and paints nothing over scrolling content (round 7, Q1/D3)", () => {
+    const css = read(join(SRC, 'ui/DataTable/DataTable.module.css'));
+    // no overlay element, no scroll-cue fades, no gradient, no opacity transition on the table's chrome
+    expect(css, 'a .edge overlay rule').not.toMatch(/\.edge\b/);
+    expect(css, 'a [data-edge] rule').not.toContain('data-edge');
+    // (the row tint layer and the skeleton shimmer are the only gradients; neither is a horizontal edge fade)
+    expect(css, 'a horizontal edge fade').not.toMatch(/linear-gradient\(\s*to (?:left|right)/);
+    expect(css, 'a pseudo-element fade on the body host').not.toMatch(/\.bodyHost[^{]*::(?:before|after)/);
+    expect(css, 'will-change: opacity layers').not.toMatch(/will-change:\s*opacity/);
+    // the pinned boundary: 1px --border-strong, inside the pinned cell's own box, on both sides and in RTL,
+    // for the header, the group band and the body cells (row rails add the same line to their shadow)
+    for (const side of ['start', 'end'] as const) {
+      const line = side === 'start' ? 'inset -1px 0 0' : 'inset 1px 0 0';
+      for (const cell of ['.th', '.td', '.bandCell']) {
+        const block = css.match(
+          new RegExp(
+            `${cell.replace('.', '\\.')}\\[data-pin-edge='${side}'\\](?::dir\\(rtl\\))?,[^{]*\\{([^}]*)\\}`,
+          ),
+        );
+        expect(block?.[1], `${cell}[data-pin-edge='${side}']`).toMatch(
+          /--pin-line:\s*inset -?1px 0 0 var\(--border-strong\)/,
+        );
+        expect(css, `${cell} ${side} ${line}`).toContain(`--pin-line: ${line} var(--border-strong)`);
+      }
+    }
+    expect(css).toMatch(
+      /\.th\[data-pin-edge\],\s*\.td\[data-pin-edge\],\s*\.bandCell\[data-pin-edge\]\s*\{\s*box-shadow: var\(--pin-line\)/,
+    );
+    expect(css).toContain(':dir(rtl)');
+    // the markup keeps the overlay out too
+    expect(read(join(SRC, 'ui/DataTable/DataTable.tsx'))).not.toContain('styles.edge');
   });
 
   it('animates data marks only through the shared motion tokens', () => {
