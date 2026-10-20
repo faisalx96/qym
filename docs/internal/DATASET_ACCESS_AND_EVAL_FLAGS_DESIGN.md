@@ -1,6 +1,6 @@
 # Dataset access, item deactivation, batch edits, per-experiment dataset token, latency-sensitive runs
 
-Status: APPROVED with the owner's decisions of 2026-10-20 (section 8). Design stage next. Base: `UI-redesign` at `00a01df4`.
+Status: DELIVERED 2026-10-20 (owner decisions in section 8; specs, reviews and the integration gate under `docs/internal/feature-rounds/2026-10-dataset-access/`). Base: `UI-redesign` at `00a01df4`.
 Integration guide: `docs/evaluation-service-api-integration-v1.3.md` (§2.2 latency-sensitive, §4.3 `QYM_DATASET_READ_TOKEN`, §4.4 `qym_api_key`).
 
 Five features, two work packages:
