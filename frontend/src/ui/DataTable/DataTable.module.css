@@ -54,10 +54,13 @@
   display: none;
 }
 
+/* `flex: none`: the card is a height-capped flex column, and a shrinkable rail was squeezed to 5.3 to 5.6 px whenever the
+   rows overflowed (50 rows), so the only overflow cue was half the 12px the design language gives it (round 7, Q1-8). */
 .rail {
   position: sticky;
   bottom: 0;
   z-index: 6;
+  flex: none;
   overflow-x: auto;
   overflow-y: hidden;
   height: 12px;

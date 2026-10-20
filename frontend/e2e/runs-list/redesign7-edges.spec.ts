@@ -5,7 +5,7 @@
  */
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { contrastOf, coveredText, edgeReport, LINE_END, LINE_START } from '../edges';
-import { seedR7, type SeededR7 } from './seed';
+import { seedProjectWithRuns, seedR7, waitForProjection, type SeededR7 } from './seed';
 import { openRuns, table } from './support';
 
 const T = '[data-testid=runs-table]';
@@ -84,7 +84,7 @@ for (const width of [1440, 1024] as const) {
           }
         }
         // Q1-8: the mirrored rail is the overflow cue
-        expect(Math.abs((rep.railHeight ?? 0) - 12), `${state}: rail height`).toBeLessThanOrEqual(1);
+        expect(Math.abs((rep.railHeight ?? 0) - 12), `${state}: rail height`).toBeLessThanOrEqual(0.5);
         return undefined;
       };
 
@@ -175,4 +175,23 @@ test.describe('Q1 under dir=rtl', () => {
     expect((await edgeReport(page, T)).overlays).toBe(0);
     expect(await coveredText(page, T)).toEqual([]);
   });
+});
+
+test.describe('Q1-8 on the 50-row page', () => {
+  for (const width of [1440, 1024] as const) {
+    test(`the rail is 12 px tall at ${width} with 50 rows (it was squeezed to 5.3 to 5.6 px)`, async ({
+      page,
+      request,
+    }) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize({ width, height: 900 });
+      const s = await seedProjectWithRuns(request, { count: 50, running: false });
+      await waitForProjection(request, s.project.slug, s.runs.length);
+      await openRuns(page, s.project.slug);
+      await expect(page.locator(`${T} tbody tr[data-run-id]`)).toHaveCount(50);
+      const rep = await edgeReport(page, T);
+      expect(rep.scrollOverflow, 'the table scrolls sideways').toBe(true);
+      expect(Math.abs((rep.railHeight ?? 0) - 12)).toBeLessThanOrEqual(0.5);
+    });
+  }
 });
