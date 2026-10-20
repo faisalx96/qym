@@ -10,6 +10,8 @@ key so the previous keys can be dropped. Columns covered:
 - ``eval_experiments.secrets_encrypted`` (temporary-model keys of live experiments)
 - ``eval_experiments.qym_api_key_encrypted`` (the creator's per-experiment qym API
   key of live experiments; rewriting it only changes the blob, never the key)
+- ``eval_experiments.dataset_read_token_encrypted`` (the experiment's dataset read
+  token of live experiments, same rule)
 
 It is idempotent: values that already decrypt with the current key are left alone,
 so re-running it rewrites nothing. Each batch is committed separately, and a row is
@@ -56,6 +58,11 @@ ENCRYPTED_COLUMNS: Tuple[Tuple[str, Any, str], ...] = (
     ("eval_environments.api_key_encrypted", EvalEnvironment, "api_key_encrypted"),
     ("eval_experiments.secrets_encrypted", EvalExperiment, "secrets_encrypted"),
     ("eval_experiments.qym_api_key_encrypted", EvalExperiment, "qym_api_key_encrypted"),
+    (
+        "eval_experiments.dataset_read_token_encrypted",
+        EvalExperiment,
+        "dataset_read_token_encrypted",
+    ),
 )
 
 _MAX_FAILED_IDS = 50

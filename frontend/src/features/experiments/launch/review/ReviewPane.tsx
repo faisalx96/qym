@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 import { Badge, Button, Card, KeyValueGrid, Text } from '@/ui';
 import { plural } from '../../lib/format';
 import { Callout } from '../components/Callout';
@@ -14,14 +14,72 @@ import {
   pointerToFieldName,
   runEstimate,
   runNamePreview,
+  type LaunchWarning,
   type Priority,
+  validationItem,
 } from '../model';
+import {
+  CEILING_POINTER,
+  CEILING_WARNING_ACTION,
+  CEILING_WARNING_TITLE,
+  LATENCY_REVIEW_LABEL,
+  LATENCY_REVIEW_VALUE,
+  TOKEN_WARNING_TITLE,
+} from '../copy';
 import { SECTION_IDS, SECTION_TITLES, useLaunch, type SectionId } from '../LaunchContext';
 import { LaunchActions } from './LaunchActions';
 import styles from './review.module.css';
 
 function priorityText(p: Priority | ''): string {
   return p || 'Environment default';
+}
+
+const TOKEN_KEY = 'QYM_DATASET_READ_TOKEN';
+
+/** The warning text with the variable name in mono. */
+function withMono(message: string): ReactNode {
+  return message.split(TOKEN_KEY).map((part, i, all) => (
+    <Fragment key={i}>
+      {part}
+      {i < all.length - 1 ? (
+        <Text variant="base" as="span" mono>
+          {TOKEN_KEY}
+        </Text>
+      ) : null}
+    </Fragment>
+  ));
+}
+
+/** Launch-level dry-run warnings: never change the badge and never disable Launch (B5-41). */
+function LaunchWarnings({ warnings }: { warnings: readonly LaunchWarning[] }) {
+  const { ctx, focusIssue } = useLaunch();
+  return (
+    <>
+      {warnings.map((w, i) =>
+        w.code === 'vllm_ceiling_unset' ? (
+          <Callout key={`${w.code}-${i}`} tone="warning" title={CEILING_WARNING_TITLE}>
+            <span>{w.message}</span>
+            <div>
+              <Button
+                size="sm"
+                variant="neutral"
+                onPress={() =>
+                  // Opens the step, the section and the collapsed group that holds the setting.
+                  focusIssue(validationItem(CEILING_POINTER, w.message, ctx, { source: 'local' }))
+                }
+              >
+                {CEILING_WARNING_ACTION}
+              </Button>
+            </div>
+          </Callout>
+        ) : w.code === 'dataset_token_not_declared' ? (
+          <Callout key={`${w.code}-${i}`} tone="warning" title={TOKEN_WARNING_TITLE}>
+            <span>{withMono(w.message)}</span>
+          </Callout>
+        ) : null,
+      )}
+    </>
+  );
 }
 
 /** "Changes by step": real counts per section with an Edit link each. */
@@ -128,6 +186,9 @@ export function ReviewPane({
                 : '—',
             },
             { key: 'prio', label: 'Priority', value: priorityText(doc.priority) },
+            ...(doc.latencySensitive
+              ? [{ key: 'latency', label: LATENCY_REVIEW_LABEL, value: LATENCY_REVIEW_VALUE }]
+              : []),
             ...(selectedEnvs.length
               ? [{ key: 'versions', label: 'Versions', value: <VersionsSummary /> }]
               : []),
@@ -153,6 +214,7 @@ export function ReviewPane({
         {preview.data?.preemption_warning ? (
           <Callout tone="warning">{preview.data.preemption_warning}</Callout>
         ) : null}
+        <LaunchWarnings warnings={preview.data?.warnings ?? []} />
         <ChangesByStep />
         <section aria-labelledby="launch-validation-title" className={styles.pane}>
           <Text variant="md" weight={600} as="h4" id="launch-validation-title">

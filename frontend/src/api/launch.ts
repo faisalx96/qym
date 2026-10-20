@@ -44,7 +44,7 @@ export const launchKeys = {
   presets: presetsKey,
   presetVersion: (pid: string, eid: string, presetId: string, version: number) =>
     ['preset-version', pid, eid, presetId, version, 'remap'] as const,
-  datasets: (slug: string) => ['datasets', slug] as const,
+  datasets: (projectId: string) => ['launch-datasets', projectId] as const,
   datasetVersions: (slug: string, name: string) => ['dataset-versions', slug, name] as const,
   evaluatorConfig: (pid: string, signature: string) => ['evaluator-config', pid, signature] as const,
   bestRunScope: (pid: string, eid: string) => ['best-run-scope', pid, eid] as const,
@@ -157,26 +157,35 @@ export function useEnvPresets(projectId: string | undefined, envId: string | und
 
 // ── Datasets ─────────────────────────────────────────────────────────────
 
-export interface DatasetRow {
-  name: string;
-  [key: string]: unknown;
-}
 export interface DatasetVersionRow {
   version: string;
   status?: string;
   aliases?: string[];
 }
 
-export async function fetchDatasets(slug: string): Promise<DatasetRow[]> {
-  const res = await api.get<{ datasets?: DatasetRow[] }>(`/v1/datasets?project_slug=${enc(slug)}`);
+/**
+ * A dataset the launch picker offers. The list is every dataset of the project, not the
+ * access-filtered catalog (owner decision D3): `private_test_set` and `access_mode` only
+ * drive the badge and the help line.
+ */
+export interface LaunchDataset {
+  id: string;
+  name: string;
+  slug: string;
+  private_test_set: boolean;
+  access_mode: 'project' | 'restricted' | string;
+}
+
+export async function fetchLaunchDatasets(projectId: string): Promise<LaunchDataset[]> {
+  const res = await api.get<{ datasets?: LaunchDataset[] }>(`${project(projectId)}/experiments/launch-datasets`);
   return res.datasets ?? [];
 }
 
-export function useProjectDatasets(slug: string | undefined) {
+export function useLaunchDatasets(projectId: string | undefined) {
   return useQuery({
-    queryKey: launchKeys.datasets(slug ?? ''),
-    enabled: Boolean(slug),
-    queryFn: () => fetchDatasets(slug!),
+    queryKey: launchKeys.datasets(projectId ?? ''),
+    enabled: Boolean(projectId),
+    queryFn: () => fetchLaunchDatasets(projectId!),
   });
 }
 

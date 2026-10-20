@@ -63,6 +63,8 @@ export interface Experiment {
   spec: Record<string, unknown>;
   versioning_details: Record<string, unknown>;
   priority: EvalPriority;
+  /** Asks the Evaluation Service for a quiet gateway; immutable after launch. */
+  latency_sensitive: boolean;
   preemption_acknowledged_at: string | null;
   status: ExperimentStatus;
   job_count: number;
@@ -134,6 +136,13 @@ export interface ExperimentJob {
   remote_versioning: unknown;
   error: string | null;
   wait_reason: string | null;
+  /** Admission state of a latency-sensitive job, copied from the service on every poll. */
+  admitted_at: string | null;
+  deferrals: number;
+  deferral_reason: string | null;
+  contaminated_attempts: number;
+  /** `null`: the experiment has no dataset read token; else whether the job's schema takes it. */
+  dataset_token: DatasetTokenFlag;
   submit_attempts: number;
   next_attempt_at: string | null;
   submitted_at: string | null;
@@ -148,6 +157,19 @@ export interface ExperimentJob {
   qym_config: JobQymConfig | null;
 }
 
+export type DatasetTokenFlag = 'sent' | 'not_declared' | null;
+
+/** A credential's state only: no prefix, id or secret ever reaches the browser. */
+export interface CredentialState {
+  state: 'active' | 'revoked' | 'none';
+  revoked_at: string | null;
+}
+
+export interface ExperimentCredentials {
+  api_key: CredentialState;
+  dataset_read_token: CredentialState;
+}
+
 export interface ExperimentEnvironmentRef {
   id: string;
   name: string;
@@ -160,11 +182,14 @@ export interface ExperimentDetail extends Experiment {
   /** swept JSON pointer -> label */
   sweep_keys: Record<string, string>;
   jobs: ExperimentJob[];
+  credentials: ExperimentCredentials;
 }
 
 export interface ExperimentListParams {
   status?: string;
   mine?: boolean;
+  /** Only latency-sensitive experiments (`latency_sensitive=true`). */
+  latency?: boolean;
   /** key -> value, sent as repeated `versioning=key=value` */
   versioning?: Record<string, string>;
   limit?: number;
@@ -259,6 +284,7 @@ export function experimentListQuery(params: ExperimentListParams): string {
   const qs = new URLSearchParams();
   if (params.status) qs.set('status', params.status);
   if (params.mine) qs.set('mine', 'true');
+  if (params.latency) qs.set('latency_sensitive', 'true');
   for (const [k, v] of Object.entries(params.versioning ?? {}))
     if (k && v) qs.append('versioning', `${k}=${v}`);
   qs.set('include_versioning_facets', 'true');

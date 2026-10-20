@@ -164,6 +164,8 @@ export function buildLaunchRequest(
   const versioning = parseVersioning(doc.versioningText).details;
   if (Object.keys(versioning).length) body.versioning_details = versioning;
   if (options.acknowledgePreemption) body.acknowledge_preemption = true;
+  // Platform-owned: a request field, never part of the editable document.
+  if (doc.latencySensitive) body.latency_sensitive = true;
   return body;
 }
 
@@ -192,6 +194,7 @@ export function dryRunKey(doc: LaunchDocument, panel?: EvaluatorPanel | null): s
     spec: specKey(doc, panel),
     name: doc.name.trim(),
     priority: doc.priority,
+    latency: doc.latencySensitive,
     versioning: parseVersioning(doc.versioningText).details,
     description: doc.description.trim(),
   });

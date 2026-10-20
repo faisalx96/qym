@@ -158,6 +158,8 @@ export interface EnvData {
   /** The environment's `max_priority` / `default_priority` (priority select). */
   maxPriority?: Priority;
   defaultPriority?: Priority;
+  /** Who may launch latency-sensitive runs here (`manager`: project managers and admins only). */
+  latencyMinRole?: 'member' | 'manager';
   /** schema_hash of the environment record (editor mode / preset publish). */
   schemaHash?: string | null;
   loading?: boolean;
@@ -248,6 +250,7 @@ export interface CloneResponse {
   base_source: Record<string, unknown>;
   cloned_base_source?: Record<string, unknown> | null;
   priority?: Priority | null;
+  latency_sensitive?: boolean;
   spec: LaunchConfig;
   versioning_details?: Record<string, JsonValue> | null;
   combo?: {
@@ -398,6 +401,8 @@ export interface LaunchDocument {
   priority: Priority | '';
   /** `key=value` lines. */
   versioningText: string;
+  /** Latency-sensitive run: starts on a quiet gateway and makes other jobs wait (guide v1.3 §2.2). */
+  latencySensitive: boolean;
   base: BaseInfo;
   baseline: Baseline;
   /** Base evaluator keys besides the dataset (samples, report_k, config, …). */
@@ -498,6 +503,8 @@ export interface LaunchRequest {
   priority?: Priority;
   versioning_details?: Record<string, string>;
   acknowledge_preemption?: boolean;
+  /** Sent only when true. */
+  latency_sensitive?: boolean;
 }
 
 export interface ServerError {
@@ -544,7 +551,16 @@ export interface DryRunResponse {
   priority?: Priority;
   preemption_warning?: string | null;
   errors: ServerError[];
+  /** Launch-level warnings (never block): `vllm_ceiling_unset`, `dataset_token_not_declared`. */
+  warnings?: LaunchWarning[];
   jobs?: DryRunJob[];
+}
+
+export interface LaunchWarning {
+  code: 'vllm_ceiling_unset' | 'dataset_token_not_declared' | string;
+  message: string;
+  pointer?: string;
+  environment_ids?: string[];
 }
 
 // ── Validation ───────────────────────────────────────────────────────────

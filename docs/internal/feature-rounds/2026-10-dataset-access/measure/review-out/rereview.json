@@ -1,0 +1,92 @@
+{
+  "w1440": {
+    "listChip": {
+      "w": 99,
+      "h": 20
+    },
+    "triggerChip": {
+      "w": 99,
+      "h": 20
+    },
+    "focus": {
+      "tag": "INPUT",
+      "id": ":r38:",
+      "name": null,
+      "label": "Eval Vllm Post Run Max Requests",
+      "expanded": null,
+      "url": "?step=settings&env=cd881951-72b0-4fd7-8000-1e25a97f10d8"
+    },
+    "fieldVisible": true,
+    "notice": {
+      "h": 36,
+      "w": 1193
+    },
+    "notes": [
+      {
+        "t": "A latency-sensitive job is active on production. Other jobs wait until it finishes.",
+        "h": 25.4,
+        "cardW": 590
+      }
+    ]
+  },
+  "w1024": {
+    "listChip": {
+      "w": 99,
+      "h": 20
+    },
+    "triggerChip": {
+      "w": 99,
+      "h": 20
+    },
+    "focus": {
+      "tag": "INPUT",
+      "id": ":r36:",
+      "name": null,
+      "label": "Eval Vllm Post Run Max Requests",
+      "expanded": null,
+      "url": "?step=settings&env=cd881951-72b0-4fd7-8000-1e25a97f10d8"
+    },
+    "fieldVisible": true,
+    "notice": {
+      "h": 52.8,
+      "w": 777
+    },
+    "notes": [
+      {
+        "t": "A latency-sensitive job is active on production. Other jobs wait until it finishes.",
+        "h": 40.8,
+        "cardW": 382
+      }
+    ]
+  },
+  "w390": {
+    "listChip": {
+      "w": 99,
+      "h": 20
+    },
+    "triggerChip": {
+      "w": 99,
+      "h": 20
+    },
+    "focus": {
+      "tag": "INPUT",
+      "id": ":r3i:",
+      "name": null,
+      "label": "Eval Vllm Post Run Max Requests",
+      "expanded": null,
+      "url": "?step=settings&env=cd881951-72b0-4fd7-8000-1e25a97f10d8"
+    },
+    "fieldVisible": true,
+    "notice": {
+      "h": 103.2,
+      "w": 279
+    },
+    "notes": [
+      {
+        "t": "A latency-sensitive job is active on production. Other jobs wait until it finishes.",
+        "h": 40.8,
+        "cardW": 279
+      }
+    ]
+  }
+}

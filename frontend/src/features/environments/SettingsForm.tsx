@@ -5,9 +5,10 @@
  */
 import { useMemo, useState } from 'react';
 import { useDeleteEnvironment, useUpdateEnvironment, type EnvironmentUpdate } from '@/api/evalEnvironments';
-import { PRIORITIES, type EvalEnvironment, type EvalPriority } from '@/api/evalCommon';
+import { PRIORITIES, type EvalEnvironment, type EvalPriority, type LatencyMinRole } from '@/api/evalCommon';
 import { Button, Checkbox, ConfirmDialog, NumberField, Select, Tag, TextField, useToast } from '@/ui';
 import { connectionKeysBodyValue, connectionKeysView } from './environmentUrl';
+import { LATENCY_ROLE_HELP, LATENCY_ROLE_ITEMS, LATENCY_ROLE_LABEL } from './copy';
 import { mapEnvironmentError, type FieldErrors } from './fieldErrors';
 import { highPriorityWarning } from './format';
 import styles from './EnvironmentPage.module.css';
@@ -21,6 +22,7 @@ interface Draft {
   ranking_k: number;
   max_priority: EvalPriority;
   default_priority: EvalPriority;
+  latency_min_role: LatencyMinRole;
   allow_keys: boolean;
   keysTouched: boolean;
 }
@@ -34,6 +36,7 @@ function draftFrom(env: EvalEnvironment): Draft {
     ranking_k: env.ranking_k ?? NaN,
     max_priority: env.max_priority,
     default_priority: env.default_priority,
+    latency_min_role: env.latency_sensitive_min_role ?? 'member',
     allow_keys: env.allow_connection_keys,
     keysTouched: false,
   };
@@ -79,6 +82,7 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
       ) ||
       draft.max_priority !== a.max_priority ||
       draft.default_priority !== a.default_priority ||
+      draft.latency_min_role !== a.latency_min_role ||
       draft.keysTouched
     );
   }, [draft, env]);
@@ -110,6 +114,7 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
       ranking_k: Number.isNaN(draft.ranking_k) ? null : draft.ranking_k,
       max_priority: draft.max_priority,
       default_priority: draft.default_priority,
+      latency_sensitive_min_role: draft.latency_min_role,
     };
     // A moved URL without an explicit re-opt-in omits the flag, so the backend turns connection keys off.
     const allow = connectionKeysBodyValue({
@@ -196,6 +201,18 @@ export function SettingsForm({ projectId, env, canEdit, onClose, onDeleted }: Se
             searchable={false}
             errorMessage={errors.default_priority}
             onChange={(k) => k && patch({ default_priority: String(k) as EvalPriority }, 'default_priority')}
+          />
+          <Select
+            label={LATENCY_ROLE_LABEL}
+            items={LATENCY_ROLE_ITEMS.map((i) => ({ ...i }))}
+            value={draft.latency_min_role}
+            isDisabled={disabled}
+            searchable={false}
+            help={LATENCY_ROLE_HELP}
+            errorMessage={errors.latency_sensitive_min_role}
+            onChange={(k) =>
+              k && patch({ latency_min_role: String(k) as LatencyMinRole }, 'latency_sensitive_min_role')
+            }
           />
         </div>
         {draft.max_priority === 'HIGH' ? (

@@ -43,3 +43,12 @@ describe('mapEnvironmentError', () => {
     expect(r.general).toBe('Something broke');
   });
 });
+
+describe('latency role errors', () => {
+  it('maps a 422 on the role onto its field with the fixed sentence', () => {
+    const error = err(422, [{ loc: ['body', 'latency_sensitive_min_role'], msg: 'Input should be member or manager' }]);
+    expect(mapEnvironmentError(error).fields.latency_sensitive_min_role).toBe(
+      'Choose who can launch latency-sensitive runs.',
+    );
+  });
+});

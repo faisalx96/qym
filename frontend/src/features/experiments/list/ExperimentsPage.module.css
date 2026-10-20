@@ -35,3 +35,12 @@
   outline: var(--focus-ring);
   outline-offset: 2px;
 }
+
+/* Name and the Latency-sensitive tag: the tag wraps under a long name (the name is never cut). */
+.nameLine {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+}

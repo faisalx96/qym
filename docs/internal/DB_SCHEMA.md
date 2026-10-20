@@ -56,3 +56,11 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 - `review_corrections`: active review candidates, snapshots, confidence, source, review status/comment, and supersession links.
 
 Published dataset versions and historical review revisions are immutable. Runs, datasets, projects, and API keys use archive, soft-delete, or revocation fields where recovery/auditability matters.
+
+## Experiment dataset read token and latency-sensitive runs (migration 0088)
+
+- `eval_experiments.dataset_read_token_id` (FK `dataset_read_tokens.id`, `ON DELETE SET NULL`, indexed; the id outlives revocation) and `dataset_read_token_encrypted` (the raw token, Fernet-encrypted like `qym_api_key_encrypted`, cleared on revocation). The service is `services/eval_dataset_tokens.py`; the experiment's token is minted at launch, injected as `env_overrides.QYM_DATASET_READ_TOKEN` only when the job's schema declares that key, and revoked with the API key once every job is terminal.
+- `eval_experiments.latency_sensitive` (boolean, default false): the launch flag, immutable after launch, sent as the top-level `latency_sensitive` body field only when true.
+- `dataset_read_tokens.kind` (`admin` default | `experiment`, check `ck_dataset_read_tokens_kind`) and `dataset_read_tokens.experiment_id` (FK `eval_experiments.id`, `ON DELETE SET NULL`, indexed): the token list tells admin tokens from experiment tokens and links to the experiment.
+- `eval_environments.latency_sensitive_min_role` (`member` default | `manager`, check `ck_eval_environments_latency_min_role`): who may launch latency-sensitive runs on the environment.
+- `eval_experiment_jobs.admitted_at`, `deferrals` (default 0), `deferral_reason` (500 characters) and `contaminated_attempts` (default 0): the Evaluation Service's admission state of the job, copied from every poll.

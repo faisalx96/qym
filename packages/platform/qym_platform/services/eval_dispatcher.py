@@ -151,6 +151,12 @@ from .eval_bindings import (
     mark_job_blocked,
     prepare_dispatch,
 )
+from .eval_dataset_tokens import (
+    TOKEN_ENV_KEY as DATASET_TOKEN_ENV_KEY,
+    DatasetTokenUnavailable,
+    has_dataset_token,
+    resolve_dataset_token,
+)
 from .eval_experiments import (
     ACTIVE_JOB_STATUSES,
     CANCELLING_WAIT_REASON,
@@ -163,6 +169,7 @@ from .eval_experiments import (
     stop_linked_run,
 )
 from .eval_model_slots import descriptor_for_schema, list_model_slots
+from .eval_schema_form import schema_declares_env_key
 from .eval_run_scores import sync_job_scores, sync_run_scores
 from .eval_service_client import (
     REDACTED,
@@ -283,6 +290,7 @@ SlotBindingsFor = Callable[
 ]
 SecretLookupFor = Callable[[EvalExperiment], Optional[SecretLookup]]
 SubmitterKeyFor = Callable[[Session, EvalExperiment], str]
+DatasetTokenFor = Callable[[Session, EvalExperiment], str]
 
 
 # ------------------------------------------------------------------ pure helpers
@@ -366,20 +374,22 @@ def _scrub_literal(value: Any, secret: Optional[str]) -> Any:
     return value
 
 
-def _scrub_outcome(outcome: "_Outcome", secret: Optional[str]) -> "_Outcome":
-    """Mask the submitted ``qym_api_key`` wherever the service may have echoed it.
+def _scrub_outcome(outcome: "_Outcome", *secrets: Optional[str]) -> "_Outcome":
+    """Mask the submitted ``qym_api_key`` and dataset read token wherever the service
+    may have echoed them.
 
     Key-named fields are already redacted by the client; this also catches the bare
     value in free text (a 422 message, an unexpected field).
     """
-    if not secret:
+    live = [secret for secret in secrets if secret]
+    if not live:
         return outcome
-    return _Outcome(
-        outcome.kind,
-        remote=_scrub_literal(outcome.remote, secret),
-        message=_scrub_literal(outcome.message, secret),
-        high_job_id=_scrub_literal(outcome.high_job_id, secret),
-    )
+    remote, message, high_job_id = outcome.remote, outcome.message, outcome.high_job_id
+    for secret in live:
+        remote = _scrub_literal(remote, secret)
+        message = _scrub_literal(message, secret)
+        high_job_id = _scrub_literal(high_job_id, secret)
+    return _Outcome(outcome.kind, remote=remote, message=message, high_job_id=high_job_id)
 
 
 def _redacted_text(value: Any) -> str:
@@ -563,6 +573,7 @@ class EvalDispatcher:
         slot_bindings_for_job: Optional[SlotBindingsFor] = None,
         secret_lookup_for: Optional[SecretLookupFor] = None,
         submitter_key_for: Optional[SubmitterKeyFor] = None,
+        dataset_token_for: Optional[DatasetTokenFor] = None,
         job_timeout: Optional[timedelta] = None,
     ) -> None:
         self.session_factory = session_factory
@@ -579,6 +590,7 @@ class EvalDispatcher:
         )
         self.secret_lookup_for = secret_lookup_for or default_secret_lookup_for
         self.submitter_key_for = submitter_key_for or resolve_submitter_key
+        self.dataset_token_for = dataset_token_for or resolve_dataset_token
         self._stop = threading.Event()
         self._wait = wait or self._stop.wait
         self._thread: Optional[threading.Thread] = None
@@ -1007,8 +1019,11 @@ class EvalDispatcher:
         job: EvalExperimentJob,
         experiment: EvalExperiment,
         qym_api_key: str,
+        dataset_token: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Final in-memory body: user, priority, ``qym_launch`` token, ``qym_api_key``.
+        """Final in-memory body: user, priority, ``qym_launch`` token, ``qym_api_key``,
+        the dataset read token (only when the job's schema declares it) and
+        ``latency_sensitive`` (only when true).
 
         ``run_metadata`` is the stored one, not the placeholder-filled copy: it is
         persisted by the run, so it must never carry a resolved key.
@@ -1037,6 +1052,16 @@ class EvalDispatcher:
             body = self.add_launch_token(body, job.id)
         # Always the platform's value: nothing stored can choose whose key is sent.
         body["qym_api_key"] = qym_api_key
+        if dataset_token:
+            env = body.get("env_overrides")
+            if not isinstance(env, dict):
+                env = body["env_overrides"] = {}
+            env[DATASET_TOKEN_ENV_KEY] = dataset_token
+        # Older services answer 422 on unknown top-level fields: send it only when true.
+        if experiment.latency_sensitive:
+            body["latency_sensitive"] = True
+        else:
+            body.pop("latency_sensitive", None)
         return body
 
     def _begin_submit(
@@ -1087,6 +1112,7 @@ class EvalDispatcher:
         client: Optional[EvalServiceClient] = None
         body: Optional[Dict[str, Any]] = None
         qym_api_key: Optional[str] = None
+        dataset_token: Optional[str] = None
         try:
             with self.session_factory() as db:
                 job = self._locked_job(db, job_id)
@@ -1141,8 +1167,23 @@ class EvalDispatcher:
                     db.commit()
                     return
                 try:
+                    dataset_token = self._dataset_token_for_job(db, job, experiment)
+                except DatasetTokenUnavailable as exc:
+                    del prep
+                    self._set_status(
+                        job,
+                        EvalJobStatus.BLOCKED,
+                        wait_reason=str(exc),
+                        error=str(exc),
+                    )
+                    job.next_attempt_at = None
+                    self._save(job, changed=True)
+                    recompute_experiment_status(db, experiment.id, now=self.clock())
+                    db.commit()
+                    return
+                try:
                     body = self._submit_body(
-                        prep.body or {}, job, experiment, qym_api_key
+                        prep.body or {}, job, experiment, qym_api_key, dataset_token
                     )
                 except LaunchTokenUnavailable:
                     del prep
@@ -1185,12 +1226,34 @@ class EvalDispatcher:
                     return
                 recompute_experiment_status(db, experiment.id, now=self.clock())
                 db.commit()  # the SUBMITTING marker is durable before the POST
-            outcome = _scrub_outcome(self._post(client, body), qym_api_key)
+            outcome = _scrub_outcome(
+                self._post(client, body), qym_api_key, dataset_token
+            )
         finally:
             body = None
             qym_api_key = None
+            dataset_token = None
             self._close(client)
         self._apply_submit_outcome(job_id, outcome)
+
+    def _dataset_token_for_job(
+        self, db: Session, job: EvalExperimentJob, experiment: EvalExperiment
+    ) -> Optional[str]:
+        """The experiment's dataset read token, for a job whose schema declares it.
+
+        ``None`` when the experiment has no token (launched before the feature) or the
+        job's schema does not declare ``QYM_DATASET_READ_TOKEN`` (a service that does
+        not know the key would answer 422). Otherwise raises ``DatasetTokenUnavailable``
+        when the token is revoked, missing or unreadable.
+        """
+        if not has_dataset_token(experiment):
+            return None
+        schema = db.get(EvalEnvironmentSchema, job.schema_id)
+        if schema is None or not schema_declares_env_key(
+            schema.schema_json, DATASET_TOKEN_ENV_KEY
+        ):
+            return None
+        return self.dataset_token_for(db, experiment)
 
     def _post(self, client: EvalServiceClient, body: Dict[str, Any]) -> _Outcome:
         try:
@@ -1474,6 +1537,8 @@ class EvalDispatcher:
             if remote_status and remote_status != job.remote_status:
                 job.remote_status = remote_status
                 changed = True
+            if self._store_admission(job, remote, remote_status):
+                changed = True
             if remote_status == "SUCCEEDED":
                 result = remote.get("result")
                 job.remote_result = (
@@ -1575,6 +1640,53 @@ class EvalDispatcher:
         job.next_attempt_at = now + timedelta(seconds=poll_interval(elapsed))
         self._save(job, changed=changed)
         return False
+
+    @staticmethod
+    def _store_admission(
+        job: EvalExperimentJob, remote: Mapping[str, Any], remote_status: Optional[str]
+    ) -> bool:
+        """Copy the service's admission state of a job (guide v1.3 §2.2) from one poll.
+
+        ``admitted_at``, ``deferrals``, ``deferral_reason`` and ``contaminated_attempts``
+        are written only when the service sent the key and the value differs, so an
+        unchanged poll writes nothing and an older service leaves ``0`` / ``NULL``.
+        While the job is not terminal, the service's ``error`` of a contaminated re-queue
+        is kept as the job's error until the next attempt starts. Returns True when
+        something changed.
+        """
+        changed = False
+        if "admitted_at" in remote:
+            admitted = _parse_remote_time(remote.get("admitted_at"))
+            if admitted != job.admitted_at:
+                job.admitted_at = admitted
+                changed = True
+        for key in ("deferrals", "contaminated_attempts"):
+            if key not in remote:
+                continue
+            try:
+                count = max(0, int(remote.get(key) or 0))
+            except (TypeError, ValueError):
+                continue
+            if count != getattr(job, key):
+                setattr(job, key, count)
+                changed = True
+        if "deferral_reason" in remote:
+            raw = remote.get("deferral_reason")
+            reason = _short(_redacted_text(raw), 500) if raw else None
+            if reason != job.deferral_reason:
+                job.deferral_reason = reason
+                changed = True
+        if (
+            job.contaminated_attempts > 0
+            and remote_status not in ("SUCCEEDED", "FAILED", "CANCELLED")
+            and "error" in remote
+        ):
+            raw_error = remote.get("error")
+            error = _redacted_text(raw_error) if raw_error else None
+            if error != job.error:
+                job.error = error
+                changed = True
+        return changed
 
     # -- remote cancel ---------------------------------------------------------
 
@@ -1678,7 +1790,12 @@ class EvalDispatcher:
                 row[0]
                 for row in db.execute(
                     select(EvalExperiment.id)
-                    .where(EvalExperiment.qym_api_key_encrypted.is_not(None))
+                    .where(
+                        or_(
+                            EvalExperiment.qym_api_key_encrypted.is_not(None),
+                            EvalExperiment.dataset_read_token_encrypted.is_not(None),
+                        )
+                    )
                     .order_by(EvalExperiment.updated_at)
                     .limit(SETTLE_SWEEP_BATCH)
                 )

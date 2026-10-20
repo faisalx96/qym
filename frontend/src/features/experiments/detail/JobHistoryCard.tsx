@@ -11,9 +11,11 @@ import {
   type Column,
   type RowAction,
   Card,
+  Tag,
 } from '@/ui';
 import { JobStatusBadge } from '../components/StatusBadges';
 import { isCancellable, isRetryable } from '../lib/cancel';
+import { admissionLine } from '../lib/admission';
 import { sweepSummary } from '../lib/format';
 import type { ExperimentFlows } from './useExperimentFlows';
 import styles from './detail.module.css';
@@ -39,6 +41,7 @@ export function JobHistoryCard({
 }: JobHistoryCardProps) {
   const supersededCount = detail.jobs.filter((j) => j.superseded).length;
   const rows = showEarlier ? detail.jobs : detail.jobs.filter((j) => !j.superseded);
+  const latency = detail.latency_sensitive;
   const columns: Column<ExperimentJob>[] = [
     {
       id: 'combo',
@@ -80,22 +83,42 @@ export function JobHistoryCard({
       id: 'status',
       header: 'Status',
       type: 'status',
-      width: 200,
+      // 240 px for a latency-sensitive experiment: the admission text fits without an ellipsis.
+      width: latency ? 240 : 200,
       priority: 1,
-      cell: (j) => (
-        <TwoLine
-          primary={<JobStatusBadge status={j.status} />}
-          secondary={
-            j.error ? (
-              <span className={styles.errorText} title={j.error}>
-                {j.error}
+      cell: (j) => {
+        const line = admissionLine(j, latency);
+        return (
+          <TwoLine
+            primary={
+              <span className={styles.jobTitle}>
+                <JobStatusBadge status={j.status} />
+                {latency && j.contaminated_attempts > 0 ? (
+                  <Tag
+                    kind="count"
+                    tone="info"
+                    aria-label={`re-queued ${j.contaminated_attempts} ${j.contaminated_attempts === 1 ? 'time' : 'times'}`}
+                    data-testid="requeue-tag"
+                  >
+                    ↻ {j.contaminated_attempts}
+                  </Tag>
+                ) : null}
               </span>
-            ) : j.wait_reason && isCancellable(j) ? (
-              j.wait_reason
-            ) : undefined
-          }
-        />
-      ),
+            }
+            secondary={
+              line ? (
+                <span
+                  className={line.error ? styles.errorText : undefined}
+                  title={line.title ?? line.text}
+                  data-testid="admission-line"
+                >
+                  {line.text}
+                </span>
+              ) : undefined
+            }
+          />
+        );
+      },
     },
     {
       id: 'attempt',

@@ -62,6 +62,13 @@ returned, is revoked once every current job is terminal, and a retry keeps it al
 or mints a new one. A retry is refused (409) when the creator is no longer an active
 member of the project; clone the experiment instead. Dry runs mint nothing.
 
+The experiment's dataset read token (``services/eval_dataset_tokens``) follows the same
+lifecycle: minted at launch, sent to the Evaluation Service as
+``env_overrides.QYM_DATASET_READ_TOKEN`` only when the job's schema declares that key,
+revoked with the API key, re-minted on retry. ``latency_sensitive`` asks the service for
+a quiet gateway (guide v1.3 section 2.2); an environment can restrict it to project
+managers (``latency_sensitive_min_role``). A dry run answers launch-level ``warnings``.
+
 Stored per job:
 
 - ``params``: ``{"slot_bindings": {slot_key: binding | null}}`` for the combination,
@@ -93,7 +100,10 @@ from qym_platform.api.projects import _require_project_access
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
+    ApiKey,
     AuditLog,
+    Dataset,
+    DatasetReadToken,
     EvalConfigPreset,
     EvalConfigPresetKind,
     EvalConfigPresetVersion,
@@ -124,6 +134,18 @@ from qym_platform.services.eval_config import (
     is_sweep,
     validate_config_document,
 )
+from qym_platform.services.eval_dataset_tokens import (
+    TOKEN_ENV_KEY as DATASET_TOKEN_ENV_KEY,
+    ensure_dataset_token_for_retry,
+    issue_experiment_dataset_token,
+)
+from qym_platform.services.eval_launch_flags import (
+    dataset_token_warnings,
+    latency_gate_message,
+    latency_gate_names,
+    vllm_ceiling_warning,
+)
+from qym_platform.services.eval_schema_form import schema_declares_env_key
 from qym_platform.services.eval_evaluator_schema import (
     accepts_config_key,
     current_evaluator_schema,
@@ -219,6 +241,8 @@ class ExperimentCreateRequest(BaseModel):
     # Copied into each launched run's ``versioning_details`` (0084). ``Any`` so a
     # malformed value gets our message (normalize_versioning_details).
     versioning_details: Any = None
+    # Asks the service for a quiet gateway; immutable after launch (guide v1.3 §2.2).
+    latency_sensitive: bool = False
 
     @field_validator("name")
     @classmethod
@@ -416,6 +440,21 @@ def _resolve_priority(
             status_code=403, detail="HIGH priority requires a project manager"
         )
     return priority
+
+
+def _latency_gate(
+    db: Session,
+    principal: Principal,
+    project_id: str,
+    envs: List[EvalEnvironment],
+    latency_sensitive: bool,
+) -> Optional[str]:
+    """The refusal text when a non-manager launches latency-sensitive on a managers-only
+    environment (owner decision D4), else ``None``."""
+    if not latency_sensitive:
+        return None
+    names = latency_gate_names(envs, is_project_manager(db, principal, project_id))
+    return latency_gate_message(names) if names else None
 
 
 def _require_preemption_ack(
@@ -794,11 +833,21 @@ def _environment_plan(
     }
 
 
+def _with_codes(errors: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Each error also under ``code`` (the ``rule``, unless it already has a code)."""
+    return [{"code": e.get("rule"), **e} for e in errors]
+
+
 def _preview_body(
-    body: Optional[Mapping[str, Any]], versioning_details: Optional[Mapping[str, Any]]
+    body: Optional[Mapping[str, Any]],
+    versioning_details: Optional[Mapping[str, Any]],
+    *,
+    latency_sensitive: bool = False,
 ) -> Any:
     """The dry run's ``request_body``: the plan's body plus what launch adds (B23)."""
     out = strip_secret_refs(body)
+    if isinstance(out, dict) and latency_sensitive:
+        out["latency_sensitive"] = True
     if isinstance(out, dict) and versioning_details:
         evaluator = out.setdefault("evaluator", {})
         if isinstance(evaluator, dict):
@@ -948,6 +997,7 @@ def _serialize_job(
     run_metrics: Optional[Mapping[str, Mapping[str, Any]]] = None,
     ranking_metrics: Optional[Mapping[str, Optional[str]]] = None,
     combo_labels: Optional[Mapping[int, str]] = None,
+    dataset_token: Optional[str] = None,
 ) -> Dict[str, Any]:
     return {
         "id": job.id,
@@ -969,6 +1019,11 @@ def _serialize_job(
         "remote_versioning": job.remote_versioning,
         "error": job.error,
         "wait_reason": job.wait_reason,
+        "admitted_at": to_api_timestamp(job.admitted_at),
+        "deferrals": job.deferrals or 0,
+        "deferral_reason": job.deferral_reason,
+        "contaminated_attempts": job.contaminated_attempts or 0,
+        "dataset_token": dataset_token,
         "submit_attempts": job.submit_attempts,
         "next_attempt_at": to_api_timestamp(job.next_attempt_at),
         "submitted_at": to_api_timestamp(job.submitted_at),
@@ -1009,6 +1064,7 @@ def _serialize_experiment(
         "spec": strip_secret_refs(experiment.spec or {}),
         "versioning_details": dict(experiment.versioning_details or {}),
         "priority": experiment.priority.value,
+        "latency_sensitive": bool(experiment.latency_sensitive),
         "preemption_acknowledged_at": to_api_timestamp(
             experiment.preemption_acknowledged_at
         ),
@@ -1037,6 +1093,54 @@ def _status_counts(jobs: List[EvalExperimentJob]) -> Dict[str, int]:
     for job in current_jobs(jobs):
         counts[job.status.value] = counts.get(job.status.value, 0) + 1
     return counts
+
+
+def _credential_state(row: Any, row_id: Optional[str]) -> Dict[str, Any]:
+    """``{state, revoked_at}`` of a credential: ``none`` | ``active`` | ``revoked``."""
+    if not row_id or row is None:
+        return {"state": "none", "revoked_at": None}
+    if row.revoked_at is not None:
+        return {"state": "revoked", "revoked_at": to_api_timestamp(row.revoked_at)}
+    return {"state": "active", "revoked_at": None}
+
+
+def _credentials(db: Session, experiment: EvalExperiment) -> Dict[str, Any]:
+    """The experiment's credentials as states only (no prefix, id or secret)."""
+    key = (
+        db.get(ApiKey, experiment.qym_api_key_id) if experiment.qym_api_key_id else None
+    )
+    token = (
+        db.get(DatasetReadToken, experiment.dataset_read_token_id)
+        if experiment.dataset_read_token_id
+        else None
+    )
+    return {
+        "api_key": _credential_state(key, experiment.qym_api_key_id),
+        "dataset_read_token": _credential_state(token, experiment.dataset_read_token_id),
+    }
+
+
+def _job_dataset_tokens(
+    db: Session, experiment: EvalExperiment, jobs: List[EvalExperimentJob]
+) -> Dict[str, Optional[str]]:
+    """Per job: ``None`` (the experiment has no token), ``sent`` or ``not_declared``.
+
+    Derived from the job's stored schema: nothing is stored per job (decision D-B2).
+    """
+    if not experiment.dataset_read_token_id:
+        return {}
+    schema_ids = sorted({j.schema_id for j in jobs})
+    declared: Dict[str, bool] = {}
+    if schema_ids:
+        for schema in db.query(EvalEnvironmentSchema).filter(
+            EvalEnvironmentSchema.id.in_(schema_ids)
+        ):
+            declared[schema.id] = schema_declares_env_key(
+                schema.schema_json, DATASET_TOKEN_ENV_KEY
+            )
+    return {
+        j.id: "sent" if declared.get(j.schema_id) else "not_declared" for j in jobs
+    }
 
 
 def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any]:
@@ -1105,6 +1209,7 @@ def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any
     }
     payload["sweep_keys"] = keys
     run_metrics = _run_metrics(db, runs)
+    job_tokens = _job_dataset_tokens(db, experiment, jobs)
     payload["jobs"] = [
         _serialize_job(
             j,
@@ -1114,9 +1219,11 @@ def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any
             run_metrics=run_metrics,
             ranking_metrics=ranking,
             combo_labels=combo_labels,
+            dataset_token=job_tokens.get(j.id),
         )
         for j in jobs
     ]
+    payload["credentials"] = _credentials(db, experiment)
     return payload
 
 
@@ -1150,6 +1257,9 @@ def create_experiment(
         raise HTTPException(status_code=422, detail=str(exc)) from None
     envs = _load_environments(db, project_id, req.environment_ids)
     priority = _resolve_priority(db, principal, project_id, envs, req.priority)
+    gate_message = _latency_gate(db, principal, project_id, envs, req.latency_sensitive)
+    if gate_message and not req.dry_run:
+        raise HTTPException(status_code=403, detail=gate_message)
     base_source = _base_source(db, project_id, req, envs)
     spec = {k: v for k, v in req.spec.items() if k != "base_source"}
     saved_connection_ids = _save_to_project_models(db, principal, project_id, req, spec)
@@ -1158,6 +1268,20 @@ def create_experiment(
         {**e, "environment_id": None, "combo_index": None}
         for e in _document_errors(spec, req.secrets)
     ]
+    if gate_message:
+        errors.append(
+            {
+                "section": "document",
+                "pointer": "/latency_sensitive",
+                "form_pointer": "/latency_sensitive",
+                "field": None,
+                "params": {},
+                "rule": "latency_sensitive_role",
+                "message": gate_message,
+                "environment_id": None,
+                "combo_index": None,
+            }
+        )
     sweep = eval_sweeps.expand(
         spec,
         environment_count=len(envs),
@@ -1222,15 +1346,25 @@ def create_experiment(
             "request_body": _preview_body(
                 plan["body"],
                 _service_versioning_details(contexts[env.id], versioning_details),
+                latency_sensitive=req.latency_sensitive,
             ),
         }
         for combo, env, schema, plan, params, run_name in planned
     ]
 
     if req.dry_run:
+        schemas = {env.id: contexts[env.id]["schema"] for env in envs}
+        documents = [combo.document for combo in sweep.combos]
+        warnings: List[Dict[str, Any]] = []
+        if req.latency_sensitive:
+            ceiling = vllm_ceiling_warning(envs, schemas, documents)
+            if ceiling is not None:
+                warnings.append(ceiling)
+        warnings += dataset_token_warnings(db, project_id, envs, schemas, documents)
         return {
             "dry_run": True,
             "ok": not errors,
+            "warnings": warnings,
             **sweep.summary(),
             "priority": priority.value,
             "preemption_warning": (
@@ -1238,7 +1372,7 @@ def create_experiment(
                 if priority == EvalPriority.HIGH
                 else None
             ),
-            "errors": errors,
+            "errors": _with_codes(errors),
             "jobs": preview,
         }
     _require_preemption_ack(priority, envs, req.acknowledge_preemption)
@@ -1247,7 +1381,7 @@ def create_experiment(
             status_code=422,
             detail={
                 "message": "The configuration is not valid",
-                "errors": errors,
+                "errors": _with_codes(errors),
                 "jobs": preview,
             },
         )
@@ -1278,6 +1412,7 @@ def create_experiment(
         secrets_encrypted=_encrypted_secrets(referenced_secrets(spec, req.secrets)),
         priority=priority,
         preemption_acknowledged_at=now if priority == EvalPriority.HIGH else None,
+        latency_sensitive=req.latency_sensitive,
         status=EvalExperimentStatus.QUEUED,
         job_count=len(planned),
         created_at=now,
@@ -1287,6 +1422,8 @@ def create_experiment(
     db.flush()
     # The creator's dedicated key, sent as ``qym_api_key`` on every submit.
     issue_experiment_api_key(db, experiment, _settings())
+    # And its dataset read token (``QYM_DATASET_READ_TOKEN``), same lifecycle.
+    issue_experiment_dataset_token(db, experiment, _settings())
     for combo, env, schema, plan, params, run_name in planned:
         assert schema is not None and plan["body"] is not None
         job_id = str(uuid4())
@@ -1337,6 +1474,7 @@ def create_experiment(
             "name": req.name,
             "environment_ids": [env.id for env in envs],
             "priority": priority.value,
+            "latency_sensitive": req.latency_sensitive,
             "combo_count": sweep.combo_count,
             "job_count": len(planned),
             "saved_connection_ids": saved_connection_ids,
@@ -1400,6 +1538,40 @@ def get_evaluator_config_panel(
     return evaluator_inputs_panel(sources)
 
 
+@router.get(_PREFIX + "/launch-datasets")
+def list_launch_datasets(
+    project_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Every dataset of the project the launch form may name (owner decision D3).
+
+    Any member who can launch may run on any dataset, restricted or private: the
+    experiment's own dataset read token does the reading. The list is therefore a plain
+    query, not the access-filtered catalog; each entry carries what the picker shows as
+    a badge (``private_test_set``, ``access_mode``).
+    """
+    _require_project_access(db, principal, project_id)
+    rows = (
+        db.query(Dataset)
+        .filter(Dataset.project_id == project_id, Dataset.deleted_at.is_(None))
+        .order_by(Dataset.name, Dataset.id)
+        .all()
+    )
+    return {
+        "datasets": [
+            {
+                "id": d.id,
+                "name": d.name,
+                "slug": d.slug,
+                "private_test_set": bool(d.private_test_set),
+                "access_mode": getattr(d, "access_mode", "project") or "project",
+            }
+            for d in rows
+        ]
+    }
+
+
 @router.get(_PREFIX)
 def list_experiments(
     project_id: str,
@@ -1416,6 +1588,7 @@ def list_experiments(
         ),
     ),
     include_versioning_facets: bool = Query(False),
+    latency_sensitive: Optional[bool] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -1429,6 +1602,8 @@ def list_experiments(
     query = db.query(EvalExperiment).filter(EvalExperiment.project_id == project_id)
     if status is not None:
         query = query.filter(EvalExperiment.status == status)
+    if latency_sensitive is not None:
+        query = query.filter(EvalExperiment.latency_sensitive.is_(latency_sensitive))
     if mine:
         query = query.filter(EvalExperiment.created_by_user_id == principal.user.id)
     elif created_by:
@@ -1636,6 +1811,11 @@ def retry_experiment_job(
     if creator_problem:
         raise HTTPException(status_code=409, detail=creator_problem)
     _resolve_priority(db, principal, project_id, [env], experiment.priority)
+    retry_gate = _latency_gate(
+        db, principal, project_id, [env], experiment.latency_sensitive
+    )
+    if retry_gate:
+        raise HTTPException(status_code=403, detail=retry_gate)
     acknowledged = bool(req and req.acknowledge_preemption)
     _require_preemption_ack(experiment.priority, [env], acknowledged)
     secrets, missing = retry_secrets(
@@ -1712,6 +1892,9 @@ def retry_experiment_job(
     # Keep the creator's key alive for this attempt, or mint a new one if it was
     # revoked when the experiment settled (eval_submitter_keys).
     ensure_key_for_retry(db, experiment, _settings())
+    ensure_dataset_token_for_retry(
+        db, experiment, _settings(), actor_user_id=principal.user.id
+    )
     recompute_experiment_status(db, experiment)
     _audit(
         db,
@@ -1768,6 +1951,7 @@ def clone_experiment(
         "base_source": {"kind": "clone", "experiment_id": experiment.id},
         "cloned_base_source": strip_secret_refs(experiment.base_source or {}),
         "priority": experiment.priority.value,
+        "latency_sensitive": bool(experiment.latency_sensitive),
         "spec": strip_secret_refs(experiment.spec or {}),
         "versioning_details": dict(experiment.versioning_details or {}),
     }

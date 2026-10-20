@@ -16,6 +16,7 @@ export function envRecord(over: Partial<EvalEnvironment> = {}): EvalEnvironment 
     api_key_hint: null,
     default_priority: 'NORMAL',
     max_priority: 'HIGH',
+    latency_sensitive_min_role: 'member',
     allow_connection_keys: true,
     ranking_metric: null,
     ranking_k: null,
@@ -124,7 +125,16 @@ export function installFakePlatform(envs: EvalEnvironment[] = [envRecord()]): Fa
         });
       if (/\/v1\/datasets\/[^/]+\/versions/.test(path))
         return json(200, { versions: [{ version: 'v1', aliases: [] }] });
-      if (/\/v1\/datasets\?/.test(path)) return json(200, { datasets: [{ name: 'ds1' }, { name: 'ds2' }] });
+      if (/\/experiments\/launch-datasets/.test(path))
+        return json(200, {
+          datasets: ['ds1', 'ds2'].map((name) => ({
+            id: name,
+            name,
+            slug: name,
+            private_test_set: false,
+            access_mode: 'project',
+          })),
+        });
       if (/\/experiments\?limit=1/.test(path)) return json(200, { experiments: [] });
       if (/\/experiments$/.test(path) && method === 'POST') {
         const b = body as { dry_run?: boolean };

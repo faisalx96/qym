@@ -119,12 +119,14 @@ def queue_jobs(
     statuses: Optional[Iterable[EvalJobStatus]] = None,
     created_by_user_id: Optional[str] = None,
     experiment_id: Optional[str] = None,
+    latency_sensitive: Optional[bool] = None,
     limit: int = 500,
 ) -> Tuple[List[Tuple[EvalExperimentJob, EvalExperiment]], int]:
     """Non-terminal jobs of a project in dispatch order, and their total count.
 
     ``statuses`` narrows :data:`QUEUE_STATUSES` (terminal statuses are ignored);
-    ``created_by_user_id`` keeps jobs of that user's experiments ("mine").
+    ``created_by_user_id`` keeps jobs of that user's experiments ("mine");
+    ``latency_sensitive`` keeps jobs of flagged (or unflagged) experiments.
     """
     wanted = [s for s in (statuses or QUEUE_STATUSES) if s in QUEUE_STATUSES]
     if not wanted:
@@ -143,6 +145,8 @@ def queue_jobs(
         query = query.filter(EvalExperiment.created_by_user_id == created_by_user_id)
     if experiment_id:
         query = query.filter(EvalExperimentJob.experiment_id == experiment_id)
+    if latency_sensitive is not None:
+        query = query.filter(EvalExperiment.latency_sensitive.is_(latency_sensitive))
     total = query.count()
     rows = query.order_by(*dispatch_order()).limit(limit).all()
     return [(job, experiment) for job, experiment in rows], total
@@ -253,6 +257,7 @@ def environment_summaries(
     ):
         counts.setdefault(env_id, {})[EvalJobStatus(status).value] = int(n)
     local_high = set()
+    local_latency = set()
     for job, experiment in (
         db.query(EvalExperimentJob, EvalExperiment)
         .join(EvalExperiment, EvalExperiment.id == EvalExperimentJob.experiment_id)
@@ -263,6 +268,8 @@ def environment_summaries(
     ):
         if job_priority(job, experiment) == "HIGH":
             local_high.add(job.environment_id)
+        if experiment.latency_sensitive:
+            local_latency.add(job.environment_id)
     out = []
     for env in environments:
         by_status = counts.get(env.id, {})
@@ -282,6 +289,8 @@ def environment_summaries(
                 "counts": by_status,
                 "high_active": env.id in local_high
                 or _snapshot_has_high(read_snapshot(db, env.id)),
+                # A latency-sensitive job of ours is active here: others wait for it.
+                "latency_active": env.id in local_latency,
             }
         )
     return out

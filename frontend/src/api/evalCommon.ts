@@ -8,6 +8,7 @@ import { api, ApiError } from '@/lib/http';
 
 export type EvalPriority = 'LOW' | 'NORMAL' | 'HIGH';
 export const PRIORITIES: EvalPriority[] = ['LOW', 'NORMAL', 'HIGH'];
+export type LatencyMinRole = 'member' | 'manager';
 
 export interface ModelSlotsSummary {
   needs_confirmation: boolean;
@@ -24,6 +25,8 @@ export interface EvalEnvironment {
   api_key_hint: string | null;
   default_priority: EvalPriority;
   max_priority: EvalPriority;
+  /** Who may launch latency-sensitive runs here: anyone in the project or managers only. */
+  latency_sensitive_min_role: LatencyMinRole;
   allow_connection_keys: boolean;
   ranking_metric: string | null;
   ranking_k: number | null;

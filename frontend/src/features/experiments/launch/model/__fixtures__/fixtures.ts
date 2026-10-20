@@ -67,6 +67,7 @@ export interface EnvOptions {
   add?: Array<{ entry: DescriptorEntry; group: string; root?: boolean }>;
   maxPriority?: EnvData['maxPriority'];
   defaultPriority?: EnvData['defaultPriority'];
+  latencyMinRole?: EnvData['latencyMinRole'];
   loading?: boolean;
   formError?: string;
   /** Overrides the confirmed slots. */
@@ -96,6 +97,7 @@ export function makeEnv(id: string, name: string, opts: EnvOptions = {}): EnvDat
     options: opts.noOptions ? null : clone(optionsResponse),
     maxPriority: opts.maxPriority ?? 'HIGH',
     defaultPriority: opts.defaultPriority ?? 'NORMAL',
+    latencyMinRole: opts.latencyMinRole ?? 'member',
     schemaHash: 'hash-' + id,
   });
   env.loading = opts.loading;

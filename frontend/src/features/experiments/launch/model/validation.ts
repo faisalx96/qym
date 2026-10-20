@@ -3,7 +3,9 @@
  * human field labels, wizard steps and focusable field names. The server dry run stays
  * the authority: these only cover the cheap checks.
  */
+import { LATENCY_REVIEW_LABEL, latencyGateMessage } from '../copy';
 import { datasetValue, DESCRIPTION_MAX, PRIORITY_ORDER } from './document';
+import { latencyGate } from './latencyGate';
 import { envsMissing, envName, leafSchema, notInEnvMessage } from './descriptor';
 import { evaluatorLocalErrors, configEntry } from './evaluator';
 import { groupOfPointer } from './settingsTree';
@@ -34,6 +36,7 @@ export const PSEUDO = {
   versioning: '#versioning-details',
   description: '#description',
   rawJson: '#advanced-json',
+  latency: '#latency',
 } as const;
 
 interface Located {
@@ -75,6 +78,7 @@ export function locate(pointer: string, ctx: FormContext): Located {
   if (pointer === PSEUDO.name) return { label: 'Name', stepId: 'where' };
   if (pointer === PSEUDO.description) return { label: 'Description', stepId: 'where' };
   if (pointer === PSEUDO.versioning) return { label: 'Versioning details', stepId: 'where' };
+  if (pointer === PSEUDO.latency) return { label: LATENCY_REVIEW_LABEL, stepId: 'where' };
   if (pointer === PSEUDO.base) return { label: 'Starting point', stepId: 'start' };
   if (pointer === PSEUDO.rawJson) return { label: 'Raw JSON', stepId: 'review' };
   if (pointer === '' || pointer == null) return { label: 'Configuration', stepId: 'review' };
@@ -202,6 +206,10 @@ export function localErrors(
     }
   }
   if (!doc.name.trim()) push(PSEUDO.name, 'Name the experiment.');
+  if (doc.latencySensitive) {
+    const gate = latencyGate(ctx.envs, ctx.isManager, doc.environmentIds);
+    if (gate.managerOnly.length) push(PSEUDO.latency, latencyGateMessage(gate.managerOnly));
+  }
   if (doc.description.length > DESCRIPTION_MAX)
     push(PSEUDO.description, `Descriptions are at most ${DESCRIPTION_MAX} characters.`);
   for (const message of parseVersioning(doc.versioningText).errors) push(PSEUDO.versioning, message);
@@ -282,7 +290,11 @@ export function validationItems(
   options: LocalErrorOptions = {},
 ): ValidationItem[] {
   const local = localErrors(doc, ctx, options);
-  return [...local, ...mapServerErrors(visibleServerErrors(server.errors, local), doc, ctx, server.preview)];
+  // The server names the gate by its request field; the form knows it as the checkbox.
+  const errors = server.errors.map((e) =>
+    e.pointer === '/latency_sensitive' ? { ...e, pointer: PSEUDO.latency } : e,
+  );
+  return [...local, ...mapServerErrors(visibleServerErrors(errors, local), doc, ctx, server.preview)];
 }
 
 // ── Launch state ─────────────────────────────────────────────────────────

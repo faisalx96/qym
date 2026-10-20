@@ -31,7 +31,9 @@ import {
   UserCell,
   type Column,
 } from '@/ui';
+import { LATENCY_FILTER_LABEL } from '../copy';
 import { ExperimentsTabs } from '../ExperimentsTabs';
+import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
 import { baseSourceLabel, plural, tallyJobCounts, versioningLabel, versioningWords } from '../lib/format';
 import { experimentPath, launchPath } from '../paths';
@@ -58,12 +60,14 @@ export function ExperimentsPage() {
 
   const status = params.get('status') ?? '';
   const mine = params.get('mine') === '1';
+  const latency = params.get('latency') === '1';
   const versioning = useMemo(() => parseVersioning(params), [params]);
   const page = Math.max(1, Number(params.get('page')) || 1);
 
   const query = useExperiments(project.id, {
     status,
     mine,
+    latency,
     versioning,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
@@ -80,7 +84,7 @@ export function ExperimentsPage() {
   const versioningKeys = [...new Set([...Object.keys(facets), ...Object.keys(versioning)])].sort((a, b) =>
     a.localeCompare(b),
   );
-  const filtered = Boolean(status || mine || Object.keys(versioning).length);
+  const filtered = Boolean(status || mine || latency || Object.keys(versioning).length);
 
   function update(mutate: (next: URLSearchParams) => void) {
     setParams(
@@ -112,7 +116,17 @@ export function ExperimentsPage() {
       pin: 'start',
       hideable: false,
       priority: 1,
-      cell: (x) => <TwoLine primary={x.name || x.id} secondary={x.description} />,
+      cell: (x) => (
+        <TwoLine
+          primary={
+            <span className={styles.nameLine}>
+              {x.name || x.id}
+              {x.latency_sensitive ? <LatencyTag /> : null}
+            </span>
+          }
+          secondary={x.description}
+        />
+      ),
     },
     {
       id: 'status',
@@ -217,6 +231,18 @@ export function ExperimentsPage() {
         }
       >
         Created by me
+      </Checkbox>
+      <Checkbox
+        isSelected={latency}
+        onChange={(on) =>
+          update((next) => {
+            if (on) next.set('latency', '1');
+            else next.delete('latency');
+            resetPage(next);
+          })
+        }
+      >
+        {LATENCY_FILTER_LABEL}
       </Checkbox>
     </div>
   );

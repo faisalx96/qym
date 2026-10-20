@@ -109,6 +109,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .eval_model_slots import propose_endpoint_slot, resolve_field, slot_field_maps
 from .eval_schema_form import (
+    PLATFORM_OWNED_ENV_OVERRIDES,
     build_form_descriptor,
     escape_pointer_segment,
     json_pointer,
@@ -152,7 +153,8 @@ PLATFORM_OWNED_CONFIG_FIELDS = (
 PLATFORM_OWNED_EVALUATOR_FIELDS = ("model",)
 # Top-level ``EvalJobCreate`` keys the platform owns. ``qym_api_key`` is the creator's
 # per-experiment key (``eval_submitter_keys``), added in memory at dispatch only.
-PLATFORM_OWNED_BODY_FIELDS = ("qym_api_key",)
+# ``latency_sensitive`` is the experiment's flag (sent only when true, guide v1.3 §2.2).
+PLATFORM_OWNED_BODY_FIELDS = ("qym_api_key", "latency_sensitive")
 # ``run_metadata`` keys the platform writes at launch (§10.1); shown read-only.
 PLATFORM_METADATA_KEYS = ("qym_launch", "qym_config")
 # User-editable ``evaluator.config`` fields in display order (Advanced panel, §8.4).
@@ -377,6 +379,7 @@ def evaluator_inputs_panel(
             "config": list(PLATFORM_OWNED_CONFIG_FIELDS),
             "evaluator": list(PLATFORM_OWNED_EVALUATOR_FIELDS),
             "body": list(PLATFORM_OWNED_BODY_FIELDS),
+            "env_overrides": list(PLATFORM_OWNED_ENV_OVERRIDES),
         },
         "platform_owned_present": owned_present,
         "reserved_metadata_prefix": RESERVED_METADATA_PREFIX,
@@ -399,6 +402,18 @@ def platform_owned_pointers(document: Mapping[str, Any]) -> list[str]:
             if config.get(name) is not None:
                 found.append("/evaluator/config/" + name)
     return found
+
+
+def platform_owned_env_pointers(document: Mapping[str, Any]) -> list[str]:
+    """Document pointers of platform-owned ``env_overrides`` keys a user has set."""
+    env = document.get("env_overrides")
+    if not isinstance(env, Mapping):
+        return []
+    return [
+        "/env_overrides/" + escape_pointer_segment(name)
+        for name in PLATFORM_OWNED_ENV_OVERRIDES
+        if name in env
+    ]
 
 
 @lru_cache(maxsize=2)
@@ -1332,7 +1347,8 @@ def validate_config_document(
                 "are reserved for the platform",
             )
         )
-    for pointer in platform_owned_pointers(document):
+    owned_env = platform_owned_env_pointers(document)
+    for pointer in [*platform_owned_pointers(document), *owned_env]:
         located.append(
             (
                 pointer,
@@ -1458,6 +1474,7 @@ def validate_config_document(
         )
         for p, r, m in schema_located
         if not is_placeholder(_get(body, split_pointer(p)))
+        and p not in owned_env
         and not any(p == s or p.startswith(s + "/") for s in sweep_ptrs)
     ]
 

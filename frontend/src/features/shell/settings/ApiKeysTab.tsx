@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { experimentPath } from '@/features/experiments/paths';
 import {
   useApiKeys,
   useCreateApiKey,
@@ -19,14 +21,17 @@ import {
   RelativeTime,
   Skeleton,
   Stack,
+  Tag,
   Text,
   TextField,
   useToast,
   type Column,
   Card,
+  TwoLine,
 } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
+import { EXPERIMENT_DELETED } from './copy';
 import { SecretRevealDialog } from '../dialogs';
 import styles from './settings.module.css';
 
@@ -212,6 +217,7 @@ function KeysCard({
 }
 
 function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: boolean }) {
+  const { slug } = useProjectContext();
   const tokens = useDatasetReadTokens(projectId, true);
   const create = useCreateReadToken(projectId);
   const lock = useSubmitLock();
@@ -229,7 +235,32 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
       pin: 'start',
       hideable: false,
       priority: 1,
-      cell: (t) => t.name || 'Unnamed token',
+      cell: (t) =>
+        t.kind === 'experiment' ? (
+          <TwoLine
+            primary={
+              <span className={styles.tokenName}>
+                {t.name || 'Unnamed token'}
+                <Tag data-testid="token-kind-chip">experiment</Tag>
+              </span>
+            }
+            secondary={
+              t.experiment ? (
+                <Link
+                  className={styles.tokenLink}
+                  to={experimentPath(slug, t.experiment.id)}
+                  data-testid="token-experiment-link"
+                >
+                  Experiment · {t.experiment.name}
+                </Link>
+              ) : (
+                <span data-testid="token-experiment-deleted">{EXPERIMENT_DELETED}</span>
+              )
+            }
+          />
+        ) : (
+          t.name || 'Unnamed token'
+        ),
     },
     {
       id: 'prefix',
@@ -276,8 +307,8 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
               Dataset read tokens
             </Text>
             <Text variant="sm">
-              Admin-issued; lets a service read private test sets (QYM_DATASET_READ_TOKEN). Sent only on
-              dataset reads.
+              Admin-issued; lets a service read private test sets (QYM_DATASET_READ_TOKEN). Experiment tokens
+              are issued at launch and revoked when the experiment settles.
             </Text>
           </div>
         </div>
@@ -363,7 +394,11 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
           onOpenChange={(o) => !o && setRevoking(null)}
           title={`Revoke “${revoking.name || 'this token'}”?`}
           tone="danger"
-          description="Services using this token lose access to private datasets."
+          description={
+            revoking.kind === 'experiment'
+              ? 'Jobs of this experiment that have not read their dataset yet will fail until you retry them; the retry issues a new token.'
+              : 'Services using this token lose access to private datasets.'
+          }
           confirmLabel="Revoke token"
           onConfirm={async () => {
             try {
