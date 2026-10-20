@@ -5,11 +5,13 @@ import { Round3Mocks } from './Round3Mocks';
 import { Round4Mocks } from './Round4Mocks';
 import { Round5Mocks } from './Round5Mocks';
 import { Round7Mocks } from './Round7Mocks';
+import { DatasetAccessMocks } from './DatasetAccessMocks';
 import type { Key } from 'react-aria-components';
 import {
   Badge,
   Button,
   Checkbox,
+  RadioGroup,
   Chip,
   ConfirmDialog,
   CopyButton,
@@ -142,6 +144,7 @@ export default function UiGalleryPage() {
   });
   const [chip, setChip] = useState(true);
   const [num, setNum] = useState(10);
+  const [radio, setRadio] = useState<'project' | 'restricted'>('project');
   const [slider, setSlider] = useState(60);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [staleSince] = useState(() => new Date(Date.now() - 90_000));
@@ -915,6 +918,29 @@ export default function UiGalleryPage() {
       <Round4Mocks Section={Section} Case={Case} />
       <Round5Mocks Section={Section} Case={Case} />
       <Round7Mocks Section={Section} Case={Case} />
+      <DatasetAccessMocks Section={Section} Case={Case} />
+      {/* After the round mocks so the hash anchors above keep their offsets. */}
+      <Section id="radio-group" title="RadioGroup">
+        <Case label="RadioGroup">
+          <RadioGroup
+            label="Who can access this dataset"
+            value={radio}
+            onChange={setRadio}
+            options={[
+              {
+                value: 'project',
+                title: 'Everyone in the project',
+                help: 'Every member can view and modify this dataset.',
+              },
+              {
+                value: 'restricted',
+                title: 'Only people listed below',
+                help: 'Everyone else cannot open this dataset.',
+              },
+            ]}
+          />
+        </Case>
+      </Section>
     </div>
   );
 }

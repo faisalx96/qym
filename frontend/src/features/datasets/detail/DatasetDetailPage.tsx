@@ -24,6 +24,7 @@ import {
   Badge,
   Button,
   DropdownMenu,
+  HelpMarker,
   ErrorState,
   Icon,
   IconButton,
@@ -41,7 +42,8 @@ import { AddItemDialog, CreateDraftDialog, NameVersionDialog, PublishDialog } fr
 import { UserPill } from '../components/UserPill';
 import { VersionSwitcher } from '../components/VersionSwitcher';
 import { pluralize, relativeTime } from '../lib/itemValue';
-import { comparePath, datasetPath, parseDatasetRoute, type DetailTab } from '../lib/route';
+import { versionItemsText } from '../lib/itemState';
+import { catalogPath, comparePath, datasetPath, parseDatasetRoute, type DetailTab } from '../lib/route';
 import { PRODUCTION_RULE, isProduction, resolveActiveVersion } from '../lib/versions';
 import { UploadWizard, type WizardMode } from '../wizard/UploadWizard';
 import { ItemsWorkspace } from './ItemsWorkspace';
@@ -65,8 +67,13 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
   const pending = dsQuery.isPending || (Boolean(dataset) && versionsQuery.isPending);
   const showSkeleton = useDelayedPending(pending);
   useCrumbLabel(dataset?.name);
+  const forbidden = dsQuery.error instanceof ApiError && isDatasetForbidden(dsQuery.error);
   useDocumentTitle(
-    dataset ? `${dataset.name}${route.itemId ? ` · ${route.itemId}` : ''}` : `${project.name} · Datasets`,
+    forbidden
+      ? 'Datasets'
+      : dataset
+        ? `${dataset.name}${route.itemId ? ` · ${route.itemId}` : ''}`
+        : `${project.name} · Datasets`,
   );
 
   // Normalise the URL: canonical slug, `?v=` always present, legacy tab=versions → lineage.
@@ -133,6 +140,22 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
         <Skeleton kind="lines" rows={3} label="Loading dataset" />
       </div>
     );
+  if (forbidden) {
+    return (
+      <div className={fullWidth} data-testid="da-403">
+        <ErrorState
+          error={dsQuery.error}
+          title="You don’t have access to this dataset"
+          message="Ask a project manager to add you. Its runs stay listed with item contents hidden."
+          action={
+            <Button variant="neutral" onPress={() => navigate(catalogPath(slug))}>
+              Back to datasets
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
   if (dsQuery.isError) {
     return (
       <div className={fullWidth}>
@@ -166,7 +189,7 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
         versions={versions}
         version={active}
         itemId={route.itemId}
-        readOnly={readOnly}
+        readOnly={readOnly || !dataset.permissions.can_modify}
       />
     );
   }
@@ -178,7 +201,7 @@ export function DatasetDetailPage({ datasetRef }: { datasetRef: string }) {
       versions={versions}
       active={active}
       tab={route.tab}
-      readOnly={readOnly}
+      archived={readOnly}
     />
   );
 }
@@ -189,15 +212,19 @@ function DetailBody({
   versions,
   active,
   tab,
-  readOnly,
+  archived,
 }: {
   slug: string;
   dataset: Dataset;
   versions: DatasetVersion[];
   active: DatasetVersion | null;
   tab: DetailTab;
-  readOnly: boolean;
+  /** the project is archived (the whole project is read-only) */
+  archived: boolean;
 }) {
+  // Read-only for an archived project, and per dataset for a viewer (A1-25): edit
+  // affordances are hidden, not disabled.
+  const readOnly = archived || !dataset.permissions.can_modify;
   const navigate = useNavigate();
   const [search] = useSearchParams();
   const toast = useToast();
@@ -205,6 +232,8 @@ function DetailBody({
   const [dialog, setDialog] = useState<'draft' | 'publish' | 'name' | 'rename' | 'describe' | null>(null);
   const [wizard, setWizard] = useState<WizardMode | null>(null);
   const [addItemOpen, setAddItemOpen] = useState(false);
+  // An item whose state the reader wants to change on a published version: it opens in the new draft.
+  const [draftForItem, setDraftForItem] = useState<string | null>(null);
   const ref = dataset.slug;
   const isDraft = active?.status === 'draft';
   const canWrite = !readOnly;
@@ -310,6 +339,21 @@ function DetailBody({
               <IconButton label="Rename dataset" icon="edit" onPress={() => setDialog('rename')} />
             ) : null}
             {dataset.private_test_set ? <Badge tone="warning">Private test set</Badge> : null}
+            {dataset.access_mode === 'restricted' ? (
+              <Badge tone="neutral" glyph={<Icon name="lock" size={12} />} data-testid="restricted-badge">
+                Restricted
+              </Badge>
+            ) : null}
+            {!archived && dataset.permissions.access_level === 'view' ? (
+              <>
+                <Badge tone="neutral" glyph={<Icon name="eye" size={12} />} data-testid="view-only-badge">
+                  View only
+                </Badge>
+                <HelpMarker label="About view only access">
+                  You can open this dataset but not change it. Ask a project manager for modify access.
+                </HelpMarker>
+              </>
+            ) : null}
           </span>
         }
         description={
@@ -332,7 +376,16 @@ function DetailBody({
         meta={[
           pluralize(versions.length, 'version'),
           pluralize(dataset.run_count, 'run'),
-          pluralize(active?.item_count ?? 0, 'item'),
+          <span key="items" data-testid="meta-items">
+            {active?.disabled_count ? (
+              <>
+                {pluralize(active.item_count, 'item')}{' '}
+                <span className={styles.disabledCount}>({active.disabled_count} disabled)</span>
+              </>
+            ) : (
+              versionItemsText(active?.item_count ?? 0, 0)
+            )}
+          </span>,
           ...(active?.parent_version_id
             ? [
                 <span key="fork">
@@ -377,6 +430,15 @@ function DetailBody({
                           label: '↓ Download JSONL',
                           href: platformUrl(downloadUrl(slug, ref, active.version)),
                         },
+                        ...(active.disabled_count > 0
+                          ? [
+                              {
+                                id: 'download-all',
+                                label: '↓ Download JSONL with disabled items',
+                                href: platformUrl(downloadUrl(slug, ref, active.version, true)),
+                              },
+                            ]
+                          : []),
                       ]
                     : []),
                   ...(canWrite
@@ -415,6 +477,10 @@ function DetailBody({
               readOnly={readOnly}
               onAddItem={() => setAddItemOpen(true)}
               onImport={() => setWizard('add-to-draft')}
+              onCreateDraft={(itemId) => {
+                setDraftForItem(itemId ?? null);
+                setDialog('draft');
+              }}
             />
           ) : (
             <NoVersions
@@ -431,18 +497,29 @@ function DetailBody({
           <LineageTab slug={slug} datasetRef={ref} />
         </TabPanel>
         <TabPanel id="settings">
-          <SettingsTab slug={slug} dataset={dataset} readOnly={readOnly} />
+          <SettingsTab slug={slug} dataset={dataset} readOnly={readOnly} archived={archived} />
         </TabPanel>
       </Tabs>
 
       <CreateDraftDialog
         open={dialog === 'draft'}
-        onOpenChange={(o) => !o && setDialog(null)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDialog(null);
+            setDraftForItem(null);
+          }
+        }}
         slug={slug}
         dataset={dataset}
         versions={versions}
         current={active}
-        onCreated={(v) => navigate(datasetPath(slug, ref, { tab: 'items', v: v.version }))}
+        onCreated={(v) =>
+          navigate(
+            draftForItem
+              ? datasetPath(slug, ref, { v: v.version, item: draftForItem })
+              : datasetPath(slug, ref, { tab: 'items', v: v.version }),
+          )
+        }
       />
       {active ? (
         <PublishDialog
@@ -495,6 +572,11 @@ function DetailBody({
       />
     </div>
   );
+}
+
+/** The dataset 403 ("You don't have access to this dataset"), as opposed to a project-level refusal. */
+export function isDatasetForbidden(e: ApiError): boolean {
+  return e.status === 403 && /access to this dataset/i.test(e.detail || e.message || '');
 }
 
 function withTab(search: URLSearchParams, tab: string): string {

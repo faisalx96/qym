@@ -84,6 +84,11 @@ function Header({ data }: { data: ViewerData }) {
           {run.dataset_name}
         </span>
       ) : null}
+      {run.dataset_disabled_items ? (
+        <span className={s.chipPlain}>
+          {run.dataset_disabled_items} disabled {run.dataset_disabled_items === 1 ? 'item' : 'items'} skipped
+        </span>
+      ) : null}
       {run.run_name ? (
         <span className={s.chipPlain} title={run.run_name}>
           {run.run_name}

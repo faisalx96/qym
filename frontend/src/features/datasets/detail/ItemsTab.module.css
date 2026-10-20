@@ -79,3 +79,29 @@
   unicode-bidi: plaintext;
   text-align: start;
 }
+
+/* A disabled row keeps its height; the muted text and the Disabled badge are the cues (spec A2-7). */
+.table tr[data-state='disabled'] td,
+.table [data-state='disabled'] {
+  color: var(--text-muted);
+}
+
+.idCell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.countLabel {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  margin-inline-start: var(--space-xs);
+  color: inherit;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}

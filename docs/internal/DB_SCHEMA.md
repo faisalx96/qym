@@ -40,10 +40,11 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 
 ## Datasets
 
-- `datasets`: project-scoped dataset identity, description/tags, and soft deletion.
+- `datasets`: project-scoped dataset identity, description/tags, and soft deletion. `access_mode` (`0087`; `project` default = every member, `restricted` = managers, admins, the creator and granted users).
+- `dataset_grants` (`0087`): per-user `view` / `modify` grants on a dataset, unique `(dataset_id, user_id)`, `ON DELETE CASCADE` on dataset and user; kept when the mode is switched back to `project`.
 - `dataset_versions`: immutable `vN` identifier, optional display name, draft/published state, parent version, item count, and content hash.
 - `dataset_aliases`: project-dataset aliases such as `production`, restricted to published versions.
-- `dataset_items`: items keyed by `(version, item_id)` with input, expected output, metadata, labels, and fingerprint.
+- `dataset_items`: items keyed by `(version, item_id)` with input, expected output, metadata, labels, and fingerprint. `disabled_at`, `disabled_by_user_id`, `disabled_reason` (`0087`, index `(dataset_version_id, disabled_at)`) mark an item left out of runs; edited in drafts only, copied into later drafts, part of `content_hash`.
 - `dataset_item_revisions`: append-only before/after item edits.
 - `dataset_version_changes`: version creation, publishing, upload, clone, and alias history.
 

@@ -68,18 +68,26 @@ export function ItemHistoryTab({
           {revisions.length ? (
             <ol className={styles.revisions}>
               {revisions.map((r) => {
-                const changed = FIELDS.filter((f) =>
-                  r.change_type === 'updated' ? !sameValue(r.before?.[f.key], r.after?.[f.key]) : true,
-                );
+                const stateChange = r.change_type === 'disabled' || r.change_type === 'enabled';
+                const changed = stateChange
+                  ? []
+                  : FIELDS.filter((f) =>
+                      r.change_type === 'updated' ? !sameValue(r.before?.[f.key], r.after?.[f.key]) : true,
+                    );
                 const typeChanged = FIELDS.filter(
                   (f) => r.before && r.after && storedType(r.before[f.key]) !== storedType(r.after[f.key]),
                 );
                 return (
-                  <li key={r.id} className={styles.revision} data-revision={r.revision_number}>
+                  <li
+                    key={r.id}
+                    className={styles.revision}
+                    data-revision={r.revision_number}
+                    data-testid={stateChange ? `rev-${r.change_type}` : undefined}
+                  >
                     <div className={styles.revHead}>
                       <Badge
                         tone={
-                          r.change_type === 'created'
+                          r.change_type === 'created' || r.change_type === 'enabled'
                             ? 'success'
                             : r.change_type === 'deleted'
                               ? 'danger'
@@ -114,7 +122,11 @@ export function ItemHistoryTab({
                             .join(', ')}
                         </Text>
                       ) : null}
-                      {editable && v.id === version.id && r.change_type !== 'deleted' && r.after ? (
+                      {editable &&
+                      v.id === version.id &&
+                      r.change_type !== 'deleted' &&
+                      !stateChange &&
+                      r.after ? (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -125,6 +137,13 @@ export function ItemHistoryTab({
                         </Button>
                       ) : null}
                     </div>
+                    {stateChange ? (
+                      <Text variant="base" tone="secondary" as="p" className={styles.reasonText}>
+                        {r.change_type === 'disabled' && r.after?.reason?.trim()
+                          ? `Reason: ${r.after.reason.trim()}`
+                          : 'No reason given'}
+                      </Text>
+                    ) : null}
                     <div className={styles.diffs}>
                       {changed.map((f) => (
                         <FieldDiff

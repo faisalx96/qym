@@ -146,8 +146,11 @@ def test_items_search_runs_the_filter_once_and_can_skip_context(env):
     assert [item["item_id"] for item in page["items"]] == ["i1", "i10"]
     assert "dataset" not in page and "version" not in page
     searches = [s for s in statements if "search_text" in s and "LIKE" in s.upper()]
-    # Count and page come from one statement (count(*) OVER ()).
-    assert len(searches) == 1, searches
+    # Count and page come from one statement (count(*) OVER ()); the state
+    # counts (active / disabled / all) are one more grouped statement.
+    assert len(searches) == 2, searches
+    assert sum("OVER ()" in s for s in searches) == 1, searches
+    assert sum("GROUP BY" in s.upper() for s in searches) == 1, searches
 
 
 def test_item_page_neighbors_follow_the_list_sort_without_loading_every_row(env):
@@ -190,7 +193,7 @@ def test_lineage_reads_stored_counts_of_published_versions(env, monkeypatch):
     assert client.post(f"/v1/datasets/qa/versions/{draft['version']}:publish", params={"project_slug": "pa"}, json={}, headers=MGR).status_code == 200
     with factory() as db:
         stored = {v.version: v.change_counts for v in db.query(DatasetVersion)}
-    assert stored == {"v1": {"added": 2, "modified": 0, "deleted": 0, "unchanged": 0}, "v2": {"added": 1, "modified": 1, "deleted": 0, "unchanged": 1}}
+    assert stored == {"v1": {"added": 2, "modified": 0, "deleted": 0, "unchanged": 0, "disabled": 0, "enabled": 0}, "v2": {"added": 1, "modified": 1, "deleted": 0, "unchanged": 1, "disabled": 0, "enabled": 0}}
 
     import qym_platform.services.dataset_versions as dataset_versions
 
@@ -221,7 +224,7 @@ def test_counts_of_a_version_whose_parent_is_a_draft_are_computed_on_read(env):
     lineage = client.get("/v1/datasets/qa/lineage", params={"project_slug": "pa"}, headers=MGR).json()
     counts = {v["version"]: v["change_counts"] for v in lineage["versions"]}
     # The child has no items; its draft parent has one.
-    assert counts["v9"] == {"added": 0, "modified": 0, "deleted": 1, "unchanged": 0}
+    assert counts["v9"] == {"added": 0, "modified": 0, "deleted": 1, "unchanged": 0, "disabled": 0, "enabled": 0}
 
 
 def test_version_list_uses_a_fixed_number_of_queries(env):
@@ -289,6 +292,10 @@ def test_members_cannot_rename_slug_move_production_or_delete_others_datasets(en
         assert db.query(DatasetVersion).count() == 2  # the refused upload wrote nothing
     perms = client.get("/v1/datasets/golden", params={"project_slug": "pa"}, headers=MEM).json()["dataset"]["permissions"]
     assert perms == {
+        "access_level": "modify",
+        "can_view_items": True,
+        "can_modify": True,
+        "can_manage_access": False,
         "can_manage": False,
         "is_creator": False,
         "can_rename_slug": False,
@@ -379,7 +386,7 @@ def test_compare_pages_one_list_and_keeps_full_compat_without_limit(env):
     first = client.get(f"/v1/datasets/qa/versions/{draft}:compare", params=params, headers=MGR).json()
     assert [row["item_id"] for row in first["field_diffs"]] == ["i3", "i4"]
     assert first["page"] == {"kind": "changed", "offset": 0, "limit": 2, "total": 3, "next_offset": 2}
-    assert first["summary"] == {"added": 0, "removed": 0, "changed": 3, "unchanged": 3}
+    assert first["summary"] == {"added": 0, "removed": 0, "changed": 3, "unchanged": 3, "disabled": 0, "enabled": 0}
     second = client.get(f"/v1/datasets/qa/versions/{draft}:compare", params=dict(params, offset=2), headers=MGR).json()
     assert [row["item_id"] for row in second["field_diffs"]] == ["i1"] and second["page"]["next_offset"] is None
     unchanged = client.get(f"/v1/datasets/qa/versions/{draft}:compare", params=dict(params, kind="unchanged", limit=10), headers=MGR).json()

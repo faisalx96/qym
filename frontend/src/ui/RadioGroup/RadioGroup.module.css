@@ -1,0 +1,80 @@
+/* RadioGroup: option rows (dot, title, help), 52px rows, accent border and tint when selected (mock da-access). */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.option {
+  position: relative; /* anchors the visually hidden input */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-sm) var(--space-md);
+  min-block-size: var(--row-comfortable);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.option[data-hovered] {
+  border-color: var(--border-strong);
+}
+
+.option[data-selected] {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--bg-elevated));
+}
+
+.option[data-focus-visible] {
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.option[data-disabled] {
+  cursor: default;
+  opacity: 1;
+}
+
+.option[data-disabled] .optionTitle {
+  color: var(--text-muted);
+}
+
+.dot {
+  inline-size: 14px;
+  block-size: 14px;
+  margin-block-start: 2px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+}
+
+.option[data-selected] .dot {
+  border-color: var(--accent-primary);
+  box-shadow: inset 0 0 0 3px var(--bg-surface);
+  background: var(--accent-primary);
+}
+
+.optionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.optionTitle {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.optionHelp {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}

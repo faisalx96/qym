@@ -140,12 +140,12 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0086`, following `0050` through
+The combined migration chain has one head, `0087`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084` and `0086` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0084`, `0086` and `0087` are quick DDL or small job/queue inserts.
 `0085` switches `spans` to daily partitions; it locks `spans` for an instant only
 to drop still-empty monthly partitions that start after today.
 
@@ -182,6 +182,7 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0087 | `datasets.access_mode` (constant default `project`), empty `dataset_grants` table, `dataset_items.disabled_at` / `disabled_by_user_id` (nullable) and `disabled_reason` (constant default empty) plus the index `(dataset_version_id, disabled_at)` | None: every dataset stays open to the whole project and every item stays active |
 | 0086 | Empty `eval_environment_evaluator_schemas` table; `eval_environments.current_evaluator_schema_id` (nullable) and `evaluator_schema_status` (constant default `unknown`) | None: each environment fetches its evaluator schema on its next **Test**, schema refresh or selection in the launch form |
 | 0085 | Drops still-empty monthly `spans` partitions that start after today (brief `ACCESS EXCLUSIVE` on `spans`, under `QYM_MIGRATION_LOCK_TIMEOUT`) and creates daily partitions for the next 14 days | None: the hourly retention pass keeps daily partitions ahead; see "Span partitions" |
 | 0071 | Nullable `dashboard_run_dimensions.search_text` (instant) and one job insert, skipped while a `build_runs_search_index` job still waits to start | `build_runs_search_index` (this release's job does all of it) — **queued, runs by itself**: builds the partial index `ix_dashboard_run_dimensions_unsearchable` CONCURRENTLY, fills `search_text` in run-key windows (one statement per 500-run window), then rebuilds `ix_dashboard_run_dimensions_search_trgm` over `search_text` and the run ID, CONCURRENTLY. It replaces `0070`'s index over descriptor expressions, which made every descriptor rewrite of a live run a non-HOT update. Until it reaches a row, the search reads that row's names from its descriptor, with the same results. Without `pg_trgm` it fills the column, logs "runs search index skipped" and finishes. Resumable and safe to start again |
@@ -269,7 +270,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0086` and a healthy API. The API process then runs every queued job itself.
+   `0087` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -451,7 +452,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0086`.
+deployment only after the API has migrated to `0087`.
 
 ```yaml
 apiVersion: apps/v1

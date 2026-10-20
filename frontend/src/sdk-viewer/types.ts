@@ -42,6 +42,8 @@ export interface Snapshot {
 /** `GET api/run` (live; `{}` until the evaluation registers) and `run` of `GET api/runs/<file>`. */
 export interface RunInfo {
   dataset_name?: string;
+  /** disabled dataset items the run left out (platform datasets only) */
+  dataset_disabled_items?: number;
   run_name?: string;
   model?: string;
   status?: 'RUNNING' | 'COMPLETED' | 'STOPPED';

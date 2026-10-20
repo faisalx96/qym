@@ -33,6 +33,7 @@ function rowText(raw: unknown): string | undefined {
 }
 
 const isStructured = (v: unknown): boolean => parseStructured(v).structured;
+const HIDDEN_DATASET_ITEMS = 'Hidden: you don’t have access to this dataset’s items.';
 
 export function TraceChips({ stats, retries }: { stats: RowTraceStats | null | undefined; retries: number }) {
   const ts = stats ?? {};
@@ -81,7 +82,8 @@ export function ItemCard({ row }: { row: Row }) {
   const state = ui.details.stateOf(row.item_id);
   const run = payload.run;
   useEffect(() => {
-    if (!loaded && !run.items_restricted) void ui.details.ensure([row.item_id]);
+    // A restricted run's details come back redacted (placeholders, scores kept): fetch them like any row's.
+    if (!loaded) void ui.details.ensure([row.item_id]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, row.item_id]);
   const repeatAggregate = model.isRepeat && !model.viewPass;
@@ -178,7 +180,11 @@ export function ItemCard({ row }: { row: Row }) {
         }}
       />
       {run.items_restricted ? (
-        <p className={styles.muted}>Item bodies are visible to admins only on a private test set.</p>
+        <p className={styles.muted} data-testid="run-item-redacted">
+          {run.items_restricted_reason === 'dataset_access'
+            ? HIDDEN_DATASET_ITEMS
+            : 'Item bodies are visible to admins only on a private test set.'}
+        </p>
       ) : null}
       <div className={styles.fields}>
         <FieldRow
@@ -258,7 +264,9 @@ export function ItemCard({ row }: { row: Row }) {
             <h3 className={styles.metricsTitle}>Metrics</h3>
             <p className={styles.muted}>
               {run.items_restricted
-                ? 'Scores are visible to admins only'
+                ? run.items_restricted_reason === 'dataset_access'
+                  ? HIDDEN_DATASET_ITEMS
+                  : 'Scores are visible to admins only'
                 : 'No scores: this item produced no output to score.'}
             </p>
           </>

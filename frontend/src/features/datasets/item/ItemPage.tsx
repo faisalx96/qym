@@ -31,7 +31,8 @@ import {
   Tag,
   useToast,
 } from '@/ui';
-import { CreateDraftDialog } from '../components/dialogs';
+import { CreateDraftDialog, DisableItemDialog } from '../components/dialogs';
+import { DisabledBanner, EnableButton, useItemStateActions } from '../components/ItemStateUi';
 import { FieldEditor } from '../components/FieldEditor';
 import { useItemEditor } from './useItemEditor';
 import { formatDate, relativeTime } from '../lib/itemValue';
@@ -61,13 +62,22 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
     dataset.slug,
     version.version,
     itemId,
-    { search: route.search || undefined, sort: route.sort || undefined, label: route.label || undefined },
-    visible,
+    {
+      search: route.search || undefined,
+      sort: route.sort || undefined,
+      label: route.label || undefined,
+      // a disabled item opened under the Active list still finds its neighbours in the full list
+      state: route.state === 'all' || itemQuery.data?.state === 'disabled' ? undefined : route.state,
+      meta: route.meta.length ? route.meta : undefined,
+    },
+    visible && Boolean(itemQuery.data),
   );
   const del = useDeleteItem(slug, dataset.slug, version.version);
   const showSkeleton = useDelayedPending(itemQuery.isPending && visible);
   const [draftOpen, setDraftOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [disableOpen, setDisableOpen] = useState(false);
+  const stateActions = useItemStateActions(slug, dataset.slug, version);
   const editable = version.status === 'draft' && !readOnly;
   const item = itemQuery.data;
 
@@ -190,18 +200,49 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
         actions={
           <div className={styles.actions}>
             {version.status !== 'draft' && !readOnly ? (
-              <Button variant="accent" onPress={() => setDraftOpen(true)} data-testid="create-draft-to-edit">
-                Create draft to edit
+              <>
+                <Button
+                  variant="accent"
+                  size="md"
+                  onPress={() => setDraftOpen(true)}
+                  data-testid="create-draft-to-edit"
+                >
+                  Create draft to edit
+                </Button>
+                <Button
+                  variant="neutral"
+                  size="md"
+                  onPress={() => setDraftOpen(true)}
+                  data-testid="item-state-action"
+                >
+                  {item.state === 'disabled' ? 'Create a draft to enable' : 'Create a draft to disable'}
+                </Button>
+              </>
+            ) : null}
+            {editable && item.state !== 'disabled' ? (
+              <Button
+                variant="neutral"
+                size="md"
+                onPress={() => setDisableOpen(true)}
+                data-testid="item-state-action"
+              >
+                Disable item…
               </Button>
             ) : null}
             {editable ? (
-              <Button variant="danger" onPress={() => setConfirmDelete(true)} data-testid="delete-item">
+              <Button
+                variant="danger"
+                size="md"
+                onPress={() => setConfirmDelete(true)}
+                data-testid="delete-item"
+              >
                 Delete
               </Button>
             ) : null}
             <LinkButton
               to={prev ? linkTo({ item: prev.item_id }) : ''}
               variant="neutral"
+              size="md"
               aria-disabled={!prev || undefined}
               data-testid="item-prev"
               icon={<Icon name="prev" size={12} />}
@@ -212,6 +253,7 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
             <LinkButton
               to={next ? linkTo({ item: next.item_id }) : ''}
               variant="neutral"
+              size="md"
               aria-disabled={!next || undefined}
               data-testid="item-next"
               onClick={(e) => !next && e.preventDefault()}
@@ -221,6 +263,7 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
             {editable ? (
               <Button
                 variant="primary"
+                size="md"
                 onPress={() => void save()}
                 isDisabled={!dirty || !valid}
                 loading={editor.saving}
@@ -232,6 +275,20 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
           </div>
         }
       />
+      {item.state === 'disabled' ? (
+        <div className={styles.banner}>
+          <DisabledBanner item={item} published={version.status !== 'draft'} />
+          {editable ? (
+            <div>
+              <EnableButton
+                size="md"
+                loading={stateActions.enabling}
+                onPress={() => void stateActions.enableItem(item.item_id)}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <Tabs
         label="Item sections"
         items={[
@@ -297,6 +354,12 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
         versions={versions}
         current={version}
         onCreated={(v) => navigate(linkTo({ v: v.version }))}
+      />
+      <DisableItemDialog
+        open={disableOpen}
+        onOpenChange={setDisableOpen}
+        itemId={item.item_id}
+        onConfirm={(reason) => stateActions.disableItem(item.item_id, reason)}
       />
       <ConfirmDialog
         open={confirmDelete}

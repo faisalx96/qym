@@ -19,18 +19,57 @@
   height: 100%;
 }
 
+.cardWrap {
+  container-type: inline-size;
+}
+
 .cardHead {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'icon title badges';
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-sm) var(--space-md);
   min-width: 0;
 }
 
+.cardIcon {
+  grid-area: icon;
+}
+
 .cardTitle {
+  grid-area: title;
   display: flex;
-  flex: 1;
   flex-direction: column;
   min-width: 0;
+}
+
+/* a name wraps at its words, never an ellipsis (DESIGN_LANGUAGE §7) */
+.cardName {
+  overflow-wrap: anywhere;
+}
+
+.badges {
+  grid-area: badges;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-xs);
+}
+
+/* under 440px of card width the cluster drops under the title (the name keeps the full line) */
+@container (max-width: 440px) {
+  .cardHead {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'icon title'
+      'badges badges';
+  }
+
+  .badges {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }
 
 .state {

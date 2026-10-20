@@ -56,6 +56,7 @@ from qym_platform.permissions import (
     can_review_run,
     can_view_run,
     can_view_run_items,
+    run_items_restricted_reason,
     has_project_access,
     is_project_manager,
     project_for_read_by_slug,
@@ -4605,19 +4606,22 @@ def run_group_metrics(
 def _with_item_visibility(
     db: Session, principal: Principal, run: Run, data: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Redact item contents of a run evaluated on a private test set unless
+    """Redact item contents of a run evaluated on a private test set (admins only)
+    or on a restricted dataset the reader cannot open, unless
     ``principal`` is an admin. Handles run payloads and single-row payloads."""
     if can_view_run_items(db, principal, run):
         return data
+    reason = run_items_restricted_reason(db, principal, run) or "private_test_set"
     snapshot = data.get("snapshot")
     if isinstance(snapshot, dict):
-        redact_item_content(snapshot.get("rows") or [])
+        redact_item_content(snapshot.get("rows") or [], reason)
     if isinstance(data.get("rows"), list):
-        redact_item_content(data["rows"])
+        redact_item_content(data["rows"], reason)
     if isinstance(data.get("row"), dict):
-        redact_item_content(data["row"])
+        redact_item_content(data["row"], reason)
     if isinstance(data.get("run"), dict):
         data["run"]["items_restricted"] = True
+        data["run"]["items_restricted_reason"] = reason
     return data
 
 
@@ -4675,7 +4679,7 @@ def run_item_reasons(
     reasons = {item_id: reason_fields(meta) for item_id, meta in metas.items()}
     if not can_view_run_items(db, principal, run):
         # Private test set: reasons and explanations quote item content.
-        redact_item_content(list(reasons.values()))
+        redact_item_content(list(reasons.values()), run_items_restricted_reason(db, principal, run))
     return {"metric": metric, "pass_number": pass_number, "reasons": reasons}
 
 
@@ -6884,7 +6888,7 @@ def get_run_spans(
         "next_offset": offset + limit if has_more else None,
     }
     if not can_view_run_items(db, principal, run):
-        redact_item_content(payload["spans"])
+        redact_item_content(payload["spans"], run_items_restricted_reason(db, principal, run))
     return payload
 
 
@@ -6917,7 +6921,7 @@ def get_item_spans(
     )
     payload = {"spans": [_serialize_span(s) for s in spans]}
     if not can_view_run_items(db, principal, run):
-        redact_item_content(payload["spans"])
+        redact_item_content(payload["spans"], run_items_restricted_reason(db, principal, run))
     return payload
 
 
@@ -7054,5 +7058,5 @@ def get_item_trace(
         fallback_to_item_trace=pass_number is None,
     )
     if not can_view_run_items(db, principal, run):
-        redact_item_content(payload)
+        redact_item_content(payload, run_items_restricted_reason(db, principal, run))
     return payload

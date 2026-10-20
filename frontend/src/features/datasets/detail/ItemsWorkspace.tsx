@@ -9,6 +9,8 @@ import { useBlocker, useSearchParams } from 'react-router-dom';
 import {
   bulkItems,
   invalidateItems,
+  useItemsBatch,
+  type BatchAction,
   type Dataset,
   type DatasetItem,
   type DatasetVersion,
@@ -16,6 +18,9 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/http';
 import { Button, ConfirmDialog, useToast } from '@/ui';
+import { DisableItemDialog } from '../components/dialogs';
+import type { BatchCriteria } from '../lib/batchCopy';
+import { BatchDialog } from './BatchDialog';
 import { ItemPane } from './ItemPane';
 import { ItemsTab } from './ItemsTab';
 import styles from './ItemsWorkspace.module.css';
@@ -27,6 +32,8 @@ export interface ItemsWorkspaceProps {
   readOnly: boolean;
   onAddItem: () => void;
   onImport: () => void;
+  /** Published version: the create-draft flow; with an item id it opens that item in the new draft. */
+  onCreateDraft?: (itemId?: string) => void;
 }
 
 export function ItemsWorkspace({
@@ -36,6 +43,7 @@ export function ItemsWorkspace({
   readOnly,
   onAddItem,
   onImport,
+  onCreateDraft,
 }: ItemsWorkspaceProps) {
   const [params] = useSearchParams();
   const qc = useQueryClient();
@@ -45,6 +53,9 @@ export function ItemsWorkspace({
   const [rows, setRows] = useState<DatasetItem[]>([]);
   const [selected, setSelected] = useState<Set<Key>>(new Set());
   const [confirmBulk, setConfirmBulk] = useState(false);
+  const [batch, setBatch] = useState<{ action: BatchAction; criteria: BatchCriteria } | null>(null);
+  const [disableSelected, setDisableSelected] = useState(false);
+  const selectedBatch = useItemsBatch(slug, dataset.slug, version.version);
   const [guard, setGuard] = useState<{ proceed: () => void } | null>(null);
   const dirty = useRef<{ dirty: boolean; save: () => Promise<boolean>; reset: () => void }>({
     dirty: false,
@@ -160,6 +171,38 @@ export function ItemsWorkspace({
     }
   }
 
+  async function applySelected(action: 'disable' | 'enable', reason?: string) {
+    const ids = [...selected].map(String);
+    const r = await selectedBatch.mutateAsync({
+      filter: { item_ids: ids, state: 'all' },
+      action,
+      reason,
+      dry_run: false,
+    });
+    const word = action === 'disable' ? 'disabled' : 'enabled';
+    if (r.affected === 0) {
+      toast.show(
+        `No change: the ${ids.length} ${ids.length === 1 ? 'item was' : 'items were'} already ${word}`,
+        {
+          tone: 'info',
+        },
+      );
+    } else {
+      toast.show(`${r.affected} ${r.affected === 1 ? 'item' : 'items'} ${word}`, { tone: 'success' });
+    }
+    setSelected(new Set());
+  }
+
+  async function enableSelected() {
+    try {
+      await applySelected('enable');
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.detail || e.message : 'Couldn’t enable the items', {
+        tone: 'error',
+      });
+    }
+  }
+
   return (
     <div className={styles.layout} data-has-pane={paneId ? '' : undefined}>
       <div className={styles.table}>
@@ -172,15 +215,36 @@ export function ItemsWorkspace({
           onImport={onImport}
           onRows={setRows}
           selection={editable ? { selected, onChange: setSelected } : undefined}
+          onCreateDraft={onCreateDraft ? () => onCreateDraft() : undefined}
+          onBatch={(action, criteria) => setBatch({ action, criteria })}
           bulkActions={
-            <Button
-              variant="danger"
-              size="sm"
-              onPress={() => setConfirmBulk(true)}
-              data-testid="bulk-delete-items"
-            >
-              Delete {selected.size}
-            </Button>
+            <>
+              <Button
+                variant="neutral"
+                size="sm"
+                onPress={() => setDisableSelected(true)}
+                data-testid="bulk-disable-selected"
+              >
+                Disable {selected.size}…
+              </Button>
+              <Button
+                variant="neutral"
+                size="sm"
+                loading={selectedBatch.isPending && !disableSelected}
+                onPress={() => void enableSelected()}
+                data-testid="bulk-enable-selected"
+              >
+                Enable {selected.size}
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onPress={() => setConfirmBulk(true)}
+                data-testid="bulk-delete-items"
+              >
+                Delete {selected.size}
+              </Button>
+            </>
           }
           onOpenItem={open}
           onFilterChange={clearSelection}
@@ -201,12 +265,36 @@ export function ItemsWorkspace({
           version={version}
           itemId={paneId}
           editable={editable}
+          readOnly={readOnly}
+          onCreateDraft={onCreateDraft}
           position={{ index: Math.max(0, index), total: rows.length }}
           query={itemQuery.toString()}
           onClose={() => attempt(() => setPaneId(null))}
           onNavigate={move}
           onDirtyChange={(d, save, reset) => {
             dirty.current = { dirty: d, save, reset };
+          }}
+        />
+      ) : null}
+      <DisableItemDialog
+        open={disableSelected}
+        onOpenChange={setDisableSelected}
+        count={selected.size}
+        itemId={selected.size === 1 ? String([...selected][0]) : undefined}
+        onConfirm={(reason) => applySelected('disable', reason || undefined)}
+      />
+      {batch ? (
+        <BatchDialog
+          slug={slug}
+          datasetRef={dataset.slug}
+          version={version.version}
+          action={batch.action}
+          criteria={batch.criteria}
+          total={version.item_count}
+          onClose={() => setBatch(null)}
+          onApplied={() => {
+            setSelected(new Set());
+            if (batch.action === 'delete') setPaneId(null);
           }}
         />
       ) : null}

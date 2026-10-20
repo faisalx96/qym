@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0086"]
+    assert heads == ["0087"]
 
 
 def test_operations_docs_name_the_current_migration_head() -> None:
@@ -262,8 +262,8 @@ def test_dataset_search_backfill_job_fills_text_and_published_counts() -> None:
         counts = {v.id: v.change_counts for v in db.query(DatasetVersion)}
     assert texts == ["a\nجديد\n\n{\"tag\": \"x\"}", "a\nقديم\n\n{\"tag\": \"x\"}"]
     assert counts == {
-        "v1": {"added": 1, "modified": 0, "deleted": 0, "unchanged": 0},
-        "v2": {"added": 0, "modified": 1, "deleted": 0, "unchanged": 0},
+        "v1": {"added": 1, "modified": 0, "deleted": 0, "unchanged": 0, "disabled": 0, "enabled": 0},
+        "v2": {"added": 0, "modified": 1, "deleted": 0, "unchanged": 0, "disabled": 0, "enabled": 0},
     }
     engine.dispose()
 

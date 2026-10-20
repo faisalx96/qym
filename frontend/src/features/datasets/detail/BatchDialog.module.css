@@ -1,0 +1,42 @@
+/* Batch confirm dialog body (mock da-batch-dialog): big affected number, id tags, reason, notes. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.bigNumber {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.bigNumber strong {
+  font-family: var(--font-mono);
+  font-size: var(--font-stat);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.idList {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.counter {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--error-text);
+}

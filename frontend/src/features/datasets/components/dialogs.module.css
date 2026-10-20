@@ -1,0 +1,6 @@
+/* Dataset dialogs: the reason counter (mono, small, muted). */
+.counter {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}

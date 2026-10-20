@@ -15,6 +15,37 @@ served by the platform itself at its root URL:
 Views keep their filters in the URL, so any page can be shared as a link. The
 offline viewer below is a separate, smaller tool that needs no platform.
 
+## Datasets: access, disabled items and batch edits
+
+### Who can open a dataset
+
+Every dataset starts open to the whole project: each member can view and modify it. A project manager or admin can restrict one
+in **Dataset → Settings → Access**: choose **Only people listed below**, add project members with the level **View** or **Modify**,
+and press **Save access** (one save for the whole list). Managers, admins and the dataset's creator always have full access.
+Switching back to **Everyone in the project** keeps the saved list, and it applies again if you restrict the dataset later.
+
+- A restricted dataset is absent from the catalog for people without access; its page answers "You don't have access to this
+  dataset". Its **runs stay listed** with scores, but item inputs, expected outputs, outputs and traces are hidden.
+- Someone with **View** sees the dataset read-only (a "View only" badge, no edit buttons). **Modify** edits items and versions; slug,
+  production alias, restore, delete and access settings stay with managers and admins.
+- Any member can launch an experiment on any dataset of the project; the run reads the items with its own dataset read token.
+- A private test set (admins only) is a separate setting and still applies on top of access.
+
+### Disable items in a draft
+
+In a draft, **Disable item…** (item pane footer or item page) leaves an item out of runs once the draft is published; add an optional
+reason. The item stays in the draft, shows a **Disabled** badge under the **Disabled** or **All** state filter, and **Enable** brings it
+back. Published versions are immutable: on one the action reads **Create a draft to disable**. A new draft copies the disabled flags
+of its parent. SDK runs and downloads use the active items only (`state=active`); **Download JSONL with disabled items** writes all.
+
+### Filter and edit by metadata
+
+**Metadata** in the items toolbar filters on a key of the item metadata, including nested keys written as dotted paths up to three
+levels (`source.region.code`). Up to five filters combine (AND) and are kept in the URL (`meta=path:value`). With a filter, search or
+label active, **All matching** disables, enables or deletes every matching item of a draft. The confirm dialog shows how many items
+would change and the first ids before anything is written; deleting more than 50 asks you to type the number. Selected rows offer
+**Disable N…**, **Enable N** and **Delete N**. API: `POST …/items:batch` (dry run by default), `GET …/items:metadata-facets`.
+
 ## Local results viewer (offline)
 
 The SDK ships a small browser viewer that needs no platform account and no network.

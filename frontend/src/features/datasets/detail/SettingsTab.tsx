@@ -17,16 +17,20 @@ import {
 } from '@/ui';
 import { catalogPath, datasetPath } from '../lib/route';
 import { DELETE_RULE } from '../lib/versions';
+import { AccessSection } from './AccessSection';
 import styles from './SettingsTab.module.css';
 
 export function SettingsTab({
   slug,
   dataset,
   readOnly,
+  archived,
 }: {
   slug: string;
   dataset: Dataset;
+  /** archived project, or a reader who cannot modify this dataset */
   readOnly: boolean;
+  archived: boolean;
 }) {
   const patch = usePatchDataset(slug, dataset.slug);
   const del = useDeleteDataset(slug, dataset.slug);
@@ -163,6 +167,8 @@ export function SettingsTab({
         </Card>
       ) : null}
 
+      <AccessSection slug={slug} dataset={dataset} archived={archived} />
+
       <Card as="section" aria-labelledby="ds-danger" tone="danger">
         <div className={styles.stack}>
           <SectionHeader
@@ -170,7 +176,7 @@ export function SettingsTab({
             title="Danger zone"
             description="Deleting moves the dataset, with all its versions, items and history, to Deleted datasets, where a project manager can restore it. Runs that used it keep their results."
           />
-          {readOnly ? (
+          {archived ? (
             <Text variant="sm" tone="muted">
               This project is archived.
             </Text>

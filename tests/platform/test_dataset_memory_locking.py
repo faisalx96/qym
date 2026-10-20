@@ -925,7 +925,7 @@ def test_unpaged_compare_caps_bodies_but_lists_every_changed_field(env, monkeypa
         headers=AUTH,
         params={"base": "v1", "include_diffs": 1},
     ).json()
-    assert body["summary"] == {"added": 3, "removed": 0, "changed": 4, "unchanged": 1}
+    assert body["summary"] == {"added": 3, "removed": 0, "changed": 4, "unchanged": 1, "disabled": 0, "enabled": 0}
     assert len(body["changed"]) == 4 and all(
         entry["fields"] == ["input"] for entry in body["changed"]
     )

@@ -31,6 +31,8 @@ export interface FormDialogProps {
   title: string;
   description?: ReactNode;
   details?: { icon?: ReactNode; title: string; body?: ReactNode }[];
+  /** A block (a note) shown above the fields. */
+  notice?: ReactNode;
   fields: FormFieldSpec[];
   size?: DialogSize;
   confirmLabel?: string;
@@ -55,6 +57,7 @@ function FormDialogInner({
   title,
   description,
   details,
+  notice,
   fields,
   size = 'md',
   confirmLabel = 'Save',
@@ -149,6 +152,7 @@ function FormDialogInner({
             ))}
           </ul>
         ) : null}
+        {notice}
         {fields.map((f) => {
           const err = errors[f.name] || undefined;
           const v = values[f.name];

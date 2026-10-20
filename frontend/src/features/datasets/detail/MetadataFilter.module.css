@@ -1,0 +1,73 @@
+/* Metadata popover body: key select, value list (32px options), footer; the Popover primitive owns the surface. */
+.panel {
+  inline-size: 320px;
+  max-inline-size: calc(100vw - 2 * var(--space-md));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.values {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.facetList {
+  display: flex;
+  flex-direction: column;
+  max-block-size: var(--dropdown-max-height);
+  margin: 0;
+  padding: var(--space-xs);
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+}
+
+.facet {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-block-size: var(--dropdown-option-height);
+  padding-inline: var(--space-sm);
+  border-radius: var(--control-radius);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  outline: none;
+}
+
+.facet[data-focused],
+.facet[data-hovered] {
+  background: var(--bg-hover);
+}
+
+.facet[data-selected] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.facet span:last-child {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+/* At the five-filter limit the button reads disabled (as a disabled Button does) but stays focusable for its tooltip. */
+.limit {
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+  cursor: not-allowed;
+}

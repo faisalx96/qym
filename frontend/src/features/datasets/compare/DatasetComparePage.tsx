@@ -22,6 +22,7 @@ import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
   EmptyState,
+  Badge,
   ErrorState,
   Icon,
   IconButton,
@@ -344,6 +345,8 @@ function CompareBody({
           { label: 'Removed', value: summary.removed, tone: summary.removed ? 'danger' : undefined },
           { label: 'Changed', value: summary.changed, tone: summary.changed ? 'warning' : undefined },
           { label: 'Unchanged', value: summary.unchanged },
+          ...(summary.disabled ? [{ label: 'Disabled', value: summary.disabled }] : []),
+          ...(summary.enabled ? [{ label: 'Enabled', value: summary.enabled }] : []),
         ]}
       />
       <Tabs
@@ -393,7 +396,28 @@ const FIELD_LABELS: Record<string, string> = {
   expected_output: 'expected_output',
   metadata: 'metadata',
   labels: 'labels',
+  state: 'state',
 };
+
+/** An item whose state differs between the two versions: Active → Disabled (spec A2-46). */
+function StateDiff({ before, after }: { before?: 'active' | 'disabled'; after?: 'active' | 'disabled' }) {
+  const name = (v?: string) => (v === 'disabled' ? 'Disabled' : 'Active');
+  const badge = (v?: string) => <Badge tone={v === 'disabled' ? 'neutral' : 'success'}>{name(v)}</Badge>;
+  return (
+    <div
+      className={styles.stateDiff}
+      data-testid="compare-state-row"
+      aria-label={`state changed from ${name(before)} to ${name(after)}`}
+    >
+      <Text as="span" variant="sm" weight={650} tone="muted">
+        state
+      </Text>
+      {badge(before)}
+      <Icon name="next" size={12} />
+      {badge(after)}
+    </div>
+  );
+}
 
 function ChangedRow({ entry, defaultOpen }: { entry: CompareChangedEntry; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -432,14 +456,18 @@ function ChangedRow({ entry, defaultOpen }: { entry: CompareChangedEntry; defaul
       {open ? (
         <div className={styles.rowBody}>
           {entry.before && entry.after ? (
-            fields.map((f) => (
-              <FieldDiff
-                key={f}
-                field={f}
-                before={entry.before?.[f as keyof typeof entry.before]}
-                after={entry.after?.[f as keyof typeof entry.after]}
-              />
-            ))
+            fields.map((f) =>
+              f === 'state' ? (
+                <StateDiff key={f} before={entry.before?.state} after={entry.after?.state} />
+              ) : (
+                <FieldDiff
+                  key={f}
+                  field={f}
+                  before={entry.before?.[f as keyof typeof entry.before]}
+                  after={entry.after?.[f as keyof typeof entry.after]}
+                />
+              ),
+            )
           ) : (
             <Text variant="sm" tone="muted">
               Field contents are not included (diffs truncated by the server).

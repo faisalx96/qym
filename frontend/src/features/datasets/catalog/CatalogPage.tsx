@@ -208,29 +208,47 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
   return (
     <Card to={datasetPath(slug, d.slug)} className={styles.fill} data-dataset-card={d.slug}>
       <div className={styles.stack}>
-        <div className={styles.cardHead}>
-          <Identicon seed={d.slug} chip />
-          <div className={styles.cardTitle}>
-            <Text variant="lg" as="span" truncate>
-              {d.name}
-            </Text>
-            <span className={styles.state}>
-              {catalogStateLine(d)
-                .split(' · ')
-                .map((part, i) => (
-                  <span
-                    key={part}
-                    data-kind={
-                      part.endsWith(' prod') ? 'prod' : part.endsWith(' draft') ? 'draft' : undefined
-                    }
-                  >
-                    {i ? ' · ' : ''}
-                    {part}
-                  </span>
-                ))}
+        <div className={styles.cardWrap}>
+          <div className={styles.cardHead} data-testid="da-card-head">
+            <span className={styles.cardIcon}>
+              <Identicon seed={d.slug} chip />
             </span>
+            <div className={styles.cardTitle}>
+              <Text variant="lg" as="span" className={styles.cardName} data-testid="da-card-name">
+                {d.name}
+              </Text>
+              <span className={styles.state}>
+                {catalogStateLine(d)
+                  .split(' · ')
+                  .map((part, i) => (
+                    <span
+                      key={part}
+                      data-kind={
+                        part.endsWith(' prod') ? 'prod' : part.endsWith(' draft') ? 'draft' : undefined
+                      }
+                    >
+                      {i ? ' · ' : ''}
+                      {part}
+                    </span>
+                  ))}
+              </span>
+            </div>
+            {d.private_test_set || d.access_mode === 'restricted' ? (
+              <div className={styles.badges} data-testid="da-card-badges">
+                {d.private_test_set ? <Badge tone="warning">Private test set</Badge> : null}
+                {d.access_mode === 'restricted' ? (
+                  <Badge tone="neutral" glyph={<Icon name="lock" size={12} />} data-testid="restricted-badge">
+                    Restricted
+                  </Badge>
+                ) : null}
+                {d.access_mode === 'restricted' && d.permissions.access_level === 'view' ? (
+                  <Badge tone="neutral" glyph={<Icon name="eye" size={12} />}>
+                    View only
+                  </Badge>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-          {d.private_test_set ? <Badge tone="warning">Private test set</Badge> : null}
         </div>
         <p className={styles.description} dir="auto">
           {d.description || <span className={styles.noDescription}>No description</span>}
