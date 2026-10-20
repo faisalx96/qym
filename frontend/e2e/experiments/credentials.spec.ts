@@ -114,7 +114,8 @@ test.describe('notice heights', () => {
       await page.setViewportSize({ width, height: 900 });
       await gotoApp(page, expPath(project.slug, `/${exp.id}`));
       const notice = page.getByTestId('token-notice');
-      await expect(notice).toContainText('Dataset read token not sent to staging, production:');
+      // Environments are named in table order, which follows the environment ids.
+      await expect(notice).toHaveText(/^Dataset read token not sent to (staging, production|production, staging):/);
       heights[width] = Math.round((await notice.locator('xpath=..').boundingBox())!.height * 10) / 10;
     }
     console.log('B4-34 heights', JSON.stringify(heights));

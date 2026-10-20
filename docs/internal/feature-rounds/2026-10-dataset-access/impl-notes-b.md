@@ -87,3 +87,27 @@ Failures not caused by this branch:
   need their expected head moved to `0088` (`heads == ["0086"]`, the docs naming the head).
 - `test_run_page_payloads.py::test_error_labeled_passes_read_the_same_in_full_and_compact_rows`: fails identically at the design
   commit `d136411d` (golden JSON `payload_minimize_labeled_run_full.json` out of date).
+
+## Fix pass (review-b.md, verdict MEETS WITH FIXES)
+
+Python 3.11.17. All measured by Playwright in the specs named; logs `/tmp/claude-1000/-home-meshari-aldossari-Documents-qym-qym/51864cf7-e4e4-455d-967b-8153416bc257/scratchpad/b-logs/`.
+
+| Item | Change | Measured / asserted |
+|---|---|---|
+| F1 (B5-39) | "Set ceiling" now calls `focusIssue` with the setting's pointer, which opens the step, the section and the collapsed group | after the click the `INPUT` named "…Post Run Max Requests" is `document.activeElement` (`latency-sensitive.spec.ts`, Review warnings) |
+| F2 (B4-22) | `text-rendering: auto` on the picker's name/badge wrapper (the popover's `geometricprecision` widened the badge) | badge in the open list 99 x 20 at 1440, 1024 and 390 (was 86.5 x 20) |
+| B-S3 | strings moved to `experiments/copy.ts` (`Latency-sensitive only`, queue note) and `shell/settings/copy.ts` (`Experiment deleted`) | `npm run check` |
+| B4-34 amended | several-environment notice | 36 / 52.8 / 103.2 px at 1440 / 1024 / 390 (`credentials.spec.ts`, notice heights) |
+| B5-65 amended | queue note | 25.4 px at 1440; 40.8 px at 1024 (two environment cards side by side) and at 390 (`lists-latency.spec.ts`) |
+| B5-40 amended | token warning | 90.4 / 73.6 / 107.2 px at 1440 / 1024 / 390 (`latency-sensitive.spec.ts`, Token warning); asserted at 1024 |
+| B5-31, B4-5 amended | wording only in `spec-b.md` | |
+
+Fake isolation (item 5): the cause was the platform's dispatcher submitting jobs of earlier tests to the shared fake after a reset,
+so counting or picking "the fake's jobs" read other tests' jobs. The specs now read only the jobs of their own experiment
+(`fakeJobsOf` in `e2e/experiments/support.ts`, matched on the `qym_launch.job_id`s). A second flake, the order of environment names in
+the notice (it follows environment ids), is accepted in both orders. The five specs together under `heavy.sh --cost 3` (2 workers),
+19 tests: run 1 19 passed (55.0 s), run 2 19 passed (1.1 min) (`five1.log`, `five2.log`; an earlier run with the ordering flake
+failed 1 of 19 twice, which is how it was found).
+
+Gate: `npm run check` 176 files / 1468 tests pass, design 52 pass; `pytest` of `test_eval_dataset_tokens.py`,
+`test_experiment_latency_sensitive.py`, `test_migrations_0088.py`, `test_design_language.py`: 69 passed, 21 skipped (Postgres).
