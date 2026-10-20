@@ -533,6 +533,8 @@
 
 /* Dataset name and badge: the name wraps (never truncated), the badge follows it. */
 .datasetName {
+  /* The popover renders text with geometricprecision, which widens the badge by 12 px (B4-22). */
+  text-rendering: auto;
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;

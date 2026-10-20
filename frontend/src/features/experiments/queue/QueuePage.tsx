@@ -4,6 +4,7 @@
  * chips borrowed from the grouped variant. Filters live in the URL (replaceState).
  * Polling: 5 s x1.5 backoff to 60 s, always on, paused while the tab is hidden.
  */
+import { LATENCY_FILTER_LABEL, queueLatencyNote } from '../copy';
 import { LatencyTag } from '../components/LatencyTag';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -379,7 +380,7 @@ export function QueuePage() {
         Only my jobs
       </Checkbox>
       <Checkbox isSelected={filters.latency} onChange={(v) => replaceUrlQuery({ latency: v })}>
-        Latency-sensitive only
+        {LATENCY_FILTER_LABEL}
       </Checkbox>
     </div>
   );
@@ -598,7 +599,7 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
         ) : null}
         {env.latency_active ? (
           <p className={styles.latencyNote} role="note" data-testid="queue-latency-note">
-            A latency-sensitive job is active on {env.name}. Other jobs wait until it finishes.
+            {queueLatencyNote(env.name)}
           </p>
         ) : null}
       </div>

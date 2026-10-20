@@ -16,6 +16,7 @@ import {
   runNamePreview,
   type LaunchWarning,
   type Priority,
+  validationItem,
 } from '../model';
 import {
   CEILING_POINTER,
@@ -51,7 +52,7 @@ function withMono(message: string): ReactNode {
 
 /** Launch-level dry-run warnings: never change the badge and never disable Launch (B5-41). */
 function LaunchWarnings({ warnings }: { warnings: readonly LaunchWarning[] }) {
-  const { focusField, revealStep } = useLaunch();
+  const { ctx, focusIssue } = useLaunch();
   return (
     <>
       {warnings.map((w, i) =>
@@ -62,10 +63,10 @@ function LaunchWarnings({ warnings }: { warnings: readonly LaunchWarning[] }) {
               <Button
                 size="sm"
                 variant="neutral"
-                onPress={() => {
-                  revealStep('settings');
-                  focusField(pointerToFieldName(CEILING_POINTER));
-                }}
+                onPress={() =>
+                  // Opens the step, the section and the collapsed group that holds the setting.
+                  focusIssue(validationItem(CEILING_POINTER, w.message, ctx, { source: 'local' }))
+                }
               >
                 {CEILING_WARNING_ACTION}
               </Button>

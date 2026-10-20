@@ -31,6 +31,7 @@ import {
 } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { useProjectContext } from '../ProjectContext';
+import { EXPERIMENT_DELETED } from './copy';
 import { SecretRevealDialog } from '../dialogs';
 import styles from './settings.module.css';
 
@@ -253,7 +254,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
                   Experiment · {t.experiment.name}
                 </Link>
               ) : (
-                <span data-testid="token-experiment-deleted">Experiment deleted</span>
+                <span data-testid="token-experiment-deleted">{EXPERIMENT_DELETED}</span>
               )
             }
           />

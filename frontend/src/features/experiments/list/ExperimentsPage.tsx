@@ -31,6 +31,7 @@ import {
   UserCell,
   type Column,
 } from '@/ui';
+import { LATENCY_FILTER_LABEL } from '../copy';
 import { ExperimentsTabs } from '../ExperimentsTabs';
 import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
@@ -241,7 +242,7 @@ export function ExperimentsPage() {
           })
         }
       >
-        Latency-sensitive only
+        {LATENCY_FILTER_LABEL}
       </Checkbox>
     </div>
   );
