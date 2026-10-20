@@ -5,6 +5,7 @@ import { Round3Mocks } from './Round3Mocks';
 import { Round4Mocks } from './Round4Mocks';
 import { Round5Mocks } from './Round5Mocks';
 import { Round7Mocks } from './Round7Mocks';
+import { EvalFlagsMocks } from './EvalFlagsMocks';
 import type { Key } from 'react-aria-components';
 import {
   Badge,
@@ -915,6 +916,7 @@ export default function UiGalleryPage() {
       <Round4Mocks Section={Section} Case={Case} />
       <Round5Mocks Section={Section} Case={Case} />
       <Round7Mocks Section={Section} Case={Case} />
+      <EvalFlagsMocks Section={Section} Case={Case} />
     </div>
   );
 }

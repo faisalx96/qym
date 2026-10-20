@@ -1,0 +1,374 @@
+{
+  "width": 390,
+  "launchCard": [
+    {
+      "x": 76,
+      "y": -354,
+      "w": 279,
+      "h": 286.3,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Experiment namePriorityEnvironment defau"
+    }
+  ],
+  "launchFields": [
+    {
+      "x": 97,
+      "y": -339,
+      "w": 237,
+      "h": 15.4,
+      "font": "11px/600",
+      "family": "Qym Sans",
+      "text": "Experiment name"
+    },
+    {
+      "x": 97,
+      "y": -320,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": ""
+    },
+    {
+      "x": 97,
+      "y": -256,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "Environment default (NORMAL)"
+    },
+    {
+      "x": 75,
+      "y": -431,
+      "w": 192,
+      "h": 15,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Environment default (NORMAL)LOWNORMALHIG"
+    },
+    {
+      "x": 97,
+      "y": -224,
+      "w": 237,
+      "h": 15.4,
+      "font": "11px/600",
+      "family": "Qym Sans",
+      "text": "Versioning details"
+    },
+    {
+      "x": 97,
+      "y": -205,
+      "w": 237,
+      "h": 72,
+      "font": "12px/400",
+      "family": "Qym Mono",
+      "text": ""
+    }
+  ],
+  "reviewPane": [
+    {
+      "x": 76,
+      "y": 363,
+      "w": 279,
+      "h": 524.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Review1 problemEnvironmentsstagingDatase"
+    }
+  ],
+  "reviewSummaryRows": [
+    {
+      "x": 97,
+      "y": 412,
+      "w": 237,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Environmentsstaging"
+    },
+    {
+      "x": 97,
+      "y": 456,
+      "w": 237,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Datasetgolden"
+    },
+    {
+      "x": 97,
+      "y": 500,
+      "w": 237,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Start fromDefault preset v1"
+    },
+    {
+      "x": 97,
+      "y": 544,
+      "w": 237,
+      "h": 36.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "PriorityEnvironment default"
+    },
+    {
+      "x": 97,
+      "y": 589,
+      "w": 237,
+      "h": 53,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Versionsagent-1.4.2 · img-20261001 · kb-"
+    }
+  ],
+  "detailHeader": [
+    {
+      "x": 76,
+      "y": 101,
+      "w": 279,
+      "h": 90,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "timeout sweeprunningTimeout 10/30/60dev@"
+    },
+    {
+      "x": 76,
+      "y": 101,
+      "w": 279,
+      "h": 26.4,
+      "font": "22px/650",
+      "family": "Qym Sans",
+      "text": "timeout sweeprunning"
+    },
+    {
+      "x": 76,
+      "y": 153,
+      "w": 279,
+      "h": 37.6,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "dev@local6 min agoPriority NormalBase: B"
+    },
+    {
+      "x": 76,
+      "y": 153,
+      "w": 55.8,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "dev@local"
+    },
+    {
+      "x": 132,
+      "y": 153,
+      "w": 72.5,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "6 min ago"
+    },
+    {
+      "x": 204,
+      "y": 153,
+      "w": 101.4,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Priority Normal"
+    },
+    {
+      "x": 76,
+      "y": 174,
+      "w": 83.6,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Base: Blank"
+    },
+    {
+      "x": 160,
+      "y": 174,
+      "w": 58.8,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "staging"
+    }
+  ],
+  "detailActions": [
+    {
+      "x": 76,
+      "y": 231,
+      "w": 125,
+      "h": 32,
+      "font": "13px/600",
+      "family": "Qym Sans",
+      "text": "Retry failed (1)"
+    },
+    {
+      "x": 76,
+      "y": 271,
+      "w": 150,
+      "h": 32,
+      "font": "13px/600",
+      "family": "Qym Sans",
+      "text": "Cancel experiment"
+    }
+  ],
+  "detailJobsCard": [
+    {
+      "x": 76,
+      "y": 1878,
+      "w": 279,
+      "h": 753.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Job historyRefreshing automatically whil"
+    }
+  ],
+  "detailJobsHeaders": [],
+  "detailJobsRows": [],
+  "detailJobsStatusCells": [],
+  "listFilters": [
+    {
+      "x": 85,
+      "y": 244,
+      "w": 261,
+      "h": 74.2,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "StatusAll statuses All statusesqueuedrun"
+    },
+    {
+      "x": -1,
+      "y": 2,
+      "w": 88,
+      "h": 15,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "All statusesqueuedrunningcompletedpartia"
+    },
+    {
+      "x": 85,
+      "y": 302,
+      "w": 100.1,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Created by me"
+    }
+  ],
+  "listRows": [],
+  "listNameCells": [],
+  "queueRows": [],
+  "queueEnvCards": [
+    {
+      "x": 76,
+      "y": 187,
+      "w": 279,
+      "h": 90,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "productionHealthy1In flight0Queued0Block"
+    },
+    {
+      "x": 76,
+      "y": 291,
+      "w": 279,
+      "h": 146.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "stagingHealthy3In flight0Queued0BlockedA"
+    }
+  ],
+  "queueNameCells": [],
+  "envPolicies": [
+    {
+      "x": 76,
+      "y": 2276,
+      "w": 279,
+      "h": 365.3,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "PoliciesLimits applied to experiments la"
+    },
+    {
+      "x": 97,
+      "y": 2314,
+      "w": 237,
+      "h": 30.8,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "Limits applied to experiments launched o"
+    },
+    {
+      "x": 97,
+      "y": 2378,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "HIGH"
+    },
+    {
+      "x": -1,
+      "y": 2,
+      "w": 71,
+      "h": 15,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "LOWNORMALHIGH"
+    },
+    {
+      "x": 97,
+      "y": 2435,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "NORMAL"
+    },
+    {
+      "x": -1,
+      "y": 2,
+      "w": 71,
+      "h": 15,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "LOWNORMALHIGH"
+    },
+    {
+      "x": 97,
+      "y": 2556,
+      "w": 141.8,
+      "h": 16.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Allow connection keys"
+    },
+    {
+      "x": 97,
+      "y": 2580,
+      "w": 237,
+      "h": 46.2,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "text": "Send project LLM connection API keys to "
+    }
+  ],
+  "tokensCard": [
+    {
+      "x": 76,
+      "y": 1006,
+      "w": 279,
+      "h": 320.8,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "text": "Dataset read tokensAdmin-issued; lets a "
+    }
+  ]
+}
