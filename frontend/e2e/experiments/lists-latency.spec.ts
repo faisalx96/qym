@@ -3,6 +3,7 @@ import { expect } from '@playwright/test';
 import { gotoApp } from '../helpers';
 import {
   FAKE_A,
+  FAKE_B,
   createEnvironment,
   expPath,
   experimentSpec,
@@ -72,4 +73,22 @@ test('the queue tags flagged jobs, filters them and warns that others wait', asy
   const grid = page.getByRole('grid', { name: 'Queued jobs in dispatch order' });
   await expect(grid.getByText('ordinary')).toHaveCount(0);
   await expect(grid.getByText('urgent').first()).toBeVisible();
+});
+
+test('the queue note measures the amended heights at the three widths (B5-65)', async ({ page, request }) => {
+  const { project } = await seed(request);
+  // Two active environments: their cards sit side by side at 1024 (381.5 px each), as in the review.
+  await createEnvironment(request, project.id, 'production', { port: FAKE_B });
+  const heights: Record<number, number> = {};
+  for (const width of [1440, 1024, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await gotoApp(page, expPath(project.slug, '/queue'));
+    const note = page.getByTestId('queue-latency-note');
+    await expect(note).toBeVisible();
+    heights[width] = Math.round((await note.boundingBox())!.height * 10) / 10;
+  }
+  console.log('B5-65 heights', JSON.stringify(heights));
+  // Amended: 25.4 at 1440, 40.8 at 1024 (the sentence wraps in the 381.5 px card), 40.8 at 390.
+  expect(heights[1440]).toBe(25.4);
+  expect(heights[1024]).toBe(40.8);
 });

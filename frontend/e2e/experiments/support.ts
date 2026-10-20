@@ -126,6 +126,22 @@ export async function fakeJobs(request: APIRequestContext, port = FAKE_A): Promi
   return (await res.json()) as FakeJob[];
 }
 
+/**
+ * The fake's jobs that belong to one experiment (matched on the job ids the platform put in
+ * `qym_launch`). The platform's dispatcher keeps submitting jobs of earlier tests after a reset, so a
+ * spec that counts or picks jobs must not read the whole fake: this is the deterministic isolation.
+ */
+export async function fakeJobsOf(
+  request: APIRequestContext,
+  experiment: { jobs: { id: string }[] },
+  port = FAKE_A,
+): Promise<FakeJob[]> {
+  const mine = new Set(experiment.jobs.map((j) => j.id));
+  return (await fakeJobs(request, port)).filter((f) =>
+    mine.has(f.eval_input?.config?.run_metadata?.qym_launch?.job_id ?? ''),
+  );
+}
+
 export async function setFakeJob(
   request: APIRequestContext,
   jobId: string,

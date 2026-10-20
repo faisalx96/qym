@@ -11,7 +11,7 @@ import {
   createEnvironment,
   expPath,
   experimentSpec,
-  fakeJobs,
+  fakeJobsOf,
   launchExperiment,
   resetFakes,
   seedProject,
@@ -49,12 +49,12 @@ const credentials = (page: Page) => page.getByRole('region', { name: 'Credential
 test.describe('credentials', () => {
   test('the token reaches only the service that declares it and never the page', async ({ page, request }) => {
     const { project, exp } = await seed(request);
-    const sent = (await fakeJobs(request, FAKE_A)).map((j) => j.env_overrides?.QYM_DATASET_READ_TOKEN);
-    const unsent = (await fakeJobs(request, FAKE_B)).map((j) => j.env_overrides?.QYM_DATASET_READ_TOKEN);
+    const sent = (await fakeJobsOf(request, exp, FAKE_A)).map((j) => j.env_overrides?.QYM_DATASET_READ_TOKEN);
+    const unsent = (await fakeJobsOf(request, exp, FAKE_B)).map((j) => j.env_overrides?.QYM_DATASET_READ_TOKEN);
     expect(sent).toHaveLength(2);
     for (const t of sent) expect(String(t)).toMatch(/^qym_dr_/);
     expect(unsent.every((t) => t === undefined)).toBe(true);
-    const fakes = [...(await fakeJobs(request, FAKE_A)), ...(await fakeJobs(request, FAKE_B))];
+    const fakes = [...(await fakeJobsOf(request, exp, FAKE_A)), ...(await fakeJobsOf(request, exp, FAKE_B))];
     expect(fakes.every((j) => j.latency_sensitive === true)).toBe(true);
 
     await gotoApp(page, expPath(project.slug, `/${exp.id}`));
@@ -97,10 +97,36 @@ test.describe('credentials', () => {
   });
 });
 
+test.describe('notice heights', () => {
+  test('the several-environments notice measures the amended heights (B4-34)', async ({ page, request }) => {
+    const { project, connectionId } = await seedProject(request, 'creds-h');
+    // Neither fake declares the key here: both environments are named in one notice.
+    const one = await createEnvironment(request, project.id, 'staging', { port: FAKE_A });
+    const two = await createEnvironment(request, project.id, 'production', { port: FAKE_B });
+    const exp = await launchExperiment(request, project.id, {
+      name: 'both undeclared',
+      environment_ids: [one.id, two.id],
+      spec: experimentSpec(connectionId),
+    });
+    await waitForSubmitted(request, project.id, exp.id);
+    const heights: Record<number, number> = {};
+    for (const width of [1440, 1024, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await gotoApp(page, expPath(project.slug, `/${exp.id}`));
+      const notice = page.getByTestId('token-notice');
+      await expect(notice).toContainText('Dataset read token not sent to staging, production:');
+      heights[width] = Math.round((await notice.locator('xpath=..').boundingBox())!.height * 10) / 10;
+    }
+    console.log('B4-34 heights', JSON.stringify(heights));
+    // Amended from 36 / 52.8 / 103.2 only where the measurement differs (see impl-notes-b.md, Fix pass).
+    expect(heights).toEqual({ 1440: 36, 1024: 52.8, 390: 103.2 });
+  });
+});
+
 test.describe('jobs table admission state', () => {
   test('deferral, admission and re-queue texts follow the service', async ({ page, request }) => {
     const { project, exp } = await seed(request);
-    const jobs = await fakeJobs(request, FAKE_A);
+    const jobs = await fakeJobsOf(request, exp, FAKE_A);
     const [first, second] = jobs;
     await setFakeJob(request, first!.id, {
       deferrals: 3,

@@ -4,7 +4,7 @@
  * dataset picker badges (B4-21 to B4-27). Numbers are the spec's, measured at 1440, 1024 and 390.
  */
 import { expect, type Locator, type Page } from '@playwright/test';
-import { createEnvironment, resetFakes, setFakeFlags, FAKE_A, test } from '../support';
+import { createEnvironment, fakeJobsOf, getExperiment, resetFakes, setFakeFlags, FAKE_A, test } from '../support';
 import { launchButton, nameBox, openLaunch, review, seedLaunch, type LaunchFixture } from './launchSupport';
 
 test.setTimeout(120_000);
@@ -103,10 +103,9 @@ test.describe('Run settings', () => {
     await expect(page.getByTestId('latency-tag')).toBeVisible();
     await expect
       .poll(async () => {
-        const jobs = (await (await request.get(`http://127.0.0.1:${FAKE_A}/__control/jobs`)).json()) as {
-          latency_sensitive?: boolean;
-        }[];
-        return jobs.some((j) => j.latency_sensitive === true);
+        const detail = await getExperiment(request, f.project.id, id);
+        const jobs = await fakeJobsOf(request, detail, FAKE_A);
+        return jobs.length > 0 && jobs.every((j) => j.latency_sensitive === true);
       })
       .toBe(true);
   });
@@ -126,6 +125,12 @@ test.describe('Review warnings', () => {
     await expect(callout).toBeVisible({ timeout: 15_000 });
     await expect(callout).toContainText(CEILING);
     await expect(callout.getByRole('button', { name: 'Set ceiling' })).toBeVisible();
+    // F1 (B5-39): "Set ceiling" opens the collapsed group and focuses the setting's input.
+    await callout.getByRole('button', { name: 'Set ceiling' }).click();
+    await expect(page.getByRole('heading', { name: 'Environment configurations', level: 2 })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: /Post Run Max Requests/i })).toBeFocused();
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('INPUT');
+    await openLaunch(page, f.project.slug, `?env=${declaring.id}`);
     // A warning is not a problem: it never joins the list of problems to fix (B5-41).
     await expect(review(page).getByRole('list', { name: 'Problems to fix' })).not.toContainText('ceiling');
   });
@@ -147,9 +152,11 @@ test.describe('Dataset picker', () => {
       await trigger.click();
       const options = page.getByRole('option');
       await expect(options).toHaveCount(2);
-      await expect(options.filter({ hasText: 'secret-set' }).getByTestId('dataset-chip')).toHaveText(
-        'Private test set',
-      );
+      const chip = options.filter({ hasText: 'secret-set' }).getByTestId('dataset-chip');
+      await expect(chip).toHaveText('Private test set');
+      // F2 (B4-22): the badge is 99 x 20 in the open list, as in the trigger.
+      const chipBox = await box(chip);
+      expect([Math.round(chipBox.width * 10) / 10, Math.round(chipBox.height)]).toEqual([99, 20]);
       await expect(options.filter({ hasText: 'golden' }).getByTestId('dataset-chip')).toHaveCount(0);
       // No launch gate: every option is selectable.
       for (const o of await options.all()) await expect(o).not.toHaveAttribute('aria-disabled', 'true');
@@ -157,5 +164,34 @@ test.describe('Dataset picker', () => {
       await expect(page.getByTestId('dataset-token-help')).toContainText('Private test set. The experiment reads it');
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
     }
+  });
+});
+
+test.describe('Token warning', () => {
+  test('the not-sent warning reads the same sentence and measures the amended heights (B5-40)', async ({
+    page,
+    request,
+  }) => {
+    const res = await request.post('/v1/datasets', {
+      data: { project_slug: f.project.slug, name: 'golden-private', description: 'e2e', private_test_set: true },
+    });
+    expect(res.ok(), await res.text()).toBeTruthy();
+    const heights: Record<number, number> = {};
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
+      await nameBox(page).fill('token');
+      await page.getByRole('button', { name: /^(golden|golden-private|Choose a dataset) Dataset$/ }).click();
+      await page.getByRole('option', { name: /golden-private/ }).click();
+      const callout = review(page).getByRole('note').filter({ hasText: 'Dataset read token will not be sent' });
+      await expect(callout).toBeVisible({ timeout: 15_000 });
+      await expect(callout).toContainText(
+        'The schema of Alpha does not declare QYM_DATASET_READ_TOKEN, so \u201cgolden-private\u201d (private) is read with the worker\u2019s own token.',
+      );
+      heights[width] = Math.round((await box(callout)).height * 10) / 10;
+    }
+    console.log('B5-40 heights', JSON.stringify(heights));
+    // Amended: the verbatim sentence wraps to 73.6 px in the 777 px column at 1024.
+    expect(heights[1024]).toBe(73.6);
   });
 });
