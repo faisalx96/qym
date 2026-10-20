@@ -570,7 +570,7 @@ Order (each step keeps `cd frontend && npm run check` and `pytest tests/platform
 3. **Q2**: backend first (`view=group`, `tests/platform`, run `pytest tests/platform` in chunks of about 48 files because the backend is touched), then the client (`groupQueryFor`, prefetch, strip skeleton, `loadingCount`). Criteria Q2-1 to Q2-12.
 4. **D1**: `ItemCard` `shiftTarget`, `item-scroll.spec.ts`. Criteria D1-1 to D1-8.
 
-Amendment rule (`DESIGN_LANGUAGE.md` section 7): a number in this document changes only with its measured value and a one-line reason here, and the spec asserts the amended number on the same element. The mocks stay in the gallery as cases until the real components exist; the reviewer measures every criterion with the scripts in `measure/` (seed `seed-r7.mts`) and writes MEETS / MEETS WITH FIXES / DOES NOT MEET with the numbers, against the mocks and the screenshots above, not against "better than before".
+Amendment rule (`DESIGN_LANGUAGE.md` section 6): a number in this document changes only with its measured value and a one-line reason here, and the spec asserts the amended number on the same element. The mocks stay in the gallery as cases until the real components exist; the reviewer measures every criterion with the scripts in `measure/` (seed `seed-r7.mts`) and writes MEETS / MEETS WITH FIXES / DOES NOT MEET with the numbers, against the mocks and the screenshots above, not against "better than before".
 
 ## 9. Implementation record (round 7 implementation stage)
 

@@ -2,7 +2,7 @@
 
 What went wrong in the React rewrite and its three product-feedback rounds, ranked by cost, with the
 root cause and the rule each failure produced. The rules live in `AGENTS.md` (process and machine),
-`docs/DESIGN_LANGUAGE.md` section 7 (design and review standards) and `00-PLAYBOOK.md` (the cycle).
+`docs/DESIGN_LANGUAGE.md` section 6 (design and review standards) and `00-PLAYBOOK.md` (the cycle).
 Evidence is in `REVIEW.md`, `redesign*/review-*.md`, `redesign2/FINAL_REVIEW.md` and the session log.
 
 ## 1. Two whole-session kills (highest cost: hours of agent work, two restarts)
@@ -58,7 +58,7 @@ criterion in the browser. One fix pass took the branch from MEETS WITH FIXES to 
 
 **Rule.** Every product-feedback round is design spec, implementation mapped criterion by criterion,
 then an independent measured review. A reviewer verdict without numbers is not a verdict
-(`DESIGN_LANGUAGE.md` section 7).
+(`DESIGN_LANGUAGE.md` section 6).
 
 ## 3. A finding "fixed" by hiding information
 

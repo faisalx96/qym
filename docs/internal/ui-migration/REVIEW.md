@@ -394,7 +394,7 @@ only be visible within the table itself".
 
 The failures of the whole migration (two session kills, repeated feedback rounds, a finding fixed by hiding
 information, spec numbers from the wrong geometry, hue as identity, non-fixes accepted) and the rules they
-produced are in `POSTMORTEM.md`; the rules themselves live in `AGENTS.md`, `docs/DESIGN_LANGUAGE.md` section 7
+produced are in `POSTMORTEM.md`; the rules themselves live in `AGENTS.md`, `docs/DESIGN_LANGUAGE.md` section 6
 and `00-PLAYBOOK.md`.
 
 ## Known gaps to decide on

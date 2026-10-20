@@ -133,7 +133,7 @@ Every numeric criterion is met on the production build except one (Q1-8, a spec 
 
 D3-8 route sweep (`e2e/visual-language/table-edges.spec.ts`, tables found / with a pinned boundary, identical at 1440 and 1024): runs list 1/1, charts 3/0, run detail classic 3/1, run detail repeat (passes) 3/2, compare 2/2, experiments 1/1, queue 1/1, experiment detail 1/1, environments 1/1, **datasets 0/0**, dataset 1/1, settings members 1/1, API keys 2/2, LLM connections 1/1, settings environments 1/1, admin runs 2/2, admin projects 1/1, admin users 1/1, admin maintenance 1/1, profile 1/1, trash 1/1. The pin sweep also found, earlier, error-row rails replacing the line on the first pinned cell, fixed with `--pin-line` (verified: group-open and rail rows in `edge-runs-1024.json` carry rail + line).
 
-## 3. Amendments (DESIGN_LANGUAGE section 7: measured value, reason in the spec, a test asserting the same number)
+## 3. Amendments (DESIGN_LANGUAGE section 6: measured value, reason in the spec, a test asserting the same number)
 
 | Amendment | Measured here | Decision |
 |---|---|---|
@@ -165,7 +165,7 @@ D3-8 route sweep (`e2e/visual-language/table-edges.spec.ts`, tables found / with
 ## 5. Findings
 
 ### Required
-- **R1. Amended numbers without a test on the same number** (`qa.md` section 9 vs DESIGN_LANGUAGE section 7). Q2-3 (340 / 80 ms for 10 x 1,200 / 10 x 300) is not asserted by `tests/platform/test_run_passes_statements.py` (statements and a per-1,000-item-passes time only); Q2-5 (500 ms at 10 x 1,200) is not asserted by `e2e/perf/runs-passes-load.spec.ts` (300-item case only, `limit(2500, 250)`); D1-3 (0 px) is script-only. Fix: add the 1,200-item case at 500 ms (CI margin, strict under `QYM_PERF_STRICT=1`) and a 10 x 300 / 10 x 1,200 timing at 340 / 80 ms to the statements test, and either assert D1-3 from `item-scroll.spec.ts` or state in `qa.md` that D1-3 and D1-3b are script-measured guards.
+- **R1. Amended numbers without a test on the same number** (`qa.md` section 9 vs DESIGN_LANGUAGE section 6). Q2-3 (340 / 80 ms for 10 x 1,200 / 10 x 300) is not asserted by `tests/platform/test_run_passes_statements.py` (statements and a per-1,000-item-passes time only); Q2-5 (500 ms at 10 x 1,200) is not asserted by `e2e/perf/runs-passes-load.spec.ts` (300-item case only, `limit(2500, 250)`); D1-3 (0 px) is script-only. Fix: add the 1,200-item case at 500 ms (CI margin, strict under `QYM_PERF_STRICT=1`) and a 10 x 300 / 10 x 1,200 timing at 340 / 80 ms to the statements test, and either assert D1-3 from `item-scroll.spec.ts` or state in `qa.md` that D1-3 and D1-3b are script-measured guards.
 - **R2. Q1-8 says 12 px, the page has 5.6 px.** `[data-testid=table-scroll-rail]` on the seeded 50-row runs page: computed height 5.625 px at 1440 and 5.25 px at 1024 (identical to the baseline; 12 px only when the table has few rows). The rail is the only overflow cue left after the cues were deleted, so spec and product must agree: amend Q1-8 with the measured number and reason and assert it on the 50-row page, or make the rail 12 px as the spec argued. Also drop the unreproduced "56 px" from the D1 amendment row.
 
 ### Optional

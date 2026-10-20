@@ -323,7 +323,7 @@ Then: `cd frontend && npm run check`, `pytest tests/platform/test_design_languag
 
 No new colour token. Section 3 "Data table" gets one sentence: child rows (`childRows`) are rows of the same column model,
 `--bg-void` surface, 3 px `--accent-primary` group rail, no wash, no opacity. If the reviewer finds `--bg-void` too dark on a
-projector, the permitted change is the child surface only (amendment rule, section 7).
+projector, the permitted change is the child surface only (amendment rule, DESIGN_LANGUAGE section 6).
 
 ## 7. Decisions made here (no owner answer was needed)
 
