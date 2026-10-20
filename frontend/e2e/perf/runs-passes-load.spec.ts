@@ -330,3 +330,33 @@ test('Q2-12: the run page still reads the default view, and its group equals the
   ]);
   expect(grouped.group).toEqual(full.group);
 });
+
+test.describe('Q2-5 at 10 passes x 1,200 items', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('a click on a run nobody prefetched paints its rows in <= 500 ms (CI margin on the dev server), with 2 requests', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const s = await seedR7(request, { repeat: 1, items: 24, big: 1200, classic: 1, slugPrefix: 'r7big' });
+    await withoutPrefetch(page);
+    const log = logApi(page);
+    await openRuns(page, s.project.slug);
+    await page.waitForTimeout(1500);
+    log.reset();
+    const run = s.big!;
+    const t = await openTimed(page, run.name, run.id, 10);
+    await page.waitForTimeout(300);
+    const calls = log.all.filter((r) => isPrefetchApi(r.url) && !r.failed);
+    expect(
+      calls.map((r) => r.url.replace(/\?.*/, '').replace(run.id, ':id')).sort(),
+      calls.map((r) => r.url).join('  '),
+    ).toEqual(['/api/runs/:id/group-metrics', '/api/runs/:id/passes']);
+    expect(calls.find((r) => isGroup(r.url))!.url).toContain('view=group');
+    // spec Q2-5 (amended): <= 500 ms on the production build (measured 460); the dev server carries the usual CI margin
+    const ms = Math.max(t.rows, t.strip);
+    test.info().annotations.push({ type: 'Q2-5 1,200', description: `${Math.round(ms)} ms` });
+    expect(ms).toBeLessThanOrEqual(limit(3000, 500));
+  });
+});

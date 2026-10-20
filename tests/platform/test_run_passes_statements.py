@@ -14,6 +14,7 @@ import statistics
 import time
 import uuid
 
+import pytest
 from _helpers import _make_env
 from fastapi.testclient import TestClient
 from qym_platform.api.runs import run_passes
@@ -171,3 +172,21 @@ def test_passes_time_stays_linear_in_item_passes():
     assert (
         median <= PER_1000_ITEM_PASSES_MS
     ), f"median {median:.1f} ms of {[round(t, 1) for t in times]}"
+
+
+# qa.md Q2-3 (amended in round 7): /passes at 10 passes x 1,200 / x 300 items, median of 9 requests. The strict numbers
+# were measured on the production seed (316.3 / 67.1 ms); this fixture is built through the ingest API in memory, so
+# the CI margin is 4x (a shared machine), the strict numbers apply under QYM_PERF_STRICT=1 on a quiet one.
+Q2_3_MS = {1200: 340 if STRICT else 1360, 300: 80 if STRICT else 320}
+
+
+@pytest.mark.parametrize("items", [300, 1200])
+def test_passes_ceiling_at_the_seeded_sizes(items):
+    factory = _build(items, 10)
+    _call(factory)  # warm
+    runs = [_call(factory) for _ in range(9)]
+    median = statistics.median(ms for _, ms, _ in runs)
+    assert {n for n, _, _ in runs} == {runs[0][0]} and runs[0][0] <= MAX_STATEMENTS
+    assert (
+        median <= Q2_3_MS[items]
+    ), f"{items} items: median {median:.1f} ms of {[round(ms) for _, ms, _ in runs]}"

@@ -374,6 +374,8 @@ export interface SeededR7 {
   repeat: Array<{ id: string; name: string }>;
   /** A run with 19 passes (more placeholder rows than the old cap of 10), when asked for. */
   passes19?: { id: string; name: string };
+  /** One 10-pass run with `big` items (the 10 x 1,200 case of Q2-5), when asked for. */
+  big?: { id: string; name: string };
   classic: Array<{ id: string; name: string }>;
   /** Everything on the page, newest first. */
   all: Array<{ id: string; name: string }>;
@@ -502,7 +504,14 @@ async function seedR7Repeat(
  */
 export async function seedR7(
   request: APIRequestContext,
-  opts: { repeat?: number; items?: number; passes19?: boolean; classic?: number; slugPrefix?: string } = {},
+  opts: {
+    repeat?: number;
+    items?: number;
+    passes19?: boolean;
+    big?: number;
+    classic?: number;
+    slugPrefix?: string;
+  } = {},
 ): Promise<SeededR7> {
   const nRepeat = opts.repeat ?? 3;
   const items = opts.items ?? 24;
@@ -520,6 +529,11 @@ export async function seedR7(
   if (opts.passes19) {
     const name = 'r7-passes19';
     passes19 = { id: await seedR7Repeat(request, token, name, 19, 8, started()), name };
+  }
+  let big: SeededR7['big'];
+  if (opts.big) {
+    const name = `r7-big-${opts.big}`;
+    big = { id: await seedR7Repeat(request, token, name, 10, opts.big, started()), name };
   }
   const classic: SeededR7['classic'] = [];
   for (let c = 0; c < (opts.classic ?? 3); c++) {
@@ -539,7 +553,7 @@ export async function seedR7(
     });
     classic.push({ id: run.id, name });
   }
-  const all = [...repeat, ...(passes19 ? [passes19] : []), ...classic];
+  const all = [...repeat, ...(passes19 ? [passes19] : []), ...(big ? [big] : []), ...classic];
   await waitForProjection(request, project.slug, all.length);
-  return { project, token, repeat, passes19, classic, all };
+  return { project, token, repeat, passes19, big, classic, all };
 }
