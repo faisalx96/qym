@@ -647,6 +647,65 @@ they produced.
 - **A fix changes a measurement.** If a commit does not move the measured value or the screenshot (for example a
   rendering property that does not alter the raster), it is recorded as a limitation, not accepted as a fix.
 
+## 8. Design choices that failed, and the rules that replace them
+
+Each rule below comes from a design choice that looked reasonable, shipped, and was then rejected by the product owner or
+measured as a defect (October 2026, rounds 2 to 7; the evidence is in `docs/internal/ui-migration/`). They are written as
+rules for any future surface, not for the pages that taught them.
+
+- **Nothing is painted over content.** An affordance (a frozen-edge shadow, a scroll fade, a gradient cue) that lies on
+  top of text reduces its contrast and, when it is as tall as a scroll host, crosses rows it does not belong to (a summary
+  strip, an open detail, a toolbar). A boundary is drawn by the element that owns it: a pinned cell draws its own 1 px
+  line, so the line exists exactly where pinned cells exist and stops at any row that is not laid out in the columns. An
+  overflow cue lives outside the content (the rail), never on it. Criterion: 0 px of any glyph under an element with a
+  gradient or an opacity below 1; a boundary's extent equals its owner's box.
+- **A name is never truncated.** Keys, identifiers, labels and column names wrap; they are never cut with an ellipsis,
+  never clamped to a character count, never squeezed to a 0 px box, and a `title` tooltip does not count as visible.
+  Long names break at their words (a soft break after `_`, `-` and `.` and before a camelCase capital), with
+  `overflow-wrap: anywhere` only as the fallback for a single very long word. Data is shown as written: no
+  `text-transform` on a key or value (uppercasing a camelCase key hides its word boundaries); eyebrow styling is for
+  fixed UI labels only. Criterion: `scrollWidth <= clientWidth`, computed `text-overflow` is not `ellipsis`, rendered text
+  equals the source string.
+- **Text does not give up width to controls.** In a row that holds a name and its actions, the name has a non-shrinking
+  basis and the actions wrap under it when the row is narrow; `min-width: 0` goes only on the element that is meant to
+  shrink. Every such row is measured at the narrowest real width (390 and the narrowest nested depth), where this fails
+  first. Criterion: 0 px of overlap between the painted text of any two siblings; a value starts after its key's last line.
+- **A loading frame is the loaded layout.** Placeholders render the same DOM as the loaded state with skeleton values, and
+  their count follows the data (the number of rows that will arrive), not a cap. A frame that is "about the right height"
+  shifts at some width or some count. Criterion: the container's height at the placeholder frame equals its height at
+  the loaded frame, 0 +- 1 px, at every width and at the largest realistic count.
+- **A request returns what its view renders.** A lightweight component never shares the request path of an expensive
+  derived analysis; a `view=` parameter or a separate route serves the subset, the full computation stays on the surface
+  that shows it, and a GET writes nothing. The server cost of every component's request is measured on the largest
+  realistic data before it ships; a number nobody reads is never computed on a user's click. Criterion: endpoint time
+  and statement count at the realistic size, equal statement counts at two sizes (no N+1), rows written = 0.
+- **Load by default, in stages.** Everything a page will show is requested without a click or a scroll: the core first,
+  then the rest in order, from an idle callback with bounded concurrency and a cap, off under `saveData`. "Lazy" means
+  "after the core paints", never "when the user asks". A click on something still in flight joins the request instead of
+  starting another. Prefetching is not a visible default and needs no owner approval; a changed page size, column set or
+  density is, and does. Criterion: requests after the click = 0 when prefetched; click to painted <= the render cost alone.
+- **Whatever stays fixed while the page scrolls is positioned by the compositor.** Native `position: sticky`, which means
+  the element is placed outside any horizontal scroller when the component is first designed (a sticky element inside a
+  scroller sticks to that scroller, not to the page, and cannot be fixed later). When a JS-written offset is unavoidable
+  (a header that must stop above a detail), the write lands on the moving element only, never on a container whose
+  descendants inherit a custom property, and the structural limitation is recorded in the spec with the frames it cannot
+  prove. One sticky container, not one sticky layer per cell. Criterion: elements restyled per scroll event <= 150; pinned
+  cells 0 px off their row in every frame; sticky elements = pinned cells.
+- **Optional content never changes geometry.** Axis labels, count labels, badges and "+ N more" have fixed-height slots;
+  an empty or thinned label keeps its line, so the plot, the bar bottom and the row height do not move with the data.
+  Criterion: bar bottom = axis y at 0 px for 1 to 20 buckets; row height identical with and without the optional part.
+- **Fill the container.** A visual inside a fluid card spans the card; fixed pixel widths and heights belong to tokens
+  (row heights, bar heights), not to charts or grids. A row of controls uses one control height and aligns its items on
+  the centre line. Criterion: chart width = card content width at every width from 1440 to 390; control spread = 0.
+- **The default view is the primary content.** A tab set, a drawer or a detail opens on what the user came for (the
+  content, not its metadata; the item, not its settings), and a remembered choice never promotes a secondary tab to the
+  default. Criterion: the first painted tab after navigation is the content tab, regardless of stored state.
+- **Ambiguous complaints are measured on every candidate.** When the owner's words fit more than one element ("the
+  frozen input"), the designer measures each candidate, says which one the numbers point to, and records the open
+  question once. When a defect cannot be reproduced in the test environment (a trackpad fling on a compositor thread in
+  headless Chromium), the spec says so, fixes the structural cause anyway, and the reviewer verifies on the owner's
+  device rather than closing the point on a measurement that could not fail.
+
 ---
 
 ## 6. Self-check before you finish (any LLM session: run these)

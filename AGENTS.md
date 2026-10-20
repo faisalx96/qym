@@ -119,7 +119,9 @@ A feedback round is three stages, each by a different agent (`docs/internal/ui-m
    FIXES / DOES NOT MEET with the numbers. A verdict without measurements is not a verdict. A fix must change
    the measured value or the screenshot; otherwise it is a documented limitation, not a fix.
 The design standards behind this (density versus hiding, hue budget, amendment rule) are in
-`docs/DESIGN_LANGUAGE.md` section 7. Merges into the integration branch are plain `--no-ff`; nothing is pushed
+`docs/DESIGN_LANGUAGE.md` section 7; the design choices that failed and the generic rules that replaced them
+(no overlays on content, names never truncated, loading frames at the loaded height, a request returns what its
+view renders, load by default, compositor-positioned sticky elements) are section 8. Read both before a spec. Merges into the integration branch are plain `--no-ff`; nothing is pushed
 by agents; `ui/*` branches and worktrees are kept.
 
 ## Testing Guidelines
