@@ -1,0 +1,624 @@
+{
+  "table": "runs",
+  "width": 1440,
+  "states": {
+    "rest": {
+      "lines": {
+        "start": {
+          "cells": 52,
+          "top": 124,
+          "bottom": 1782,
+          "gaps": [],
+          "x": 611,
+          "shadow": "rgb(82, 82, 108) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 52,
+          "top": 124,
+          "bottom": 1782,
+          "gaps": [],
+          "x": 1306,
+          "shadow": "rgb(82, 82, 108) 1px 0px 0px 0px inset"
+        }
+      },
+      "cueElementsLive": 0,
+      "attrs": [
+        "data-cues",
+        "data-scroll-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 3684,
+      "clientW": 1203,
+      "pinStart": 0,
+      "pinEnd": 0,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 1411,
+          "t": 58,
+          "b": 868,
+          "w": 1205,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 1410,
+          "t": 59,
+          "b": 124,
+          "w": 1203,
+          "h": 65
+        },
+        "footer": {
+          "l": 207,
+          "r": 1410,
+          "t": 827,
+          "b": 867,
+          "w": 1203,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 821.375,
+          "w": 1203,
+          "h": 697.375
+        },
+        "scroller": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 821.375,
+          "w": 1203,
+          "h": 697.375
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 611,
+          "t": 124,
+          "b": 148,
+          "w": 404,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 207,
+          "r": 3891.15625,
+          "t": 1750,
+          "b": 1782,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 1410,
+          "t": 821.375,
+          "b": 827,
+          "w": 1203,
+          "h": 5.625
+        },
+        "details": [],
+        "pinStart": 0,
+        "pinEnd": 0
+      },
+      "extents": [],
+      "insetKinds": [
+        "th:start:rgb(82, 82, 108) -1px 0px 0px 0px inset, rgb(59, 59, 84) 0px -1px 0px 0px inset",
+        "th:end:rgb(82, 82, 108) 1px 0px 0px 0px inset",
+        "th:start:rgb(82, 82, 108) -1px 0px 0px 0px inset",
+        "td:start:rgb(82, 82, 108) -1px 0px 0px 0px inset",
+        "td:end:rgb(82, 82, 108) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": []
+    },
+    "few-rows": {
+      "lines": {
+        "start": {
+          "cells": 3,
+          "top": 158,
+          "bottom": 248,
+          "gaps": [],
+          "x": 611,
+          "shadow": "rgb(82, 82, 108) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 3,
+          "top": 158,
+          "bottom": 248,
+          "gaps": [],
+          "x": 1306,
+          "shadow": "rgb(82, 82, 108) 1px 0px 0px 0px inset"
+        }
+      },
+      "cueElementsLive": 0,
+      "attrs": [
+        "data-cues",
+        "data-scroll-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 3684,
+      "clientW": 1203,
+      "pinStart": 0,
+      "pinEnd": 0,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 1411,
+          "t": 58,
+          "b": 301,
+          "w": 1205,
+          "h": 243
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 1410,
+          "t": 59,
+          "b": 158,
+          "w": 1203,
+          "h": 99
+        },
+        "footer": {
+          "l": 207,
+          "r": 1410,
+          "t": 260,
+          "b": 300,
+          "w": 1203,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 1410,
+          "t": 158,
+          "b": 248,
+          "w": 1203,
+          "h": 90
+        },
+        "scroller": {
+          "l": 207,
+          "r": 1410,
+          "t": 158,
+          "b": 248,
+          "w": 1203,
+          "h": 90
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 611,
+          "t": 158,
+          "b": 182,
+          "w": 404,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 207,
+          "r": 3891.15625,
+          "t": 216,
+          "b": 248,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 1410,
+          "t": 248,
+          "b": 260,
+          "w": 1203,
+          "h": 12
+        },
+        "details": [],
+        "pinStart": 0,
+        "pinEnd": 0
+      },
+      "extents": [],
+      "insetKinds": [
+        "th:start:rgb(82, 82, 108) -1px 0px 0px 0px inset, rgb(59, 59, 84) 0px -1px 0px 0px inset",
+        "th:end:rgb(82, 82, 108) 1px 0px 0px 0px inset",
+        "th:start:rgb(82, 82, 108) -1px 0px 0px 0px inset",
+        "td:start:rgb(82, 82, 108) -1px 0px 0px 0px inset",
+        "td:end:rgb(82, 82, 108) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": []
+    },
+    "group-open": {
+      "lines": {
+        "start": {
+          "cells": 62,
+          "top": 124,
+          "bottom": 2147,
+          "gaps": [
+            45
+          ],
+          "x": 611,
+          "shadow": "rgb(82, 82, 108) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 62,
+          "top": 124,
+          "bottom": 2147,
+          "gaps": [
+            45
+          ],
+          "x": 1306,
+          "shadow": "rgb(82, 82, 108) 1px 0px 0px 0px inset"
+        }
+      },
+      "cueElementsLive": 0,
+      "attrs": [
+        "data-cues",
+        "data-scroll-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 3684,
+      "clientW": 1203,
+      "pinStart": 0,
+      "pinEnd": 0,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 1411,
+          "t": 58,
+          "b": 868,
+          "w": 1205,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 1410,
+          "t": 59,
+          "b": 124,
+          "w": 1203,
+          "h": 65
+        },
+        "footer": {
+          "l": 207,
+          "r": 1410,
+          "t": 827,
+          "b": 867,
+          "w": 1203,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "scroller": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 611,
+          "t": 124,
+          "b": 148,
+          "w": 404,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 207,
+          "r": 3891.15625,
+          "t": 2115,
+          "b": 2147,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 1410,
+          "t": 822.203125,
+          "b": 827,
+          "w": 1203,
+          "h": 4.796875
+        },
+        "details": [
+          {
+            "l": 207,
+            "r": 3891.15625,
+            "t": 534,
+            "b": 579,
+            "w": 3684.15625,
+            "h": 45,
+            "strip": true
+          }
+        ],
+        "pinStart": 0,
+        "pinEnd": 0
+      },
+      "extents": [],
+      "insetKinds": [
+        "th:start:rgb(82, 82, 108) -1px 0px 0px 0px inset, rgb(59, 59, 84) 0px -1px 0px 0px inset",
+        "th:end:rgb(82, 82, 108) 1px 0px 0px 0px inset",
+        "th:start:rgb(82, 82, 108) -1px 0px 0px 0px inset",
+        "td:start:rgb(82, 82, 108) -1px 0px 0px 0px inset",
+        "td:end:rgb(82, 82, 108) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": []
+    },
+    "group-open-scrolled": {
+      "lines": {
+        "start": {
+          "cells": 62,
+          "top": 124,
+          "bottom": 2147,
+          "gaps": [
+            45
+          ],
+          "x": 611,
+          "shadow": "rgb(82, 82, 108) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 62,
+          "top": 124,
+          "bottom": 2147,
+          "gaps": [
+            45
+          ],
+          "x": 1306,
+          "shadow": "rgb(82, 82, 108) 1px 0px 0px 0px inset"
+        }
+      },
+      "cueElementsLive": 0,
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-scroll-start"
+      ],
+      "scrollLeft": 600,
+      "scrollW": 3684,
+      "clientW": 1203,
+      "pinStart": 0,
+      "pinEnd": 0,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 1411,
+          "t": 58,
+          "b": 868,
+          "w": 1205,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 1410,
+          "t": 59,
+          "b": 124,
+          "w": 1203,
+          "h": 65
+        },
+        "footer": {
+          "l": 207,
+          "r": 1410,
+          "t": 827,
+          "b": 867,
+          "w": 1203,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "scroller": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 611,
+          "t": 124,
+          "b": 148,
+          "w": 404,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": -393,
+          "r": 3291.15625,
+          "t": 2115,
+          "b": 2147,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 1410,
+          "t": 822.203125,
+          "b": 827,
+          "w": 1203,
+          "h": 4.796875
+        },
+        "details": [
+          {
+            "l": -393,
+            "r": 3291.15625,
+            "t": 534,
+            "b": 579,
+            "w": 3684.15625,
+            "h": 45,
+            "strip": true
+          }
+        ],
+        "pinStart": 0,
+        "pinEnd": 0
+      },
+      "extents": [],
+      "insetKinds": [
+        "th:start:rgb(82, 82, 108) -1px 0px 0px 0px inset, rgb(59, 59, 84) 0px -1px 0px 0px inset",
+        "th:end:rgb(82, 82, 108) 1px 0px 0px 0px inset",
+        "th:start:rgb(82, 82, 108) -1px 0px 0px 0px inset",
+        "td:start:rgb(82, 82, 108) -1px 0px 0px 0px inset",
+        "td:end:rgb(82, 82, 108) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": []
+    },
+    "group-open-end": {
+      "lines": {
+        "start": {
+          "cells": 62,
+          "top": 124,
+          "bottom": 2147,
+          "gaps": [
+            45
+          ],
+          "x": 611,
+          "shadow": "rgb(82, 82, 108) -1px 0px 0px 0px inset"
+        },
+        "end": {
+          "cells": 62,
+          "top": 124,
+          "bottom": 2147,
+          "gaps": [
+            45
+          ],
+          "x": 1306,
+          "shadow": "rgb(82, 82, 108) 1px 0px 0px 0px inset"
+        }
+      },
+      "cueElementsLive": 0,
+      "attrs": [
+        "data-cues",
+        "data-scroll-start"
+      ],
+      "scrollLeft": 2481,
+      "scrollW": 3684,
+      "clientW": 1203,
+      "pinStart": 0,
+      "pinEnd": 0,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 1411,
+          "t": 58,
+          "b": 868,
+          "w": 1205,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 1410,
+          "t": 59,
+          "b": 124,
+          "w": 1203,
+          "h": 65
+        },
+        "footer": {
+          "l": 207,
+          "r": 1410,
+          "t": 827,
+          "b": 867,
+          "w": 1203,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "scroller": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 611,
+          "t": 124,
+          "b": 148,
+          "w": 404,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": -2274,
+          "r": 1410.15625,
+          "t": 2115,
+          "b": 2147,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 1410,
+          "t": 822.203125,
+          "b": 827,
+          "w": 1203,
+          "h": 4.796875
+        },
+        "details": [
+          {
+            "l": -2274,
+            "r": 1410.15625,
+            "t": 534,
+            "b": 579,
+            "w": 3684.15625,
+            "h": 45,
+            "strip": true
+          }
+        ],
+        "pinStart": 0,
+        "pinEnd": 0
+      },
+      "extents": [],
+      "insetKinds": [
+        "th:start:rgb(82, 82, 108) -1px 0px 0px 0px inset, rgb(59, 59, 84) 0px -1px 0px 0px inset",
+        "th:end:rgb(82, 82, 108) 1px 0px 0px 0px inset",
+        "th:start:rgb(82, 82, 108) -1px 0px 0px 0px inset",
+        "td:start:rgb(82, 82, 108) -1px 0px 0px 0px inset",
+        "td:end:rgb(82, 82, 108) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": []
+    }
+  }
+}

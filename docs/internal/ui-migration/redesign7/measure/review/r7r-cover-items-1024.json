@@ -1,0 +1,435 @@
+{
+  "rest": {
+    "cover": {
+      "tested": 353,
+      "coveredByPinnedCell": 26,
+      "coveredByPageChrome": 0,
+      "coveredByStickyHeaderOrBar": 12,
+      "coveredByOverlay": 0,
+      "overlayKinds": {},
+      "pinned": {
+        "TD:end": 26
+      },
+      "bad": [],
+      "dataEdgeElements": 0,
+      "gradientElements": 22,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "detail-open": {
+    "cover": {
+      "tested": 298,
+      "coveredByPinnedCell": 8,
+      "coveredByPageChrome": 35,
+      "coveredByStickyHeaderOrBar": 32,
+      "coveredByOverlay": 0,
+      "overlayKinds": {},
+      "pinned": {
+        "TD:end": 8
+      },
+      "bad": [],
+      "dataEdgeElements": 0,
+      "gradientElements": 22,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [
+        {
+          "x": 308,
+          "y": 275,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 275,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 390,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 390,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 505,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 505,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 620,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 620,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 735,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 735,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        }
+      ],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "detail-open-scrolled-260": {
+    "cover": {
+      "tested": 290,
+      "coveredByPinnedCell": 12,
+      "coveredByPageChrome": 34,
+      "coveredByStickyHeaderOrBar": 27,
+      "coveredByOverlay": 0,
+      "overlayKinds": {},
+      "pinned": {
+        "TD:start": 12
+      },
+      "bad": [],
+      "dataEdgeElements": 0,
+      "gradientElements": 22,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [
+        {
+          "x": 308,
+          "y": 275,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 275,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 390,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 390,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 505,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 505,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 620,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 620,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 735,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 735,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        }
+      ],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "detail-open-end": {
+    "cover": {
+      "tested": 307,
+      "coveredByPinnedCell": 4,
+      "coveredByPageChrome": 21,
+      "coveredByStickyHeaderOrBar": 41,
+      "coveredByOverlay": 0,
+      "overlayKinds": {},
+      "pinned": {
+        "TD:start": 4
+      },
+      "bad": [],
+      "dataEdgeElements": 0,
+      "gradientElements": 22,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [
+        {
+          "x": 308,
+          "y": 275,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 275,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 390,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 390,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 505,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 505,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 620,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 620,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 735,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 735,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        }
+      ],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "detail-open-scrolled-260-page-300": {
+    "cover": {
+      "tested": 355,
+      "coveredByPinnedCell": 31,
+      "coveredByPageChrome": 45,
+      "coveredByStickyHeaderOrBar": 3,
+      "coveredByOverlay": 5,
+      "overlayKinds": {
+        "div._rail_betwm_57": 5
+      },
+      "pinned": {
+        "TD:start": 26,
+        "TD:end": 5
+      },
+      "bad": [
+        {
+          "text": "{ \"prompt\": \"Question 12: what",
+          "x": 249,
+          "y": 994,
+          "over": "div._rail_betwm_57",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "{ \"prompt\": \"Question 12: what",
+          "x": 306,
+          "y": 994,
+          "over": "div._rail_betwm_57",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "scorer error",
+          "x": 396,
+          "y": 994,
+          "over": "div._rail_betwm_57",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "scorer error",
+          "x": 416,
+          "y": 994,
+          "over": "div._rail_betwm_57",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "scorer error",
+          "x": 436,
+          "y": 994,
+          "over": "div._rail_betwm_57",
+          "bg": "none",
+          "op": "1"
+        }
+      ],
+      "dataEdgeElements": 0,
+      "gradientElements": 22,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [
+        {
+          "x": 308,
+          "y": 0,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 0,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 90,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 90,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 205,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 205,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 320,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 320,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 308,
+          "y": 435,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 309,
+          "y": 435,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        }
+      ],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  }
+}

@@ -1,0 +1,469 @@
+{
+  "rest": {
+    "cover": {
+      "tested": 870,
+      "coveredByPinnedCell": 97,
+      "coveredByPageChrome": 0,
+      "coveredByStickyHeaderOrBar": 6,
+      "coveredByOverlay": 0,
+      "overlayKinds": {},
+      "pinned": {
+        "TD:end": 97
+      },
+      "bad": [],
+      "dataEdgeElements": 0,
+      "gradientElements": 0,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "group-open": {
+    "cover": {
+      "tested": 800,
+      "coveredByPinnedCell": 102,
+      "coveredByPageChrome": 0,
+      "coveredByStickyHeaderOrBar": 6,
+      "coveredByOverlay": 6,
+      "overlayKinds": {
+        "button._trigger_1ia3n_2": 1,
+        "span._optionText_1ia3n_130": 2,
+        "span._text_15ndv_2": 2,
+        "span._title_154s3_17": 1
+      },
+      "pinned": {
+        "TD:end": 75,
+        "TD:start": 27
+      },
+      "bad": [
+        {
+          "text": "Metric",
+          "x": 365,
+          "y": 551,
+          "over": "button._trigger_1ia3n_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 376,
+          "y": 551,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 387,
+          "y": 551,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass@10",
+          "x": 232,
+          "y": 563,
+          "over": "span._text_15ndv_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass@10",
+          "x": 250,
+          "y": 563,
+          "over": "span._text_15ndv_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass@10",
+          "x": 268,
+          "y": 563,
+          "over": "span._title_154s3_17",
+          "bg": "none",
+          "op": "1"
+        }
+      ],
+      "dataEdgeElements": 0,
+      "gradientElements": 0,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [
+        {
+          "x": 610,
+          "y": 539,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 539,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 548,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 548,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 557,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 557,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 566,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 566,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 575,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 575,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        }
+      ],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "group-open-scrolled-600": {
+    "cover": {
+      "tested": 906,
+      "coveredByPinnedCell": 338,
+      "coveredByPageChrome": 0,
+      "coveredByStickyHeaderOrBar": 22,
+      "coveredByOverlay": 6,
+      "overlayKinds": {
+        "button._trigger_1ia3n_2": 1,
+        "span._optionText_1ia3n_130": 2,
+        "span._text_15ndv_2": 2,
+        "span._title_154s3_17": 1
+      },
+      "pinned": {
+        "TD:start": 300,
+        "TD:end": 38
+      },
+      "bad": [
+        {
+          "text": "Metric",
+          "x": 365,
+          "y": 551,
+          "over": "button._trigger_1ia3n_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 376,
+          "y": 551,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 387,
+          "y": 551,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass@10",
+          "x": 232,
+          "y": 563,
+          "over": "span._text_15ndv_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass@10",
+          "x": 250,
+          "y": 563,
+          "over": "span._text_15ndv_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass@10",
+          "x": 268,
+          "y": 563,
+          "over": "span._title_154s3_17",
+          "bg": "none",
+          "op": "1"
+        }
+      ],
+      "dataEdgeElements": 0,
+      "gradientElements": 0,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [
+        {
+          "x": 610,
+          "y": 539,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 539,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 548,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 548,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 557,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 557,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 566,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 566,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 575,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 575,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        }
+      ],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "group-open-end": {
+    "cover": {
+      "tested": 771,
+      "coveredByPinnedCell": 84,
+      "coveredByPageChrome": 0,
+      "coveredByStickyHeaderOrBar": 26,
+      "coveredByOverlay": 6,
+      "overlayKinds": {
+        "button._trigger_1ia3n_2": 1,
+        "span._optionText_1ia3n_130": 2,
+        "span._text_15ndv_2": 2,
+        "span._title_154s3_17": 1
+      },
+      "pinned": {
+        "TD:start": 84
+      },
+      "bad": [
+        {
+          "text": "Metric",
+          "x": 365,
+          "y": 551,
+          "over": "button._trigger_1ia3n_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 376,
+          "y": 551,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 387,
+          "y": 551,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass@10",
+          "x": 232,
+          "y": 563,
+          "over": "span._text_15ndv_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass@10",
+          "x": 250,
+          "y": 563,
+          "over": "span._text_15ndv_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass@10",
+          "x": 268,
+          "y": 563,
+          "over": "span._title_154s3_17",
+          "bg": "none",
+          "op": "1"
+        }
+      ],
+      "dataEdgeElements": 0,
+      "gradientElements": 0,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [
+        {
+          "x": 610,
+          "y": 539,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 539,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 548,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 548,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 557,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 557,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 566,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 566,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 610,
+          "y": 575,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 611,
+          "y": 575,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        }
+      ],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "strip": {
+    "stats": 20,
+    "covered": 10
+  }
+}

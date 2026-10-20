@@ -1,0 +1,65 @@
+{
+  "table": "items",
+  "width": 390,
+  "states": {
+    "rest": {
+      "lines": {
+        "start": null,
+        "end": null
+      },
+      "cueElementsLive": 0,
+      "attrs": [
+        "data-cues"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 0,
+      "clientW": 0,
+      "pinStart": 0,
+      "pinEnd": 0,
+      "boxes": {
+        "card": {
+          "l": 76,
+          "r": 355,
+          "t": 448.84375,
+          "b": 86694.046875,
+          "w": 279,
+          "h": 86245.203125
+        },
+        "toolbar": null,
+        "footer": {
+          "l": 77,
+          "r": 354,
+          "t": 86596.65625,
+          "b": 86693.046875,
+          "w": 277,
+          "h": 96.390625
+        },
+        "bodyHost": {
+          "l": 77,
+          "r": 354,
+          "t": 449.84375,
+          "b": 86596.65625,
+          "w": 277,
+          "h": 86146.8125
+        },
+        "scroller": null,
+        "firstHeaderRow": null,
+        "lastBodyRow": null,
+        "rail": null,
+        "details": [],
+        "pinStart": 0,
+        "pinEnd": 0
+      },
+      "extents": [],
+      "insetKinds": [],
+      "overlapSummary": {
+        "textNodesOverCue": 0,
+        "totalPx": 0,
+        "worstOverlapPx": 0,
+        "minContrastShaded": null,
+        "byRowKind": {}
+      },
+      "overlaps": []
+    }
+  }
+}

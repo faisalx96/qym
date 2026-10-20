@@ -1,0 +1,167 @@
+{
+  "net": "none",
+  "width": 1440,
+  "settle": true,
+  "open": 1,
+  "run": "r300",
+  "median": {
+    "firstGroupPlaceholdersMs": 0,
+    "firstGroupRowsMs": 59,
+    "firstGroupStripMs": 59,
+    "requestsAfterClick": 0,
+    "apiKB": 0,
+    "cls": 0.171
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "listApiAtLoad": 37,
+      "groups": [
+        {
+          "runId": "ba921600-98cc-45f9-b5fb-1b3fd95261dc",
+          "placeholdersMs": 0,
+          "rowsMs": 59,
+          "stripMs": 59,
+          "heightBefore": 1658,
+          "heightPlaceholders": null,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": null,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.171,
+      "requestList": []
+    },
+    {
+      "rep": 1,
+      "listApiAtLoad": 36,
+      "groups": [
+        {
+          "runId": "ba921600-98cc-45f9-b5fb-1b3fd95261dc",
+          "placeholdersMs": 0,
+          "rowsMs": 59,
+          "stripMs": 59,
+          "heightBefore": 1658,
+          "heightPlaceholders": null,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": null,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.171,
+      "requestList": []
+    },
+    {
+      "rep": 2,
+      "listApiAtLoad": 37,
+      "groups": [
+        {
+          "runId": "ba921600-98cc-45f9-b5fb-1b3fd95261dc",
+          "placeholdersMs": 0,
+          "rowsMs": 57,
+          "stripMs": 57,
+          "heightBefore": 1658,
+          "heightPlaceholders": null,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": null,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.171,
+      "requestList": []
+    },
+    {
+      "rep": 3,
+      "listApiAtLoad": 37,
+      "groups": [
+        {
+          "runId": "ba921600-98cc-45f9-b5fb-1b3fd95261dc",
+          "placeholdersMs": 0,
+          "rowsMs": 61,
+          "stripMs": 61,
+          "heightBefore": 1658,
+          "heightPlaceholders": null,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": null,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.171,
+      "requestList": []
+    },
+    {
+      "rep": 4,
+      "listApiAtLoad": 37,
+      "groups": [
+        {
+          "runId": "ba921600-98cc-45f9-b5fb-1b3fd95261dc",
+          "placeholdersMs": 0,
+          "rowsMs": 56,
+          "stripMs": 56,
+          "heightBefore": 1658,
+          "heightPlaceholders": null,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": null,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.171,
+      "requestList": []
+    }
+  ]
+}

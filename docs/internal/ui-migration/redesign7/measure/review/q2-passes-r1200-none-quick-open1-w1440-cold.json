@@ -1,0 +1,375 @@
+{
+  "net": "none",
+  "width": 1440,
+  "settle": false,
+  "open": 1,
+  "run": "r1200",
+  "median": {
+    "firstGroupPlaceholdersMs": 59,
+    "firstGroupRowsMs": 469,
+    "firstGroupStripMs": 167,
+    "requestsAfterClick": 12,
+    "apiKB": 6.4,
+    "cls": 0.0897
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "3b823023-e8aa-4173-8b9c-7dbcdef101a6",
+          "placeholdersMs": 55,
+          "rowsMs": 472,
+          "stripMs": 150,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 6
+        }
+      ],
+      "requestsAfterClick": 15,
+      "passesRequests": 8,
+      "groupMetricsRequests": 7,
+      "apiKB": 9.42,
+      "passesKB": 6.26,
+      "passesTtfbMs": [
+        411,
+        341,
+        398,
+        410,
+        421,
+        null,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        645,
+        987,
+        1045,
+        1111,
+        1188,
+        null,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        30,
+        38,
+        32,
+        64,
+        72,
+        70,
+        null
+      ],
+      "groupDoneMs": [
+        322,
+        699,
+        699,
+        765,
+        1061,
+        1132,
+        null
+      ],
+      "cls": 0.0926,
+      "requestList": [
+        "e8aa-4173-8b9c-7dbcdef101a6/passes @232-645ms ttfb 411 1.3kB",
+        "73-8b9c-7dbcdef101a6/group-metrics?metric=correct&threshold=0.8&view=group @232-322ms ttfb 30 0.5kB",
+        "98cc-45f9-b5fb-1b3fd95261dc/passes @645-987ms ttfb 341 1.3kB",
+        "f9-b5fb-1b3fd95261dc/group-metrics?metric=correct&threshold=0.8&view=group @645-699ms ttfb 38 0.5kB",
+        "4a96-4fe2-a38d-081493da1538/passes @645-1045ms ttfb 398 1.2kB",
+        "e2-a38d-081493da1538/group-metrics?metric=correct&threshold=0.8&view=group @646-699ms ttfb 32 0.5kB",
+        "e5a5-4cbc-b0a2-0c6e59e40f21/passes @700-1111ms ttfb 410 1.2kB",
+        "bc-b0a2-0c6e59e40f21/group-metrics?metric=correct&threshold=0.8&view=group @700-765ms ttfb 64 0.5kB",
+        "7a42-4ffc-9c42-5a6652a5d472/passes @765-1188ms ttfb 421 1.2kB",
+        "fc-9c42-5a6652a5d472/group-metrics?metric=correct&threshold=0.8&view=group @988-1061ms ttfb 72 0.5kB",
+        "0b06-4ede-9afb-babf48f2c51c/passes @1045-NaNms ttfb NaN 0.0kB",
+        "de-9afb-babf48f2c51c/group-metrics?metric=correct&threshold=0.8&view=group @1061-1132ms ttfb 70 0.5kB",
+        "e687-4481-8547-5f879aad3232/passes @1111-NaNms ttfb NaN 0.0kB",
+        "81-8547-5f879aad3232/group-metrics?metric=correct&threshold=0.8&view=group @1132-NaNms ttfb NaN 0.0kB",
+        "aa87-41ce-bc79-3c29439f740c/passes @1188-NaNms ttfb NaN 0.0kB"
+      ]
+    },
+    {
+      "rep": 1,
+      "listApiAtLoad": 2,
+      "groups": [
+        {
+          "runId": "3b823023-e8aa-4173-8b9c-7dbcdef101a6",
+          "placeholdersMs": 65,
+          "rowsMs": 491,
+          "stripMs": 215,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 8
+        }
+      ],
+      "requestsAfterClick": 11,
+      "passesRequests": 6,
+      "groupMetricsRequests": 5,
+      "apiKB": 5.88,
+      "passesKB": 3.77,
+      "passesTtfbMs": [
+        426,
+        420,
+        null,
+        344,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        509,
+        930,
+        null,
+        887,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        77,
+        39,
+        32,
+        48,
+        null
+      ],
+      "groupDoneMs": [
+        177,
+        550,
+        542,
+        598,
+        null
+      ],
+      "cls": 0.0822,
+      "requestList": [
+        "e8aa-4173-8b9c-7dbcdef101a6/passes @81-509ms ttfb 426 1.3kB",
+        "73-8b9c-7dbcdef101a6/group-metrics?metric=correct&threshold=0.8&view=group @81-177ms ttfb 77 0.5kB",
+        "98cc-45f9-b5fb-1b3fd95261dc/passes @509-930ms ttfb 420 1.3kB",
+        "f9-b5fb-1b3fd95261dc/group-metrics?metric=correct&threshold=0.8&view=group @509-550ms ttfb 39 0.5kB",
+        "4a96-4fe2-a38d-081493da1538/passes @509-NaNms ttfb NaN 0.0kB",
+        "e2-a38d-081493da1538/group-metrics?metric=correct&threshold=0.8&view=group @509-542ms ttfb 32 0.5kB",
+        "e5a5-4cbc-b0a2-0c6e59e40f21/passes @543-887ms ttfb 344 1.2kB",
+        "bc-b0a2-0c6e59e40f21/group-metrics?metric=correct&threshold=0.8&view=group @549-598ms ttfb 48 0.5kB",
+        "7a42-4ffc-9c42-5a6652a5d472/passes @598-NaNms ttfb NaN 0.0kB",
+        "fc-9c42-5a6652a5d472/group-metrics?metric=correct&threshold=0.8&view=group @888-NaNms ttfb NaN 0.0kB",
+        "0b06-4ede-9afb-babf48f2c51c/passes @930-NaNms ttfb NaN 0.0kB"
+      ]
+    },
+    {
+      "rep": 2,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "3b823023-e8aa-4173-8b9c-7dbcdef101a6",
+          "placeholdersMs": 79,
+          "rowsMs": 468,
+          "stripMs": 167,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 6
+        }
+      ],
+      "requestsAfterClick": 11,
+      "passesRequests": 6,
+      "groupMetricsRequests": 5,
+      "apiKB": 5.88,
+      "passesKB": 3.77,
+      "passesTtfbMs": [
+        382,
+        421,
+        345,
+        null,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        521,
+        943,
+        868,
+        null,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        27,
+        50,
+        54,
+        77,
+        null
+      ],
+      "groupDoneMs": [
+        219,
+        575,
+        577,
+        660,
+        null
+      ],
+      "cls": 0.0897,
+      "requestList": [
+        "e8aa-4173-8b9c-7dbcdef101a6/passes @138-521ms ttfb 382 1.3kB",
+        "73-8b9c-7dbcdef101a6/group-metrics?metric=correct&threshold=0.8&view=group @138-219ms ttfb 27 0.5kB",
+        "98cc-45f9-b5fb-1b3fd95261dc/passes @522-943ms ttfb 421 1.3kB",
+        "f9-b5fb-1b3fd95261dc/group-metrics?metric=correct&threshold=0.8&view=group @522-575ms ttfb 50 0.5kB",
+        "4a96-4fe2-a38d-081493da1538/passes @522-868ms ttfb 345 1.2kB",
+        "e2-a38d-081493da1538/group-metrics?metric=correct&threshold=0.8&view=group @522-577ms ttfb 54 0.5kB",
+        "e5a5-4cbc-b0a2-0c6e59e40f21/passes @575-NaNms ttfb NaN 0.0kB",
+        "bc-b0a2-0c6e59e40f21/group-metrics?metric=correct&threshold=0.8&view=group @577-660ms ttfb 77 0.5kB",
+        "7a42-4ffc-9c42-5a6652a5d472/passes @660-NaNms ttfb NaN 0.0kB",
+        "fc-9c42-5a6652a5d472/group-metrics?metric=correct&threshold=0.8&view=group @868-NaNms ttfb NaN 0.0kB",
+        "0b06-4ede-9afb-babf48f2c51c/passes @944-NaNms ttfb NaN 0.0kB"
+      ]
+    },
+    {
+      "rep": 3,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "3b823023-e8aa-4173-8b9c-7dbcdef101a6",
+          "placeholdersMs": 54,
+          "rowsMs": 465,
+          "stripMs": 154,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 6
+        }
+      ],
+      "requestsAfterClick": 12,
+      "passesRequests": 6,
+      "groupMetricsRequests": 6,
+      "apiKB": 6.4,
+      "passesKB": 3.77,
+      "passesTtfbMs": [
+        407,
+        408,
+        338,
+        null,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        517,
+        927,
+        857,
+        null,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        33,
+        42,
+        65,
+        100,
+        86,
+        null
+      ],
+      "groupDoneMs": [
+        203,
+        560,
+        584,
+        684,
+        944,
+        null
+      ],
+      "cls": 0.0831,
+      "requestList": [
+        "e8aa-4173-8b9c-7dbcdef101a6/passes @109-517ms ttfb 407 1.3kB",
+        "73-8b9c-7dbcdef101a6/group-metrics?metric=correct&threshold=0.8&view=group @109-203ms ttfb 33 0.5kB",
+        "98cc-45f9-b5fb-1b3fd95261dc/passes @518-927ms ttfb 408 1.3kB",
+        "f9-b5fb-1b3fd95261dc/group-metrics?metric=correct&threshold=0.8&view=group @518-560ms ttfb 42 0.5kB",
+        "4a96-4fe2-a38d-081493da1538/passes @518-857ms ttfb 338 1.2kB",
+        "e2-a38d-081493da1538/group-metrics?metric=correct&threshold=0.8&view=group @518-584ms ttfb 65 0.5kB",
+        "e5a5-4cbc-b0a2-0c6e59e40f21/passes @561-NaNms ttfb NaN 0.0kB",
+        "bc-b0a2-0c6e59e40f21/group-metrics?metric=correct&threshold=0.8&view=group @584-684ms ttfb 100 0.5kB",
+        "7a42-4ffc-9c42-5a6652a5d472/passes @685-NaNms ttfb NaN 0.0kB",
+        "fc-9c42-5a6652a5d472/group-metrics?metric=correct&threshold=0.8&view=group @857-944ms ttfb 86 0.5kB",
+        "0b06-4ede-9afb-babf48f2c51c/passes @928-NaNms ttfb NaN 0.0kB",
+        "de-9afb-babf48f2c51c/group-metrics?metric=correct&threshold=0.8&view=group @944-NaNms ttfb NaN 0.0kB"
+      ]
+    },
+    {
+      "rep": 4,
+      "listApiAtLoad": 3,
+      "groups": [
+        {
+          "runId": "3b823023-e8aa-4173-8b9c-7dbcdef101a6",
+          "placeholdersMs": 59,
+          "rowsMs": 469,
+          "stripMs": 173,
+          "heightBefore": 1658,
+          "heightPlaceholders": 2023,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": 45,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 7
+        }
+      ],
+      "requestsAfterClick": 12,
+      "passesRequests": 6,
+      "groupMetricsRequests": 6,
+      "apiKB": 6.4,
+      "passesKB": 3.77,
+      "passesTtfbMs": [
+        400,
+        351,
+        null,
+        382,
+        null,
+        null
+      ],
+      "passesDoneMs": [
+        514,
+        867,
+        null,
+        937,
+        null,
+        null
+      ],
+      "groupTtfbMs": [
+        33,
+        36,
+        83,
+        80,
+        78,
+        null
+      ],
+      "groupDoneMs": [
+        205,
+        554,
+        602,
+        691,
+        946,
+        null
+      ],
+      "cls": 0.0897,
+      "requestList": [
+        "e8aa-4173-8b9c-7dbcdef101a6/passes @114-514ms ttfb 400 1.3kB",
+        "73-8b9c-7dbcdef101a6/group-metrics?metric=correct&threshold=0.8&view=group @114-205ms ttfb 33 0.5kB",
+        "98cc-45f9-b5fb-1b3fd95261dc/passes @515-867ms ttfb 351 1.3kB",
+        "f9-b5fb-1b3fd95261dc/group-metrics?metric=correct&threshold=0.8&view=group @515-554ms ttfb 36 0.5kB",
+        "4a96-4fe2-a38d-081493da1538/passes @515-NaNms ttfb NaN 0.0kB",
+        "e2-a38d-081493da1538/group-metrics?metric=correct&threshold=0.8&view=group @516-602ms ttfb 83 0.5kB",
+        "e5a5-4cbc-b0a2-0c6e59e40f21/passes @554-937ms ttfb 382 1.2kB",
+        "bc-b0a2-0c6e59e40f21/group-metrics?metric=correct&threshold=0.8&view=group @602-691ms ttfb 80 0.5kB",
+        "7a42-4ffc-9c42-5a6652a5d472/passes @691-NaNms ttfb NaN 0.0kB",
+        "fc-9c42-5a6652a5d472/group-metrics?metric=correct&threshold=0.8&view=group @867-946ms ttfb 78 0.5kB",
+        "0b06-4ede-9afb-babf48f2c51c/passes @938-NaNms ttfb NaN 0.0kB",
+        "de-9afb-babf48f2c51c/group-metrics?metric=correct&threshold=0.8&view=group @946-NaNms ttfb NaN 0.0kB"
+      ]
+    }
+  ]
+}

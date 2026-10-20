@@ -1,0 +1,418 @@
+{
+  "rest": {
+    "cover": {
+      "tested": 477,
+      "coveredByPinnedCell": 54,
+      "coveredByPageChrome": 0,
+      "coveredByStickyHeaderOrBar": 7,
+      "coveredByOverlay": 0,
+      "overlayKinds": {},
+      "pinned": {
+        "TD:end": 54
+      },
+      "bad": [],
+      "dataEdgeElements": 0,
+      "gradientElements": 0,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "group-open": {
+    "cover": {
+      "tested": 408,
+      "coveredByPinnedCell": 41,
+      "coveredByPageChrome": 0,
+      "coveredByStickyHeaderOrBar": 7,
+      "coveredByOverlay": 4,
+      "overlayKinds": {
+        "button._trigger_1ia3n_2": 1,
+        "span._optionText_1ia3n_130": 2,
+        "span._badge_axtgj_2": 1
+      },
+      "pinned": {
+        "TD:end": 18,
+        "TD:start": 23
+      },
+      "bad": [
+        {
+          "text": "Metric",
+          "x": 365,
+          "y": 577,
+          "over": "button._trigger_1ia3n_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 376,
+          "y": 577,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 387,
+          "y": 577,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass^k over Pass@k: how much o",
+          "x": 534,
+          "y": 767,
+          "over": "span._badge_axtgj_2",
+          "bg": "none",
+          "op": "1"
+        }
+      ],
+      "dataEdgeElements": 0,
+      "gradientElements": 0,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [
+        {
+          "x": 466,
+          "y": 572,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 572,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 583,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 583,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 594,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 594,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 605,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 605,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 617,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 617,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        }
+      ],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "group-open-scrolled-600": {
+    "cover": {
+      "tested": 589,
+      "coveredByPinnedCell": 119,
+      "coveredByPageChrome": 0,
+      "coveredByStickyHeaderOrBar": 19,
+      "coveredByOverlay": 4,
+      "overlayKinds": {
+        "button._trigger_1ia3n_2": 1,
+        "span._optionText_1ia3n_130": 2,
+        "td._td_betwm_423": 1
+      },
+      "pinned": {
+        "TD:start": 101,
+        "TD:end": 18
+      },
+      "bad": [
+        {
+          "text": "Metric",
+          "x": 365,
+          "y": 577,
+          "over": "button._trigger_1ia3n_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 376,
+          "y": 577,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 387,
+          "y": 577,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass^k over Pass@k: how much o",
+          "x": 534,
+          "y": 767,
+          "over": "td._td_betwm_423",
+          "bg": "linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0)), none",
+          "op": "1"
+        }
+      ],
+      "dataEdgeElements": 0,
+      "gradientElements": 0,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [
+        {
+          "x": 466,
+          "y": 572,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 572,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 583,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 583,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 594,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 594,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 605,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 605,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 617,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 617,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        }
+      ],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "group-open-end": {
+    "cover": {
+      "tested": 534,
+      "coveredByPinnedCell": 103,
+      "coveredByPageChrome": 0,
+      "coveredByStickyHeaderOrBar": 19,
+      "coveredByOverlay": 4,
+      "overlayKinds": {
+        "button._trigger_1ia3n_2": 1,
+        "span._optionText_1ia3n_130": 2,
+        "div._cell_betwm_381": 1
+      },
+      "pinned": {
+        "TD:start": 103
+      },
+      "bad": [
+        {
+          "text": "Metric",
+          "x": 365,
+          "y": 577,
+          "over": "button._trigger_1ia3n_2",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 376,
+          "y": 577,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Metric",
+          "x": 387,
+          "y": 577,
+          "over": "span._optionText_1ia3n_130",
+          "bg": "none",
+          "op": "1"
+        },
+        {
+          "text": "Pass^k over Pass@k: how much o",
+          "x": 534,
+          "y": 767,
+          "over": "div._cell_betwm_381",
+          "bg": "none",
+          "op": "1"
+        }
+      ],
+      "dataEdgeElements": 0,
+      "gradientElements": 0,
+      "pseudoFades": [
+        "none",
+        "none"
+      ]
+    },
+    "stack": {
+      "insideDetail": [
+        {
+          "x": 466,
+          "y": 572,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 572,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 583,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 583,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 594,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 594,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 605,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 605,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 466,
+          "y": 617,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        },
+        {
+          "x": 467,
+          "y": 617,
+          "pinnedEdgeCells": 0,
+          "gradients": 0
+        }
+      ],
+      "outsideCard": {
+        "left": 0,
+        "right": 0,
+        "bottom": 0,
+        "samples": 40
+      }
+    }
+  },
+  "strip": {
+    "stats": 20,
+    "covered": 8
+  }
+}
