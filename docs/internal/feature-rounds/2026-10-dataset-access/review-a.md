@@ -134,3 +134,23 @@ pytest, one file at a time: `test_dataset_access.py` 29 passed, `test_dataset_it
 ## Not measured
 Postgres (`QYM_TEST_POSTGRES_URL` unset); 5,000-item batch timing (A3-59); the hover, keyboard and loading/error frames of S2 and S12 (relied on the implementer's passing e2e); `/__ui` gallery visual; `e2e/compare`; the two failing run-detail specs on the base commit.
 Ports: 8985 (platform), 8975/5985/9075/9076/9975 (Playwright runs) all released (confirmed by `ss -ltnp`).
+
+## Re-review of the fix pass (feat/dataset-access at 5ba81c05)
+
+Same method: production build (`npm run build` rebuilt), platform on 8985 in proxy_headers mode, identities mem3 (no access), mem2 (view), mgr. Playwright on 8975 (8984 was held again).
+Scripts: `measure/review-a-rerun.mts` plus the earlier `review-a-run3.mts`, `review-a-cmp.mts`.
+
+| Fix | Measured | Verdict |
+|---|---|---|
+| F1 A1-33/A1-36 | items table input cells for mem3 read `Hidden: you don’t have access to this dataset’s items.` for every row; `POST /items/details` returns the same sentence in `input`, `output`, `expected`; "private test set" occurrences on the run page after opening an item: 0 (1440 and 390). The private-test-set text stays the default: `redact_item_content(payload, reason=None)` and `placeholder_for` use the old placeholder unless the reason is `dataset_access`; `test_dataset_access.py` 29 passed (incl. the private-wins and orthogonality cases). I did not render a private-test-set run in the browser | MEETS |
+| F2 A1-33 | after expanding #1: `run-item-redacted` count 1 at 1440 and at 390, no "Loading item details…", line height 16.8 (1440) / 33.6 (390, wraps) | MEETS |
+| F3 A1-34 | compare (mem3, restricted run vs a readable run): 20 `Hidden: you don’t have access…` lines, 0 private-test-set text, no content leak | MEETS |
+| F4 A1-30 | 403 alert 188.98 / 188.98 / 244.42 at 1440 / 1024 / 390; spec amended (section 11), e2e line `near(…, height, 1)` with the 390 value 244.4 | MEETS |
+| F5 A1-1 | catalog card `View only` badge (mem2) 91.5 x 20 with 1 svg glyph at 1440, 1024, 390 | MEETS |
+| F6 A3-27 | batch dialog 598 x 372.8 at 1440 and 1024, 348 x 426.2 at 390; amendment recorded in the spec | MEETS |
+| F7 | `e2e/run-detail/redesign5-bars.spec.ts`: 14 passed (the whole file, R1-3 included; at cost 2 heavy.sh killed the run, at cost 3 it ran clean) | MEETS |
+
+Gates: `access-identities.spec.ts` in header-auth mode (`QYM_E2E_AUTH_MODE=proxy_headers QYM_ADMIN_BOOTSTRAP_TOKEN=e2e-bootstrap`, cost 2): 3 passed. `e2e/datasets` (cost 3, none mode): 178 passed, 3 skipped (the identity spec, which needs header mode). The earlier `redesign3-header.spec.ts:196` failure was not re-run.
+
+### Final verdict: MEETS (190 of 190; DOES NOT MEET 0, MEETS WITH FIXES 0)
+Open, unchanged from the first review: Postgres (`QYM_TEST_POSTGRES_URL` unset), 5,000-item timing, `/__ui` gallery look, `e2e/compare`, and `redesign3-header.spec.ts:196` (test-harness `Response has been disposed`, likely pre-existing).
