@@ -542,3 +542,19 @@ Every spec asserts the number of its criterion on the named element (`data-testi
 11. **Gate**: `scripts/heavy.sh --cost 3 -- npm run check`, `pytest tests/platform/test_design_language.py`, the three new pytest files in a `heavy.sh --cost 4` chunk, the two Playwright specs (`--workers 1` each), then the criterion -> change -> test table and after screenshots at the same names (`after-*.png`).
 
 Known limitations (documented, not fixed here): the 21 px overflow of the catalog card at 390 (existing); the `SectionHeader` top spacing above "Access" is the existing section-header recipe; the interactive popover and menus are static panels in the gallery (the real `Popover` and `DropdownMenu` portals are not opened there).
+
+
+## 11. Amendments made while implementing (measured in the product; the e2e asserts these numbers)
+
+| Id | Spec number | Amended to | Reason |
+|---|---|---|---|
+| A1-5 / A1-6 | project mode 388.4 / 506.8 px | 388.4 / 506.8 with saved grants kept; **373.0 / 476.0** with none | the mock always had three saved grants, which add the second help line "3 saved grants are kept…" (15.4 px, 30.8 px at 390) |
+| A1-23 | placeholder equals the loaded height +-1 px | met with a reserved frame (191.5 px, 276.5 px at 390) | amendment-free; recorded because the frame heights are literal |
+| A1-22 | summary 41.6 / 58.4 | met (the summary keeps two columns at 390) | the mock's container query never applied |
+| A3-3 | popover 279 px at 390 | **320 px** at every width | the popover fits the 390 px viewport; 279 was the gallery frame |
+| A3-17 | menu panel 240 px | **content sized (178 px)** | `DropdownMenu` sizes to its items; the primitive has no width prop |
+| A2-5 | filtered toolbar at 390: 257 px | **225 px** (1440: 67, 1024: 99 unchanged) | the real trailing cluster wraps one row less than the mock frame |
+| A3-10 | the Metadata button is disabled at five filters | reads disabled (`data-limit`, muted fill) but stays focusable | a natively disabled button gets no tooltip; the hint shows on focus |
+| A2-63 | `field_diffs` pseudo-field `{field: "state", ...}` | `fields` contains `"state"` and `before.state` / `after.state` are `active` / `disabled` | one existing diff shape; the UI renders the state diff from it |
+| A2-57 | revision `before` / `after` = `{disabled, reason}` | the same plus `item_id` | compare and the item lineage match revisions by `item_id` |
+| A3-60 | `GET …/items` catalog | `GET /v1/datasets` gains `include_inaccessible` | WP-B's launch picker lists datasets the caller cannot open (owner decision D3) |

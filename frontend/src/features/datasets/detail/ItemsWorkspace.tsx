@@ -174,7 +174,7 @@ export function ItemsWorkspace({
   async function applySelected(action: 'disable' | 'enable', reason?: string) {
     const ids = [...selected].map(String);
     const r = await selectedBatch.mutateAsync({
-      filter: { item_ids: ids, state: action === 'disable' ? 'active' : 'disabled' },
+      filter: { item_ids: ids, state: 'all' },
       action,
       reason,
       dry_run: false,

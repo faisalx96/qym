@@ -70,7 +70,7 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
       state: route.state === 'all' || itemQuery.data?.state === 'disabled' ? undefined : route.state,
       meta: route.meta.length ? route.meta : undefined,
     },
-    visible,
+    visible && Boolean(itemQuery.data),
   );
   const del = useDeleteItem(slug, dataset.slug, version.version);
   const showSkeleton = useDelayedPending(itemQuery.isPending && visible);

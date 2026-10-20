@@ -13,6 +13,7 @@ import {
   Skeleton,
   Text,
   Tooltip,
+  useToast,
 } from '@/ui';
 import { META_LIMIT_HINT, canAddMetaFilter, type MetaFilter } from '../lib/metaFilter';
 import styles from './MetadataFilter.module.css';
@@ -27,13 +28,17 @@ export interface MetadataFilterProps {
 
 export function MetadataFilter({ slug, datasetRef, version, filters, onAdd }: MetadataFilterProps) {
   const [open, setOpen] = useState(false);
+  const toast = useToast();
   const canAdd = canAddMetaFilter(filters);
   const button = (
     <Button
       variant="neutral"
       size="sm"
       icon={<Icon name="plus" size={12} />}
-      isDisabled={!canAdd}
+      // At the limit the button reads disabled but stays focusable, so its tooltip can say why.
+      className={canAdd ? undefined : styles.limit}
+      data-limit={canAdd ? undefined : ''}
+      onPress={canAdd ? undefined : () => toast.show(META_LIMIT_HINT, { tone: 'info' })}
       data-testid="metadata-filter"
     >
       Metadata

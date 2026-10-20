@@ -82,3 +82,49 @@ def test_platform_dataset_sends_read_token_only_when_set(monkeypatch: pytest.Mon
     # The user's key still authenticates; the token rides along for the read.
     assert seen[1].get_header("Authorization") == "Bearer user-key"
     assert seen[1].get_header("X-qym-dataset-read-token") == "qym_dr_service"
+
+
+def test_platform_dataset_asks_for_active_items_and_records_the_disabled_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    from urllib.parse import parse_qs, urlparse
+
+    from qym.core import dataset as dataset_module
+    from qym.core.dataset import QymDataset
+
+    monkeypatch.setenv("QYM_BASE_URL", "http://platform")
+    monkeypatch.setenv("QYM_API_KEY", "user-key")
+    seen: list = []
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(req)
+        return _Response(
+            {
+                "items": [{"item_id": "a", "input": "x"}],
+                "version": {"id": "v-1", "version": "v2", "disabled_count": 3, "schema": {}},
+                "next_offset": None,
+            }
+        )
+
+    monkeypatch.setattr(dataset_module.request, "urlopen", fake_urlopen)
+    dataset = QymDataset("qa")
+    assert [item.id for item in dataset.get_items()] == ["a"]
+    assert parse_qs(urlparse(seen[0].full_url).query)["state"] == ["active"]
+    assert dataset.disabled_count == 3
+
+
+def test_client_get_dataset_items_sends_state_active(monkeypatch: pytest.MonkeyPatch) -> None:
+    from urllib.parse import parse_qs, urlparse
+
+    from qym.platform import client as client_module
+
+    seen: list = []
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(req)
+        return _Response({"items": []})
+
+    monkeypatch.setattr(client_module.request, "urlopen", fake_urlopen)
+    platform = client_module.PlatformClient.__new__(client_module.PlatformClient)
+    platform.platform_url = "http://platform"
+    platform.api_key = "user-key"
+    platform.get_dataset_items(dataset="qa")
+    assert parse_qs(urlparse(seen[0].full_url).query)["state"] == ["active"]

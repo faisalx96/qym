@@ -1,5 +1,5 @@
 /** Dataset → Settings → Access (spec A1-5 to A1-24): who can open and change this dataset. */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Key } from 'react-aria-components';
 import {
   useDatasetAccess,
@@ -84,7 +84,9 @@ export function AccessSection({
             <Text variant="base" tone="muted" as="p">
               Choose who in this project can open and change this dataset.
             </Text>
-            <Skeleton kind="lines" rows={5} label="Loading access" />
+            <div className={styles.skeletonFrame}>
+              <Skeleton kind="lines" rows={5} label="Loading access" />
+            </div>
           </>
         ) : (
           // A save (or a refetch with new data) remounts the body, so the draft starts from the server's state.
@@ -158,15 +160,24 @@ function AccessBody({
     setWho(null);
   }
 
-  function removeRow(index: number) {
-    setRows(rows.filter((_, i) => i !== index));
-    // Focus moves to the next row's Remove, or to the Add person select when none remains.
-    requestAnimationFrame(() => {
+  // After a removal focus moves to the next row's Remove, or to the Add person select when none remains.
+  const focusAfterRemove = useRef<number | null>(null);
+  useEffect(() => {
+    const index = focusAfterRemove.current;
+    if (index === null) return;
+    focusAfterRemove.current = null;
+    const frame = requestAnimationFrame(() => {
       const buttons = tableRef.current?.querySelectorAll<HTMLElement>('button[aria-label^="Remove "]');
       const next = buttons?.[index];
       if (next) next.focus();
       else addRef.current?.querySelector<HTMLElement>('button')?.focus();
     });
+    return () => cancelAnimationFrame(frame);
+  }, [rows]);
+
+  function removeRow(index: number) {
+    focusAfterRemove.current = index;
+    setRows(rows.filter((_, i) => i !== index));
   }
 
   const sentence = archived
