@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useUpdateMetric } from '@/api/runs';
 import { humanizeKey } from '@/lib/humanizeKey';
 import { textDirAttrs } from '@/lib/text';
+import { keyWithBreaks } from '@/lib/keyBreaks';
 import { isInternalMetaKey, metricMetaDisplayKey } from '@/lib/metrics';
 import { Button, DataTable, IconButton, StructuredValue, Tag, TextBlock, useToast, type Column } from '@/ui';
 import { TABLE_PAGE, TABLE_ROW_CAP, detectTable, type DetectedTable } from '../../lib/metricTables';
@@ -131,7 +132,7 @@ export function MetricDetailBody({ meta, hidden }: { meta: Record<string, unknow
               <div key={k} className={styles.fact}>
                 {/* a judge key is a data key: shown as written (exact case), wrapped in its column, never cut */}
                 <dt data-part="key">
-                  <span {...textDirAttrs(name(k))}>{name(k)}</span>
+                  <span {...textDirAttrs(name(k))}>{keyWithBreaks(name(k))}</span>
                 </dt>
                 <dd data-part="value" data-mono={mono ? '' : undefined} {...(mono ? {} : textDirAttrs(text))}>
                   {text}

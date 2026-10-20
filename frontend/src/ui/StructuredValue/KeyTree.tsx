@@ -5,6 +5,7 @@ import { CopyButton } from '../CopyButton';
 import { Icon } from '../Icon';
 import { TextBlock } from '../TextBlock';
 import { textDirAttrs } from '@/lib/text';
+import { keyWithBreaks } from '@/lib/keyBreaks';
 import { copyValue } from './structured';
 import {
   ARRAY_LIMIT,
@@ -135,7 +136,7 @@ function KeyRow({
           {/* the key is a name: it wraps, it is never cut (round 7, D2); the preview follows its last line or starts a new one */}
           <span className={styles.line}>
             <span className={styles.key} data-part="key" {...textDirAttrs(name)}>
-              {name}
+              {keyWithBreaks(name)}
             </span>
             {!isOpen ? (
               <span

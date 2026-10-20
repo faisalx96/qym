@@ -128,7 +128,10 @@ for (const width of [1440, 1024, 390] as const) {
         for (const set of [r.collapsed, r.expanded, r.expected, r.facts]) {
           expect(Math.max(0, ...lines(set, 10))).toBeLessThanOrEqual(1);
           expect(Math.max(0, ...lines(set, 40))).toBeLessThanOrEqual(2);
-          expect(Math.max(0, ...lines(set, 80))).toBeLessThanOrEqual(3);
+          // the tree breaks at words (<wbr>, round 7 review O2): its 80-character keys take 4 lines at 390 (3 before)
+          expect(Math.max(0, ...lines(set, 80))).toBeLessThanOrEqual(
+            set === r.collapsed || set === r.expanded ? 4 : 3,
+          );
         }
       }
 

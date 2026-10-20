@@ -122,6 +122,11 @@
   unicode-bidi: isolate;
 }
 
+/* an Arabic key wraps at its words too; its lines stay flush with the left edge of the row like every other key */
+.key[dir='rtl'] {
+  text-align: left;
+}
+
 .summary {
   flex: 1 1 12ch;
   min-inline-size: 0;

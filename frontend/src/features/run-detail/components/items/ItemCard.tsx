@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isItemTaskError } from '@/lib/metrics';
 import { textDirAttrs } from '@/lib/text';
+import { keyWithBreaks } from '@/lib/keyBreaks';
 import { Button, CopyButton, FieldRow, StructuredValue, Tag, parseStructured, useStickyShift } from '@/ui';
 import { bodyText, formatCompact, itemLink } from '../../lib/itemText';
 import {
@@ -219,7 +220,7 @@ export function ItemCard({ row }: { row: Row }) {
                   <Tag key={k} kind="data">
                     <span className={styles.tagText}>
                       <span className={styles.tagKey} data-part="key" {...textDirAttrs(k)}>
-                        {k}
+                        {keyWithBreaks(k)}
                       </span>
                       {': '}
                       <span className={styles.tagValue} data-part="value" {...textDirAttrs(shown)}>

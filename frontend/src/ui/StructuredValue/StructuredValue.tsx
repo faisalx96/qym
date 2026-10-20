@@ -9,6 +9,7 @@ import { SegmentedControl } from '../SegmentedControl';
 import { Tag } from '../Tag';
 import { TextBlock } from '../TextBlock';
 import { textDirAttrs, type TextMode } from '@/lib/text';
+import { keyWithBreaks } from '@/lib/keyBreaks';
 import { ClampedText } from './ClampedText';
 import {
   classifySection,
@@ -161,7 +162,7 @@ function Section({ id, name, value, open, onToggle, textMode, lines }: SectionPr
           <span className={styles.spacer} aria-hidden="true" />
           <span className={styles.line}>
             <span className={styles.key} data-part="key" {...textDirAttrs(name)}>
-              {name}
+              {keyWithBreaks(name)}
             </span>
             <Scalar value={value} />
           </span>
@@ -183,7 +184,7 @@ function Section({ id, name, value, open, onToggle, textMode, lines }: SectionPr
           {/* a data key keeps its case and wraps; it is never cut (round 7, D2) */}
           <span className={styles.line}>
             <span className={styles.key} data-part="key" {...textDirAttrs(name)}>
-              {name}
+              {keyWithBreaks(name)}
             </span>
             {summary ? (
               <span className={styles.summary} data-part="value" {...textDirAttrs(summary)}>

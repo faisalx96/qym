@@ -82,6 +82,11 @@
   unicode-bidi: isolate;
 }
 
+/* an Arabic key wraps at its words too; its lines stay flush with the left edge of the row like every other key */
+.key[dir='rtl'] {
+  text-align: left;
+}
+
 /* A preview may be cut (it is a summary of the value, the value is one click away); a key never is. */
 .preview {
   flex: 1 1 12ch;
