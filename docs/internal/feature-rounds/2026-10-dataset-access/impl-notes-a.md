@@ -34,4 +34,9 @@ Measured numbers that match the spec: access section 618.8 / 995.7, mode row 53.
 After-screenshots: `shots/after-*.png` (catalog, access, toolbar, batch dialog, item pane and page, metadata popover).
 
 ## Gate
-Recorded in the hand-back and appended below when run.
+All runs through `scripts/heavy.sh` on Python 3.11.17 (logs under the scratchpad `/tmp/claude-1000/-home-meshari-aldossari-Documents-qym-qym/51864cf7-e4e4-455d-967b-8153416bc257/scratchpad`):
+- `npm run check` (cost 3): pass (`gate-check.log`); `npm run build` (cost 2): pass (`gate-build.log`).
+- `pytest tests/platform` in four 48-file chunks (cost 4, `gate-pytest-aa..ad.log`): all pass except `test_run_page_payloads.py::test_error_labeled_passes_read_the_same_in_full_and_compact_rows` (float noise 0.39999999999999997 vs 0.4000000000000001 in a golden), which fails identically on the base commit 38d710c5.
+- `pytest tests/sdk` (cost 3): 498 passed. `mypy packages/sdk/qym`: the same 192 lines before and after (no new errors).
+- Playwright `e2e/datasets` (all 177 specs, cost 3, `gate-e2e-folder.log`): pass, including `access.spec.ts` and `item-state-batch.spec.ts`. The Evaluation Service stand-ins were left out of the run (their ports clash with the other worktree's).
+- `black` and `isort` disagree on the repo's existing files; the new files are isort-clean.
