@@ -24,12 +24,11 @@ from collections import Counter
 from typing import Any, Iterable, Optional
 
 from fastapi import HTTPException
+from qym_platform.db.models import DatasetItem
 from sqlalchemy import String, and_, case, cast, func, literal
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import array as pg_array
 from sqlalchemy.orm import Session
-
-from qym_platform.db.models import DatasetItem
 
 MAX_META_FILTERS = 5
 MAX_PATH_LEVELS = 3
@@ -48,7 +47,9 @@ _KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 def parse_path(path: str) -> list[str]:
     """The keys of a dotted ``path``; 422 when it is empty, too deep or has odd characters."""
     parts = (path or "").split(".")
-    if not 1 <= len(parts) <= MAX_PATH_LEVELS or not all(_KEY_RE.match(part) for part in parts):
+    if not 1 <= len(parts) <= MAX_PATH_LEVELS or not all(
+        _KEY_RE.match(part) for part in parts
+    ):
         raise HTTPException(status_code=422, detail=PATH_DETAIL)
     return parts
 
@@ -104,7 +105,9 @@ def _clause(db: Session, path: str, value: str) -> Any:
     return and_(kind.in_(("integer", "real", "text", "true", "false")), text == value)
 
 
-def apply_meta_filters(db: Session, query: Any, pairs: Iterable[tuple[str, str]]) -> Any:
+def apply_meta_filters(
+    db: Session, query: Any, pairs: Iterable[tuple[str, str]]
+) -> Any:
     """AND every ``(path, value)`` pair onto an item ``query``."""
     for path, value in pairs:
         query = query.filter(_clause(db, path, value))
@@ -148,9 +151,11 @@ def clear_facet_cache() -> None:
 
 def metadata_facets(db: Session, version_id: str) -> dict[str, Any]:
     """Every scalar leaf path of a version's metadata with its values and counts."""
-    stamp = db.query(func.count(DatasetItem.id), func.max(DatasetItem.updated_at)).filter(
-        DatasetItem.dataset_version_id == version_id
-    ).one()
+    stamp = (
+        db.query(func.count(DatasetItem.id), func.max(DatasetItem.updated_at))
+        .filter(DatasetItem.dataset_version_id == version_id)
+        .one()
+    )
     key = (int(stamp[0] or 0), stamp[1])
     now = time.monotonic()
     with _cache_lock:
@@ -175,7 +180,10 @@ def metadata_facets(db: Session, version_id: str) -> dict[str, Any]:
         paths.append(
             {
                 "path": path,
-                "values": [{"value": value, "count": count} for value, count in values[:MAX_FACET_VALUES]],
+                "values": [
+                    {"value": value, "count": count}
+                    for value, count in values[:MAX_FACET_VALUES]
+                ],
                 "truncated": len(values) > MAX_FACET_VALUES,
                 "value_count": len(values),
             }

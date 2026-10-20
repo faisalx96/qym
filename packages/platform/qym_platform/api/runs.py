@@ -4609,9 +4609,9 @@ def _with_item_visibility(
     """Redact item contents of a run evaluated on a private test set (admins only)
     or on a restricted dataset the reader cannot open, unless
     ``principal`` is an admin. Handles run payloads and single-row payloads."""
-    reason = run_items_restricted_reason(db, principal, run)
-    if reason is None:
+    if can_view_run_items(db, principal, run):
         return data
+    reason = run_items_restricted_reason(db, principal, run) or "private_test_set"
     snapshot = data.get("snapshot")
     if isinstance(snapshot, dict):
         redact_item_content(snapshot.get("rows") or [])

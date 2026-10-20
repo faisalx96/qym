@@ -28,7 +28,12 @@ INDEX = "ix_dataset_items_version_disabled"
 def upgrade() -> None:
     op.add_column(
         "datasets",
-        sa.Column("access_mode", sa.String(length=16), nullable=False, server_default="project"),
+        sa.Column(
+            "access_mode",
+            sa.String(length=16),
+            nullable=False,
+            server_default="project",
+        ),
     )
     op.create_table(
         "dataset_grants",
@@ -59,13 +64,18 @@ def upgrade() -> None:
     op.create_index("ix_dataset_grants_dataset_id", "dataset_grants", ["dataset_id"])
     op.create_index("ix_dataset_grants_user_id", "dataset_grants", ["user_id"])
 
-    op.add_column("dataset_items", sa.Column("disabled_at", sa.DateTime(), nullable=True))
     op.add_column(
-        "dataset_items", sa.Column("disabled_by_user_id", sa.String(length=36), nullable=True)
+        "dataset_items", sa.Column("disabled_at", sa.DateTime(), nullable=True)
     )
     op.add_column(
         "dataset_items",
-        sa.Column("disabled_reason", sa.String(length=500), nullable=False, server_default=""),
+        sa.Column("disabled_by_user_id", sa.String(length=36), nullable=True),
+    )
+    op.add_column(
+        "dataset_items",
+        sa.Column(
+            "disabled_reason", sa.String(length=500), nullable=False, server_default=""
+        ),
     )
     op.create_index(INDEX, "dataset_items", ["dataset_version_id", "disabled_at"])
 

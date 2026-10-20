@@ -28,11 +28,15 @@ async function seedProject(request: APIRequestContext, prefix: string) {
   return { project, people, publish };
 }
 
+/** A platform answer being rewritten (loosely typed on purpose). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type JsonObject = Record<string, any>;
+
 /** Rewrite the JSON answer of the requests matching `url`. */
-async function rewrite(page: Page, url: RegExp, patch: (body: Record<string, any>) => void, status?: number) {
+async function rewrite(page: Page, url: RegExp, patch: (body: JsonObject) => void, status?: number) {
   await page.route(url, async (route: Route) => {
     const res = await route.fetch();
-    const body = (await res.json()) as Record<string, any>;
+    const body = (await res.json()) as JsonObject;
     patch(body);
     await route.fulfill({ response: res, json: body, status: status ?? res.status() });
   });
@@ -467,7 +471,7 @@ test.describe('a run on a dataset the reader cannot open (A1-32 to A1-35)', () =
     });
     await page.route(new RegExp(`/api/runs/${run.id}(\\?|$)`), async (route) => {
       const res = await route.fetch();
-      const body = (await res.json()) as Record<string, any>;
+      const body = (await res.json()) as JsonObject;
       body.run.items_restricted = true;
       body.run.items_restricted_reason = 'dataset_access';
       await route.fulfill({ response: res, json: body });
