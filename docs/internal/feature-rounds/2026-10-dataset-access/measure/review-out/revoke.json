@@ -1,0 +1,26 @@
+{
+  "revokeBtn": 1,
+  "adminRevokeBtn": 1,
+  "revokedRowActions": 0,
+  "statuses": [
+    "Dev User1m agoactive",
+    "X…Alice14m agoactive",
+    "v User14m agorevoked",
+    "T…Alice16m agoactive",
+    "ev User19m agoactive",
+    "TR…Bob24m agorevoked",
+    "i…Alice24m agoactive",
+    "ev User27m agoactive",
+    "v User27m agorevoked",
+    "v User27m agorevoked",
+    "ev User27m agoactive",
+    "ev User34m agoactive",
+    "ev User34m agoactive",
+    "ev User34m agoactive",
+    "v User34m agorevoked"
+  ],
+  "dialog": "Revoke “Evaluation Service · private run”?\n\nJobs of this experiment that have not read their dataset yet will fail until you retry them; the retry issues a new token.\n\nCancel\nRevoke token",
+  "focus": "Cancel",
+  "adminDialog": "Revoke “admin svc token”?\n\nServices using this token lose access to private datasets.\n\nCancel\nRevoke token",
+  "createForm": 1
+}

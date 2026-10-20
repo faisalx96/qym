@@ -1,0 +1,114 @@
+{
+  "w1440": {
+    "optionBox": {
+      "x": 655,
+      "y": 637,
+      "w": 351.5,
+      "h": 32,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "8px",
+      "text": "secret-setPrivate test set"
+    },
+    "optionChip": {
+      "x": 722,
+      "y": 643,
+      "w": 86.5,
+      "h": 20,
+      "font": "10px/650",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "8px",
+      "text": "Private test set"
+    },
+    "optionChipScroll": {
+      "sw": 87,
+      "cw": 87,
+      "ws": "normal"
+    },
+    "optionNameBox": {
+      "x": 663,
+      "y": 643,
+      "w": 144.8,
+      "h": 20,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "secret-setPrivate test set"
+    }
+  },
+  "w390": {
+    "optionBox": {
+      "x": 102,
+      "y": 213,
+      "w": 227,
+      "h": 32,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "8px",
+      "text": "secret-setPrivate test set"
+    },
+    "optionChip": {
+      "x": 168,
+      "y": 219,
+      "w": 86.5,
+      "h": 20,
+      "font": "10px/650",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "8px",
+      "text": "Private test set"
+    },
+    "optionChipScroll": {
+      "sw": 87,
+      "cw": 87,
+      "ws": "normal"
+    },
+    "optionNameBox": {
+      "x": 110,
+      "y": 219,
+      "w": 144.8,
+      "h": 20,
+      "font": "11px/400",
+      "family": "Qym Sans",
+      "color": "rgb(168, 168, 186)",
+      "pl": "0px",
+      "text": "secret-setPrivate test set"
+    }
+  },
+  "gate": {
+    "disabledWhenOnlyProd": true,
+    "pane": [
+      "6Review and launch",
+      "Step 1 of 6: Where it runs, 1 problem to fix",
+      "Latency-sensitive run",
+      "Only a project manager can launch it on production. Clear the box or ask a project manager.",
+      "1 PROBLEM",
+      "LATENCY-SENSITIVE",
+      "runs to launch",
+      "No post-run request ceiling: steady foreign load would be accepted and skew latency (guide §2.2)",
+      "1 problem to fix",
+      "Latency-sensitive",
+      "Latency-sensitive runs on production need a project manager",
+      "Launch 2 runs"
+    ],
+    "launchBtns": [],
+    "item": {
+      "x": 1074,
+      "y": 776,
+      "w": 310,
+      "h": 70.4,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "pl": "14px",
+      "text": "Latency-sensitiveLatency-sensitive runs on production need a project manager"
+    },
+    "active": "INPUT  launch-latency",
+    "afterClear": false,
+    "launchAfterClear": []
+  }
+}

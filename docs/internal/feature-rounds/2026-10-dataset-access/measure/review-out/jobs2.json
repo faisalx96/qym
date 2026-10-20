@@ -1,0 +1,204 @@
+{
+  "clip_lat": [
+    {
+      "t": "re-queued ×1 · contaminated",
+      "chain": [
+        {
+          "tag": "SPAN",
+          "w": 145,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 224,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 224,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "DIV",
+          "w": 224,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        }
+      ]
+    },
+    {
+      "t": "admitted 15:52",
+      "chain": [
+        {
+          "tag": "SPAN",
+          "w": 77,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 224,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 224,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "DIV",
+          "w": 224,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        }
+      ]
+    },
+    {
+      "t": "deferred ×3 · vllm quiet window",
+      "chain": [
+        {
+          "tag": "SPAN",
+          "w": 157,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 224,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 224,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "DIV",
+          "w": 224,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        }
+      ]
+    },
+    {
+      "t": "deferred ×1 · gateway quiet window",
+      "chain": [
+        {
+          "tag": "SPAN",
+          "w": 177,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 224,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 224,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "DIV",
+          "w": 224,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        }
+      ]
+    },
+    {
+      "t": "giving up after 3 discarded run(s)",
+      "chain": [
+        {
+          "tag": "SPAN",
+          "w": 162,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 224,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 224,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "DIV",
+          "w": 224,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        }
+      ]
+    }
+  ],
+  "clip_blocked": [
+    {
+      "t": "The experiment's dataset read token is u",
+      "chain": [
+        {
+          "tag": "SPAN",
+          "w": 374,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 184,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "SPAN",
+          "w": 184,
+          "ov": "visible",
+          "to": "clip",
+          "ws": "nowrap"
+        },
+        {
+          "tag": "DIV",
+          "w": 184,
+          "ov": "hidden",
+          "to": "ellipsis",
+          "ws": "nowrap"
+        }
+      ]
+    }
+  ]
+}

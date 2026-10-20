@@ -1,0 +1,1600 @@
+{
+  "ids": {
+    "lat sweep": "bd255fbd-e49a-4eda-b378-0aeca476915c",
+    "blocked tok": "1d141a8e-3dfb-4413-bcee-9fcc7cac5a16",
+    "alice lat": "729d8adc-c538-4d7a-8c72-bc3832b4b9a9",
+    "gate": "c3a891e6-4e5b-4e55-a9d7-994a7ebc4f10",
+    "plain two": "acb87987-2a61-4032-9494-4ab1df5e33db",
+    "lat two": "c21c1139-c530-4920-a2f9-9afb9eb441f1",
+    "lat one": "d1483463-0eac-41d1-bf7e-5db51ddebbf5",
+    "private run": "8e111416-25ae-4d84-b0aa-d769ec6a80da",
+    "urgent check": "fb216e04-00c9-44e0-a33e-10f1c3d53cd4",
+    "timeout sweep": "d91e7581-2bf2-4db2-954c-5305512691d6",
+    "staging vs prod": "99fcca44-c38e-41ff-9ab1-5a385c33d28a",
+    "baseline run": "6ff46c65-6fff-49f3-adc0-1e6a0db1238e"
+  },
+  "w1440": {
+    "active": {
+      "name": "staging vs prod",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 1193,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokenactive"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’s own token.",
+      "notice": {
+        "x": 212,
+        "y": 250,
+        "w": 1193,
+        "h": 36,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(168, 168, 186)",
+        "pl": "14px",
+        "text": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’"
+      },
+      "noticeRole": 1,
+      "noticeCount": 1,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 1193,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "staging vs prodrunningJobs launched by this experiment, one per combination and environment.dev@local30 min agoPriority NormalBase: Blankproduction, staging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 1193,
+        "y": 101
+      }
+    },
+    "revoked": {
+      "name": "baseline run",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 1193,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyrevoked 18:00Dataset read tokenrevoked 18:00"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "revoked 18:00",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:00:49.588199Z",
+          "font": "10px/650"
+        },
+        {
+          "t": "revoked 18:00",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:00:49.588909Z",
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 1193,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "baseline runcompletedJobs launched by this experiment, one per combination and environment.dev@local30 min agoPriority NormalBase: Blankstaging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 1193,
+        "y": 101
+      }
+    },
+    "notissued": {
+      "name": "urgent check",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 1193,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyrevoked 18:17Dataset read tokennot issued"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "revoked 18:17",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:17:24.911717Z",
+          "font": "10px/650"
+        },
+        {
+          "t": "not issued",
+          "w": 80.7,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 1193,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "urgent checkcompletedJobs launched by this experiment, one per combination and environment.dev@local30 min agoPriority HighBase: Blankstaging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 1193,
+        "y": 101
+      }
+    },
+    "notsent": {
+      "name": "gate",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 1193,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokennot sent"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "not sent",
+          "w": 68.7,
+          "h": 20,
+          "bg": "color(srgb 0.960784 0.619608 0.0431373 / 0.12)",
+          "color": "rgb(245, 158, 11)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’s own token.",
+      "notice": {
+        "x": 212,
+        "y": 250,
+        "w": 1193,
+        "h": 36,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(168, 168, 186)",
+        "pl": "14px",
+        "text": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’"
+      },
+      "noticeRole": 1,
+      "noticeCount": 1,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 1193,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "gaterunningJobs launched by this experiment, one per combination and environment.alice@x.test20 min agoPriority NormalBase: Blankproduction"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 1193,
+        "y": 101
+      }
+    },
+    "warning": {
+      "name": "blocked tok",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 1193,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokenrevoked 18:15"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "revoked 18:15",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:15:11.088301Z",
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": "Dataset read token revoked 18:15. Retry the blocked jobs to issue a new one.",
+      "notice": {
+        "x": 212,
+        "y": 250,
+        "w": 1193,
+        "h": 34.8,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(168, 168, 186)",
+        "pl": "14px",
+        "text": "Dataset read token revoked 18:15. Retry the blocked jobs to issue a new one."
+      },
+      "noticeRole": 1,
+      "noticeCount": 1,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 1193,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "blocked tokfailedJobs launched by this experiment, one per combination and environment.dev@local11 min agoPriority NormalBase: Blankstaging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 1193,
+        "y": 101
+      }
+    },
+    "latency": {
+      "name": "lat sweep",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 1193,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokenactive"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 1193,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "lat sweeprunningLatency-sensitiveJobs launched by this experiment, one per combination and environment.alice@x.test11 min agoPriority NormalBase: Blankstaging"
+      },
+      "tag": {
+        "x": 404,
+        "y": 104,
+        "w": 98.4,
+        "h": 20,
+        "font": "10px/650",
+        "family": "Qym Sans",
+        "color": "rgb(0, 168, 255)",
+        "pl": "8px",
+        "text": "Latency-sensitive"
+      },
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 1193,
+        "y": 101
+      }
+    },
+    "latone": {
+      "name": "lat one",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 1193,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyrevoked 18:16Dataset read tokenrevoked 18:16"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "revoked 18:16",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:16:24.372957Z",
+          "font": "10px/650"
+        },
+        {
+          "t": "revoked 18:16",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:16:24.374030Z",
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 1193,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "lat onecompletedLatency-sensitiveJobs launched by this experiment, one per combination and environment.dev@local23 min agoPriority HighBase: Blankstaging"
+      },
+      "tag": {
+        "x": 378,
+        "y": 104,
+        "w": 98.4,
+        "h": 20,
+        "font": "10px/650",
+        "family": "Qym Sans",
+        "color": "rgb(0, 168, 255)",
+        "pl": "8px",
+        "text": "Latency-sensitive"
+      },
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 1193,
+        "y": 101
+      }
+    }
+  },
+  "w1024": {
+    "active": {
+      "name": "staging vs prod",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 777,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokenactive"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’s own token.",
+      "notice": {
+        "x": 212,
+        "y": 250,
+        "w": 777,
+        "h": 52.8,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(168, 168, 186)",
+        "pl": "14px",
+        "text": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’"
+      },
+      "noticeRole": 1,
+      "noticeCount": 1,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 777,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "staging vs prodrunningJobs launched by this experiment, one per combination and environment.dev@local30 min agoPriority NormalBase: Blankproduction, staging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 777,
+        "y": 101
+      }
+    },
+    "revoked": {
+      "name": "baseline run",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 777,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyrevoked 18:00Dataset read tokenrevoked 18:00"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "revoked 18:00",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:00:49.588199Z",
+          "font": "10px/650"
+        },
+        {
+          "t": "revoked 18:00",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:00:49.588909Z",
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 777,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "baseline runcompletedJobs launched by this experiment, one per combination and environment.dev@local30 min agoPriority NormalBase: Blankstaging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 777,
+        "y": 101
+      }
+    },
+    "notissued": {
+      "name": "urgent check",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 777,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyrevoked 18:17Dataset read tokennot issued"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "revoked 18:17",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:17:24.911717Z",
+          "font": "10px/650"
+        },
+        {
+          "t": "not issued",
+          "w": 80.7,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 777,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "urgent checkcompletedJobs launched by this experiment, one per combination and environment.dev@local30 min agoPriority HighBase: Blankstaging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 777,
+        "y": 101
+      }
+    },
+    "notsent": {
+      "name": "gate",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 777,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokennot sent"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "not sent",
+          "w": 68.7,
+          "h": 20,
+          "bg": "color(srgb 0.960784 0.619608 0.0431373 / 0.12)",
+          "color": "rgb(245, 158, 11)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’s own token.",
+      "notice": {
+        "x": 212,
+        "y": 250,
+        "w": 777,
+        "h": 52.8,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(168, 168, 186)",
+        "pl": "14px",
+        "text": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’"
+      },
+      "noticeRole": 1,
+      "noticeCount": 1,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 777,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "gaterunningJobs launched by this experiment, one per combination and environment.alice@x.test20 min agoPriority NormalBase: Blankproduction"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 777,
+        "y": 101
+      }
+    },
+    "warning": {
+      "name": "blocked tok",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 777,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokenrevoked 18:15"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "revoked 18:15",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:15:11.088301Z",
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": "Dataset read token revoked 18:15. Retry the blocked jobs to issue a new one.",
+      "notice": {
+        "x": 212,
+        "y": 250,
+        "w": 777,
+        "h": 34.8,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(168, 168, 186)",
+        "pl": "14px",
+        "text": "Dataset read token revoked 18:15. Retry the blocked jobs to issue a new one."
+      },
+      "noticeRole": 1,
+      "noticeCount": 1,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 777,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "blocked tokfailedJobs launched by this experiment, one per combination and environment.dev@local11 min agoPriority NormalBase: Blankstaging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 777,
+        "y": 101
+      }
+    },
+    "latency": {
+      "name": "lat sweep",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 777,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokenactive"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 777,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "lat sweeprunningLatency-sensitiveJobs launched by this experiment, one per combination and environment.alice@x.test11 min agoPriority NormalBase: Blankstaging"
+      },
+      "tag": {
+        "x": 404,
+        "y": 104,
+        "w": 98.4,
+        "h": 20,
+        "font": "10px/650",
+        "family": "Qym Sans",
+        "color": "rgb(0, 168, 255)",
+        "pl": "8px",
+        "text": "Latency-sensitive"
+      },
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 777,
+        "y": 101
+      }
+    },
+    "latone": {
+      "name": "lat one",
+      "section": {
+        "x": 212,
+        "y": 210,
+        "w": 777,
+        "h": 20,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyrevoked 18:16Dataset read tokenrevoked 18:16"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "revoked 18:16",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:16:24.372957Z",
+          "font": "10px/650"
+        },
+        {
+          "t": "revoked 18:16",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:16:24.374030Z",
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 212,
+        "y": 101,
+        "w": 777,
+        "h": 69.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "lat onecompletedLatency-sensitiveJobs launched by this experiment, one per combination and environment.dev@local23 min agoPriority HighBase: Blankstaging"
+      },
+      "tag": {
+        "x": 378,
+        "y": 104,
+        "w": 98.4,
+        "h": 20,
+        "font": "10px/650",
+        "family": "Qym Sans",
+        "color": "rgb(0, 168, 255)",
+        "pl": "8px",
+        "text": "Latency-sensitive"
+      },
+      "overflow": 0,
+      "titleBlock": {
+        "h": 69.2,
+        "w": 777,
+        "y": 101
+      }
+    }
+  },
+  "w390": {
+    "active": {
+      "name": "staging vs prod",
+      "section": {
+        "x": 76,
+        "y": 231,
+        "w": 279,
+        "h": 63.4,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokenactive"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’s own token.",
+      "notice": {
+        "x": 76,
+        "y": 314,
+        "w": 279,
+        "h": 103.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(168, 168, 186)",
+        "pl": "14px",
+        "text": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’"
+      },
+      "noticeRole": 1,
+      "noticeCount": 1,
+      "header": {
+        "x": 76,
+        "y": 101,
+        "w": 279,
+        "h": 90,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "staging vs prodrunningJobs launched by this experiment, one per combination and environment.dev@local30 min agoPriority NormalBase: Blankproduction, staging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 90,
+        "w": 279,
+        "y": 101
+      }
+    },
+    "revoked": {
+      "name": "baseline run",
+      "section": {
+        "x": 76,
+        "y": 231,
+        "w": 279,
+        "h": 63.4,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyrevoked 18:00Dataset read tokenrevoked 18:00"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "revoked 18:00",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:00:49.588199Z",
+          "font": "10px/650"
+        },
+        {
+          "t": "revoked 18:00",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:00:49.588909Z",
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 76,
+        "y": 101,
+        "w": 279,
+        "h": 90,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "baseline runcompletedJobs launched by this experiment, one per combination and environment.dev@local30 min agoPriority NormalBase: Blankstaging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 90,
+        "w": 279,
+        "y": 101
+      }
+    },
+    "notissued": {
+      "name": "urgent check",
+      "section": {
+        "x": 76,
+        "y": 231,
+        "w": 279,
+        "h": 63.4,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyrevoked 18:17Dataset read tokennot issued"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "revoked 18:17",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:17:24.911717Z",
+          "font": "10px/650"
+        },
+        {
+          "t": "not issued",
+          "w": 80.7,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 76,
+        "y": 101,
+        "w": 279,
+        "h": 90,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "urgent checkcompletedJobs launched by this experiment, one per combination and environment.dev@local30 min agoPriority HighBase: Blankstaging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 90,
+        "w": 279,
+        "y": 101
+      }
+    },
+    "notsent": {
+      "name": "gate",
+      "section": {
+        "x": 76,
+        "y": 231,
+        "w": 279,
+        "h": 63.4,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokennot sent"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "not sent",
+          "w": 68.7,
+          "h": 20,
+          "bg": "color(srgb 0.960784 0.619608 0.0431373 / 0.12)",
+          "color": "rgb(245, 158, 11)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’s own token.",
+      "notice": {
+        "x": 76,
+        "y": 314,
+        "w": 279,
+        "h": 103.2,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(168, 168, 186)",
+        "pl": "14px",
+        "text": "Dataset read token not sent to production: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’"
+      },
+      "noticeRole": 1,
+      "noticeCount": 1,
+      "header": {
+        "x": 76,
+        "y": 101,
+        "w": 279,
+        "h": 90,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "gaterunningJobs launched by this experiment, one per combination and environment.alice@x.test20 min agoPriority NormalBase: Blankproduction"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 90,
+        "w": 279,
+        "y": 101
+      }
+    },
+    "warning": {
+      "name": "blocked tok",
+      "section": {
+        "x": 76,
+        "y": 231,
+        "w": 279,
+        "h": 63.4,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokenrevoked 18:15"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "revoked 18:15",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:15:11.088301Z",
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": "Dataset read token revoked 18:15. Retry the blocked jobs to issue a new one.",
+      "notice": {
+        "x": 76,
+        "y": 314,
+        "w": 279,
+        "h": 51.6,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(168, 168, 186)",
+        "pl": "14px",
+        "text": "Dataset read token revoked 18:15. Retry the blocked jobs to issue a new one."
+      },
+      "noticeRole": 1,
+      "noticeCount": 1,
+      "header": {
+        "x": 76,
+        "y": 101,
+        "w": 279,
+        "h": 90,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "blocked tokfailedJobs launched by this experiment, one per combination and environment.dev@local11 min agoPriority NormalBase: Blankstaging"
+      },
+      "tag": null,
+      "overflow": 0,
+      "titleBlock": {
+        "h": 90,
+        "w": 279,
+        "y": 101
+      }
+    },
+    "latency": {
+      "name": "lat sweep",
+      "section": {
+        "x": 76,
+        "y": 259,
+        "w": 279,
+        "h": 63.4,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyactiveDataset read tokenactive"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        },
+        {
+          "t": "active",
+          "w": 55.9,
+          "h": 20,
+          "bg": "color(srgb 0.0627451 0.72549 0.505882 / 0.12)",
+          "color": "rgb(16, 185, 129)",
+          "title": null,
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 76,
+        "y": 101,
+        "w": 279,
+        "h": 118,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "lat sweeprunningLatency-sensitiveJobs launched by this experiment, one per combination and environment.alice@x.test11 min agoPriority NormalBase: Blankstaging"
+      },
+      "tag": {
+        "x": 76,
+        "y": 135,
+        "w": 98.4,
+        "h": 20,
+        "font": "10px/650",
+        "family": "Qym Sans",
+        "color": "rgb(0, 168, 255)",
+        "pl": "8px",
+        "text": "Latency-sensitive"
+      },
+      "overflow": 0,
+      "titleBlock": {
+        "h": 118,
+        "w": 279,
+        "y": 101
+      }
+    },
+    "latone": {
+      "name": "lat one",
+      "section": {
+        "x": 76,
+        "y": 231,
+        "w": 279,
+        "h": 63.4,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "CredentialsAPI keyrevoked 18:16Dataset read tokenrevoked 18:16"
+      },
+      "dts": [
+        "API key",
+        "Dataset read token"
+      ],
+      "badges": [
+        {
+          "t": "revoked 18:16",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:16:24.372957Z",
+          "font": "10px/650"
+        },
+        {
+          "t": "revoked 18:16",
+          "w": 98.6,
+          "h": 20,
+          "bg": "rgba(0, 0, 0, 0)",
+          "color": "rgb(154, 154, 178)",
+          "title": "2026-10-20T15:16:24.374030Z",
+          "font": "10px/650"
+        }
+      ],
+      "pairGap": {
+        "colGap": "normal",
+        "gap": "normal",
+        "itemGap": "8px",
+        "align": "center",
+        "n": 2,
+        "secAlign": "center"
+      },
+      "noticeText": null,
+      "notice": null,
+      "noticeRole": 0,
+      "noticeCount": 0,
+      "header": {
+        "x": 76,
+        "y": 101,
+        "w": 279,
+        "h": 90,
+        "font": "12px/400",
+        "family": "Qym Sans",
+        "color": "rgb(237, 237, 240)",
+        "pl": "0px",
+        "text": "lat onecompletedLatency-sensitiveJobs launched by this experiment, one per combination and environment.dev@local24 min agoPriority HighBase: Blankstaging"
+      },
+      "tag": {
+        "x": 242,
+        "y": 104,
+        "w": 98.4,
+        "h": 20,
+        "font": "10px/650",
+        "family": "Qym Sans",
+        "color": "rgb(0, 168, 255)",
+        "pl": "8px",
+        "text": "Latency-sensitive"
+      },
+      "overflow": 0,
+      "titleBlock": {
+        "h": 90,
+        "w": 279,
+        "y": 101
+      }
+    }
+  }
+}
