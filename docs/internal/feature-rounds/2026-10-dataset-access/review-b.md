@@ -274,3 +274,26 @@ Feature 4 and 5 migrations: B-S14 and the migration notes are in section 5.
 | MEETS WITH FIXES | 2 | B4-22 (F2), B-S3 (documented limitation) |
 | DOES NOT MEET | 1 | B5-39 (F1) |
 | Partly not measurable here (counted above under MEETS) | 4 | restricted chip and help (B4-22/B4-25), restricted reads (B4-11), Postgres (B4-2/B-S14), `Experiment deleted` (B4-40) |
+
+## 10. Re-review of the fix pass (tip `597a35b9`: `c9765744`, `ab2041e4`, `597a35b9` on top of the cherry-picked review `bd485bd6`)
+
+Production build of the tip (`npm run build` through `heavy.sh --cost 2`, log `scratchpad/rb/build2.log`), fresh DB, platform on 8986 with
+`proxy_headers`, fakes on 9086 (`--flags`) and 9087, same method as section 1. Script `measure/review-b-rereview.mts` (+ `review-b-launch3.mts`),
+numbers in `measure/review-out/rereview.json`.
+
+| Item | Measured (1440 / 1024 / 390) | Verdict |
+|---|---|---|
+| F1, B5-39 | Click "Set ceiling": URL `?step=settings`, `document.activeElement` is an `INPUT` labelled `Eval Vllm Post Run Max Requests` (the EVAL_VLLM_POST_RUN_MAX_REQUESTS setting), visible (non-zero box), group opened, at all three widths. Callout heights unchanged 100.4 / 83.6 / 117.2. | MEETS |
+| F2, B4-22 | Open list chip `Private test set` **99 x 20 / 99 x 20 / 99 x 20**; trigger chip 99 x 20 at all three. | MEETS |
+| B-S3 | `Latency-sensitive only` now only in `experiments/copy.ts` (used by list and queue), the queue note in `queueLatencyNote` there, `Experiment deleted` in `shell/settings/copy.ts` (grep over `src`, tests and gallery excluded). | MEETS |
+| B4-34 (amended) | Notice (`staging vs prod`, one environment not declared) **36 / 52.8 / 103.2**, widths 1193 / 777 / 279. Spec row marked `(amended)` with 36 / 52.8 / 103.2, asserted in `credentials.spec.ts` (`toEqual({1440:36,1024:52.8,390:103.2})`). Wording nit: the amendment says "several environments", the numbers I measured are for one environment; the numbers are right, the word is not. | MEETS |
+| B5-65 (amended) | Queue note **25.4 / 40.8 / 40.8** (card 590 / 382 / 279 px). Spec row amended, asserted in `lists-latency.spec.ts` (`{390:40.8,1024:40.8,1440:25.4}`). | MEETS |
+| B5-40 (amended) | Token warning **90.4 / 73.6 / 107.2**. Spec row amended (73.6 at 1024), asserted in `latency-sensitive.spec.ts`. | MEETS |
+| B5-31 (amended) | Spec row reworded: a memory draft does not survive a reload, the clone is the reload-proof path; matches my earlier measurement. | MEETS |
+| B4-5 (amended) | Spec regex now `qym_dr_` + 20 or more token characters; the token-list `prefix` (`qym_dr_` + 9) no longer matches. | MEETS |
+| Spec rows | B4-5, B4-34, B5-31, B5-40, B5-65 carry `(amended)` with the same numbers the e2e asserts. | MEETS |
+| Five Playwright specs together (`heavy.sh --cost 3`, log `scratchpad/rb/pw2.log`) | **19 passed, 0 failed** in one run (credentials, lists-latency, latency-sensitive, latency-role, dataset-read-tokens). The earlier cross-spec failure did not recur: `fakeJobsOf(request, exp, port)` filters the fake's jobs by experiment, so a concurrent spec's job no longer enters the assertion. | MEETS |
+
+**Final verdict: MEETS.** All 130 criteria are MEETS (with the amended numbers above); the only open items are the ones that cannot be measured on this
+branch (Restricted chip and restricted reads need WP-A's 0087, Postgres, the chain 0086 -> 0087 -> 0088 at integration). Ports 8986, 5986, 9086
+and 9087 released (`ss -ltnp` empty).
