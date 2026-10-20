@@ -432,3 +432,50 @@
   color: var(--text-muted);
   font-size: var(--font-base);
 }
+
+/* The Credentials row: one line of "name + badge" pairs after an eyebrow; wraps at 390 without clipping a name. */
+.creds {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  min-width: 0;
+}
+
+.credList {
+  display: contents;
+}
+
+.credItem {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  margin: 0;
+  min-width: 0;
+}
+
+.credName {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.credValue {
+  margin: 0;
+  display: inline-flex;
+}
+
+.jobTitle {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+}
+
+@media (width <= 480px) {
+  .creds > :first-child {
+    flex-basis: 100%;
+  }
+}

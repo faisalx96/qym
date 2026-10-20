@@ -19,7 +19,7 @@ import {
   cloneExperiment,
   fetchActiveEnvironments,
   fetchBestRunBase,
-  fetchDatasets,
+  fetchLaunchDatasets,
   fetchEvaluatorConfig,
   fetchPresets,
   fetchPresetVersion,
@@ -30,7 +30,7 @@ import {
   refreshSchema,
   useEnvPresets,
   useEvaluatorConfig,
-  useProjectDatasets,
+  useLaunchDatasets,
 } from '@/api/launch';
 import type { Preset } from '@/api/evalEnvironments';
 import { ApiError } from '@/lib/http';
@@ -244,10 +244,13 @@ export function LaunchProvider({
         .filter((e): e is EvalEnvironment => Boolean(e)),
     [doc.environmentIds, envRecords],
   );
-  const datasetsQuery = useProjectDatasets(slug);
+  // Every dataset of the project, restricted and private ones included (owner decision D3: any
+  // member may launch on any dataset; the experiment's own token does the reading).
+  const datasetsQuery = useLaunchDatasets(projectId);
+  const datasets = datasetsQuery.data ?? null;
   const datasetNames = useMemo(
-    () => (datasetsQuery.data ? datasetsQuery.data.map((d) => d.name) : null),
-    [datasetsQuery.data],
+    () => (datasets ? datasets.map((d) => d.name) : null),
+    [datasets],
   );
   const envs = useEnvData(projectId, selectedEnvs, doc.extraEndpoints);
   const targets = useMemo(
@@ -334,7 +337,10 @@ export function LaunchProvider({
       const [loaded, datasets, evaluatorPanel] = await Promise.all([
         loadEnvDataNow(qc, projectId, selected, extras),
         qc
-          .ensureQueryData({ queryKey: launchKeys.datasets(slug), queryFn: () => fetchDatasets(slug) })
+          .ensureQueryData({
+            queryKey: launchKeys.datasets(projectId),
+            queryFn: () => fetchLaunchDatasets(projectId),
+          })
           .catch(() => []),
         evalTargets.length
           ? qc
@@ -359,7 +365,7 @@ export function LaunchProvider({
         isManager: canManage,
       });
     },
-    [qc, projectId, slug, canManage],
+    [qc, projectId, canManage],
   );
 
   // ── starting point ──────────────────────────────────────────────────────
@@ -933,7 +939,13 @@ export function LaunchProvider({
   const changeCount = diffCount(doc).total + evaluatorChangedCount(doc, ctx.evaluatorPanel);
   const hasChanges =
     changeCount > 0 ||
-    Boolean(doc.name.trim() || doc.description.trim() || doc.versioningText.trim() || doc.priority);
+    Boolean(
+      doc.name.trim() ||
+        doc.description.trim() ||
+        doc.versioningText.trim() ||
+        doc.priority ||
+        doc.latencySensitive,
+    );
   const hasChangesRef = useRef(hasChanges);
   useEffect(() => {
     hasChangesRef.current = hasChanges;
@@ -990,6 +1002,7 @@ export function LaunchProvider({
     reloadSlots,
     loadProposal,
     datasetNames,
+    datasets,
     review: view.review,
     preview,
     launchErrors,

@@ -69,3 +69,36 @@ cd frontend && npm ci && npm run build:sdk
 Do this before `pip wheel packages/sdk` so the wheel contains it. For development,
 `npm run dev:sdk` serves it on port 5808 and proxies `/api` to a local viewer on 8818
 (start one with `qym ui FILE --port 8818` or `qym run create ... --local-ui --ui-port 8818`).
+
+## Experiments: latency-sensitive runs and credentials
+
+### Latency-sensitive runs
+
+Tick **Latency-sensitive run** under the name and priority on the first launch step when the run measures latency.
+The Evaluation Service then starts the run only when the gateway is quiet, makes other jobs on the environment wait
+while it runs, and discards and re-queues it if foreign traffic overlaps (up to its limit). Expect a later start.
+
+- The experiment page shows a **Latency-sensitive** tag. A job that waits for a quiet gateway reads
+  `deferred ×3 · vllm quiet window` in the Status column; a running job reads `admitted 12:52`; a re-queue shows
+  `↻ 1` and `re-queued ×1 · contaminated`. The Experiments list and the Queue have a **Latency-sensitive only**
+  filter, and the Queue says which environment is held by such a job.
+- The review pane warns (without blocking) when the environment's schema declares
+  `EVAL_VLLM_POST_RUN_MAX_REQUESTS` and you left it unset: without a ceiling, steady foreign load would be accepted and
+  skew latency. **Set ceiling** jumps to that setting.
+- Each environment has **Who can launch latency-sensitive runs** (Environment page, Policies): *Anyone in the project*
+  (default) or *Project managers only*. On a managers-only environment a member cannot tick the box (the form says so),
+  and the API answers 403. Project managers and admins change the setting in either direction.
+- The flag is fixed at launch; **Duplicate** and **Retry** carry it. It does not change priority or queue order.
+
+### Dataset read token
+
+Every launch mints a dataset read token for the experiment. The Evaluation Service uses it to read datasets of the
+project, private test sets and restricted datasets included, so any member who can launch may name any dataset of the
+project; people without access to a restricted dataset still see the run's scores, not its item contents. The token is
+sent only to environments whose schema declares `QYM_DATASET_READ_TOKEN`; for the others the experiment page says the
+service reads with its own token. It is revoked when the experiment settles and replaced when you retry a job.
+
+The experiment page shows a **Credentials** row (API key and dataset read token: *active*, *revoked*, *not issued*,
+*not sent*); no secret is ever shown. In Project settings, API keys, **Dataset read tokens** also lists experiment tokens
+with an *experiment* tag and a link to the experiment; admins can revoke one by hand (a retry issues a new one).
+

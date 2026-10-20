@@ -34,6 +34,7 @@ export function createDocument(init: Partial<LaunchDocument> = {}): LaunchDocume
     description: '',
     priority: '',
     versioningText: '',
+    latencySensitive: false,
     base: emptyBaseInfo('scratch'),
     baseline: { values: {}, bindings: {}, dataset: null },
     evaluatorExtra: {},

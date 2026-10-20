@@ -87,6 +87,14 @@ export async function setFakeArrayLeaves(request: APIRequestContext, port: numbe
   await control(request, port, '/schema', { array_leaves: on });
 }
 
+/**
+ * Makes a fake declare `QYM_DATASET_READ_TOKEN` and `EVAL_VLLM_POST_RUN_MAX_REQUESTS` in its
+ * env-overrides schema (guide v1.3) until the next `resetFakes`. Call before `createEnvironment`.
+ */
+export async function setFakeFlags(request: APIRequestContext, port: number, declared = true): Promise<void> {
+  await control(request, port, '/flags', { declared });
+}
+
 /** What a fake's versioning-details endpoint answers until the next `resetFakes`. */
 export async function setFakeVersioning(
   request: APIRequestContext,
@@ -106,6 +114,8 @@ export interface FakeJob {
   id: string;
   status: string;
   priority: string;
+  env_overrides?: Record<string, unknown>;
+  latency_sensitive?: boolean;
   eval_input: {
     config?: { run_name?: string; run_metadata?: { qym_launch?: { token?: string; job_id?: string } } };
   };
@@ -119,7 +129,14 @@ export async function fakeJobs(request: APIRequestContext, port = FAKE_A): Promi
 export async function setFakeJob(
   request: APIRequestContext,
   jobId: string,
-  patch: { status?: string; error?: string | null },
+  patch: {
+    status?: string;
+    error?: string | null;
+    deferrals?: number;
+    deferral_reason?: string | null;
+    admitted_at?: string | null;
+    contaminated_attempts?: number;
+  },
   port = FAKE_A,
 ): Promise<void> {
   await control(request, port, `/jobs/${jobId}`, patch);
@@ -260,6 +277,7 @@ export async function launchExperiment(
     environment_ids: string[];
     spec: unknown;
     priority?: string;
+    latency_sensitive?: boolean;
     acknowledge_preemption?: boolean;
     secrets?: Record<string, string>;
     description?: string;

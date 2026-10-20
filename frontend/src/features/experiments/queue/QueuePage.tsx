@@ -4,6 +4,7 @@
  * chips borrowed from the grouped variant. Filters live in the URL (replaceState).
  * Polling: 5 s x1.5 backoff to 60 s, always on, paused while the tab is hidden.
  */
+import { LatencyTag } from '../components/LatencyTag';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Key } from 'react-aria-components';
@@ -96,6 +97,7 @@ export function QueuePage() {
       statuses: params.getAll('status'),
       mine: params.get('mine') === '1' || params.get('mine') === 'true',
       experiment: params.get('experiment') || undefined,
+      latency: params.get('latency') === '1',
     }),
     [params],
   );
@@ -227,6 +229,7 @@ export function QueuePage() {
                 {j.experiment_name || 'Experiment'} #{j.combo_index}
               </Link>
               {j.priority === 'HIGH' ? <Tag tone="warning">HIGH</Tag> : null}
+              {j.latency_sensitive ? <LatencyTag /> : null}
               {j.attempt > 0 ? <Tag kind="count">attempt {j.attempt + 1}</Tag> : null}
             </span>
           }
@@ -375,11 +378,18 @@ export function QueuePage() {
       <Checkbox isSelected={filters.mine} onChange={(v) => replaceUrlQuery({ mine: v })}>
         Only my jobs
       </Checkbox>
+      <Checkbox isSelected={filters.latency} onChange={(v) => replaceUrlQuery({ latency: v })}>
+        Latency-sensitive only
+      </Checkbox>
     </div>
   );
 
   const filtered = Boolean(
-    filters.environment || filters.statuses?.length || filters.mine || filters.experiment,
+    filters.environment ||
+      filters.statuses?.length ||
+      filters.mine ||
+      filters.latency ||
+      filters.experiment,
   );
   const environments = query.data?.environments ?? [];
 
@@ -476,7 +486,13 @@ export function QueuePage() {
                     <Button
                       variant="neutral"
                       onPress={() =>
-                        replaceUrlQuery({ environment: null, status: null, mine: null, experiment: null })
+                        replaceUrlQuery({
+                          environment: null,
+                          status: null,
+                          mine: null,
+                          latency: null,
+                          experiment: null,
+                        })
                       }
                     >
                       Clear filters
@@ -578,6 +594,11 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
         {env.high_active ? (
           <p className={styles.high}>
             A HIGH-priority job is active on {env.name}. Other jobs wait until it finishes.
+          </p>
+        ) : null}
+        {env.latency_active ? (
+          <p className={styles.latencyNote} role="note" data-testid="queue-latency-note">
+            A latency-sensitive job is active on {env.name}. Other jobs wait until it finishes.
           </p>
         ) : null}
       </div>

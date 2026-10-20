@@ -37,8 +37,15 @@ export interface QueueJob {
   run_name: string | null;
   params: Record<string, unknown>;
   priority: EvalPriority;
+  /** The experiment is latency-sensitive (makes other jobs on its environment wait). */
+  latency_sensitive: boolean;
   status: QueueStatus;
   wait_reason: string | null;
+  /** Admission state copied from the service (latency-sensitive jobs). */
+  admitted_at: string | null;
+  deferrals: number;
+  deferral_reason: string | null;
+  contaminated_attempts: number;
   error: string | null;
   queue_position: number | null;
   created_by_user_id: string | null;
@@ -65,6 +72,8 @@ export interface QueueEnvironment {
   stale_remote: number;
   counts: Record<string, number>;
   high_active: boolean;
+  /** A latency-sensitive job of ours is active on this environment. */
+  latency_active: boolean;
 }
 
 export interface QueueResponse {
@@ -79,6 +88,8 @@ export interface QueueFilters {
   statuses?: string[];
   mine?: boolean;
   experiment?: string;
+  /** Only jobs of latency-sensitive experiments. */
+  latency?: boolean;
 }
 
 export function queueQueryString(filters: QueueFilters, limit = 500): string {
@@ -87,6 +98,7 @@ export function queueQueryString(filters: QueueFilters, limit = 500): string {
   (filters.statuses ?? []).forEach((s) => q.append('status', s));
   if (filters.mine) q.set('mine', 'true');
   if (filters.experiment) q.set('experiment_id', filters.experiment);
+  if (filters.latency) q.set('latency_sensitive', 'true');
   q.set('limit', String(limit));
   return q.toString();
 }

@@ -11,12 +11,14 @@ import { useCrumbLabel } from '@/lib/crumb-label';
 import { fullWidth } from '@/features/shell/layout';
 import { useDelayedPending } from '@/lib/pending';
 import { Button, ErrorState, PageHeader, Skeleton, StatStrip, Text } from '@/ui';
+import { LatencyTag } from '../components/LatencyTag';
 import { ExperimentStatusBadge } from '../components/StatusBadges';
 import { isCancellable, isRetryable } from '../lib/cancel';
 import { absTime, baseSourceLabel, relTime, titleCase } from '../lib/format';
 import { buildMatrix, compareHref, currentJobs, jobStats, pruneSelection } from '../lib/matrix';
 import { defaultPresetEditPath, experimentsPath } from '../paths';
 import { ChartCard } from './ChartCard';
+import { Credentials } from './Credentials';
 import { JobHistoryCard } from './JobHistoryCard';
 import { MatrixCard } from './MatrixCard';
 import { QueueStrip } from './QueueStrip';
@@ -140,6 +142,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
           <span className={styles.titleRow}>
             {x.name || x.id}
             <ExperimentStatusBadge status={x.status} />
+            {x.latency_sensitive ? <LatencyTag /> : null}
           </span>
         }
         description={
@@ -147,6 +150,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
         }
         meta={meta}
       />
+      <Credentials detail={x} />
       <div className={styles.headerActions}>
         {retryable.length ? (
           <Button

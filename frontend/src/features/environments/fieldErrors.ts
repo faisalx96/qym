@@ -1,9 +1,10 @@
 /** Maps an environment save/create error onto the form field it is about (RHF `setError` equivalent). */
 import { ApiError } from '@/lib/http';
 import { errorMessage } from '@/api/evalCommon';
+import { LATENCY_ROLE_ERROR } from './copy';
 
 export type EnvironmentField =
-  'name' | 'base_url' | 'api_key' | 'ranking_metric' | 'ranking_k' | 'max_priority' | 'default_priority';
+  'name' | 'base_url' | 'api_key' | 'ranking_metric' | 'ranking_k' | 'max_priority' | 'default_priority' | 'latency_sensitive_min_role';
 export type FieldErrors = Partial<Record<EnvironmentField, string>>;
 
 const FIELDS: EnvironmentField[] = [
@@ -14,6 +15,7 @@ const FIELDS: EnvironmentField[] = [
   'ranking_k',
   'max_priority',
   'default_priority',
+  'latency_sensitive_min_role',
 ];
 
 function fieldFromText(message: string): EnvironmentField | null {
@@ -41,7 +43,8 @@ export function mapEnvironmentError(error: unknown): { fields: FieldErrors; gene
         const loc = Array.isArray((item as { loc?: unknown[] }).loc) ? (item as { loc: unknown[] }).loc : [];
         const last = String(loc[loc.length - 1] ?? '');
         const msg = String((item as { msg?: unknown }).msg ?? '');
-        if ((FIELDS as string[]).includes(last)) fields[last as EnvironmentField] = msg;
+        if (last === 'latency_sensitive_min_role') fields[last] = LATENCY_ROLE_ERROR;
+        else if ((FIELDS as string[]).includes(last)) fields[last as EnvironmentField] = msg;
         else if (msg) rest.push(msg);
       }
       return { fields, general: rest.join('; ') };

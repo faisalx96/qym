@@ -5,7 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/http';
-import type { EvalEnvironment, EvalPriority } from './evalCommon';
+import type { EvalEnvironment, EvalPriority, LatencyMinRole } from './evalCommon';
 
 const base = (projectId: string) => `/v1/projects/${encodeURIComponent(projectId)}/eval-environments`;
 const envBase = (projectId: string, envId: string) => `${base(projectId)}/${encodeURIComponent(envId)}`;
@@ -21,6 +21,7 @@ export interface EnvironmentUpdate {
   ranking_metric?: string | null;
   ranking_k?: number | null;
   max_priority?: EvalPriority;
+  latency_sensitive_min_role?: LatencyMinRole;
   default_priority?: EvalPriority;
   allow_connection_keys?: boolean;
   is_active?: boolean;

@@ -79,6 +79,10 @@ export interface DatasetReadToken {
   created_at: string;
   revoked_at?: string | null;
   creator?: { id: string; email: string; display_name: string } | null;
+  /** `experiment`: minted at launch for one experiment and revoked when it settles. */
+  kind?: 'admin' | 'experiment';
+  /** The experiment of an experiment token (`null`: it was deleted). */
+  experiment?: { id: string; name: string } | null;
 }
 
 export interface LlmConnection {

@@ -22,6 +22,11 @@ export function makeJob(over: Partial<ExperimentJob> = {}): ExperimentJob {
     remote_versioning: null,
     error: null,
     wait_reason: null,
+    admitted_at: null,
+    deferrals: 0,
+    deferral_reason: null,
+    contaminated_attempts: 0,
+    dataset_token: null,
     submit_attempts: 1,
     next_attempt_at: null,
     submitted_at: null,
@@ -68,6 +73,7 @@ export function makeDetail(jobs: ExperimentJob[], over: Partial<ExperimentDetail
     spec: {},
     versioning_details: {},
     priority: 'NORMAL',
+    latency_sensitive: false,
     preemption_acknowledged_at: null,
     status: 'RUNNING',
     job_count: jobs.length,
@@ -86,6 +92,10 @@ export function makeDetail(jobs: ExperimentJob[], over: Partial<ExperimentDetail
     ranking_metrics: {},
     sweep_keys: { '/t': 'timeout' },
     jobs,
+    credentials: {
+      api_key: { state: 'active', revoked_at: null },
+      dataset_read_token: { state: 'active', revoked_at: null },
+    },
     ...over,
   };
 }

@@ -84,6 +84,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { EvalEnvironment } from '@/api/evalCommon';
 import type { Preset } from '@/api/evalEnvironments';
+import type { LaunchDataset } from '@/api/launch';
 import type { AskOptions } from '@/features/environments/usePromiseConfirm';
 import {
   buildContext,
@@ -180,6 +181,8 @@ export interface LaunchContextValue {
   loadProposal: (names: string | string[]) => Promise<string[]>;
   /** Names of the project's datasets (null while loading). */
   datasetNames: string[] | null;
+  /** Every dataset of the project with the facts the picker badges (null while loading). */
+  datasets: LaunchDataset[] | null;
 
   review: ReviewState;
   preview: PreviewState;
@@ -227,6 +230,8 @@ export interface LaunchTestProviderProps {
   /** Loaded environments (model `envDataFrom(...)` results). */
   envs?: EnvData[];
   datasetNames?: string[];
+  /** Datasets with their badges; default: plain datasets named by `datasetNames`. */
+  datasets?: LaunchDataset[];
   canManage?: boolean;
   mode?: LaunchMode;
   preview?: Partial<PreviewState>;
@@ -246,6 +251,7 @@ export function LaunchTestProvider({
   doc: initialDoc,
   envs = [],
   datasetNames = [],
+  datasets: datasetRows,
   canManage = true,
   mode = 'launch',
   preview: previewOverride,
@@ -288,6 +294,15 @@ export function LaunchTestProvider({
     reloadSlots: NOOP_ASYNC,
     loadProposal: async () => [],
     datasetNames,
+    datasets:
+      datasetRows ??
+      datasetNames.map((name) => ({
+        id: name,
+        name,
+        slug: name,
+        private_test_set: false,
+        access_mode: 'project',
+      })),
     review: view.review,
     preview,
     launchErrors,

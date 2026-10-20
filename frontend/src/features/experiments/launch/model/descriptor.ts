@@ -27,6 +27,23 @@ export function confirmedSlots(slots: readonly ModelSlot[] | undefined): ModelSl
   return (slots ?? []).filter((s) => s.status === undefined || s.status === 'confirmed');
 }
 
+/**
+ * The descriptor without the platform-owned top-level fields (`read_only`, e.g. the dataset read
+ * token the platform fills at dispatch): the launch form never shows them (spec-b B4-7).
+ */
+export function withoutPlatformOwned(form: FormDescriptor | null | undefined): FormDescriptor | null {
+  if (!form) return null;
+  const owned = Object.keys(form.fields).filter((p) => form.fields[p]?.read_only && !form.fields[p]?.parent);
+  if (!owned.length) return form;
+  const drop = new Set(owned);
+  return {
+    ...form,
+    root: form.root.filter((p) => !drop.has(p)),
+    fields: Object.fromEntries(Object.entries(form.fields).filter(([p]) => !drop.has(p))),
+    groups: form.groups.map((g) => ({ ...g, pointers: g.pointers.filter((p) => !drop.has(p)) })),
+  };
+}
+
 /** EnvData from the raw responses of one environment (any of them may be missing). */
 export function envDataFrom(input: {
   id: string;
@@ -38,6 +55,7 @@ export function envDataFrom(input: {
   optionsError?: string;
   maxPriority?: EnvData['maxPriority'];
   defaultPriority?: EnvData['defaultPriority'];
+  latencyMinRole?: EnvData['latencyMinRole'];
   schemaHash?: string | null;
   extra?: EnvData['extra'];
 }): EnvData {
@@ -46,8 +64,9 @@ export function envDataFrom(input: {
     name: input.name,
     maxPriority: input.maxPriority,
     defaultPriority: input.defaultPriority,
+    latencyMinRole: input.latencyMinRole,
     schemaHash: input.schemaHash ?? input.form?.schema_hash ?? null,
-    form: input.form?.descriptor ?? null,
+    form: withoutPlatformOwned(input.form?.descriptor),
     formError: input.formError,
     evaluator: input.form?.evaluator ?? null,
     slots: confirmedSlots(input.slots?.slots),

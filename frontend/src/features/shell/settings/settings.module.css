@@ -212,3 +212,21 @@
   color: var(--text-muted);
   font-size: var(--font-sm);
 }
+
+/* Experiment tokens: the name wraps (never cut) and the kind tag follows it. */
+.tokenName {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+}
+
+.tokenLink {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.tokenLink:hover {
+  text-decoration: underline;
+}

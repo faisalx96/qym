@@ -96,4 +96,5 @@ export * from './validation';
 export * from './rawJson';
 export * from './editor';
 export * from './listTable';
+export * from './latencyGate';
 export * from './globalSweep';

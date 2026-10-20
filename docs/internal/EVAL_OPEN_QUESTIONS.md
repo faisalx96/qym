@@ -633,6 +633,25 @@ B19 in `experiment_launch.js` and the single-host placement (roles slot only) in
 
 ---
 
+### B25. Presets that set the dataset read token fail validation until edited (D-B11, Decided)
+
+**Question.** The platform now owns `/env_overrides/QYM_DATASET_READ_TOKEN` (the per-experiment dataset read token).
+A saved or official preset that already sets that key would silently override the minted token.
+
+**Decision.** The key is platform-owned like `qym_api_key`: a document that sets it (any value, also in a sweep) is
+rejected with `platform_owned` and the launch form hides the field (`read_only` in the form descriptor). A preset that
+carries the key fails validation until the key is removed from it. Reason: one owner of the value, and a user-supplied
+token must never win over the minted one.
+
+**To reverse.** Drop the key from `PLATFORM_OWNED_ENV_OVERRIDES` (`services/eval_schema_form.py`) and let a document value
+win over the minted token in `EvalDispatcher._submit_body`.
+
+**Also decided here (WP-B implementation).** A contaminated re-queue keeps the service's reason in `job.error` until the next
+attempt starts (the status cell then shows it in red, B5-13); `DELETE .../dataset-read-tokens/{id}` is idempotent for
+experiment tokens (the dispatcher may have revoked them) and stays a 400 for an already revoked admin token.
+
+---
+
 ## C. Operational follow-ups (not blocking)
 
 - **C1. Browser verification.** No browser or node was available, so all new UI was

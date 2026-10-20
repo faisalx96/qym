@@ -613,7 +613,14 @@ export interface ClonePrefill {
   /** Merge into the document with Object.assign / spread. */
   patch: Pick<
     LaunchDocument,
-    'name' | 'description' | 'environmentIds' | 'priority' | 'versioningText' | 'clone' | 'base'
+    | 'name'
+    | 'description'
+    | 'environmentIds'
+    | 'priority'
+    | 'versioningText'
+    | 'latencySensitive'
+    | 'clone'
+    | 'base'
   >;
   notes: string[];
   /** Slot keys of temporary models that lose their key (re-enter under Models). */
@@ -693,6 +700,7 @@ export function prefillFromClone(
       environmentIds: envIds,
       priority: res.priority ?? '',
       versioningText: versioningText(res.versioning_details),
+      latencySensitive: Boolean(res.latency_sensitive),
       clone,
       base: { ...emptyBaseInfo('clone'), loaded: false, notes },
     },

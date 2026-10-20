@@ -45,6 +45,7 @@ function toEnvData(env: EvalEnvironment, group: Group | undefined): EnvData {
     optionsError: group?.optionsError,
     maxPriority: env.max_priority,
     defaultPriority: env.default_priority,
+    latencyMinRole: env.latency_sensitive_min_role,
     schemaHash: env.schema_hash,
     extra: group?.extra,
   });

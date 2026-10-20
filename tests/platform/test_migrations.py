@@ -729,6 +729,27 @@ def test_eval_environments_migration_sqlite_upgrade_and_downgrade(
     engine.dispose()
 
 
+# What 0088 adds (dataset read tokens, latency-sensitive runs): the older revisions' schema
+# tests below do not apply it (it needs ``dataset_read_tokens``), so its diffs are dropped
+# here; ``test_migrations_0088.py`` checks 0088 against the models.
+_REVISION_0088_NAMES = (
+    "dataset_read_token_id",
+    "dataset_read_token_encrypted",
+    "latency_sensitive",
+    "latency_sensitive_min_role",
+    "ck_eval_environments_latency_min_role",
+    "ix_eval_experiments_dataset_read_token_id",
+    "admitted_at",
+    "deferrals",
+    "deferral_reason",
+    "contaminated_attempts",
+)
+
+
+def _without_0088(diffs: list[Any]) -> list[Any]:
+    return [d for d in diffs if not any(name in repr(d) for name in _REVISION_0088_NAMES)]
+
+
 def test_eval_environments_migration_matches_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -769,7 +790,7 @@ def test_eval_environments_migration_matches_models(
             connection,
             opts={"compare_type": True, "include_object": include_object},
         )
-        assert compare_metadata(context, Base.metadata) == []
+        assert _without_0088(compare_metadata(context, Base.metadata)) == []
 
     column = models.ProjectLlmConnection.__table__.c.available_for_experiments
     assert column.server_default is not None and not column.nullable
@@ -1174,7 +1195,7 @@ def _eval_experiment_model_diffs(
             connection,
             opts={"compare_type": True, "include_object": include_eval_object},
         )
-        return compare_metadata(context, Base.metadata)
+        return _without_0088(compare_metadata(context, Base.metadata))
 
     inspector = sa.inspect(connection)
     columns = {

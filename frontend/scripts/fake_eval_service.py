@@ -1,11 +1,15 @@
 """A tiny stand-in Evaluation Service for dev and e2e (guide v1.2 subset).
 
     python frontend/scripts/fake_eval_service.py 8904
+    python frontend/scripts/fake_eval_service.py 8905 --flags    # schema declares QYM_DATASET_READ_TOKEN
+                                                                 # and EVAL_VLLM_POST_RUN_MAX_REQUESTS (guide v1.3)
 
 Serves the fixture schemas under /evals/..., accepts jobs (PENDING -> RUNNING on the
 next read, never finishing by itself) and exposes /__control to drive them:
 
     POST /__control/jobs/{id}   {"status": "SUCCEEDED", "error": null}
+                                also: "deferrals", "deferral_reason", "admitted_at", "contaminated_attempts"
+                                (the admission state of a latency-sensitive job, guide v1.3 section 2.2)
     GET  /__control/jobs        every job it holds
     POST /__control/reset       forget jobs, restore health
     POST /__control/health      {"down": true}   next requests answer 503
@@ -48,7 +52,32 @@ ARRAY_LEAVES = {
         },
     },
 }
-STATE: Dict[str, Any] = {"down": False, "versioning": dict(DEFAULT_VERSIONING), "array_leaves": False}
+# Guide v1.3: the keys a service declares once it supports the per-experiment dataset
+# read token (section 4.3) and the latency-sensitive post-run ceiling (section 2.2).
+FLAG_PROPERTIES = {
+    "QYM_DATASET_READ_TOKEN": {"type": "string", "title": "Qym Dataset Read Token"},
+    "EVAL_VLLM_POST_RUN_MAX_REQUESTS": {
+        "anyOf": [{"type": "integer", "minimum": 1}, {"type": "null"}],
+        "default": None,
+        "title": "Eval Vllm Post Run Max Requests",
+    },
+}
+STATE: Dict[str, Any] = {
+    "down": False,
+    "versioning": dict(DEFAULT_VERSIONING),
+    "array_leaves": False,
+    "flags": "--flags" in sys.argv[2:],
+}
+# Control fields a test may set on a job.
+CONTROL_FIELDS = {
+    "status",
+    "error",
+    "result",
+    "deferrals",
+    "deferral_reason",
+    "admitted_at",
+    "contaminated_attempts",
+}
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
 
 
@@ -78,6 +107,8 @@ def env_schema() -> Any:
     schema = copy.deepcopy(SCHEMA)
     if STATE["array_leaves"]:
         schema["properties"].update(copy.deepcopy(ARRAY_LEAVES))
+    if STATE["flags"]:
+        schema["properties"].update(copy.deepcopy(FLAG_PROPERTIES))
     return schema
 
 
@@ -114,6 +145,7 @@ async def submit(request: Request) -> Any:
         "created_at": _now(),
         "updated_at": None,
         "env_overrides": body.get("env_overrides") or {},
+        "latency_sensitive": body.get("latency_sensitive"),
         "eval_input": body.get("evaluator") or {},
         "result": None,
         "error": None,
@@ -156,8 +188,15 @@ async def control_set(job_id: str, request: Request) -> Any:
     job = JOBS.get(job_id)
     if not job:
         raise HTTPException(404, "unknown job")
-    job.update({k: v for k, v in body.items() if k in {"status", "error", "result"}}, updated_at=_now())
+    job.update({k: v for k, v in body.items() if k in CONTROL_FIELDS}, updated_at=_now())
     return job
+
+
+@app.post("/__control/flags")
+async def control_flags(request: Request) -> Any:
+    """{"declared": true} serves the v1.3 keys in the schema (a schema refresh picks them up)."""
+    STATE["flags"] = bool((await request.json()).get("declared"))
+    return {"flags": STATE["flags"]}
 
 
 @app.post("/__control/reset")
@@ -166,6 +205,7 @@ def control_reset() -> Any:
     STATE["down"] = False
     STATE["versioning"] = dict(DEFAULT_VERSIONING)
     STATE["array_leaves"] = False
+    STATE["flags"] = "--flags" in sys.argv[2:]
     return {"ok": True}
 
 

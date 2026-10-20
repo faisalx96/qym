@@ -103,3 +103,13 @@
   font-family: var(--font-mono);
   font-size: var(--font-sm);
 }
+
+/* The note under an environment card while a latency-sensitive job is active (spec-b B5-65). */
+.latencyNote {
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border-default));
+  border-radius: var(--control-radius);
+  color: var(--warning);
+  font-size: var(--font-sm);
+}
