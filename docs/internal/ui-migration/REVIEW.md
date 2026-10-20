@@ -339,6 +339,57 @@ time or in parallel after the core paints; never viewport-gated lazy loading (B8
 | Full Playwright (`heavy.sh --cost 4`) | 1319 passed, 21 skipped, 3 failed under load (a click timeout in `experiments/launch/tables`, a disposed response at test end in `redesign3-header`, a focus assertion in `passes-rows` Q24); the three spec files re-run alone: 49 passed, 0 failed (28.8 min) |
 | `npm run e2e:sdk` | 42 passed |
 
+## QA round 7 (2026-10-19/20, `ui/redesign7-qa`)
+
+Owner QA feedback: runs page, "the line for actions is above the reliability metrics which makes it harder to read" and
+"loading the passes takes a long time"; run detail, "the frozen input is laggy when scrolling down", "the name of keys for
+json values output is overlapping with the content, the name should always be fully visible", and "table boundaries should
+only be visible within the table itself".
+
+- Design (`redesign7/qa.md`, 52 criteria Q1, Q2, D1, D2, D3, mocks `/__ui#round7`, scripts `redesign7/measure/`): the
+  "line" is two overlays the DataTable painted over its cells (an 11 px gradient plus a 1 px line, and a 24 px fade) as tall
+  as the scroll host: 25 px of the strip's "Reliability" sat under both at 1.1:1 contrast, and in the items table the
+  overlay was 26,058 px tall and crossed the open item. Passes were slow because the strip's `group-metrics` request ran a
+  pure-Python bootstrap (2,000 iterations) whose result the strip never shows: 2.6 s at 10 x 300 items, 10.9 s at 10 x
+  1,200, and it blocked the pass rows behind it; nothing was fetched before the click. Keys were clamped at 28 characters
+  with an ellipsis and a nested key at 390 could shrink to a 0 px box. The frozen bar showed no positional lag in headless
+  Chromium, but every scroll restyled 25,616 elements because its shift was written on the item's `<article>`.
+- Implementation (`redesign7/impl-notes.md`): both overlays deleted, the boundary is a 1 px `--border-strong` line drawn by
+  the pinned cells themselves (so it stops at the passes strip and at an open item); `group-metrics?view=group` skips the
+  bootstrap and writes nothing; the runs page prefetches the passes of its terminal repeat runs after the list settles
+  (cap 20, 4 in flight, a click joins an in-flight request); the loading frame has the loaded height (`min(samples, 20)`
+  rows, skeleton strip); keys wrap at their words (`<wbr>` after `_ - .` and before camelCase capitals), never clip, and
+  render in their exact case; the item bar's shift is written on the bar only. Native `position: sticky` for the bar was
+  tried and is impossible: the bar sits inside the table's horizontal scroller, so a sticky bar tracks that scroller (1,020
+  px off the line). The rail is 12 px at every row count (`flex: none`).
+- Review (`redesign7/review-qa.md`): MEETS WITH FIXES (R1 three amended numbers without a test on the same element; R2
+  the rail measured 5.6 px on a 50-row page; O2 keys wrapped mid-word), fix pass fbe7fe83 and 7edbe19b, re-review MEETS.
+  Reviewer's numbers: 0 px of text under any shade in every state, strip labels 6.9:1; click to rows prefetched 57 to 59
+  ms local and Fast 3G with 0 requests (was 132 / 632), cold 174 / 469 ms at 10 x 300 / 10 x 1,200 (was 2,805 / 11,225),
+  `view=group` 10 / 23 ms cold with 0 analysis rows written; bar 0 px off the CSS-sticky control in every presented
+  frame, 1,417 elements styled per scroll (was 25,616); 201 key rows at three widths with 0 truncated, clipped or
+  overlapping, 0 case mismatches; 21 pinned-table routes at two widths with 0 overlays. Merged 0a05861e.
+- Not proven: the owner's trackpad lag. Headless Chromium cannot scroll on the compositor while the main thread is
+  blocked, so the D1-3b harness cannot distinguish a JS-positioned bar from a compositor-driven one; the reviewer
+  prototyped a scroll-driven animation (F4) that tracks at 0 px and it is the next step if the bar still trails on a real
+  device. Open for the owner: the prefetch cap of 20 runs per list view on production data; the run page's repeat section
+  still pays the bootstrap on first open (10.9 s at 10 x 1,200; follow-up: precomputed per-pass aggregates).
+- Process: a third `systemd-oomd` kill (2026-10-19 17:58) took the orchestrator and the reviewer when heavy.sh's adaptive
+  step admitted a Playwright folder under a 2 GB cap while swap was nearly full; fixed in 8cd5756d (no lowering without
+  `--min-cost`, reserve +1 GB while swap free < 1 GB; `POSTMORTEM.md` section 1).
+
+### Gate on `UI-redesign` 0a05861e
+
+| Suite | Result |
+|---|---|
+| `npm run check` | clean; Vitest 171 files, 1439 tests, design-language 52 |
+| `npm run build`, `npm run build:sdk` | ok |
+| `pytest tests/platform/test_design_language.py` | 1 passed |
+| `pytest tests/platform` (4 chunks, `heavy.sh --cost 3`, `-n 2`) | 2791 passed, 745 skipped, 0 failed |
+| `pytest tests/sdk` | 496 passed, 4 skipped |
+| Full Playwright (`heavy.sh --cost 3`, 2 workers; swap was 3.7 of 4 GB used) | 1331 passed, 6 failed under load, then `systemd-oomd` killed the test cgroup at 67.8% slice pressure (the session survived: the cgroup isolation did its job); the 4 spec files never reached plus the 5 with failures re-run alone with 1 worker: 65 passed, 0 failed |
+| `npm run e2e:sdk` | 41 passed, 1 failed under load (`qa-fixes` reconnect clock); that file alone: 9 passed |
+
 ## Post-mortem
 
 The failures of the whole migration (two session kills, repeated feedback rounds, a finding fixed by hiding
