@@ -361,7 +361,11 @@ export function OutputCard({
             Output not received: this item’s outcome event never reached the platform.
           </p>
         ) : run.run.items_restricted ? (
-          <p className={styles.note}>Item bodies are visible to admins only on a private test set.</p>
+          <p className={styles.note}>
+            {run.run.items_restricted_reason === 'dataset_access'
+              ? 'Hidden: you don’t have access to this dataset’s items.'
+              : 'Item bodies are visible to admins only on a private test set.'}
+          </p>
         ) : (
           <Collapsible text={output} />
         )}

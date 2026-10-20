@@ -262,8 +262,8 @@ def test_dataset_search_backfill_job_fills_text_and_published_counts() -> None:
         counts = {v.id: v.change_counts for v in db.query(DatasetVersion)}
     assert texts == ["a\nجديد\n\n{\"tag\": \"x\"}", "a\nقديم\n\n{\"tag\": \"x\"}"]
     assert counts == {
-        "v1": {"added": 1, "modified": 0, "deleted": 0, "unchanged": 0},
-        "v2": {"added": 0, "modified": 1, "deleted": 0, "unchanged": 0},
+        "v1": {"added": 1, "modified": 0, "deleted": 0, "unchanged": 0, "disabled": 0, "enabled": 0},
+        "v2": {"added": 0, "modified": 1, "deleted": 0, "unchanged": 0, "disabled": 0, "enabled": 0},
     }
     engine.dispose()
 

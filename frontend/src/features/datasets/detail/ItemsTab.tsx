@@ -20,21 +20,37 @@ import { useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { copyText } from '@/lib/copy';
 import {
+  Badge,
   Button,
   Chip,
   ConfirmDialog,
   DataTable,
+  DropdownMenu,
   EmptyState,
   Icon,
   promptPreview,
   ScoreBar,
   SearchField,
+  SegmentedControl,
   TagsCell,
   useToast,
   type Column,
   type RowAction,
 } from '@/ui';
 import { formatLatency, formatJson } from '../lib/itemValue';
+import { menuLabel } from '../lib/batchCopy';
+import { STATE_OPTIONS, stateCount, stateTotalText, stateUrlValue, type StateFilter } from '../lib/itemState';
+import {
+  addMetaFilter,
+  metaChipLabel,
+  metaFiltersToParams,
+  parseMetaFilters,
+  removeMetaFilter,
+  type MetaFilter,
+} from '../lib/metaFilter';
+import type { BatchAction } from '@/api/datasets';
+import type { BatchCriteria } from '../lib/batchCopy';
+import { MetadataFilter } from './MetadataFilter';
 import { metricDir } from '../lib/metricDir';
 import { ITEM_PAGE_SIZES, datasetPath, itemSortKey, parseDatasetRoute, parseItemSort } from '../lib/route';
 import styles from './ItemsTab.module.css';
@@ -56,8 +72,12 @@ export interface ItemsTabProps {
   onRows?: (rows: DatasetItem[]) => void;
   /** Called after a single-row delete succeeds (the workspace closes a pane showing that item). */
   onDeleted?: (itemId: string) => void;
-  /** Search or label filter changed: the workspace drops its row selection. */
+  /** Search, label, state or metadata filter changed: the workspace drops its row selection. */
   onFilterChange?: () => void;
+  /** Published version: opens the create-draft flow ("Create a draft to edit items"). */
+  onCreateDraft?: () => void;
+  /** "All matching" menu: open the batch dialog for the current criteria. */
+  onBatch?: (action: BatchAction, criteria: BatchCriteria) => void;
 }
 
 export function ItemsTab({
@@ -73,6 +93,8 @@ export function ItemsTab({
   onRows,
   onDeleted,
   onFilterChange,
+  onCreateDraft,
+  onBatch,
 }: ItemsTabProps) {
   const [params, setParams] = useSearchParams();
   const route = parseDatasetRoute(dataset.slug, params);
@@ -84,6 +106,8 @@ export function ItemsTab({
   const isDraft = version.status === 'draft';
   const canEdit = isDraft && !readOnly;
   const visible = dataset.items_visible;
+  const metaFilters = useMemo(() => parseMetaFilters(route.meta), [route.meta]);
+  const metaParams = useMemo(() => metaFiltersToParams(metaFilters), [metaFilters]);
 
   // Debounced server search mirrored to ?search= (page reset).
   useEffect(() => {
@@ -114,6 +138,8 @@ export function ItemsTab({
       search: route.search || undefined,
       sort: route.sort || undefined,
       label: route.label || undefined,
+      state: route.state === 'active' ? undefined : route.state,
+      meta: metaParams.length ? metaParams : undefined,
     },
     visible,
   );
@@ -134,13 +160,45 @@ export function ItemsTab({
         slug,
         dataset.slug,
         version.version,
-        { search: route.search || undefined, label: route.label || undefined },
+        {
+          search: route.search || undefined,
+          label: route.label || undefined,
+          state: route.state === 'active' ? undefined : route.state,
+          meta: metaParams.length ? metaParams : undefined,
+        },
         query.data.total,
       );
       selection.onChange(new Set(ids));
     } catch {
       toast.show('Couldn’t select all matching items', { tone: 'error' });
     }
+  }
+
+  function setMeta(next: MetaFilter[]) {
+    onFilterChange?.();
+    setParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.delete('meta');
+        for (const value of metaFiltersToParams(next)) params.append('meta', value);
+        params.delete('page');
+        return params;
+      },
+      { replace: true },
+    );
+  }
+
+  function clearFilters() {
+    onFilterChange?.();
+    setSearch('');
+    setParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        for (const key of ['search', 'label', 'meta', 'page']) params.delete(key);
+        return params;
+      },
+      { replace: true },
+    );
   }
 
   function setQuery(updates: Record<string, string | null>) {
@@ -175,7 +233,15 @@ export function ItemsTab({
     );
   }
 
-  if (query.data && query.data.total === 0 && !route.search && !route.label) {
+  const noCriteria = !route.search && !route.label && metaFilters.length === 0;
+  const counts = query.data?.counts;
+  if (
+    query.data &&
+    query.data.total === 0 &&
+    noCriteria &&
+    route.state === 'active' &&
+    (counts?.all ?? 0) === 0
+  ) {
     return (
       <div>
         {isDraft ? (
@@ -231,16 +297,21 @@ export function ItemsTab({
         </Link>
       ),
     },
-    ...(hasUserIds
+    ...(hasUserIds || route.state !== 'active'
       ? [
           {
             id: 'item_id',
             header: 'ID',
             type: 'id',
             sort: 'item_id',
-            width: 140,
+            width: route.state !== 'active' ? 180 : 140,
             priority: 2,
-            cell: (item: DatasetItem) => <span dir="ltr">{item.item_id}</span>,
+            cell: (item: DatasetItem) => (
+              <span className={styles.idCell}>
+                <span dir="ltr">{item.item_id}</span>
+                {item.state === 'disabled' ? <Badge tone="neutral">Disabled</Badge> : null}
+              </span>
+            ),
           } satisfies Column<DatasetItem>,
         ]
       : []),
@@ -357,7 +428,13 @@ export function ItemsTab({
 
   const total = query.data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / route.pageSize));
-  const filtered = Boolean(route.search || route.label);
+  const filtered = !noCriteria;
+  const canBatch = canEdit && !noCriteria && onBatch;
+  const criteria: BatchCriteria = {
+    search: route.search || undefined,
+    label: route.label || undefined,
+    meta: metaFilters,
+  };
   return (
     <div className={styles.wrap} data-items-tab aria-busy={query.isFetching || undefined}>
       <DataTable<DatasetItem>
@@ -371,6 +448,7 @@ export function ItemsTab({
         onSortChange={(s) => setQuery({ sort: s ? itemSortKey(s.key, s.direction) : null, page: null })}
         onRowOpen={openItem}
         rowActions={rowActions}
+        rowProps={(item) => ({ 'data-state': item.state === 'disabled' ? 'disabled' : undefined })}
         selection={
           selection
             ? {
@@ -388,14 +466,26 @@ export function ItemsTab({
         error={query.isError ? query.error : undefined}
         onRetry={() => void query.refetch()}
         isFiltered={filtered}
-        empty={query.data ? <EmptyState compact title="No items" /> : undefined}
+        empty={
+          query.data ? (
+            route.state === 'disabled' ? (
+              <EmptyState
+                compact
+                title="No disabled items"
+                body="Items you disable in a draft appear here."
+              />
+            ) : (
+              <EmptyState compact title="No items" />
+            )
+          ) : undefined
+        }
         filteredEmpty={
           <EmptyState
             compact
             title="No items match these filters"
             action={
-              <Button variant="neutral" onPress={() => setSearch('')}>
-                Clear search
+              <Button variant="neutral" onPress={clearFilters}>
+                Clear filters
               </Button>
             }
           />
@@ -414,34 +504,129 @@ export function ItemsTab({
               data-testid="items-search"
             />
           }
+          filters={
+            <>
+              <MetadataFilter
+                slug={slug}
+                datasetRef={dataset.slug}
+                version={version.version}
+                filters={metaFilters}
+                onAdd={(f) => setMeta(addMetaFilter(metaFilters, f))}
+              />
+              <span data-testid="items-state">
+                <SegmentedControl<StateFilter>
+                  label="Item state"
+                  options={STATE_OPTIONS.map((o) => {
+                    const n = stateCount(counts, o.id);
+                    return {
+                      value: o.id,
+                      label: (
+                        <>
+                          {o.label}
+                          {n === undefined ? null : <span className={styles.countLabel}>{n}</span>}
+                        </>
+                      ),
+                    };
+                  })}
+                  value={route.state}
+                  onChange={(next) => {
+                    onFilterChange?.();
+                    setQuery({ state: stateUrlValue(next) ?? null, page: null });
+                  }}
+                />
+              </span>
+            </>
+          }
           chips={
-            route.label ? (
-              <Chip
-                isSelected
-                onRemove={() => {
-                  onFilterChange?.();
-                  setQuery({ label: null, page: null });
-                }}
-                removeLabel="Clear label filter"
-              >
-                label: {route.label}
-              </Chip>
+            route.label || metaFilters.length ? (
+              <div className={styles.chipRow} data-testid="filter-chips">
+                {route.label ? (
+                  <Chip
+                    isSelected
+                    onRemove={() => {
+                      onFilterChange?.();
+                      setQuery({ label: null, page: null });
+                    }}
+                    removeLabel="Clear label filter"
+                  >
+                    label: {route.label}
+                  </Chip>
+                ) : null}
+                {metaFilters.map((f) => (
+                  <Chip
+                    key={f.path}
+                    isSelected
+                    onRemove={() => setMeta(removeMetaFilter(metaFilters, f))}
+                    removeLabel={`Remove filter ${metaChipLabel(f)}`}
+                    data-testid="meta-chip"
+                  >
+                    {metaChipLabel(f)}
+                  </Chip>
+                ))}
+              </div>
             ) : null
           }
           count={
             query.data ? (
               <span aria-live="polite">
-                {query.data.total.toLocaleString()} {query.data.total === 1 ? 'item' : 'items'}
+                {stateTotalText(route.state, counts, query.data.total)}
                 {route.search ? ` matching “${route.search}”` : ''}
               </span>
             ) : null
           }
           trailing={
-            canEdit ? (
-              <Button variant="neutral" size="sm" icon={<Icon name="plus" size={12} />} onPress={onAddItem}>
-                Add item
-              </Button>
-            ) : null
+            <>
+              {!readOnly && !noCriteria && !isDraft && onCreateDraft ? (
+                <Button
+                  variant="neutral"
+                  size="sm"
+                  onPress={onCreateDraft}
+                  data-testid="batch-published-entry"
+                >
+                  Create a draft to edit items
+                </Button>
+              ) : null}
+              {canBatch ? (
+                <DropdownMenu
+                  label="Actions on all matching items"
+                  trigger={
+                    <Button
+                      variant="neutral"
+                      size="sm"
+                      iconEnd={<Icon name="chevron-down" size={12} />}
+                      data-testid="all-matching"
+                    >
+                      All matching
+                    </Button>
+                  }
+                  items={[
+                    {
+                      id: 'disable',
+                      label: menuLabel('disable', counts?.active ?? 0),
+                      disabled: !counts?.active,
+                    },
+                    {
+                      id: 'enable',
+                      label: menuLabel('enable', counts?.disabled ?? 0),
+                      disabled: !counts?.disabled,
+                    },
+                    {
+                      id: 'delete',
+                      label: menuLabel('delete', counts?.all ?? 0),
+                      tone: 'danger',
+                      separatorBefore: true,
+                      disabled: !counts?.all,
+                    },
+                  ]}
+                  onAction={(id) => onBatch(id as BatchAction, criteria)}
+                />
+              ) : null}
+              {canEdit ? (
+                <Button variant="neutral" size="sm" icon={<Icon name="plus" size={12} />} onPress={onAddItem}>
+                  Add item
+                </Button>
+              ) : null}
+            </>
           }
         />
         <DataTable.Footer

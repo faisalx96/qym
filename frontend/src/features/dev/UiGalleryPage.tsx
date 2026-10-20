@@ -11,6 +11,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  RadioGroup,
   Chip,
   ConfirmDialog,
   CopyButton,
@@ -143,6 +144,7 @@ export default function UiGalleryPage() {
   });
   const [chip, setChip] = useState(true);
   const [num, setNum] = useState(10);
+  const [radio, setRadio] = useState<'project' | 'restricted'>('project');
   const [slider, setSlider] = useState(60);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [staleSince] = useState(() => new Date(Date.now() - 90_000));
@@ -355,6 +357,25 @@ export default function UiGalleryPage() {
               width={220}
             />
           </Stack>
+        </Case>
+        <Case label="RadioGroup">
+          <RadioGroup
+            label="Who can access this dataset"
+            value={radio}
+            onChange={setRadio}
+            options={[
+              {
+                value: 'project',
+                title: 'Everyone in the project',
+                help: 'Every member can view and modify this dataset.',
+              },
+              {
+                value: 'restricted',
+                title: 'Only people listed below',
+                help: 'Everyone else cannot open this dataset.',
+              },
+            ]}
+          />
         </Case>
         <Case label="Select (searchable when > 8)">
           <Stack gap="sm">

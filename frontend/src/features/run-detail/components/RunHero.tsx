@@ -354,7 +354,18 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
             </div>
           </div>
         ) : null}
-        {run.items_restricted ? (
+        {run.items_restricted && run.items_restricted_reason === 'dataset_access' ? (
+          <div className={styles.banner} role="status" data-testid="restricted-dataset-banner">
+            <Icon name="lock" size={14} />
+            <div>
+              <div className={styles.bannerTitle}>Restricted dataset</div>
+              <p className={styles.bannerBody}>
+                This run was evaluated on a dataset you don’t have access to. Scores and latencies are shown,
+                but item inputs, expected outputs, outputs, traces, and analysis are hidden.
+              </p>
+            </div>
+          </div>
+        ) : run.items_restricted ? (
           <div className={styles.banner} role="status" data-testid="private-test-set">
             <Icon name="info" size={16} />
             <div>

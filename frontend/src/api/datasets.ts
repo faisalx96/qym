@@ -18,7 +18,16 @@ export interface DsUser {
   display_name: string;
 }
 
+export type DatasetAccessMode = 'project' | 'restricted';
+export type DatasetAccessLevel = 'none' | 'view' | 'modify' | 'manage';
+export type ItemState = 'active' | 'disabled' | 'all';
+
 export interface DatasetPermissions {
+  /** the reader's level on this dataset (owner decision D1: `none` still lists runs, redacted) */
+  access_level: DatasetAccessLevel;
+  can_view_items: boolean;
+  can_modify: boolean;
+  can_manage_access: boolean;
   can_manage: boolean;
   is_creator: boolean;
   can_rename_slug: boolean;
@@ -53,6 +62,8 @@ export interface DatasetVersion {
   schema: VersionSchema;
   labels: string[];
   item_count: number;
+  /** items left out of runs; `item_count` stays the total */
+  disabled_count: number;
   run_count: number;
   content_hash: string | null;
   created_by_user_id: string | null;
@@ -64,7 +75,7 @@ export interface DatasetVersion {
   published_at: string | null;
   is_default: boolean;
   aliases: string[];
-  change_counts?: { added: number; deleted: number; modified: number };
+  change_counts?: { added: number; deleted: number; modified: number; disabled?: number; enabled?: number };
 }
 
 export interface Dataset {
@@ -75,6 +86,9 @@ export interface Dataset {
   description: string | null;
   tags: string[];
   private_test_set: boolean;
+  access_mode: DatasetAccessMode;
+  /** saved grants; 0 for `project` mode */
+  grant_count: number;
   items_visible: boolean;
   can_set_private_test_set: boolean;
   created_by_user_id: string | null;
@@ -96,6 +110,12 @@ export interface ItemResultSummary {
   metrics: Record<string, { avg: number | null; count?: number }>;
 }
 
+export interface ItemDisabled {
+  at: string;
+  by: DsUser | null;
+  reason: string;
+}
+
 export interface DatasetItem {
   id: number;
   item_id: string;
@@ -105,6 +125,9 @@ export interface DatasetItem {
   metadata: Record<string, unknown>;
   labels: string[];
   fingerprint?: string;
+  /** `active` (or missing on older servers) or `disabled` */
+  state?: 'active' | 'disabled';
+  disabled?: ItemDisabled | null;
   created_at: string;
   updated_at: string;
   run_count?: number;
@@ -125,8 +148,16 @@ export interface ItemsResponse {
   items: DatasetItem[];
   metric_names: string[];
   metric_directions: MetricDirectionMap;
+  /** counts for the current search, label and metadata criteria, ignoring `state` */
+  counts?: ItemStateCounts;
   total: number;
   next_offset: number | null;
+}
+
+export interface ItemStateCounts {
+  active: number;
+  disabled: number;
+  all: number;
 }
 
 export interface DatasetRunRow {
@@ -227,12 +258,18 @@ export interface ItemNeighbors {
   next: DatasetItem | null;
 }
 
+/** A revision body: the item fields, or `{item_id, disabled, reason}` for a state change. */
+export type RevisionSnapshot = Omit<Partial<DatasetItem>, 'disabled'> & {
+  disabled?: boolean;
+  reason?: string;
+};
+
 export interface ItemRevision {
   id: string;
   revision_number: number;
-  change_type: 'created' | 'updated' | 'deleted';
-  before: Partial<DatasetItem> | null;
-  after: Partial<DatasetItem> | null;
+  change_type: 'created' | 'updated' | 'deleted' | 'disabled' | 'enabled';
+  before: RevisionSnapshot | null;
+  after: RevisionSnapshot | null;
   actor_user_id: string | null;
   actor: DsUser | null;
   actor_email?: string | null;
@@ -252,6 +289,7 @@ export interface CompareFieldSnapshot {
   expected_output: unknown;
   metadata: unknown;
   labels: string[];
+  state?: 'active' | 'disabled';
 }
 
 export interface CompareChangedEntry {
@@ -275,7 +313,14 @@ export interface CompareItemEntry extends DatasetItem {
 export interface CompareResponse {
   base: DatasetVersion;
   target: DatasetVersion;
-  summary: { added: number; removed: number; changed: number; unchanged: number };
+  summary: {
+    added: number;
+    removed: number;
+    changed: number;
+    unchanged: number;
+    disabled?: number;
+    enabled?: number;
+  };
   added?: string[];
   removed?: string[];
   unchanged?: string[];
@@ -295,11 +340,13 @@ const enc = encodeURIComponent;
 function withSlug(
   path: string,
   slug: string,
-  extra: Record<string, string | number | undefined | null> = {},
+  extra: Record<string, string | number | undefined | null | readonly string[]> = {},
 ) {
   const q = new URLSearchParams({ project_slug: slug });
   for (const [k, v] of Object.entries(extra)) {
-    if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+    if (Array.isArray(v)) {
+      for (const entry of v) q.append(k, String(entry));
+    } else if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
   }
   return `${path}?${q.toString()}`;
 }
@@ -323,6 +370,8 @@ export const dsKeys = {
   lineage: (slug: string, ref: string) => ['dataset-lineage', slug, ref] as const,
   compare: (slug: string, ref: string, head: string, base: string, kind: CompareKind) =>
     ['dataset-compare', slug, ref, head, base, kind] as const,
+  access: (slug: string, ref: string) => ['dataset-access', slug, ref] as const,
+  facets: (slug: string, ref: string, version: string) => ['dataset-facets', slug, ref, version] as const,
 };
 
 export interface ItemsParams {
@@ -331,12 +380,18 @@ export interface ItemsParams {
   search?: string;
   sort?: string;
   label?: string;
+  /** `active` is the server default; send `disabled` or `all` explicitly */
+  state?: ItemState;
+  /** repeatable `path:value` metadata filters */
+  meta?: string[];
 }
 
 export interface NeighborParams {
   search?: string;
   sort?: string;
   label?: string;
+  state?: ItemState;
+  meta?: string[];
 }
 
 // ---------------------------------------------------------------- queries
@@ -380,7 +435,7 @@ export async function fetchMatchingItemIds(
   slug: string,
   ref: string,
   version: string,
-  params: Pick<ItemsParams, 'search' | 'label'>,
+  params: Pick<ItemsParams, 'search' | 'label' | 'state' | 'meta'>,
   total: number,
 ): Promise<string[]> {
   const ids: string[] = [];
@@ -392,6 +447,8 @@ export async function fetchMatchingItemIds(
         offset,
         search: params.search,
         label: params.label,
+        state: params.state,
+        meta: params.meta,
         include_context: 'false',
       }),
     );
@@ -418,6 +475,8 @@ export function useDatasetItems(
           search: params.search,
           sort: params.sort,
           label: params.label,
+          state: params.state,
+          meta: params.meta,
           include_context: 'false',
         }),
       ),
@@ -456,6 +515,8 @@ export function useItemNeighbors(
           search: params.search,
           sort: params.sort,
           label: params.label,
+          state: params.state,
+          meta: params.meta,
         }),
       ),
     enabled: enabled && Boolean(ref && version && itemId),
@@ -550,8 +611,86 @@ export function fetchFullCompare(slug: string, ref: string, head: string, base: 
   );
 }
 
-export function downloadUrl(slug: string, ref: string, version: string) {
-  return withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}:download`, slug);
+export function downloadUrl(slug: string, ref: string, version: string, includeDisabled = false) {
+  return withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}:download`, slug, {
+    include_disabled: includeDisabled ? 'true' : undefined,
+  });
+}
+
+// ---------------------------------------------------------------- access
+
+export interface AccessPerson {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export type GrantLevel = 'view' | 'modify';
+
+export interface AccessGrant {
+  user: AccessPerson;
+  level: GrantLevel;
+  granted_by: AccessPerson | null;
+  created_at: string;
+}
+
+export interface DatasetAccess {
+  access_mode: DatasetAccessMode;
+  grants: AccessGrant[];
+  can_manage_access: boolean;
+  candidates: AccessPerson[];
+  your_level: Exclude<DatasetAccessLevel, 'none'>;
+}
+
+export function useDatasetAccess(slug: string, ref: string, enabled = true) {
+  return useQuery({
+    queryKey: dsKeys.access(slug, ref),
+    queryFn: () => api.get<DatasetAccess>(withSlug(`/v1/datasets/${enc(ref)}/access`, slug)),
+    enabled: enabled && Boolean(ref),
+    retry: false,
+  });
+}
+
+export function useSaveDatasetAccess(slug: string, ref: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      access_mode: DatasetAccessMode;
+      grants: { user_id: string; level: GrantLevel }[];
+    }) => api.put<DatasetAccess>(withSlug(`/v1/datasets/${enc(ref)}/access`, slug), body),
+    onSuccess: (r) => {
+      qc.setQueryData(dsKeys.access(slug, ref), r);
+      void qc.invalidateQueries({ queryKey: ['dataset', slug, ref] });
+      void qc.invalidateQueries({ queryKey: ['datasets', slug] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------- metadata facets
+
+export interface MetaFacetPath {
+  path: string;
+  values: { value: string; count: number }[];
+  truncated: boolean;
+  value_count: number;
+}
+
+export interface MetaFacets {
+  paths: MetaFacetPath[];
+  truncated: boolean;
+}
+
+export function useMetadataFacets(slug: string, ref: string, version: string, enabled: boolean) {
+  return useQuery({
+    queryKey: dsKeys.facets(slug, ref, version),
+    queryFn: () =>
+      api.get<MetaFacets>(
+        withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items:metadata-facets`, slug),
+      ),
+    enabled: enabled && Boolean(ref && version),
+    staleTime: 60_000,
+    retry: false,
+  });
 }
 
 // ---------------------------------------------------------------- mutations
@@ -570,6 +709,7 @@ export function invalidateItems(qc: QueryClient, slug: string, ref: string) {
   void qc.invalidateQueries({ queryKey: ['dataset-item', slug, ref] });
   void qc.invalidateQueries({ queryKey: ['dataset-item-neighbors', slug, ref] });
   void qc.invalidateQueries({ queryKey: ['dataset-item-lineage', slug, ref] });
+  void qc.invalidateQueries({ queryKey: ['dataset-facets', slug, ref] });
   invalidateDataset(qc, slug, ref);
 }
 
@@ -750,6 +890,93 @@ export function useBulkItems(slug: string, ref: string, version: string) {
   return useMutation({
     mutationFn: (body: BulkItemsBody) => bulkItems(slug, ref, version, body),
     onSuccess: () => invalidateItems(qc, slug, ref),
+  });
+}
+
+function invalidateAfterStateChange(qc: QueryClient, slug: string, ref: string) {
+  void qc.invalidateQueries({ queryKey: ['dataset-items', slug, ref] });
+  void qc.invalidateQueries({ queryKey: ['dataset-item', slug, ref] });
+  void qc.invalidateQueries({ queryKey: ['dataset-item-neighbors', slug, ref] });
+  void qc.invalidateQueries({ queryKey: ['dataset-item-lineage', slug, ref] });
+  void qc.invalidateQueries({ queryKey: ['dataset-facets', slug, ref] });
+  void invalidateDataset(qc, slug, ref);
+}
+
+export interface ItemStateResponse {
+  item: DatasetItem;
+  changed: boolean;
+}
+
+export function useDisableItem(slug: string, ref: string, version: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, reason }: { itemId: string; reason?: string }) =>
+      api.post<ItemStateResponse>(
+        withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items/${enc(itemId)}:disable`, slug),
+        reason ? { reason } : {},
+      ),
+    onSuccess: (r, { itemId }) => {
+      qc.setQueryData(dsKeys.item(slug, ref, version, itemId), { item: r.item });
+      invalidateAfterStateChange(qc, slug, ref);
+    },
+  });
+}
+
+export function useEnableItem(slug: string, ref: string, version: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId }: { itemId: string }) =>
+      api.post<ItemStateResponse>(
+        withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items/${enc(itemId)}:enable`, slug),
+      ),
+    onSuccess: (r, { itemId }) => {
+      qc.setQueryData(dsKeys.item(slug, ref, version, itemId), { item: r.item });
+      invalidateAfterStateChange(qc, slug, ref);
+    },
+  });
+}
+
+export type BatchAction = 'disable' | 'enable' | 'delete';
+
+export interface BatchFilterBody {
+  search?: string;
+  label?: string;
+  meta?: Record<string, string>;
+  item_ids?: string[];
+  state?: ItemState;
+}
+
+export interface BatchRequestBody {
+  filter: BatchFilterBody;
+  action: BatchAction;
+  reason?: string;
+  dry_run: boolean;
+  expected_affected?: number;
+}
+
+export interface BatchResponse {
+  matched: number;
+  affected: number;
+  sample_item_ids: string[];
+  version_status: VersionStatus;
+  dry_run: boolean;
+  missing_item_ids?: string[];
+}
+
+export function postItemsBatch(slug: string, ref: string, version: string, body: BatchRequestBody) {
+  return api.post<BatchResponse>(
+    withSlug(`/v1/datasets/${enc(ref)}/versions/${enc(version)}/items:batch`, slug),
+    body,
+  );
+}
+
+export function useItemsBatch(slug: string, ref: string, version: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BatchRequestBody) => postItemsBatch(slug, ref, version, body),
+    onSuccess: (_r, body) => {
+      if (!body.dry_run) invalidateAfterStateChange(qc, slug, ref);
+    },
   });
 }
 

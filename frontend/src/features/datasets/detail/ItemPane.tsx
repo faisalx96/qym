@@ -2,8 +2,20 @@
 import { useState } from 'react';
 import { useDatasetItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
-import { Button, ConfirmDialog, ErrorState, IconButton, LinkButton, Skeleton, Text, useToast } from '@/ui';
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  ErrorState,
+  IconButton,
+  LinkButton,
+  Skeleton,
+  Text,
+  useToast,
+} from '@/ui';
+import { DisableItemDialog } from '../components/dialogs';
 import { FieldEditor } from '../components/FieldEditor';
+import { DisabledBanner, EnableButton, useItemStateActions } from '../components/ItemStateUi';
 import { useItemEditor } from '../item/useItemEditor';
 import { datasetPath } from '../lib/route';
 import styles from './ItemPane.module.css';
@@ -14,6 +26,10 @@ export interface ItemPaneProps {
   version: DatasetVersion;
   itemId: string;
   editable: boolean;
+  /** the reader cannot change this dataset (viewer or archived project): no state actions at all */
+  readOnly: boolean;
+  /** Published version: opens the create-draft flow, then this item opens in the draft. */
+  onCreateDraft?: (itemId: string) => void;
   position: { index: number; total: number };
   query: string;
   onClose: () => void;
@@ -29,6 +45,8 @@ export function ItemPane({
   version,
   itemId,
   editable,
+  readOnly,
+  onCreateDraft,
   position,
   query,
   onClose,
@@ -40,6 +58,10 @@ export function ItemPane({
   const q = useDatasetItem(slug, dataset.slug, version.version, itemId);
   const item: DatasetItem | undefined = q.data;
   const editor = useItemEditor(slug, dataset.slug, version.version, item);
+  const state = useItemStateActions(slug, dataset.slug, version);
+  const [disableOpen, setDisableOpen] = useState(false);
+  const disabled = item?.state === 'disabled';
+  const published = version.status !== 'draft';
   // Saving a field as a different type (string -> number ...) asks first (UX must-fix 7).
   const [typeConfirm, setTypeConfirm] = useState<{ names: string[]; resolve: (ok: boolean) => void } | null>(
     null,
@@ -77,6 +99,7 @@ export function ItemPane({
           <span className={styles.pos}>
             {position.index + 1} / {position.total.toLocaleString()}
           </span>
+          {disabled ? <Badge tone="neutral">Disabled</Badge> : null}
         </div>
         <div className={styles.headActions}>
           <IconButton label="Previous item" icon="chevron-up" onPress={() => onNavigate(-1)} />
@@ -102,8 +125,18 @@ export function ItemPane({
             onRetry={() => void q.refetch()}
           />
         ) : null}
+        {item && disabled ? (
+          <div className={styles.banner}>
+            <DisabledBanner item={item} published={published} />
+            {editable ? (
+              <div className={styles.bannerAction}>
+                <EnableButton loading={state.enabling} onPress={() => void state.enableItem(item.item_id)} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {item && editor.state ? (
-          <div className={styles.fields}>
+          <div className={styles.fields} data-disabled={disabled ? '' : undefined}>
             <FieldEditor
               compact
               label="Input"
@@ -134,7 +167,12 @@ export function ItemPane({
       </div>
       {editable ? (
         <footer className={styles.foot}>
-          <Text as="span" variant="sm" tone="muted" aria-live="polite">
+          {item && !disabled ? (
+            <Button variant="neutral" onPress={() => setDisableOpen(true)} data-testid="item-state-action">
+              Disable item…
+            </Button>
+          ) : null}
+          <Text as="span" variant="sm" tone="muted" aria-live="polite" className={styles.status}>
             {editor.dirty
               ? editor.valid
                 ? 'Unsaved changes'
@@ -151,6 +189,25 @@ export function ItemPane({
             Save changes
           </Button>
         </footer>
+      ) : null}
+      {!readOnly && published && item && onCreateDraft ? (
+        <footer className={styles.foot}>
+          <Button
+            variant="neutral"
+            onPress={() => onCreateDraft(item.item_id)}
+            data-testid="item-state-action"
+          >
+            {disabled ? 'Create a draft to enable' : 'Create a draft to disable'}
+          </Button>
+        </footer>
+      ) : null}
+      {item ? (
+        <DisableItemDialog
+          open={disableOpen}
+          onOpenChange={setDisableOpen}
+          itemId={item.item_id}
+          onConfirm={(reason) => state.disableItem(item.item_id, reason)}
+        />
       ) : null}
       <ConfirmDialog
         open={typeConfirm !== null}

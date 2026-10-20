@@ -223,6 +223,7 @@ describe('primitive module contracts', () => {
     ],
     Select: ['height: var(--control-height)', 'min-height: var(--dropdown-option-height)'],
     MultiSelect: ['min-height: var(--dropdown-option-height)', 'width: var(--dropdown-width)'],
+    RadioGroup: ['min-block-size: var(--row-comfortable)', 'var(--accent-primary)', '[data-selected]'],
     SegmentedControl: ['height: var(--control-height)', 'background: var(--accent-primary)', 'height: 100%'],
     Pagination: ['height: var(--control-height)', 'min-width: 160px', 'font-family: var(--font-mono)'],
     Badge: [

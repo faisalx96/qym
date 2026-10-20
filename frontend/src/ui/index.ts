@@ -37,6 +37,7 @@ export * from './SearchField';
 export * from './NumberField';
 export * from './Textarea';
 export * from './Checkbox';
+export * from './RadioGroup';
 export * from './Switch';
 export * from './Slider';
 export * from './Select';

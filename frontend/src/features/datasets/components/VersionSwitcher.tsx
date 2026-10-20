@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button as AriaButton, ListBox, ListBoxItem } from 'react-aria-components';
 import type { DatasetVersion } from '@/api/datasets';
 import { Badge, Icon, Popover, SearchField, Tag } from '@/ui';
+import { versionItemsText } from '../lib/itemState';
 import { pluralize, relativeTime } from '../lib/itemValue';
 import { isProduction } from '../lib/versions';
 import styles from './VersionSwitcher.module.css';
@@ -84,8 +85,10 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
                   <VersionBadge version={v} />
                 </span>
                 <span className={styles.rowMeta}>
-                  {pluralize(v.item_count, 'item')} · {pluralize(v.run_count, 'run')} ·{' '}
-                  {relativeTime(v.updated_at)}
+                  <span data-testid="version-row-items">
+                    {versionItemsText(v.item_count, v.disabled_count)}
+                  </span>{' '}
+                  · {pluralize(v.run_count, 'run')} · {relativeTime(v.updated_at)}
                 </span>
               </ListBoxItem>
             )}

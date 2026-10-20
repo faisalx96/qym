@@ -25,11 +25,19 @@ export interface DatasetRoute {
   search: string;
   sort: string;
   label: string;
+  /** items state filter; `active` is the default and is never written to the URL */
+  state: 'active' | 'disabled' | 'all';
+  /** repeatable `path:value` metadata filters (`meta=` in the URL) */
+  meta: string[];
   q: string;
   catalogSort: string;
   base: string | null;
   head: string | null;
   compareTab: 'changed' | 'added' | 'removed' | 'unchanged';
+}
+
+export function parseItemStateParam(raw: string | null): 'active' | 'disabled' | 'all' {
+  return raw === 'disabled' || raw === 'all' ? raw : 'active';
 }
 
 /** `splat` is everything after `/datasets/` (may be '' or undefined). */
@@ -77,6 +85,8 @@ export function parseDatasetRoute(splat: string | undefined, params: URLSearchPa
     search: params.get('search') ?? '',
     sort: params.get('sort') ?? '',
     label: params.get('label') ?? '',
+    state: parseItemStateParam(params.get('state')),
+    meta: params.getAll('meta').filter(Boolean),
     q: params.get('q') ?? '',
     catalogSort: params.get('sort') ?? '',
     base: params.get('base') || null,

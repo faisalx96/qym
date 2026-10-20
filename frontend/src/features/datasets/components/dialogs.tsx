@@ -11,11 +11,16 @@ import {
   type DatasetVersion,
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
-import { FormDialog, useToast, type FormValue } from '@/ui';
+import { useRef, useState } from 'react';
+import { Button, Dialog, FormDialog, Textarea, useToast, type FormValue } from '@/ui';
+import { Note } from './Note';
 import { sniffJson } from '../lib/itemValue';
+import { publishDisabledNote } from '../lib/itemState';
 import { datasetPath } from '../lib/route';
 import { slugifyDatasetName } from '../lib/slugify';
 import { PRODUCTION_RULE } from '../lib/versions';
+
+import styles from './dialogs.module.css';
 
 function errorText(e: unknown): string {
   if (e instanceof ApiError) return e.detail || e.message;
@@ -158,6 +163,13 @@ export function PublishDialog({
       onOpenChange={onOpenChange}
       title={`Publish ${version.version}`}
       description={`Publishing freezes ${version.version} (${version.item_count.toLocaleString()} items) as a snapshot; runs can target it and it can no longer be edited.`}
+      notice={
+        version.disabled_count > 0 ? (
+          <Note tone="info" data-testid="publish-disabled-note">
+            <span>{publishDisabledNote(version.disabled_count, version.version)}</span>
+          </Note>
+        ) : undefined
+      }
       confirmLabel="Publish"
       submittingLabel="Publishing…"
       fields={
@@ -314,5 +326,94 @@ export function AddItemDialog({
         }
       }}
     />
+  );
+}
+
+export const REASON_MAX = 500;
+
+/**
+ * Disable one item or several selected items (spec A2-29 to A2-35): a reason, a counter and an
+ * error under the field. `onConfirm` throws with the server detail to keep the dialog open.
+ */
+export function DisableItemDialog({
+  open,
+  onOpenChange,
+  itemId,
+  count,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  /** a single item's id; leave out with `count` for selected rows */
+  itemId?: string;
+  count?: number;
+  onConfirm: (reason: string) => Promise<void>;
+}) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
+  const many = count !== undefined && count !== 1;
+  const title = many ? `Disable ${count} items?` : `Disable item ${itemId ?? ''}?`;
+  const body = many
+    ? 'They stay in this draft and are left out of runs once it is published. You can enable them again in any draft.'
+    : 'The item stays in this draft but is left out of runs once the draft is published. You can enable it again in any draft.';
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await onConfirm(reason.trim());
+      setReason('');
+      onOpenChange(false);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (busy) return;
+        if (!o) {
+          setReason('');
+          setError(null);
+        }
+        onOpenChange(o);
+      }}
+      title={title}
+      description={body}
+      isKeyboardDismissDisabled={busy}
+      dismissOnBackdrop={!busy}
+      initialFocus={field}
+      data-testid="da-modal"
+      footer={
+        <>
+          <Button variant="neutral" size="md" onPress={() => onOpenChange(false)} isDisabled={busy}>
+            Cancel
+          </Button>
+          <Button variant="primary" size="md" loading={busy} onPress={() => void submit()}>
+            {many ? `Disable ${count}` : 'Disable item'}
+          </Button>
+        </>
+      }
+    >
+      <Textarea
+        ref={field}
+        label="Reason (optional)"
+        rows={3}
+        value={reason}
+        onChange={(v) => setReason(v.slice(0, REASON_MAX))}
+        maxLength={REASON_MAX}
+        dir="auto"
+        errorMessage={error ?? undefined}
+        help={
+          <span data-testid="reason-counter" className={styles.counter}>
+            {reason.length} / {REASON_MAX}
+          </span>
+        }
+      />
+    </Dialog>
   );
 }

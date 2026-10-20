@@ -146,6 +146,7 @@ function v(partial: Partial<DatasetVersion>): DatasetVersion {
     schema: {},
     labels: [],
     item_count: 0,
+    disabled_count: 0,
     run_count: 0,
     content_hash: null,
     created_by_user_id: null,

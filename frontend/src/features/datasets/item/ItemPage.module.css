@@ -43,3 +43,10 @@
   flex-wrap: wrap;
   gap: var(--space-xs);
 }
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-block-end: var(--space-md);
+}

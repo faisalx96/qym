@@ -58,6 +58,8 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
                 {v.change_counts.added ? <Tag tone="success">+{v.change_counts.added}</Tag> : null}
                 {v.change_counts.deleted ? <Tag tone="danger">−{v.change_counts.deleted}</Tag> : null}
                 {v.change_counts.modified ? <Tag tone="warning">~{v.change_counts.modified}</Tag> : null}
+                {v.change_counts.disabled ? <Tag>{v.change_counts.disabled} disabled</Tag> : null}
+                {v.change_counts.enabled ? <Tag>{v.change_counts.enabled} enabled</Tag> : null}
               </span>
             ) : null}
           </div>

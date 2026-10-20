@@ -85,6 +85,8 @@ export interface Run {
   versioning_details?: Record<string, unknown>;
   live_revision?: string;
   items_restricted?: boolean;
+  /** why item contents are hidden: an admin-only private test set, or a restricted dataset the reader cannot open */
+  items_restricted_reason?: 'private_test_set' | 'dataset_access' | null;
   origin?: string;
   error_count?: number;
   execution_count?: number;
