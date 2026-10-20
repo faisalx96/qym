@@ -174,10 +174,13 @@ def test_passes_time_stays_linear_in_item_passes():
     ), f"median {median:.1f} ms of {[round(t, 1) for t in times]}"
 
 
-# qa.md Q2-3 (amended in round 7): /passes at 10 passes x 1,200 / x 300 items, median of 9 requests. The strict numbers
-# were measured on the production seed (316.3 / 67.1 ms); this fixture is built through the ingest API in memory, so
-# the CI margin is 4x (a shared machine), the strict numbers apply under QYM_PERF_STRICT=1 on a quiet one.
-Q2_3_MS = {1200: 340 if STRICT else 1360, 300: 80 if STRICT else 320}
+# qa.md Q2-3 (amended in round 7): /passes at 10 passes x 1,200 / x 300 items, median of 9 requests. The spec ceilings
+# (340 / 80 ms) are measured on the production seed with redesign7/measure/passes_profile.py (316 / 67 ms implementer,
+# 324 / 68 ms reviewer). This fixture is built through the ingest API in memory and is about 3x slower on the same
+# handler (review: 866 / 209 ms), so the numbers asserted here are calibrated to the fixture: 950 / 250 ms strict
+# (QYM_PERF_STRICT=1, a quiet machine), 4x that as the CI margin on a shared machine. The seed numbers are the
+# product criterion; this test guards the handler against regressing by more than its fixture-to-seed ratio.
+Q2_3_MS = {1200: 950 if STRICT else 3800, 300: 250 if STRICT else 1000}
 
 
 @pytest.mark.parametrize("items", [300, 1200])

@@ -378,7 +378,7 @@ inside its amended ceilings (<= 26, <= 40). The round-7 scenario is harsher (20 
 ### D1.4 Tests to write
 
 Vitest `ui/DataTable/__tests__/stickyShiftTarget.test.tsx` (the hook writes `--head-shift` on the element `shiftTarget` returns and nowhere else) and `features/run-detail/components/items/ItemCard.test.tsx` (the shift lands on `[data-item-bar]`, not on the article);
-Playwright `e2e/perf/item-scroll.spec.ts` (new: D1-1 to D1-5 and D1-8 with a CDP session and the jsonKeys fixture from `seed-r7.mts` moved into `e2e/run-detail/seed.ts` as `seedR7JsonKeys`; counts asserted exactly, times with the CI margin; D1-3 under `QYM_PERF_STRICT=1`); `e2e/perf/table-scroll.spec.ts` keeps D1-6 and D1-7.
+Playwright `e2e/perf/item-scroll.spec.ts` (new: D1-1 to D1-5 and D1-8 with a CDP session and the jsonKeys fixture from `seed-r7.mts` moved into `e2e/run-detail/seed.ts` as `seedR7JsonKeys`; counts asserted exactly, times with the CI margin; D1-3 and D1-3b are script-measured guards, see section 9); `e2e/perf/table-scroll.spec.ts` keeps D1-6 and D1-7.
 
 ### D1.5 Implementation notes
 
