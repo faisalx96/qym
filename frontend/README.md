@@ -218,9 +218,11 @@ file; 3 GB for `npm run check`, one Playwright folder or `pytest tests/sdk`;
 48 files (a whole-suite `pytest -n 2 tests/platform` at 3 GB is killed by its
 own cap). Cost plus the reserve must fit under what the desktop leaves free
 (about 7 GB on a 15 GB host with an editor and a browser open), so a cost of
-5 never admits there; after five minutes of waiting the script lowers the cost
-by 1 GB and logs it (`QYM_HEAVY_ADAPT=0` keeps it waiting). Send heavy runs to a
-log file and look for the `waiting` line before assuming a test is slow.
+5 never admits there. The script never lowers a cost on its own (`--min-cost GB`
+opts in to lowering down to that floor) and adds 1 GB to the reserve while less
+than 1 GB of swap is free, because a capped run that thrashes is what gets the
+whole terminal scope killed. Send heavy runs to a log file and look for the
+`waiting` line before assuming a test is slow.
 
 ## Saved table layouts (localStorage / sessionStorage keys)
 

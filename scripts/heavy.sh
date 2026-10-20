@@ -3,7 +3,7 @@
 # machine-wide budget so several runs, agents or terminals cannot push the host into
 # swap thrash and get the whole session killed by the OOM killer / systemd-oomd.
 #
-#   scripts/heavy.sh [--cost GB] [--name LABEL] [--timeout SEC] -- <command...>
+#   scripts/heavy.sh [--cost GB] [--min-cost GB] [--name LABEL] [--timeout SEC] -- <command...>
 #
 # What it does, in order:
 #   1. Budget: reserve = max(2 GB, 20% of RAM) stays free for the desktop and the
@@ -21,9 +21,16 @@
 #      test run, never the terminal or the agent that launched it. Elsewhere the
 #      command runs directly, still gated by 1-4.
 #
-#   6. Adaptation: if the command is not admitted within QYM_HEAVY_ADAPT_AFTER seconds
-#      (default 300) while pressure is low, the cost drops by 1 GB (to a floor of 2) and the
-#      script says so; a --cost the host can never admit degrades instead of stalling.
+#   6. Swap: when less than 1 GB of swap is free the reserve grows by 1 GB. The reclaim that
+#      trips systemd-oomd comes from a nearly full swap, not from MemAvailable (2026-10-19:
+#      a folder run admitted at 2 GB with 0.6 GB of swap free thrashed, the slice crossed the
+#      pressure limit and oomd killed the terminal scope holding the orchestrator).
+#   7. Adaptation (opt-in): with --min-cost GB (or QYM_HEAVY_MIN_COST_GB) below --cost, a command
+#      not admitted within QYM_HEAVY_ADAPT_AFTER seconds (default 300) while pressure is low has
+#      its cost lowered by 1 GB at a time, never below --min-cost, and the script says so. By
+#      default the floor equals the cost: a run is never admitted under a cap smaller than the
+#      cost its command needs (a capped cgroup that thrashes is what killed the session above).
+#      A --cost the host cannot admit waits and logs `waiting`; that log line is the signal.
 #
 # Cost guide (GB): 2 = Vitest subset, tsc, builds, one Playwright spec file; 3 = npm run check,
 # one Playwright folder, pytest tests/sdk; 4 = full Playwright, pytest tests/platform in chunks
@@ -32,16 +39,19 @@
 # and a browser open that is about 7 GB, so --cost 5 never admits.
 #
 # Environment overrides: QYM_HEAVY_RESERVE_GB, QYM_HEAVY_COST_GB, QYM_HEAVY_MAX_SLOTS,
-# QYM_HEAVY_NO_SCOPE=1 (skip systemd-run), QYM_HEAVY_LOCK_DIR, QYM_HEAVY_ADAPT=0 (never lower
-# the cost), QYM_HEAVY_ADAPT_AFTER (seconds).
+# QYM_HEAVY_NO_SCOPE=1 (skip systemd-run), QYM_HEAVY_LOCK_DIR, QYM_HEAVY_MIN_COST_GB (adaptation
+# floor; default = the cost, i.e. no adaptation), QYM_HEAVY_ADAPT_AFTER (seconds), QYM_HEAVY_SWAP_FLOOR_MB
+# (default 1024: below this much free swap the reserve grows by 1 GB).
 set -euo pipefail
 
 cost_gb="${QYM_HEAVY_COST_GB:-3}"
+min_cost_gb="${QYM_HEAVY_MIN_COST_GB:-}"
 name="heavy"
 timeout_s=7200
 while [ $# -gt 0 ]; do
     case "$1" in
         --cost) cost_gb="$2"; shift 2 ;;
+        --min-cost) min_cost_gb="$2"; shift 2 ;;
         --name) name="$2"; shift 2 ;;
         --timeout) timeout_s="$2"; shift 2 ;;
         --) shift; break ;;
@@ -64,6 +74,12 @@ mem_avail_kb() {
             END {print int(s*ps/1024)}'
     fi
 }
+swap_free_kb() { # Linux only; elsewhere "no swap" (a large number)
+    if [ -r /proc/meminfo ]; then
+        awk '/^SwapTotal:/{t=$2} /^SwapFree:/{f=$2} END{ if (t+0 == 0) print 1073741824; else print f }' /proc/meminfo
+    else echo 1073741824; fi
+}
+swap_floor_kb=$(( ${QYM_HEAVY_SWAP_FLOOR_MB:-1024} * 1024 ))
 mem_pressure() { # Linux PSI "some avg10", else 0
     if [ -r /proc/pressure/memory ]; then awk 'NR==1{sub("avg10=","",$2); print $2}' /proc/pressure/memory
     else echo 0; fi
@@ -75,7 +91,11 @@ reserve_gb="${QYM_HEAVY_RESERVE_GB:-}"
 if [ -z "$reserve_gb" ]; then
     reserve_gb=$(( total_gb / 5 )); [ "$reserve_gb" -lt 2 ] && reserve_gb=2
 fi
+[ -z "$min_cost_gb" ] && min_cost_gb="$cost_gb"
+[ "$min_cost_gb" -lt 2 ] && min_cost_gb=2
+[ "$min_cost_gb" -gt "$cost_gb" ] && min_cost_gb="$cost_gb"
 cost_kb=$(( cost_gb * 1048576 ))
+base_reserve_gb="$reserve_gb"
 reserve_kb=$(( reserve_gb * 1048576 ))
 slots=$(( (total_gb - reserve_gb) / cost_gb ))
 [ "$slots" -lt 1 ] && slots=1
@@ -94,6 +114,12 @@ waited=0
 while :; do
     avail_kb=$(mem_avail_kb)
     pressure=$(mem_pressure)
+    # Swap-aware reserve: a nearly full swap means the kernel is already reclaiming; one more
+    # GB of headroom keeps the user slice under the oomd pressure limit.
+    swap_kb=$(swap_free_kb)
+    if [ "$swap_kb" -lt "$swap_floor_kb" ]; then reserve_gb=$(( base_reserve_gb + 1 )); swap_note=", swap free $((swap_kb/1024)) MB: reserve +1G"
+    else reserve_gb="$base_reserve_gb"; swap_note=""; fi
+    reserve_kb=$(( reserve_gb * 1048576 ))
     ok_mem=$(( avail_kb - cost_kb >= reserve_kb ))
     ok_psi=$(awk -v p="$pressure" 'BEGIN{print (p+0 < 20) ? 1 : 0}')
     if [ "$ok_mem" = 1 ] && [ "$ok_psi" = 1 ]; then
@@ -109,15 +135,16 @@ while :; do
         exit 75
     fi
     if [ $(( waited % 60 )) = 0 ]; then
-        echo "heavy.sh [$name]: waiting (avail $((avail_kb/1024)) MB, need $(( (cost_kb+reserve_kb)/1024 )) MB, psi $pressure%, slots $slots)" >&2
+        echo "heavy.sh [$name]: waiting (avail $((avail_kb/1024)) MB, need $(( (cost_kb+reserve_kb)/1024 )) MB${swap_note}, psi $pressure%, slots $slots)" >&2
     fi
-    # Adapt: a cost the host cannot admit (desktop baseline leaves too little free) would
-    # wait until the timeout. After adapt_after seconds lower the cost by 1 GB (never below 2)
-    # and say so, so a wrong --cost degrades to a smaller budget instead of a silent stall.
-    if [ "$waited" -ge "$adapt_after" ] && [ "$ok_psi" = 1 ] && [ "$cost_gb" -gt 2 ] && [ "${QYM_HEAVY_ADAPT:-1}" = 1 ]; then
+    # Adapt (opt-in, --min-cost): after adapt_after seconds lower the cost by 1 GB, never below
+    # the floor the caller declared its command can live with. Never below the default floor
+    # (= the cost): a run admitted under a cap it needs more than thrashes and gets the whole
+    # terminal scope killed (2026-10-19).
+    if [ "$waited" -ge "$adapt_after" ] && [ "$ok_psi" = 1 ] && [ "$cost_gb" -gt "$min_cost_gb" ]; then
         cost_gb=$(( cost_gb - 1 )); cost_kb=$(( cost_gb * 1048576 ))
         slots=$(( (total_gb - reserve_gb) / cost_gb )); [ "$slots" -lt 1 ] && slots=1; [ "$slots" -gt "$max_slots" ] && slots="$max_slots"
-        echo "heavy.sh [$name]: not admitted after ${waited}s, lowering cost to ${cost_gb}G (set QYM_HEAVY_ADAPT=0 to keep waiting)" >&2
+        echo "heavy.sh [$name]: not admitted after ${waited}s, lowering cost to ${cost_gb}G (floor --min-cost ${min_cost_gb}G)" >&2
         adapt_after=$(( waited + adapt_every ))
     fi
     sleep 10; waited=$(( waited + 10 ))

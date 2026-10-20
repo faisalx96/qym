@@ -86,7 +86,9 @@ of the whole user slice; see `docs/internal/ui-migration/POSTMORTEM.md` section 
 - Cost guide: 2 = Vitest subset, tsc, builds, one Playwright spec file; 3 = `npm run check`, one Playwright
   folder, `pytest tests/sdk`; 4 = full `npm run e2e`, `pytest tests/platform` in chunks of about 48 files
   (`ls tests/platform/test_*.py | split -l 48`). Cost + reserve (max of 2 GB and 20% of RAM) must fit under
-  what the desktop leaves free; the script lowers the cost by 1 GB after 5 minutes of waiting and logs it.
+  what the desktop leaves free. The script never admits a run under a cap smaller than its cost (pass `--min-cost` to
+  allow lowering) and adds 1 GB to the reserve while less than 1 GB of swap is free; a run that keeps printing `waiting`
+  has the wrong cost for this machine, or the desktop holds too much (log out and in when GNOME Shell exceeds 2 GB).
 - Heavy runs go to a log file; read the log for `heavy.sh [...]: waiting` before reporting progress. A run
   that prints `waiting` for more than ten minutes has the wrong cost, not a slow test.
 - Light commands (one spec with `--workers 1`, one or two Vitest files, tsc, eslint) run directly.

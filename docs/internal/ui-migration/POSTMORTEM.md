@@ -24,9 +24,15 @@ desktop apps count, and it kills the largest scope, which is always the terminal
   reserve needs 8 GB free and the desktop never leaves more than about 7 GB. A reviewer's `--cost 4`
   Playwright folder waited the same way until the agent lowered it by hand.
 - Two long full-folder Playwright runs lost their output mid-run and had to be re-run in chunks.
+- 2026-10-19 17:58, a third kill: the adaptive step added after round 6 lowered a reviewer's Playwright folder
+  run from 3 GB to 2 GB after five minutes of waiting and admitted it under a 2 GB cap. The capped cgroup
+  thrashed (79% pressure), swap was 3.4 of 4 GB full, the user slice crossed the oomd limit and the terminal
+  scope holding the orchestrator and the reviewer was killed, then the test scope. The desktop held 9 GB
+  before any test (GNOME Shell 5 GB after nine days up). Fix: the script never lowers a cost below what the
+  command needs unless `--min-cost` says so, and the reserve grows by 1 GB while swap free is under 1 GB.
 
 **Rules.** `scripts/heavy.sh` for every full suite, build and `pytest -n`, with the cost table in
-`AGENTS.md`; the script now lowers its cost by 1 GB after five minutes of waiting and says so; platform
+`AGENTS.md`; the script never admits a run under a cap smaller than its cost and watches swap; platform
 pytest runs in four chunks; every heavy run logs to a file and the orchestrator reads the log for the
 `waiting` line before assuming progress; at most one sub-agent per agent; servers stopped the moment a
 check ends; `free -h` with at least 3 GB available before starting another agent.
