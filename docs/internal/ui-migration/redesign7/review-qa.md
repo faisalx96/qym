@@ -194,3 +194,25 @@ Slip to disclose: one `pkill -f` with a pattern unique to my own wait loop was i
 
 ## 7. Files
 Measurement outputs: `measure/review/*.json`; my probes: `measure/review/r7r-cover.mts` (independent glyph / stack probe), `r7r-d1-sticky.mts` (native sticky feasibility), `r7r-d1-f4.mts` (scroll-timeline prototype), `r7r-d1-smooth.mts` and `r7r-smooth-probe.mts` (compositor-scroll attempts), `r7r-shots.mts`, `r7r-q2-select.mts`, `r7r-rail.mts`, `r7r-strip.mts`, `r7r-grad.mts`. Screenshots: `shots/review-*.png` (17, each under 300 KB).
+
+## 11. Re-review of the fix pass (tip `fbe7fe83`: commits `3b8612e1` rail, `4dc80983` tests, `2f247ea8` key word breaks, `fbe7fe83` notes; cherry-picked here)
+
+Production build rebuilt through `heavy.sh --cost 2`, seeded DB restored, only the three items below measured. Raw output: `measure/review/r7r-rail.mts` re-run, `r7r-keyflush.mts`, `d2-keys` / `d2-exact` re-run (stdout), screenshots `shots/review2-d2-panel-en-1440.png`, `review2-d2-panel-en-390.png`, `review2-d2-output-ar-390.png`.
+
+### R2 / Q1-8 (rail): RESOLVED
+- `[data-testid=table-scroll-rail]` on the seeded 50-row runs page: computed and rect height **12 px at 1440 and 12 px at 1024** (was 5.6 / 5.3), `position: sticky`, offset height 12.
+- `redesign7-edges.spec.ts`: the new `Q1-8 on the 50-row page` cases seed 50 rows (`seedProjectWithRuns({ count: 50 })`), expect `tbody tr[data-run-id]` count 50, `scrollOverflow` true and `abs(railHeight - 12) <= 0.5` at 1440 and 1024, and the in-state check was tightened from 1 to 0.5. The assertion is on the 50-row page.
+
+### R1 (amended numbers asserted): PARTLY RESOLVED
+- Q2-5 at 10 x 1,200: `runs-passes-load.spec.ts` has the new case (exactly `/passes` and `group-metrics ... view=group`, `limit(3000, 500)`). The file ran alone with `--workers 1`: **12 passed**; the new case also passes with `QYM_PERF_STRICT=1` (500 ms on the dev server). Asserted on the same element: yes.
+- D1-3 / D1-3b: `qa.md` section 9 and the criteria table now say "script-measured guard, not a Playwright assertion", and the "56 px" claim is replaced by "not reproduced by the review (0 px)". Accepted. One stale sentence remains in section D1.4 ("D1-3 under `QYM_PERF_STRICT=1`"), cosmetic.
+- Q2-3 (`/passes` 340 / 80 ms): `test_run_passes_statements.py` now has `test_passes_ceiling_at_the_seeded_sizes` (300 and 1,200 items, median of 9, statements equal and <= 28). Directly run: **4 passed** in default mode, where the ceilings are 4x (320 / 1,360 ms), so the amended 340 / 80 is **not** what is asserted by default. Under `QYM_PERF_STRICT=1` (340 / 80) it **fails here**: 209.4 ms (300) and 865.7 ms (1,200), because the in-memory ingest-built fixture is about 3x slower than the production seed, which on the same machine just now measured 67.6 / 324.5 ms (`passes_profile.py`, meets 80 / 340). So the number is asserted only in a mode that cannot pass on the test's own fixture. Remaining fix (small): calibrate the strict numbers to the fixture (for example about 250 / 950) and state that 340 / 80 is measured by `passes_profile.py` on the seed, or build the test on a fixture that matches the seed.
+
+### O2 (keys break at their words): RESOLVED
+- D2 re-run on the production build: 201 key rows, ellipsis 0, clipped 0, key over value 0, key over actions 0, value over actions 0, key box 0 px 0, gap under 8 px 0, key past row 0 (D2-1 to D2-13 unchanged at 0). D2-15: **0 mismatches** over 35 + 19 + 35 + 19 keys.
+- Line counts: tree at 1440 / 1024 1 line for 10 / 40 / 80 and for the 45 / 57 / 60-character depth-3 keys; tree at 390: 10-char 1, 40-char 2, **80-char 4, depth-3 45 / 57 / 60-char 4** (matches the amended D2-6); sections at 390 40 / 80 chars 2 / 3; facts 1 / 2 / 4 at 1440 and 1024, 1 / 2 / 3 stacked at 390.
+- Flush left (D2-12): every multi-line key, fact label and the wrapped Arabic keys (`تحليل_أهلية_...`, `استدعاء_الأداة_...`) have a line-left spread of 0 px and start 0 px from the box's left edge, in the tree, the facts and at 390.
+- `self_consistency_check_result` (and the longer `..._across_rescored_samples`) now breaks at words: 1440 `self_consistency_check_ / result_across_rescored_ / samples` (3 lines), 390 `self_consistency_check_result_across_ / rescored_samples` (2 lines); `customer_eligibility_ / assessment_result_a`; `retrievedPolicyDocument / IdentifiersUsedTo` (`review2-d2-panel-en-1440.png`, `-390.png`). The mid-word breaks I reported are gone.
+
+### Final verdict: MEETS WITH FIXES (one small item left)
+R2 and O2 are resolved, Q2-5 and D1-3 are resolved; the only open item is the Q2-3 strict calibration above (a test-number fix, no product change). With it done this is MEETS.
