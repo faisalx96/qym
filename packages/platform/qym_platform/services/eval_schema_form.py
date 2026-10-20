@@ -95,6 +95,39 @@ from typing import Any
 
 DESCRIPTOR_VERSION = 1
 
+# ``env_overrides`` keys the platform fills at dispatch (the per-experiment dataset read
+# token, ``services/eval_dataset_tokens``): the form hides them and a document that sets
+# one is rejected as ``platform_owned``.
+PLATFORM_OWNED_ENV_OVERRIDES = ("QYM_DATASET_READ_TOKEN",)
+
+
+def schema_declares_env_key(schema: Any, key: str) -> bool:
+    """Whether an ``env_overrides`` JSON Schema declares the top-level property ``key``."""
+    if not isinstance(schema, dict):
+        return False
+    props = schema.get("properties")
+    if isinstance(props, dict) and key in props:
+        return True
+    for branch in ("allOf", "anyOf", "oneOf"):
+        parts = schema.get(branch)
+        if isinstance(parts, list) and any(
+            schema_declares_env_key(part, key) for part in parts
+        ):
+            return True
+    return False
+
+
+def mark_platform_owned_env_fields(descriptor: dict[str, Any]) -> dict[str, Any]:
+    """``descriptor`` with ``read_only: true`` on the platform-owned top-level fields."""
+    fields = descriptor.get("fields")
+    if isinstance(fields, dict):
+        for name in PLATFORM_OWNED_ENV_OVERRIDES:
+            entry = fields.get("/" + name)
+            if isinstance(entry, dict):
+                entry["read_only"] = True
+    return descriptor
+
+
 _MAX_DEPTH = 32
 _SCALAR_TYPES = {"boolean", "integer", "number", "string", "enum"}
 _BOUND_KEYS = (

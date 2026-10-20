@@ -80,6 +80,7 @@ from ..db.models import (
 )
 from ..secrets import previous_encryption_keys
 from ..settings import PlatformSettings
+from .eval_dataset_tokens import revoke_dataset_token_when_settled
 from .eval_submitter_keys import revoke_key_when_settled
 from .run_lifecycle import (
     RUN_STATUS_REASON_CANCELLED_BY_USER,
@@ -445,7 +446,8 @@ def recompute_experiment_status(
     Once the jobs have settled it also drops the temporary-model keys
     (``clear_secrets_when_settled``) and, once every current job is terminal and the
     last one finished ``KEY_REVOKE_GRACE`` before ``now``, revokes the creator's
-    per-experiment qym API key (``eval_submitter_keys``).
+    per-experiment qym API key (``eval_submitter_keys``) and its dataset read token
+    (``eval_dataset_tokens``).
 
     On Postgres the experiment row is locked first (``FOR NO KEY UPDATE``, reloaded),
     so transactions settling sibling jobs recompute one after another and each one
@@ -500,7 +502,10 @@ def recompute_experiment_status(
         row.status = status
     clear_secrets_when_settled(row, jobs)
     # The creator's qym API key outlives BLOCKED jobs: they may be retried.
-    revoke_key_when_settled(row, current_jobs(jobs), TERMINAL_JOB_STATUSES, now=now)
+    current = current_jobs(jobs)
+    revoke_key_when_settled(row, current, TERMINAL_JOB_STATUSES, now=now)
+    # The dataset read token follows the key: same guard, grace and transaction.
+    revoke_dataset_token_when_settled(row, current, TERMINAL_JOB_STATUSES, now=now)
     return status
 
 

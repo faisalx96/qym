@@ -49,6 +49,7 @@ Database helpers only ``flush``; the caller owns the transaction.
 
 from __future__ import annotations
 
+import copy
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -65,6 +66,7 @@ from ..db.models import (
     EvalModelSlotStatus,
 )
 from .eval_schema_form import (
+    mark_platform_owned_env_fields,
     DESCRIPTOR_VERSION,
     build_form_descriptor,
     escape_pointer_segment,
@@ -594,8 +596,10 @@ def descriptor_for_schema(schema: EvalEnvironmentSchema) -> dict[str, Any]:
         isinstance(cached, dict)
         and cached.get("descriptor_version") == DESCRIPTOR_VERSION
     ):
-        return cached
-    return build_form_descriptor(schema.schema_json or {})
+        return mark_platform_owned_env_fields(copy.deepcopy(cached))
+    return mark_platform_owned_env_fields(
+        build_form_descriptor(schema.schema_json or {})
+    )
 
 
 def _order(slot: Any) -> tuple[int, int, str]:

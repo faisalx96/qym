@@ -7,6 +7,7 @@ checked **per job**. Cancelling an orphan remote job needs a project manager.
 ``GET /v1/projects/{pid}/eval-queue``
     Query: ``environment_id``, ``status`` (repeatable; non-terminal statuses only,
     anything else is a 422), ``mine`` (jobs of my experiments), ``experiment_id``,
+    ``latency_sensitive`` (``true``: only jobs of latency-sensitive experiments),
     ``limit`` (default 500, max 1000). Response::
 
         {
@@ -35,7 +36,8 @@ checked **per job**. Cancelling an orphan remote job needs a project manager.
             "id", "name", "is_active", "health_status", "health_error",
             "inflight", "queued", "blocked",
             "stale_remote",            # finished locally, maybe still running remotely
-            "counts": {status: n}, "high_active"
+            "counts": {status: n}, "high_active",
+            "latency_active"           # a latency-sensitive job of ours is active here
           }]
         }
 
@@ -241,6 +243,7 @@ def get_queue(
     status: Optional[List[EvalJobStatus]] = Query(None),
     mine: bool = Query(False),
     experiment_id: Optional[str] = Query(None, max_length=36),
+    latency_sensitive: Optional[bool] = Query(None),
     limit: int = Query(500, ge=1, le=1000),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
@@ -271,6 +274,7 @@ def get_queue(
         statuses=status,
         created_by_user_id=principal.user.id if mine else None,
         experiment_id=experiment_id,
+        latency_sensitive=latency_sensitive,
         limit=limit,
     )
     jobs = [job for job, _ in rows]
@@ -306,8 +310,13 @@ def get_queue(
                 "run_name": _job_run_name(job),
                 "params": strip_secret_refs(job.params or {}),
                 "priority": eval_queue.job_priority(job, experiment),
+                "latency_sensitive": bool(experiment.latency_sensitive),
                 "status": job.status.value,
                 "wait_reason": job.wait_reason,
+                "admitted_at": to_api_timestamp(job.admitted_at),
+                "deferrals": job.deferrals or 0,
+                "deferral_reason": job.deferral_reason,
+                "contaminated_attempts": job.contaminated_attempts or 0,
                 "error": job.error,
                 "queue_position": positions.get(job.id),
                 "created_by_user_id": experiment.created_by_user_id,

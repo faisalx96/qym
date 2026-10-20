@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -32,6 +32,7 @@ from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db import models as db_models
 from qym_platform.db.models import (
+    AuditLog,
     EvalEnvironment,
     EvalEnvironmentEvaluatorSchema,
     EvalEnvironmentSchema,
@@ -133,6 +134,8 @@ class EnvironmentCreateRequest(BaseModel):
     api_key: str = Field(..., min_length=1, max_length=4096)
     default_priority: EvalPriority = EvalPriority.NORMAL
     max_priority: EvalPriority = EvalPriority.NORMAL
+    # Who may launch latency-sensitive runs here (owner decision D4).
+    latency_sensitive_min_role: Literal["member", "manager"] = "member"
     allow_connection_keys: bool = False
     ranking_metric: Optional[str] = Field(default=None, max_length=200)
     ranking_k: Optional[int] = Field(default=None, ge=1, le=1000)
@@ -147,6 +150,7 @@ class EnvironmentUpdateRequest(BaseModel):
     api_key: Optional[str] = Field(default=None, max_length=4096)
     default_priority: Optional[EvalPriority] = None
     max_priority: Optional[EvalPriority] = None
+    latency_sensitive_min_role: Optional[Literal["member", "manager"]] = None
     allow_connection_keys: Optional[bool] = None
     ranking_metric: Optional[str] = Field(default=None, max_length=200)
     ranking_k: Optional[int] = Field(default=None, ge=1, le=1000)
@@ -624,6 +628,7 @@ def _serialize_environment(
         "api_key_hint": _key_hint(env.api_key_last4),
         "default_priority": env.default_priority.value,
         "max_priority": env.max_priority.value,
+        "latency_sensitive_min_role": env.latency_sensitive_min_role or "member",
         "allow_connection_keys": bool(env.allow_connection_keys),
         "ranking_metric": env.ranking_metric,
         "ranking_k": env.ranking_k,
@@ -794,6 +799,7 @@ async def create_environment(
         base_url=base_url,
         default_priority=req.default_priority,
         max_priority=req.max_priority,
+        latency_sensitive_min_role=req.latency_sensitive_min_role,
         allow_connection_keys=req.allow_connection_keys,
         ranking_metric=(req.ranking_metric or "").strip() or None,
         ranking_k=req.ranking_k,
@@ -887,6 +893,20 @@ def update_environment(
     if req.max_priority is not None:
         env.max_priority = req.max_priority
     _check_priorities(env)
+    if req.latency_sensitive_min_role is not None:
+        before_role = env.latency_sensitive_min_role or "member"
+        if req.latency_sensitive_min_role != before_role:
+            env.latency_sensitive_min_role = req.latency_sensitive_min_role
+            db.add(
+                AuditLog(
+                    actor_user_id=principal.user.id,
+                    action="eval.environment_updated",
+                    entity_type="eval_environment",
+                    entity_id=env.id,
+                    before={"latency_sensitive_min_role": before_role},
+                    after={"latency_sensitive_min_role": req.latency_sensitive_min_role},
+                )
+            )
     if req.allow_connection_keys is not None:
         env.allow_connection_keys = req.allow_connection_keys
     elif url_changed:

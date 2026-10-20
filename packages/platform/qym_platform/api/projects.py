@@ -20,6 +20,7 @@ from qym_platform.db.models import (
     DatasetItem,
     DatasetItemRevision,
     DatasetReadToken,
+    EvalExperiment,
     DatasetVersion,
     DatasetVersionChange,
     Project,
@@ -1339,8 +1340,18 @@ def _require_admin_project(db: Session, principal: Principal, project_id: str) -
     return project
 
 
-def _dataset_read_token_payload(row: DatasetReadToken, creator: Optional[User]) -> Dict[str, Any]:
+# The list is capped: every experiment launch adds an experiment token (limit L-B2).
+DATASET_READ_TOKEN_LIST_LIMIT = 200
+
+
+def _dataset_read_token_payload(
+    row: DatasetReadToken,
+    creator: Optional[User],
+    experiment: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     return {
+        "kind": row.kind or "admin",
+        "experiment": experiment,
         "id": row.id,
         "name": row.name,
         "prefix": row.prefix,
@@ -1366,10 +1377,29 @@ def list_dataset_read_tokens(
         db.query(DatasetReadToken, User)
         .outerjoin(User, User.id == DatasetReadToken.created_by_user_id)
         .filter(DatasetReadToken.project_id == project_id)
-        .order_by(DatasetReadToken.created_at.desc())
+        .order_by(DatasetReadToken.created_at.desc(), DatasetReadToken.id)
+        .limit(DATASET_READ_TOKEN_LIST_LIMIT)
         .all()
     )
-    return {"tokens": [_dataset_read_token_payload(row, user) for row, user in rows]}
+    experiment_ids = sorted({row.experiment_id for row, _ in rows if row.experiment_id})
+    experiments = (
+        {
+            exp_id: {"id": exp_id, "name": name}
+            for exp_id, name in db.query(EvalExperiment.id, EvalExperiment.name).filter(
+                EvalExperiment.id.in_(experiment_ids)
+            )
+        }
+        if experiment_ids
+        else {}
+    )
+    return {
+        "tokens": [
+            _dataset_read_token_payload(
+                row, user, experiments.get(row.experiment_id or "")
+            )
+            for row, user in rows
+        ]
+    }
 
 
 @router.post("/v1/projects/{project_id}/dataset-read-tokens")
@@ -1408,8 +1438,27 @@ def revoke_dataset_read_token(
     if not row:
         raise HTTPException(status_code=404, detail="Dataset read token not found")
     if row.revoked_at:
+        if row.kind == "experiment":
+            # The dispatcher may have revoked it already: revoking again is a no-op.
+            return {"ok": True, "id": row.id}
         raise HTTPException(status_code=400, detail="Dataset read token already revoked")
     dataset_read_tokens.revoke_token(db, row)
+    if row.kind == "experiment" and row.experiment_id:
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="eval.dataset_token_revoked",
+                entity_type="eval_experiment",
+                entity_id=row.experiment_id,
+                before={},
+                after={
+                    "experiment_id": row.experiment_id,
+                    "token_id": row.id,
+                    "reason": "manual",
+                },
+            )
+        )
+        db.commit()
     logger.info("Dataset read token %s revoked in project %s", row.id, project_id)
     return {"ok": True, "id": row.id}
 

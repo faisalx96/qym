@@ -497,6 +497,27 @@ class DatasetReadToken(Base):
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # 'admin' (issued in Project Settings) or 'experiment' (minted at launch,
+    # ``services/eval_dataset_tokens``); migration 0088.
+    kind: Mapped[str] = mapped_column(
+        String(16), default="admin", server_default="admin", nullable=False
+    )
+    experiment_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_experiments.id",
+            ondelete="SET NULL",
+            name="fk_dataset_read_tokens_experiment_id",
+            use_alter=True,
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('admin', 'experiment')", name="ck_dataset_read_tokens_kind"
+        ),
+    )
 
 
 class ProjectLlmConnection(Base):
@@ -588,6 +609,11 @@ class EvalEnvironment(Base):
         server_default=EvalPriority.NORMAL.value,
         nullable=False,
     )
+    # Who may launch latency-sensitive runs here: 'member' (anyone in the project) or
+    # 'manager' (project managers and admins); migration 0088.
+    latency_sensitive_min_role: Mapped[str] = mapped_column(
+        String(10), default="member", server_default="member", nullable=False
+    )
     # Opt-in to send decrypted ProjectLlmConnection keys to this environment.
     allow_connection_keys: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
@@ -654,6 +680,10 @@ class EvalEnvironment(Base):
         CheckConstraint(
             "max_priority IN ('LOW', 'NORMAL', 'HIGH')",
             name="ck_eval_environments_max_priority",
+        ),
+        CheckConstraint(
+            "latency_sensitive_min_role IN ('member', 'manager')",
+            name="ck_eval_environments_latency_min_role",
         ),
     )
 
@@ -825,6 +855,24 @@ class EvalExperiment(Base):
         index=True,
     )
     qym_api_key_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The per-experiment dataset read token (migration 0088,
+    # ``services/eval_dataset_tokens``): same lifecycle as the API key above.
+    dataset_read_token_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "dataset_read_tokens.id",
+            ondelete="SET NULL",
+            name="fk_eval_experiments_dataset_read_token_id",
+        ),
+        nullable=True,
+        index=True,
+    )
+    dataset_read_token_encrypted: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+    # Asks the Evaluation Service for a quiet gateway (guide v1.3 section 2.2).
+    latency_sensitive: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     priority: Mapped[EvalPriority] = mapped_column(
         _string_enum(EvalPriority, 10),
         default=EvalPriority.NORMAL,
@@ -942,6 +990,15 @@ class EvalExperimentJob(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # Why a non-terminal job isn't progressing, e.g. "Environment is disabled".
     wait_reason: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    # Admission state of a latency-sensitive job, copied from every poll (0088).
+    admitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    deferrals: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    deferral_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    contaminated_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
     cancel_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     cancelled_by_user_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True

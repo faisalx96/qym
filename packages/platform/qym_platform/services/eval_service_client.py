@@ -67,7 +67,12 @@ _TEXT_SECRET_PATTERNS = (
     ),
     # A launch token (``eval_experiments.TOKEN_PREFIX``) anywhere in the text.
     re.compile(r"()\bqlt_[A-Za-z0-9_-]{8,}"),
+    # A dataset read token (``dataset_read_tokens.TOKEN_PREFIX``): the per-experiment
+    # ``env_overrides.QYM_DATASET_READ_TOKEN``, whose key already ends in ``_token``.
+    re.compile(r"()\bqym_dr_[A-Za-z0-9_-]{8,}"),
 )
+# The subset with a recognizable prefix, safe to apply to every string of a response.
+_PREFIXED_TOKEN_PATTERNS = _TEXT_SECRET_PATTERNS[-2:]
 
 _HIGH_PRIORITY_ACTIVE_RE = re.compile(
     r"cannot accept (?P<priority>\S+) priority job while HIGH priority job "
@@ -210,8 +215,15 @@ def redact_payload(value: Any) -> Any:
     if isinstance(value, list):
         return [redact_payload(item) for item in value]
     if isinstance(value, str):
-        return _redact_json_string(value)
+        return _scrub_prefixed_tokens(_redact_json_string(value))
     return value
+
+
+def _scrub_prefixed_tokens(text: str) -> str:
+    """Mask launch and dataset read tokens (recognizable prefixes) in any string."""
+    for pattern in _PREFIXED_TOKEN_PATTERNS:
+        text = pattern.sub(lambda match: match.group(1) + REDACTED, text)
+    return text
 
 
 def _redact_schema(value: Any) -> Any:
