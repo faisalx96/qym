@@ -1,4 +1,5 @@
-/* The item bar: one --row-compact line, opaque, hairline below; translated to the sticky line by useStickyShift. */
+/* The item bar: one --row-compact line, opaque, hairline below; translated to the sticky line by useStickyShift, which
+   writes --head-shift on this element only (round 7, D1). */
 .bar {
   position: relative;
   z-index: 2;
@@ -11,6 +12,11 @@
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-surface);
   transform: translateY(var(--head-shift, 0px));
+}
+
+/* its own layer only while it moves (the article carries [data-stuck] while the bar is shifted) */
+[data-stuck] > .bar {
+  will-change: transform;
 }
 
 .num {

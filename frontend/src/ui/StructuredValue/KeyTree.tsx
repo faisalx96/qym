@@ -4,6 +4,8 @@ import { Collapse } from '../Collapse';
 import { CopyButton } from '../CopyButton';
 import { Icon } from '../Icon';
 import { TextBlock } from '../TextBlock';
+import { textDirAttrs } from '@/lib/text';
+import { keyWithBreaks } from '@/lib/keyBreaks';
 import { copyValue } from './structured';
 import {
   ARRAY_LIMIT,
@@ -118,6 +120,8 @@ function KeyRow({
     else next.add(path);
     onOpenChange(next);
   };
+  const preview = previewOf(value);
+  const typed = nested || isNested(value);
   return (
     <div className={styles.row} data-depth={depth} data-open={isOpen ? '' : undefined}>
       <div className={styles.head}>
@@ -129,43 +133,51 @@ function KeyRow({
           onClick={toggle}
         >
           <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={14} className={styles.chevron} />
-          <span className={styles.key} dir="ltr" title={name}>
-            {name}
+          {/* the key is a name: it wraps, it is never cut (round 7, D2); the preview follows its last line or starts a new one */}
+          <span className={styles.line}>
+            <span className={styles.key} data-part="key" {...textDirAttrs(name)}>
+              {keyWithBreaks(name)}
+            </span>
+            {!isOpen ? (
+              <span
+                className={typed ? styles.type : styles.preview}
+                data-part={typed ? 'type' : 'value'}
+                {...(typed ? { dir: 'ltr' as const } : textDirAttrs(preview))}
+              >
+                {preview}
+              </span>
+            ) : nested ? (
+              <span className={styles.type} data-part="type" dir="ltr">
+                {preview}
+              </span>
+            ) : null}
           </span>
-          {!isOpen ? (
-            <span
-              className={nested || isNested(value) ? styles.type : styles.preview}
-              dir={nested || isNested(value) ? 'ltr' : 'auto'}
-            >
-              {previewOf(value)}
-            </span>
-          ) : nested ? (
-            <span className={styles.type} dir="ltr">
-              {previewOf(value)}
-            </span>
-          ) : null}
         </button>
-        {isOpen && nested ? (
-          <span className={styles.bulk}>
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={`Expand all in ${name}`}
-              onPress={() => onOpenChange(expandKey(open, value, path))}
-            >
-              Expand all
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={`Collapse all in ${name}`}
-              onPress={() => onOpenChange(collapseBelow(open, value, path))}
-            >
-              Collapse all
-            </Button>
+        {isOpen ? (
+          <span className={styles.actions} data-part="actions">
+            {nested ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Expand all in ${name}`}
+                  onPress={() => onOpenChange(expandKey(open, value, path))}
+                >
+                  Expand all
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Collapse all in ${name}`}
+                  onPress={() => onOpenChange(collapseBelow(open, value, path))}
+                >
+                  Collapse all
+                </Button>
+              </>
+            ) : null}
+            <CopyButton text={() => copyValue(value)} label={`Copy ${name}`} />
           </span>
         ) : null}
-        {isOpen ? <CopyButton text={() => copyValue(value)} label={`Copy ${name}`} /> : null}
       </div>
       <Collapse open={isOpen} id={bodyId}>
         <div className={styles.body}>

@@ -1,0 +1,107 @@
+{
+  "net": "none",
+  "width": 1440,
+  "settle": true,
+  "open": 1,
+  "run": "r300",
+  "median": {
+    "firstGroupPlaceholdersMs": 0,
+    "firstGroupRowsMs": 58,
+    "firstGroupStripMs": 58,
+    "requestsAfterClick": 0,
+    "apiKB": 0,
+    "cls": 0.17
+  },
+  "reps": [
+    {
+      "rep": 0,
+      "listApiAtLoad": 36,
+      "groups": [
+        {
+          "runId": "617a1849-60a3-43a0-94f0-00a24e1094a4",
+          "placeholdersMs": 0,
+          "rowsMs": 58,
+          "stripMs": 58,
+          "heightBefore": 1658,
+          "heightPlaceholders": null,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": null,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.1647,
+      "requestList": []
+    },
+    {
+      "rep": 1,
+      "listApiAtLoad": 37,
+      "groups": [
+        {
+          "runId": "617a1849-60a3-43a0-94f0-00a24e1094a4",
+          "placeholdersMs": 0,
+          "rowsMs": 58,
+          "stripMs": 58,
+          "heightBefore": 1658,
+          "heightPlaceholders": null,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": null,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.17,
+      "requestList": []
+    },
+    {
+      "rep": 2,
+      "listApiAtLoad": 36,
+      "groups": [
+        {
+          "runId": "617a1849-60a3-43a0-94f0-00a24e1094a4",
+          "placeholdersMs": 0,
+          "rowsMs": 64,
+          "stripMs": 64,
+          "heightBefore": 1658,
+          "heightPlaceholders": null,
+          "heightAfterRows": 2023,
+          "heightAfterStrip": null,
+          "stripPlaceholderPx": null,
+          "stripLoadedPx": 45,
+          "requestsSoFar": 0
+        }
+      ],
+      "requestsAfterClick": 0,
+      "passesRequests": 0,
+      "groupMetricsRequests": 0,
+      "apiKB": 0,
+      "passesKB": 0,
+      "passesTtfbMs": [],
+      "passesDoneMs": [],
+      "groupTtfbMs": [],
+      "groupDoneMs": [],
+      "cls": 0.174,
+      "requestList": []
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 /** Expanded item: bodies (lazy), metadata, output, trace chips, metrics; repeat items show one column per pass. */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isItemTaskError } from '@/lib/metrics';
+import { textDirAttrs } from '@/lib/text';
+import { keyWithBreaks } from '@/lib/keyBreaks';
 import { Button, CopyButton, FieldRow, StructuredValue, Tag, parseStructured, useStickyShift } from '@/ui';
 import { bodyText, formatCompact, itemLink } from '../../lib/itemText';
 import {
@@ -87,10 +89,15 @@ export function ItemCard({ row }: { row: Row }) {
   const articleRef = useRef<HTMLElement>(null);
   const scroller = useShellScroller();
   const stickyOffset = useStickyOffset();
-  // the bar owns the sticky line while the table header is held above this detail
+  // The bar owns the sticky line while the table header is held above this detail. Native `position: sticky` cannot do it:
+  // the bar sits inside the table's scroller (`overflow: auto`) and `.bodyHost` (`overflow: hidden`), the nearest scroll
+  // containers, so it never sticks to the page scroller (measured round 7: 1,700 px off the line at most). The shift is
+  // therefore written on the bar itself, not on the article: a custom property is inherited, and written on the article it
+  // restyled all of the open item's descendants on every scroll event (25,616 elements styled in 2 s, 78 ms; round 7 D1).
   useStickyShift({
     container: articleRef,
     head: (c) => c.querySelector<HTMLElement>('[data-item-bar]'),
+    shiftTarget: (c) => c.querySelector<HTMLElement>('[data-item-bar]'),
     parent: scroller,
     top: stickyOffset,
     // the article only exists once the details have loaded
@@ -206,11 +213,23 @@ export function ItemCard({ row }: { row: Row }) {
                   {v}
                 </Tag>
               ))}
-              {tags.map(([k, v]) => (
-                <Tag key={k} kind="data">
-                  {k}: {itemMetadataDisplayValue(v)}
-                </Tag>
-              ))}
+              {tags.map(([k, v]) => {
+                const shown = itemMetadataDisplayValue(v);
+                // key and value are two isolated runs, so an Arabic key still comes first (round 7, D2)
+                return (
+                  <Tag key={k} kind="data">
+                    <span className={styles.tagText}>
+                      <span className={styles.tagKey} data-part="key" {...textDirAttrs(k)}>
+                        {keyWithBreaks(k)}
+                      </span>
+                      {': '}
+                      <span className={styles.tagValue} data-part="value" {...textDirAttrs(shown)}>
+                        {shown}
+                      </span>
+                    </span>
+                  </Tag>
+                );
+              })}
             </div>
           </FieldRow>
         ) : null}

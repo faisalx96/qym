@@ -1,0 +1,1126 @@
+{
+  "table": "items",
+  "width": 1024,
+  "states": {
+    "rest": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 1444,
+      "clientW": 775,
+      "pinStart": 96,
+      "pinEnd": 48,
+      "boxes": {
+        "card": {
+          "l": 212,
+          "r": 989,
+          "t": 268.296875,
+          "b": 26380.296875,
+          "w": 777,
+          "h": 26112
+        },
+        "toolbar": null,
+        "footer": {
+          "l": 213,
+          "r": 988,
+          "t": 26339.296875,
+          "b": 26379.296875,
+          "w": 775,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 213,
+          "r": 988,
+          "t": 269.296875,
+          "b": 26327.296875,
+          "w": 775,
+          "h": 26058
+        },
+        "scroller": {
+          "l": 213,
+          "r": 988,
+          "t": 269.296875,
+          "b": 26327.296875,
+          "w": 775,
+          "h": 26058
+        },
+        "firstHeaderRow": {
+          "l": 213,
+          "r": 245,
+          "t": 269.296875,
+          "b": 293.296875,
+          "w": 32,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 213,
+          "r": 1657,
+          "t": 1367.296875,
+          "b": 1419.296875,
+          "w": 1444,
+          "h": 52
+        },
+        "rail": {
+          "l": 213,
+          "r": 988,
+          "t": 988,
+          "b": 1000,
+          "w": 775,
+          "h": 12
+        },
+        "details": [],
+        "pinStart": 96,
+        "pinEnd": 48
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 24908,
+          "heightPx": 26058,
+          "tableRowsBoxPx": 1150,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 24908,
+          "heightPx": 26058,
+          "tableRowsBoxPx": 1150,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 24908,
+          "heightPx": 26058,
+          "tableRowsBoxPx": 1150,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 24908,
+          "heightPx": 26058,
+          "tableRowsBoxPx": 1150,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 4,
+        "totalPx": 88,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "header": 2,
+          "row": 2
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Metrics",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 6.2,
+          "contrastShaded": 1.1,
+          "rowKind": "header",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "quality",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 5.7,
+          "contrastShaded": 1.1,
+          "rowKind": "header",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Error",
+          "overlapPx": 19,
+          "alpha": 0.92,
+          "contrastBase": 15.6,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Error",
+          "overlapPx": 19,
+          "alpha": 0.92,
+          "contrastBase": 15.6,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        }
+      ]
+    },
+    "detail-open": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 1444,
+      "clientW": 775,
+      "pinStart": 96,
+      "pinEnd": 48,
+      "boxes": {
+        "card": {
+          "l": 212,
+          "r": 989,
+          "t": 268.296875,
+          "b": 26955.296875,
+          "w": 777,
+          "h": 26687
+        },
+        "toolbar": null,
+        "footer": {
+          "l": 213,
+          "r": 988,
+          "t": 26914.296875,
+          "b": 26954.296875,
+          "w": 775,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 213,
+          "r": 988,
+          "t": 269.296875,
+          "b": 26902.296875,
+          "w": 775,
+          "h": 26633
+        },
+        "scroller": {
+          "l": 213,
+          "r": 988,
+          "t": 269.296875,
+          "b": 26902.296875,
+          "w": 775,
+          "h": 26633
+        },
+        "firstHeaderRow": {
+          "l": 213,
+          "r": 245,
+          "t": 269.296875,
+          "b": 293.296875,
+          "w": 32,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 213,
+          "r": 1657,
+          "t": 1370.296875,
+          "b": 1422.296875,
+          "w": 1444,
+          "h": 52
+        },
+        "rail": {
+          "l": 213,
+          "r": 988,
+          "t": 988,
+          "b": 1000,
+          "w": 775,
+          "h": 12
+        },
+        "details": [
+          {
+            "l": 213,
+            "r": 1657,
+            "t": 431.296875,
+            "b": 1006.296875,
+            "w": 1444,
+            "h": 575,
+            "strip": false
+          }
+        ],
+        "pinStart": 96,
+        "pinEnd": 48
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [
+            {
+              "strip": false,
+              "heightPx": 575
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": -517,
+          "bottomBelowLastRowPx": -474,
+          "heightPx": 162,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "none",
+          "widthPx": 0,
+          "topAboveFirstHeaderPx": 269.3,
+          "bottomBelowLastRowPx": -1422.3,
+          "heightPx": 0,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [
+            {
+              "strip": false,
+              "heightPx": 575
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 5,
+        "totalPx": 113.5,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "header": 2,
+          "detail": 2,
+          "row": 1
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Metrics",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 6.2,
+          "contrastShaded": 1.1,
+          "rowKind": "header",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "quality",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 5.7,
+          "contrastShaded": 1.1,
+          "rowKind": "header",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Collapse all",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 5.7,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Collapse",
+          "overlapPx": 19.5,
+          "alpha": 0.75,
+          "contrastBase": 10.7,
+          "contrastShaded": 1.9,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Error",
+          "overlapPx": 19,
+          "alpha": 0.92,
+          "contrastBase": 15.6,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        }
+      ]
+    },
+    "detail-open-scrolled": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end",
+        "data-scroll-start"
+      ],
+      "scrollLeft": 260,
+      "scrollW": 1444,
+      "clientW": 775,
+      "pinStart": 96,
+      "pinEnd": 48,
+      "boxes": {
+        "card": {
+          "l": 212,
+          "r": 989,
+          "t": 268.296875,
+          "b": 26955.296875,
+          "w": 777,
+          "h": 26687
+        },
+        "toolbar": null,
+        "footer": {
+          "l": 213,
+          "r": 988,
+          "t": 26914.296875,
+          "b": 26954.296875,
+          "w": 775,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 213,
+          "r": 988,
+          "t": 269.296875,
+          "b": 26902.296875,
+          "w": 775,
+          "h": 26633
+        },
+        "scroller": {
+          "l": 213,
+          "r": 988,
+          "t": 269.296875,
+          "b": 26902.296875,
+          "w": 775,
+          "h": 26633
+        },
+        "firstHeaderRow": {
+          "l": 213,
+          "r": 245,
+          "t": 269.296875,
+          "b": 293.296875,
+          "w": 32,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": -47,
+          "r": 1397,
+          "t": 1370.296875,
+          "b": 1422.296875,
+          "w": 1444,
+          "h": 52
+        },
+        "rail": {
+          "l": 213,
+          "r": 988,
+          "t": 988,
+          "b": 1000,
+          "w": 775,
+          "h": 12
+        },
+        "details": [
+          {
+            "l": -47,
+            "r": 1397,
+            "t": 431.296875,
+            "b": 1006.296875,
+            "w": 1444,
+            "h": 575,
+            "strip": false
+          }
+        ],
+        "pinStart": 96,
+        "pinEnd": 48
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [
+            {
+              "strip": false,
+              "heightPx": 575
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [
+            {
+              "strip": false,
+              "heightPx": 575
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-start",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": -517,
+          "bottomBelowLastRowPx": -474,
+          "heightPx": 162,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [
+            {
+              "strip": false,
+              "heightPx": 575
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "none",
+          "widthPx": 0,
+          "topAboveFirstHeaderPx": 269.3,
+          "bottomBelowLastRowPx": -1422.3,
+          "heightPx": 0,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [
+            {
+              "strip": false,
+              "heightPx": 575
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [
+            {
+              "strip": false,
+              "heightPx": 575
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 23,
+        "totalPx": 499,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "row": 14,
+          "detail": 8,
+          "header": 1
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-start+fade-start",
+          "text": "{ \"prompt\": \"ما هي عاصمة الم",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "{ \"prompt\": \"ما هي عاصمة الم",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 2: what does clause",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Collapse all",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 5.7,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Clause 1 requires written ap",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Clause 1 requires written ap",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "4 shown of 4 · 2 below thres",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 6.7,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 3: what does clause",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 4: what does clause",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 5: what does clause",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 6: what does clause",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 7: what does clause",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "اشرح الفرق بين التعلم الآلي ",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 9: what does clause",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        }
+      ]
+    },
+    "detail-open-end": {
+      "attrs": [
+        "data-cues",
+        "data-pin-start",
+        "data-pin-end",
+        "data-scroll-start"
+      ],
+      "scrollLeft": 669,
+      "scrollW": 1444,
+      "clientW": 775,
+      "pinStart": 96,
+      "pinEnd": 48,
+      "boxes": {
+        "card": {
+          "l": 212,
+          "r": 989,
+          "t": 268.296875,
+          "b": 26955.296875,
+          "w": 777,
+          "h": 26687
+        },
+        "toolbar": null,
+        "footer": {
+          "l": 213,
+          "r": 988,
+          "t": 26914.296875,
+          "b": 26954.296875,
+          "w": 775,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 213,
+          "r": 988,
+          "t": 269.296875,
+          "b": 26902.296875,
+          "w": 775,
+          "h": 26633
+        },
+        "scroller": {
+          "l": 213,
+          "r": 988,
+          "t": 269.296875,
+          "b": 26902.296875,
+          "w": 775,
+          "h": 26633
+        },
+        "firstHeaderRow": {
+          "l": 213,
+          "r": 245,
+          "t": 269.296875,
+          "b": 293.296875,
+          "w": 32,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": -456,
+          "r": 988,
+          "t": 1370.296875,
+          "b": 1422.296875,
+          "w": 1444,
+          "h": 52
+        },
+        "rail": {
+          "l": 213,
+          "r": 988,
+          "t": 988,
+          "b": 1000,
+          "w": 775,
+          "h": 12
+        },
+        "details": [
+          {
+            "l": -456,
+            "r": 988,
+            "t": 431.296875,
+            "b": 1006.296875,
+            "w": 1444,
+            "h": 575,
+            "strip": false
+          }
+        ],
+        "pinStart": 96,
+        "pinEnd": 48
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [
+            {
+              "strip": false,
+              "heightPx": 575
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-start",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": -517,
+          "bottomBelowLastRowPx": -474,
+          "heightPx": 162,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [
+            {
+              "strip": false,
+              "heightPx": 575
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0,
+          "display": "none",
+          "widthPx": 0,
+          "topAboveFirstHeaderPx": 269.3,
+          "bottomBelowLastRowPx": -1422.3,
+          "heightPx": 0,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [
+            {
+              "strip": false,
+              "heightPx": 575
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 25480,
+          "heightPx": 26633,
+          "tableRowsBoxPx": 1153,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 16,
+        "totalPx": 332.5,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "detail": 6,
+          "row": 9,
+          "header": 1
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Clause 1 requires written ap",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Clause 1 requires written ap",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "4 shown of 4 · 2 below thres",
+          "overlapPx": 25,
+          "alpha": 0.93,
+          "contrastBase": 6.7,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Question 2: what does clause",
+          "overlapPx": 24.5,
+          "alpha": 0.92,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.1,
+          "rowKind": "detail",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "56.3%",
+          "overlapPx": 22,
+          "alpha": 0.92,
+          "contrastBase": 6.5,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "74.1%",
+          "overlapPx": 22,
+          "alpha": 0.92,
+          "contrastBase": 11.2,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "60.5%",
+          "overlapPx": 22,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "69.3%",
+          "overlapPx": 22,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "84.4%",
+          "overlapPx": 22,
+          "alpha": 0.92,
+          "contrastBase": 10.5,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "96.9%",
+          "overlapPx": 22,
+          "alpha": 0.92,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "64.7%",
+          "overlapPx": 22,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "60.6%",
+          "overlapPx": 22,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "46.1%",
+          "overlapPx": 22,
+          "alpha": 0.92,
+          "contrastBase": 6.5,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Root cause",
+          "overlapPx": 17,
+          "alpha": 0.93,
+          "contrastBase": 15.6,
+          "contrastShaded": 1.2,
+          "rowKind": "detail",
+          "pinned": false
+        }
+      ]
+    }
+  }
+}

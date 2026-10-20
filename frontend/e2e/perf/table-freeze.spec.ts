@@ -1,4 +1,7 @@
-/** Perf round 6 (A7, A8, A13): the first scroll tick and freezing a column from the Columns menu. */
+/**
+ * Perf round 6 (A7, A8, A13): the first scroll tick and freezing a column from the Columns menu.
+ * A13 became a round 7 guard (Q1-1, Q1-7): there is no edge overlay to animate, the boundary line is static.
+ */
 import { test, expect } from '@playwright/test';
 import { seedProjectWithRuns } from '../runs-list/seed';
 import { openRuns } from '../runs-list/support';
@@ -51,14 +54,11 @@ test('first horizontal tick renders nothing; freezing a column is a few commits 
     expect(f.worst, step).toBeLessThanOrEqual(limit(400, 90));
   }
 
-  // A13: under prefers-reduced-motion the shadow appears without a transition
+  // A13 (round 7): no overlay element and no transition on the boundary, also under prefers-reduced-motion
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await expect
-    .poll(async () =>
-      page
-        .getByTestId('runs-table')
-        .locator('[data-edge="start"]')
-        .evaluate((e) => parseFloat(getComputedStyle(e).transitionDuration)),
-    )
-    .toBeLessThanOrEqual(0.001);
+  await expect(page.getByTestId('runs-table').locator('[data-edge]')).toHaveCount(0);
+  const cell = page.locator('[data-testid="runs-table"] tbody td[data-pin-edge="start"]').first();
+  expect(await cell.evaluate((e) => parseFloat(getComputedStyle(e).transitionDuration))).toBeLessThanOrEqual(
+    0.001,
+  );
 });

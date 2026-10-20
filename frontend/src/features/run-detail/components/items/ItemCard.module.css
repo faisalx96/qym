@@ -111,6 +111,18 @@
   gap: var(--space-xs);
 }
 
+/* A tag's key and value: one wrapping run of two isolated spans, the key first whatever its script. */
+.tagText {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
+
+.tagKey,
+.tagValue {
+  unicode-bidi: isolate;
+}
+
 .muted {
   color: var(--text-muted);
 }

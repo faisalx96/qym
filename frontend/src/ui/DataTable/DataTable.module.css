@@ -54,10 +54,13 @@
   display: none;
 }
 
+/* `flex: none`: the card is a height-capped flex column, and a shrinkable rail was squeezed to 5.3 to 5.6 px whenever the
+   rows overflowed (50 rows), so the only overflow cue was half the 12px the design language gives it (round 7, Q1-8). */
 .rail {
   position: sticky;
   bottom: 0;
   z-index: 6;
+  flex: none;
   overflow-x: auto;
   overflow-y: hidden;
   height: 12px;
@@ -78,32 +81,6 @@
 
 .railInner {
   height: 1px;
-}
-
-/* Edge cues: a fade where more columns hide off-screen. */
-.bodyHost[data-cues]::before,
-.bodyHost[data-cues]::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 24px;
-  z-index: 1; /* above plain cells, below pinned cells, headers and the sticky detail panel */
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-.bodyHost[data-cues]::before {
-  inset-inline-start: var(--pin-start, 0px);
-  background: linear-gradient(to right, var(--bg-void), transparent);
-}
-.bodyHost[data-cues]::after {
-  inset-inline-end: var(--pin-end, 0px);
-  background: linear-gradient(to left, var(--bg-void), transparent);
-}
-.bodyHost[data-scroll-start]::before,
-.bodyHost[data-scroll-end]::after {
-  opacity: 0.7;
 }
 
 .table {
@@ -383,13 +360,6 @@
   width: 2px;
 }
 
-.th[data-pin-edge] {
-  box-shadow: inset -1px 0 0 var(--border-default);
-}
-.th[data-pin-edge='end'] {
-  box-shadow: inset 1px 0 0 var(--border-default);
-}
-
 .tbody td {
   font-size: var(--font-base);
   color: var(--text-secondary);
@@ -472,49 +442,39 @@
   z-index: 2;
 }
 
-.td[data-pin-edge] {
-  box-shadow: inset -1px 0 0 var(--border-subtle);
+/* The boundary of the frozen columns is drawn by the frozen cells themselves (round 7, Q1/D3): one 1px
+   `--border-strong` line on the inner edge of the last start cell and the first end cell, header and body alike.
+   Nothing is painted over scrolling content, and a row that has no pinned cell (a detail row: the passes strip,
+   an expanded item) has no line. The line is static: it never changes with the scroll position, so no cell repaints
+   when scrolling starts. `box-shadow` has no logical sides, so the right-to-left case is spelled out. The line lives in
+   `--pin-line` so a row rail (state, selection, open group, focus ring) can keep it: those rules add it to their own
+   shadow instead of replacing it. */
+.th[data-pin-edge='start'],
+.td[data-pin-edge='start'],
+.bandCell[data-pin-edge='start'],
+.th[data-pin-edge='end']:dir(rtl),
+.td[data-pin-edge='end']:dir(rtl),
+.bandCell[data-pin-edge='end']:dir(rtl) {
+  --pin-line: inset -1px 0 0 var(--border-strong);
 }
-.td[data-pin-edge='end'] {
-  box-shadow: inset 1px 0 0 var(--border-subtle);
+.th[data-pin-edge='end'],
+.td[data-pin-edge='end'],
+.bandCell[data-pin-edge='end'],
+.th[data-pin-edge='start']:dir(rtl),
+.td[data-pin-edge='start']:dir(rtl),
+.bandCell[data-pin-edge='start']:dir(rtl) {
+  --pin-line: inset 1px 0 0 var(--border-strong);
 }
-
-/* Pinned edge gains a soft shadow only when content scrolls under it. It is one element per edge, faded by
-   opacity on the compositor: no cell repaints when the scroll starts, and nothing animates while scrolling. */
-.edge {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  inline-size: 11px;
-  z-index: 3; /* over the plain cells the shadow falls on; it never overlaps a pinned cell */
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 120ms var(--ease-out);
-  will-change: opacity;
+.th[data-pin-edge],
+.td[data-pin-edge],
+.bandCell[data-pin-edge] {
+  box-shadow: var(--pin-line);
 }
-.edge[data-edge='start'] {
-  inset-inline-start: calc(var(--pin-start, 0px) - 1px);
-  border-inline-start: 1px solid var(--border-strong);
-  background: linear-gradient(to right, var(--bg-void), transparent);
-}
-.edge[data-edge='end'] {
-  inset-inline-end: calc(var(--pin-end, 0px) - 1px);
-  border-inline-end: 1px solid var(--border-strong);
-  background: linear-gradient(to left, var(--bg-void), transparent);
-}
-.bodyHost:dir(rtl) .edge[data-edge='start'] {
-  background: linear-gradient(to left, var(--bg-void), transparent);
-}
-.bodyHost:dir(rtl) .edge[data-edge='end'] {
-  background: linear-gradient(to right, var(--bg-void), transparent);
-}
-.bodyHost[data-scroll-start] .edge[data-edge='start'],
-.bodyHost[data-scroll-end] .edge[data-edge='end'] {
-  opacity: 0.85;
-}
-.bodyHost:not([data-pin-start]) .edge[data-edge='start'],
-.bodyHost:not([data-pin-end]) .edge[data-edge='end'] {
-  display: none; /* nothing frozen on that side: nothing to shade */
+/* the group band keeps its underline when it is also the cell next to the freeze line */
+.bandCell[data-labelled][data-pin-edge] {
+  box-shadow:
+    var(--pin-line),
+    inset 0 -1px 0 var(--border-default);
 }
 
 .tr {
@@ -553,7 +513,9 @@
 
 .tr[data-selected] td:first-child,
 .tr[data-selected] td[data-pseudo='select'] {
-  box-shadow: inset 2px 0 0 var(--accent-primary);
+  box-shadow:
+    inset 2px 0 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
 }
 
 .tr[aria-expanded='true'] {
@@ -562,37 +524,48 @@
 
 /* Row state rail on the first cell. */
 .tr[data-state='error'] td:first-child {
-  box-shadow: inset 3px 0 0 var(--error);
+  box-shadow:
+    inset 3px 0 0 var(--error),
+    var(--pin-line, 0 0 0 transparent);
 }
 .tr[data-state='warn'] td:first-child {
-  box-shadow: inset 3px 0 0 var(--warning);
+  box-shadow:
+    inset 3px 0 0 var(--warning),
+    var(--pin-line, 0 0 0 transparent);
 }
 .tr[data-state='live'] td:first-child {
-  box-shadow: inset 3px 0 0 var(--info);
+  box-shadow:
+    inset 3px 0 0 var(--info),
+    var(--pin-line, 0 0 0 transparent);
 }
 .tr[data-state='new'] td:first-child {
-  box-shadow: inset 3px 0 0 var(--accent-primary);
+  box-shadow:
+    inset 3px 0 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
 }
 
 /* A focused row reads as one framed band (2px top and bottom on every cell, the ends closed), also over a state rail. */
 .tr:focus-visible td {
   box-shadow:
     inset 0 2px 0 var(--accent-primary),
-    inset 0 -2px 0 var(--accent-primary);
+    inset 0 -2px 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
 }
 
 .tr:focus-visible td:first-child {
   box-shadow:
     inset 2px 0 0 var(--accent-primary),
     inset 0 2px 0 var(--accent-primary),
-    inset 0 -2px 0 var(--accent-primary);
+    inset 0 -2px 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
 }
 
 .tr:focus-visible td:last-child {
   box-shadow:
     inset -2px 0 0 var(--accent-primary),
     inset 0 2px 0 var(--accent-primary),
-    inset 0 -2px 0 var(--accent-primary);
+    inset 0 -2px 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
 }
 
 .selectionCluster {
@@ -644,7 +617,7 @@
 /* detailFit="viewport": the expanded detail is as wide as the visible scroller and stays put while the columns scroll sideways */
 .detailHold {
   position: sticky;
-  /* `contain: layout` makes this a stacking context: it must sit above the scroll-edge cues (1) as a whole */
+  /* `contain: layout` makes this a stacking context: it must sit above the plain cells (1) as a whole */
   z-index: 2;
   inset-inline-start: 0;
   inline-size: var(--scroller-w, 100%);
@@ -1024,10 +997,7 @@
   .sortGlyph,
   .kebab,
   .rowActions,
-  .resizer::after,
-  .edge,
-  .bodyHost::before,
-  .bodyHost::after {
+  .resizer::after {
     transition: none;
   }
   .bone,
@@ -1194,7 +1164,9 @@
 
 .tr[data-group-open]:not([data-state]) > td:first-child,
 .childRow > td:first-child {
-  box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
+  box-shadow:
+    inset var(--rail-width) 0 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
 }
 
 .tr[data-group-open] > td,
@@ -1202,16 +1174,11 @@
   font-weight: 600;
 }
 
-.childRow > td[data-pin-edge='start']:first-child,
-.tr[data-group-open]:not([data-state]) > td[data-pin-edge='start']:first-child {
-  box-shadow:
-    inset var(--rail-width) 0 0 var(--accent-primary),
-    inset -1px 0 0 var(--border-subtle);
-}
-
 .childRow[data-selected] > td:first-child,
 .childRow[data-selected] > td[data-pseudo='select'] {
-  box-shadow: inset var(--rail-width) 0 0 var(--accent-primary);
+  box-shadow:
+    inset var(--rail-width) 0 0 var(--accent-primary),
+    var(--pin-line, 0 0 0 transparent);
 }
 
 @keyframes child-in {

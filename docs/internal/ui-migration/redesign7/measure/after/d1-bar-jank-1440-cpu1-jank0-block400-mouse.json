@@ -1,0 +1,101 @@
+{
+  "width": 1440,
+  "cpu": 1,
+  "jankMs": 0,
+  "periodMs": 120,
+  "reps": [
+    {
+      "rep": 0,
+      "setup": {
+        "line": 150,
+        "itemH": 1980,
+        "barX": 433,
+        "ctlX": 217,
+        "markX": 1350,
+        "scrollMax": 4114
+      },
+      "block": {
+        "blockMs": 400,
+        "blockWindowMs": 400,
+        "framesBeforeBlock": 0,
+        "framesInBlock": 1,
+        "framesAfterBlock": 33,
+        "firstPageMoveMsAfterBlockStart": 455,
+        "framesPageMoved": 11,
+        "framesPageMovedDuringBlock": 0,
+        "barOffsetOver1px": 0,
+        "maxBarOffsetPx": 0,
+        "maxBarOffsetDuringBlockPx": 0,
+        "traceScrollByEvents": 31,
+        "traceScrollByNames": [
+          "ScrollTree::ScrollBy"
+        ],
+        "traceScrollByOffMainThreadDuringBlock": 0,
+        "traceBlockFound": true,
+        "offsets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "presentedFrames": 34,
+      "framesWithBothMarkers": 34,
+      "stuckFramesJudged": 34,
+      "barOffsetPx": {
+        "median": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "framesBarOffsetOver1px": 0,
+      "framesBarOffsetOver8px": 0,
+      "presentedFps": 60,
+      "longestPresentGapMs": 400,
+      "domFramesJudged": 121,
+      "domMaxBarOffsetPx": 0,
+      "sample": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

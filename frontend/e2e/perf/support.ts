@@ -60,7 +60,11 @@ interface TraceEvent {
   ts: number;
   tid: number;
   dur: number;
-  args?: { data?: { type?: string }; beginData?: { stackTrace?: Array<{ url?: string }> } };
+  args?: {
+    data?: { type?: string };
+    beginData?: { stackTrace?: Array<{ url?: string }> };
+    elementCount?: number;
+  };
 }
 
 export interface TraceCounts {
@@ -70,6 +74,10 @@ export interface TraceCounts {
   appForcedLayouts: number;
   scrollDispatches: number;
   scrollMsMedian: number;
+  /** Style recalculations (UpdateLayoutTree) in the traced window, the elements they styled in total and in the largest one. */
+  styleRecalcs: number;
+  elementsStyled: number;
+  maxElementsOneRecalc: number;
 }
 
 /** A Chromium timeline trace around `act`, summarised the way docs/internal/ui-migration/perf6/measure/lib.mts does. */
@@ -93,6 +101,7 @@ export async function traced(cdp: CDPSession, act: () => Promise<void>): Promise
   const x = events.filter((e) => e.ph === 'X' && e.dur != null);
   const scrolls = x.filter((e) => e.name === 'EventDispatch' && e.args?.data?.type === 'scroll');
   const layouts = x.filter((e) => e.name === 'Layout');
+  const recalcs = x.filter((e) => e.name === 'UpdateLayoutTree');
   const inScroll = (e: TraceEvent) =>
     scrolls.some((s) => s.tid === e.tid && e.ts >= s.ts && e.ts <= s.ts + s.dur);
   const fromApp = (l: TraceEvent) => /\/(assets|src)\//.test(l.args?.beginData?.stackTrace?.[0]?.url ?? '');
@@ -101,6 +110,9 @@ export async function traced(cdp: CDPSession, act: () => Promise<void>): Promise
     appForcedLayouts: layouts.filter(fromApp).length,
     scrollDispatches: scrolls.length,
     scrollMsMedian: median(scrolls.map((s) => s.dur / 1000)),
+    styleRecalcs: recalcs.length,
+    elementsStyled: recalcs.reduce((n, e) => n + (e.args?.elementCount ?? 0), 0),
+    maxElementsOneRecalc: Math.max(0, ...recalcs.map((e) => e.args?.elementCount ?? 0)),
   };
 }
 

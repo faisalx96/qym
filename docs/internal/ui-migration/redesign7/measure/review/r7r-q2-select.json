@@ -1,0 +1,160 @@
+{
+  "medianMs": 37,
+  "rows": [
+    {
+      "rep": 0,
+      "before": "80.0%",
+      "target": "quality",
+      "opts": [
+        " ",
+        "correct",
+        "quality",
+        "faithfulness"
+      ],
+      "ms": 38,
+      "requests": [
+        "/api/runs/ba921600-98cc-45f9-b5fb-1b3fd95261dc/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/421ffbeb-4a96-4fe2-a38d-081493da1538/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/35e53aaf-e5a5-4cbc-b0a2-0c6e59e40f21/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/3aa639cf-7a42-4ffc-9c42-5a6652a5d472/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/f5ec9e38-0b06-4ede-9afb-babf48f2c51c/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/ea2d8f8f-e687-4481-8547-5f879aad3232/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/37c5a781-aa87-41ce-bc79-3c29439f740c/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/b3cac0bf-19c5-4b42-a806-67e9f7d945ee/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/5ad31cd0-fda7-456c-b9b3-4c13b54c18a9/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/1b156b34-7a11-4dfe-bfad-a7c584cf2833/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/c010a7a4-db87-498b-89ff-aba822367569/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/26b7cf7f-e796-42d2-bcd2-92be584b04d5/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/3b823023-e8aa-4173-8b9c-7dbcdef101a6/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/db134dc0-8afe-4e5b-9326-a3adf0ab46e7/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/2381a4f6-0eb7-4df5-826b-a0d74e8e9f80/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/ac9f9c7b-11b4-48f2-9b06-abcdcb8b0329/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/b8112514-de87-453b-adf6-42787742d346/group-metrics?metric=quality&threshold=0.8&view=group"
+      ]
+    },
+    {
+      "rep": 1,
+      "before": "80.0%",
+      "target": "quality",
+      "opts": [
+        " ",
+        "correct",
+        "quality",
+        "faithfulness"
+      ],
+      "ms": 42,
+      "requests": [
+        "/api/runs/ba921600-98cc-45f9-b5fb-1b3fd95261dc/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/421ffbeb-4a96-4fe2-a38d-081493da1538/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/35e53aaf-e5a5-4cbc-b0a2-0c6e59e40f21/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/3aa639cf-7a42-4ffc-9c42-5a6652a5d472/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/f5ec9e38-0b06-4ede-9afb-babf48f2c51c/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/ea2d8f8f-e687-4481-8547-5f879aad3232/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/37c5a781-aa87-41ce-bc79-3c29439f740c/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/b3cac0bf-19c5-4b42-a806-67e9f7d945ee/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/5ad31cd0-fda7-456c-b9b3-4c13b54c18a9/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/1b156b34-7a11-4dfe-bfad-a7c584cf2833/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/c010a7a4-db87-498b-89ff-aba822367569/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/26b7cf7f-e796-42d2-bcd2-92be584b04d5/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/3b823023-e8aa-4173-8b9c-7dbcdef101a6/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/db134dc0-8afe-4e5b-9326-a3adf0ab46e7/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/2381a4f6-0eb7-4df5-826b-a0d74e8e9f80/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/ac9f9c7b-11b4-48f2-9b06-abcdcb8b0329/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/b8112514-de87-453b-adf6-42787742d346/group-metrics?metric=quality&threshold=0.8&view=group"
+      ]
+    },
+    {
+      "rep": 2,
+      "before": "80.0%",
+      "target": "quality",
+      "opts": [
+        " ",
+        "correct",
+        "quality",
+        "faithfulness"
+      ],
+      "ms": 31,
+      "requests": [
+        "/api/runs/ba921600-98cc-45f9-b5fb-1b3fd95261dc/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/421ffbeb-4a96-4fe2-a38d-081493da1538/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/35e53aaf-e5a5-4cbc-b0a2-0c6e59e40f21/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/3aa639cf-7a42-4ffc-9c42-5a6652a5d472/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/f5ec9e38-0b06-4ede-9afb-babf48f2c51c/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/ea2d8f8f-e687-4481-8547-5f879aad3232/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/37c5a781-aa87-41ce-bc79-3c29439f740c/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/b3cac0bf-19c5-4b42-a806-67e9f7d945ee/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/5ad31cd0-fda7-456c-b9b3-4c13b54c18a9/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/1b156b34-7a11-4dfe-bfad-a7c584cf2833/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/c010a7a4-db87-498b-89ff-aba822367569/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/26b7cf7f-e796-42d2-bcd2-92be584b04d5/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/3b823023-e8aa-4173-8b9c-7dbcdef101a6/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/db134dc0-8afe-4e5b-9326-a3adf0ab46e7/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/2381a4f6-0eb7-4df5-826b-a0d74e8e9f80/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/ac9f9c7b-11b4-48f2-9b06-abcdcb8b0329/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/b8112514-de87-453b-adf6-42787742d346/group-metrics?metric=quality&threshold=0.8&view=group"
+      ]
+    },
+    {
+      "rep": 3,
+      "before": "80.0%",
+      "target": "quality",
+      "opts": [
+        " ",
+        "correct",
+        "quality",
+        "faithfulness"
+      ],
+      "ms": 34,
+      "requests": [
+        "/api/runs/ba921600-98cc-45f9-b5fb-1b3fd95261dc/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/421ffbeb-4a96-4fe2-a38d-081493da1538/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/35e53aaf-e5a5-4cbc-b0a2-0c6e59e40f21/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/3aa639cf-7a42-4ffc-9c42-5a6652a5d472/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/f5ec9e38-0b06-4ede-9afb-babf48f2c51c/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/ea2d8f8f-e687-4481-8547-5f879aad3232/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/37c5a781-aa87-41ce-bc79-3c29439f740c/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/b3cac0bf-19c5-4b42-a806-67e9f7d945ee/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/5ad31cd0-fda7-456c-b9b3-4c13b54c18a9/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/1b156b34-7a11-4dfe-bfad-a7c584cf2833/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/c010a7a4-db87-498b-89ff-aba822367569/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/26b7cf7f-e796-42d2-bcd2-92be584b04d5/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/3b823023-e8aa-4173-8b9c-7dbcdef101a6/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/db134dc0-8afe-4e5b-9326-a3adf0ab46e7/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/2381a4f6-0eb7-4df5-826b-a0d74e8e9f80/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/ac9f9c7b-11b4-48f2-9b06-abcdcb8b0329/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/b8112514-de87-453b-adf6-42787742d346/group-metrics?metric=quality&threshold=0.8&view=group"
+      ]
+    },
+    {
+      "rep": 4,
+      "before": "80.0%",
+      "target": "quality",
+      "opts": [
+        " ",
+        "correct",
+        "quality",
+        "faithfulness"
+      ],
+      "ms": 37,
+      "requests": [
+        "/api/runs/ba921600-98cc-45f9-b5fb-1b3fd95261dc/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/421ffbeb-4a96-4fe2-a38d-081493da1538/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/35e53aaf-e5a5-4cbc-b0a2-0c6e59e40f21/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/3aa639cf-7a42-4ffc-9c42-5a6652a5d472/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/f5ec9e38-0b06-4ede-9afb-babf48f2c51c/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/ea2d8f8f-e687-4481-8547-5f879aad3232/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/37c5a781-aa87-41ce-bc79-3c29439f740c/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/b3cac0bf-19c5-4b42-a806-67e9f7d945ee/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/5ad31cd0-fda7-456c-b9b3-4c13b54c18a9/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/1b156b34-7a11-4dfe-bfad-a7c584cf2833/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/c010a7a4-db87-498b-89ff-aba822367569/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/26b7cf7f-e796-42d2-bcd2-92be584b04d5/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/3b823023-e8aa-4173-8b9c-7dbcdef101a6/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/db134dc0-8afe-4e5b-9326-a3adf0ab46e7/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/2381a4f6-0eb7-4df5-826b-a0d74e8e9f80/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/ac9f9c7b-11b4-48f2-9b06-abcdcb8b0329/group-metrics?metric=quality&threshold=0.8&view=group",
+        "/api/runs/b8112514-de87-453b-adf6-42787742d346/group-metrics?metric=quality&threshold=0.8&view=group"
+      ]
+    }
+  ]
+}

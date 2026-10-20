@@ -42,9 +42,17 @@ export const dashboardKeys = {
 };
 export const runKeys = {
   passes: (id: string) => ['run', id, 'passes'] as const,
-  groupMetrics: (id: string, metric: string, threshold: number) =>
-    ['run', id, 'group-metrics', metric, threshold] as const,
+  /**
+   * `view: 'group'` is the runs-table strip's own entry (the five group statistics, no bootstrap curve); without a
+   * view the key is the run page's full response, so the two never share a cache entry (round 7, Q2).
+   */
+  groupMetrics: (id: string, metric: string, threshold: number, view?: GroupMetricsView) =>
+    (view
+      ? ['run', id, 'group-metrics', metric, threshold, view]
+      : ['run', id, 'group-metrics', metric, threshold]) as readonly unknown[],
 };
+
+export type GroupMetricsView = 'group';
 
 export interface RunsBody {
   project_slug: string;
@@ -224,14 +232,40 @@ function unwrapLegacy<T extends { error?: string }>(data: T): T {
   return data;
 }
 
+/**
+ * The query of a run's passes: one definition for `useRunPasses`, the open groups of the runs table and the page's
+ * background prefetch, so all three read and write the same cache entry (a click on a prefetched run issues no request).
+ */
+export function runPassesQuery(runId: string) {
+  return {
+    queryKey: runKeys.passes(runId),
+    queryFn: async ({ signal }: { signal: AbortSignal }) =>
+      unwrapLegacy(await api.get<RunPasses>(`/api/runs/${encodeRunId(runId)}/passes`, { signal })),
+  };
+}
+
+/** The group-metrics query of a run; `view: 'group'` is the strip's (no bootstrap), none is the run page's full curve. */
+export function groupMetricsQuery(runId: string, metric: string, threshold: number, view?: GroupMetricsView) {
+  return {
+    queryKey: runKeys.groupMetrics(runId, metric, threshold, view),
+    queryFn: async ({ signal }: { signal: AbortSignal }) =>
+      unwrapLegacy(
+        await api.get<GroupMetrics>(
+          `/api/runs/${encodeRunId(runId)}/group-metrics?metric=${encodeURIComponent(metric)}&threshold=${threshold}${
+            view ? `&view=${view}` : ''
+          }`,
+          { signal },
+        ),
+      ),
+  };
+}
+
 export function useRunPasses(
   runId: string,
   opts: { enabled?: boolean; refetchInterval?: number | false } = {},
 ) {
   return useQuery({
-    queryKey: runKeys.passes(runId),
-    queryFn: async ({ signal }) =>
-      unwrapLegacy(await api.get<RunPasses>(`/api/runs/${encodeRunId(runId)}/passes`, { signal })),
+    ...runPassesQuery(runId),
     enabled: opts.enabled ?? true,
     refetchInterval: opts.refetchInterval ?? false,
     refetchIntervalInBackground: false,
@@ -242,9 +276,7 @@ export function useRunPasses(
 export function useRunPassesMany(runs: Array<{ runId: string; refetchInterval?: number | false }>) {
   return useQueries({
     queries: runs.map((r) => ({
-      queryKey: runKeys.passes(r.runId),
-      queryFn: async ({ signal }: { signal: AbortSignal }) =>
-        unwrapLegacy(await api.get<RunPasses>(`/api/runs/${encodeRunId(r.runId)}/passes`, { signal })),
+      ...runPassesQuery(r.runId),
       refetchInterval: r.refetchInterval ?? false,
       refetchIntervalInBackground: false,
     })),
@@ -255,20 +287,28 @@ export function useGroupMetrics(
   runId: string,
   metric: string | null,
   threshold: number,
-  opts: { enabled?: boolean } = {},
+  opts: { enabled?: boolean; view?: GroupMetricsView } = {},
 ) {
   return useQuery({
-    queryKey: runKeys.groupMetrics(runId, metric ?? '', threshold),
-    queryFn: async ({ signal }) =>
-      unwrapLegacy(
-        await api.get<GroupMetrics>(
-          `/api/runs/${encodeRunId(runId)}/group-metrics?metric=${encodeURIComponent(metric ?? '')}&threshold=${threshold}`,
-          { signal },
-        ),
-      ),
+    ...groupMetricsQuery(runId, metric ?? '', threshold, opts.view),
     enabled: (opts.enabled ?? true) && Boolean(metric),
     placeholderData: keepPreviousData,
   });
+}
+
+/** Warm the cache for a run the reader has not opened yet (never throws: a failed prefetch shows nothing). */
+export function prefetchRunPasses(qc: QueryClient, runId: string): Promise<void> {
+  return qc.prefetchQuery(runPassesQuery(runId));
+}
+
+export function prefetchGroupMetrics(
+  qc: QueryClient,
+  runId: string,
+  metric: string,
+  threshold: number,
+  view: GroupMetricsView = 'group',
+): Promise<void> {
+  return qc.prefetchQuery(groupMetricsQuery(runId, metric, threshold, view));
 }
 
 export function useProjectMembers(projectId: string | undefined) {

@@ -1,0 +1,76 @@
+{
+  "r300x10": {
+    "case": "10 passes x 300 items",
+    "run_id": "35e53aaf-e5a5-4cbc-b0a2-0c6e59e40f21",
+    "view_group_http_ms": [
+      13.7,
+      8.7,
+      8.8,
+      10.5,
+      10.2
+    ],
+    "view_group_http_median_ms": 10.2,
+    "view_group_handler_ms": [
+      4.2,
+      4.1,
+      4.0,
+      4.2,
+      4.0
+    ],
+    "view_group_handler_median_ms": 4.1,
+    "keys": [
+      "direction",
+      "group",
+      "metric",
+      "report_k",
+      "run_id",
+      "samples",
+      "threshold"
+    ],
+    "payload_bytes": 381,
+    "gzip_bytes": 237,
+    "run_metric_analyses_before": 0,
+    "run_metric_analyses_after_view_group": 0,
+    "default_view_first_request_ms": 2621.1,
+    "default_view_repeat_request_ms": 11.2,
+    "default_view_bytes": 3694,
+    "group_equal_in_both_views": true
+  },
+  "r1200x10": {
+    "case": "10 passes x 1,200 items",
+    "run_id": "3b823023-e8aa-4173-8b9c-7dbcdef101a6",
+    "view_group_http_ms": [
+      29.0,
+      20.0,
+      20.6,
+      23.0,
+      24.8
+    ],
+    "view_group_http_median_ms": 23.0,
+    "view_group_handler_ms": [
+      15.9,
+      15.7,
+      90.7,
+      16.2,
+      15.6
+    ],
+    "view_group_handler_median_ms": 15.9,
+    "keys": [
+      "direction",
+      "group",
+      "metric",
+      "report_k",
+      "run_id",
+      "samples",
+      "threshold"
+    ],
+    "payload_bytes": 384,
+    "gzip_bytes": 240,
+    "run_metric_analyses_before": 1,
+    "run_metric_analyses_after_view_group": 1,
+    "default_view_first_request_ms": 10558.3,
+    "default_view_repeat_request_ms": 32.1,
+    "default_view_bytes": 3776,
+    "group_equal_in_both_views": true
+  }
+}

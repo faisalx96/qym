@@ -154,7 +154,7 @@ opacity-only and compositor-driven; it is not a cause.
 
 ### 3.3 Design
 
-D1. **Items table: no layout read in the scroll path.**
+D1. **Items table: no layout read in the scroll path.** (Round 7, D1: the item bar's shift is written on the bar itself, not on the item article; see `redesign7/qa.md` D1.)
    `useStickyShift` keeps a geometry cache `{line, tableTop (document space), tableH, headH, details: [{top, bottom}] (document
    space)}` refreshed only when something that moves layout changes: a `ResizeObserver` on the table, the parent and each
    expanded detail (observe on expand, unobserve on collapse), `resize`, and the existing `data-detail-row` set (a

@@ -331,7 +331,7 @@ function defaultCell<R>(col: Column<R>, row: R): ReactNode {
 /**
  * DataTable v2: own `<table>` markup (see docs/internal/ui-migration/redesign/tables.md §Decisions).
  * Typed columns, density, zebra, column bands, pinned columns, header menu,
- * selection + bulk bar, expansion, grouping, row actions, states, scroll cues
+ * selection + bulk bar, expansion, grouping, row actions, states, the scroll rail
  * and a card layout on narrow screens. Plain by default: a three-column list
  * is just a header and rows.
  */
@@ -647,8 +647,6 @@ function DataTableInner<R>({
       ),
     [renderCols, measured, model.widths, pins],
   );
-  const pinSum = (side: 'start' | 'end') =>
-    renderCols.filter((c) => effectivePin(c, pins) === side).reduce((n, c) => n + (measured[c.id] ?? 0), 0);
   const lastStart = [...renderCols].reverse().find((c) => effectivePin(c, pins) === 'start')?.id;
   const firstEnd = renderCols.find((c) => effectivePin(c, pins) === 'end')?.id;
 
@@ -1659,7 +1657,7 @@ function DataTableInner<R>({
       <thead className={styles.thead}>
         {hasBands ? (
           <tr className={styles.bandRow} role="row">
-            {renderBands(renderCols, styles, pins, offsets)}
+            {renderBands(renderCols, styles, pins, offsets, lastStart, firstEnd)}
           </tr>
         ) : null}
         <tr role="row">{renderCols.map((c) => thFor(c))}</tr>
@@ -1733,26 +1731,8 @@ function DataTableInner<R>({
         {toolbarNode}
         {otherKids}
         {banner}
-        <div
-          ref={hostRef}
-          className={styles.bodyHost}
-          data-pin-start={pinSum('start') > 0 ? '' : undefined}
-          data-pin-end={pinSum('end') > 0 ? '' : undefined}
-          data-cues={scrollCues ? '' : undefined}
-          style={
-            {
-              '--pin-start': `${pinSum('start')}px`,
-              '--pin-end': `${pinSum('end')}px`,
-            } as React.CSSProperties
-          }
-        >
+        <div ref={hostRef} className={styles.bodyHost} data-cues={scrollCues ? '' : undefined}>
           {progress ? <div className={styles.progress} role="progressbar" aria-label="Refreshing" /> : null}
-          {cardMode ? null : (
-            <>
-              <span className={styles.edge} data-edge="start" aria-hidden="true" />
-              <span className={styles.edge} data-edge="end" aria-hidden="true" />
-            </>
-          )}
           {cardMode ? (
             <CardList
               display={display}
@@ -1820,6 +1800,8 @@ function renderBands<R>(
   s: Record<string, string>,
   pins: Record<string, 'start' | 'end' | null>,
   offsets: Record<string, number>,
+  lastStart: string | undefined,
+  firstEnd: string | undefined,
 ) {
   // Pseudo (select/expand/actions) columns never carry a group.
   return groupBands(cols, (c) => effectivePin(c, pins)).map((b) => (
@@ -1831,6 +1813,13 @@ function renderBands<R>(
       className={s.bandCell}
       data-labelled={b.label ? '' : undefined}
       data-pin={b.pin ?? undefined}
+      data-pin-edge={
+        b.pin === 'start' && b.lastId === lastStart
+          ? 'start'
+          : b.pin === 'end' && b.firstId === firstEnd
+            ? 'end'
+            : undefined
+      }
       style={{
         insetInlineStart: b.pin === 'start' ? offsets[b.firstId] : undefined,
         insetInlineEnd: b.pin === 'end' ? offsets[b.lastId] : undefined,

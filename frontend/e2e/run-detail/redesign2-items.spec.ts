@@ -179,7 +179,8 @@ for (const width of [1280, 1440]) {
     await answer.click();
     const row = answer.locator('xpath=ancestor::div[contains(@data-depth, "0")][1]');
     const box = (await row.boundingBox())!;
-    const key = (await answer.locator('span[dir="ltr"]').first().boundingBox())!;
+    // the key is a data-part="key" span with the direction of its own script (round 7, D2)
+    const key = (await answer.locator('[data-part=key]').first().boundingBox())!;
     expect(key.x - box.x).toBeLessThan(40);
     // the value text reads right to left inside its own block, capped at the reading measure
     const text = row.locator('[dir="rtl"]').first();

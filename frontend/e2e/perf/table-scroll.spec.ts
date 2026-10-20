@@ -45,7 +45,7 @@ test.describe('runs table: frozen columns', () => {
     );
     expect(sticky).toBeLessThanOrEqual(270);
 
-    // A12: nothing but opacity transitions while scrolling
+    // A12 (amended in round 7, Q1-7): no transition at all while scrolling; the boundary is a static line
     await page.evaluate(() => {
       const w = window as unknown as { __tr: string[] };
       w.__tr = [];
@@ -68,7 +68,7 @@ test.describe('runs table: frozen columns', () => {
     // A1 (runs): the handler does almost nothing
     expect(trace.scrollMsMedian).toBeLessThanOrEqual(limit(2.5, 1));
     const tr = await page.evaluate(() => (window as unknown as { __tr: string[] }).__tr);
-    expect(tr.filter((t) => !t.endsWith(':opacity'))).toEqual([]);
+    expect(tr).toEqual([]);
 
     // A10/A11: frozen cells sit on their header cells at ten positions (LTR), and under dir=rtl
     const align = async (): Promise<number> =>
@@ -99,7 +99,7 @@ test.describe('runs table: frozen columns', () => {
     await cdp.detach();
   });
 
-  test('the edge shadow is one element that fades (no per-cell box-shadow swap)', async ({
+  test('the pinned boundary is a static line: no overlay element, no transition, unchanged by scrolling', async ({
     page,
     request,
   }) => {
@@ -107,18 +107,31 @@ test.describe('runs table: frozen columns', () => {
     await waitForProjection(request, s.project.slug, s.runs.length);
     await page.addInitScript(PINS);
     await openRuns(page, s.project.slug);
-    const edge = page.getByTestId('runs-table').locator('[data-edge="start"]');
+    const runs = page.getByTestId('runs-table');
     const cell = page.locator('[data-testid="runs-table"] tbody td[data-pin-edge="start"]').first();
-    await expect(edge).toHaveCSS('opacity', '0');
-    const shadowBefore = await cell.evaluate((e) => getComputedStyle(e).boxShadow);
-    const scroller = page.getByTestId('runs-table').locator('[data-dt-scroller]');
-    await scroller.evaluate((el) => el.scrollTo({ left: 120 }));
+    // round 7, Q1-1: nothing is painted over the scrolling columns
+    await expect(runs.locator('[data-edge]')).toHaveCount(0);
+    const fade = await runs
+      .locator('[data-cues]')
+      .evaluate((e) => [getComputedStyle(e, '::before').content, getComputedStyle(e, '::after').content]);
+    expect(fade.every((c) => c === 'none' || c === 'normal')).toBe(true);
+    await page.evaluate(() => {
+      const w = window as unknown as { __tr: string[] };
+      w.__tr = [];
+      document.addEventListener('transitionstart', (e) => w.__tr.push((e.target as Element).tagName), true);
+    });
+    const shadows = async () => cell.evaluate((e) => getComputedStyle(e).boxShadow);
+    const before = await shadows();
+    // Q1-4: one 1px --border-strong line on the inner (right) side of the start boundary cell
+    expect(before).toBe('rgb(82, 82, 108) -1px 0px 0px 0px inset');
+    const scroller = runs.locator('[data-dt-scroller]');
+    for (const left of [120, 600, 100000]) {
+      await scroller.evaluate((el, x) => el.scrollTo({ left: x }), left);
+      await page.waitForTimeout(250);
+      expect(await shadows()).toBe(before); // Q1-7: the same at scrollLeft 0, 600 and the end
+    }
     await expect(scroller).toHaveAttribute('data-scrolled-x', '');
-    await expect
-      .poll(async () => Number(await edge.evaluate((e) => getComputedStyle(e).opacity)))
-      .toBeGreaterThan(0.5);
-    // no pinned cell changed its box-shadow when scrolling started (the old rule swapped it on every pinned-edge cell)
-    expect(await cell.evaluate((e) => getComputedStyle(e).boxShadow)).toBe(shadowBefore);
+    expect(await page.evaluate(() => (window as unknown as { __tr: string[] }).__tr)).toEqual([]);
   });
 });
 

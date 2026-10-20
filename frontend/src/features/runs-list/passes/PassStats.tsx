@@ -1,6 +1,6 @@
 /** The five group statistics (Pass@k, Pass^k, Avg@k, Consistency, Reliability) as label + value pairs in the strip. */
 import type { GroupMetrics } from '@/api/dashboardTypes';
-import { ScoreValue } from '@/ui';
+import { ScoreValue, Skeleton } from '@/ui';
 import styles from './PassStats.module.css';
 
 type Group = NonNullable<GroupMetrics['group']>;
@@ -24,21 +24,28 @@ export function PassStats({
   k,
   dir,
   busy,
+  loading = false,
 }: {
   group: Group | null | undefined;
   k: number | string;
   dir: 'maximize' | 'minimize' | null;
   /** Group metrics are reloading: the previous values stay, dimmed. */
   busy: boolean;
+  /** Nothing has arrived yet: the labels are real, the values are skeletons of the same width (the frame keeps its height). */
+  loading?: boolean;
 }) {
   const values = statValues(group);
   return (
-    <dl className={styles.stats} aria-busy={busy} data-busy={busy ? '' : undefined}>
+    <dl className={styles.stats} aria-busy={busy || loading} data-busy={busy && !loading ? '' : undefined}>
       {statDefinitions(k).map((d, i) => (
         <div key={d.label} className={styles.stat} title={d.help}>
           <dt>{d.label}</dt>
           <dd>
-            <ScoreValue value={values[i]} direction={dir ?? 'maximize'} digits={1} />
+            {loading ? (
+              <Skeleton kind="value" width="5ch" label={`Loading ${d.label}`} />
+            ) : (
+              <ScoreValue value={values[i]} direction={dir ?? 'maximize'} digits={1} />
+            )}
           </dd>
         </div>
       ))}

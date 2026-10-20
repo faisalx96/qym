@@ -69,11 +69,12 @@ describe('StructuredValue', () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it('keeps keys LTR and lets Arabic values pick their own direction', () => {
+  it('anchors keys at the left, a key takes its own script direction (round 7), Arabic values pick theirs', () => {
     render(<StructuredValue value={OUTPUT} />);
+    // a Latin key resolves left to right through dir=auto; an Arabic key would carry dir=rtl lang=ar
     expect(within(screen.getByRole('group', { name: 'answer' })).getByText('answer')).toHaveAttribute(
       'dir',
-      'ltr',
+      'auto',
     );
     expect(screen.getByText(/عاصمة المملكة/).closest('[dir]')).toHaveAttribute('dir', 'rtl');
   });

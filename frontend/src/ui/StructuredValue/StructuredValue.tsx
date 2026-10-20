@@ -8,7 +8,8 @@ import { JsonTree } from '../JsonViewer';
 import { SegmentedControl } from '../SegmentedControl';
 import { Tag } from '../Tag';
 import { TextBlock } from '../TextBlock';
-import { type TextMode } from '@/lib/text';
+import { textDirAttrs, type TextMode } from '@/lib/text';
+import { keyWithBreaks } from '@/lib/keyBreaks';
 import { ClampedText } from './ClampedText';
 import {
   classifySection,
@@ -159,10 +160,12 @@ function Section({ id, name, value, open, onToggle, textMode, lines }: SectionPr
       <div className={styles.section} id={id} data-kind="scalar" role="group" aria-label={name}>
         <div className={styles.head}>
           <span className={styles.spacer} aria-hidden="true" />
-          <span className={styles.key} dir="ltr">
-            {name}
+          <span className={styles.line}>
+            <span className={styles.key} data-part="key" {...textDirAttrs(name)}>
+              {keyWithBreaks(name)}
+            </span>
+            <Scalar value={value} />
           </span>
-          <Scalar value={value} />
         </div>
       </div>
     );
@@ -178,12 +181,21 @@ function Section({ id, name, value, open, onToggle, textMode, lines }: SectionPr
           onClick={onToggle}
         >
           <Icon name="chevron-right" size={12} className={styles.chevron} />
-          <span className={styles.key} dir="ltr">
-            {name}
+          {/* a data key keeps its case and wraps; it is never cut (round 7, D2) */}
+          <span className={styles.line}>
+            <span className={styles.key} data-part="key" {...textDirAttrs(name)}>
+              {keyWithBreaks(name)}
+            </span>
+            {summary ? (
+              <span className={styles.summary} data-part="value" {...textDirAttrs(summary)}>
+                {summary}
+              </span>
+            ) : null}
           </span>
-          {summary ? <span className={styles.summary}>{summary}</span> : null}
         </button>
-        <CopyButton text={() => copyValue(value)} label={`Copy ${name}`} className={styles.copy} />
+        <span className={styles.actions} data-part="actions">
+          <CopyButton text={() => copyValue(value)} label={`Copy ${name}`} />
+        </span>
       </div>
       <Collapse open={open} id={bodyId}>
         <div className={styles.body}>

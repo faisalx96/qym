@@ -1,0 +1,1432 @@
+{
+  "table": "runs",
+  "width": 1440,
+  "states": {
+    "rest": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 3684,
+      "clientW": 1203,
+      "pinStart": 404,
+      "pinEnd": 104,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 1411,
+          "t": 58,
+          "b": 868,
+          "w": 1205,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 1410,
+          "t": 59,
+          "b": 124,
+          "w": 1203,
+          "h": 65
+        },
+        "footer": {
+          "l": 207,
+          "r": 1410,
+          "t": 827,
+          "b": 867,
+          "w": 1203,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 821.375,
+          "w": 1203,
+          "h": 697.375
+        },
+        "scroller": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 821.375,
+          "w": 1203,
+          "h": 697.375
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 611,
+          "t": 124,
+          "b": 148,
+          "w": 404,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 207,
+          "r": 3891.15625,
+          "t": 1750,
+          "b": 1782,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 1410,
+          "t": 821.375,
+          "b": 827,
+          "w": 1203,
+          "h": 5.625
+        },
+        "details": [],
+        "pinStart": 404,
+        "pinEnd": 104
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -960.6,
+          "heightPx": 697,
+          "tableRowsBoxPx": 1658,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -960.6,
+          "heightPx": 697,
+          "tableRowsBoxPx": 1658,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -960.6,
+          "heightPx": 697,
+          "tableRowsBoxPx": 1658,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -960.6,
+          "heightPx": 697,
+          "tableRowsBoxPx": 1658,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 20,
+        "totalPx": 79.5,
+        "worstOverlapPx": 22.5,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "header": 1,
+          "row": 19
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-end+fade-end",
+          "text": "correct",
+          "overlapPx": 22.5,
+          "alpha": 0.88,
+          "contrastBase": 5.7,
+          "contrastShaded": 1.2,
+          "rowKind": "header",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.0%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.7%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.2,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.2%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.6%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.2,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "69.5%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.07%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.2,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.10%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "69.57%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.2,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.9%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "69.63%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.2,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.6%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "69.8%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.2,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "69.5%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        }
+      ]
+    },
+    "few-rows": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 3684,
+      "clientW": 1203,
+      "pinStart": 404,
+      "pinEnd": 104,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 1411,
+          "t": 58,
+          "b": 301,
+          "w": 1205,
+          "h": 243
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 1410,
+          "t": 59,
+          "b": 158,
+          "w": 1203,
+          "h": 99
+        },
+        "footer": {
+          "l": 207,
+          "r": 1410,
+          "t": 260,
+          "b": 300,
+          "w": 1203,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 1410,
+          "t": 158,
+          "b": 248,
+          "w": 1203,
+          "h": 90
+        },
+        "scroller": {
+          "l": 207,
+          "r": 1410,
+          "t": 158,
+          "b": 248,
+          "w": 1203,
+          "h": 90
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 611,
+          "t": 158,
+          "b": 182,
+          "w": 404,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 207,
+          "r": 3891.15625,
+          "t": 216,
+          "b": 248,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 1410,
+          "t": 248,
+          "b": 260,
+          "w": 1203,
+          "h": 12
+        },
+        "details": [],
+        "pinStart": 404,
+        "pinEnd": 104
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 0,
+          "heightPx": 90,
+          "tableRowsBoxPx": 90,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 0,
+          "heightPx": 90,
+          "tableRowsBoxPx": 90,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 0,
+          "heightPx": 90,
+          "tableRowsBoxPx": 90,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": 0,
+          "heightPx": 90,
+          "tableRowsBoxPx": 90,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 2,
+        "totalPx": 25.5,
+        "worstOverlapPx": 22.5,
+        "minContrastShaded": 1.2,
+        "byRowKind": {
+          "header": 1,
+          "row": 1
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-end+fade-end",
+          "text": "correct",
+          "overlapPx": 22.5,
+          "alpha": 0.88,
+          "contrastBase": 5.7,
+          "contrastShaded": 1.2,
+          "rowKind": "header",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "69.0%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.9,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        }
+      ]
+    },
+    "group-open": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end"
+      ],
+      "scrollLeft": 0,
+      "scrollW": 3684,
+      "clientW": 1203,
+      "pinStart": 404,
+      "pinEnd": 104,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 1411,
+          "t": 58,
+          "b": 868,
+          "w": 1205,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 1410,
+          "t": 59,
+          "b": 124,
+          "w": 1203,
+          "h": 65
+        },
+        "footer": {
+          "l": 207,
+          "r": 1410,
+          "t": 827,
+          "b": 867,
+          "w": 1203,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "scroller": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 611,
+          "t": 124,
+          "b": 148,
+          "w": 404,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": 207,
+          "r": 3891.15625,
+          "t": 2115,
+          "b": 2147,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 1410,
+          "t": 822.203125,
+          "b": 827,
+          "w": 1203,
+          "h": 4.796875
+        },
+        "details": [
+          {
+            "l": 207,
+            "r": 3891.15625,
+            "t": 534,
+            "b": 579,
+            "w": 3684.15625,
+            "h": 45,
+            "strip": true
+          }
+        ],
+        "pinStart": 404,
+        "pinEnd": 104
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 45
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 45
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 21,
+        "totalPx": 104.5,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "strip": 1,
+          "header": 1,
+          "row": 9,
+          "pass": 10
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Reliability",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 6.9,
+          "contrastShaded": 1.1,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "correct",
+          "overlapPx": 22.5,
+          "alpha": 0.88,
+          "contrastBase": 5.7,
+          "contrastShaded": 1.2,
+          "rowKind": "header",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.0%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.2,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "69.3%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 12.4,
+          "contrastShaded": 1.2,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.7%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 12.4,
+          "contrastShaded": 1.2,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "68.3%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 12.4,
+          "contrastShaded": 1.2,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.7%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 12.4,
+          "contrastShaded": 1.2,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "72.0%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 12.4,
+          "contrastShaded": 1.2,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "69.7%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 12.4,
+          "contrastShaded": 1.2,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "73.0%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 12.4,
+          "contrastShaded": 1.2,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.0%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 12.4,
+          "contrastShaded": 1.2,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "67.3%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 12.4,
+          "contrastShaded": 1.2,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "69.3%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 12.4,
+          "contrastShaded": 1.2,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-end+fade-end",
+          "text": "70.7%",
+          "overlapPx": 3,
+          "alpha": 0.92,
+          "contrastBase": 11.2,
+          "contrastShaded": 1.2,
+          "rowKind": "row",
+          "pinned": false
+        }
+      ]
+    },
+    "group-open-scrolled": {
+      "attrs": [
+        "data-cues",
+        "data-scroll-end",
+        "data-pin-start",
+        "data-pin-end",
+        "data-scroll-start"
+      ],
+      "scrollLeft": 600,
+      "scrollW": 3684,
+      "clientW": 1203,
+      "pinStart": 404,
+      "pinEnd": 104,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 1411,
+          "t": 58,
+          "b": 868,
+          "w": 1205,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 1410,
+          "t": 59,
+          "b": 124,
+          "w": 1203,
+          "h": 65
+        },
+        "footer": {
+          "l": 207,
+          "r": 1410,
+          "t": 827,
+          "b": 867,
+          "w": 1203,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "scroller": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 611,
+          "t": 124,
+          "b": 148,
+          "w": 404,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": -393,
+          "r": 3291.15625,
+          "t": 2115,
+          "b": 2147,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 1410,
+          "t": 822.203125,
+          "b": 827,
+          "w": 1203,
+          "h": 4.796875
+        },
+        "details": [
+          {
+            "l": -393,
+            "r": 3291.15625,
+            "t": 534,
+            "b": 579,
+            "w": 3684.15625,
+            "h": 45,
+            "strip": true
+          }
+        ],
+        "pinStart": 404,
+        "pinEnd": 104
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 45
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 45
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 45
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 45
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 21,
+        "totalPx": 75.5,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "strip": 2,
+          "row": 9,
+          "pass": 10
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-end+fade-end",
+          "text": "Reliability",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 6.9,
+          "contrastShaded": 1.1,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "%",
+          "overlapPx": 3,
+          "alpha": 0.93,
+          "contrastBase": 10.7,
+          "contrastShaded": 1.1,
+          "rowKind": "strip",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 6.5,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 7.2,
+          "contrastShaded": 1.1,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "Analyze",
+          "overlapPx": 2.5,
+          "alpha": 0.93,
+          "contrastBase": 6.5,
+          "contrastShaded": 1.1,
+          "rowKind": "row",
+          "pinned": false
+        }
+      ]
+    },
+    "group-open-end": {
+      "attrs": [
+        "data-cues",
+        "data-pin-start",
+        "data-pin-end",
+        "data-scroll-start"
+      ],
+      "scrollLeft": 2481,
+      "scrollW": 3684,
+      "clientW": 1203,
+      "pinStart": 404,
+      "pinEnd": 104,
+      "boxes": {
+        "card": {
+          "l": 206,
+          "r": 1411,
+          "t": 58,
+          "b": 868,
+          "w": 1205,
+          "h": 810
+        },
+        "toolbar": {
+          "l": 207,
+          "r": 1410,
+          "t": 59,
+          "b": 124,
+          "w": 1203,
+          "h": 65
+        },
+        "footer": {
+          "l": 207,
+          "r": 1410,
+          "t": 827,
+          "b": 867,
+          "w": 1203,
+          "h": 40
+        },
+        "bodyHost": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "scroller": {
+          "l": 207,
+          "r": 1410,
+          "t": 124,
+          "b": 822.203125,
+          "w": 1203,
+          "h": 698.203125
+        },
+        "firstHeaderRow": {
+          "l": 207,
+          "r": 611,
+          "t": 124,
+          "b": 148,
+          "w": 404,
+          "h": 24
+        },
+        "lastBodyRow": {
+          "l": -2274,
+          "r": 1410.15625,
+          "t": 2115,
+          "b": 2147,
+          "w": 3684.15625,
+          "h": 32
+        },
+        "rail": {
+          "l": 207,
+          "r": 1410,
+          "t": 822.203125,
+          "b": 827,
+          "w": 1203,
+          "h": 4.796875
+        },
+        "details": [
+          {
+            "l": -2274,
+            "r": 1410.15625,
+            "t": 534,
+            "b": 579,
+            "w": 3684.15625,
+            "h": 45,
+            "strip": true
+          }
+        ],
+        "pinStart": 404,
+        "pinEnd": 104
+      },
+      "extents": [
+        {
+          "cue": "edge-start",
+          "opacity": 0.85,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 45
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "edge-end",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 11,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-start",
+          "opacity": 0.7,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [
+            {
+              "strip": true,
+              "heightPx": 45
+            }
+          ],
+          "overToolbar": 0,
+          "overFooter": 0
+        },
+        {
+          "cue": "fade-end",
+          "opacity": 0,
+          "display": "block",
+          "widthPx": 24,
+          "topAboveFirstHeaderPx": 0,
+          "bottomBelowLastRowPx": -1324.8,
+          "heightPx": 698,
+          "tableRowsBoxPx": 2023,
+          "overDetailRows": [],
+          "overToolbar": 0,
+          "overFooter": 0
+        }
+      ],
+      "insetKinds": [
+        "th:start:rgb(59, 59, 84) -1px 0px 0px 0px inset",
+        "th:end:rgb(59, 59, 84) 1px 0px 0px 0px inset",
+        "td:start:rgb(43, 43, 64) -1px 0px 0px 0px inset",
+        "td:end:rgb(43, 43, 64) 1px 0px 0px 0px inset"
+      ],
+      "overlapSummary": {
+        "textNodesOverCue": 21,
+        "totalPx": 389,
+        "worstOverlapPx": 25,
+        "minContrastShaded": 1.1,
+        "byRowKind": {
+          "header": 1,
+          "row": 9,
+          "pass": 10,
+          "strip": 1
+        }
+      },
+      "overlaps": [
+        {
+          "cues": "edge-start+fade-start",
+          "text": "⚡ Median latency",
+          "overlapPx": 25,
+          "alpha": 0.92,
+          "contrastBase": 5.7,
+          "contrastShaded": 1.1,
+          "rowKind": "header",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.7s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.7,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.6s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.7,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.7s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.7,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.7s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.7,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.8s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.7,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.7s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.7,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.8s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.7,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.8s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.7,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.7s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.7,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.6s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.7,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.7s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 8.1,
+          "contrastShaded": 1.7,
+          "rowKind": "pass",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.7s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 7.3,
+          "contrastShaded": 1.7,
+          "rowKind": "row",
+          "pinned": false
+        },
+        {
+          "cues": "edge-start+fade-start",
+          "text": "1.7s",
+          "overlapPx": 19,
+          "alpha": 0.71,
+          "contrastBase": 7.8,
+          "contrastShaded": 1.7,
+          "rowKind": "row",
+          "pinned": false
+        }
+      ]
+    }
+  }
+}

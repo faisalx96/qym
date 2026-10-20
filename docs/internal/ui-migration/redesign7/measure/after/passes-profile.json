@@ -1,0 +1,153 @@
+{
+  "reps": 9,
+  "r300": {
+    "case": "10 passes x 300 items",
+    "run_id": "617a1849-60a3-43a0-94f0-00a24e1094a4",
+    "wall_ms": {
+      "median": 67.1,
+      "p95": 139.8,
+      "min": 62.6,
+      "max": 140.1
+    },
+    "handler_ms": {
+      "median": 57.1,
+      "min": 56.3
+    },
+    "payload_bytes": 9868,
+    "sql_statements": 28,
+    "sql_ms_total": 8.1,
+    "slowest_sql": [
+      {
+        "ms": 2.3,
+        "rows": -1,
+        "sql": "SELECT run_item_pass_scores.run_id AS run_item_pass_scores_run_id, run_item_pass_scores.pass_number AS run_item_pass_scores_pass_number, run_item_pass_scores.metric_name "
+      },
+      {
+        "ms": 1.4,
+        "rows": -1,
+        "sql": "SELECT run_item_pass_scores.run_id AS run_item_pass_scores_run_id, run_item_pass_scores.item_id AS run_item_pass_scores_item_id, run_item_pass_scores.pass_number AS run_i"
+      },
+      {
+        "ms": 1.3,
+        "rows": -1,
+        "sql": "SELECT run_item_pass_scores.run_id AS run_item_pass_scores_run_id, run_item_pass_scores.pass_number AS run_item_pass_scores_pass_number, run_item_pass_scores.metric_name "
+      },
+      {
+        "ms": 1.0,
+        "rows": -1,
+        "sql": "SELECT run_trace_aggregates.id AS run_trace_aggregates_id, run_trace_aggregates.run_id AS run_trace_aggregates_run_id, run_trace_aggregates.trace_id AS run_trace_aggregat"
+      },
+      {
+        "ms": 0.7,
+        "rows": -1,
+        "sql": "SELECT run_item_attempts.item_id AS run_item_attempts_item_id, run_item_attempts.pass_number AS run_item_attempts_pass_number, run_item_attempts.attempt_number AS run_ite"
+      },
+      {
+        "ms": 0.6,
+        "rows": -1,
+        "sql": "SELECT run_item_pass_scores.pass_number AS run_item_pass_scores_pass_number, run_item_pass_scores.meta AS run_item_pass_scores_meta FROM run_item_pass_scores WHERE run_it"
+      }
+    ],
+    "cprofile_top": [
+      "         376119 function calls (375916 primitive calls) in 0.179 seconds",
+      "   Ordered by: cumulative time",
+      "   List reduced from 545 to 22 due to restriction <22>",
+      "   ncalls  tottime  percall  cumtime  percall filename:lineno(function)",
+      "        1    0.002    0.002    0.179    0.179 /home/meshari-aldossari/Documents/qym/qym-wt-redesign7/docs/internal/ui-migration/redesign7/measure/passes_profile.py:55(direct)",
+      "        1    0.015    0.015    0.175    0.175 /home/meshari-aldossari/Documents/qym/qym-wt-redesign7/packages/platform/qym_platform/api/runs.py:4041(run_passes)",
+      "        4    0.000    0.000    0.113    0.028 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py:2746(all)",
+      "       21    0.003    0.000    0.109    0.005 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/loading.py:214(chunks)",
+      "        4    0.000    0.000    0.108    0.027 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/engine/result.py:1890(_fetchall_impl)",
+      "        1    0.000    0.000    0.103    0.103 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/engine/result.py:1372(all)",
+      "        1    0.000    0.000    0.102    0.102 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/engine/result.py:1282(_fetchall_impl)",
+      "     3005    0.003    0.000    0.081    0.000 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/loading.py:1075(_instance)",
+      "     3005    0.074    0.000    0.074    0.000 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/loading.py:1336(_populate_full)",
+      "       10    0.000    0.000    0.016    0.002 /home/meshari-aldossari/Documents/qym/qym-wt-redesign7/packages/platform/qym_platform/api/ingest.py:549(_build_run_trace_stats)",
+      "     6004    0.001    0.000    0.014    0.000 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/dialects/sqlite/base.py:1097(process)",
+      "     6004    0.001    0.000    0.014    0.000 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/sql/sqltypes.py:3006(process)",
+      "      202    0.002    0.000    0.013    0.000 {built-in method builtins.sum}",
+      "     3004    0.001    0.000    0.013    0.000 /usr/lib/python3.12/json/__init__.py:299(loads)",
+      "       14    0.000    0.000    0.013    0.001 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py:2916(_iter)",
+      "        1    0.004    0.004    0.013    0.013 /home/meshari-aldossari/Documents/qym/qym-wt-redesign7/packages/platform/qym_platform/api/runs.py:893(_repeat_pass_event_state)",
+      "       14    0.000    0.000    0.013    0.001 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2406(execute)",
+      "       14    0.000    0.000    0.013    0.001 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2201(_execute_internal)",
+      "       14    0.000    0.000    0.012    0.001 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/context.py:306(orm_execute_statement)",
+      "       14    0.000    0.000    0.012    0.001 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1407(execute)"
+    ]
+  },
+  "r1200": {
+    "case": "10 passes x 1200 items",
+    "run_id": "883c6f05-adc3-47a4-ba92-e998ef9f1e67",
+    "wall_ms": {
+      "median": 316.3,
+      "p95": 322.2,
+      "min": 256.4,
+      "max": 338.5
+    },
+    "handler_ms": {
+      "median": 303.4,
+      "min": 302.1
+    },
+    "payload_bytes": 9899,
+    "sql_statements": 28,
+    "sql_ms_total": 36.8,
+    "slowest_sql": [
+      {
+        "ms": 11.6,
+        "rows": -1,
+        "sql": "SELECT run_item_pass_scores.run_id AS run_item_pass_scores_run_id, run_item_pass_scores.pass_number AS run_item_pass_scores_pass_number, run_item_pass_scores.metric_name "
+      },
+      {
+        "ms": 6.3,
+        "rows": -1,
+        "sql": "SELECT run_item_pass_scores.run_id AS run_item_pass_scores_run_id, run_item_pass_scores.pass_number AS run_item_pass_scores_pass_number, run_item_pass_scores.metric_name "
+      },
+      {
+        "ms": 5.6,
+        "rows": -1,
+        "sql": "SELECT run_item_pass_scores.run_id AS run_item_pass_scores_run_id, run_item_pass_scores.item_id AS run_item_pass_scores_item_id, run_item_pass_scores.pass_number AS run_i"
+      },
+      {
+        "ms": 4.5,
+        "rows": -1,
+        "sql": "SELECT run_trace_aggregates.id AS run_trace_aggregates_id, run_trace_aggregates.run_id AS run_trace_aggregates_run_id, run_trace_aggregates.trace_id AS run_trace_aggregat"
+      },
+      {
+        "ms": 3.2,
+        "rows": -1,
+        "sql": "SELECT run_item_attempts.item_id AS run_item_attempts_item_id, run_item_attempts.pass_number AS run_item_attempts_pass_number, run_item_attempts.attempt_number AS run_ite"
+      },
+      {
+        "ms": 3.1,
+        "rows": -1,
+        "sql": "SELECT run_item_pass_scores.pass_number AS run_item_pass_scores_pass_number, run_item_pass_scores.meta AS run_item_pass_scores_meta FROM run_item_pass_scores WHERE run_it"
+      }
+    ],
+    "cprofile_top": [
+      "         1474119 function calls (1473916 primitive calls) in 0.490 seconds",
+      "   Ordered by: cumulative time",
+      "   List reduced from 545 to 22 due to restriction <22>",
+      "   ncalls  tottime  percall  cumtime  percall filename:lineno(function)",
+      "        1    0.008    0.008    0.490    0.490 /home/meshari-aldossari/Documents/qym/qym-wt-redesign7/docs/internal/ui-migration/redesign7/measure/passes_profile.py:55(direct)",
+      "        1    0.061    0.061    0.476    0.476 /home/meshari-aldossari/Documents/qym/qym-wt-redesign7/packages/platform/qym_platform/api/runs.py:4041(run_passes)",
+      "        4    0.000    0.000    0.172    0.043 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py:2746(all)",
+      "       21    0.014    0.001    0.157    0.007 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/loading.py:214(chunks)",
+      "        4    0.001    0.000    0.153    0.038 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/engine/result.py:1890(_fetchall_impl)",
+      "        1    0.001    0.001    0.131    0.131 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/engine/result.py:1372(all)",
+      "        1    0.000    0.000    0.130    0.130 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/engine/result.py:1282(_fetchall_impl)",
+      "        1    0.086    0.086    0.120    0.120 /home/meshari-aldossari/Documents/qym/qym-wt-redesign7/packages/platform/qym_platform/api/runs.py:893(_repeat_pass_event_state)",
+      "       10    0.000    0.000    0.063    0.006 /home/meshari-aldossari/Documents/qym/qym-wt-redesign7/packages/platform/qym_platform/api/ingest.py:549(_build_run_trace_stats)",
+      "    24004    0.003    0.000    0.058    0.000 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/dialects/sqlite/base.py:1097(process)",
+      "    24004    0.003    0.000    0.055    0.000 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/sql/sqltypes.py:3006(process)",
+      "    12004    0.004    0.000    0.052    0.000 /usr/lib/python3.12/json/__init__.py:299(loads)",
+      "      202    0.009    0.000    0.051    0.000 {built-in method builtins.sum}",
+      "    12004    0.011    0.000    0.046    0.000 /usr/lib/python3.12/json/decoder.py:332(decode)",
+      "       14    0.000    0.000    0.045    0.003 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py:2916(_iter)",
+      "       14    0.000    0.000    0.045    0.003 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2406(execute)",
+      "       14    0.000    0.000    0.045    0.003 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2201(_execute_internal)",
+      "       14    0.000    0.000    0.045    0.003 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/orm/context.py:306(orm_execute_statement)",
+      "       14    0.000    0.000    0.044    0.003 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1407(execute)",
+      "       14    0.000    0.000    0.044    0.003 /home/meshari-aldossari/Documents/qym/qym/.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:524(_execute_on_connection)"
+    ]
+  }
+}

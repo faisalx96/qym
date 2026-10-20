@@ -15,11 +15,15 @@ const q = (over: Partial<Parameters<typeof childRowsOf>[1] & object>) => ({
 });
 
 describe('childRowsOf', () => {
-  it('shows as many loading rows as the run has passes (1..10) and keeps the frame of the strip', () => {
+  it('shows as many loading rows as the run has passes (1..20) and keeps the frame of the strip', () => {
     const out = childRowsOf(run(3), q({ isPending: true }));
     expect(out.rows.map((r) => r.kind)).toEqual(['loading', 'loading', 'loading']);
     expect(out.detail).toBe(true);
-    expect(loadingCount(30)).toBe(10);
+    // round 7 (Q2-9): the cap is 20, so a 19-pass run does not jump by 9 rows when its passes arrive
+    expect(loadingCount(19)).toBe(19);
+    expect(childRowsOf(run(19), q({ isPending: true })).rows).toHaveLength(19);
+    expect(loadingCount(20)).toBe(20);
+    expect(loadingCount(30)).toBe(20);
     expect(loadingCount(0)).toBe(1);
   });
 

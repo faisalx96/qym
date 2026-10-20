@@ -1,0 +1,427 @@
+/* Round 7 QA mocks (visual contract for docs/internal/ui-migration/redesign7/qa.md). Tokens only.
+   The real column widths: 1193 px report column at 1440 (1151 px inside an item card), 279 px at 390 (237 px inside). */
+
+.frame {
+  inline-size: min(100%, 1193px);
+  margin-inline: 0;
+}
+
+.frameRuns {
+  inline-size: min(100%, 1203px);
+}
+
+/* the real report column at a 1024 viewport */
+@media (width <= 1100px) {
+  .frame,
+  .frameRuns {
+    inline-size: min(100%, 777px);
+  }
+}
+
+@media (width <= 480px) {
+  .frame {
+    inline-size: min(100%, 279px);
+  }
+
+  .frameRuns {
+    inline-size: min(100%, 289px);
+  }
+}
+
+.label {
+  margin-block: var(--space-md) var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.label[data-kind='spec'] {
+  color: var(--accent-primary);
+}
+
+.note {
+  margin-block: var(--space-xs) 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* ───────────── Q1 / D3: the boundary is drawn by the pinned cells themselves ─────────────
+   Everything below is the specified recipe, applied over the real DataTable: no overlay element, no gradient,
+   a 1px --border-strong line inside the inner edge of every pinned-edge cell (header and body). A row that has no pinned
+   cell (the strip, an expanded detail) has no line, so the line stops above it and resumes below it. */
+.specified [data-edge] {
+  display: none;
+}
+
+.specified [data-cues]::before,
+.specified [data-cues]::after {
+  display: none;
+}
+
+.specified th[data-pin-edge='start'],
+.specified td[data-pin-edge='start'] {
+  box-shadow: inset -1px 0 0 var(--border-strong);
+}
+
+.specified th[data-pin-edge='end'],
+.specified td[data-pin-edge='end'] {
+  box-shadow: inset 1px 0 0 var(--border-strong);
+}
+
+.specified tr[data-child] > td[data-pin-edge='start']:first-child,
+.specified tr[data-group-open] > td[data-pin-edge='start']:first-child {
+  box-shadow:
+    inset var(--rail-width) 0 0 var(--accent-primary),
+    inset -1px 0 0 var(--border-strong);
+}
+
+/* ───────────── D2: key rows ───────────── */
+
+.keys {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  direction: ltr;
+  text-align: start;
+}
+
+.keys > .row {
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.row {
+  min-inline-size: 0;
+}
+
+/* The head: [toggle: chevron | name line] then the row's actions. The actions wrap under the name when they do not fit
+   beside it, so the key never has to give up its width. */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: var(--space-xs);
+  min-block-size: var(--row-compact);
+}
+
+.toggle {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 14px minmax(0, 1fr);
+  column-gap: 6px;
+  align-items: start;
+  min-inline-size: 0;
+  padding-block: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  direction: ltr;
+}
+
+.chevron {
+  margin-block-start: 2px;
+}
+
+/* One flex line: the key, then its preview. The key never shrinks below its text: it wraps (anywhere) inside the line;
+   the preview takes the rest of the key's last line when at least 12ch fit there (8px gap) and otherwise starts a new line. */
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-sm);
+  min-inline-size: 0;
+}
+
+.key {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  color: var(--text-primary);
+  unicode-bidi: isolate;
+}
+
+.value {
+  flex: 1 1 12ch;
+  min-inline-size: 0;
+  max-inline-size: max-content;
+  overflow: hidden;
+  font-size: var(--font-base);
+  line-height: 1.5;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  unicode-bidi: isolate;
+}
+
+.value[data-part='type'] {
+  flex: 0 0 auto;
+  font-size: var(--font-sm);
+}
+
+.actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+  min-block-size: var(--row-compact);
+}
+
+.body {
+  margin-inline-start: 7px;
+  padding: var(--space-xs) 0 var(--space-sm) var(--space-md);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.leaf {
+  inline-size: fit-content;
+  max-inline-size: min(100%, var(--field-measure));
+  font-size: var(--font-base);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+/* Sections variant (Input / Expected): the key is the same wrapping name, in the section's own typography. */
+.section {
+  min-inline-size: 0;
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.sectionKey {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  unicode-bidi: isolate;
+}
+
+.sectionBody {
+  padding-block: var(--space-xs) var(--space-sm);
+  padding-inline-start: calc(14px + var(--space-sm));
+  font-size: var(--font-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* Tags: key then value as two isolated runs, so Arabic keys keep their place before the value. */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.tagKey,
+.tagValue {
+  unicode-bidi: isolate;
+}
+
+/* ───────────── D2: metric facts ───────────── */
+
+.panel {
+  padding: var(--space-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  container-type: inline-size;
+  direction: ltr;
+}
+
+.metaBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.prose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+/* The prose label is a key name too: it wraps, it is never cut. */
+.eyebrow {
+  max-inline-size: 100%;
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.proseText {
+  inline-size: fit-content;
+  max-inline-size: min(100%, 76ch);
+  font-size: var(--font-md);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.proseText[data-primary] {
+  color: var(--text-primary);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  column-gap: var(--space-lg);
+  margin: 0;
+}
+
+/* key column: as wide as the longest key of the row up to 40% of it, at least --field-label-width; longer keys wrap there */
+.fact {
+  display: grid;
+  grid-template-columns: fit-content(40%) minmax(0, 1fr);
+  column-gap: var(--space-md);
+  align-items: baseline;
+  padding-block: var(--space-xs);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.fact dt {
+  min-inline-size: var(--field-label-width);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-align: start;
+  color: var(--text-muted);
+}
+
+.fact dd {
+  justify-self: start;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  margin: 0;
+  font-size: var(--font-base);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.fact dd[data-mono] {
+  font-family: var(--font-mono);
+}
+
+@container (max-width: 420px) {
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+  }
+
+  .fact dt {
+    min-inline-size: 0;
+  }
+}
+
+/* ───────────── item detail used by r7-edge-items ───────────── */
+
+.detail {
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-surface);
+  direction: ltr;
+}
+
+.itemBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-block-size: var(--row-compact);
+  margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-lg)) var(--space-sm);
+  padding-inline: var(--space-lg);
+  border-block-end: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.itemNum {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.itemPreview {
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--font-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.itemActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: var(--field-label-width) minmax(0, 1fr);
+  column-gap: var(--space-md);
+  padding-block: var(--space-sm);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.fieldLabel {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.fieldValue {
+  min-inline-size: 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.regionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  padding-block: var(--space-sm) var(--space-xs);
+}
+
+.regionTitle {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+@media (width <= 480px) {
+  .fieldRow {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-xs);
+  }
+}

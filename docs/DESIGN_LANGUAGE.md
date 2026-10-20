@@ -168,10 +168,11 @@ Enforced by `npm run test:design` (vitest), ESLint (TSX rules) and Stylelint.
 16. **Scroll- and pin-driven geometry never transitions** (`ui/DataTable`): no
     `transition` or `animation` on `left`, `right`, `top`, `bottom`, `inset-*`,
     `transform`, `box-shadow`, `width`, `inline-size` or `all` (a frozen cell or sticky
-    header follows the scroll position directly; a transition would trail it). The
-    one permitted fade is `opacity` (the frozen-edge shadow and the scroll cues), and it
-    is off under `prefers-reduced-motion`. Scroll handlers write refs, data attributes and
-    styles only: no React state and no layout read (`getBoundingClientRect`) per scroll event.
+    header follows the scroll position directly; a transition would trail it). Nothing in the
+    table fades while scrolling: the frozen boundary is a static line drawn by the frozen cells
+    (see "Data table"), so no `opacity` transition exists either. Scroll handlers write refs,
+    data attributes and styles only: no React state and no layout read (`getBoundingClientRect`)
+    per scroll event.
 
 ---
 
@@ -297,8 +298,13 @@ The recipes, by intent:
   new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are right-aligned; a column
   whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
   `--table-group-height` band above the header. Sort glyph, header menu and resize divider show on hover/focus only;
-  pinned columns (start/end) are opaque, with an edge shadow while content scrolls under them. Wide tables expose only
-  the persistent mirrored horizontal scrollbar rail (never both native and mirror). Below 640px tables that declare
+  pinned columns (start/end) are opaque, and the boundary is a 1px `--border-strong` line on the inner edge of the
+  pinned cells themselves (the last start cell and the first end cell of the header, the group band and every body row; the
+  sides swap under `dir="rtl"`). **A table's boundary is drawn by its own cells: nothing is painted over scrolling
+  content or over a row that is not in the columns** (no gradient, no shadow, no overlay element), so a row without a
+  pinned cell (the passes strip, an expanded item) has no line and a glyph is never covered (round 7, owner rule). Wide
+  tables expose only the persistent mirrored horizontal scrollbar rail (never both native and mirror), which is the
+  overflow cue. Below 640px tables that declare
   column `priority` become stacked cards. Chrome parts (`DataTable.Toolbar`, `DataTable.Footer`, selection bar, Columns
   and Density menus) sit inside the card on `--bg-surface`. `ScoreBar` takes `size='lg'` (14 to 16px track, value inside the bar), `series` and `index`; `DeltaCell emphasis`
   renders the pill outside the noise band. Cell kit (`ScoreBar`, `DeltaCell`, `TwoLine`, `IdCell`,
@@ -474,13 +480,21 @@ is not allowed.
   expanded item it is held above the detail (it stops when its bottom touches the detail's top, scrolls away, and returns to the line
   when the line crosses the detail's bottom; `useStickyShift` takes the detail spans, pure geometry in `stickyShift.ts`). The
   expanded item starts with an `ItemBar` (`--row-compact`, opaque, number, verdict, input preview, Copy link, Collapse) that
-  takes the sticky line. The table scroller is an overflow container, so the bar is translated by the same hook, not CSS sticky.
+  takes the sticky line. The table scroller is an overflow container, so the bar is translated by the same hook, not CSS sticky;
+  the hook writes `--head-shift` on the bar itself (a custom property is inherited: written on the item it restyled every descendant on every
+  scroll event), and the bar is its own layer only while it is shifted (round 7, D1).
 - **Item details** (round 3 P5): the expanded item is `direction: ltr` and left anchored: Input, Expected and Tags are
   `FieldRow labelAnchor="start"` (label column `--field-label-width`, the value block as wide as its text up to
   `--field-measure`; only the value carries `dir`), then the Output region, a full-width divider (1px `--border-strong`, 20px
   above) and the Metrics region. Output keys are collapsed key rows (`StructuredValue variant="keys"` / `KeyTree`: chevron, key,
   one-line preview; open: the value, Copy, per-key Expand all / Collapse all recursive; the region has global Expand all / Collapse
-  all and Sections | Raw). A repeat item has a pass rail (a chip per pass with number and verdict glyph, at most three read side by
+  all and Sections | Raw). **A data key is a name: it is shown exactly as written (case included, `text-transform: none`), wraps
+  (`overflow-wrap: anywhere`) and is never cut, clipped or ellipsised; whatever follows it (its preview, its actions) starts after
+  its last line, so a key never overlaps its content** (round 7, D2; tree keys, `StructuredValue` section keys, fact keys, Tag
+  keys; the key element carries `data-part="key"` and its own script direction, `textDirAttrs`, the row stays left to right). The
+  preview follows the key's last line (8px) when 12ch fit there, else starts the next line under it; the row's actions wrap under
+  the name when the whole name does not fit beside them. Fixed UI labels (Input, Expected, Output, the prose eyebrow) keep the
+  uppercase tracked eyebrow style. A repeat item has a pass rail (a chip per pass with number and verdict glyph, at most three read side by
   side). **A pass has no colour**: its identity is text, colour on a pass is only its verdict. Metrics are one matrix
   (metric rows by pass columns, Mean, 8 rows then "Show N more"), values are mono 600 band-coloured text (no tinted cells, no
   outline: the selected row takes `--bg-selected` and a 2px `--accent-primary` bar at its inline start; a single pass's Reason is a
@@ -488,12 +502,12 @@ is not allowed.
   The panel (`--bg-elevated`, `container-type: inline-size`, `direction: ltr`) has a one-row header (mono name, `ScoreValue`, "Pass n",
   "edited", then the text button "Edit score" and Close), a hairline, then: **prose blocks** (reason, reasoning, explanation, label,
   then any string over 60 characters) with the eyebrow label stacked above the text (13px, line 1.6, 76ch, `dir` on the text only) so a
-  label can never overlap its text; **facts** (`dl`: humanized sentence-case key `--font-sm` 650 in a `--field-label-width` column,
-  ellipsis + raw key in `title`, value next to it; the row stacks under 420px); **tables** for `{columns, rows}`, arrays of arrays and
+  label can never overlap its text; **facts** (`dl`: the judge key as written, `--font-sm` 650, in a key column of
+  `fit-content(40%)` at least `--field-label-width` where a long key wraps, value next to it; the row stacks under 420px); **tables** for `{columns, rows}`, arrays of arrays and
   arrays of two or more uniform plain objects (`detectTable`; eyebrow with the row count over an embedded `DataTable`, every header
   sortable, 12 rows then "Show N more rows", scrolls inside); and collapsed key rows for everything else. Label roles are exactly
-  three: eyebrow (11px 650 uppercase), fact key (11px 650 sentence case), tree key (12px 600 mono). `FieldRow` labels and `KeyTree`
-  keys are cut at their column (ellipsis, title) instead of painting over the value. Score edits happen in that panel.
+  three: eyebrow (11px 650 uppercase), fact key (11px 650, case as written), tree key (12px 600 mono). `FieldRow` labels wrap in
+  their column; no key is cut. Score edits happen in that panel.
 - **Items toolbar and correlation matrix** (round 5 R4): the toolbar row aligns its controls to one bottom edge, so a control with a
   label above (analysis metric, threshold, sort) and one without share a vertical centre; the metric correlation grid is as wide as its
   card body and its cells are as wide as their column (at least 20px, scrolling inside the card beyond that). A trace opens on its
