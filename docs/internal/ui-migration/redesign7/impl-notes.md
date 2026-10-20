@@ -137,3 +137,15 @@ Everything heavy ran through `scripts/heavy.sh` (logs in the agent's scratchpad;
 The two folder runs and the full run also executed `redesign5-shots.spec.ts` / `redesign5-spacing-trace.spec.ts` (the `e2e/run-detail` folder run included them), which rewrote five curated PNGs of `redesign5/shots`; they were restored with `git checkout -- docs/internal/ui-migration/redesign5/shots` and nothing of them is committed.
 The three load failures above are timeouts or a harness race, each green on a re-run alone; none touches code changed by this round.
 
+
+## 8. Review fix pass (`review-qa.md`: MEETS WITH FIXES)
+
+| Finding | Outcome | Numbers |
+|---|---|---|
+| R2, Q1-8 rail | Cause: `.rail` was a shrinkable flex item of the height-capped card, so with 50 rows it was squeezed. `flex: none`. Asserted on a 50-row page at 1440 and 1024 (fails without the fix: 7.4 px on the dev fixture) | 5.6 / 5.3 px -> **12 px** (+- 0.5) at every row count; commit `3b8612e1` |
+| R1, Q2-3 | `test_run_passes_statements.py` asserts the median of 9 at 10x300 and 10x1,200 (80 / 340 ms strict under `QYM_PERF_STRICT=1`, 4x CI margin otherwise: this in-memory ingest-built fixture measured 200 / 850 ms on the loaded machine against 67 / 316 ms on the production seed), statements equal and <= 28 kept (16 on the fixture) | 4 tests pass; commit `4dc80983` |
+| R1, Q2-5 | 10x1,200 case in `runs-passes-load.spec.ts`: `limit(3000, 500)`, exactly 2 requests, `view=group` | passes (48 s incl. the 60k-event seed); commit `4dc80983` |
+| R1, D1-3 / D1-3b | `qa.md` section 9 and the criterion rows say they are script-measured guards (`d1-bar-jank.mts`), with the reason; the "56 px with overflow: visible" is dropped from the D1 amendment row | docs, commit `2f247ea8` |
+| O2, word breaks | `lib/keyBreaks.tsx` (`<wbr>` after `_ - .`, before a camelCase capital) in the tree key, sections key, fact `dt`, Tag key; `anywhere` stays the fallback; Arabic keys `text-align: left`. Vitest `keyBreaks.test.tsx` (textContent unchanged) | production `d2-keys.mts`: **201 rows, 0 violations** of D2-1 to D2-13; `d2-exact.mts` **0 mismatches** in 35 + 19 + 35 + 19 keys. Line counts: tree 80-character keys at 390 **4 lines (was 3)**, depth-3 45 / 57 / 60-character keys 4 (were 3, 3, 4); everything else unchanged. `qa.md` D2-6 amended |
+
+Gate for this pass (`/home/meshari-aldossari/Documents/qym/qym/scripts/heavy.sh`, never printed `waiting`): `npm run check` clean, **171 files / 1,439 Vitest tests**, design test 52; both pytest files **10 passed**, 5 skipped; `e2e/perf` 25 passed + 1 failed (`run-sections.spec.ts`, a `view=summary` request count of 3 against <= 2 in a dev-server run; green on re-run alone, 3 passed); `e2e/runs-list` **228 passed**; `e2e/run-detail` **409 passed**, 9 skipped; `npm run build` ok. `redesign5/shots` was rewritten by the run-detail folder run and restored (nothing committed). No servers left (`ss -ltnp` empty on 8972, 5972, 9072, 9073, 9972).
