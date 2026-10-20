@@ -40,3 +40,19 @@ All runs through `scripts/heavy.sh` on Python 3.11.17 (logs under the scratchpad
 - `pytest tests/sdk` (cost 3): 498 passed. `mypy packages/sdk/qym`: the same 192 lines before and after (no new errors).
 - Playwright `e2e/datasets` (all 177 specs, cost 3, `gate-e2e-folder.log`): pass, including `access.spec.ts` and `item-state-batch.spec.ts`. The Evaluation Service stand-ins were left out of the run (their ports clash with the other worktree's).
 - `black` and `isort` disagree on the repo's existing files; the new files are isort-clean.
+
+## Fix pass (review-a.md, F1 to F7)
+
+| # | Change | Test | Measured after |
+|---|---|---|---|
+| F1 A1-33/36 | `permissions.redact_item_content(payload, reason)` picks the placeholder: `DATASET_ACCESS_PLACEHOLDER` for `dataset_access`, the private-test-set text otherwise; `api/runs.py` passes `items_restricted_reason` for rows, details, reasons, spans and traces | `test_dataset_access.py` (details and run rows hold the sentence, no "private test set"); `access-identities.spec.ts` (real user with no access, run page and `POST /items/details`) | table and details read "Hidden: you don’t have access to this dataset’s items."; 0 occurrences of "private test set" on the page |
+| F2 A1-33 | `ItemCard` fetches the (redacted) details for a restricted row like any other row, so the card renders | `access-identities.spec.ts` expands item #1 at 1440 and 390 | `run-item-redacted` count 1 per open item, text exact, one line (under 40 px), no "Loading item details…" |
+| F3 A1-34 | same backend change; compare `OutputCard` already chose the text by reason | `access-identities.spec.ts` compare (`cohortA`/`cohortB`, `tab=items`) | the sentence is visible in the output cards, no private-test-set text |
+| F4 A1-30 | amended: 244.4 at 390 (the text wraps one more line in the 279 px column) | `access.spec.ts` 403 test, tolerance 1 px at every width (189 / 189 / 244.4) | 188.98 / 188.98 / 244.4 |
+| F5 A1-1 | catalog "View only" badge carries the `eye` glyph | `access.spec.ts` (card, rewritten answer) and `access-identities.spec.ts` (real view grant) | 91.5 x 20 |
+| F6 A3-27 | amended: 348 px at 390 (279 was the gallery frame) | `item-state-batch.spec.ts` | 348 |
+| F7 | `redesign5-bars.spec.ts:286` fails 4 of 4 on the branch, passes 4 of 4 on 38d710c5: caused by this branch (the RadioGroup gallery Case sat above the `#round5` anchor and moved it by a fractional offset). Fixed by moving that Case into its own section after the round mocks; 3 of 3 pass. `redesign3-header.spec.ts:196` ("Response has been disposed" inside the spec's own `route.fetch().json()`) is a flake that also fails on the base commit: 2 of 12 there, 3 of 12 on the branch. Left as is. | `redesign5-bars.spec.ts -g R1-3 --repeat-each 3` | pass |
+
+The identity spec needs header auth: `QYM_E2E_AUTH_MODE=proxy_headers QYM_ADMIN_BOOTSTRAP_TOKEN=e2e-bootstrap npx playwright test e2e/datasets/access-identities.spec.ts` (it skips otherwise). Gate logs: `gate2-*.log` in the scratchpad.
+
+Fix-pass gate (heavy.sh cost 3 each, Python 3.11.17): `npm run check` pass; `e2e/datasets` 178 passed; `e2e/compare` pass; `e2e/run-detail` 408 passed, 1 failed: `redesign2-items.spec.ts:101` (Raw radio click), a flake that also fails on 38d710c5 (2 of 20 there, 2 of 10 on the branch); the identity spec 3 passed in header-auth mode; pytest of the three WP-A files, `test_run_views`, `test_private_test_sets`, `test_design_language` pass, `test_run_page_payloads` keeps its one pre-existing failure (a float in a golden, fails on the base commit).

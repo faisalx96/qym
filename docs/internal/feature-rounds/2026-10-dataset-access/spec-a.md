@@ -558,3 +558,7 @@ Known limitations (documented, not fixed here): the 21 px overflow of the catalo
 | A2-63 | `field_diffs` pseudo-field `{field: "state", ...}` | `fields` contains `"state"` and `before.state` / `after.state` are `active` / `disabled` | one existing diff shape; the UI renders the state diff from it |
 | A2-57 | revision `before` / `after` = `{disabled, reason}` | the same plus `item_id` | compare and the item lineage match revisions by `item_id` |
 | A3-60 | `GET …/items` catalog | `GET /v1/datasets` gains `include_inaccessible` | WP-B's launch picker lists datasets the caller cannot open (owner decision D3) |
+| A1-30 | 403 alert 229 px at 390 | **244.4** (189 at 1440 and 1024 unchanged) | the body and the meta line wrap one more line in the 279 px column; the gallery frame was narrower text |
+| A1-1 | "View only" 91.5 x 20 on the card | met: the card badge now carries the same `eye` glyph as the page header | review F5 |
+| A3-27 | batch dialog 279 px at 390 | **348 px** (600 at 1440 and 1024) | 279 was the gallery frame; the dialog fits the viewport |
+| A1-33 / A1-34 / A1-36 | placeholder for a restricted dataset | `Hidden: you don’t have access to this dataset’s items.` in the table, the details endpoint, spans and the compare cards; the private-test-set text only for private test sets | review F1, F3: `redact_item_content(payload, reason)` |

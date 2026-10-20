@@ -78,7 +78,6 @@
   color: var(--text-primary);
 }
 
-
 /* The placeholder reserves the loaded project-mode form: 343 px of body at 760 wide, 446 px at 279 (spec A1-23, no shift). */
 .skeletonFrame {
   min-block-size: 191.5px;

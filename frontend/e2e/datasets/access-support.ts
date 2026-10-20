@@ -25,7 +25,9 @@ export async function addMembers(
   for (const name of names) {
     const email = `${name.toLowerCase().replace(/[^a-z]+/g, '.')}.${Date.now().toString(36)}@e2e.local`;
     const user = await createUser(request, email, name);
-    await ok(request.post(`/v1/projects/${projectId}/members`, { data: { user_id: user.id, role: 'MEMBER' } }));
+    await ok(
+      request.post(`/v1/projects/${projectId}/members`, { data: { user_id: user.id, role: 'MEMBER' } }),
+    );
     out.push({ id: user.id, email, name });
   }
   return out;
@@ -71,9 +73,12 @@ export async function batch(
   body: Record<string, unknown>,
 ) {
   return ok<{ matched: number; affected: number; sample_item_ids: string[] }>(
-    request.post(`/v1/datasets/${encodeURIComponent(ref)}/versions/${version}/items:batch?project_slug=${slug}`, {
-      data: body,
-    }),
+    request.post(
+      `/v1/datasets/${encodeURIComponent(ref)}/versions/${version}/items:batch?project_slug=${slug}`,
+      {
+        data: body,
+      },
+    ),
   );
 }
 
@@ -86,8 +91,12 @@ export function metadataItems(n: number, financeCount = Math.floor(n / 3), prefi
     const arabic = i % 5 === 0;
     return {
       item_id: `${prefix}-${String(i + 1).padStart(3, '0')}`,
-      input: arabic ? `ما هي سياسة الاسترجاع للطلب رقم ${i + 1}؟` : `What is the refund policy for order #${i + 1}?`,
-      expected_output: arabic ? 'يمكنك إرجاع المنتج خلال 30 يوماً' : `Refunds within 30 days for order #${i + 1}.`,
+      input: arabic
+        ? `ما هي سياسة الاسترجاع للطلب رقم ${i + 1}؟`
+        : `What is the refund policy for order #${i + 1}?`,
+      expected_output: arabic
+        ? 'يمكنك إرجاع المنتج خلال 30 يوماً'
+        : `Refunds within 30 days for order #${i + 1}.`,
       metadata: {
         domain: i < financeCount ? 'finance' : DOMAINS[1 + (i % 3)],
         difficulty: i % 3,

@@ -25,7 +25,14 @@ async function seedFaq(request: APIRequestContext, prefix: string): Promise<Seed
   await bulkItems(request, project.slug, d.slug, v1.version, metadataItems(130, 42));
   await publishVersion(request, project.slug, d.slug, v1.version, true);
   const v2 = await createVersion(request, project.slug, d.slug, { from_version: v1.version });
-  await disableItems(request, project.slug, d.slug, v2.version, ['faq-003', 'faq-005', 'faq-050', 'faq-070', 'faq-090', 'faq-120'], 'duplicate of faq-014');
+  await disableItems(
+    request,
+    project.slug,
+    d.slug,
+    v2.version,
+    ['faq-003', 'faq-005', 'faq-050', 'faq-070', 'faq-090', 'faq-120'],
+    'duplicate of faq-014',
+  );
   return { slug: project.slug, ds: d.slug, v1: v1.version, v2: v2.version };
 }
 
@@ -42,7 +49,10 @@ const toolbar = (page: Page) => page.locator('[data-dt-toolbar]');
 const rowOf = (page: Page, id: string) =>
   page.locator(`[data-item-link="${id}"]`).locator('xpath=ancestor::*[@role="row"]');
 const stateLabel = (page: Page, name: string) =>
-  page.getByTestId('items-state').locator('label').filter({ hasText: new RegExp(`^${name}`) });
+  page
+    .getByTestId('items-state')
+    .locator('label')
+    .filter({ hasText: new RegExp(`^${name}`) });
 async function pickState(page: Page, name: 'Active' | 'Disabled' | 'All') {
   await stateLabel(page, name).click();
 }
@@ -73,10 +83,13 @@ test.describe('state control and toolbar (A2-1 to A2-12)', () => {
       await expect(control.locator('label').nth(0)).toContainText('Active124');
       await expect(control.locator('label').nth(1)).toContainText('Disabled6');
       await expect(control.locator('label').nth(2)).toContainText('All130');
-      const countFont = await control.locator('span[class*="countLabel"]').first().evaluate((el) => {
-        const cs = getComputedStyle(el);
-        return { family: cs.fontFamily, nums: cs.fontVariantNumeric };
-      });
+      const countFont = await control
+        .locator('span[class*="countLabel"]')
+        .first()
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return { family: cs.fontFamily, nums: cs.fontVariantNumeric };
+        });
       expect(countFont.family).toMatch(/mono/i);
       expect(countFont.nums).toContain('tabular-nums');
       // A2-4: the toolbar height by width, the same loading and loaded.
@@ -108,9 +121,9 @@ test.describe('state control and toolbar (A2-1 to A2-12)', () => {
     // Counts ignore the state and follow the other criteria; All = Active + Disabled.
     await page.getByRole('searchbox', { name: 'Search items' }).fill('order #1');
     await expect(control.locator('label').nth(2)).not.toContainText('All130');
-    const counts = await control.locator('label').evaluateAll((els) =>
-      els.map((e) => Number(/(\d+)$/.exec(e.textContent ?? '')?.[1])),
-    );
+    const counts = await control
+      .locator('label')
+      .evaluateAll((els) => els.map((e) => Number(/(\d+)$/.exec(e.textContent ?? '')?.[1])));
     expect(counts[0]! + counts[1]!).toBe(counts[2]!);
   });
 
@@ -128,12 +141,19 @@ test.describe('state control and toolbar (A2-1 to A2-12)', () => {
     const badge = disabledRow.getByText('Disabled', { exact: true });
     expect((await size(badge)).h).toBe(20);
     const colors = await Promise.all(
-      [disabledRow, activeRow].map((row) => row.locator('td').nth(3).evaluate((td) => getComputedStyle(td).color)),
+      [disabledRow, activeRow].map((row) =>
+        row
+          .locator('td')
+          .nth(3)
+          .evaluate((td) => getComputedStyle(td).color),
+      ),
     );
     expect(colors[0]).not.toBe(colors[1]);
     const opacity = await disabledRow.evaluate((tr) => getComputedStyle(tr).opacity);
     expect(opacity).toBe('1'); // never hidden or dimmed by opacity alone
-    const idWidth = await page.getByRole('columnheader', { name: /^ID/ }).evaluate((th) => th.getBoundingClientRect().width);
+    const idWidth = await page
+      .getByRole('columnheader', { name: /^ID/ })
+      .evaluate((th) => th.getBoundingClientRect().width);
     near(idWidth, 180, 1);
     // Under Active the badge never appears.
     await pickState(page, 'Active');
@@ -155,7 +175,10 @@ test.describe('state control and toolbar (A2-1 to A2-12)', () => {
     expect(query(page).get('state')).toBe('disabled'); // the state stays
   });
 
-  test('a published version shows the same state control, no checkboxes (A2-12)', async ({ page, request }) => {
+  test('a published version shows the same state control, no checkboxes (A2-12)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'pub');
     await open(page, s, '', s.v1);
     await expect(page.getByRole('checkbox')).toHaveCount(0);
@@ -172,7 +195,10 @@ test.describe('state control and toolbar (A2-1 to A2-12)', () => {
 });
 
 test.describe('metadata filter and chips (A3-1 to A3-14)', () => {
-  test('the Metadata button is 98 x 24 and the popover is 320 wide (A3-1 to A3-3)', async ({ page, request }) => {
+  test('the Metadata button is 98 x 24 and the popover is 320 wide (A3-1 to A3-3)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'meta');
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 900 });
@@ -189,7 +215,10 @@ test.describe('metadata filter and chips (A3-1 to A3-14)', () => {
     }
   });
 
-  test('pick a key and a value: a chip, ?meta= in the URL, counts follow (A3-4 to A3-9)', async ({ page, request }) => {
+  test('pick a key and a value: a chip, ?meta= in the URL, counts follow (A3-4 to A3-9)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'pick');
     await page.setViewportSize({ width: 1440, height: 900 });
     await open(page, s);
@@ -199,7 +228,12 @@ test.describe('metadata filter and chips (A3-1 to A3-14)', () => {
     await popover.getByRole('button', { name: /Key/ }).click();
     const keys = page.getByRole('listbox').filter({ hasText: 'source.region.code' }).getByRole('option');
     const options = await keys.allInnerTexts();
-    expect(options.map((o) => o.split('\n')[0])).toEqual(['difficulty', 'domain', 'source.channel', 'source.region.code']);
+    expect(options.map((o) => o.split('\n')[0])).toEqual([
+      'difficulty',
+      'domain',
+      'source.channel',
+      'source.region.code',
+    ]);
     await page.getByRole('option', { name: /^domain/ }).click();
     const values = popover.getByRole('listbox', { name: 'Values of domain' });
     await expect(values.getByRole('option').first()).toContainText('finance');
@@ -222,7 +256,11 @@ test.describe('metadata filter and chips (A3-1 to A3-14)', () => {
 
   test('chips and the toolbar heights with three filters (A2-5, A3-7, A3-8)', async ({ page, request }) => {
     const s = await seedFaq(request, 'chips');
-    for (const [width, chipRow, toolbarH] of [[1440, 26, 67], [1024, 26, 99], [390, 56, 225]] as const) {
+    for (const [width, chipRow, toolbarH] of [
+      [1440, 26, 67],
+      [1024, 26, 99],
+      [390, 56, 225],
+    ] as const) {
       await page.setViewportSize({ width, height: 900 });
       await open(page, s, 'label=edge&meta=domain:finance&meta=source.region.code:sa');
       await expect(page.getByTestId('meta-chip')).toHaveCount(2);
@@ -237,7 +275,11 @@ test.describe('metadata filter and chips (A3-1 to A3-14)', () => {
   test('five filters is the limit: the button disables with the hint (A3-10)', async ({ page, request }) => {
     const s = await seedFaq(request, 'five');
     await page.setViewportSize({ width: 1440, height: 900 });
-    await open(page, s, 'meta=domain:finance&meta=difficulty:1&meta=source.channel:chat&meta=source.region.code:sa&meta=extra:1');
+    await open(
+      page,
+      s,
+      'meta=domain:finance&meta=difficulty:1&meta=source.channel:chat&meta=source.region.code:sa&meta=extra:1',
+    );
     await expect(page.getByTestId('meta-chip')).toHaveCount(5);
     const button = page.getByTestId('metadata-filter');
     await expect(button).toHaveAttribute('data-limit', '');
@@ -258,21 +300,28 @@ test.describe('metadata filter and chips (A3-1 to A3-14)', () => {
     await expect(page.getByTestId('meta-popover').getByRole('listbox')).toBeVisible();
     await page.keyboard.press('Escape');
     await page.unroute(/items:metadata-facets/);
-    await page.route(/items:metadata-facets/, (route) => route.fulfill({ json: { paths: [], truncated: false } }));
+    await page.route(/items:metadata-facets/, (route) =>
+      route.fulfill({ json: { paths: [], truncated: false } }),
+    );
     await page.reload();
     await page.getByTestId('metadata-filter').click();
     await expect(page.getByText('No metadata keys')).toBeVisible();
     await expect(page.getByText('Items in this version have no metadata fields to filter on.')).toBeVisible();
     await page.keyboard.press('Escape');
     await page.unroute(/items:metadata-facets/);
-    await page.route(/items:metadata-facets/, (route) => route.fulfill({ status: 500, json: { detail: 'boom' } }));
+    await page.route(/items:metadata-facets/, (route) =>
+      route.fulfill({ status: 500, json: { detail: 'boom' } }),
+    );
     await page.reload();
     await page.getByTestId('metadata-filter').click();
     await expect(page.getByText('Couldn’t load metadata keys')).toBeVisible();
     await expect(page.getByTestId('meta-popover').getByRole('button', { name: 'Retry' })).toBeVisible();
   });
 
-  test('a truncated path says so and an unlisted value applies as an exact match (A3-14)', async ({ page, request }) => {
+  test('a truncated path says so and an unlisted value applies as an exact match (A3-14)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'trunc');
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.route(/items:metadata-facets/, (route) =>
@@ -292,7 +341,9 @@ test.describe('metadata filter and chips (A3-1 to A3-14)', () => {
     );
     await open(page, s);
     await page.getByTestId('metadata-filter').click();
-    await expect(page.getByTestId('facet-truncated')).toHaveText('Showing the 200 most common values of 340. Type to search.');
+    await expect(page.getByTestId('facet-truncated')).toHaveText(
+      'Showing the 200 most common values of 340. Type to search.',
+    );
     await page.getByRole('searchbox', { name: 'Find a value' }).fill('t999');
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('meta-chip')).toHaveText('ticket: t999');
@@ -302,7 +353,10 @@ test.describe('metadata filter and chips (A3-1 to A3-14)', () => {
 const FILTER = 'meta=domain:finance'; // 42 finance items; 2 of them disabled in the seed
 
 test.describe('All matching menu and selected rows (A3-15 to A3-26)', () => {
-  test('the menu appears with a criterion; its numbers are the counts (A3-15 to A3-17, A3-20)', async ({ page, request }) => {
+  test('the menu appears with a criterion; its numbers are the counts (A3-15 to A3-17, A3-20)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'menu');
     await page.setViewportSize({ width: 1440, height: 900 });
     await open(page, s);
@@ -315,10 +369,16 @@ test.describe('All matching menu and selected rows (A3-15 to A3-26)', () => {
     expect([t.w, t.h]).toEqual([108, 24]);
     await trigger.click();
     const menu = page.getByRole('menu', { name: 'All matching' });
-    await expect(menu.getByRole('menuitem')).toHaveText(['Disable all 40 matching…', 'Enable all 2 matching…', 'Delete all 42 matching…']);
+    await expect(menu.getByRole('menuitem')).toHaveText([
+      'Disable all 40 matching…',
+      'Enable all 2 matching…',
+      'Delete all 42 matching…',
+    ]);
     // Amended A3-17: the real menu is content sized (178 px here), not the 240 px of the mock panel.
     expect((await size(menu)).w).toBeLessThanOrEqual(240);
-    for (const h of await menu.getByRole('menuitem').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) {
+    for (const h of await menu
+      .getByRole('menuitem')
+      .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) {
       expect(h).toBeGreaterThanOrEqual(32 - 0.5);
     }
     await expect(menu.getByRole('menuitem', { name: /^Delete all/ })).toHaveAttribute('data-tone', 'danger');
@@ -329,10 +389,16 @@ test.describe('All matching menu and selected rows (A3-15 to A3-26)', () => {
     await open(page, s, 'label=arabic&meta=difficulty:1');
     // none of these items is disabled: Enable all 0 matching…
     await page.getByTestId('all-matching').click();
-    await expect(page.getByRole('menuitem', { name: 'Enable all 0 matching…' })).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByRole('menuitem', { name: 'Enable all 0 matching…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
-  test('a published version swaps the menu for one button that opens the create-draft flow (A3-18)', async ({ page, request }) => {
+  test('a published version swaps the menu for one button that opens the create-draft flow (A3-18)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'pubentry');
     await open(page, s, FILTER, s.v1);
     await expect(page.getByTestId('all-matching')).toHaveCount(0);
@@ -343,23 +409,40 @@ test.describe('All matching menu and selected rows (A3-15 to A3-26)', () => {
     await expect(page.getByRole('dialog', { name: 'Create draft' })).toBeVisible();
   });
 
-  test('selected rows: Disable N…, Enable N, Delete N and the toolbar heights (A3-21 to A3-23)', async ({ page, request }) => {
+  test('selected rows: Disable N…, Enable N, Delete N and the toolbar heights (A3-21 to A3-23)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'selrows');
-    for (const [width, h] of [[1440, 99], [1024, 131], [390, 321]] as const) {
+    for (const [width, h] of [
+      [1440, 99],
+      [1024, 131],
+      [390, 321],
+    ] as const) {
       await page.setViewportSize({ width, height: 900 });
       await open(page, s, `label=arabic&${FILTER}&meta=difficulty:0`);
       await selectRows(page, ['faq-001', 'faq-016']);
       const cluster = page.getByRole('region', { name: 'Selection actions' });
       await expect(cluster).toContainText('2 selected');
-      await expect(cluster.getByRole('button')).toHaveText(['Disable 2…', 'Enable 2', 'Delete 2', 'Clear selection']);
+      await expect(cluster.getByRole('button')).toHaveText([
+        'Disable 2…',
+        'Enable 2',
+        'Delete 2',
+        'Clear selection',
+      ]);
       near((await size(toolbar(page))).h, h, 4);
     }
     // Enable 2 applies at once (reversible): these two are active, so nothing changes.
     await page.getByTestId('bulk-enable-selected').click();
-    await expect(page.locator('[data-toast-container]')).toContainText('No change: the 2 items were already enabled');
+    await expect(page.locator('[data-toast-container]')).toContainText(
+      'No change: the 2 items were already enabled',
+    );
   });
 
-  test('disabling selected rows: the dialog is titled with the count (A2-35, A3-22)', async ({ page, request }) => {
+  test('disabling selected rows: the dialog is titled with the count (A2-35, A3-22)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'seldis');
     await page.setViewportSize({ width: 1440, height: 900 });
     await open(page, s);
@@ -376,13 +459,21 @@ test.describe('All matching menu and selected rows (A3-15 to A3-26)', () => {
     await expect(rowOf(page, 'faq-001')).toHaveCount(0); // left the Active list
   });
 
-  test('selecting disabled rows and pressing Disable 2… reports no change (A3-23)', async ({ page, request }) => {
+  test('selecting disabled rows and pressing Disable 2… reports no change (A3-23)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'seldis2');
     await open(page, s, 'state=disabled');
     await selectRows(page, ['faq-003', 'faq-005']);
     await page.getByTestId('bulk-disable-selected').click();
-    await page.getByRole('dialog', { name: 'Disable 2 items?' }).getByRole('button', { name: 'Disable 2' }).click();
-    await expect(page.locator('[data-toast-container]')).toContainText('No change: the 2 items were already disabled');
+    await page
+      .getByRole('dialog', { name: 'Disable 2 items?' })
+      .getByRole('button', { name: 'Disable 2' })
+      .click();
+    await expect(page.locator('[data-toast-container]')).toContainText(
+      'No change: the 2 items were already disabled',
+    );
   });
 });
 
@@ -393,7 +484,10 @@ test.describe('batch confirm dialog (A3-27 to A3-42)', () => {
     await page.getByRole('menuitem', { name: entry }).click();
   }
 
-  test('disable: numbers, first items, reason with counter, then apply (A3-29 to A3-31, A3-36)', async ({ page, request }) => {
+  test('disable: numbers, first items, reason with counter, then apply (A3-29 to A3-31, A3-36)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'bdis');
     await page.setViewportSize({ width: 1440, height: 900 });
     await openBatch(page, s, /^Disable all/);
@@ -401,7 +495,9 @@ test.describe('batch confirm dialog (A3-27 to A3-42)', () => {
     await expect(dialog).toBeVisible();
     near((await size(dialog)).w, 600, 2);
     await expect(dialog.getByTestId('batch-numbers')).toContainText('40');
-    await expect(dialog.getByTestId('batch-numbers')).toContainText('40 of 130 items match domain: finance and are active.');
+    await expect(dialog.getByTestId('batch-numbers')).toContainText(
+      '40 of 130 items match domain: finance and are active.',
+    );
     const ids = dialog.getByTestId('batch-ids');
     await expect(ids).toContainText('First items');
     await expect(ids.locator('li')).toHaveCount(6); // five tags and "and 35 more"
@@ -409,7 +505,9 @@ test.describe('batch confirm dialog (A3-27 to A3-42)', () => {
     const reason = dialog.getByRole('textbox', { name: 'Reason (optional)' });
     await reason.fill('x'.repeat(30));
     await expect(dialog.getByTestId('reason-counter')).toHaveText('30 / 500');
-    await expect(dialog).toContainText('The items stay in this draft and are left out of runs once it is published.');
+    await expect(dialog).toContainText(
+      'The items stay in this draft and are left out of runs once it is published.',
+    );
     await dialog.getByRole('button', { name: 'Disable 40' }).click();
     await expect(page.locator('[data-toast-container]')).toContainText('Disabled 40 items');
     await expect(dialog).toHaveCount(0);
@@ -462,7 +560,10 @@ test.describe('batch confirm dialog (A3-27 to A3-42)', () => {
     await expect(dialog.getByRole('button', { name: 'Delete 42' })).toBeEnabled();
   });
 
-  test('the dialog opens in the checking state and the primary waits for the dry run (A3-28)', async ({ page, request }) => {
+  test('the dialog opens in the checking state and the primary waits for the dry run (A3-28)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'bcheck');
     await page.route(/items:batch/, async (route) => {
       await new Promise((r) => setTimeout(r, 900));
@@ -481,12 +582,19 @@ test.describe('batch confirm dialog (A3-27 to A3-42)', () => {
     void checking;
   });
 
-  test('a moved count answers 409: the dialog says so and offers Review again (A3-37)', async ({ page, request }) => {
+  test('a moved count answers 409: the dialog says so and offers Review again (A3-37)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'b409');
     await openBatch(page, s, /^Disable all/);
     const dialog = page.getByRole('dialog', { name: 'Disable 40 items?' });
     // Another editor changes the matching set after the dry run.
-    await batch(request, s.slug, s.ds, s.v2, { filter: { item_ids: ['faq-001'] }, action: 'disable', dry_run: false });
+    await batch(request, s.slug, s.ds, s.v2, {
+      filter: { item_ids: ['faq-001'] },
+      action: 'disable',
+      dry_run: false,
+    });
     await dialog.getByRole('button', { name: 'Disable 40' }).click();
     const changed = dialog.getByTestId('batch-changed');
     await expect(changed).toHaveText('The matching items changed. Review the new count and try again.');
@@ -513,13 +621,17 @@ test.describe('batch confirm dialog (A3-27 to A3-42)', () => {
     await expect(page.getByRole('dialog', { name: 'Disable 40 items?' })).toBeVisible();
   });
 
-  test('another apply error shows its detail and re-enables the primary (A3-39)', async ({ page, request }) => {
+  test('another apply error shows its detail and re-enables the primary (A3-39)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'bother');
     await openBatch(page, s, /^Disable all/);
     const dialog = page.getByRole('dialog', { name: 'Disable 40 items?' });
     await page.route(/items:batch/, async (route) => {
       const body = route.request().postDataJSON() as { dry_run: boolean };
-      if (!body.dry_run) await route.fulfill({ status: 403, json: { detail: 'You can view this dataset but not change it' } });
+      if (!body.dry_run)
+        await route.fulfill({ status: 403, json: { detail: 'You can view this dataset but not change it' } });
       else await route.continue();
     });
     await dialog.getByRole('button', { name: 'Disable 40' }).click();
@@ -543,11 +655,16 @@ test.describe('batch confirm dialog (A3-27 to A3-42)', () => {
     await expect(page.locator('[data-toast-container]')).toContainText('Disabled 40 items');
   });
 
-  test('a dry run that affects nothing shows an info toast and no dialog (A3-40)', async ({ page, request }) => {
+  test('a dry run that affects nothing shows an info toast and no dialog (A3-40)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'bzero');
     await open(page, s, FILTER);
     await page.route(/items:batch/, (route) =>
-      route.fulfill({ json: { matched: 3, affected: 0, sample_item_ids: [], version_status: 'draft', dry_run: true } }),
+      route.fulfill({
+        json: { matched: 3, affected: 0, sample_item_ids: [], version_status: 'draft', dry_run: true },
+      }),
     );
     await page.getByTestId('all-matching').click();
     await page.getByRole('menuitem', { name: /^Disable all/ }).click();
@@ -624,7 +741,10 @@ test.describe('item pane, item page and the disable dialog (A2-13 to A2-35)', ()
     const action = pane(page).getByTestId('item-state-action');
     await expect(action).toHaveText('Create a draft to disable');
     await action.click();
-    await page.getByRole('dialog', { name: 'Create draft' }).getByRole('button', { name: 'Create draft' }).click();
+    await page
+      .getByRole('dialog', { name: 'Create draft' })
+      .getByRole('button', { name: 'Create draft' })
+      .click();
     await expect.poll(() => query(page).get('item')).toBe('faq-002');
     expect(query(page).get('v')).not.toBe(s.v1);
   });
@@ -645,7 +765,10 @@ test.describe('item pane, item page and the disable dialog (A2-13 to A2-35)', ()
     await expect(page.getByTestId('item-state-action')).toHaveText('Create a draft to disable');
   });
 
-  test('a 409 from the server shows its detail under the reason field (A2-27, A2-33)', async ({ page, request }) => {
+  test('a 409 from the server shows its detail under the reason field (A2-27, A2-33)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'err409');
     await open(page, s);
     await rowOf(page, 'faq-001').click();
@@ -688,7 +811,10 @@ test.describe('version header, download, publish note, history and compare (A2-3
     await expect(note).toHaveText('6 items are disabled. Runs on v2 skip them.');
   });
 
-  test('history shows disabled and enabled revisions without diffs or revert (A2-43, A2-44)', async ({ page, request }) => {
+  test('history shows disabled and enabled revisions without diffs or revert (A2-43, A2-44)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedFaq(request, 'hist');
     await gotoApp(page, `/projects/${s.slug}/datasets/${s.ds}?v=${s.v2}&item=faq-003&tab=history`);
     const rev = page.getByTestId('rev-disabled');
@@ -726,4 +852,19 @@ test.describe('version header, download, publish note, history and compare (A2-3
     // v2 is a draft: its counts are computed on read.
     await expect(page.getByText('6 disabled').first()).toBeVisible();
   });
+});
+
+test('the batch dialog is 348 px wide at 390 (amended A3-27: 279 was the gallery frame) (F6)', async ({
+  page,
+  request,
+}) => {
+  const s = await seedFaq(request, 'b390');
+  await page.setViewportSize({ width: 390, height: 900 });
+  await open(page, s, FILTER);
+  await page.getByTestId('all-matching').click();
+  await page.getByRole('menuitem', { name: /^Disable all/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Disable 40 items?' });
+  await expect(dialog).toBeVisible();
+  near((await size(dialog)).w, 348, 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

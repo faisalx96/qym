@@ -157,6 +157,8 @@ def apply_reviewable_run_filter(query: Query, db: Session, principal: Principal)
 # dataset, its versions and runs' scores.
 
 PRIVATE_TEST_SET_PLACEHOLDER = "[private test set: visible to admins only]"
+# Shown in place of item content when the reader has no access to a restricted dataset.
+DATASET_ACCESS_PLACEHOLDER = "Hidden: you don\u2019t have access to this dataset\u2019s items."
 PRIVATE_TEST_SET_DETAIL = "This dataset is a private test set; its items are visible to admins only."
 
 # Keys of item-shaped payloads (run rows, dataset items, correction snapshots)
@@ -435,9 +437,9 @@ _METRIC_META_SAFE_STRINGS = frozenset(
 )
 
 
-def _redact_metric_meta(meta: Any) -> Any:
+def _redact_metric_meta(meta: Any, placeholder: str = PRIVATE_TEST_SET_PLACEHOLDER) -> Any:
     if isinstance(meta, list):
-        return [_redact_metric_meta(entry) for entry in meta]
+        return [_redact_metric_meta(entry, placeholder) for entry in meta]
     if not isinstance(meta, dict):
         # A bare score value (``scores_snapshot``) or a missing pass.
         return meta if meta is None or isinstance(meta, (bool, int, float, str)) else None
@@ -447,16 +449,16 @@ def _redact_metric_meta(meta: Any) -> Any:
             safe[key] = value
         elif key == "error" and value:
             # Truthiness drives the metric-error state in the UI.
-            safe[key] = PRIVATE_TEST_SET_PLACEHOLDER
+            safe[key] = placeholder
         elif key in _METRIC_META_SAFE_STRINGS and isinstance(value, str):
             safe[key] = value
     return safe
 
 
-def _redact(value: Any) -> None:
+def _redact(value: Any, placeholder: str = PRIVATE_TEST_SET_PLACEHOLDER) -> None:
     if isinstance(value, list):
         for entry in value:
-            _redact(entry)
+            _redact(entry, placeholder)
         return
     if not isinstance(value, dict):
         return
@@ -464,26 +466,33 @@ def _redact(value: Any) -> None:
         entry = value[key]
         if key in _METRIC_META_KEYS and isinstance(entry, dict):
             value[key] = {
-                metric: _redact_metric_meta(meta) for metric, meta in entry.items()
+                metric: _redact_metric_meta(meta, placeholder) for metric, meta in entry.items()
             }
         elif isinstance(key, str) and _is_content_key(key):
             if entry not in (None, "", [], {}):
-                value[key] = PRIVATE_TEST_SET_PLACEHOLDER
+                value[key] = placeholder
         elif key in _ITEM_CONTENT_CLEARED_KEYS:
             value[key] = [] if isinstance(entry, list) else {} if isinstance(entry, dict) else None
         else:
-            _redact(entry)
+            _redact(entry, placeholder)
 
 
-def redact_item_content(payload: Any) -> Any:
+def placeholder_for(reason: Optional[str]) -> str:
+    """The text that replaces item content: the access sentence for ``dataset_access``, else the private-test-set one."""
+    return DATASET_ACCESS_PLACEHOLDER if reason == "dataset_access" else PRIVATE_TEST_SET_PLACEHOLDER
+
+
+def redact_item_content(payload: Any, reason: Optional[str] = None) -> Any:
     """Redact item content in place from an item-shaped dict (or a list of
     them), recursing into nested values such as ``pass_attempts`` and metric
-    explanations. Marks each top-level dict ``content_restricted``."""
+    explanations. Marks each top-level dict ``content_restricted``. ``reason`` is
+    ``items_restricted_reason``: ``dataset_access`` words the placeholder for a
+    restricted dataset, anything else keeps the private-test-set text."""
     if isinstance(payload, list):
         for entry in payload:
-            redact_item_content(entry)
+            redact_item_content(entry, reason)
         return payload
     if isinstance(payload, dict):
-        _redact(payload)
+        _redact(payload, placeholder_for(reason))
         payload["content_restricted"] = True
     return payload

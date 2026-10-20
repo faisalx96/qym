@@ -654,6 +654,14 @@ def test_run_on_a_restricted_dataset_is_listed_but_item_contents_are_redacted(wo
         "/api/runs/run-1/items/details", json={"item_ids": ["a"]}, headers=MEM
     )
     assert details.status_code == 200 and SECRET not in details.text
+    # F1: the placeholder names the right cause, in the table rows and in the details.
+    from qym_platform.permissions import DATASET_ACCESS_PLACEHOLDER
+
+    assert DATASET_ACCESS_PLACEHOLDER == "Hidden: you don\u2019t have access to this dataset\u2019s items."
+    assert details.json()["rows"][0]["input"] == DATASET_ACCESS_PLACEHOLDER
+    assert DATASET_ACCESS_PLACEHOLDER in data.text
+    assert "private test set" not in data.text.lower()
+    assert "private test set" not in details.text.lower()
     for path in ("/api/runs/run-1/spans", "/api/runs/run-1/items/a/trace"):
         response = client.get(path, headers=MEM)
         assert SECRET not in response.text, path

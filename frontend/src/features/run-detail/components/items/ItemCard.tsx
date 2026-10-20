@@ -82,7 +82,8 @@ export function ItemCard({ row }: { row: Row }) {
   const state = ui.details.stateOf(row.item_id);
   const run = payload.run;
   useEffect(() => {
-    if (!loaded && !run.items_restricted) void ui.details.ensure([row.item_id]);
+    // A restricted run's details come back redacted (placeholders, scores kept): fetch them like any row's.
+    if (!loaded) void ui.details.ensure([row.item_id]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, row.item_id]);
   const repeatAggregate = model.isRepeat && !model.viewPass;

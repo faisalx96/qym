@@ -358,25 +358,6 @@ export default function UiGalleryPage() {
             />
           </Stack>
         </Case>
-        <Case label="RadioGroup">
-          <RadioGroup
-            label="Who can access this dataset"
-            value={radio}
-            onChange={setRadio}
-            options={[
-              {
-                value: 'project',
-                title: 'Everyone in the project',
-                help: 'Every member can view and modify this dataset.',
-              },
-              {
-                value: 'restricted',
-                title: 'Only people listed below',
-                help: 'Everyone else cannot open this dataset.',
-              },
-            ]}
-          />
-        </Case>
         <Case label="Select (searchable when > 8)">
           <Stack gap="sm">
             <Select
@@ -938,6 +919,28 @@ export default function UiGalleryPage() {
       <Round5Mocks Section={Section} Case={Case} />
       <Round7Mocks Section={Section} Case={Case} />
       <DatasetAccessMocks Section={Section} Case={Case} />
+      {/* After the round mocks so the hash anchors above keep their offsets. */}
+      <Section id="radio-group" title="RadioGroup">
+        <Case label="RadioGroup">
+          <RadioGroup
+            label="Who can access this dataset"
+            value={radio}
+            onChange={setRadio}
+            options={[
+              {
+                value: 'project',
+                title: 'Everyone in the project',
+                help: 'Every member can view and modify this dataset.',
+              },
+              {
+                value: 'restricted',
+                title: 'Only people listed below',
+                help: 'Everyone else cannot open this dataset.',
+              },
+            ]}
+          />
+        </Case>
+      </Section>
     </div>
   );
 }

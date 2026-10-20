@@ -11,13 +11,26 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 import { createProject, gotoApp, uniqueSlug } from '../helpers';
 import { axeSeriousViolations, describeViolations } from '../shell/support';
 import { addMembers, near, setAccess, size, WIDTHS } from './access-support';
-import { bulkItems, createApiKey, createDataset, createVersion, ingestRun, publishVersion, sampleItems } from './support';
+import {
+  bulkItems,
+  createApiKey,
+  createDataset,
+  createVersion,
+  ingestRun,
+  publishVersion,
+  sampleItems,
+} from './support';
 import { runUrl } from '../run-detail/support';
 import type { APIRequestContext } from '@playwright/test';
 
 async function seedProject(request: APIRequestContext, prefix: string) {
   const project = await createProject(request, `Access ${prefix}`, uniqueSlug(prefix));
-  const people = await addMembers(request, project.id, ['Noura Alharbi', 'Khalid Almutairi', 'Sara Alqahtani', 'Omar Alharbi']);
+  const people = await addMembers(request, project.id, [
+    'Noura Alharbi',
+    'Khalid Almutairi',
+    'Sara Alqahtani',
+    'Omar Alharbi',
+  ]);
   const publish = async (name: string, extra: Record<string, unknown> = {}) => {
     const d = await createDataset(request, project.slug, name, extra);
     const v = await createVersion(request, project.slug, d.slug);
@@ -74,7 +87,9 @@ test.describe('catalog card (A1-1 to A1-4)', () => {
       const long = await publish('legal-clauses');
       const wordy = await publish('Ministry of Justice legal clauses reviewed by counsel');
       const secret = await publish('Pricing golden', { private_test_set: true });
-      await setAccess(request, project.slug, long.slug, 'restricted', [{ user_id: people[0]!.id, level: 'view' }]);
+      await setAccess(request, project.slug, long.slug, 'restricted', [
+        { user_id: people[0]!.id, level: 'view' },
+      ]);
       await setAccess(request, project.slug, secret.slug, 'restricted');
       await setAccess(request, project.slug, wordy.slug, 'restricted');
       await page.setViewportSize({ width, height: 900 });
@@ -116,7 +131,11 @@ test.describe('catalog card (A1-1 to A1-4)', () => {
       for (const ds of b.datasets) ds.permissions.access_level = 'view';
     });
     await gotoApp(page, `/projects/${project.slug}/datasets`);
-    await expect(page.locator(`[data-dataset-card="${d.slug}"]`).getByText('View only')).toBeVisible();
+    const viewOnly = page.locator(`[data-dataset-card="${d.slug}"]`).getByText('View only');
+    await expect(viewOnly).toBeVisible();
+    const vb = await size(viewOnly);
+    near(vb.w, 91.5, 1); // F5: the same size as the page header badge
+    expect(vb.h).toBe(20);
   });
 });
 
@@ -157,7 +176,9 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
         near(group.w, width === 390 ? 237 : 718);
         const row = await size(page.getByTestId('access-mode-project'));
         near(row.h, width === 390 ? 69 : 53.6);
-        const overflow = await page.getByTestId('access-mode').evaluate((el) => el.scrollWidth <= el.clientWidth);
+        const overflow = await page
+          .getByTestId('access-mode')
+          .evaluate((el) => el.scrollWidth <= el.clientWidth);
         expect(overflow).toBe(true);
         if (mode === 'restricted') {
           // A1-15 / A1-16: the add row.
@@ -185,7 +206,9 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
     await expect(table.getByText('Noura Alharbi')).toBeVisible();
     const headers = await table.getByRole('columnheader').allInnerTexts();
     expect(headers.map((h) => h.trim().toLowerCase())).toEqual(['person', 'level', 'added by', 'remove']);
-    const widths = await table.getByRole('columnheader').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+    const widths = await table
+      .getByRole('columnheader')
+      .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
     expect(widths.slice(1)).toEqual([160, 150, 48]);
     const rows = table.getByRole('row');
     expect(await rows.count()).toBe(4); // header + three people
@@ -208,7 +231,13 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
   test('grants render as cards at 390 with no horizontal scroll (A1-17)', async ({ page, request }) => {
     const { project, publish, people } = await seedProject(request, 'cards');
     const d = await publish('Legal clauses');
-    await setAccess(request, project.slug, d.slug, 'restricted', people.slice(0, 3).map((p) => ({ user_id: p.id, level: 'view' as const })));
+    await setAccess(
+      request,
+      project.slug,
+      d.slug,
+      'restricted',
+      people.slice(0, 3).map((p) => ({ user_id: p.id, level: 'view' as const })),
+    );
     await page.setViewportSize({ width: 390, height: 1000 });
     await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}?tab=settings`);
     const table = page.getByTestId('access-grants-table');
@@ -223,7 +252,10 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
     }
   });
 
-  test('keyboard: arrow keys move the radio selection and the section turns dirty (A1-9)', async ({ page, request }) => {
+  test('keyboard: arrow keys move the radio selection and the section turns dirty (A1-9)', async ({
+    page,
+    request,
+  }) => {
     const { project, publish } = await seedProject(request, 'kbd');
     const d = await publish('Legal clauses');
     await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}?tab=settings`);
@@ -237,7 +269,10 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
     await expect(projectRadio).toBeChecked();
   });
 
-  test('add a person, save, reload: one PUT, a toast and the state persists (A1-15, A1-20)', async ({ page, request }) => {
+  test('add a person, save, reload: one PUT, a toast and the state persists (A1-15, A1-20)', async ({
+    page,
+    request,
+  }) => {
     const { project, publish, people } = await seedProject(request, 'save');
     const d = await publish('Legal clauses');
     await setAccess(request, project.slug, d.slug, 'restricted', [{ user_id: people[1]!.id, level: 'view' }]);
@@ -273,7 +308,10 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
     const d = await publish('Legal clauses');
     await page.route(ACCESS_GET, async (route) => {
       if (route.request().method() === 'PUT')
-        await route.fulfill({ status: 422, json: { detail: 'User x is not an active member of this project' } });
+        await route.fulfill({
+          status: 422,
+          json: { detail: 'User x is not an active member of this project' },
+        });
       else await route.continue();
     });
     await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}?tab=settings`);
@@ -284,7 +322,10 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
     await expect(page.getByTestId('access-save-bar').getByText('Unsaved changes')).toBeVisible();
   });
 
-  test('a failed load shows an error with Retry, never the default form (A1-24)', async ({ page, request }) => {
+  test('a failed load shows an error with Retry, never the default form (A1-24)', async ({
+    page,
+    request,
+  }) => {
     const { project, publish } = await seedProject(request, 'err');
     const d = await publish('Legal clauses');
     let fail = true;
@@ -300,7 +341,10 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
     await expect(page.getByTestId('access-mode')).toBeVisible();
   });
 
-  test('the loading placeholder keeps the loaded height within a pixel (A1-23)', async ({ page, request }) => {
+  test('the loading placeholder keeps the loaded height within a pixel (A1-23)', async ({
+    page,
+    request,
+  }) => {
     const { project, publish } = await seedProject(request, 'load');
     const d = await publish('Legal clauses');
     await page.route(ACCESS_GET, async (route) => {
@@ -320,9 +364,14 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
   test('the read-only summary for a person who cannot manage access (A1-22)', async ({ page, request }) => {
     const { project, publish, people } = await seedProject(request, 'ro');
     const d = await publish('Legal clauses');
-    await setAccess(request, project.slug, d.slug, 'restricted', [{ user_id: people[0]!.id, level: 'modify' }]);
+    await setAccess(request, project.slug, d.slug, 'restricted', [
+      { user_id: people[0]!.id, level: 'modify' },
+    ]);
     await asViewer(page);
-    for (const [width, height] of [[1440, 41.6], [390, 58.4]] as const) {
+    for (const [width, height] of [
+      [1440, 41.6],
+      [390, 58.4],
+    ] as const) {
       await page.setViewportSize({ width, height: 1000 });
       await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}?tab=settings`);
       const summary = page.getByTestId('access-summary');
@@ -330,7 +379,9 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
       near((await size(summary)).h, height, 2);
       await expect(summary).toContainText('Only people listed below');
       await expect(summary).toContainText('View');
-      await expect(page.getByText('Only project managers and admins can change who has access.')).toBeVisible();
+      await expect(
+        page.getByText('Only project managers and admins can change who has access.'),
+      ).toBeVisible();
       await expect(page.getByRole('radiogroup')).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Save access' })).toHaveCount(0);
       await expect(page.getByTestId('access-grants-table').getByText('Modify')).toBeVisible();
@@ -340,7 +391,9 @@ test.describe('Settings → Access section (A1-5 to A1-24)', () => {
   test('axe finds nothing on the manager form', async ({ page, request }) => {
     const { project, publish, people } = await seedProject(request, 'axe');
     const d = await publish('Legal clauses');
-    await setAccess(request, project.slug, d.slug, 'restricted', [{ user_id: people[0]!.id, level: 'modify' }]);
+    await setAccess(request, project.slug, d.slug, 'restricted', [
+      { user_id: people[0]!.id, level: 'modify' },
+    ]);
     await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}?tab=settings`);
     await expect(page.getByTestId('access-grants-table')).toBeVisible();
     await page.waitForTimeout(450);
@@ -364,7 +417,14 @@ test.describe('a viewer (A1-25 to A1-31)', () => {
       near(b.w, 91.5, 1);
       expect(b.h).toBe(20);
       await expect(page.getByRole('button', { name: 'About view only access' })).toBeVisible();
-      for (const gone of ['add-item', 'import-draft', 'publish', 'create-draft', 'set-production', 'create-first-draft']) {
+      for (const gone of [
+        'add-item',
+        'import-draft',
+        'publish',
+        'create-draft',
+        'set-production',
+        'create-first-draft',
+      ]) {
         await expect(page.getByTestId(gone)).toHaveCount(0);
       }
       await expect(page.getByRole('button', { name: 'Rename dataset' })).toHaveCount(0);
@@ -386,7 +446,10 @@ test.describe('a viewer (A1-25 to A1-31)', () => {
     const d = await publish('Legal clauses');
     await setAccess(request, project.slug, d.slug, 'restricted');
     await asViewer(page);
-    for (const [width, height] of [[1440, 40], [1024, 65]] as const) {
+    for (const [width, height] of [
+      [1440, 40],
+      [1024, 65],
+    ] as const) {
       await page.setViewportSize({ width, height: 900 });
       await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}?tab=items&meta=topic:refunds`);
       const toolbar = page.locator('[data-dt-toolbar]');
@@ -408,7 +471,10 @@ test.describe('a viewer (A1-25 to A1-31)', () => {
     await expect(page.getByRole('menuitem', { name: 'Delete item' })).toHaveCount(0);
   });
 
-  test('settings: General fields are read-only and the danger zone names the delete rule (A1-29)', async ({ page, request }) => {
+  test('settings: General fields are read-only and the danger zone names the delete rule (A1-29)', async ({
+    page,
+    request,
+  }) => {
     const { project, publish } = await seedProject(request, 'vset');
     const d = await publish('Legal clauses');
     await asViewer(page, false);
@@ -416,7 +482,9 @@ test.describe('a viewer (A1-25 to A1-31)', () => {
     await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveAttribute('readonly', '');
     await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
     await expect(page.getByTestId('delete-dataset')).toHaveCount(0);
-    await expect(page.getByText('Only the dataset creator or a project manager can delete a dataset.')).toBeVisible();
+    await expect(
+      page.getByText('Only the dataset creator or a project manager can delete a dataset.'),
+    ).toBeVisible();
   });
 
   test('a dataset the caller cannot open renders the 403 page and makes no other request (A1-30, A1-31)', async ({
@@ -432,18 +500,26 @@ test.describe('a viewer (A1-25 to A1-31)', () => {
     await page.route(DATASET_GET, (route) =>
       route.fulfill({ status: 403, json: { detail: "You don't have access to this dataset" } }),
     );
-    for (const [width, height] of [[1440, 189], [1024, 189], [390, 229]] as const) {
+    for (const [width, height] of [
+      [1440, 189],
+      [1024, 189],
+      [390, 244.4],
+    ] as const) {
       datasetCalls.length = 0;
       await page.setViewportSize({ width, height: 900 });
       await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}`);
       const view = page.getByTestId('da-403');
       await expect(view).toBeVisible();
-      await expect(view.getByRole('heading', { name: 'You don’t have access to this dataset' })).toBeVisible();
-      await expect(view).toContainText('Ask a project manager to add you. Its runs stay listed with item contents hidden.');
+      await expect(
+        view.getByRole('heading', { name: 'You don’t have access to this dataset' }),
+      ).toBeVisible();
+      await expect(view).toContainText(
+        'Ask a project manager to add you. Its runs stay listed with item contents hidden.',
+      );
       await expect(view).toContainText("HTTP 403 · You don't have access to this dataset");
       await expect(view.getByRole('button', { name: 'Retry' })).toHaveCount(0);
       await expect(view.getByRole('button', { name: 'Back to datasets' })).toBeVisible();
-      near((await size(view.locator('[role="alert"]'))).h, height, 25);
+      near((await size(view.locator('[role="alert"]'))).h, height, 1); // amended at 390: 244.4 (the text wraps one more line)
       expect(await page.title()).toContain('Datasets');
       expect(datasetCalls).toHaveLength(1); // the failed GET only: no versions, no items
     }
@@ -476,7 +552,11 @@ test.describe('a run on a dataset the reader cannot open (A1-32 to A1-35)', () =
       body.run.items_restricted_reason = 'dataset_access';
       await route.fulfill({ response: res, json: body });
     });
-    for (const [width, height] of [[1440, 55.5], [1024, 73.5], [390, 127.5]] as const) {
+    for (const [width, height] of [
+      [1440, 55.5],
+      [1024, 73.5],
+      [390, 127.5],
+    ] as const) {
       await page.setViewportSize({ width, height: 1000 });
       await gotoApp(page, runUrl(project.slug, run.id));
       const banner = page.getByTestId('restricted-dataset-banner');

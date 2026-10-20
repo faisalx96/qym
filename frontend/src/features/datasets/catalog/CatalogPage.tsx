@@ -242,7 +242,9 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
                   </Badge>
                 ) : null}
                 {d.access_mode === 'restricted' && d.permissions.access_level === 'view' ? (
-                  <Badge tone="neutral">View only</Badge>
+                  <Badge tone="neutral" glyph={<Icon name="eye" size={12} />}>
+                    View only
+                  </Badge>
                 ) : null}
               </div>
             ) : null}

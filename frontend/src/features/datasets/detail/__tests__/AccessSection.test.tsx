@@ -44,9 +44,10 @@ interface Harness {
   puts: unknown[];
 }
 
-function install(
-  responses: { get: () => Response | Promise<Response>; put?: (body: unknown) => DatasetAccess },
-): Harness {
+function install(responses: {
+  get: () => Response | Promise<Response>;
+  put?: (body: unknown) => DatasetAccess;
+}): Harness {
   const harness: Harness = { puts: [] };
   vi.stubGlobal(
     'fetch',
@@ -97,8 +98,12 @@ describe('Access section (A1-7 to A1-24)', () => {
     const only = within(group).getByRole('radio', { name: /Only people listed below/ });
     expect(project).toBeChecked();
     expect(only).not.toBeChecked();
-    expect(screen.getByText('Every member can view and modify this dataset. This is the default.')).toBeInTheDocument();
-    expect(screen.getByText('Project managers, admins and the creator always have full access.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Every member can view and modify this dataset. This is the default.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Project managers, admins and the creator always have full access.'),
+    ).toBeInTheDocument();
     // Save and Discard are disabled while nothing changed.
     expect(screen.getByRole('button', { name: 'Save access' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Discard' })).toBeDisabled();
@@ -116,7 +121,9 @@ describe('Access section (A1-7 to A1-24)', () => {
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     // An empty restricted list is allowed to be saved and says who still has access.
     expect(screen.getByText('No one is listed')).toBeInTheDocument();
-    expect(screen.getByText('Only project managers, admins and the creator can open this dataset.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Only project managers, admins and the creator can open this dataset.'),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save access' }));
     await waitFor(() => expect(calls.puts).toHaveLength(1));
     expect(calls.puts[0]).toEqual({ access_mode: 'restricted', grants: [] });
@@ -178,7 +185,9 @@ describe('Access section (A1-7 to A1-24)', () => {
 
   it('keeps saved grants and says so when switching back to the project mode', async () => {
     const user = userEvent.setup();
-    install({ get: () => ok(restricted([grant(NOURA, 'view'), grant(KHALID, 'view'), grant(OMAR, 'view')])) });
+    install({
+      get: () => ok(restricted([grant(NOURA, 'view'), grant(KHALID, 'view'), grant(OMAR, 'view')])),
+    });
     renderSection();
     await user.click(await screen.findByRole('radio', { name: /Everyone in the project/ }));
     expect(
@@ -189,13 +198,22 @@ describe('Access section (A1-7 to A1-24)', () => {
   it('is a read-only summary for someone who cannot manage access', async () => {
     install({
       get: () =>
-        ok(restricted([grant(NOURA, 'modify')]) && { ...restricted([grant(NOURA, 'modify')]), can_manage_access: false, candidates: [], your_level: 'view' }),
+        ok(
+          restricted([grant(NOURA, 'modify')]) && {
+            ...restricted([grant(NOURA, 'modify')]),
+            can_manage_access: false,
+            candidates: [],
+            your_level: 'view',
+          },
+        ),
     });
     renderSection();
     const summary = await screen.findByTestId('access-summary');
     expect(within(summary).getByText('Only people listed below')).toBeInTheDocument();
     expect(within(summary).getByText('View')).toBeInTheDocument();
-    expect(screen.getByText('Only project managers and admins can change who has access.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Only project managers and admins can change who has access.'),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save access' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Remove / })).not.toBeInTheDocument();
@@ -218,7 +236,10 @@ describe('Access section (A1-7 to A1-24)', () => {
     install({
       get: () =>
         fail
-          ? new Response(JSON.stringify({ detail: 'boom' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+          ? new Response(JSON.stringify({ detail: 'boom' }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            })
           : ok(access()),
     });
     renderSection();
