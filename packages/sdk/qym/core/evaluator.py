@@ -864,6 +864,9 @@ class Evaluator:
                 "run_metadata": self.run_metadata,
             },
             "model": self.model_name,
+            "dataset_disabled_items": int(
+                self.run_metadata.get("dataset_disabled_items") or 0
+            ),
             "version": version,
             "git_sha": git_info["git_commit"],
             "git_branch": git_info["git_branch"],
@@ -1195,6 +1198,16 @@ class Evaluator:
             self.run_metadata["dataset_id"] = self._platform_dataset_id
         if self._platform_dataset_version_id:
             self.run_metadata["dataset_version_id"] = self._platform_dataset_version_id
+        disabled_items = int(getattr(self.dataset, "disabled_count", 0) or 0)
+        if disabled_items:
+            # Disabled items are skipped by every run; record how many and
+            # how many the run used so the run page and the viewer can say so.
+            self.run_metadata["dataset_active_items"] = len(items)
+            self.run_metadata["dataset_disabled_items"] = disabled_items
+            console.print(
+                f"[dim]{disabled_items} disabled item"
+                f"{'' if disabled_items == 1 else 's'} skipped[/dim]"
+            )
 
         run_info = self._build_run_info(result)
 

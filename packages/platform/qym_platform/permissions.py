@@ -9,6 +9,7 @@ from sqlalchemy.orm import Query, Session
 from qym_platform.auth import Principal
 from qym_platform.db.models import (
     Dataset,
+    DatasetGrant,
     DatasetVersion,
     Project,
     ProjectMembership,
@@ -206,13 +207,44 @@ def can_view_dataset_items(principal: Principal, dataset: Dataset | None) -> boo
     return is_platform_admin(principal)
 
 
-def private_test_set_run_ids(db: Session, runs: Iterable[Run]) -> set[str]:
-    """Ids of ``runs`` evaluated against a private test set.
+def _runs_on_datasets(db: Session, runs: list[Run], datasets: list[Any]) -> set[str]:
+    """Ids of ``runs`` evaluated against one of ``datasets`` (rows with ``id``,
+    ``project_id``, ``slug`` and ``name``).
 
     A run is linked by ``dataset_id``, by ``dataset_version_id``, or (for runs
-    uploaded without either) by its dataset name matching a private dataset's
-    slug or name in the same project.
+    uploaded without either) by its dataset name matching a dataset's slug or
+    name in the same project.
     """
+    if not runs or not datasets:
+        return set()
+    dataset_ids = {row.id for row in datasets}
+    names = {(row.project_id, row.slug) for row in datasets} | {
+        (row.project_id, row.name) for row in datasets
+    }
+    version_ids = {run.dataset_version_id for run in runs if run.dataset_version_id and not run.dataset_id}
+    matching_versions: set[str] = set()
+    if version_ids:
+        matching_versions = {
+            row[0]
+            for row in db.query(DatasetVersion.id)
+            .filter(DatasetVersion.id.in_(version_ids), DatasetVersion.dataset_id.in_(dataset_ids))
+            .all()
+        }
+    out: set[str] = set()
+    for run in runs:
+        if run.dataset_id:
+            if run.dataset_id in dataset_ids:
+                out.add(run.id)
+        elif run.dataset_version_id:
+            if run.dataset_version_id in matching_versions:
+                out.add(run.id)
+        elif (run.project_id, run.dataset) in names:
+            out.add(run.id)
+    return out
+
+
+def private_test_set_run_ids(db: Session, runs: Iterable[Run]) -> set[str]:
+    """Ids of ``runs`` evaluated against a private test set."""
     runs = [run for run in runs if run is not None]
     if not runs:
         return set()
@@ -221,54 +253,153 @@ def private_test_set_run_ids(db: Session, runs: Iterable[Run]) -> set[str]:
         .filter(Dataset.private_test_set.is_(True))
         .all()
     )
-    if not private:
-        return set()
-    private_ids = {row.id for row in private}
-    private_names = {(row.project_id, row.slug) for row in private} | {
-        (row.project_id, row.name) for row in private
-    }
-    version_ids = {run.dataset_version_id for run in runs if run.dataset_version_id and not run.dataset_id}
-    private_version_ids: set[str] = set()
-    if version_ids:
-        private_version_ids = {
-            row[0]
-            for row in db.query(DatasetVersion.id)
-            .filter(DatasetVersion.id.in_(version_ids), DatasetVersion.dataset_id.in_(private_ids))
-            .all()
-        }
-    out: set[str] = set()
-    for run in runs:
-        if run.dataset_id:
-            if run.dataset_id in private_ids:
-                out.add(run.id)
-        elif run.dataset_version_id:
-            if run.dataset_version_id in private_version_ids:
-                out.add(run.id)
-        elif (run.project_id, run.dataset) in private_names:
-            out.add(run.id)
-    return out
+    return _runs_on_datasets(db, runs, private)
 
 
 def run_is_private_test_set(db: Session, run: Run) -> bool:
     return run.id in private_test_set_run_ids(db, [run])
 
 
+# --- Per-dataset access --------------------------------------------------------
+#
+# ``datasets.access_mode`` is ``project`` (every member views and modifies, the
+# default) or ``restricted`` (only managers, admins, the creator and users with
+# a ``DatasetGrant``). ``dataset_access_level`` is the single decision point.
+
+DATASET_ACCESS_DENIED_DETAIL = "You don't have access to this dataset"
+DATASET_VIEW_ONLY_DETAIL = "You can view this dataset but not change it"
+DATASET_ACCESS_MANAGE_DETAIL = "Only project managers and admins can change dataset access"
+DATASET_LEVELS = ("none", "view", "modify", "manage")
+_LEVEL_RANK = {name: rank for rank, name in enumerate(DATASET_LEVELS)}
+
+
+def dataset_level_at_least(level: str, need: str) -> bool:
+    """Whether access ``level`` is ``need`` or higher."""
+    return _LEVEL_RANK.get(level, 0) >= _LEVEL_RANK[need]
+
+
+def dataset_access_levels(
+    db: Session, principal: Principal, datasets: Iterable[Dataset]
+) -> dict[str, str]:
+    """Access level of ``principal`` on each dataset, with a fixed number of queries.
+
+    Platform admins and project managers get ``manage``; a non-member gets
+    ``none``. Other members get ``modify`` in ``project`` mode; in ``restricted``
+    mode the creator gets ``modify``, a granted user the grant's level and
+    everyone else ``none``. Grants of a removed member are inert because the
+    membership is required first.
+    """
+    datasets = [dataset for dataset in datasets if dataset is not None]
+    if not datasets:
+        return {}
+    if is_platform_admin(principal):
+        return {dataset.id: "manage" for dataset in datasets}
+    project_ids = {dataset.project_id for dataset in datasets}
+    roles = {
+        row.project_id: row.role
+        for row in db.query(ProjectMembership.project_id, ProjectMembership.role).filter(
+            ProjectMembership.user_id == principal.user.id,
+            ProjectMembership.project_id.in_(project_ids),
+        )
+    }
+    restricted_ids = [
+        dataset.id
+        for dataset in datasets
+        if dataset.access_mode == "restricted" and dataset.project_id in roles
+    ]
+    grants: dict[str, str] = {}
+    if restricted_ids:
+        grants = {
+            row.dataset_id: row.level
+            for row in db.query(DatasetGrant.dataset_id, DatasetGrant.level).filter(
+                DatasetGrant.user_id == principal.user.id, DatasetGrant.dataset_id.in_(restricted_ids)
+            )
+        }
+    levels: dict[str, str] = {}
+    for dataset in datasets:
+        role = roles.get(dataset.project_id)
+        if role is None:
+            levels[dataset.id] = "none"
+        elif role == ProjectRole.MANAGER:
+            levels[dataset.id] = "manage"
+        elif dataset.access_mode != "restricted":
+            levels[dataset.id] = "modify"
+        elif dataset.created_by_user_id == principal.user.id:
+            levels[dataset.id] = "modify"
+        else:
+            granted = grants.get(dataset.id)
+            levels[dataset.id] = granted if granted in ("view", "modify") else "none"
+    return levels
+
+
+def dataset_access_level(db: Session, principal: Principal, dataset: Dataset) -> str:
+    """``none`` | ``view`` | ``modify`` | ``manage`` for ``principal`` on ``dataset``."""
+    return dataset_access_levels(db, principal, [dataset])[dataset.id]
+
+
+def restricted_dataset_rows_without_access(
+    db: Session, principal: Principal, project_ids: Iterable[str]
+) -> list[Any]:
+    """Restricted datasets of ``project_ids`` that ``principal`` cannot open."""
+    if is_platform_admin(principal):
+        return []
+    project_ids = {pid for pid in project_ids if pid}
+    if not project_ids:
+        return []
+    restricted = (
+        db.query(Dataset)
+        .filter(Dataset.project_id.in_(project_ids), Dataset.access_mode == "restricted")
+        .all()
+    )
+    levels = dataset_access_levels(db, principal, restricted)
+    return [dataset for dataset in restricted if levels.get(dataset.id) == "none"]
+
+
+def run_item_hidden_reasons(
+    db: Session, principal: Principal, runs: Iterable[Run]
+) -> dict[str, str]:
+    """``{run_id: reason}`` for ``runs`` whose item contents ``principal`` may not see.
+
+    The reason is ``private_test_set`` (admin-only items; wins when both apply)
+    or ``dataset_access`` (the reader has no access to the run's restricted dataset).
+    """
+    runs = [run for run in runs if run is not None]
+    if not runs or is_platform_admin(principal):
+        return {}
+    reasons = {run_id: "private_test_set" for run_id in private_test_set_run_ids(db, runs)}
+    rest = [run for run in runs if run.id not in reasons]
+    if rest:
+        blocked = restricted_dataset_rows_without_access(db, principal, {run.project_id for run in rest})
+        for run_id in _runs_on_datasets(db, rest, blocked):
+            reasons[run_id] = "dataset_access"
+    return reasons
+
+
+def run_items_restricted_reason(db: Session, principal: Principal, run: Run) -> Optional[str]:
+    return run_item_hidden_reasons(db, principal, [run]).get(run.id)
+
+
 def can_view_run_items(db: Session, principal: Principal, run: Run) -> bool:
     """Whether ``principal`` may see ``run``'s item contents."""
-    if is_platform_admin(principal):
-        return True
-    return not run_is_private_test_set(db, run)
+    return run_items_restricted_reason(db, principal, run) is None
+
+
+def hidden_dataset_run_ids(db: Session, principal: Principal, runs: Iterable[Run]) -> set[str]:
+    """Ids of ``runs`` whose item contents ``principal`` may not see (private
+    test set or a restricted dataset without access)."""
+    return set(run_item_hidden_reasons(db, principal, runs))
 
 
 def hidden_item_run_ids(db: Session, principal: Principal, runs: Iterable[Run]) -> set[str]:
-    """Ids of ``runs`` whose item contents ``principal`` may not see."""
-    if is_platform_admin(principal):
-        return set()
-    return private_test_set_run_ids(db, runs)
+    """Alias of :func:`hidden_dataset_run_ids` kept for existing callers."""
+    return hidden_dataset_run_ids(db, principal, runs)
 
 
 def require_run_items_visible(db: Session, principal: Principal, run: Run) -> None:
-    if not can_view_run_items(db, principal, run):
+    reason = run_items_restricted_reason(db, principal, run)
+    if reason == "dataset_access":
+        raise HTTPException(status_code=403, detail=DATASET_ACCESS_DENIED_DETAIL)
+    if reason is not None:
         raise HTTPException(status_code=403, detail=PRIVATE_TEST_SET_DETAIL)
 
 

@@ -56,6 +56,7 @@ from qym_platform.permissions import (
     can_review_run,
     can_view_run,
     can_view_run_items,
+    run_items_restricted_reason,
     has_project_access,
     is_project_manager,
     project_for_read_by_slug,
@@ -4605,9 +4606,11 @@ def run_group_metrics(
 def _with_item_visibility(
     db: Session, principal: Principal, run: Run, data: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Redact item contents of a run evaluated on a private test set unless
+    """Redact item contents of a run evaluated on a private test set (admins only)
+    or on a restricted dataset the reader cannot open, unless
     ``principal`` is an admin. Handles run payloads and single-row payloads."""
-    if can_view_run_items(db, principal, run):
+    reason = run_items_restricted_reason(db, principal, run)
+    if reason is None:
         return data
     snapshot = data.get("snapshot")
     if isinstance(snapshot, dict):
@@ -4618,6 +4621,7 @@ def _with_item_visibility(
         redact_item_content(data["row"])
     if isinstance(data.get("run"), dict):
         data["run"]["items_restricted"] = True
+        data["run"]["items_restricted_reason"] = reason
     return data
 
 

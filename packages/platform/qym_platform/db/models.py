@@ -1380,6 +1380,12 @@ class Dataset(Base):
     private_test_set: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=false(), nullable=False
     )
+    # 'project' = every project member can view and modify (the default);
+    # 'restricted' = only managers, admins, the creator and granted users
+    # (``DatasetGrant``). See ``permissions.dataset_access_level``.
+    access_mode: Mapped[str] = mapped_column(
+        String(16), default="project", server_default="project", nullable=False
+    )
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -1394,6 +1400,24 @@ class Dataset(Base):
         UniqueConstraint("project_id", "slug", name="uq_dataset_project_slug"),
         Index("ix_datasets_project_deleted", "project_id", "deleted_at"),
     )
+
+
+class DatasetGrant(Base):
+    """A per-user access grant on a dataset (``view`` or ``modify``)."""
+
+    __tablename__ = "dataset_grants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("datasets.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    level: Mapped[str] = mapped_column(String(16), nullable=False)
+    granted_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("dataset_id", "user_id", name="uq_dataset_grant_user"),)
 
 
 class DatasetVersion(Base):
@@ -1466,12 +1490,18 @@ class DatasetItem(Base):
     # a trigram index can serve. NULL only on rows written before migration 0068
     # until the backfill_dataset_search_text maintenance job reaches them.
     search_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+    # Disabled items stay in a draft but are left out of runs once it is
+    # published (draft-only edits; see api/datasets.py ``:disable`` / ``:enable``).
+    disabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    disabled_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, default=None)
+    disabled_reason: Mapped[str] = mapped_column(String(500), default="", server_default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
         UniqueConstraint("dataset_version_id", "item_id", name="uq_dataset_item_id"),
         Index("ix_dataset_item_version_fingerprint", "dataset_version_id", "fingerprint"),
+        Index("ix_dataset_items_version_disabled", "dataset_version_id", "disabled_at"),
     )
 
 

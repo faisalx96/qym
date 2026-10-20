@@ -1210,7 +1210,8 @@ class PlatformClient:
 
         ref = urllib.parse.quote(dataset, safe="")
         version_ref = urllib.parse.quote(version or alias or "production", safe="")
-        params = {"limit": str(limit)}
+        # Disabled items stay out of runs: ask for the active set explicitly.
+        params = {"limit": str(limit), "state": "active"}
         if project_slug:
             params["project_slug"] = project_slug
         url = (

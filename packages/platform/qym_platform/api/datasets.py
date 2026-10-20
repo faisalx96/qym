@@ -30,22 +30,32 @@ from qym_platform.db.models import (
     AuditLog,
     Dataset,
     DatasetAlias,
+    DatasetGrant,
     DatasetItem,
     DatasetItemRevision,
     DatasetVersion,
     DatasetVersionChange,
     DatasetVersionStatus,
     Project,
+    ProjectMembership,
+    ProjectRole,
     Run,
     RunItem,
     RunItemScore,
     User,
+    UserRole,
 )
 from qym_platform.deps import get_db
 from qym_platform.item_identity import build_identity_fingerprint
 from qym_platform.permissions import (
+    DATASET_ACCESS_DENIED_DETAIL,
+    DATASET_ACCESS_MANAGE_DETAIL,
+    DATASET_VIEW_ONLY_DETAIL,
     PRIVATE_TEST_SET_DETAIL,
     can_view_dataset_items,
+    dataset_access_level,
+    dataset_access_levels,
+    dataset_level_at_least,
     has_project_access,
     is_platform_admin,
     is_project_manager,
@@ -54,6 +64,12 @@ from qym_platform.permissions import (
 )
 from qym_platform.services.dataset_read_tokens import HEADER as DATASET_READ_TOKEN_HEADER
 from qym_platform.services.dataset_read_tokens import token_grants_project
+from qym_platform.services.dataset_meta import (
+    apply_meta_filters,
+    meta_pairs_from_mapping,
+    metadata_facets,
+    parse_meta_params,
+)
 from qym_platform.services.dataset_search import dataset_item_search_text, filter_dataset_item_search
 from qym_platform.services.dataset_versions import (
     change_counts_for,
@@ -206,7 +222,17 @@ def _project_for_request(
     return project
 
 
-def _get_dataset(db: Session, project: Project, ref: str) -> Dataset:
+def _get_dataset(
+    db: Session,
+    project: Project,
+    ref: str,
+    principal: Optional[Principal] = None,
+    need: str = "view",
+    *,
+    read_token: Optional[str] = None,
+) -> Dataset:
+    """The live dataset ``ref`` of ``project``; with a ``principal``, also enforce
+    its per-dataset access level (403 below ``need``)."""
     dataset = (
         db.query(Dataset)
         .filter(
@@ -218,7 +244,58 @@ def _get_dataset(db: Session, project: Project, ref: str) -> Dataset:
     )
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    if principal is not None:
+        _require_dataset_access(db, principal, dataset, need, read_token=read_token)
     return dataset
+
+
+def _visible_datasets_clause(db: Session, principal: Principal, project_id: str) -> Any:
+    """SQL filter keeping the datasets ``principal`` may open, or ``None`` when all.
+
+    Managers and admins see every dataset; other members see ``project`` mode
+    datasets, their own, and the ones they hold a grant on. One statement for a
+    whole page, so the catalog stays free of per-dataset queries.
+    """
+    if _can_manage_datasets(db, principal, project_id):
+        return None
+    user_id = principal.user.id
+    granted = select(DatasetGrant.dataset_id).where(DatasetGrant.user_id == user_id)
+    return (
+        (Dataset.access_mode != "restricted")
+        | (Dataset.created_by_user_id == user_id)
+        | Dataset.id.in_(granted)
+    )
+
+
+def _require_dataset_access(
+    db: Session,
+    principal: Principal,
+    dataset: Dataset,
+    need: str = "view",
+    *,
+    read_token: Optional[str] = None,
+) -> str:
+    """Refuse (403) a principal whose access level on ``dataset`` is below ``need``.
+
+    ``need`` is ``view`` or ``modify`` (``manage`` routes check the project
+    manager rule themselves, with their own texts). A dataset read token sent
+    next to an API key lifts ``none`` to ``view`` on item reads of its project.
+    Returns the level.
+    """
+    level = dataset_access_level(db, principal, dataset)
+    if (
+        level == "none"
+        and need == "view"
+        and read_token
+        and principal.auth_type == "api_key"
+        and token_grants_project(db, read_token, dataset.project_id)
+    ):
+        return "view"
+    if level == "none":
+        raise HTTPException(status_code=403, detail=DATASET_ACCESS_DENIED_DETAIL)
+    if not dataset_level_at_least(level, need):
+        raise HTTPException(status_code=403, detail=DATASET_VIEW_ONLY_DETAIL)
+    return level
 
 
 def _require_items_visible(
@@ -413,7 +490,16 @@ def _item_payload(
     *,
     run_count: Optional[int] = None,
     result_summary: Optional[Dict[str, Any]] = None,
+    users: Optional[Dict[str, User]] = None,
 ) -> Dict[str, Any]:
+    disabled: Optional[Dict[str, Any]] = None
+    if item.disabled_at is not None:
+        actor = (users or {}).get(item.disabled_by_user_id or "")
+        disabled = {
+            "at": to_api_timestamp(item.disabled_at),
+            "by": _user_payload(actor),
+            "reason": item.disabled_reason or "",
+        }
     payload = {
         "id": item.id,
         "item_id": item.item_id,
@@ -423,6 +509,8 @@ def _item_payload(
         "metadata": item.item_metadata or {},
         "labels": item.labels or [],
         "fingerprint": item.fingerprint,
+        "state": "disabled" if item.disabled_at is not None else "active",
+        "disabled": disabled,
         "created_at": to_api_timestamp(item.created_at),
         "updated_at": to_api_timestamp(item.updated_at),
     }
@@ -430,6 +518,14 @@ def _item_payload(
         payload["run_count"] = int(run_count)
     if result_summary is not None:
         payload["result_summary"] = result_summary
+    return payload
+
+
+def _item_snapshot(item: DatasetItem) -> Dict[str, Any]:
+    """The item body stored in revisions: the payload without its derived state."""
+    payload = _item_payload(item)
+    payload.pop("state", None)
+    payload.pop("disabled", None)
     return payload
 
 
@@ -455,6 +551,12 @@ def _version_payloads(
         .group_by(Run.dataset_version_id)
         .all()
     )
+    disabled_counts = dict(
+        db.query(DatasetItem.dataset_version_id, func.count(DatasetItem.id))
+        .filter(DatasetItem.dataset_version_id.in_(ids), DatasetItem.disabled_at.isnot(None))
+        .group_by(DatasetItem.dataset_version_id)
+        .all()
+    )
     users = _user_map(
         db, [v.created_by_user_id for v in versions] + [v.published_by_user_id for v in versions]
     )
@@ -473,6 +575,7 @@ def _version_payloads(
             "schema": version.schema or {},
             "labels": version.labels or [],
             "item_count": version.item_count,
+            "disabled_count": int(disabled_counts.get(version.id) or 0),
             "run_count": int(run_counts.get(version.id) or 0),
             "content_hash": version.content_hash,
             "created_by_user_id": version.created_by_user_id,
@@ -498,13 +601,25 @@ def _can_manage_datasets(db: Session, principal: Principal, project_id: str) -> 
     return is_project_manager(db, principal, project_id)
 
 
-def _dataset_permissions(db: Session, principal: Optional[Principal], dataset: Dataset, manager: Optional[bool] = None) -> Dict[str, Any]:
+def _dataset_permissions(
+    db: Session,
+    principal: Optional[Principal],
+    dataset: Dataset,
+    manager: Optional[bool] = None,
+    level: Optional[str] = None,
+) -> Dict[str, Any]:
     if principal is None:
         return {}
     if manager is None:
         manager = _can_manage_datasets(db, principal, dataset.project_id)
+    if level is None:
+        level = dataset_access_level(db, principal, dataset)
     creator = bool(principal.user and dataset.created_by_user_id == principal.user.id)
     return {
+        "access_level": level,
+        "can_view_items": dataset_level_at_least(level, "view") and can_view_dataset_items(principal, dataset),
+        "can_modify": dataset_level_at_least(level, "modify"),
+        "can_manage_access": level == "manage",
         "can_manage": bool(manager),
         "is_creator": creator,
         "can_rename_slug": bool(manager),
@@ -570,6 +685,16 @@ def _dataset_payloads(
     )
     users = _user_map(db, [dataset.created_by_user_id for dataset in datasets] + [dataset.deleted_by_user_id for dataset in datasets])
     manager = _can_manage_datasets(db, principal, datasets[0].project_id) if principal is not None else None
+    levels = dataset_access_levels(db, principal, datasets) if principal is not None else {}
+    restricted_ids = [dataset.id for dataset in datasets if dataset.access_mode == "restricted"]
+    grant_counts: Dict[str, int] = {}
+    if restricted_ids:
+        grant_counts = dict(
+            db.query(DatasetGrant.dataset_id, func.count(DatasetGrant.id))
+            .filter(DatasetGrant.dataset_id.in_(restricted_ids))
+            .group_by(DatasetGrant.dataset_id)
+            .all()
+        )
     payloads = []
     for dataset in datasets:
         production = version_payloads.get(production_ids.get(dataset.id) or "")
@@ -582,6 +707,8 @@ def _dataset_payloads(
             "description": dataset.description,
             "tags": dataset.tags or [],
             "private_test_set": bool(dataset.private_test_set),
+            "access_mode": dataset.access_mode or "project",
+            "grant_count": int(grant_counts.get(dataset.id) or 0),
             # Viewer-specific: whether this caller may read item contents and
             # toggle the private flag (admins only).
             "items_visible": principal is None or can_view_dataset_items(principal, dataset),
@@ -599,7 +726,7 @@ def _dataset_payloads(
             payload["deleted_by"] = _user_payload(users.get(dataset.deleted_by_user_id))
             payload["original_slug"] = _original_slug(dataset.slug)
         if principal is not None:
-            permissions = _dataset_permissions(db, principal, dataset, manager)
+            permissions = _dataset_permissions(db, principal, dataset, manager, levels.get(dataset.id))
             # Mirrors _require_alias_permission: the creator sets the first production.
             permissions["can_set_production"] = bool(
                 permissions["can_move_production"] or (permissions["is_creator"] and dataset.id not in production_ids)
@@ -1078,6 +1205,9 @@ def _content_hash(items: Iterable[DatasetItem]) -> str:
             "metadata": item.item_metadata or {},
             "labels": item.labels or [],
             "fingerprint": item.fingerprint,
+            # Only present when set, so a version without disabled items keeps
+            # the digest it always had.
+            **({"disabled": True} if getattr(item, "disabled_at", None) is not None else {}),
         }
         for item in sorted(items, key=lambda row: (row.index, row.item_id))
     ]
@@ -1098,7 +1228,14 @@ class _ContentHasher:
         self._first = True
 
     def update(
-        self, item_id: str, input_value: Any, expected: Any, metadata: Any, labels: Any, fingerprint: Optional[str]
+        self,
+        item_id: str,
+        input_value: Any,
+        expected: Any,
+        metadata: Any,
+        labels: Any,
+        fingerprint: Optional[str],
+        disabled: bool = False,
     ) -> None:
         payload = {
             "item_id": item_id,
@@ -1108,6 +1245,8 @@ class _ContentHasher:
             "labels": labels or [],
             "fingerprint": fingerprint,
         }
+        if disabled:
+            payload["disabled"] = True
         if not self._first:
             self._sha.update(b",")
         self._first = False
@@ -1137,6 +1276,7 @@ def _stream_version_hash(db: Session, version_id: str) -> tuple[int, str]:
             DatasetItem.item_metadata,
             DatasetItem.labels,
             DatasetItem.fingerprint,
+            DatasetItem.disabled_at,
         )
         .filter(DatasetItem.dataset_version_id == version_id)
         .order_by(DatasetItem.index, DatasetItem.id)
@@ -1149,7 +1289,15 @@ def _stream_version_hash(db: Session, version_id: str) -> tuple[int, str]:
 
     def flush_group() -> None:
         for row in sorted(group, key=lambda r: r.item_id):
-            hasher.update(row.item_id, row.input, row.expected_output, row.item_metadata, row.labels, row.fingerprint)
+            hasher.update(
+                row.item_id,
+                row.input,
+                row.expected_output,
+                row.item_metadata,
+                row.labels,
+                row.fingerprint,
+                row.disabled_at is not None,
+            )
         group.clear()
 
     for row in rows:
@@ -1609,7 +1757,7 @@ def _copy_items(db: Session, from_version_id: str, to_version_id: str) -> None:
     """Copy every item of one version into another with one INSERT ... SELECT.
 
     No item body passes through Python. Copies keep their stored values (item
-    ID, index, bodies, labels, fingerprint, search text) and get new
+    ID, index, bodies, labels, fingerprint, search text, disabled flag) and get new
     timestamps, as the ORM copy did.
     """
     now = utc_now_naive()
@@ -1622,6 +1770,9 @@ def _copy_items(db: Session, from_version_id: str, to_version_id: str) -> None:
         "labels",
         "fingerprint",
         "search_text",
+        "disabled_at",
+        "disabled_by_user_id",
+        "disabled_reason",
     )
     source = DatasetItem.__table__.c
     rows = (
@@ -1752,12 +1903,22 @@ def list_datasets(
     deleted: bool = Query(default=False, description="List deleted datasets (newest deletion first) instead of live ones."),
     limit: Optional[int] = Query(default=None, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    include_inaccessible: bool = Query(
+        default=False,
+        description=(
+            "Also list restricted datasets the caller cannot open (permissions.access_level "
+            "'none'), for launch pickers: any member may launch on any dataset of the project."
+        ),
+    ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     query = db.query(Dataset).filter(Dataset.project_id == project.id)
+    visible = None if include_inaccessible else _visible_datasets_clause(db, principal, project.id)
+    if visible is not None:
+        query = query.filter(visible)
     if deleted:
         query = query.filter(Dataset.deleted_at.isnot(None)).order_by(Dataset.deleted_at.desc(), Dataset.id)
     else:
@@ -1819,8 +1980,183 @@ def get_dataset(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
     return {"dataset": _dataset_payload(db, dataset, principal)}
+
+
+class AccessGrantIn(BaseModel):
+    user_id: str
+    level: str
+
+
+class UpdateAccessRequest(BaseModel):
+    access_mode: str
+    grants: list[AccessGrantIn] = Field(default_factory=list)
+
+
+def _person_payload(user: Optional[User]) -> Optional[Dict[str, Any]]:
+    if not user:
+        return None
+    return {"id": user.id, "name": user.display_name or user.email.split("@")[0], "email": user.email}
+
+
+def _access_payload(db: Session, principal: Principal, dataset: Dataset, level: str) -> Dict[str, Any]:
+    """The access settings of ``dataset`` as seen by ``principal`` (``GET`` / ``PUT …/access``)."""
+    members = {
+        row.user_id: row.role
+        for row in db.query(ProjectMembership.user_id, ProjectMembership.role)
+        .join(User, User.id == ProjectMembership.user_id)
+        .filter(ProjectMembership.project_id == dataset.project_id, User.is_active.is_(True))
+    }
+    grants = (
+        db.query(DatasetGrant)
+        .filter(DatasetGrant.dataset_id == dataset.id)
+        .order_by(DatasetGrant.created_at, DatasetGrant.id)
+        .all()
+    )
+    grants = [grant for grant in grants if grant.user_id in members]
+    users = _user_map(db, [g.user_id for g in grants] + [g.granted_by_user_id for g in grants])
+    rows = [
+        {
+            "user": _person_payload(users.get(grant.user_id)),
+            "level": grant.level,
+            "granted_by": _person_payload(users.get(grant.granted_by_user_id)),
+            "created_at": to_api_timestamp(grant.created_at),
+        }
+        for grant in grants
+        if grant.user_id in users
+    ]
+    rows.sort(key=lambda row: (row["created_at"] or "", (row["user"]["name"] or "").lower()))
+    can_manage = level == "manage"
+    candidates: list[Dict[str, Any]] = []
+    if can_manage:
+        taken = {grant.user_id for grant in grants} | {dataset.created_by_user_id}
+        pool = [
+            user_id
+            for user_id, role in members.items()
+            if role != ProjectRole.MANAGER and user_id not in taken
+        ]
+        for user in _user_map(db, pool).values():
+            if user.role != UserRole.ADMIN:
+                candidates.append(_person_payload(user))
+        candidates.sort(key=lambda row: (row["name"].lower(), row["email"]))
+    return {
+        "access_mode": dataset.access_mode or "project",
+        "grants": rows,
+        "can_manage_access": can_manage,
+        "candidates": candidates,
+        "your_level": level,
+    }
+
+
+@router.get("/v1/datasets/{dataset_ref}/access")
+def get_dataset_access(
+    dataset_ref: str,
+    project_slug: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(dataset_principal),
+) -> Dict[str, Any]:
+    """Who can open and change this dataset. Anyone who can view it sees the grants."""
+    _require_scope(principal, "datasets:read")
+    project = _project_for_request(db, principal, project_slug)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
+    level = dataset_access_level(db, principal, dataset)
+    return _access_payload(db, principal, dataset, level)
+
+
+@router.put("/v1/datasets/{dataset_ref}/access")
+def update_dataset_access(
+    dataset_ref: str,
+    req: UpdateAccessRequest,
+    project_slug: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(dataset_principal),
+) -> Dict[str, Any]:
+    """Replace the access mode and the grant list (project managers and admins only).
+
+    Grants stay stored while the mode is ``project`` and apply again if the mode
+    is switched back to ``restricted``.
+    """
+    _require_scope(principal, "datasets:write")
+    project = _project_for_request(db, principal, project_slug, write=True)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
+    level = dataset_access_level(db, principal, dataset)
+    if level != "manage":
+        raise HTTPException(status_code=403, detail=DATASET_ACCESS_MANAGE_DETAIL)
+    if req.access_mode not in ("project", "restricted"):
+        raise HTTPException(status_code=422, detail="access_mode must be project or restricted")
+    seen: set[str] = set()
+    for entry in req.grants:
+        if entry.level not in ("view", "modify"):
+            raise HTTPException(status_code=422, detail="level must be view or modify")
+        if entry.user_id in seen:
+            raise HTTPException(status_code=422, detail=f"Duplicate grant for user {entry.user_id}")
+        seen.add(entry.user_id)
+    member_ids = {
+        row[0]
+        for row in db.query(ProjectMembership.user_id)
+        .join(User, User.id == ProjectMembership.user_id)
+        .filter(
+            ProjectMembership.project_id == dataset.project_id,
+            ProjectMembership.user_id.in_(seen or [""]),
+            User.is_active.is_(True),
+        )
+    }
+    for entry in req.grants:
+        if entry.user_id not in member_ids:
+            raise HTTPException(
+                status_code=422, detail=f"User {entry.user_id} is not an active member of this project"
+            )
+    existing = {
+        grant.user_id: grant
+        for grant in db.query(DatasetGrant).filter(DatasetGrant.dataset_id == dataset.id).all()
+    }
+    before = {
+        "access_mode": dataset.access_mode or "project",
+        "grants": sorted(
+            ({"user_id": g.user_id, "level": g.level} for g in existing.values()),
+            key=lambda row: row["user_id"],
+        ),
+    }
+    wanted = {entry.user_id: entry.level for entry in req.grants}
+    now = utc_now_naive()
+    for user_id, grant in existing.items():
+        if user_id not in wanted:
+            db.delete(grant)
+        elif grant.level != wanted[user_id]:
+            grant.level = wanted[user_id]
+            grant.updated_at = now
+    for user_id, grant_level in wanted.items():
+        if user_id not in existing:
+            db.add(
+                DatasetGrant(
+                    dataset_id=dataset.id,
+                    user_id=user_id,
+                    level=grant_level,
+                    granted_by_user_id=principal.user.id,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+    dataset.access_mode = req.access_mode
+    dataset.updated_at = now
+    after = {
+        "access_mode": req.access_mode,
+        "grants": sorted(
+            ({"user_id": user_id, "level": grant_level} for user_id, grant_level in wanted.items()),
+            key=lambda row: row["user_id"],
+        ),
+    }
+    _audit(db, principal, "dataset.access_changed", dataset, before=before, after=after)
+    db.commit()
+    logger.info(
+        "Dataset %s access set to %s with %d grants by user %s",
+        dataset.id,
+        req.access_mode,
+        len(wanted),
+        principal.user.id,
+    )
+    return _access_payload(db, principal, dataset, level)
 
 
 MANAGER_ONLY_SLUG = "Only project managers can change a dataset's slug: SDK and CI references use it."
@@ -1839,7 +2175,7 @@ def update_dataset(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     if req.name is not None:
         next_name = req.name.strip()
         if next_name != dataset.name:
@@ -1884,7 +2220,7 @@ def delete_dataset(
     """Soft-delete a dataset: it moves to Deleted datasets, where a manager can restore it."""
     _require_scope(principal, "datasets:delete")
     project = _project_for_request(db, principal, project_slug, write=True)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
     if not _dataset_permissions(db, principal, dataset).get("can_delete"):
         raise HTTPException(status_code=403, detail=DELETE_RULE)
     dataset.deleted_at = utc_now_naive()
@@ -1973,7 +2309,7 @@ def list_versions(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
     versions = (
         db.query(DatasetVersion)
         .filter(DatasetVersion.dataset_id == dataset.id)
@@ -1996,7 +2332,7 @@ def list_dataset_runs(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
 
     query = db.query(Run).filter(Run.deleted_at.is_(None), Run.dataset_id == dataset.id)
     if version:
@@ -2101,7 +2437,7 @@ def create_version(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     source_ref = req.from_version or req.from_alias
     parent = _resolve_version(db, dataset, source_ref) if source_ref else None
     version_name, display_name = _version_identity(db, dataset, req.version, req.name)
@@ -2144,7 +2480,7 @@ def publish_version(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     version = _resolve_version(db, dataset, version_ref)
     if req.set_alias:
         _require_alias_permission(db, principal, dataset, req.set_alias)
@@ -2198,7 +2534,7 @@ def update_version(
     """Edit version metadata. The vN identifier itself is immutable."""
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     version = _resolve_version(db, dataset, version_ref)
     if req.name is not None:
         version.name = req.name.strip()
@@ -2309,7 +2645,7 @@ def set_alias(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     version = _resolve_version(db, dataset, req.version)
     alias = _set_alias(db, dataset, alias_name, version, principal)
     db.commit()
@@ -2330,7 +2666,7 @@ def get_lineage(
     """
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
     versions = (
         db.query(DatasetVersion)
         .filter(DatasetVersion.dataset_id == dataset.id)
@@ -2401,12 +2737,51 @@ def _plain_item_order(sort_key: str) -> list[Any]:
     return [DatasetItem.index, DatasetItem.item_id]
 
 
-def _filtered_items_query(db: Session, version: DatasetVersion, search: Optional[str], label: Optional[str]):
+ITEM_STATES = ("active", "disabled", "all")
+STATE_DETAIL = "state must be active, disabled or all"
+
+
+def _check_state(state: str) -> str:
+    if state not in ITEM_STATES:
+        raise HTTPException(status_code=422, detail=STATE_DETAIL)
+    return state
+
+
+def _filtered_items_query(
+    db: Session,
+    version: DatasetVersion,
+    search: Optional[str],
+    label: Optional[str],
+    state: str = "all",
+    meta: Optional[list[tuple[str, str]]] = None,
+):
+    """Items of ``version`` matching the list criteria; ``state`` is ``active``,
+    ``disabled`` or ``all`` (the default for internal callers)."""
     query = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id)
     query = filter_dataset_item_search(db, query, search, version_id=version.id)
     if label:
         query = query.filter(cast(DatasetItem.labels, String).like(f"%{label}%"))
+    if meta:
+        query = apply_meta_filters(db, query, meta)
+    if state == "active":
+        query = query.filter(DatasetItem.disabled_at.is_(None))
+    elif state == "disabled":
+        query = query.filter(DatasetItem.disabled_at.isnot(None))
     return query
+
+
+def _state_counts(db: Session, version: DatasetVersion, search: Optional[str], label: Optional[str], meta: Any) -> Dict[str, int]:
+    """``{"active", "disabled", "all"}`` item counts for the list criteria, ignoring state (one grouped statement)."""
+    query = _filtered_items_query(db, version, search, label, "all", meta)
+    flag = case((DatasetItem.disabled_at.is_(None), 0), else_=1)
+    rows = query.with_entities(flag, func.count(DatasetItem.id)).order_by(None).group_by(flag).all()
+    by_flag = {int(key): int(count) for key, count in rows}
+    active, disabled = by_flag.get(0, 0), by_flag.get(1, 0)
+    return {"active": active, "disabled": disabled, "all": active + disabled}
+
+
+def _item_users(db: Session, items: Iterable[DatasetItem]) -> Dict[str, User]:
+    return _user_map(db, [item.disabled_by_user_id for item in items if item.disabled_at is not None])
 
 
 def _computed_sort_ids(db: Session, version: DatasetVersion, query, sort_raw: str) -> list[int]:
@@ -2467,6 +2842,8 @@ def list_items(
     search: Optional[str] = Query(default=None),
     sort: str = Query(default="index_asc"),
     label: Optional[str] = Query(default=None),
+    state: str = Query(default="active", description="active (default), disabled or all."),
+    meta: list[str] = Query(default_factory=list, description="Repeatable path:value metadata filter."),
     include_context: bool = Query(
         default=True,
         description="Include the dataset and version payloads. The dashboard passes false: it already has them.",
@@ -2477,10 +2854,12 @@ def list_items(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, read_token=read_token)
     _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
-    query = _filtered_items_query(db, version, search, label)
+    _check_state(state)
+    meta_pairs = parse_meta_params(meta)
+    query = _filtered_items_query(db, version, search, label, state, meta_pairs)
 
     sort_raw = sort or "index_asc"
     sort_key = sort_raw.lower()
@@ -2511,6 +2890,7 @@ def list_items(
     result_summaries = _item_result_summaries(db, version, items)
     edit_counts = _item_edit_counts(db, version, items)
     metric_names = _version_metric_names(db, version)
+    item_users = _item_users(db, items)
     response: Dict[str, Any] = {
         # Each metric's direction across the version's runs, for the item means.
         "metric_directions": _version_metric_directions(db, version),
@@ -2519,11 +2899,13 @@ def list_items(
                 item,
                 run_count=(result_summaries.get(item.id, {}) or {}).get("run_count", 0),
                 result_summary=result_summaries.get(item.id),
+                users=item_users,
             )
             | {"edit_count": edit_counts.get(item.id, 0)}
             for item in items
         ],
         "metric_names": metric_names,
+        "counts": _state_counts(db, version, search, label, meta_pairs),
         "total": int(total),
         "next_offset": offset + limit if offset + limit < int(total) else None,
     }
@@ -2544,7 +2926,7 @@ def create_item(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -2583,7 +2965,7 @@ def create_item(
         item,
         change_type="created",
         before={},
-        after=_item_payload(item),
+        after=_item_snapshot(item),
         actor_user_id=principal.user.id,
     )
     db.commit()
@@ -2602,7 +2984,7 @@ def get_item(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, read_token=read_token)
     _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
     item = (
@@ -2613,7 +2995,7 @@ def get_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     run_count = db.query(RunItem.id).filter(RunItem.dataset_item_pk == item.id).count()
-    return {"item": _item_payload(item, run_count=run_count)}
+    return {"item": _item_payload(item, run_count=run_count, users=_item_users(db, [item]))}
 
 
 @router.patch("/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}")
@@ -2632,7 +3014,7 @@ def update_item(
     """
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -2643,7 +3025,7 @@ def update_item(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Dataset item not found")
-    before = _item_payload(item)
+    before = _item_snapshot(item)
     changes = req.model_dump(exclude_unset=True)
     next_item_id = (changes.get("item_id") or "").strip() or item.item_id
     input_value = _json_safe(changes["input"]) if "input" in changes else item.input
@@ -2659,7 +3041,7 @@ def update_item(
     )
     if unchanged:
         # Nothing to write: no revision, no updated_at bump.
-        return {"item": before}
+        return {"item": _item_payload(item, users=_item_users(db, [item]))}
     item.item_id = next_item_id
     item.input = input_value
     item.expected_output = expected
@@ -2670,9 +3052,9 @@ def update_item(
         flag_modified(item, attr)
     item.fingerprint = build_identity_fingerprint(input_value=input_value, expected_value=expected, metadata=metadata)
     item.updated_at = utc_now_naive()
-    _record_item_revision(db, version, item, change_type="updated", before=before, after=_item_payload(item), actor_user_id=principal.user.id)
+    _record_item_revision(db, version, item, change_type="updated", before=before, after=_item_snapshot(item), actor_user_id=principal.user.id)
     db.commit()
-    return {"item": _item_payload(item)}
+    return {"item": _item_payload(item, users=_item_users(db, [item]))}
 
 
 @router.delete("/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}")
@@ -2686,7 +3068,7 @@ def delete_item(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug, write=True)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -2697,7 +3079,7 @@ def delete_item(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Dataset item not found")
-    before = _item_payload(item)
+    before = _item_snapshot(item)
     _record_item_revision(db, version, None, change_type="deleted", before=before, after={}, actor_user_id=principal.user.id)
     _detach_item_revisions(db, item)
     _detach_item_run_results(db, item)
@@ -2705,6 +3087,333 @@ def delete_item(
     version.item_count = max(0, int(version.item_count or 0) - 1)
     db.commit()
     return {"ok": True}
+
+
+REASON_MAX = 500
+REASON_DETAIL = "Reason must be 500 characters or fewer"
+STATE_DRAFT_DETAIL = "Create a draft to change item state"
+BATCH_DRAFT_DETAIL = "Create a draft to edit items"
+BATCH_CHANGED_DETAIL = "The matching items changed. Review the new count and try again."
+
+
+class ItemStateRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+def _require_state_draft(version: DatasetVersion, detail: str = STATE_DRAFT_DETAIL) -> None:
+    status = version.status.value if hasattr(version.status, "value") else str(version.status)
+    if status != DatasetVersionStatus.DRAFT.value:
+        raise HTTPException(status_code=409, detail=detail)
+
+
+def _clean_reason(reason: Optional[str]) -> str:
+    text = (reason or "").strip()
+    if len(text) > REASON_MAX:
+        raise HTTPException(status_code=422, detail=REASON_DETAIL)
+    return text
+
+
+def _toggle_item_state(
+    db: Session,
+    dataset_ref: str,
+    version_ref: str,
+    item_id: str,
+    project_slug: Optional[str],
+    principal: Principal,
+    *,
+    disable: bool,
+    reason: Optional[str],
+) -> Dict[str, Any]:
+    _require_scope(principal, "datasets:write")
+    project = _project_for_request(db, principal, project_slug, write=True)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
+    _require_items_visible(principal, dataset)
+    version = _resolve_version(db, dataset, version_ref)
+    _require_state_draft(version)
+    text = _clean_reason(reason) if disable else ""
+    item = (
+        db.query(DatasetItem)
+        .filter(DatasetItem.dataset_version_id == version.id, DatasetItem.item_id == item_id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Dataset item not found")
+    if (item.disabled_at is not None) == disable:
+        # Already in the wanted state: a retry or a double click changes nothing.
+        return {"item": _item_payload(item, users=_item_users(db, [item])), "changed": False}
+    before = {"item_id": item.item_id, "disabled": item.disabled_at is not None, "reason": item.disabled_reason or ""}
+    now = utc_now_naive()
+    if disable:
+        item.disabled_at = now
+        item.disabled_by_user_id = principal.user.id
+        item.disabled_reason = text
+    else:
+        item.disabled_at = None
+        item.disabled_by_user_id = None
+        item.disabled_reason = ""
+    item.updated_at = now
+    after = {"item_id": item.item_id, "disabled": disable, "reason": text if disable else ""}
+    _record_item_revision(
+        db,
+        version,
+        item,
+        change_type="disabled" if disable else "enabled",
+        before=before,
+        after=after,
+        actor_user_id=principal.user.id,
+    )
+    _audit(
+        db,
+        principal,
+        "dataset.item_disabled" if disable else "dataset.item_enabled",
+        dataset,
+        after={"version": version.version, "item_id": item.item_id, "reason": text},
+    )
+    db.commit()
+    return {"item": _item_payload(item, users=_item_users(db, [item])), "changed": True}
+
+
+@router.post("/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}:disable")
+def disable_item(
+    dataset_ref: str,
+    version_ref: str,
+    item_id: str,
+    req: ItemStateRequest = Body(default_factory=ItemStateRequest),
+    project_slug: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(dataset_principal),
+) -> Dict[str, Any]:
+    """Leave an item out of runs once its draft is published (draft versions only)."""
+    return _toggle_item_state(
+        db, dataset_ref, version_ref, item_id, project_slug, principal, disable=True, reason=req.reason
+    )
+
+
+@router.post("/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}:enable")
+def enable_item(
+    dataset_ref: str,
+    version_ref: str,
+    item_id: str,
+    project_slug: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(dataset_principal),
+) -> Dict[str, Any]:
+    """Include a disabled item in runs again (draft versions only)."""
+    return _toggle_item_state(
+        db, dataset_ref, version_ref, item_id, project_slug, principal, disable=False, reason=None
+    )
+
+
+@router.get("/v1/datasets/{dataset_ref}/versions/{version_ref}/items:metadata-facets")
+def item_metadata_facets(
+    dataset_ref: str,
+    version_ref: str,
+    project_slug: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(dataset_principal),
+) -> Dict[str, Any]:
+    """Scalar metadata paths of a version with their values and counts (for the filter popover)."""
+    _require_scope(principal, "datasets:read")
+    project = _project_for_request(db, principal, project_slug)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
+    _require_items_visible(principal, dataset)
+    version = _resolve_version(db, dataset, version_ref)
+    return metadata_facets(db, version.id)
+
+
+MAX_BATCH_ITEM_IDS = 1000
+BATCH_ACTIONS = ("disable", "enable", "delete")
+EMPTY_FILTER_DETAIL = "Add a search, label, metadata or item filter before a batch edit"
+NO_MATCH_DETAIL = "No items match this filter"
+
+
+class BatchFilter(BaseModel):
+    search: Optional[str] = None
+    label: Optional[str] = None
+    meta: Optional[Dict[str, Any]] = None
+    item_ids: Optional[list[str]] = None
+    state: str = "all"
+
+
+class BatchItemsRequest(BaseModel):
+    filter: BatchFilter = Field(default_factory=BatchFilter)
+    action: str
+    reason: Optional[str] = None
+    dry_run: bool = True
+    expected_affected: Optional[int] = None
+
+
+@router.post("/v1/datasets/{dataset_ref}/versions/{version_ref}/items:batch")
+def batch_items(
+    dataset_ref: str,
+    version_ref: str,
+    req: BatchItemsRequest,
+    project_slug: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(dataset_principal),
+) -> Dict[str, Any]:
+    """Disable, enable or delete every draft item matching a filter.
+
+    ``dry_run`` (the default) only counts. An apply runs set-based statements in
+    one transaction: one revision per changed item, one audit entry. A filter
+    with no search, label, metadata or item ids is refused so an empty filter
+    can never touch a whole version.
+    """
+    _require_scope(principal, "datasets:write")
+    project = _project_for_request(db, principal, project_slug, write=True)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
+    _require_items_visible(principal, dataset)
+    version = _resolve_version(db, dataset, version_ref)
+    _require_state_draft(version, BATCH_DRAFT_DETAIL)
+    if req.action not in BATCH_ACTIONS:
+        raise HTTPException(status_code=422, detail="action must be disable, enable or delete")
+    reason = _clean_reason(req.reason)
+    if req.action != "disable":
+        reason = ""
+    criteria = req.filter
+    _check_state(criteria.state)
+    meta_pairs = meta_pairs_from_mapping(criteria.meta)
+    item_ids = [str(value) for value in (criteria.item_ids or []) if str(value)]
+    if len(item_ids) > MAX_BATCH_ITEM_IDS:
+        raise HTTPException(status_code=422, detail=f"item_ids takes at most {MAX_BATCH_ITEM_IDS} ids")
+    search = (criteria.search or "").strip() or None
+    label = (criteria.label or "").strip() or None
+    if not (search or label or meta_pairs or item_ids):
+        raise HTTPException(status_code=422, detail=EMPTY_FILTER_DETAIL)
+    query = _filtered_items_query(db, version, search, label, criteria.state, meta_pairs)
+    if item_ids:
+        query = query.filter(DatasetItem.item_id.in_(item_ids))
+    matched = int(query.with_entities(func.count(DatasetItem.id)).order_by(None).scalar() or 0)
+    if matched == 0:
+        raise HTTPException(status_code=422, detail=NO_MATCH_DETAIL)
+    if req.action == "disable":
+        target = query.filter(DatasetItem.disabled_at.is_(None))
+    elif req.action == "enable":
+        target = query.filter(DatasetItem.disabled_at.isnot(None))
+    else:
+        target = query
+    affected = int(target.with_entities(func.count(DatasetItem.id)).order_by(None).scalar() or 0)
+    sample = [
+        row[0]
+        for row in target.with_entities(DatasetItem.item_id).order_by(DatasetItem.index, DatasetItem.item_id).limit(20)
+    ]
+    response: Dict[str, Any] = {
+        "matched": matched,
+        "affected": affected,
+        "sample_item_ids": sample,
+        "version_status": version.status.value if hasattr(version.status, "value") else str(version.status),
+        "dry_run": bool(req.dry_run),
+    }
+    if item_ids:
+        found = {
+            row[0]
+            for row in db.query(DatasetItem.item_id).filter(
+                DatasetItem.dataset_version_id == version.id, DatasetItem.item_id.in_(item_ids)
+            )
+        }
+        response["missing_item_ids"] = [value for value in dict.fromkeys(item_ids) if value not in found][:20]
+    if req.dry_run:
+        return response
+    if req.expected_affected is not None and req.expected_affected != affected:
+        raise HTTPException(status_code=409, detail=BATCH_CHANGED_DETAIL)
+    if affected:
+        _apply_batch(db, version, target, req.action, reason, principal)
+        _audit(
+            db,
+            principal,
+            "dataset.items_batch",
+            dataset,
+            after={
+                "version": version.version,
+                "action": req.action,
+                "matched": matched,
+                "affected": affected,
+                "filter": {
+                    "search": search,
+                    "label": label,
+                    "meta": dict(meta_pairs),
+                    "item_ids": len(item_ids),
+                    "state": criteria.state,
+                },
+            },
+        )
+        version.updated_at = utc_now_naive()
+    db.commit()
+    logger.info(
+        "Dataset %s version %s batch %s: %d of %d items",
+        dataset.id,
+        version.version,
+        req.action,
+        affected,
+        matched,
+    )
+    return response
+
+
+def _apply_batch(
+    db: Session, version: DatasetVersion, target: Any, action: str, reason: str, principal: Principal
+) -> None:
+    """Write one batch action for the items ``target`` selects (a constant number of statements)."""
+    actor = principal.user.id
+    now = utc_now_naive()
+    first_revision = _revision_count(db, version) + 1
+    revision_table = DatasetItemRevision.__table__
+    if action == "delete":
+        locked = target.order_by(DatasetItem.index, DatasetItem.id).with_for_update().all()
+        pks = [item.id for item in locked]
+        revisions = [
+            {
+                "dataset_item_id": None,
+                "dataset_version_id": version.id,
+                "revision_number": first_revision + offset,
+                "change_type": "deleted",
+                "before": _item_snapshot(item),
+                "after": {},
+                "actor_user_id": actor,
+                "created_at": now,
+            }
+            for offset, item in enumerate(locked)
+        ]
+        picked = DatasetItem.id.in_(pks)
+        db.query(DatasetItemRevision).filter(DatasetItemRevision.dataset_item_id.in_(pks)).update(
+            {DatasetItemRevision.dataset_item_id: None}, synchronize_session=False
+        )
+        db.query(RunItem).filter(RunItem.dataset_item_pk.in_(pks)).update(
+            {RunItem.dataset_item_pk: None}, synchronize_session=False
+        )
+        db.query(DatasetItem).filter(picked).delete(synchronize_session=False)
+        if revisions:
+            db.execute(insert(revision_table), revisions)
+        db.flush()
+        version.item_count = int(
+            db.query(func.count(DatasetItem.id)).filter(DatasetItem.dataset_version_id == version.id).scalar() or 0
+        )
+        return
+    rows = target.with_entities(DatasetItem.id, DatasetItem.item_id).order_by(DatasetItem.index, DatasetItem.id).all()
+    pks = [row[0] for row in rows]
+    disabling = action == "disable"
+    values: Dict[str, Any] = (
+        {"disabled_at": now, "disabled_by_user_id": actor, "disabled_reason": reason, "updated_at": now}
+        if disabling
+        else {"disabled_at": None, "disabled_by_user_id": None, "disabled_reason": "", "updated_at": now}
+    )
+    db.query(DatasetItem).filter(DatasetItem.id.in_(pks)).update(values, synchronize_session=False)
+    db.execute(
+        insert(revision_table),
+        [
+            {
+                "dataset_item_id": row[0],
+                "dataset_version_id": version.id,
+                "revision_number": first_revision + offset,
+                "change_type": "disabled" if disabling else "enabled",
+                "before": {"item_id": row[1], "disabled": not disabling, "reason": ""},
+                "after": {"item_id": row[1], "disabled": disabling, "reason": reason if disabling else ""},
+                "actor_user_id": actor,
+                "created_at": now,
+            }
+            for offset, row in enumerate(rows)
+        ],
+    )
 
 
 MAX_BULK_ENTRIES = 1000
@@ -2737,7 +3446,7 @@ def bulk_items(
             ),
         )
     project = _project_for_request(db, principal, project_slug, write=True)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, need="modify")
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -2774,7 +3483,7 @@ def bulk_items(
             version,
             None,
             change_type="deleted",
-            before=_item_payload(item),
+            before=_item_snapshot(item),
             after={},
             actor_user_id=actor_user_id,
             revision_number=next_revision(),
@@ -2848,7 +3557,7 @@ def bulk_items(
                 new_item,
                 change_type="created",
                 before={},
-                after=payload,
+                after=_item_snapshot(new_item),
                 actor_user_id=actor_user_id,
                 revision_number=number,
             )
@@ -2868,7 +3577,7 @@ def bulk_items(
             if existing.id is None:
                 # Updating an item created earlier in this request.
                 flush_pending()
-            before = _item_payload(existing)
+            before = _item_snapshot(existing)
             existing.input = input_value
             existing.expected_output = expected
             existing.item_metadata = metadata
@@ -2881,7 +3590,7 @@ def bulk_items(
                 existing,
                 change_type="updated",
                 before=before,
-                after=_item_payload(existing),
+                after=_item_snapshot(existing),
                 actor_user_id=actor_user_id,
                 revision_number=next_revision(),
             )
@@ -2933,7 +3642,7 @@ def item_runs(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     item = (
@@ -3005,7 +3714,7 @@ def item_runs(
         for metric, values in sorted(numeric_scores_by_metric.items())
     }
     return {
-        "item": _item_payload(item),
+        "item": _item_payload(item, users=_item_users(db, [item])),
         "aggregates": {
             "run_count": len(rows),
             "success_count": len(rows) - error_count,
@@ -3067,15 +3776,18 @@ def item_neighbors(
     search: Optional[str] = Query(default=None),
     sort: str = Query(default="index_asc"),
     label: Optional[str] = Query(default=None),
+    state: str = Query(default="all", description="active, disabled or all (default), as on the list."),
+    meta: list[str] = Query(default_factory=list, description="Repeatable path:value metadata filter."),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
-    query = _filtered_items_query(db, version, search, label)
+    _check_state(state)
+    query = _filtered_items_query(db, version, search, label, state, parse_meta_params(meta))
     sort_key = (sort or "index_asc").lower()
     if sort_key.startswith(_COMPUTED_SORT_PREFIXES):
         ordered_ids = _computed_sort_ids(db, version, query, sort or "index_asc")
@@ -3114,8 +3826,8 @@ def item_neighbors(
         "item_id": item_id,
         "index": idx,
         "total": total,
-        "previous": _item_payload(previous_item) if previous_item else None,
-        "next": _item_payload(next_item) if next_item else None,
+        "previous": _item_payload(previous_item, users=_item_users(db, [previous_item])) if previous_item else None,
+        "next": _item_payload(next_item, users=_item_users(db, [next_item])) if next_item else None,
     }
 
 
@@ -3130,7 +3842,7 @@ def item_lineage(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     versions_by_id = {
@@ -3172,7 +3884,8 @@ def item_lineage(
         db,
         [r.actor_user_id for r in relevant_revisions]
         + [v.created_by_user_id for v in chain]
-        + [v.published_by_user_id for v in chain],
+        + [v.published_by_user_id for v in chain]
+        + [row.disabled_by_user_id for row in items_by_version.values() if row.disabled_at is not None],
     )
     revisions_by_version: Dict[str, list[DatasetItemRevision]] = defaultdict(list)
     for revision in relevant_revisions:
@@ -3182,7 +3895,7 @@ def item_lineage(
         "lineage": [
             {
                 "version": _version_payload(db, v),
-                "item": _item_payload(items_by_version[v.id]) if v.id in items_by_version else None,
+                "item": _item_payload(items_by_version[v.id], users=users) if v.id in items_by_version else None,
                 "revisions": [
                     {
                         "id": row.id,
@@ -3242,6 +3955,7 @@ def _compare_rows(db: Session, version_id: str) -> Dict[str, Any]:
             DatasetItem.index,
             DatasetItem.fingerprint,
             DatasetItem.labels,
+            DatasetItem.disabled_at,
         ).filter(DatasetItem.dataset_version_id == version_id)
     }
 
@@ -3259,6 +3973,7 @@ def _compare_bodies(db: Session, version_id: str, item_ids: list[str]) -> Dict[s
             DatasetItem.expected_output,
             DatasetItem.item_metadata,
             DatasetItem.labels,
+            DatasetItem.disabled_at,
         ).filter(DatasetItem.dataset_version_id == version_id, DatasetItem.item_id.in_(item_ids))
     }
 
@@ -3275,7 +3990,13 @@ def _changed_fields(b: Any, t: Any) -> list[str]:
         fields.append("metadata")
     if (b.labels or []) != (t.labels or []):
         fields.append("labels")
+    if (b.disabled_at is None) != (t.disabled_at is None):
+        fields.append("state")
     return fields
+
+
+def _state_name(disabled_at: Any) -> str:
+    return "active" if disabled_at is None else "disabled"
 
 
 @router.get("/v1/datasets/{dataset_ref}/versions/{version_ref}:compare")
@@ -3313,7 +4034,7 @@ def compare_versions(
     """
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
     _require_items_visible(principal, dataset)
     target = _resolve_version(db, dataset, version_ref)
     base_version = _resolve_version(db, dataset, base)
@@ -3379,8 +4100,15 @@ def compare_versions(
         if not (
             base_rows[item_id_key].fingerprint == target_rows[item_id_key].fingerprint
             and (base_rows[item_id_key].labels or []) == (target_rows[item_id_key].labels or [])
+            and (base_rows[item_id_key].disabled_at is None) == (target_rows[item_id_key].disabled_at is None)
         )
     ]
+    disabled_count = sum(
+        1 for key in shared if base_rows[key].disabled_at is None and target_rows[key].disabled_at is not None
+    )
+    enabled_count = sum(
+        1 for key in shared if base_rows[key].disabled_at is not None and target_rows[key].disabled_at is None
+    )
     changed_ids = _time_order(target_rows, changed_ids)
     unchanged = sorted(shared - set(changed_ids), key=lambda item_id_value: (target_rows[item_id_value].index, item_id_value))
 
@@ -3474,19 +4202,28 @@ def compare_versions(
                         "expected_output": b.expected_output,
                         "metadata": b.item_metadata or {},
                         "labels": b.labels or [],
+                        "state": _state_name(b.disabled_at),
                     },
                     after={
                         "input": t.input,
                         "expected_output": t.expected_output,
                         "metadata": t.item_metadata or {},
                         "labels": t.labels or [],
+                        "state": _state_name(t.disabled_at),
                     },
                 )
             )
     response: Dict[str, Any] = {
         "base": _version_payload(db, base_version),
         "target": _version_payload(db, target),
-        "summary": {"added": len(added), "removed": len(removed), "changed": len(changed_ids), "unchanged": len(unchanged)},
+        "summary": {
+            "added": len(added),
+            "removed": len(removed),
+            "changed": len(changed_ids),
+            "unchanged": len(unchanged),
+            "disabled": disabled_count,
+            "enabled": enabled_count,
+        },
     }
     if not paged:
         response.update(
@@ -3634,7 +4371,7 @@ def _upload_dataset_sync(
         raise HTTPException(status_code=400, detail="Dataset name is required")
     slug = _slugify(clean_name)
     if dataset_ref:
-        dataset: Optional[Dataset] = _get_dataset(db, project, dataset_ref)
+        dataset: Optional[Dataset] = _get_dataset(db, project, dataset_ref, principal, need="modify")
     else:
         dataset = _dataset_for_upload(db, project, clean_name, slug)
         if dataset and create_only:
@@ -3648,6 +4385,7 @@ def _upload_dataset_sync(
     if private_test_set:
         _require_admin_for_private_flag(principal)
     if dataset:
+        _require_dataset_access(db, principal, dataset, "modify")
         _require_items_visible(principal, dataset)
     if dataset and publish and set_alias:
         # Refuse before anything is written: an upload must not move production for a member.
@@ -3772,15 +4510,18 @@ def download_version(
     dataset_ref: str,
     version_ref: str,
     project_slug: Optional[str] = Query(default=None),
+    include_disabled: bool = Query(default=False, description="Also write disabled items."),
+    meta: list[str] = Query(default_factory=list, description="Repeatable path:value metadata filter."),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
     read_token: Optional[str] = Header(default=None, alias=DATASET_READ_TOKEN_HEADER),
 ) -> Response:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal, read_token=read_token)
     _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
+    meta_pairs = parse_meta_params(meta)
     filename = f"{dataset.slug}-{version.version}.jsonl"
     fallback = f"{_ascii_name(dataset.slug, 'dataset')}-{_ascii_name(version.version, 'version')}.jsonl"
     session_factory = sessionmaker(bind=db.get_bind(), autoflush=False)
@@ -3788,7 +4529,7 @@ def download_version(
     # after this returns and must not keep a transaction open meanwhile.
     db.rollback()
     return StreamingResponse(
-        _jsonl_chunks(session_factory, version.id),
+        _jsonl_chunks(session_factory, version.id, include_disabled=include_disabled, meta=meta_pairs),
         media_type="application/x-ndjson",
         headers={"Content-Disposition": _attachment_disposition(filename, fallback)},
     )
@@ -3797,7 +4538,13 @@ def download_version(
 _DOWNLOAD_BATCH_SIZE = 1000
 
 
-def _jsonl_chunks(session_factory: sessionmaker, version_id: str) -> Iterator[bytes]:
+def _jsonl_chunks(
+    session_factory: sessionmaker,
+    version_id: str,
+    *,
+    include_disabled: bool = True,
+    meta: Optional[list[tuple[str, str]]] = None,
+) -> Iterator[bytes]:
     """The version's JSONL, one chunk per batch of items, in index order.
 
     Each batch is a keyset page read by its own short-lived session, closed
@@ -3816,6 +4563,10 @@ def _jsonl_chunks(session_factory: sessionmaker, version_id: str) -> Iterator[by
                 DatasetItem.item_metadata,
                 DatasetItem.labels,
             ).filter(DatasetItem.dataset_version_id == version_id)
+            if not include_disabled:
+                query = query.filter(DatasetItem.disabled_at.is_(None))
+            if meta:
+                query = apply_meta_filters(session, query, meta)
             if after is not None:
                 last_index, last_id = after
                 query = query.filter(
@@ -3853,7 +4604,7 @@ def get_version(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
     version = _resolve_version(db, dataset, version_ref)
     return {"dataset": _dataset_payload(db, dataset, principal), "version": _version_payload(db, version)}
 
@@ -3869,7 +4620,7 @@ def item_revisions(
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
-    dataset = _get_dataset(db, project, dataset_ref)
+    dataset = _get_dataset(db, project, dataset_ref, principal)
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     item = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id, DatasetItem.item_id == item_id).first()

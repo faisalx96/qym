@@ -417,6 +417,8 @@ class QymDataset:
         self._version_label: Optional[str] = None
         self.input_cols: List[str] = []
         self._items: Optional[List[CsvDatasetItem]] = None
+        # Items the version holds but a run leaves out (disabled in the draft).
+        self.disabled_count: int = 0
         if not self.platform_url or not self.api_key:
             raise DatasetNotFoundError(
                 f"Dataset '{dataset_name}' is not a local file and qym platform credentials are missing. "
@@ -445,7 +447,8 @@ class QymDataset:
             self.version or self.alias or "production",
             safe="",
         )
-        params: Dict[str, str] = {"limit": "1000"}
+        # Disabled items stay out of runs: ask for the active set explicitly.
+        params: Dict[str, str] = {"limit": "1000", "state": "active"}
         if self.project_slug:
             params["project_slug"] = self.project_slug
         items: List[CsvDatasetItem] = []
@@ -480,6 +483,10 @@ class QymDataset:
                     str(version_data.get("version") or "")
                     or self._version_label
                 )
+                try:
+                    self.disabled_count = int(version_data.get("disabled_count") or 0)
+                except (TypeError, ValueError):
+                    self.disabled_count = 0
             for item in data.get("items") or []:
                 items.append(
                     CsvDatasetItem(

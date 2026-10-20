@@ -526,7 +526,7 @@ def test_lineage_counts_follow_the_compare_rule_and_load_no_bodies(maint_db):
     event.listen(engine, "before_cursor_execute", lambda *a: statements.append(a[2]))
     with factory() as db:
         counts = compute_change_counts(db, db.get(DatasetVersion, "v2"))
-    assert counts == {"added": 0, "modified": 1, "deleted": 0, "unchanged": 1}
+    assert counts == {"added": 0, "modified": 1, "deleted": 0, "unchanged": 1, "disabled": 0, "enabled": 0}
     reads = [s for s in statements if "FROM dataset_items" in s]
     assert reads and not any("dataset_items.input" in s for s in reads)
 
@@ -586,7 +586,7 @@ def test_paged_compare_returns_only_its_page(maint_db, dataset_client):
     paged = dataset_client.get(url, params={"project_slug": "p", "base": "v1", "include_diffs": 1, "kind": "changed", "limit": 2})
     body = _ok(paged)
     assert [row["item_id"] for row in body["field_diffs"]] == ["c0", "c1"] or len(body["field_diffs"]) == 2
-    assert body["summary"] == {"added": 1, "removed": 0, "changed": 3, "unchanged": 4}
+    assert body["summary"] == {"added": 1, "removed": 0, "changed": 3, "unchanged": 4, "disabled": 0, "enabled": 0}
     for key in ("added", "removed", "changed", "unchanged", "timestamps"):
         assert key not in body, key
     full = _ok(dataset_client.get(url, params={"project_slug": "p", "base": "v1"}))
