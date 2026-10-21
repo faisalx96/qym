@@ -67,3 +67,28 @@ one local run, two environments; the home shot has the latency box ticked).
 | QA3-26 name x / width | 243 / 154.8 | 243 / 154.8 with and without the tag |
 | QA3-27 | Run 260, row 32, scroll 2634, overflow 0 | 260, 32, 2634, 0 |
 | QA3-30 card height | 162.8 | 162.8 with and without the tag |
+
+## 4. Gate (all through `scripts/heavy.sh`; logs under `/tmp/claude-1000/-home-meshari-aldossari-Documents-qym-qym/51864cf7-e4e4-455d-967b-8153416bc257/scratchpad/qa/b-impl/`)
+
+| Command | Result | Log |
+|---|---|---|
+| `npm run check` (cost 3: tsc, eslint, stylelint, Vitest 182 files / 1523 tests, design-language 53 tests) | pass (the first run timed out two tests of `settings.test.tsx` under load; the file alone and the rerun pass) | `gate2-check.log` |
+| `npm run build` (cost 2) | pass | `gate-build.log` |
+| `pytest tests/platform` in 5 chunks of 48 files (cost 4 each) | 4 chunks pass; chunk `ac`: 1 failure, `test_migrations.py::test_operations_docs_name_the_current_migration_head` (`docs/RELEASE_NOTES.md` names head `0086` in an older section). **Pre-existing**: neither file is touched by this branch (`git diff cfa83880 -- docs/RELEASE_NOTES.md tests/platform/test_migrations.py` is empty). Not fixed here. | `gate-pytest-chunk-a{a,b,c,d,e}.log` |
+| `pytest tests/platform/test_design_language.py` | pass | `gate-pytest-design.log` |
+| `pytest tests/sdk` (cost 3) | pass | `gate-pytest-sdk.log` |
+| `mypy packages/sdk/qym` | 112 errors in 20 files, **pre-existing** (none on the lines this branch changed in `cli/run.py`) | `gate-mypy.log` |
+| `npx playwright test e2e/runs-list` (cost 3) | 234 passed | `gate3-e2e-runs-list.log` |
+| `npx playwright test e2e/experiments` (cost 3, 2 workers) | 185 passed, 6 failed (Raw JSON / CodeMirror `.cm-content` not found in `evaluation.spec.ts`, `models.spec.ts`, `wizard.spec.ts`: load-induced; the same three files pass 29 / 29 with `--workers 1`) | `gate3-e2e-experiments.log`, `rerun6.log` |
+| `black --check` / `isort --check` on touched Python | the base files `dashboard_summaries.py`, `cli/run.py`, `api/experiments.py`, `test_run_origin_filter.py`, `test_cli_run_list_origin.py` already failed both at `cfa83880`; `run_origin.py` and `test_experiment_versioning_details.py` are black-clean | n/a |
+
+Port note: the other work package's fake Evaluation Service B sits on 9084 (its platform port 8983 + 101), which is also this package's fake A (8984 + 100). The final e2e runs used the platform port 8985
+(Vite 5985, fakes 9085 / 9086, stub 9985, `QYM_E2E_DB=.qym-e2e-qb.db`).
+
+## 5. Open points for the reviewer
+
+1. QA3-28 (repeat run with the tag after `Official`) is covered by a component test only; the e2e seed has no multi-pass run.
+2. QA3-15 / QA3-24 gate states for a non-manager (disabled, partial) are unit-tested only (the e2e platform runs as a manager).
+3. The Environments card heights of QA3-13 / QA3-14 depend on the environments' tag rows; the control's own contribution (+38.8 px on, callout 34.8 px) is what matches the spec (amended in spec 8b).
+4. The step-1 `Details` link of each environment precedes the next environment in the tab order (spec QA4-13 lists "environments, Details"): the measured order is Alpha, Details of Alpha, Bare, Details of Bare, New environment, dataset, Refresh.
+5. `experiment.latency_sensitive` is absent from descriptors until the reconcile pass republishes them (limit 100 per pass); the UI reads absent as false.
