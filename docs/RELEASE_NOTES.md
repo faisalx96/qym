@@ -30,6 +30,7 @@ Datasets get per-dataset access, disabled items and batch edits by metadata; exp
 
 ### Runs
 
+- **Column drag in the Columns menu works downward and past the fold.** Dragging a column's handle downward dropped nothing in Chrome, because the browser released the pointer capture when React re-inserted the dragged row to show the new order; the drag now listens on the document and captures on the list. Holding the pointer at the top or bottom edge of the list scrolls it, so a column can be dragged to the end of a long list.
 - **JSON metadata chips open their viewer.** In the run header, a config or metadata value that is an object or array ("{ 3 keys }") is a button that opens the JSON viewer whether or not the chip band is expanded. Before, it opened only after "+ N more", which a run with few chips never shows.
 
 ### Operations

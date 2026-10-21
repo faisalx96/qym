@@ -55,6 +55,145 @@ test.describe('runs columns layout (1280)', () => {
     expect(key, 'the layout is saved under a per-user key').toMatch(/^qym:data-table:v2:runs\.v2:.+/);
   });
 
+  test('a pointer drag of the handle across several rows moves the column that far (Chromium)', async ({
+    page,
+    request,
+  }) => {
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    const before = await headers(page);
+    await openMenu(page);
+    // Date is near the top of the list, so it and the three rows above it are inside the list's visible area
+    const rows = menu(page).locator('[data-col-row]');
+    const ids = await rows.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.colRow!));
+    const from = ids.indexOf('time');
+    expect(from).toBeGreaterThanOrEqual(3);
+    const target = await rows.nth(from - 3).boundingBox();
+    const grip = await handle(page, 'Date').boundingBox();
+    expect(target && grip).toBeTruthy();
+    // press on the handle, move up in small steps through three rows, release on the target row
+    await page.mouse.move(grip!.x + grip!.width / 2, grip!.y + grip!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip!.x + grip!.width / 2, target!.y + 2, { steps: 12 });
+    await page.mouse.up();
+    const after = await headers(page);
+    expect(after.indexOf('time')).toBe(before.indexOf('time') - 3);
+    expect(after.filter((c) => c.startsWith('metric-'))).toEqual(
+      before.filter((c) => c.startsWith('metric-')),
+    );
+    await expect(menu(page)).toBeVisible();
+  });
+
+  test('a drag held at the top edge of the list scrolls it, so a column from below the fold reaches the top', async ({
+    page,
+    request,
+  }) => {
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    const before = await headers(page);
+    await openMenu(page);
+    const list = menu(page).getByRole('list', { name: 'Column order' });
+    const scrollable = await list.evaluate((el) => el.scrollHeight > el.clientHeight + 1);
+    expect(scrollable, 'the runs table has more columns than the list shows at once').toBe(true);
+    // Owner is below the fold: bring it into view, press its handle and hold the pointer at the list's top edge
+    await handle(page, 'Owner').scrollIntoViewIfNeeded();
+    const grip = await handle(page, 'Owner').boundingBox();
+    const box = await list.boundingBox();
+    const x = grip!.x + grip!.width / 2;
+    await page.mouse.move(x, grip!.y + grip!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x, box!.y + 6, { steps: 10 });
+    for (let i = 0; i < 12; i++) {
+      await page.waitForTimeout(80);
+      await page.mouse.move(x, box!.y + 6 + (i % 2));
+    }
+    await expect
+      .poll(async () => list.evaluate((el) => el.scrollTop), { message: 'the list scrolled to its top' })
+      .toBe(0);
+    await page.mouse.up();
+    const after = await headers(page);
+    expect(after.indexOf('owner')).toBeLessThan(before.indexOf('owner') - 3);
+    await expect(menu(page)).toBeVisible();
+  });
+
+  test('releasing the pointer outside the popover still drops the column and keeps the menu open', async ({
+    page,
+    request,
+  }) => {
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    const before = await headers(page);
+    await openMenu(page);
+    const rows = menu(page).locator('[data-col-row]');
+    const ids = await rows.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.colRow!));
+    const from = ids.indexOf('time');
+    const target = await rows.nth(from - 2).boundingBox();
+    const grip = await handle(page, 'Date').boundingBox();
+    const dialog = await menu(page).boundingBox();
+    await page.mouse.move(grip!.x + grip!.width / 2, grip!.y + grip!.height / 2);
+    await page.mouse.down();
+    // drift left out of the popover while moving up two rows, then release there
+    await page.mouse.move(dialog!.x - 80, target!.y + 2, { steps: 12 });
+    await page.mouse.up();
+    const after = await headers(page);
+    expect(after.indexOf('time')).toBe(before.indexOf('time') - 2);
+    await expect(menu(page)).toBeVisible();
+  });
+
+  test('a drag held at the bottom edge scrolls the list, so a column from the top reaches the end', async ({
+    page,
+    request,
+  }) => {
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    const before = await headers(page);
+    await openMenu(page);
+    const list = menu(page).getByRole('list', { name: 'Column order' });
+    const rows = menu(page).locator('[data-col-row]');
+    const ids = await rows.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.colRow!));
+    const grip = await handle(page, 'Task').boundingBox();
+    const box = await list.boundingBox();
+    const x = grip!.x + grip!.width / 2;
+    await page.mouse.move(x, grip!.y + grip!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x, box!.y + box!.height - 6, { steps: 10 });
+    for (let i = 0; i < 16; i++) {
+      await page.waitForTimeout(80);
+      await page.mouse.move(x, box!.y + box!.height - 6 - (i % 2));
+    }
+    await expect
+      .poll(
+        async () => list.evaluate((el) => Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight - 1),
+        { message: 'the list scrolled to its end' },
+      )
+      .toBe(true);
+    await page.mouse.up();
+    const after = await headers(page);
+    expect(after.length).toBe(before.length);
+    // Task is now the last of the reorderable columns (the locked actions column stays after it)
+    expect(after.filter((c) => ids.includes(c)).at(-1)).toBe('task');
+    expect(after.indexOf('task')).toBeGreaterThan(before.indexOf('task') + 8);
+    await expect(menu(page)).toBeVisible();
+  });
+
+  test('a pointer drag downward by three rows moves the column down by three', async ({ page, request }) => {
+    const s = await sharedProject(request, 12);
+    await openRuns(page, s.project.slug);
+    const before = await headers(page);
+    await openMenu(page);
+    const rows = menu(page).locator('[data-col-row]');
+    const ids = await rows.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.colRow!));
+    const from = ids.indexOf('task');
+    const target = await rows.nth(from + 3).boundingBox();
+    const grip = await handle(page, 'Task').boundingBox();
+    await page.mouse.move(grip!.x + grip!.width / 2, grip!.y + grip!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip!.x + grip!.width / 2, target!.y + target!.height - 2, { steps: 12 });
+    await page.mouse.up();
+    const after = await headers(page);
+    expect(after.indexOf('task')).toBe(before.indexOf('task') + 3);
+  });
+
   test('Escape cancels a lift without changing the order', async ({ page, request }) => {
     const s = await sharedProject(request, 12);
     await openRuns(page, s.project.slug);

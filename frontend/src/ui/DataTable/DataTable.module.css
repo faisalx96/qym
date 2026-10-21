@@ -1096,6 +1096,11 @@
 .colHandle:active {
   cursor: grabbing;
 }
+/* While a row is dragged: no text selection anywhere in the list and the grabbing cursor over every row. */
+.colMenuList[data-dragging] {
+  cursor: grabbing;
+  user-select: none;
+}
 .colHandle:disabled {
   cursor: default;
   opacity: 0.4;
