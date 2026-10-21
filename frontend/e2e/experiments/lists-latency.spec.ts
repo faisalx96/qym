@@ -36,7 +36,7 @@ async function seed(request: Parameters<typeof seedProject>[0]) {
     spec: experimentSpec(connectionId),
   });
   await waitForSubmitted(request, project.id, flagged.id);
-  return { project, env, flagged, plain };
+  return { project, env, flagged, plain, connectionId };
 }
 
 test('the list tags flagged experiments and filters them from the URL', async ({ page, request }) => {
@@ -121,6 +121,42 @@ test('the list tag keeps its numbers at three widths and never changes a row hei
       expect(heights).toEqual([40, 40]);
       const filter = await page.getByTestId('filter-latency').boundingBox();
       expect([Math.round(filter!.width * 10) / 10, Math.round(filter!.height * 10) / 10]).toEqual([141.9, 16.8]);
+    }
+    expect(await pageOverflow(page)).toBe('');
+  }
+});
+
+test('a long name wraps beside its tag instead of being clipped (QA3-35)', async ({ page, request }) => {
+  const { project, env, connectionId } = await seed(request);
+  const long = 'nightly regression of the support agent on staging';
+  await launchExperiment(request, project.id, {
+    name: long,
+    environment_ids: [env.id],
+    spec: experimentSpec(connectionId),
+    latency_sensitive: true,
+    description: 'weekly check',
+  });
+  for (const width of [1440, 1024, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await gotoApp(page, expPath(project.slug));
+    const tags = page.getByTestId('latency-tag');
+    await expect(tags.first()).toBeVisible();
+    const cell = page.getByText(long).locator('xpath=ancestor::*[contains(@class,"twoLine")][1]');
+    await expect(cell).toBeVisible();
+    const m = await cell.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const name = el.querySelector('span span') as HTMLElement;
+      const td = el.closest('td,li') as HTMLElement;
+      return { w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10, fits: name.scrollWidth <= name.clientWidth, td: td.getBoundingClientRect().height };
+    });
+    console.log('QA3-35', width, JSON.stringify(m));
+    expect(m.fits).toBe(true);
+    if (width === 1440) {
+      expect(m.w).toBe(204); // the 220 px cell minus its 8 px padding
+      expect(Math.abs(m.td - 73.9)).toBeLessThanOrEqual(2);
+      const rows = await page.getByRole('grid', { name: 'Experiments' }).getByRole('row').evaluateAll((r) => r.slice(1).map((x) => Math.round(x.getBoundingClientRect().height)));
+      expect(rows.filter((h) => h === 40).length).toBe(rows.length - 1);
+      await page.screenshot({ path: '../docs/internal/feature-rounds/2026-10-qa-feedback/shots/after-qb-list-wrap-1440.png' });
     }
     expect(await pageOverflow(page)).toBe('');
   }

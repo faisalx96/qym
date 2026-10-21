@@ -192,13 +192,19 @@ def test_cli_run_list_human_output_marks_official_runs(get_paths, monkeypatch) -
 FLAGGED_RUN = {
     **OFFICIAL_RUN,
     "run_id": "run-official-2",
-    "experiment": {**OFFICIAL_RUN["experiment"], "name": "Latency check", "latency_sensitive": True},
+    "experiment": {
+        **OFFICIAL_RUN["experiment"],
+        "name": "Latency check",
+        "latency_sensitive": True,
+    },
 }
 
 
 def test_cli_run_list_json_passes_latency_sensitive_through(monkeypatch) -> None:
     payload = {"tasks": {"qa": {"gpt-x": [dict(FLAGGED_RUN), dict(LOCAL_RUN)]}}}
-    monkeypatch.setattr(PlatformAPIClient, "_get", lambda self, path, timeout=30: payload)
+    monkeypatch.setattr(
+        PlatformAPIClient, "_get", lambda self, path, timeout=30: payload
+    )
 
     result = _invoke("--json", "run", "list")
 
@@ -214,9 +220,24 @@ def test_cli_run_list_human_output_marks_latency_sensitive(monkeypatch) -> None:
     import qym.cli.run as run_module
 
     payload = {
-        "tasks": {"qa": {"gpt-x": [dict(FLAGGED_RUN), {**OFFICIAL_RUN, "experiment": {**OFFICIAL_RUN["experiment"], "latency_sensitive": False}}]}}
+        "tasks": {
+            "qa": {
+                "gpt-x": [
+                    dict(FLAGGED_RUN),
+                    {
+                        **OFFICIAL_RUN,
+                        "experiment": {
+                            **OFFICIAL_RUN["experiment"],
+                            "latency_sensitive": False,
+                        },
+                    },
+                ]
+            }
+        }
     }
-    monkeypatch.setattr(PlatformAPIClient, "_get", lambda self, path, timeout=30: payload)
+    monkeypatch.setattr(
+        PlatformAPIClient, "_get", lambda self, path, timeout=30: payload
+    )
     console = Console(record=True, width=250)
     monkeypatch.setattr(run_module, "err_console", console)
 

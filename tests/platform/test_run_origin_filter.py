@@ -262,7 +262,9 @@ def _flag_experiment(engine, experiment_id, value=True):
 
 @pytest.mark.parametrize("flagged", [False, True])
 @pytest.mark.parametrize("published", [False, True])
-def test_runs_list_experiment_ref_carries_latency_sensitive(database, flagged, published):  # noqa: F811
+def test_runs_list_experiment_ref_carries_latency_sensitive(
+    database, flagged, published
+):  # noqa: F811
     experiment_id = _seed(database)
     _flag_experiment(database, experiment_id, flagged)
     if published:
@@ -274,7 +276,9 @@ def test_runs_list_experiment_ref_carries_latency_sensitive(database, flagged, p
     assert rows["local-1"]["experiment"] is None
 
 
-def test_descriptor_without_latency_sensitive_is_requeued_and_republished(database, client):  # noqa: F811
+def test_descriptor_without_latency_sensitive_is_requeued_and_republished(
+    database, client
+):  # noqa: F811
     experiment_id = _seed(database)
     _flag_experiment(database, experiment_id, True)
     drain(database)
@@ -301,4 +305,3 @@ def test_descriptor_without_latency_sensitive_is_requeued_and_republished(databa
     assert page["rows"][0]["experiment"]["latency_sensitive"] is True
     with Session(database) as db:
         assert service.reconcile_summary_shapes(db) == 0
-

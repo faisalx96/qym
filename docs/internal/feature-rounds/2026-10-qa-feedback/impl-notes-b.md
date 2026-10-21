@@ -92,3 +92,14 @@ Port note: the other work package's fake Evaluation Service B sits on 9084 (its 
 3. The Environments card heights of QA3-13 / QA3-14 depend on the environments' tag rows; the control's own contribution (+38.8 px on, callout 34.8 px) is what matches the spec (amended in spec 8b).
 4. The step-1 `Details` link of each environment precedes the next environment in the tab order (spec QA4-13 lists "environments, Details"): the measured order is Alpha, Details of Alpha, Bare, Details of Bare, New environment, dataset, Refresh.
 5. `experiment.latency_sensitive` is absent from descriptors until the reconcile pass republishes them (limit 100 per pass); the UI reads absent as false.
+
+## 6. Fix pass (review-b.md, MEETS WITH FIXES)
+
+| Fix | Change | Measured |
+|---|---|---|
+| F1 QA3-35 | `ExperimentsPage.module.css` `.nameLine`: `display: flex; white-space: normal; overflow-wrap: anywhere` (TwoLine's primary line is nowrap and clipped); new e2e "a long name wraps beside its tag" in `lists-latency.spec.ts`; shot `shots/after-qb-list-wrap-1440.png` | long name + description at 1440 / 1024: content 204 px (220 cell minus padding), td 72.5 px (target 73.9 +- 2), name `scrollWidth <= clientWidth`; at 390 card 74.1 px high, fits; other rows stay 40 px; page overflow 0 at 1440 / 1024 / 390. Without a description the cell is 56.2 px (name 2 lines, tag below). |
+| F2 QA3-14 | spec 8b: partial callout 55.6 px at 1440, 72.4 / 106 at 1024 / 390 | text only |
+| F2b QA2-3, QA2-6, QA2-20 | spec corrected: create answers 200 (not 201); legacy `versioning_details` are shown (detail, list, run payloads, `qym run get`), never filtered | text only |
+| F3 lint | my appended hunks in `cli/run.py`, `test_run_origin_filter.py`, `test_cli_run_list_origin.py` black-formatted | `black --diff` line counts equal the base: 576 / 52 / 38 (were 584 / 89 / 96); the two test files pass |
+
+Gate: `npm run check` PASS (`fix-check.log`); `lists-latency.spec.ts` 5 passed (`--workers 1`, platform 8985 / Vite 5985); pytest on the two touched files 28 passed.

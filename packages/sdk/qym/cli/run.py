@@ -545,7 +545,10 @@ def run_list(
                 origin_str = "Official run"
                 if experiment_name:
                     origin_str += f" · {rich_escape(experiment_name)}"
-                if isinstance(experiment, dict) and experiment.get("latency_sensitive") is True:
+                if (
+                    isinstance(experiment, dict)
+                    and experiment.get("latency_sensitive") is True
+                ):
                     origin_str += " · latency-sensitive"
             else:
                 origin_str = "Local"
