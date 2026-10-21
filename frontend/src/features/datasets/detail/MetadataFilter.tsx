@@ -192,7 +192,8 @@ function FacetPanel({
                 if (e.key === 'Enter' && exact) {
                   e.preventDefault();
                   if (multi) {
-                    if (!atLimit) setChosen([...chosen, typed.trim()]);
+                    const value = typed.trim();
+                    if (!atLimit && !chosen.includes(value)) setChosen([...chosen, value]);
                     setTyped('');
                   } else {
                     submit([typed.trim()]);

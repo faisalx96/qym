@@ -150,6 +150,38 @@ test.describe('running text keeps its underline; link buttons stay as they were 
   });
 });
 
+test.describe('run page section nav (QG1-11)', () => {
+  test('the Run sections links are block links and never underline on hover', async ({ page, request }) => {
+    const project = await createProject(request, 'Run nav', uniqueSlug('rn'));
+    const key = await createApiKey(request, project.id);
+    const d = await createDataset(request, project.slug, 'Legal clauses');
+    const v = await createVersion(request, project.slug, d.slug);
+    const items = sampleItems(6);
+    await bulkItems(request, project.slug, d.slug, v.version, items);
+    await publishVersion(request, project.slug, d.slug, v.version, true);
+    const run = await ingestRun(request, {
+      apiKey: key,
+      task: 'faq',
+      runName: 'nav run',
+      dataset: d,
+      version: { ...v, status: 'published' },
+      items,
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await gotoApp(page, runUrl(project.slug, run.id));
+    const links = page.getByRole('navigation', { name: 'Run sections' }).getByRole('link');
+    await expect(links.first()).toBeVisible();
+    const n = await links.count();
+    expect(n).toBeGreaterThan(2);
+    for (let i = 0; i < n; i += 1) {
+      const link = links.nth(i);
+      await expect(link).toHaveAttribute('data-link', 'block');
+      await hovered(page, link);
+      expect(await decoInside(link), `link #${i}`).toEqual([]);
+    }
+  });
+});
+
 test.describe('experiments surfaces (QG1-6, QG1-10)', () => {
   let areas: AreasWorld;
   test.beforeAll(async ({ request }) => {

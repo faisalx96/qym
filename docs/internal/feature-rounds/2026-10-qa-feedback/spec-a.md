@@ -509,6 +509,10 @@ Numbers and texts the product could not meet exactly, each measured and asserted
 | QA5-44 | bottom edge equals the host's bottom edge | 0 px at every scroll position until the content ends; **31.9 px** above the host edge at the very end | the host has bottom padding and the bar is sticky inside its content |
 | QA5-62 | dialog 440 wide | **438** | the mock's box was drawn without the 1 px border |
 | QG1-9 | selector `a:hover:not([data-link='block'])` | `a:hover:where(:not([data-link='block']))` | specificity: see the table row; found by the e2e inventory (sidebar items underlined on hover with the literal selector) |
+| QA5-54 | People card, three people, read only at 390: 438.5 (table 360) | **435.3 to 438.5** (table 356.8 to 360; a grant card is 118.9 to 120) | data dependent: a card whose email fits one line is 1.1 px shorter than the mock's; the e2e seed measures 438.45 and asserts 438.5 within 4 px (review fix pass F3) |
+| QA5-62 | dialog 440 x 162.2 | 438 x **165** (height amended too) | the real ConfirmDialog has a 1 px border and its footer padding (review fix pass F4) |
+| QA5-45 | status text colour primary | `--text-primary`, rgb(237, 237, 240) | was `--text-secondary`; fixed in code (F2) |
+| QG1-11 | 0 filled or multi-text anchors underline | run page "Run sections" links now carry `data-link="block"` | found by the review (F5) |
 | QG1-7 | breadcrumbs keep the underline on hover | breadcrumbs never underline (their own `.link:hover { text-decoration: none }`, unchanged) | the spec's list was wrong for breadcrumbs; the rule and the surfaces are as specified |
 
 Additions the spec did not list: the `Tabs` primitive scrolls the selected tab into view when the strip is wider than its column (five dataset tabs at 279 px hid the Access tab); the `Chip` primitive carries the wrap rule of QA1-20 for every chip; a facets payload without `kind` is read as scalar (older servers, mocked payloads).

@@ -201,6 +201,20 @@ describe('Metadata filter popover (QA1-1 to QA1-18)', () => {
     expect(added).toEqual([{ path: 'big', values: ['not-listed'], mode: 'any' }]);
   });
 
+  it('typing the same unlisted value twice keeps one choice (QA1-8)', async () => {
+    const user = userEvent.setup();
+    const added: MetaFilter[] = [];
+    setup(added);
+    await open(user);
+    await pickKey(user, /^big/);
+    const box = screen.getByRole('searchbox', { name: 'Find a value' });
+    await user.type(box, 'k299{Enter}');
+    await user.type(box, 'k299{Enter}');
+    expect(screen.getByTestId('facet-selected-count')).toHaveTextContent('1 selected');
+    await user.click(screen.getByRole('button', { name: 'Add filter' }));
+    expect(added).toEqual([{ path: 'big', values: ['k299'], mode: 'any' }]);
+  });
+
   it('stops at twenty values and says so (QA1-8)', async () => {
     const user = userEvent.setup({ delay: null });
     setup([]);

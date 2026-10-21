@@ -219,6 +219,40 @@ test.describe('keys and values (QA1-2 to QA1-8)', () => {
   });
 });
 
+test.describe('typed values of a truncated list key (QA1-15)', () => {
+  test('the same unlisted value typed twice is one choice and no meta_mode', async ({ page, request }) => {
+    const s = await seedList(request, 'dup');
+    await page.route(/items:metadata-facets/, (route) =>
+      route.fulfill({
+        json: {
+          paths: [
+            {
+              path: 'els',
+              kind: 'list',
+              values: Array.from({ length: 200 }, (_, n) => ({ value: `k${n}`, count: 200 - n })),
+              truncated: true,
+              value_count: 340,
+            },
+          ],
+          truncated: false,
+        },
+      }),
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await open(page, s);
+    await page.getByTestId('metadata-filter').click();
+    const box = page.getByRole('searchbox', { name: 'Find a value' });
+    await box.fill('k299');
+    await box.press('Enter');
+    await box.fill('k299');
+    await box.press('Enter');
+    await expect(page.getByTestId('facet-selected-count')).toHaveText('1 selected');
+    await page.getByRole('button', { name: 'Add filter' }).click();
+    expect(query(page).getAll('meta')).toEqual(['els:k299']);
+    expect(query(page).getAll('meta_mode')).toEqual([]);
+  });
+});
+
 test.describe('geometry (QA1-4, QA1-12, QA1-20, QA1-21)', () => {
   for (const width of WIDTHS) {
     test(`popover heights and chip sizes at ${width}px`, async ({ page, request }) => {

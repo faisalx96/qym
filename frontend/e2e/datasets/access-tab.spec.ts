@@ -467,6 +467,10 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
     await page.getByTestId('access-mode-project').click();
     await expect(bar).toContainText('Unsaved changes');
     near((await size(bar)).h, 56, 0.6);
+    // QA5-45: primary text colour (rgb(237, 237, 240)), not the secondary grey
+    expect(await bar.locator('[data-part=status]').evaluate((e) => getComputedStyle(e).color)).toBe(
+      'rgb(237, 237, 240)',
+    );
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
     let fail = true;
@@ -564,7 +568,9 @@ test.describe('leaving the tab with unsaved changes (QA5-62, QA5-63)', () => {
     await expect(dialog).toContainText(
       'You have unsaved changes to who can access this dataset. They are lost if you leave this tab.',
     );
-    near((await size(dialog)).w, 438, 1); // amended: 438 (the mock drew the 440 px box without its border)
+    const dialogBox = await size(dialog);
+    near(dialogBox.w, 438, 1); // amended: 438 (the mock drew the 440 px box without its border)
+    near(dialogBox.h, 165, 1); // amended: 165 (spec 162.2)
     await expect(dialog.getByRole('button', { name: 'Keep editing' })).toBeFocused();
     await dialog.getByRole('button', { name: 'Keep editing' }).click();
     await expect(page).toHaveURL(/tab=access/);
@@ -627,6 +633,11 @@ test.describe('read only, archived, loading and error (QA5-53 to QA5-58)', () =>
       if (width !== 390) near((await size(page.getByTestId('access-mode-card'))).h, cardH, 1);
       if (width === 1440) near((await size(page.getByTestId('access-tab'))).h, whole, 1.5);
       await expect(page.getByTestId('access-always')).toBeVisible();
+      // QA5-54: 438.5 / 360 with these names; a card list whose grants have a one-line email is 1.1 px shorter per card (435.3 / 356.8)
+      if (width === 390) {
+        near((await size(page.getByTestId('access-people'))).h, 438.5, 4);
+        near((await size(table)).h, 360, 4);
+      }
     }
   });
 

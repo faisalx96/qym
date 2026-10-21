@@ -86,3 +86,15 @@ Logs in `/tmp/claude-1000/-home-meshari-aldossari-Documents-qym-qym/51864cf7-e4e
 * The `Tabs` and `Chip` primitives changed (selected-tab scroll, chip wrap rule); the visual-language folder was re-run.
 * The first full run of the sidebar-nav inventory found the specificity bug of the literal `:not()` selector (QG1-9 amendment); the inventory anchor test now
   guards it.
+
+## Fix pass (review-a.md, verdict MEETS WITH FIXES)
+
+| Fix | Criterion | Change | Measured after |
+|---|---|---|---|
+| F1 | QA1-8, QA1-15, QA1-22 | `MetadataFilter.tsx`: Enter on a typed value already in `chosen` is ignored | `1 selected`, URL `meta=els:k299`, no `meta_mode` (Vitest case + e2e `typed values of a truncated list key`) |
+| F2 | QA5-45 | `AccessTab.module.css`: dirty status uses `--text-primary` | computed colour `rgb(237, 237, 240)` (was `rgb(168, 168, 186)`), asserted in `access-tab.spec.ts` |
+| F3 | QA5-54 | recorded as data dependent in spec section 11: the e2e seed measures People card 438.45 / table about 360, the reviewer's seed 435.3 / 356.8 (a card whose email fits one line is 1.1 px shorter); no code change | e2e asserts 438.5 / 360 within 4 px |
+| F4 | QA5-62 | amended in section 11: dialog 438 x 165 | e2e asserts 438 x 165 within 1 px |
+| F5 | QG1-11 | `run-detail/components/SectionNav.tsx` links carry `data-link="block"` | `textDecorationLine` none on hover for every Run sections link (new case in `link-cards.spec.ts`) |
+
+Gate: `npm run check` pass (`fix-check.log`), Playwright (workers 1) meta-list-filter + access-tab + link-cards pass (`fix-pw.log`, the F3 case re-run in `fix-pw2.log`), Vitest `src/features/datasets/detail` 40 pass, `test_design_language.py` pass.

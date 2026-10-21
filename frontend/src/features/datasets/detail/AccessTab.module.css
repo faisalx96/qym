@@ -133,8 +133,9 @@
   color: var(--error-text);
 }
 
+/* unsaved changes read in primary text (QA5-45) */
 .saveBar[data-state='dirty'] .saveStatus {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .saveActions {
