@@ -103,7 +103,11 @@ for (const width of [1440, 390]) {
       await expect(h.getByRole('button', { name: /run details/i })).toHaveCount(0);
       await expect(h.locator('[aria-controls="run-hero-details"]')).toHaveCount(0);
       const buttons = await h.getByRole('button').allInnerTexts();
-      for (const t of buttons) expect(t).toMatch(/\+ \d+ more|Show less|^\s*$|Copy|Export|Previous|Next/);
+      // (an object or array chip is a button that opens its JSON: "{ 3 keys }" / "[ 4 items ]")
+      for (const t of buttons)
+        expect(t).toMatch(
+          /\+ \d+ more|Show less|^\s*$|Copy|Export|Previous|Next|^[[{] \d+ (keys?|items?) [\]}]$/,
+        );
       // the passes tag on a repeat run
       await openRun(page, s.slug, wide);
       await expect(hero(page).getByText('x10 passes')).toBeVisible();
@@ -202,7 +206,9 @@ test('P6-8, P6-9: the clamp keeps 54px (84 compact), "+ N more" is exact, openin
     // (a request the dev server's StrictMode repeats after the test ended has nothing left to answer)
     const res = await route.fetch().catch(() => null);
     if (!res) return;
-    const body = await res.json();
+    // a response the page already navigated away from is disposed: nothing left to answer
+    const body = await res.json().catch(() => null);
+    if (!body) return;
     const extra: Record<string, string> = {};
     for (let i = 0; i < 20; i++) extra[`meta_key_${String(i).padStart(2, '0')}`] = `value number ${i}`;
     body.run.metadata = { ...(body.run.metadata ?? {}), ...extra };
@@ -246,7 +252,9 @@ test('P6-8 compact: five lines (144px, spec amended) and at least six chips at 2
     // (a request the dev server's StrictMode repeats after the test ended has nothing left to answer)
     const res = await route.fetch().catch(() => null);
     if (!res) return;
-    const body = await res.json();
+    // a response the page already navigated away from is disposed: nothing left to answer
+    const body = await res.json().catch(() => null);
+    if (!body) return;
     const extra: Record<string, string> = {};
     for (let i = 0; i < 20; i++) extra[`meta_key_${String(i).padStart(2, '0')}`] = `value number ${i}`;
     body.run.metadata = { ...(body.run.metadata ?? {}), ...extra };
@@ -285,7 +293,9 @@ test('P6-11: a stopped run shows its reason as one muted line under band 1, not 
     // (a request the dev server's StrictMode repeats after the test ended has nothing left to answer)
     const res = await route.fetch().catch(() => null);
     if (!res) return;
-    const body = await res.json();
+    // a response the page already navigated away from is disposed: nothing left to answer
+    const body = await res.json().catch(() => null);
+    if (!body) return;
     body.run.status = 'STOPPED';
     body.run.status_reason_label = 'Stopped by an administrator';
     await route.fulfill({ json: body });
@@ -295,4 +305,33 @@ test('P6-11: a stopped run shows its reason as one muted line under band 1, not 
   await expect(line).toHaveText('Stopped: Stopped by an administrator');
   const [a, b] = await Promise.all([hero(page).locator('h1').boundingBox(), line.boundingBox()]);
   expect(b!.y).toBeGreaterThan(a!.y + a!.height - 1);
+});
+
+test('QA: an object metadata chip opens its JSON in a dialog while the band is clamped', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // one object-valued metadata entry, and few enough chips that nothing is hidden (no "+ N more")
+  await page.route(new RegExp(`/api/runs/${classic}\\?view=compact(&fields=scores|$)`), async (route) => {
+    const res = await route.fetch().catch(() => null);
+    if (!res) return;
+    // a response the page already navigated away from is disposed: nothing left to answer
+    const body = await res.json().catch(() => null);
+    if (!body) return;
+    body.run.metadata = { ...(body.run.metadata ?? {}), judge: { model: 'gpt-5', rubric: 'strict', k: 3 } };
+    await route.fulfill({ json: body });
+  });
+  await openRun(page, s.slug, classic);
+  const h = hero(page);
+  const band = h.getByRole('group', { name: 'Versioning, config and metadata' });
+  const chip = band.getByRole('button', { name: 'View judge as JSON (3 keys)' });
+  await expect(chip).toBeVisible();
+  await expect(chip).toHaveText('{ 3 keys }');
+  // the band is clamped (no "Show less") and still the chip is clickable
+  await expect(h.getByRole('button', { name: 'Show less' })).toHaveCount(0);
+  await chip.click();
+  const dialog = page.getByRole('dialog', { name: 'judge' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('tree', { name: 'judge' })).toContainText('rubric');
+  await expect(dialog.getByRole('tree', { name: 'judge' })).toContainText('strict');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 });
