@@ -1,13 +1,15 @@
 /**
- * /projects/:slug/datasets/:ref — hero + Items/Runs/Lineage/Settings tabs,
+ * /projects/:slug/datasets/:ref — hero + Items/Runs/Lineage/Access/Settings tabs,
  * or the item page when `?item=` (brief 07 §2.4). Version resolution:
  * `?v=` alias → label → production → newest published → newest; the URL is
  * normalised to always carry `?v=`.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   downloadUrl,
+  prefetchDatasetAccess,
   useDataset,
   useDatasetVersions,
   useSetProduction,
@@ -23,6 +25,7 @@ import { fullWidth } from '@/features/shell/layout';
 import {
   Badge,
   Button,
+  ConfirmDialog,
   DropdownMenu,
   HelpMarker,
   ErrorState,
@@ -49,6 +52,7 @@ import { UploadWizard, type WizardMode } from '../wizard/UploadWizard';
 import { ItemsWorkspace } from './ItemsWorkspace';
 import { LineageTab } from './LineageTab';
 import { RunsTab } from './RunsTab';
+import { AccessTab } from './AccessTab';
 import { SettingsTab } from './SettingsTab';
 import { ItemPage } from '../item/ItemPage';
 import { InlineEditDialog } from './InlineEditDialog';
@@ -232,9 +236,26 @@ function DetailBody({
   const [dialog, setDialog] = useState<'draft' | 'publish' | 'name' | 'rename' | 'describe' | null>(null);
   const [wizard, setWizard] = useState<WizardMode | null>(null);
   const [addItemOpen, setAddItemOpen] = useState(false);
+  const [accessDirty, setAccessDirty] = useState(false);
+  const [leaveTo, setLeaveTo] = useState<string | null>(null);
+  const qc = useQueryClient();
   // An item whose state the reader wants to change on a published version: it opens in the new draft.
   const [draftForItem, setDraftForItem] = useState<string | null>(null);
   const ref = dataset.slug;
+  // Load by default: once the items tab has painted, warm the Access tab's query during idle time (QA5-23).
+  // Only on the items tab: the Settings tab makes no access request at all (QA5-14).
+  useEffect(() => {
+    if (tab !== 'items' || !active) return undefined;
+    const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (conn?.saveData) return undefined;
+    const run = () => void prefetchDatasetAccess(qc, slug, ref);
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(run, { timeout: 2000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = setTimeout(run, 300);
+    return () => clearTimeout(id);
+  }, [tab, active, qc, slug, ref]);
   const isDraft = active?.status === 'draft';
   const canWrite = !readOnly;
   const contentAccess = dataset.items_visible;
@@ -325,6 +346,12 @@ function DetailBody({
     { id: 'items', label: 'Items', count: active?.item_count },
     { id: 'runs', label: 'Runs', count: active?.run_count },
     { id: 'lineage', label: 'Lineage', count: versions.length },
+    // the grant count shows for a restricted dataset only: "0" on a project-wide one would read as "nobody" (QD10)
+    {
+      id: 'access',
+      label: 'Access',
+      count: dataset.access_mode === 'restricted' ? dataset.grant_count : undefined,
+    },
     { id: 'settings', label: 'Settings' },
   ];
 
@@ -466,7 +493,11 @@ function DetailBody({
         label="Dataset sections"
         items={tabItems}
         selected={tab}
-        onSelect={(id) => navigate({ search: `?${withTab(search, id)}` })}
+        onSelect={(id) => {
+          // unsaved access edits are lost when the tab leaves (QA5-62): ask first
+          if (tab === 'access' && id !== 'access' && accessDirty) setLeaveTo(id);
+          else navigate({ search: `?${withTab(search, id)}` });
+        }}
       >
         <TabPanel id="items">
           {active ? (
@@ -496,10 +527,28 @@ function DetailBody({
         <TabPanel id="lineage">
           <LineageTab slug={slug} datasetRef={ref} />
         </TabPanel>
+        <TabPanel id="access">
+          <AccessTab slug={slug} dataset={dataset} archived={archived} onDirtyChange={setAccessDirty} />
+        </TabPanel>
         <TabPanel id="settings">
           <SettingsTab slug={slug} dataset={dataset} readOnly={readOnly} archived={archived} />
         </TabPanel>
       </Tabs>
+      <ConfirmDialog
+        open={leaveTo !== null}
+        onOpenChange={(o) => !o && setLeaveTo(null)}
+        title="Discard access changes?"
+        description="You have unsaved changes to who can access this dataset. They are lost if you leave this tab."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        tone="danger"
+        onConfirm={() => {
+          const next = leaveTo;
+          setLeaveTo(null);
+          setAccessDirty(false);
+          if (next) navigate({ search: `?${withTab(search, next)}` });
+        }}
+      />
 
       <CreateDraftDialog
         open={dialog === 'draft'}
