@@ -35,6 +35,7 @@ Datasets get per-dataset access, disabled items and batch edits by metadata; exp
 
 ### Operations
 
+- **Live dashboard refresh no longer waits on busy rows.** The summary worker's live rebuild of a running run used to wait up to `QYM_DB_LOCK_TIMEOUT_MS` (5 s) for a bucket or summary row held by another transaction, then log "Dashboard live summary refresh failed … ShareLock" and stall every other partition meanwhile. It now takes those rows with `NOWAIT`, skips the tick when a row is busy (debug log, `live_refresh_busy` counter) and retries after the interval, which is now `QYM_DASHBOARD_LIVE_REFRESH_SECONDS` (default 2). Frequent collisions at low load mean two loop processes are running; see "Several web processes in one pod" in `docs/internal/OPERATIONS.md`.
 - **Stale bundle after a deploy.** A tab opened before a deploy used to show "Something went wrong: Unable to preload CSS for …" on its next lazy route (seen on the dataset page). The app now reloads itself once in that case; see "Serving the UI" in `docs/internal/OPERATIONS.md`.
 
 # October 2026 — Platform 0.6.0 / SDK 1.9.0

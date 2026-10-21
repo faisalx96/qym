@@ -104,7 +104,9 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     # Background loops get their own small pool so a backfill cannot starve requests.
     worker_engine = build_engine(settings, role="worker") if runs_loops else None
     worker_sessions = sessionmaker(bind=worker_engine, autoflush=False, autocommit=False) if worker_engine is not None else SessionLocal
-    dashboard_worker = DashboardSummaryWorker(worker_sessions)
+    dashboard_worker = DashboardSummaryWorker(
+        worker_sessions, live_refresh_interval=settings.dashboard_live_refresh_seconds
+    )
     app.state.dashboard_summary_worker = dashboard_worker
     maintenance_worker = MaintenanceWorker(worker_sessions, worker_engine if worker_engine is not None else SessionLocal.kw["bind"])
     app.state.maintenance_worker = maintenance_worker

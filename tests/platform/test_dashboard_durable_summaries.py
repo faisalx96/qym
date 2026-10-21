@@ -568,11 +568,11 @@ def test_worker_defers_and_throttles_live_rebuilds_outside_the_partition_lock(
     calls = []
     inner = service.refresh_live_summary
 
-    def spy(db, run_id):
+    def spy(db, run_id, **kw):
         # Called on a fresh session after the partition transaction committed.
         assert not db.dirty and not db.new
         calls.append(run_id)
-        return inner(db, run_id)
+        return inner(db, run_id, **kw)
 
     monkeypatch.setattr(service, "refresh_live_summary", spy)
     with Session(database) as db:
@@ -602,6 +602,123 @@ def test_worker_defers_and_throttles_live_rebuilds_outside_the_partition_lock(
     assert projected(database)["status"] == "COMPLETED"
     assert "r" not in worker._live_refresh
     assert_legacy_parity(database)
+
+
+def test_live_rebuild_skips_a_busy_row_and_retries_without_an_error(
+    database, monkeypatch, caplog
+):
+    """A bucket or summary row held by another transaction is not waited for:
+    the rebuild is skipped for this tick (debug log, counter), stays pending
+    and succeeds on a later tick. Any other failure is still logged as one."""
+    import logging
+
+    from sqlalchemy.exc import OperationalError
+
+    with Session(database) as db:
+        run(db)
+        item(db, "a")
+        db.commit()
+    worker = service.DashboardSummaryWorker(
+        sessionmaker(database, autoflush=False), live_refresh_interval=0
+    )
+    worker.tick()
+    with Session(database) as db:
+        item(db, "b")
+        db.commit()
+    inner = service.refresh_live_summary
+    busy = {"left": 1}
+
+    class Held(Exception):
+        pgcode = "55P03"
+
+    def flaky(db, run_id, **kw):
+        assert kw.get("nowait") is True
+        if busy["left"]:
+            busy["left"] -= 1
+            raise OperationalError("select … for update nowait", {}, Held())
+        return inner(db, run_id, **kw)
+
+    monkeypatch.setattr(service, "refresh_live_summary", flaky)
+    with caplog.at_level(logging.DEBUG, logger=worker._logger.name):
+        worker.tick()
+    assert worker.live_refresh_busy == 1
+    assert worker._live_refresh["r"][1] is True, "still pending"
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert any("skipped" in r.getMessage() for r in caplog.records)
+    assert projected(database)["total_items"] == 1
+    caplog.clear()
+    worker.tick()
+    assert worker.live_refresh_busy == 1
+    assert worker._live_refresh["r"][1] is False
+    assert projected(database)["total_items"] == 2
+    # a failure that is not a busy row is still an error
+    monkeypatch.setattr(
+        service,
+        "refresh_live_summary",
+        lambda db, run_id, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    with Session(database) as db:
+        item(db, "c")
+        db.commit()
+    with caplog.at_level(logging.DEBUG, logger=worker._logger.name):
+        worker.tick()
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert worker.live_refresh_busy == 1
+
+
+def test_is_lock_busy_classifies_sqlstates():
+    from sqlalchemy.exc import OperationalError
+
+    class Pg:
+        def __init__(self, code):
+            self.pgcode = code
+
+    class Pg3:
+        def __init__(self, code):
+            self.sqlstate = code
+
+    assert service.is_lock_busy(OperationalError("s", {}, Pg("55P03")))
+    assert service.is_lock_busy(OperationalError("s", {}, Pg("40P01")))
+    assert service.is_lock_busy(OperationalError("s", {}, Pg3("55P03")))
+    assert not service.is_lock_busy(OperationalError("s", {}, Pg("23505")))
+    assert not service.is_lock_busy(RuntimeError("55P03"))
+
+
+def test_live_rebuild_does_not_wait_for_a_held_summary_row_on_postgres(database):
+    """PostgreSQL: with the summary row locked by another session the rebuild
+    returns at once (NOWAIT) instead of waiting for ``lock_timeout``."""
+    if database.dialect.name != "postgresql":
+        pytest.skip("NOWAIT is a PostgreSQL feature")
+    import time as _time
+
+    with Session(database) as db:
+        run(db)
+        item(db, "a")
+        db.commit()
+    worker = service.DashboardSummaryWorker(
+        sessionmaker(database, autoflush=False), live_refresh_interval=0
+    )
+    worker.tick()
+    with Session(database) as db:
+        item(db, "b")
+        db.commit()
+    holder = Session(database)
+    holder.execute(
+        select(Summary).where(Summary.run_key == "r").with_for_update()
+    ).scalar_one()
+    try:
+        started = _time.monotonic()
+        worker.tick()
+        elapsed = _time.monotonic() - started
+    finally:
+        holder.rollback()
+        holder.close()
+    assert elapsed < 2.0, elapsed
+    assert worker.live_refresh_busy == 1
+    assert worker._live_refresh["r"][1] is True
+    worker.tick()
+    assert worker._live_refresh["r"][1] is False
+    assert projected(database)["total_items"] == 2
 
 
 def test_projected_median_matches_python_median(database):

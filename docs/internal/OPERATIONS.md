@@ -46,6 +46,7 @@ sure one process runs a given job.
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
 | `QYM_DB_LOCK_TIMEOUT_MS` | `5000` | Lock-wait guard (all roles) |
+| `QYM_DASHBOARD_LIVE_REFRESH_SECONDS` | `2` | How often the summary worker rebuilds a live run's dashboard numbers after its events committed. A rebuild never waits for a row held by another transaction (`NOWAIT`): it is skipped and retried after this interval, counted in the worker's `live_refresh_busy`. Raise it under heavy ingest |
 | `QYM_REQUEST_TIMING` | `false` | `Server-Timing` header + per-request log line (logger `qym_platform.middleware.timing`, was `qym.timing`) |
 | `QYM_LOG_LEVEL` | `INFO` | Platform log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). See "Logging" |
 | `QYM_LOG_FORMAT` | `text` | `text` or `json` (one JSON object per line). See "Logging" |
@@ -710,6 +711,7 @@ workers:
 | `QYM_ANALYSIS_JOB_MAX_WORKERS`, `QYM_ANALYSIS_MAX_CONCURRENCY`, `QYM_ANALYSIS_MAX_RETRIES` | no | `2`, `20`, `1` | Per workers process |
 | `QYM_PRODUCT_EVAL_MAX_WORKERS`, `QYM_PRODUCT_EVAL_*` (concurrency, timeout, run count, default dataset, `MAX_RETAINED_JOBS`) | no | `3`, … | Per workers process |
 | `QYM_JOB_POLL_INTERVAL_SECONDS`, `QYM_SERVICE_HEARTBEAT_SECONDS` | no | `1`, `10` | |
+| `QYM_DASHBOARD_LIVE_REFRESH_SECONDS` | no | `2` | Live dashboard rebuild interval (see the single-server table) |
 | `QYM_EVAL_JOB_TIMEOUT_SECONDS`, `QYM_EVAL_*` | no | `8100` | Evaluation Service dispatcher |
 | `QYM_SPAN_RETENTION_DAYS`, `QYM_DELETED_RUN_GRACE_DAYS`, `QYM_SPAN_PARTITION_DAYS_AHEAD` | no | `60`, `30`, `14` | Retention runs here |
 | `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` | no | `false` | Analyses call the LLM from here |

@@ -151,6 +151,10 @@ class PlatformSettings(BaseSettings):
     job_queue_timeout_seconds: int = Field(default=1800, ge=30)
     # Workers: how often to look for queued jobs, and the liveness heartbeat.
     job_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
+    # How often the summary worker rebuilds a live run's dashboard numbers after
+    # its events committed (each rebuild is a short transaction). Raise it under
+    # heavy ingest to trade dashboard freshness for fewer lock collisions.
+    dashboard_live_refresh_seconds: float = Field(default=2.0, gt=0, le=300)
     service_heartbeat_seconds: float = Field(default=10.0, ge=1, le=300)
 
     # Observability
