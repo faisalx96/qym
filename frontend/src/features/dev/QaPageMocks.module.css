@@ -1,0 +1,275 @@
+/* Composed page mocks: app shell at the real size (1440 wide, sidebar 192, content column 1193; 56 px rail and 279 px column at 390). */
+.shell {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: 192px minmax(0, 1fr);
+  inline-size: 1440px;
+  min-block-size: 900px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+}
+
+@media (width <= 480px) {
+  .shell {
+    grid-template-columns: 56px minmax(0, 1fr);
+    inline-size: 390px;
+  }
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-md) var(--space-sm);
+  border-inline-end: 1px solid var(--border-subtle);
+  background: var(--bg-void);
+}
+
+.brand {
+  padding: var(--space-xs) var(--space-sm) var(--space-md);
+  font-size: var(--font-xl);
+  font-weight: 650;
+  color: var(--accent-primary);
+}
+
+.nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navGroup {
+  margin: var(--space-md) 0 var(--space-xs);
+  padding-inline: var(--space-sm);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-block-size: 32px;
+  padding-inline: var(--space-sm);
+  border-radius: var(--control-radius);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.navItem[data-active] {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.userText {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.userText strong {
+  color: var(--text-primary);
+}
+
+.avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--accent-primary);
+}
+
+@media (width <= 480px) {
+  .brand,
+  .navGroup,
+  .navItem span:last-child,
+  .userText {
+    display: none;
+  }
+
+  .navItem {
+    justify-content: center;
+    padding-inline: 0;
+  }
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-block-size: 50px;
+  padding-inline: var(--space-md);
+  border-block-end: 1px solid var(--border-subtle);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}
+
+.crumbs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.topStats {
+  margin-inline-start: auto;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+@media (width <= 480px) {
+  .topStats {
+    display: none;
+  }
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-md) 35px var(--space-xl) var(--space-lg);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding-block-start: var(--space-md);
+}
+
+.titleRow {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.actions {
+  display: inline-flex;
+  gap: var(--space-sm);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.toolbarRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  inline-size: 260px;
+  max-inline-size: 100%;
+  block-size: var(--control-height);
+  padding-inline: var(--space-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.filterAnchor {
+  position: relative;
+}
+
+.popoverHost {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-xs));
+  inset-inline-start: 0;
+  z-index: var(--z-dropdown);
+}
+
+.count {
+  margin-inline-start: auto;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--space-md);
+  margin: var(--space-md) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fillCard {
+  block-size: 100%;
+}
+
+.cardInner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.cardMeta {
+  display: flex;
+  gap: var(--space-xs);
+  margin-block-start: var(--space-sm);
+}
+
+/* The page mock is a full-height picture, not a scroller: the bar is drawn at the end of the content (the product pins it to the scroll host's bottom, QA5-44). */
+.shell [data-testid='access-save-bar'] {
+  position: relative;
+}
