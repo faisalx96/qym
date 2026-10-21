@@ -517,6 +517,13 @@ the Python package:
   `/login?next=...` before the bundle loads.
 - **Caching.** `/assets/*` (content-hashed, gzipped once per file version) is
   cacheable; pages and API responses are `Cache-Control: no-store`.
+- **Deploys and open tabs.** A tab opened before a deploy holds an `index.html` that
+  names the previous build's chunks; its next lazy route would fail with "Unable to
+  preload CSS for …" or "Failed to fetch dynamically imported module". The app
+  reloads itself once in that case (at most once a minute per tab) and only shows
+  "Something went wrong" when the reload fails too. With several `main` replicas
+  on different images during a rollout the same reload covers a request that
+  reaches the other version.
 - **Old links.** `/app` and `/app/...` answer a 302 to the canonical URL and
   keep the query string, so links shared during the migration still work.
 - **Exports.** `GET /api/runs/{id}/export-html` returns one self-contained HTML
