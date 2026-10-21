@@ -179,7 +179,10 @@ class WorkersRuntime:
         self.engine = build_engine(self.settings, role="worker")
         sessions = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
         self.loops: Dict[str, Any] = {
-            "dashboard_summary": DashboardSummaryWorker(sessions),
+            "dashboard_summary": DashboardSummaryWorker(
+                sessions,
+                live_refresh_interval=self.settings.dashboard_live_refresh_seconds,
+            ),
             "maintenance": MaintenanceWorker(sessions, self.engine),
             "eval_dispatcher": EvalDispatcher(sessions),
             "remote_queue_snapshotter": RemoteQueueSnapshotter(sessions),

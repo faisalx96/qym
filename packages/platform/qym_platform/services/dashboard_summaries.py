@@ -12,6 +12,8 @@ from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+from sqlalchemy.exc import OperationalError
+
 from qym_platform.db.dashboard_models import DashboardBucketRollup as Bucket
 from qym_platform.db.dashboard_models import DashboardChangeEvent as Change
 from qym_platform.db.dashboard_models import DashboardDeadLetter as DeadLetter
@@ -156,8 +158,30 @@ def _bucket_keys(project, hour):
     )
 
 
-def _lock_buckets(db, project, hours):
-    """Take shared bucket locks in one order, including timestamp corrections."""
+# PostgreSQL: a row lock that was not free under ``NOWAIT`` (55P03, also the
+# ``lock_timeout`` cancel) or a deadlock the server resolved against us (40P01).
+_LOCK_BUSY_CODES = frozenset({"55P03", "40P01"})
+
+
+def is_lock_busy(exc: BaseException) -> bool:
+    """Whether ``exc`` means a row we wanted was held by another transaction.
+
+    Such a failure is not an error of ours: the work is retried on a later
+    tick. psycopg2 exposes the SQLSTATE as ``pgcode``, psycopg 3 as ``sqlstate``.
+    """
+    if not isinstance(exc, OperationalError):
+        return False
+    orig = getattr(exc, "orig", None)
+    code = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+    return code in _LOCK_BUSY_CODES
+
+
+def _lock_buckets(db, project, hours, *, nowait=False):
+    """Take shared bucket locks in one order, including timestamp corrections.
+
+    ``nowait`` (PostgreSQL) fails at once with 55P03 instead of waiting up to
+    ``lock_timeout`` when another transaction holds a bucket; SQLite ignores it.
+    """
     for key in sorted({key for hour in hours for key in _bucket_keys(project, hour)}):
         identity = dict(
             zip(("project_key", "slice_key", "bucket_key", "granularity"), key)
@@ -166,7 +190,7 @@ def _lock_buckets(db, project, hours):
         db.scalar(
             select(Bucket)
             .where(*(getattr(Bucket, k) == v for k, v in identity.items()))
-            .with_for_update()
+            .with_for_update(nowait=nowait)
         )
 
 
@@ -1862,7 +1886,7 @@ def process_partition(
     return len(accepted)
 
 
-def refresh_live_summary(db, run_id):
+def refresh_live_summary(db, run_id, *, nowait=False):
     """Rebuild a live run's summary without the partition lock.
 
     Runs in its own short transaction after ``process_partition`` committed
@@ -1872,6 +1896,10 @@ def refresh_live_summary(db, run_id):
     numeric records read after the locks are at least that new. A terminal or
     deleted run is skipped: its final publication belongs to the partition
     transaction. Returns whether a summary was rebuilt.
+
+    With ``nowait`` (PostgreSQL) a bucket or summary row held by another
+    transaction raises at once (``is_lock_busy``) instead of stalling the
+    worker for ``lock_timeout``; the caller keeps the rebuild pending.
     """
     from qym_platform.db.models import Run
 
@@ -1887,8 +1915,13 @@ def refresh_live_summary(db, run_id):
     hours = {_hour(run.started_at or run.created_at)}
     if dimension is not None:
         hours.add(_hour(dimension.timestamp))
-    _lock_buckets(db, partition.project_key, hours)
-    db.get(Summary, run_id, with_for_update=True, populate_existing=True)
+    _lock_buckets(db, partition.project_key, hours, nowait=nowait)
+    db.execute(
+        select(Summary)
+        .where(Summary.run_key == run_id)
+        .with_for_update(nowait=nowait)
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
     run = db.get(Run, run_id, populate_existing=True)
     if (
         run is None
@@ -2568,6 +2601,8 @@ class DashboardSummaryWorker:
         # Source rows locked per backfill transaction.
         self.backfill_chunk = max(1, min(backfill_chunk, max_events))
         self.live_refresh_interval = live_refresh_interval
+        # Rebuilds skipped because a row was busy (diagnostics; see _refresh_live_summaries).
+        self.live_refresh_busy = 0
         # run_id -> [monotonic time of the last rebuild, rebuild pending]
         self._live_refresh = OrderedDict()
         self._stop = threading.Event()
@@ -2727,7 +2762,11 @@ class DashboardSummaryWorker:
         """Rebuild deferred live summaries whose throttle interval elapsed.
 
         Each rebuild is its own short transaction without the partition lock.
-        A failed rebuild stays pending and is retried after the interval.
+        A failed rebuild stays pending and is retried after the interval. A
+        bucket or summary row held by another transaction (an API write, a
+        second loop process) is not waited for: the rebuild is skipped for
+        this tick and counted in ``live_refresh_busy``, so one busy row never
+        stalls the loop for ``lock_timeout``.
         """
         now = time.monotonic()
         due = [
@@ -2745,11 +2784,20 @@ class DashboardSummaryWorker:
             try:
                 with self.session_factory() as db:
                     db.info["dashboard_projection_worker"] = True
-                    refresh_live_summary(db, run_id)
+                    refresh_live_summary(db, run_id, nowait=True)
                     db.commit()
                 entry[1] = False
                 self._live_refresh.move_to_end(run_id)
-            except Exception:
+            except Exception as exc:
+                if is_lock_busy(exc):
+                    self.live_refresh_busy += 1
+                    self._logger.debug(
+                        "Dashboard live summary refresh for partition %s skipped: "
+                        "a row is held by another transaction; retried in %.1fs",
+                        run_id,
+                        self.live_refresh_interval,
+                    )
+                    continue
                 self._logger.exception(
                     "Dashboard live summary refresh failed for partition %s", run_id
                 )
