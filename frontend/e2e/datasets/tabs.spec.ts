@@ -211,7 +211,7 @@ test.describe('settings', () => {
     await expect(page.getByText('Settings saved')).toBeVisible();
     await page.reload();
     await expect(page.getByRole('textbox', { name: 'Description' })).toHaveValue('now described');
-    await expect(page.getByRole('list', { name: 'Tags' })).toContainText('alpha');
+    await expect(page.locator('[role=group][aria-label="Tags"]')).toContainText('alpha');
   });
 
   test('delete needs the typed name, then the dataset lives under ?view=deleted and Restore brings it back', async ({
