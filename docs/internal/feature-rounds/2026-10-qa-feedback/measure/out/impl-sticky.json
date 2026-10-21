@@ -1,0 +1,32 @@
+{
+  "390": {
+    "host": "MAIN._content_67obp_265",
+    "hostH": 850,
+    "scrollH": 2452,
+    "top": 0,
+    "mid": 0,
+    "end": 31.56,
+    "pos": "sticky",
+    "barH": 56
+  },
+  "1024": {
+    "host": "MAIN._content_67obp_265",
+    "hostH": 850,
+    "scrollH": 1159,
+    "top": 0,
+    "mid": 0,
+    "end": 31.88,
+    "pos": "sticky",
+    "barH": 56
+  },
+  "1440": {
+    "host": "MAIN._content_67obp_265",
+    "hostH": 850,
+    "scrollH": 1102,
+    "top": 0,
+    "mid": 0,
+    "end": 31.86,
+    "pos": "sticky",
+    "barH": 56
+  }
+}

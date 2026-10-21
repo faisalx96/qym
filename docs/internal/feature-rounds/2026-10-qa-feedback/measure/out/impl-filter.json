@@ -1,0 +1,770 @@
+{
+  "390": {
+    "keyOptions": [
+      "chat87",
+      "email87",
+      "phone22",
+      "channels3 values · list or value",
+      "difficulty3 values",
+      "domain4 values",
+      "levels4 values · list",
+      "source.channel2 values",
+      "source.labels5 values · list",
+      "source.region.code4 values",
+      "tags8 values · list"
+    ],
+    "tagsEmpty": {
+      "[data-testid=meta-popover]": {
+        "x": 58,
+        "y": 440,
+        "w": 320,
+        "h": 448,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 73,
+        "y": 567.9,
+        "w": 290,
+        "h": 266,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 73,
+        "y": 847.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 73,
+        "y": 875.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 78,
+        "y": 572.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 237.5,
+        "y": 847.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "tagsPartial": {
+      "[data-testid=meta-popover]": {
+        "x": 58,
+        "y": 440,
+        "w": 320,
+        "h": 448,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 73,
+        "y": 567.9,
+        "w": 290,
+        "h": 266,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 73,
+        "y": 847.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 73,
+        "y": 875.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 78,
+        "y": 572.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 237.5,
+        "y": 847.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "tagsFull": {
+      "[data-testid=meta-popover]": {
+        "x": 58,
+        "y": 440,
+        "w": 320,
+        "h": 448,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 73,
+        "y": 567.9,
+        "w": 290,
+        "h": 266,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 73,
+        "y": 847.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 73,
+        "y": 875.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 78,
+        "y": 572.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 237.5,
+        "y": 847.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "mixed": {
+      "[data-testid=meta-popover]": {
+        "x": 58,
+        "y": 440,
+        "w": 320,
+        "h": 359.7,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 73,
+        "y": 567.9,
+        "w": 290,
+        "h": 106,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 73,
+        "y": 687.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 73,
+        "y": 715.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 78,
+        "y": 572.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 237.5,
+        "y": 687.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "scalar": {
+      "[data-testid=meta-popover]": {
+        "x": 58,
+        "y": 440,
+        "w": 320,
+        "h": 318.9,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 73,
+        "y": 567.9,
+        "w": 290,
+        "h": 138,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": null,
+      "[data-testid=meta-match-help]": null,
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 78,
+        "y": 572.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": null
+    },
+    "chips": [
+      "domain: finance 136.0x26.0",
+      "tags: billing, refund (all) 178.0x26.0",
+      "channels: chat, phone (any) 198.0x26.0"
+    ],
+    "chipRow": {
+      "[data-testid=filter-chips]": {
+        "x": 85,
+        "y": 474.8,
+        "w": 261,
+        "h": 86,
+        "font": "12px/400"
+      }
+    },
+    "total": [
+      "130 items",
+      "2 items",
+      "2 items"
+    ],
+    "fiveChips": [
+      "domain: finance 136.0x26.0",
+      "tags: billing, refund (all) 178.0x26.0",
+      "source.labels: gold, silver, reviewed, needs-review, synthetic (all) 261.0x38.6",
+      "channels: chat 129.0x26.0",
+      "source.region.code: sa 173.0x26.0"
+    ],
+    "fiveRow": {
+      "[data-testid=filter-chips]": {
+        "x": 85,
+        "y": 474.8,
+        "w": 261,
+        "h": 158.6,
+        "font": "12px/400"
+      }
+    },
+    "overflow": [
+      261,
+      261
+    ]
+  },
+  "1024": {
+    "keyOptions": [
+      "chat87",
+      "email87",
+      "phone22",
+      "channels3 values · list or value",
+      "difficulty3 values",
+      "domain4 values",
+      "levels4 values · list",
+      "source.channel2 values",
+      "source.labels5 values · list",
+      "source.region.code4 values",
+      "tags8 values · list"
+    ],
+    "tagsEmpty": {
+      "[data-testid=meta-popover]": {
+        "x": 489,
+        "y": 281,
+        "w": 320,
+        "h": 519.7,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 408.9,
+        "w": 290,
+        "h": 266,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 504,
+        "y": 688.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 504,
+        "y": 716.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 413.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 668.5,
+        "y": 688.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "tagsPartial": {
+      "[data-testid=meta-popover]": {
+        "x": 489,
+        "y": 281,
+        "w": 320,
+        "h": 519.7,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 408.9,
+        "w": 290,
+        "h": 266,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 504,
+        "y": 688.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 504,
+        "y": 716.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 413.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 668.5,
+        "y": 688.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "tagsFull": {
+      "[data-testid=meta-popover]": {
+        "x": 489,
+        "y": 281,
+        "w": 320,
+        "h": 519.7,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 408.9,
+        "w": 290,
+        "h": 266,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 504,
+        "y": 688.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 504,
+        "y": 716.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 413.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 668.5,
+        "y": 688.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "mixed": {
+      "[data-testid=meta-popover]": {
+        "x": 489,
+        "y": 281,
+        "w": 320,
+        "h": 359.7,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 408.9,
+        "w": 290,
+        "h": 106,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 504,
+        "y": 528.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 504,
+        "y": 556.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 413.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 668.5,
+        "y": 528.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "scalar": {
+      "[data-testid=meta-popover]": {
+        "x": 489,
+        "y": 281,
+        "w": 320,
+        "h": 318.9,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 408.9,
+        "w": 290,
+        "h": 138,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": null,
+      "[data-testid=meta-match-help]": null,
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 413.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": null
+    },
+    "chips": [
+      "domain: finance 136.0x26.0",
+      "tags: billing, refund (all) 178.0x26.0",
+      "channels: chat, phone (any) 198.0x26.0"
+    ],
+    "chipRow": {
+      "[data-testid=filter-chips]": {
+        "x": 221,
+        "y": 284,
+        "w": 520,
+        "h": 26,
+        "font": "12px/400"
+      }
+    },
+    "total": [
+      "130 items",
+      "2 items",
+      "2 items"
+    ],
+    "fiveChips": [
+      "domain: finance 136.0x26.0",
+      "tags: billing, refund (all) 178.0x26.0",
+      "source.labels: gold, silver, reviewed, needs-review, synthetic (all) 403.0x26.0",
+      "channels: chat 129.0x26.0",
+      "source.region.code: sa 173.0x26.0"
+    ],
+    "fiveRow": {
+      "[data-testid=filter-chips]": {
+        "x": 221,
+        "y": 284,
+        "w": 759,
+        "h": 56,
+        "font": "12px/400"
+      }
+    },
+    "overflow": [
+      759,
+      759
+    ]
+  },
+  "1440": {
+    "keyOptions": [
+      "chat87",
+      "email87",
+      "phone22",
+      "channels3 values · list or value",
+      "difficulty3 values",
+      "domain4 values",
+      "levels4 values · list",
+      "source.channel2 values",
+      "source.labels5 values · list",
+      "source.region.code4 values",
+      "tags8 values · list"
+    ],
+    "tagsEmpty": {
+      "[data-testid=meta-popover]": {
+        "x": 489,
+        "y": 243,
+        "w": 320,
+        "h": 519.7,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 370.9,
+        "w": 290,
+        "h": 266,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 504,
+        "y": 650.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 504,
+        "y": 678.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 375.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 668.5,
+        "y": 650.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "tagsPartial": {
+      "[data-testid=meta-popover]": {
+        "x": 489,
+        "y": 243,
+        "w": 320,
+        "h": 519.7,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 370.9,
+        "w": 290,
+        "h": 266,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 504,
+        "y": 650.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 504,
+        "y": 678.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 375.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 668.5,
+        "y": 650.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "tagsFull": {
+      "[data-testid=meta-popover]": {
+        "x": 489,
+        "y": 243,
+        "w": 320,
+        "h": 519.7,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 370.9,
+        "w": 290,
+        "h": 266,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 504,
+        "y": 650.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 504,
+        "y": 678.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 375.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 668.5,
+        "y": 650.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "mixed": {
+      "[data-testid=meta-popover]": {
+        "x": 489,
+        "y": 243,
+        "w": 320,
+        "h": 359.7,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 370.9,
+        "w": 290,
+        "h": 106,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": {
+        "x": 504,
+        "y": 490.9,
+        "w": 290,
+        "h": 58.8,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match-help]": {
+        "x": 504,
+        "y": 518.9,
+        "w": 290,
+        "h": 30.8,
+        "font": "11px/400"
+      },
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 375.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": {
+        "x": 668.5,
+        "y": 490.9,
+        "w": 125.5,
+        "h": 24,
+        "font": "12px/400"
+      }
+    },
+    "scalar": {
+      "[data-testid=meta-popover]": {
+        "x": 489,
+        "y": 243,
+        "w": 320,
+        "h": 318.9,
+        "font": "12px/400"
+      },
+      "[data-testid=facet-values]": {
+        "x": 504,
+        "y": 370.9,
+        "w": 290,
+        "h": 138,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-match]": null,
+      "[data-testid=meta-match-help]": null,
+      "[data-testid=meta-popover] [role=option]": {
+        "x": 509,
+        "y": 375.9,
+        "w": 280,
+        "h": 32,
+        "font": "12px/400"
+      },
+      "[data-testid=meta-popover] [role=radiogroup]": null
+    },
+    "chips": [
+      "domain: finance 136.0x26.0",
+      "tags: billing, refund (all) 178.0x26.0",
+      "channels: chat, phone (any) 198.0x26.0"
+    ],
+    "chipRow": {
+      "[data-testid=filter-chips]": {
+        "x": 779.5,
+        "y": 210.4,
+        "w": 520,
+        "h": 26,
+        "font": "12px/400"
+      }
+    },
+    "total": [
+      "130 items",
+      "2 items",
+      "2 items"
+    ],
+    "fiveChips": [
+      "domain: finance 136.0x26.0",
+      "tags: billing, refund (all) 178.0x26.0",
+      "source.labels: gold, silver, reviewed, needs-review, synthetic (all) 403.0x26.0",
+      "channels: chat 129.0x26.0",
+      "source.region.code: sa 173.0x26.0"
+    ],
+    "fiveRow": {
+      "[data-testid=filter-chips]": {
+        "x": 221,
+        "y": 242.4,
+        "w": 1035,
+        "h": 26,
+        "font": "12px/400"
+      }
+    },
+    "overflow": [
+      1035,
+      1035
+    ]
+  }
+}
