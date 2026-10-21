@@ -1,6 +1,6 @@
 # QA feedback round, October 2026 (datasets access / eval flags follow-up)
 
-Status: IN PROGRESS (started 2026-10-21 from `UI-redesign` e6700a95, platform 2.0.0 / SDK 2.0.0).
+Status: DELIVERED 2026-10-22 (started 2026-10-21 from `UI-redesign` e6700a95, platform 2.0.0 / SDK 2.0.0; gate record `GATE.md`).
 Previous round: `docs/internal/feature-rounds/2026-10-dataset-access/` (design doc
 `docs/internal/DATASET_ACCESS_AND_EVAL_FLAGS_DESIGN.md`, owner decisions D1-D7 there stay in force).
 
