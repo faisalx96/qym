@@ -28,6 +28,10 @@ Datasets get per-dataset access, disabled items and batch edits by metadata; exp
 - **Environment and Evaluation configurations steps.** The Customize wizard on the new-experiment page, and the default preset editor, has six steps: after **Models** come **Environment configurations** (environment and role overrides, sweeps) and **Evaluation configurations** (evaluation inputs), and **Raw JSON** sits on the final review step. Each configuration step shows how many values changed from the starting point.
 - **Current versions on the Models step.** For each selected environment, the Models step shows the `agent`, `image` and `kb` versions a run started now would record, read live from the Evaluation Service's `GET /evals/versioning-details/current` (integration guide v1.2), with **Refresh**. Older services show "Not supported"; a service that cannot read its KB shows the reason. New read-only route `GET /v1/projects/{id}/eval-environments/{env_id}/versioning-details`.
 
+### Operations
+
+- **Stale bundle after a deploy.** A tab opened before a deploy used to show "Something went wrong: Unable to preload CSS for …" on its next lazy route (seen on the dataset page). The app now reloads itself once in that case; see "Serving the UI" in `docs/internal/OPERATIONS.md`.
+
 # October 2026 — Platform 0.6.0 / SDK 1.9.0
 
 Evaluation Service experiments get a schema-driven launch form, runs carry free-form versioning details, stops show within seconds, and the platform logs every error with its traceback. SDK 1.9.0 scores metrics in their own queue. Platform 0.6.0 still accepts SDK 1.8.0.
