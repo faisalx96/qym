@@ -12,6 +12,10 @@ import styles from './DataTable.module.css';
 /** Marks the freeze line inside the draft list. */
 const LINE = '\u0000line';
 
+/** Pointer drag: the list scrolls by this many px per frame while the pointer rests within this many px of its edge. */
+const AUTO_SCROLL_STEP = 6;
+const AUTO_SCROLL_EDGE = 24;
+
 /** Moves `id` so it ends at `to` in `list` (the list keeps the freeze line as an item). */
 export function moveItem(list: string[], id: string, to: number): string[] {
   const from = list.indexOf(id);
@@ -177,37 +181,78 @@ function ReorderBody<R>({
   };
   const onHandleDown = (id: string, e: PointerEvent<HTMLButtonElement>) => {
     if (searching) return;
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
     e.preventDefault();
-    const el = e.currentTarget;
-    el.setPointerCapture(e.pointerId);
+    const list = listRef.current;
+    const pointerId = e.pointerId;
+    // Capture on the list, never on the handle: React reinserts the dragged row's node to show each new order,
+    // and Chromium releases a capture held by a node that is removed and reinserted, which dropped the rest of
+    // the drag and the release. The listeners sit on the document for the same reason.
+    try {
+      list?.setPointerCapture(pointerId);
+    } catch {
+      // Capture is a nicety (events keep coming while the pointer is outside the popover); the document listeners work without it.
+    }
     let current = base;
+    let lastY = e.clientY;
+    let edge = 0;
+    let raf = 0;
     setLifted(id);
     setDraft(base);
-    const move = (ev: globalThis.PointerEvent) => {
-      const to = rowAt(ev.clientY);
+    list?.setAttribute('data-dragging', '');
+    const place = (clientY: number) => {
+      const to = rowAt(clientY);
       if (current.indexOf(id) === to) return;
       current = moveItem(current, id, to);
       setDraft(current);
     };
-    const up = () => {
-      el.removeEventListener('pointermove', move);
-      el.removeEventListener('pointerup', up);
-      el.removeEventListener('pointercancel', cancel);
+    // Near the top or bottom edge of a scrolling list the list scrolls while the pointer rests there.
+    const tick = () => {
+      if (edge && list) {
+        list.scrollTop += edge * AUTO_SCROLL_STEP;
+        place(lastY);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    const move = (ev: globalThis.PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      lastY = ev.clientY;
+      if (list && list.scrollHeight > list.clientHeight) {
+        const r = list.getBoundingClientRect();
+        edge = ev.clientY < r.top + AUTO_SCROLL_EDGE ? -1 : ev.clientY > r.bottom - AUTO_SCROLL_EDGE ? 1 : 0;
+      } else edge = 0;
+      place(ev.clientY);
+    };
+    const finish = () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', cancel);
+      list?.removeAttribute('data-dragging');
+      try {
+        if (list?.hasPointerCapture(pointerId)) list.releasePointerCapture(pointerId);
+      } catch {
+        // already released
+      }
+    };
+    const up = (ev: globalThis.PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      finish();
       commit(current);
       setMessage(describe(current, id));
       setDraft(null);
       setLifted(null);
     };
-    const cancel = () => {
-      el.removeEventListener('pointermove', move);
-      el.removeEventListener('pointerup', up);
-      el.removeEventListener('pointercancel', cancel);
+    const cancel = (ev: globalThis.PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      finish();
       setDraft(null);
       setLifted(null);
     };
-    el.addEventListener('pointermove', move);
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', cancel);
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', cancel);
   };
   const onHandleKey = (id: string, e: KeyboardEvent<HTMLButtonElement>) => {
     if (searching) return;
