@@ -157,8 +157,11 @@ function ContextBand({
                 const chip = (
                   <span role="listitem" data-chip="" className={styles.chipItem}>
                     <KeyValueTag label={c.label} text={c.text} title={c.title}>
-                      {open && c.raw !== undefined ? (
-                        <JsonPreview value={c.raw} title={c.key} compact />
+                      {c.raw !== undefined ? (
+                        // An object or array value opens its JSON in a dialog, clamped or not (QA 2026-10-21).
+                        <JsonPreview value={c.raw} title={c.key} compact>
+                          {c.text}
+                        </JsonPreview>
                       ) : undefined}
                     </KeyValueTag>
                   </span>
