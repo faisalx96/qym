@@ -322,7 +322,7 @@ test('QA: an object metadata chip opens its JSON in a dialog while the band is c
   await openRun(page, s.slug, classic);
   const h = hero(page);
   const band = h.getByRole('group', { name: 'Versioning, config and metadata' });
-  const chip = band.getByRole('button', { name: 'View judge as JSON (3 keys)' });
+  const chip = band.getByRole('button', { name: 'View judge as JSON { 3 keys }' });
   await expect(chip).toBeVisible();
   await expect(chip).toHaveText('{ 3 keys }');
   // the band is clamped (no "Show less") and still the chip is clickable

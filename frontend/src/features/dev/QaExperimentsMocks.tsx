@@ -61,9 +61,15 @@ function LatencyControl({ mode }: { mode: LatencyMode }) {
         </p>
       ) : null}
       {checked ? (
-        <Callout tone="warning" title="Other jobs wait while this run executes" className={entry.latencyCallout}>
+        <Callout
+          tone="warning"
+          title="Other jobs wait while this run executes"
+          className={entry.latencyCallout}
+        >
           {mode === 'on-partial' ? (
-            <span>Only a project manager can launch it on production. Clear the box or ask a project manager.</span>
+            <span>
+              Only a project manager can launch it on production. Clear the box or ask a project manager.
+            </span>
           ) : null}
         </Callout>
       ) : null}
@@ -160,19 +166,22 @@ function VersionRow({ env, state }: { env: string; state: VersionState }) {
     >
       <span className={entry.versionName}>{env}</span>
       {state.kind === 'loading' ? (
-        <dl className={entry.versionList} aria-busy="true">
+        <>
+          {/* Outside the <dl>: a <dl> may only hold dt/dd groups (axe definition-list), as in VersionsBlock. */}
           <span className={styles.srOnly} role="status">
             Reading…
           </span>
-          {['agent', 'image', 'kb'].map((key) => (
-            <div key={key} className={entry.versionItem}>
-              <dt>{key}</dt>
-              <dd>
-                <span className={styles.skelValue} aria-hidden="true" />
-              </dd>
-            </div>
-          ))}
-        </dl>
+          <dl className={entry.versionList} aria-busy="true">
+            {['agent', 'image', 'kb'].map((key) => (
+              <div key={key} className={entry.versionItem}>
+                <dt>{key}</dt>
+                <dd>
+                  <span className={styles.skelValue} aria-hidden="true" />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </>
       ) : state.kind === 'unsupported' ? (
         <span className={entry.help}>
           Not supported by this environment (its Evaluation Service is older than v1.2).
@@ -239,7 +248,12 @@ function RunSettingsMock({ mode }: { mode: LatencyMode }) {
       <div className={panel.cardStack}>
         <div className={entry.stack} data-testid="launch-run-settings">
           <div className={entry.row}>
-            <TextField label="Experiment name" value="timeout sweep" onChange={noop} isDisabled={mode === 'readonly'} />
+            <TextField
+              label="Experiment name"
+              value="timeout sweep"
+              onChange={noop}
+              isDisabled={mode === 'readonly'}
+            />
             <Select
               label="Priority"
               items={[{ key: '', label: 'Environment default (NORMAL)' }]}
@@ -348,7 +362,15 @@ function RunsFrame({ children, kind }: { children: ReactNode; kind: 'cell' | 'ca
 
 /* ───────────────────────────── Experiments list (QA3-c, kept) ───────────────────────────── */
 
-function ListNameCell({ name, description, latency }: { name: string; description?: string; latency?: boolean }) {
+function ListNameCell({
+  name,
+  description,
+  latency,
+}: {
+  name: string;
+  description?: string;
+  latency?: boolean;
+}) {
   return (
     <div className={styles.listCell}>
       <TwoLine
@@ -388,8 +410,14 @@ export function QaExperimentsMocks({
   Case: (p: { label: string; wide?: boolean; children: ReactNode }) => JSX.Element;
 }) {
   return (
-    <Sec id="qa-experiments" title="Experiments QA round: versions read-only and the latency flag (QA-B design contract)">
-      <Case wide label="qb-home (QA3-a: the latency control on the launch home view, inside the Environments card)">
+    <Sec
+      id="qa-experiments"
+      title="Experiments QA round: versions read-only and the latency flag (QA-B design contract)"
+    >
+      <Case
+        wide
+        label="qb-home (QA3-a: the latency control on the launch home view, inside the Environments card)"
+      >
         <div className={styles.home}>
           <L>Off (default)</L>
           <div className={entry.where}>
@@ -418,12 +446,25 @@ export function QaExperimentsMocks({
           </div>
         </div>
       </Case>
-      <Case wide label="qb-versions (QA2, QA4: the read-only block; every state; same component on the home view and step 1)">
+      <Case
+        wide
+        label="qb-versions (QA2, QA4: the read-only block; every state; same component on the home view and step 1)"
+      >
         <div className={styles.col}>
           <L>Loaded, two environments</L>
-          <VersionsBlockMock rows={[['production', OK], ['staging', OK]]} />
+          <VersionsBlockMock
+            rows={[
+              ['production', OK],
+              ['staging', OK],
+            ]}
+          />
           <L>Loading (same row height as loaded)</L>
-          <VersionsBlockMock rows={[['production', { kind: 'loading' }], ['staging', { kind: 'loading' }]]} />
+          <VersionsBlockMock
+            rows={[
+              ['production', { kind: 'loading' }],
+              ['staging', { kind: 'loading' }],
+            ]}
+          />
           <L>Mixed: loaded, older service, read error</L>
           <VersionsBlockMock rows={MIXED} />
           <L>A key the service leaves unset</L>
@@ -432,14 +473,29 @@ export function QaExperimentsMocks({
           />
         </div>
       </Case>
-      <Case wide label="qb-step1 (QA2, QA3, QA4: Customize step 1; no versioning box; the block below the environments)">
+      <Case
+        wide
+        label="qb-step1 (QA2, QA3, QA4: Customize step 1; no versioning box; the block below the environments)"
+      >
         <div className={styles.col}>
           <L>No environment selected: no block</L>
           <Step1Mock mode="off" rows={null} />
           <L>Two environments, loaded, latency on</L>
-          <Step1Mock mode="on" rows={[['production', OK], ['staging', OK]]} />
+          <Step1Mock
+            mode="on"
+            rows={[
+              ['production', OK],
+              ['staging', OK],
+            ]}
+          />
           <L>Loading</L>
-          <Step1Mock mode="off" rows={[['production', { kind: 'loading' }], ['staging', { kind: 'loading' }]]} />
+          <Step1Mock
+            mode="off"
+            rows={[
+              ['production', { kind: 'loading' }],
+              ['staging', { kind: 'loading' }],
+            ]}
+          />
           <L>Mixed states, latency disabled for a member</L>
           <Step1Mock mode="disabled-all" rows={MIXED} />
           <L>Archived project (read only; the block still reads)</L>
@@ -448,7 +504,10 @@ export function QaExperimentsMocks({
       </Case>
       <Case wide label="qb-runs (QA3-d: the Runs page tag; table cell 260 px, card head 273 px)">
         <div className={styles.stack}>
-          <L>Table, Run cell (260 px column): official, latency-sensitive in the leading slot, long name, repeat run (tag after Official)</L>
+          <L>
+            Table, Run cell (260 px column): official, latency-sensitive in the leading slot, long name,
+            repeat run (tag after Official)
+          </L>
           <RunsFrame kind="cell">
             <RunCellMock name="prompt sweep · timeout=10" />
           </RunsFrame>
@@ -475,7 +534,11 @@ export function QaExperimentsMocks({
           <L>Short name: tag on the first line</L>
           <ListNameCell name="latency check" description="Timeout 10/30" latency />
           <L>Long name: the tag wraps under it, never clipped</L>
-          <ListNameCell name="nightly regression of the support agent on staging" description="Timeout 10/30" latency />
+          <ListNameCell
+            name="nightly regression of the support agent on staging"
+            description="Timeout 10/30"
+            latency
+          />
           <L>Not latency-sensitive: same row height</L>
           <ListNameCell name="nightly baseline" description="Timeout 10/30" />
         </div>

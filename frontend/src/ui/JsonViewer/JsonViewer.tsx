@@ -175,17 +175,24 @@ export interface JsonPreviewProps {
   children?: ReactNode;
 }
 
-/** Preview button → JsonDialog. Label: "View <title> as JSON (<n> keys)". */
+/**
+ * Preview button → JsonDialog. Label: "View <title> as JSON (<n> keys)"; with string `children` as the visible text,
+ * "View <title> as JSON <children>", so the visible text stays part of the accessible name (axe label-content-name-mismatch).
+ */
 export function JsonPreview({ value, title = 'value', className, compact, children }: JsonPreviewProps) {
   const [open, setOpen] = useState(false);
   const data = useMemo(() => parseJson(value), [value]);
   if (data === null) return <span className={styles.plain}>{String(value ?? '')}</span>;
+  const label =
+    typeof children === 'string'
+      ? `View ${title} as JSON ${children}`
+      : `View ${title} as JSON (${jsonSummary(data)})`;
   return (
     <>
       <AriaButton
         className={[styles.preview, className].filter(Boolean).join(' ')}
         aria-haspopup="dialog"
-        aria-label={`View ${title} as JSON (${jsonSummary(data)})`}
+        aria-label={label}
         onPress={() => setOpen(true)}
         data-compact={compact ? '' : undefined}
       >

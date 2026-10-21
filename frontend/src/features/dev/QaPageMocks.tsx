@@ -19,6 +19,7 @@ import {
   Text,
   type Column,
   type IconName,
+  TabPanel,
 } from '@/ui';
 import { UserPill } from '@/features/datasets/components/UserPill';
 import { AccessTabMock, FacetPopover, SettingsMock } from './QaDatasetsMocks';
@@ -150,8 +151,12 @@ function DatasetPage({
         ]}
         selected={tab}
         onSelect={noop}
-      />
-      <div className={styles.panel}>{children}</div>
+      >
+        {/* The selected tab's aria-controls must resolve (axe aria-valid-attr-value): the page body is its panel. */}
+        <TabPanel id={tab} className={styles.panel}>
+          {children}
+        </TabPanel>
+      </Tabs>
     </>
   );
 }
