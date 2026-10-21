@@ -68,7 +68,9 @@ a {
   text-decoration: none;
 }
 
-a:hover {
+/* An underline on hover is for running text. A link that is a box (a card, a boxed button, a link with tags) opts out
+   with data-link="block" and keeps its own hover treatment (QD13). */
+a:hover:not([data-link='block']) {
   text-decoration: underline;
 }
 

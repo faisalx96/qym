@@ -68,7 +68,7 @@ function Fact({ label, children, title }: { label: string; children: React.React
 
 function MetaLink({ to, title, children }: { to: string | null; title?: string; children: React.ReactNode }) {
   return to ? (
-    <Link className={styles.metaLink} to={to} title={title}>
+    <Link className={styles.metaLink} to={to} title={title} data-link="block">
       {children}
     </Link>
   ) : (

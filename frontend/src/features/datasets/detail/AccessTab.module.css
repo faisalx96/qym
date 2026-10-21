@@ -1,0 +1,145 @@
+/* Access tab: cards, mode grid, add row on top, sticky save bar. Spec QA5-24 to QA5-72; the recipe is features/dev/QaDatasetsMocks.module.css. */
+.accessTab {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.modeBody,
+.peopleBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.modeGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-sm);
+}
+
+@container (min-width: 700px) {
+  .modeGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.always {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: var(--field-label-width) minmax(0, 1fr);
+  gap: var(--space-sm) var(--space-md);
+  margin: 0;
+  font-size: var(--font-base);
+}
+
+.summary dt {
+  font-size: var(--font-sm);
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.summary dd {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.addPerson {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-sm);
+}
+
+.addSelect {
+  flex: 1 1 240px;
+  min-inline-size: 0;
+  max-inline-size: 320px;
+}
+
+.personCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.personName {
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.personEmail {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.when {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* the placeholder reserves the loaded project-wide form (no saved grants): the card is as tall loading as loaded */
+.skeletonFrame {
+  min-block-size: 83px;
+}
+
+@container (width < 900px) {
+  .skeletonFrame {
+    min-block-size: 98.4px;
+  }
+}
+
+@container (width < 700px) {
+  .skeletonFrame {
+    min-block-size: 206.1px;
+  }
+}
+
+/* the save bar is sticky to the page's scroll host (compositor positioned, DESIGN_LANGUAGE 7) */
+.saveBar {
+  position: sticky;
+  inset-block-end: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+  min-block-size: var(--bar-action-h);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.saveStatus {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.saveStatus[data-tone='error'] {
+  color: var(--error-text);
+}
+
+.saveBar[data-state='dirty'] .saveStatus {
+  color: var(--text-secondary);
+}
+
+.saveActions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-inline-start: auto;
+}
+
