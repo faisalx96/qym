@@ -38,7 +38,8 @@ const choose = (page: Page, value: RegExp) =>
   page.getByTestId('facet-values').getByRole('option', { name: value }).click();
 const modeLabel = (page: Page, text: string) =>
   page.getByTestId('meta-match').locator('label', { hasText: text });
-const count = (page: Page, n: number) => expect(page.locator('[data-dt-toolbar]')).toContainText(`${n} items`);
+const count = (page: Page, n: number) =>
+  expect(page.locator('[data-dt-toolbar]')).toContainText(`${n} items`);
 
 test.describe('keys and values (QA1-2 to QA1-8)', () => {
   test('list and mixed keys are listed with their descriptions; attachments and flags are not (QA1-2)', async ({
@@ -86,12 +87,16 @@ test.describe('keys and values (QA1-2 to QA1-8)', () => {
       'urgent 24',
     ]);
     await expect(page.getByTestId('facet-selected-count')).toHaveText('None selected');
-    await expect(page.getByTestId('meta-match-help')).toHaveText('Choose two or more values to pick a match mode.');
+    await expect(page.getByTestId('meta-match-help')).toHaveText(
+      'Choose two or more values to pick a match mode.',
+    );
     await expect(page.getByRole('button', { name: 'Add filter' })).toBeDisabled();
     await choose(page, /refund/);
     await choose(page, /billing/);
     await expect(page.getByTestId('facet-selected-count')).toHaveText('2 selected');
-    await expect(page.getByTestId('meta-match-help')).toHaveText('Items that have at least one of the chosen values.');
+    await expect(page.getByTestId('meta-match-help')).toHaveText(
+      'Items that have at least one of the chosen values.',
+    );
     await page.getByRole('button', { name: 'Add filter' }).click();
     await expect(page.getByTestId('meta-popover')).toHaveCount(0);
     // QA1-19: values in facet order, the mode in the suffix; QA1-22: the URL.
@@ -196,13 +201,18 @@ test.describe('keys and values (QA1-2 to QA1-8)', () => {
     const d = await createDataset(request, project.slug, 'many');
     const v = await createVersion(request, project.slug, d.slug);
     await bulkItems(request, project.slug, d.slug, v.version, [
-      { item_id: 'a', input: 'q', metadata: { k: Array.from({ length: 24 }, (_, n) => `v${String(n).padStart(2, '0')}`) } },
+      {
+        item_id: 'a',
+        input: 'q',
+        metadata: { k: Array.from({ length: 24 }, (_, n) => `v${String(n).padStart(2, '0')}`) },
+      },
     ]);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await gotoApp(page, `/projects/${project.slug}/datasets/${d.slug}?tab=items&v=v1`);
     await page.getByTestId('metadata-filter').click();
     const values = page.getByTestId('facet-values');
-    for (let n = 0; n < 20; n += 1) await values.getByRole('option', { name: new RegExp(`^v${String(n).padStart(2, '0')}`) }).click();
+    for (let n = 0; n < 20; n += 1)
+      await values.getByRole('option', { name: new RegExp(`^v${String(n).padStart(2, '0')}`) }).click();
     await expect(page.getByTestId('facet-selected-count')).toHaveText('20 selected');
     await expect(page.getByTestId('facet-limit')).toHaveText('You can choose up to 20 values.');
     await expect(values.getByRole('option', { name: /^v20/ })).toHaveAttribute('aria-disabled', 'true');
@@ -256,9 +266,15 @@ test.describe('geometry (QA1-4, QA1-12, QA1-20, QA1-21)', () => {
       );
       const chips = page.getByTestId('filter-chips');
       await expect(page.getByTestId('meta-chip')).toHaveCount(3);
-      const sizes = await chips.locator('> *').evaluateAll((els) =>
-        els.map((e) => [e.textContent, +e.getBoundingClientRect().width.toFixed(1), +e.getBoundingClientRect().height.toFixed(1)]),
-      );
+      const sizes = await chips
+        .locator('> *')
+        .evaluateAll((els) =>
+          els.map((e) => [
+            e.textContent,
+            +e.getBoundingClientRect().width.toFixed(1),
+            +e.getBoundingClientRect().height.toFixed(1),
+          ]),
+        );
       expect(sizes).toEqual([
         ['domain: finance', 136, 26],
         ['tags: billing, refund (all)', 178, 26],
@@ -272,7 +288,9 @@ test.describe('geometry (QA1-4, QA1-12, QA1-20, QA1-21)', () => {
       );
       await expect(page.getByTestId('meta-chip')).toHaveCount(5);
       const longChip = chips.locator('> *').nth(2);
-      await expect(longChip).toContainText('source.labels: gold, silver, reviewed, needs-review, synthetic (all)');
+      await expect(longChip).toContainText(
+        'source.labels: gold, silver, reviewed, needs-review, synthetic (all)',
+      );
       const lb = await size(longChip);
       near(lb.w, long[0], 0.6);
       near(lb.h, long[1], 0.6);
@@ -286,11 +304,18 @@ test.describe('geometry (QA1-4, QA1-12, QA1-20, QA1-21)', () => {
 });
 
 test.describe('URL rules and the five-path limit (QA1-22, QA1-24)', () => {
-  test('a bad mode, a mode without meta and a duplicate are dropped by the page', async ({ page, request }) => {
+  test('a bad mode, a mode without meta and a duplicate are dropped by the page', async ({
+    page,
+    request,
+  }) => {
     const s = await seedList(request, 'url');
     await page.setViewportSize({ width: 1440, height: 900 });
     // bad mode -> all (the API default); a mode for a path without meta is ignored
-    await open(page, s, 'meta=tags:billing&meta=tags:refund&meta_mode=tags:bogus&meta_mode=levels:any&meta=tags:billing');
+    await open(
+      page,
+      s,
+      'meta=tags:billing&meta=tags:refund&meta_mode=tags:bogus&meta_mode=levels:any&meta=tags:billing',
+    );
     await expect(page.getByTestId('meta-chip')).toHaveText('tags: billing, refund (all)');
     await count(page, 6);
   });
@@ -301,7 +326,11 @@ test.describe('URL rules and the five-path limit (QA1-22, QA1-24)', () => {
   }) => {
     const s = await seedList(request, 'limit5');
     await page.setViewportSize({ width: 1440, height: 900 });
-    await open(page, s, 'meta=tags:billing&meta=tags:refund&meta_mode=tags:any&meta=domain:finance&meta=difficulty:0');
+    await open(
+      page,
+      s,
+      'meta=tags:billing&meta=tags:refund&meta_mode=tags:any&meta=domain:finance&meta=difficulty:0',
+    );
     await expect(page.getByTestId('metadata-filter')).toBeEnabled();
     await open(
       page,

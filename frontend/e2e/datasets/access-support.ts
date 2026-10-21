@@ -1,7 +1,21 @@
 /** WP-A e2e seeding through the public API as dev@local (ADMIN under QYM_AUTH_MODE=none). */
-import { expect, type APIRequestContext, type APIResponse, type Locator, type Page, type Route } from '@playwright/test';
+import {
+  expect,
+  type APIRequestContext,
+  type APIResponse,
+  type Locator,
+  type Page,
+  type Route,
+} from '@playwright/test';
 import { createProject, createUser, uniqueSlug } from '../helpers';
-import { bulkItems, createDataset, createVersion, publishVersion, sampleItems, type SeedItem } from './support';
+import {
+  bulkItems,
+  createDataset,
+  createVersion,
+  publishVersion,
+  sampleItems,
+  type SeedItem,
+} from './support';
 
 async function ok<T>(p: Promise<APIResponse>): Promise<T> {
   const res = await p;
@@ -183,7 +197,6 @@ export async function asViewer(page: Page, restricted = true) {
   });
 }
 
-
 const TAGS = ['billing', 'refund', 'shipping', 'account', 'vip', 'urgent', 'fraud', 'arabic'];
 const LABELS = ['gold', 'silver', 'reviewed', 'needs-review', 'synthetic'];
 
@@ -194,7 +207,11 @@ const LABELS = ['gold', 'silver', 'reviewed', 'needs-review', 'synthetic'];
  */
 export function listMetadataItems(n = 130, prefix = 'faq'): SeedItem[] {
   return Array.from({ length: n }, (_, i) => {
-    const tags = [TAGS[i % 8]!, ...(i % 3 === 0 ? [TAGS[(i + 1) % 8]!] : []), ...(i % 5 === 0 ? [TAGS[(i + 3) % 8]!] : [])];
+    const tags = [
+      TAGS[i % 8]!,
+      ...(i % 3 === 0 ? [TAGS[(i + 1) % 8]!] : []),
+      ...(i % 5 === 0 ? [TAGS[(i + 3) % 8]!] : []),
+    ];
     return {
       item_id: `${prefix}-${String(i + 1).padStart(3, '0')}`,
       input: `What is the refund policy for order #${i + 1}?`,
@@ -208,7 +225,8 @@ export function listMetadataItems(n = 130, prefix = 'faq'): SeedItem[] {
           channel: i % 2 ? 'chat' : 'email',
           labels: i % 2 === 0 ? [LABELS[i % 5], LABELS[(i + 2) % 5]] : [LABELS[i % 5]],
         },
-        channels: i % 3 === 0 ? ['chat', 'email', 'phone'].slice(0, 1 + (i % 2) + 1) : i % 2 ? 'chat' : 'email',
+        channels:
+          i % 3 === 0 ? ['chat', 'email', 'phone'].slice(0, 1 + (i % 2) + 1) : i % 2 ? 'chat' : 'email',
         attachments: i % 4 === 0 ? [{ kind: 'pdf', pages: 2 }] : [],
         flags: [],
         levels: [i % 3, (i % 3) + 1],

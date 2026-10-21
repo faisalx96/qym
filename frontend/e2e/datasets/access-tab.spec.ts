@@ -34,7 +34,12 @@ async function people(request: Parameters<typeof seedProject>[0], s: Seeded, n: 
   return [...s.people, ...more];
 }
 
-async function restrictedWith(request: Parameters<typeof seedProject>[0], prefix: string, n: number, name = 'Legal clauses') {
+async function restrictedWith(
+  request: Parameters<typeof seedProject>[0],
+  prefix: string,
+  n: number,
+  name = 'Legal clauses',
+) {
   const s = await seedProject(request, prefix);
   const d = await s.publish(name);
   // two members beyond the grants stay candidates, so the add row (not the "everyone already has access" line) shows
@@ -54,7 +59,8 @@ async function restrictedWith(request: Parameters<typeof seedProject>[0], prefix
 const leaveDialog = (page: Page) =>
   page.getByRole('alertdialog').or(page.getByRole('dialog', { name: 'Discard access changes?' }));
 
-const accessUrl = (slug: string, ds: string, extra = '') => `/projects/${slug}/datasets/${ds}?tab=access&v=v1${extra}`;
+const accessUrl = (slug: string, ds: string, extra = '') =>
+  `/projects/${slug}/datasets/${ds}?tab=access&v=v1${extra}`;
 
 async function open(page: Page, width: number, slug: string, ds: string, height = 1300) {
   await page.setViewportSize({ width, height });
@@ -96,7 +102,10 @@ test.describe('the tab strip (QA5-17 to QA5-23)', () => {
     await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('at 390 the strip scrolls and keeps the selected Access tab in view (QA5-17, QA5-21)', async ({ page, request }) => {
+  test('at 390 the strip scrolls and keeps the selected Access tab in view (QA5-17, QA5-21)', async ({
+    page,
+    request,
+  }) => {
     const { project, d } = await restrictedWith(request, 'strip390', 3);
     await page.setViewportSize({ width: 390, height: 900 });
     await gotoApp(page, accessUrl(project.slug, d.slug));
@@ -111,7 +120,10 @@ test.describe('the tab strip (QA5-17 to QA5-23)', () => {
     expect(box!.x + box!.width).toBeLessThanOrEqual(list!.x + list!.width + 0.5);
   });
 
-  test('a project-wide dataset shows no count, a restricted one with no grant shows 0 (QA5-18)', async ({ page, request }) => {
+  test('a project-wide dataset shows no count, a restricted one with no grant shows 0 (QA5-18)', async ({
+    page,
+    request,
+  }) => {
     const wide = await seedProject(request, 'cnt');
     const d = await wide.publish('Plain');
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -124,7 +136,10 @@ test.describe('the tab strip (QA5-17 to QA5-23)', () => {
     await expect(page.getByRole('tab', { name: /^Access/ })).toHaveText('Access0');
   });
 
-  test('everyone who can open the dataset sees the tab, a reader included (QA5-20, QA5-22)', async ({ page, request }) => {
+  test('everyone who can open the dataset sees the tab, a reader included (QA5-20, QA5-22)', async ({
+    page,
+    request,
+  }) => {
     const { project, d } = await restrictedWith(request, 'who', 1);
     await asViewer(page);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -134,7 +149,10 @@ test.describe('the tab strip (QA5-17 to QA5-23)', () => {
     expect(await page.getByTestId('restricted-badge').evaluate((e) => e.tagName)).not.toBe('A');
   });
 
-  test('the access query is warmed once from an idle callback and a click joins it (QA5-23, QA5-78)', async ({ page, request }) => {
+  test('the access query is warmed once from an idle callback and a click joins it (QA5-23, QA5-78)', async ({
+    page,
+    request,
+  }) => {
     const { project, d } = await restrictedWith(request, 'warm', 3);
     const gets: number[] = [];
     page.on('request', (r) => {
@@ -162,7 +180,11 @@ test.describe('layout and heights (QA5-24 to QA5-37, QA5-59)', () => {
     test(`twelve people at ${width}px`, async ({ page, request }) => {
       const { project, d } = await restrictedWith(request, `l12-${width}`, 12);
       await open(page, width, project.slug, d.slug, 1500);
-      near((await size(page.getByTestId('access-tab'))).w, width === 1440 ? 1193 : width === 1024 ? 777 : 279, 0.6);
+      near(
+        (await size(page.getByTestId('access-tab'))).w,
+        width === 1440 ? 1193 : width === 1024 ? 777 : 279,
+        0.6,
+      );
       near((await size(page.getByTestId('access-tab'))).h, whole, 0.8);
       near((await size(page.getByTestId('access-mode-card'))).h, mode, 0.8);
       near((await size(page.getByTestId('access-mode'))).h, group, 0.8);
@@ -173,7 +195,11 @@ test.describe('layout and heights (QA5-24 to QA5-37, QA5-59)', () => {
       near((await size(page.getByTestId('access-save-bar'))).h, 56, 0.6);
       await expect(page.getByTestId('access-count')).toHaveText('12 people');
       // the add row sits above the table (QA5-34)
-      const ys = await page.evaluate(() => ['access-add', 'access-grants-table'].map((id) => document.querySelector(`[data-testid=${id}]`)!.getBoundingClientRect().top));
+      const ys = await page.evaluate(() =>
+        ['access-add', 'access-grants-table'].map(
+          (id) => document.querySelector(`[data-testid=${id}]`)!.getBoundingClientRect().top,
+        ),
+      );
       expect(ys[0]!).toBeLessThan(ys[1]!);
       // QA5-66: no overflow
       for (const id of ['access-tab', 'access-mode-card', 'access-people', 'access-grants-table']) {
@@ -219,18 +245,28 @@ test.describe('layout and heights (QA5-24 to QA5-37, QA5-59)', () => {
       const kept = await restrictedWith(request, `keep${width}`, 3);
       await open(page, width, kept.project.slug, kept.d.slug);
       await page.getByTestId('access-mode-project').click();
-      await expect(page.getByTestId('access-mode-restricted')).toContainText('3 saved grants are kept and apply again if you switch back.');
+      await expect(page.getByTestId('access-mode-restricted')).toContainText(
+        '3 saved grants are kept and apply again if you switch back.',
+      );
       near((await size(page.getByTestId('access-mode-card'))).h, withNote, 0.8);
     }
   });
 
-  test('radio options sit side by side from 700 px of tab width and stack below (QA5-28, QA5-29)', async ({ page, request }) => {
+  test('radio options sit side by side from 700 px of tab width and stack below (QA5-28, QA5-29)', async ({
+    page,
+    request,
+  }) => {
     const { project, d } = await restrictedWith(request, 'radios', 1);
     for (const width of WIDTHS) {
       await open(page, width, project.slug, d.slug);
-      const [a, b] = await page.getByTestId('access-mode').getByRole('radio').evaluateAll((els) =>
-        els.map((e) => (e.closest('label') ?? e).getBoundingClientRect()).map((r) => ({ x: r.left, y: r.top, w: r.width })),
-      ) as [{ x: number; y: number; w: number }, { x: number; y: number; w: number }];
+      const [a, b] = (await page
+        .getByTestId('access-mode')
+        .getByRole('radio')
+        .evaluateAll((els) =>
+          els
+            .map((e) => (e.closest('label') ?? e).getBoundingClientRect())
+            .map((r) => ({ x: r.left, y: r.top, w: r.width })),
+        )) as [{ x: number; y: number; w: number }, { x: number; y: number; w: number }];
       if (width === 390) expect(b.y).toBeGreaterThan(a.y);
       else {
         near(a.y, b.y, 0.6);
@@ -246,21 +282,36 @@ test.describe('layout and heights (QA5-24 to QA5-37, QA5-59)', () => {
     await expect(group).toContainText('Everyone in the project');
     await expect(group).toContainText('Every member can view and modify this dataset. This is the default.');
     await expect(group).toContainText('Only people listed below');
-    await expect(group).toContainText('Everyone else in the project cannot open this dataset. Its runs stay listed with item contents hidden.');
+    await expect(group).toContainText(
+      'Everyone else in the project cannot open this dataset. Its runs stay listed with item contents hidden.',
+    );
     await page.getByTestId('access-mode-project').click();
     await expect(group).toContainText('1 saved grant is kept and applies again if you switch back.');
-    await expect(page.getByTestId('access-always')).toHaveText('Project managers, admins and the creator always have full access.');
+    await expect(page.getByTestId('access-always')).toHaveText(
+      'Project managers, admins and the creator always have full access.',
+    );
   });
 });
 
 test.describe('the grants table (QA5-36 to QA5-42)', () => {
-  test('columns, rows, Person cell and Added column at 1440 (QA5-36, QA5-38, QA5-41)', async ({ page, request }) => {
+  test('columns, rows, Person cell and Added column at 1440 (QA5-36, QA5-38, QA5-41)', async ({
+    page,
+    request,
+  }) => {
     const { project, d, list } = await restrictedWith(request, 'tbl', 3);
     await open(page, 1440, project.slug, d.slug);
     const table = page.getByTestId('access-grants-table');
     const headers = await table.getByRole('columnheader').allInnerTexts();
-    expect(headers.map((h) => h.trim().toLowerCase())).toEqual(['person', 'level', 'added by', 'added', 'remove']);
-    const widths = await table.getByRole('columnheader').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+    expect(headers.map((h) => h.trim().toLowerCase())).toEqual([
+      'person',
+      'level',
+      'added by',
+      'added',
+      'remove',
+    ]);
+    const widths = await table
+      .getByRole('columnheader')
+      .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
     expect(widths.slice(1)).toEqual([160, 180, 130, 48]);
     near(widths[0]!, 633, 1);
     near((await size(table.getByRole('row').nth(1))).h, 40, 0.6);
@@ -273,7 +324,10 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
     await expect(table.getByRole('radiogroup', { name: `Level for ${list[0]!.name}` })).toBeVisible();
   });
 
-  test('a level change keeps the date; remove and re-add is clean again (QA5-41, QA5-47, QA5-51)', async ({ page, request }) => {
+  test('a level change keeps the date; remove and re-add is clean again (QA5-41, QA5-47, QA5-51)', async ({
+    page,
+    request,
+  }) => {
     const { project, d, list } = await restrictedWith(request, 'chg', 2);
     await open(page, 1440, project.slug, d.slug);
     const table = page.getByTestId('access-grants-table');
@@ -293,7 +347,10 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
     await expect(page.getByTestId('access-save-bar')).toContainText('No changes');
   });
 
-  test('Unknown user for a deleted granter, You and Not saved for a new row (QA5-40, QA5-41)', async ({ page, request }) => {
+  test('Unknown user for a deleted granter, You and Not saved for a new row (QA5-40, QA5-41)', async ({
+    page,
+    request,
+  }) => {
     const { project, d, list } = await restrictedWith(request, 'unk', 2);
     await rewrite(page, ACCESS_GET, (b) => {
       b.grants[0].granted_by = null;
@@ -311,7 +368,10 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
     void list;
   });
 
-  test('Remove moves focus to the next row, then to the add select (QA5-42, QA5-48)', async ({ page, request }) => {
+  test('Remove moves focus to the next row, then to the add select (QA5-42, QA5-48)', async ({
+    page,
+    request,
+  }) => {
     const { project, d, list } = await restrictedWith(request, 'foc', 2);
     await open(page, 1440, project.slug, d.slug);
     const table = page.getByTestId('access-grants-table');
@@ -323,18 +383,31 @@ test.describe('the grants table (QA5-36 to QA5-42)', () => {
     void list;
   });
 
-  test('an Arabic name and very long names wrap inside the Person cell (QA5-64, QA5-71)', async ({ page, request }) => {
+  test('an Arabic name and very long names wrap inside the Person cell (QA5-64, QA5-71)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedProject(request, 'rtl');
     const d = await s.publish('Legal clauses');
     const more = await addMembers(request, s.project.id, ['نورة العتيبي', 'A'.repeat(60)]);
-    await setAccess(request, s.project.slug, d.slug, 'restricted', more.map((p) => ({ user_id: p.id, level: 'view' as const })));
+    await setAccess(
+      request,
+      s.project.slug,
+      d.slug,
+      'restricted',
+      more.map((p) => ({ user_id: p.id, level: 'view' as const })),
+    );
     for (const width of [1440, 390]) {
       await open(page, width, s.project.slug, d.slug);
       const cell = page.getByTestId('access-grants-table').getByText('نورة العتيبي');
       await expect(cell).toHaveAttribute('dir', 'auto');
-      const fits = await page.getByTestId('access-grants-table').evaluate((el) => el.scrollWidth <= el.clientWidth);
+      const fits = await page
+        .getByTestId('access-grants-table')
+        .evaluate((el) => el.scrollWidth <= el.clientWidth);
       expect(fits).toBe(true);
-      await expect(page.getByTestId('access-grants-table').getByText('A'.repeat(60), { exact: true })).toBeVisible();
+      await expect(
+        page.getByTestId('access-grants-table').getByText('A'.repeat(60), { exact: true }),
+      ).toBeVisible();
     }
   });
 });
@@ -347,7 +420,14 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
       const gaps = await page.evaluate(() => {
         const bar = document.querySelector('[data-testid=access-save-bar]') as HTMLElement;
         let host: HTMLElement | null = bar.parentElement;
-        while (host && !(host.scrollHeight > host.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(host).overflowY))) host = host.parentElement;
+        while (
+          host &&
+          !(
+            host.scrollHeight > host.clientHeight + 1 &&
+            /(auto|scroll)/.test(getComputedStyle(host).overflowY)
+          )
+        )
+          host = host.parentElement;
         if (!host) return null;
         const hostBottom = host.getBoundingClientRect().bottom;
         const out: number[] = [];
@@ -357,7 +437,12 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
         }
         host.scrollTop = host.scrollHeight;
         const end = +(hostBottom - bar.getBoundingClientRect().bottom).toFixed(2);
-        return { out, end, position: getComputedStyle(bar).position, height: bar.getBoundingClientRect().height };
+        return {
+          out,
+          end,
+          position: getComputedStyle(bar).position,
+          height: bar.getBoundingClientRect().height,
+        };
       });
       expect(gaps, 'a scroll host exists').not.toBeNull();
       expect(gaps!.position).toBe('sticky');
@@ -368,7 +453,10 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
     }
   });
 
-  test('states: No changes, Unsaved changes, Saving, Couldn’t save access (QA5-45, QA5-46)', async ({ page, request }) => {
+  test('states: No changes, Unsaved changes, Saving, Couldn’t save access (QA5-45, QA5-46)', async ({
+    page,
+    request,
+  }) => {
     const { project, d } = await restrictedWith(request, 'states', 2);
     await open(page, 1440, project.slug, d.slug);
     const bar = page.getByTestId('access-save-bar');
@@ -407,7 +495,10 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
     await expect(bar).toContainText('No changes');
   });
 
-  test('add a person, save, reload: one PUT and the count in the strip updates (QA5-46, QA5-68, QA5-78)', async ({ page, request }) => {
+  test('add a person, save, reload: one PUT and the count in the strip updates (QA5-46, QA5-68, QA5-78)', async ({
+    page,
+    request,
+  }) => {
     const { project, d, list } = await restrictedWith(request, 'savef', 1);
     const s = await addMembers(request, project.id, ['Late Joiner']);
     await open(page, 1440, project.slug, d.slug);
@@ -436,20 +527,29 @@ test.describe('the save bar (QA5-44 to QA5-47, QA5-61)', () => {
     await expect(page.getByTestId('access-grants-table').getByText('Late Joiner')).toBeVisible();
   });
 
-  test('at 390 the bar is 56 clean and 65.4 with a wrapping status (QA5-45, QA5-61)', async ({ page, request }) => {
+  test('at 390 the bar is 56 clean and 65.4 with a wrapping status (QA5-45, QA5-61)', async ({
+    page,
+    request,
+  }) => {
     const { project, d } = await restrictedWith(request, 'narrow', 2);
     await open(page, 390, project.slug, d.slug);
     const bar = page.getByTestId('access-save-bar');
     near((await size(bar)).h, 56, 0.6);
     await page.route(/\/v1\/datasets\/[^/?]+\/access\?/, (route) =>
-      route.request().method() === 'PUT' ? route.fulfill({ status: 500, json: { detail: 'boom' } }) : route.continue(),
+      route.request().method() === 'PUT'
+        ? route.fulfill({ status: 500, json: { detail: 'boom' } })
+        : route.continue(),
     );
     await page.getByTestId('access-mode-project').click();
     await page.getByRole('button', { name: 'Save access' }).click();
     await expect(bar).toContainText('Couldn’t save access');
     const h = (await size(bar)).h;
-    expect([56, 65.4].some((n) => Math.abs(h - n) < 1), `bar ${h}`).toBe(true);
-    for (const name of ['Discard', 'Save access']) near((await size(page.getByRole('button', { name }))).h, 24, 0.6);
+    expect(
+      [56, 65.4].some((n) => Math.abs(h - n) < 1),
+      `bar ${h}`,
+    ).toBe(true);
+    for (const name of ['Discard', 'Save access'])
+      near((await size(page.getByRole('button', { name }))).h, 24, 0.6);
   });
 });
 
@@ -461,7 +561,9 @@ test.describe('leaving the tab with unsaved changes (QA5-62, QA5-63)', () => {
     await page.getByRole('tab', { name: 'Settings' }).click();
     const dialog = leaveDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText('You have unsaved changes to who can access this dataset. They are lost if you leave this tab.');
+    await expect(dialog).toContainText(
+      'You have unsaved changes to who can access this dataset. They are lost if you leave this tab.',
+    );
     near((await size(dialog)).w, 438, 1); // amended: 438 (the mock drew the 440 px box without its border)
     await expect(dialog.getByRole('button', { name: 'Keep editing' })).toBeFocused();
     await dialog.getByRole('button', { name: 'Keep editing' }).click();
@@ -479,7 +581,10 @@ test.describe('leaving the tab with unsaved changes (QA5-62, QA5-63)', () => {
     await expect(page.getByTestId('access-mode-restricted')).toBeChecked(); // the edits were dropped
   });
 
-  test('without edits the tab switches at once; the keyboard also asks (QA5-62)', async ({ page, request }) => {
+  test('without edits the tab switches at once; the keyboard also asks (QA5-62)', async ({
+    page,
+    request,
+  }) => {
     const { project, d } = await restrictedWith(request, 'leave2', 2);
     await open(page, 1440, project.slug, d.slug);
     await page.getByRole('tab', { name: 'Settings' }).click();
@@ -506,13 +611,17 @@ test.describe('read only, archived, loading and error (QA5-53 to QA5-58)', () =>
       near((await size(summary)).h, summaryH, 0.8);
       await expect(summary).toContainText('Only people listed below');
       await expect(summary).toContainText('View');
-      await expect(page.getByText('Only project managers and admins can change who has access.')).toBeVisible();
+      await expect(
+        page.getByText('Only project managers and admins can change who has access.'),
+      ).toBeVisible();
       await expect(page.getByTestId('access-mode-card').getByText('Restricted')).toBeVisible();
       await expect(page.getByRole('radiogroup')).toHaveCount(0);
       await expect(page.getByTestId('access-save-bar')).toHaveCount(0);
       await expect(page.getByTestId('access-add')).toHaveCount(0);
       const table = page.getByTestId('access-grants-table');
-      const headers = (await table.getByRole('columnheader').allInnerTexts()).map((h) => h.trim().toLowerCase());
+      const headers = (await table.getByRole('columnheader').allInnerTexts()).map((h) =>
+        h.trim().toLowerCase(),
+      );
       if (width !== 390) expect(headers).toEqual(['person', 'level', 'added by', 'added']);
       await expect(table.getByRole('button', { name: /^Remove / })).toHaveCount(0);
       if (width !== 390) near((await size(page.getByTestId('access-mode-card'))).h, cardH, 1);
@@ -556,7 +665,10 @@ test.describe('read only, archived, loading and error (QA5-53 to QA5-58)', () =>
     }
   });
 
-  test('a failed load shows an error inside the mode card, with Retry (QA5-58)', async ({ page, request }) => {
+  test('a failed load shows an error inside the mode card, with Retry (QA5-58)', async ({
+    page,
+    request,
+  }) => {
     const s = await seedProject(request, 'err');
     const d = await s.publish('Plain');
     let fail = true;
@@ -580,9 +692,14 @@ test.describe('read only, archived, loading and error (QA5-53 to QA5-58)', () =>
     await expect(page.getByTestId('access-mode')).toBeVisible();
   });
 
-  test('a dataset the caller cannot open shows the 403 page and no tab (QA5-70)', async ({ page, request }) => {
+  test('a dataset the caller cannot open shows the 403 page and no tab (QA5-70)', async ({
+    page,
+    request,
+  }) => {
     const { project, d } = await restrictedWith(request, 'f403', 1);
-    await page.route(DATASET_GET, (route) => route.fulfill({ status: 403, json: { detail: "You don't have access to this dataset" } }));
+    await page.route(DATASET_GET, (route) =>
+      route.fulfill({ status: 403, json: { detail: "You don't have access to this dataset" } }),
+    );
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoApp(page, accessUrl(project.slug, d.slug));
     await expect(page.getByTestId('da-403')).toBeVisible();
@@ -591,7 +708,10 @@ test.describe('read only, archived, loading and error (QA5-53 to QA5-58)', () =>
 });
 
 test.describe('keyboard and a11y (QA5-21, QA5-48, QA5-49, QA5-65)', () => {
-  test('arrow keys move the radios and the tab order follows the page (QA5-48)', async ({ page, request }) => {
+  test('arrow keys move the radios and the tab order follows the page (QA5-48)', async ({
+    page,
+    request,
+  }) => {
     const { project, d } = await restrictedWith(request, 'kbd', 2);
     await open(page, 1440, project.slug, d.slug);
     const radio = page.getByRole('radio', { name: /Only people listed below/ });

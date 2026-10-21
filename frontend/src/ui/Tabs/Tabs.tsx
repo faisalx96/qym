@@ -35,16 +35,28 @@ export function Tabs({
   orientation = 'horizontal',
 }: TabsProps) {
   const listRef = useRef<HTMLDivElement>(null);
-  // A strip wider than its column (five dataset tabs at 279 px) scrolls: the selected tab is kept in view.
+  // A strip wider than its column (five dataset tabs at 279 px) scrolls: the selected tab is kept in view. Counts and the
+  // webfont arrive after the first paint and widen the tabs, so the check runs again whenever a tab or the strip resizes
+  // (never on a scroll: a reader who scrolls the strip by hand is left alone).
+  const shape = items.map((i) => `${i.id}:${i.count ?? ''}`).join('|');
   useEffect(() => {
     const list = listRef.current;
-    const tab = list?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
-    if (!list || !tab || orientation !== 'horizontal' || list.scrollWidth <= list.clientWidth) return;
-    const box = list.getBoundingClientRect();
-    const at = tab.getBoundingClientRect();
-    if (at.left < box.left) list.scrollLeft += at.left - box.left - 8;
-    else if (at.right > box.right) list.scrollLeft += at.right - box.right + 8;
-  }, [selected, orientation, items.length]);
+    if (!list || orientation !== 'horizontal') return undefined;
+    const keepInView = () => {
+      const tab = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      if (!tab || list.scrollWidth <= list.clientWidth) return;
+      const box = list.getBoundingClientRect();
+      const at = tab.getBoundingClientRect();
+      if (at.left < box.left) list.scrollLeft += at.left - box.left - 8;
+      else if (at.right > box.right) list.scrollLeft += at.right - box.right + 8;
+    };
+    keepInView();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(keepInView);
+    observer.observe(list);
+    list.querySelectorAll('[role="tab"]').forEach((tab) => observer.observe(tab));
+    return () => observer.disconnect();
+  }, [selected, orientation, shape]);
   return (
     <AriaTabs
       selectedKey={selected}
