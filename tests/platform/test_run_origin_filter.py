@@ -23,6 +23,7 @@ from qym_platform.db.models import (
     EvalEnvironmentSchema,
     EvalExperiment,
     EvalExperimentJob,
+    Run,
     RunOrigin,
     RunWorkflowStatus,
     User,
@@ -248,3 +249,59 @@ def test_descriptor_without_origin_counts_as_local_and_is_requeued(database, cli
     drain(database)
     page = _dashboard(client, "runs", {"origins": ["official"]}).json()
     assert [row["run_id"] for row in page["rows"]] == ["official"]
+
+
+# ── experiment.latency_sensitive (QA3-1, QA3-3, QA3-9) ─────────────────────
+
+
+def _flag_experiment(engine, experiment_id, value=True):
+    with Session(engine) as db:
+        db.get(EvalExperiment, experiment_id).latency_sensitive = value
+        db.commit()
+
+
+@pytest.mark.parametrize("flagged", [False, True])
+@pytest.mark.parametrize("published", [False, True])
+def test_runs_list_experiment_ref_carries_latency_sensitive(
+    database, flagged, published
+):  # noqa: F811
+    experiment_id = _seed(database)
+    _flag_experiment(database, experiment_id, flagged)
+    if published:
+        drain(database)
+    rows = _rows(_list(database))
+    experiment = rows["official"]["experiment"]
+    assert experiment["latency_sensitive"] is flagged
+    assert set(experiment) == {"id", "name", "job_id", "latency_sensitive"}
+    assert rows["local-1"]["experiment"] is None
+
+
+def test_descriptor_without_latency_sensitive_is_requeued_and_republished(
+    database, client
+):  # noqa: F811
+    experiment_id = _seed(database)
+    _flag_experiment(database, experiment_id, True)
+    drain(database)
+    with Session(database) as db:
+        dimension = db.get(Dimension, "official")
+        assert dimension.descriptor["experiment"]["latency_sensitive"] is True
+        stale = dict(dimension.descriptor)
+        stale["experiment"] = {
+            k: v for k, v in stale["experiment"].items() if k != "latency_sensitive"
+        }
+        dimension.descriptor = stale
+        db.commit()
+    # Until republished the field is absent (the UI reads absent as false).
+    page = _dashboard(client, "runs", {"origins": ["official"]}).json()
+    assert "latency_sensitive" not in page["rows"][0]["experiment"]
+    with Session(database) as db:
+        assert service._descriptor_origin_stale(
+            db.get(Run, "official"), db.get(Dimension, "official")
+        )
+        assert service.reconcile_summary_shapes(db) == 1
+        db.commit()
+    drain(database)
+    page = _dashboard(client, "runs", {"origins": ["official"]}).json()
+    assert page["rows"][0]["experiment"]["latency_sensitive"] is True
+    with Session(database) as db:
+        assert service.reconcile_summary_shapes(db) == 0

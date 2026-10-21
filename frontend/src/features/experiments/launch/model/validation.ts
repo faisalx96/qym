@@ -10,7 +10,7 @@ import { envsMissing, envName, leafSchema, notInEnvMessage } from './descriptor'
 import { evaluatorLocalErrors, configEntry } from './evaluator';
 import { groupOfPointer } from './settingsTree';
 import { matchTemplate, pointerToFieldName, splitPointer, unescapeSegment } from './pointers';
-import { parseVersioning, buildSpec } from './spec';
+import { buildSpec } from './spec';
 import { jobEstimate, sweepLocalErrors } from './sweeps';
 import type {
   DryRunResponse,
@@ -33,7 +33,6 @@ export const PSEUDO = {
   environments: '#environments',
   name: '#name',
   base: '#base',
-  versioning: '#versioning-details',
   description: '#description',
   rawJson: '#advanced-json',
   latency: '#latency',
@@ -77,7 +76,6 @@ export function locate(pointer: string, ctx: FormContext): Located {
   if (pointer === PSEUDO.environments) return { label: 'Environments', stepId: 'where' };
   if (pointer === PSEUDO.name) return { label: 'Name', stepId: 'where' };
   if (pointer === PSEUDO.description) return { label: 'Description', stepId: 'where' };
-  if (pointer === PSEUDO.versioning) return { label: 'Versioning details', stepId: 'where' };
   if (pointer === PSEUDO.latency) return { label: LATENCY_REVIEW_LABEL, stepId: 'where' };
   if (pointer === PSEUDO.base) return { label: 'Starting point', stepId: 'start' };
   if (pointer === PSEUDO.rawJson) return { label: 'Raw JSON', stepId: 'review' };
@@ -212,7 +210,6 @@ export function localErrors(
   }
   if (doc.description.length > DESCRIPTION_MAX)
     push(PSEUDO.description, `Descriptions are at most ${DESCRIPTION_MAX} characters.`);
-  for (const message of parseVersioning(doc.versioningText).errors) push(PSEUDO.versioning, message);
   for (const e of evaluatorLocalErrors(doc, ctx.evaluatorPanel)) push(e.pointer, e.message);
   const spec = buildSpec(doc, ctx.evaluatorPanel);
   for (const e of sweepLocalErrors(spec, (p) => locate(p, ctx).label)) push(e.pointer, e.message);

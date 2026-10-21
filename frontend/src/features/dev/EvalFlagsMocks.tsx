@@ -18,7 +18,6 @@ import {
   Tag,
   Text,
   TextField,
-  Textarea,
   TwoLine,
   type Column,
 } from '@/ui';
@@ -82,16 +81,6 @@ function RunSettingsMock({ mode }: { mode: RunMode }) {
               ) : null}
             </Callout>
           ) : null}
-          <Textarea
-            label="Versioning details"
-            rows={2}
-            mono
-            dir="ltr"
-            value=""
-            onChange={noop}
-            isDisabled={mode === 'readonly'}
-            help="One key=value per line (for example agent_version=1.4). Stored on the experiment and its runs."
-          />
         </div>
       </div>
     </Card>

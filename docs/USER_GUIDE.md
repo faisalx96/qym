@@ -105,7 +105,8 @@ Do this before `pip wheel packages/sdk` so the wheel contains it. For developmen
 
 ### Latency-sensitive runs
 
-Tick **Latency-sensitive run** under the name and priority on the first launch step when the run measures latency.
+Tick **Latency-sensitive run** inside the Environments card on the launch home view, or under the name and priority on the first
+Customize step (it is one setting: ticking it on either page ticks it on both), when the run measures latency.
 The Evaluation Service then starts the run only when the gateway is quiet, makes other jobs on the environment wait
 while it runs, and discards and re-queues it if foreign traffic overlaps (up to its limit). Expect a later start.
 
@@ -119,7 +120,17 @@ while it runs, and discards and re-queues it if foreign traffic overlaps (up to 
 - Each environment has **Who can launch latency-sensitive runs** (Environment page, Policies): *Anyone in the project*
   (default) or *Project managers only*. On a managers-only environment a member cannot tick the box (the form says so),
   and the API answers 403. Project managers and admins change the setting in either direction.
+- Runs that came from a latency-sensitive experiment carry a small clock tag in the first cell of the Runs page (hover for
+  "Latency-sensitive experiment"); `qym run list --json` has `experiment.latency_sensitive` on each official run.
 - The flag is fixed at launch; **Duplicate** and **Retry** carry it. It does not change priority or queue order.
+
+### Evaluation Service versions (read-only)
+
+The launch form has no versioning box. Under the environments, on the launch home view and on the first Customize step, a
+**Evaluation Service versions** card shows each environment's current `agent`, `image` and `kb`, read from its Evaluation Service
+(**Refresh** reads them again). A run records the versions its service reports; nothing typed by a user is stored on a new
+experiment, Duplicate and Rerun carry none, and `POST .../experiments` answers 422 when a request still sends `versioning_details`
+(`null` and `{}` are accepted). Experiments and runs created earlier keep their versioning details and still filter by them.
 
 ### Dataset read token
 

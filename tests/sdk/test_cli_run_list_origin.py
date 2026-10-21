@@ -184,3 +184,67 @@ def test_cli_run_list_human_output_marks_official_runs(get_paths, monkeypatch) -
     assert "Origin" in text
     assert "Official run · Nightly sweep" in text
     assert "Local" in text
+
+
+# ── experiment.latency_sensitive (QA3-2) ────────────────────
+
+
+FLAGGED_RUN = {
+    **OFFICIAL_RUN,
+    "run_id": "run-official-2",
+    "experiment": {
+        **OFFICIAL_RUN["experiment"],
+        "name": "Latency check",
+        "latency_sensitive": True,
+    },
+}
+
+
+def test_cli_run_list_json_passes_latency_sensitive_through(monkeypatch) -> None:
+    payload = {"tasks": {"qa": {"gpt-x": [dict(FLAGGED_RUN), dict(LOCAL_RUN)]}}}
+    monkeypatch.setattr(
+        PlatformAPIClient, "_get", lambda self, path, timeout=30: payload
+    )
+
+    result = _invoke("--json", "run", "list")
+
+    assert result.exit_code == 0, result.output
+    runs = {r["run_id"]: r for r in json.loads(result.stdout)["runs"]}
+    assert runs["run-official-2"]["experiment"]["latency_sensitive"] is True
+    assert runs["run-local-1"]["experiment"] is None
+
+
+def test_cli_run_list_human_output_marks_latency_sensitive(monkeypatch) -> None:
+    from rich.console import Console
+
+    import qym.cli.run as run_module
+
+    payload = {
+        "tasks": {
+            "qa": {
+                "gpt-x": [
+                    dict(FLAGGED_RUN),
+                    {
+                        **OFFICIAL_RUN,
+                        "experiment": {
+                            **OFFICIAL_RUN["experiment"],
+                            "latency_sensitive": False,
+                        },
+                    },
+                ]
+            }
+        }
+    }
+    monkeypatch.setattr(
+        PlatformAPIClient, "_get", lambda self, path, timeout=30: payload
+    )
+    console = Console(record=True, width=250)
+    monkeypatch.setattr(run_module, "err_console", console)
+
+    result = _invoke("run", "list")
+
+    assert result.exit_code == 0, result.output
+    text = console.export_text()
+    assert "Official run · Latency check · latency-sensitive" in text
+    assert "Official run · Nightly sweep" in text
+    assert text.count("latency-sensitive") == 1

@@ -38,12 +38,11 @@ test.describe('Run settings', () => {
       await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
       await nameBox(page).fill('quiet run');
       await expect(checkbox(page)).not.toBeChecked();
-      // Below the name/priority row and above Versioning details (B5-23).
+      // Below the name/priority row (B5-23); the Versioning details box is gone (QA2-9).
       const nameTop = (await box(nameBox(page))).y;
       const checkTop = (await box(checkbox(page))).y;
-      const versioningTop = (await box(page.getByLabel('Versioning details'))).y;
       expect(nameTop).toBeLessThan(checkTop);
-      expect(checkTop).toBeLessThan(versioningTop);
+      await expect(page.getByLabel('Versioning details')).toHaveCount(0);
       const helper = block(page).getByText(HELPER);
       await expect(helper).toBeVisible();
       expect(await helper.evaluate((el) => getComputedStyle(el).paddingInlineStart)).toBe('24px');

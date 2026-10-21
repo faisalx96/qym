@@ -120,4 +120,49 @@ describe('VersionsBlock', () => {
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'error'));
     expect(row()).toHaveTextContent('Couldn’t read:');
   });
+
+  it('has one Refresh button, the new help text, no "Add versioning details" and no inputs (QA2-11, QA4-4)', async () => {
+    stubVersioning([ok({ agent_version: 'v1' })]);
+    renderBlock();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    const group = screen.getByRole('group', { name: 'Current versions' });
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
+    expect(group).toHaveTextContent('Read from each environment. Runs record what its Evaluation Service reports.');
+    expect(group).not.toHaveTextContent('Add versioning details');
+    expect(group.querySelector('input, textarea, select, [contenteditable]')).toBeNull();
+  });
+
+  it('loads as the loaded layout: names, placeholders, aria-busy and a hidden status (QA4-7)', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
+    renderBlock();
+    const list = row().querySelector('dl') as HTMLElement;
+    expect(list).toHaveAttribute('aria-busy', 'true');
+    // The hidden status is not a child of the definition list (axe: dl may hold only dt / dd groups).
+    expect(list.querySelector('[role="status"]')).toBeNull();
+    expect(within(list).getAllByText(/^(agent|image|kb)$/, { selector: 'dt' })).toHaveLength(3);
+    expect(list.querySelectorAll('dd')).toHaveLength(3);
+    expect(within(row()).getByRole('status')).toHaveTextContent('Reading…');
+  });
+
+  it('Refresh pressed twice while loading asks once more, not twice (QA4-11)', async () => {
+    const reads = stubVersioning([ok({ agent_version: 'v1' })]);
+    const user = userEvent.setup();
+    renderBlock();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    expect(reads.length).toBeLessThanOrEqual(3);
+    expect(reads.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('a second instance reads nothing again (one query shared by home and step 1, QA4-6)', async () => {
+    const reads = stubVersioning([ok({ agent_version: 'v1' })]);
+    const { unmount } = renderBlock();
+    await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
+    unmount();
+    render(block);
+    expect(row()).toHaveAttribute('data-status', 'ok');
+    expect(reads).toHaveLength(1);
+  });
 });

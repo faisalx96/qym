@@ -117,9 +117,9 @@ describe('local errors', () => {
     ]);
   });
 
-  it('checks the versioning details and the description length', () => {
-    const items = localErrors(valid({ versioningText: 'bad', description: 'x'.repeat(5001) }), ctx);
-    expect(items.map((i) => i.pointer)).toEqual(['#description', '#versioning-details']);
+  it('checks the description length', () => {
+    const items = localErrors(valid({ description: 'x'.repeat(5001) }), ctx);
+    expect(items.map((i) => i.pointer)).toEqual(['#description']);
   });
 
   it('reports invalid evaluation inputs and run_metadata mistakes on the evaluation step', () => {

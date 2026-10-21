@@ -7,6 +7,7 @@ import {
   Badge,
   DropdownMenu,
   HelpMarker,
+  Icon,
   IconButton,
   RunStatusBadge,
   ScoreBar,
@@ -333,6 +334,25 @@ export function MetricCell({
   );
 }
 
+/**
+ * A run of a latency-sensitive experiment (QA3-25): a 20 x 20 clock tag, so it adds no width to the
+ * 260 px Run column. The meaning is the accessible name and the title, as for `Official`.
+ */
+export function RunLatencyTag() {
+  return (
+    <Tag
+      tone="info"
+      className={styles.runLatencyTag}
+      role="img"
+      aria-label="Latency-sensitive experiment"
+      title="Latency-sensitive experiment"
+      data-testid="run-latency-tag"
+    >
+      <Icon name="clock" size={12} />
+    </Tag>
+  );
+}
+
 export function RunNameCell({
   row,
   expanded,
@@ -346,8 +366,10 @@ export function RunNameCell({
   const intent = useRunIntent(row.run_id);
   const repeat = row.samples > 1;
   const name = row.external_run_id || row.run_name || row.run_id.slice(0, 8);
+  // Absent (a run not republished yet) reads as false.
+  const latency = row.experiment?.latency_sensitive === true;
   return (
-    <span className={styles.runName}>
+    <span className={styles.runName} data-testid="run-cell">
       {repeat ? (
         <IconButton
           label={
@@ -358,6 +380,10 @@ export function RunNameCell({
           aria-expanded={expanded}
           className={styles.chevron}
         />
+      ) : latency ? (
+        <span className={styles.leadSlot}>
+          <RunLatencyTag />
+        </span>
       ) : (
         <span className={styles.chevronSpacer} aria-hidden="true" />
       )}
@@ -375,6 +401,7 @@ export function RunNameCell({
           Official
         </Tag>
       ) : null}
+      {latency && repeat ? <RunLatencyTag /> : null}
     </span>
   );
 }

@@ -7,8 +7,8 @@ the launch form's Advanced panel (§8.4, D5; ``eval_config``): with
 schemas (guide v1.1 §3.4, ``eval_evaluator_schema``); an environment whose service has
 no such endpoint, and a call without ids, get the static ``EvaluatorRequestConfig``.
 Each job is validated against its own environment's evaluator schema. The experiment's
-``versioning_details`` are also sent as ``evaluator.config.versioning_details`` to every
-environment whose evaluator schema declares that key (B23).
+``versioning_details`` are refused with 422 (QA2-1): the Evaluation Service reports a
+run's versions itself, and experiments created before that change keep what they stored.
 
 - Members may create (``dry_run`` previews without persisting), list, read and clone.
   ``HIGH`` priority needs a project manager and ``acknowledge_preemption: true``
@@ -147,7 +147,6 @@ from qym_platform.services.eval_launch_flags import (
 )
 from qym_platform.services.eval_schema_form import schema_declares_env_key
 from qym_platform.services.eval_evaluator_schema import (
-    accepts_config_key,
     current_evaluator_schema,
     descriptor_for_row,
     evaluator_schema_json,
@@ -173,7 +172,6 @@ from qym_platform.services.eval_model_slots import (
     list_model_slots,
 )
 from qym_platform.services.run_versioning import (
-    normalize_versioning_details,
     parse_versioning_params,
     project_versioning_values,
     versioning_conditions,
@@ -238,8 +236,8 @@ class ExperimentCreateRequest(BaseModel):
     secrets: Dict[str, Any] = Field(default_factory=dict, repr=False)
     # Slot keys whose temporary model is saved as a project connection (#12).
     save_to_project_models: List[str] = Field(default_factory=list, max_length=50)
-    # Copied into each launched run's ``versioning_details`` (0084). ``Any`` so a
-    # malformed value gets our message (normalize_versioning_details).
+    # Refused unless null or ``{}`` (QA2-1). ``Any`` so a malformed value gets our
+    # message, never a validation echo.
     versioning_details: Any = None
     # Asks the service for a quiet gateway; immutable after launch (guide v1.3 §2.2).
     latency_sensitive: bool = False
@@ -838,22 +836,32 @@ def _with_codes(errors: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [{"code": e.get("rule"), **e} for e in errors]
 
 
+VERSIONING_DETAILS_REFUSED = (
+    "Versioning details are set by the Evaluation Service and cannot be sent "
+    "with an experiment."
+)
+
+
+def _refuse_versioning_details(raw: Any) -> None:
+    """422 for any ``versioning_details`` but ``null`` / ``{}`` (QA2-1 to QA2-3).
+
+    The Evaluation Service reports the versions of a run itself; nothing user-typed
+    is recorded on a new experiment, so a script must not believe its keys were kept.
+    """
+    if raw is None or (isinstance(raw, dict) and not raw):
+        return
+    raise HTTPException(status_code=422, detail=VERSIONING_DETAILS_REFUSED)
+
+
 def _preview_body(
     body: Optional[Mapping[str, Any]],
-    versioning_details: Optional[Mapping[str, Any]],
     *,
     latency_sensitive: bool = False,
 ) -> Any:
-    """The dry run's ``request_body``: the plan's body plus what launch adds (B23)."""
+    """The dry run's ``request_body``: the plan's body plus what launch adds."""
     out = strip_secret_refs(body)
     if isinstance(out, dict) and latency_sensitive:
         out["latency_sensitive"] = True
-    if isinstance(out, dict) and versioning_details:
-        evaluator = out.setdefault("evaluator", {})
-        if isinstance(evaluator, dict):
-            config = evaluator.setdefault("config", {})
-            if isinstance(config, dict):
-                config["versioning_details"] = copy.deepcopy(dict(versioning_details))
     return out
 
 
@@ -870,7 +878,6 @@ def _request_body(
     run_name: str,
     qym_config: Mapping[str, Any],
     retry_of_job_id: Optional[str] = None,
-    versioning_details: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     out = copy.deepcopy(dict(body))
     out["user_id"] = user_id
@@ -879,8 +886,6 @@ def _request_body(
     config = evaluator.setdefault("config", {})
     config["run_name"] = run_name
     config["live_mode"] = "platform"
-    if versioning_details:
-        config["versioning_details"] = copy.deepcopy(dict(versioning_details))
     metadata = config.setdefault("run_metadata", {})
     metadata["qym_launch"] = build_qym_launch(
         experiment_id=experiment_id,
@@ -892,22 +897,6 @@ def _request_body(
     )
     metadata["qym_config"] = redact_secret_refs(qym_config)
     return out
-
-
-def _service_versioning_details(
-    context: Mapping[str, Any], details: Optional[Mapping[str, Any]]
-) -> Optional[Dict[str, Any]]:
-    """What ``evaluator.config.versioning_details`` gets on this environment (B23).
-
-    The experiment's details, for an environment whose evaluator schema declares the
-    key (guide v1.1 §4.2); ``None`` otherwise, so older services (whose config is
-    ``extra="forbid"``) never see it. Ingest still merges them at link time.
-    """
-    if not details or not accepts_config_key(
-        context.get("evaluator_schema"), "versioning_details"
-    ):
-        return None
-    return dict(details)
 
 
 def _qym_config(
@@ -1251,10 +1240,7 @@ def create_experiment(
                     "configured"
                 ),
             )
-    try:
-        versioning_details = normalize_versioning_details(req.versioning_details)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from None
+    _refuse_versioning_details(req.versioning_details)
     envs = _load_environments(db, project_id, req.environment_ids)
     priority = _resolve_priority(db, principal, project_id, envs, req.priority)
     gate_message = _latency_gate(db, principal, project_id, envs, req.latency_sensitive)
@@ -1345,7 +1331,6 @@ def create_experiment(
             ],
             "request_body": _preview_body(
                 plan["body"],
-                _service_versioning_details(contexts[env.id], versioning_details),
                 latency_sensitive=req.latency_sensitive,
             ),
         }
@@ -1408,7 +1393,7 @@ def create_experiment(
         environment_ids=[env.id for env in envs],
         base_source=base_source,
         spec=strip_secret_refs(stored_spec),
-        versioning_details=versioning_details or None,
+        versioning_details=None,
         secrets_encrypted=_encrypted_secrets(referenced_secrets(spec, req.secrets)),
         priority=priority,
         preemption_acknowledged_at=now if priority == EvalPriority.HIGH else None,
@@ -1451,9 +1436,6 @@ def create_experiment(
                         base_source,
                         plan["models"],
                         sweep=params.get("sweep"),
-                    ),
-                    versioning_details=_service_versioning_details(
-                        contexts[env.id], versioning_details
                     ),
                 ),
                 schema_id=schema.id,
@@ -1953,7 +1935,6 @@ def clone_experiment(
         "priority": experiment.priority.value,
         "latency_sensitive": bool(experiment.latency_sensitive),
         "spec": strip_secret_refs(experiment.spec or {}),
-        "versioning_details": dict(experiment.versioning_details or {}),
     }
     if job is None:
         return prefill

@@ -36,6 +36,9 @@ describe('wizard steps', () => {
   it('knows which fields the home view holds', () => {
     expect(heldOnHome(item({ pointer: '/evaluator/dataset' }))).toBe(true);
     expect(heldOnHome(item({ pointer: '/evaluator' }))).toBe(false);
+    // QA3-18: the latency gate problem is held on the home view, where the control now lives.
+    expect(heldOnHome(item({ pointer: '#latency' }))).toBe(true);
+    expect(heldOnHome(item({ pointer: '#description' }))).toBe(false);
   });
 
   it('keeps ?step= out of the form key and the unsaved-changes comparison', () => {

@@ -1630,19 +1630,29 @@ def refresh_run_summary(db, run_id, version):
 
 
 def _descriptor_origin_stale(run, dimension):
-    """An official run whose descriptor predates ``origin`` or ``versioning``.
+    """An official run whose descriptor predates ``origin``, ``versioning`` or
+    ``experiment.latency_sensitive``.
 
     ``versioning`` matters only for runs linked to an experiment job: republishing
     fills the descriptor and the run's ``dashboard_run_versions`` rows (0078).
+    The experiment reference gained ``latency_sensitive`` (QA3-3); a descriptor with
+    no experiment reference at all is not stale (nothing to fill).
     """
     from qym_platform.db.models import RunOrigin
 
     if run is None or dimension is None:
         return False
     descriptor = dimension.descriptor or {}
+    experiment = descriptor.get("experiment")
     return (
-        run.origin == RunOrigin.OFFICIAL and "origin" not in descriptor
-    ) or (run.experiment_job_id is not None and "versioning" not in descriptor)
+        (run.origin == RunOrigin.OFFICIAL and "origin" not in descriptor)
+        or (run.experiment_job_id is not None and "versioning" not in descriptor)
+        or (
+            run.experiment_job_id is not None
+            and isinstance(experiment, dict)
+            and "latency_sensitive" not in experiment
+        )
+    )
 
 
 def _note_live_refresh(db, run_id, state):
@@ -1928,6 +1938,13 @@ def reconcile_summary_shapes(db, *, limit=100):
                 and_(
                     Run.experiment_job_id.isnot(None),
                     Dimension.descriptor["versioning"].as_string().is_(None),
+                ),
+                and_(
+                    Run.experiment_job_id.isnot(None),
+                    Dimension.descriptor[("experiment", "id")].as_string().isnot(None),
+                    Dimension.descriptor[("experiment", "latency_sensitive")]
+                    .as_string()
+                    .is_(None),
                 ),
             )
         )

@@ -5,6 +5,7 @@ import { DatasetPicker } from '../entry/DatasetPicker';
 import { EnvironmentPicker } from '../entry/EnvironmentPicker';
 import { VersionsBlock } from '../entry/VersionsBlock';
 import { HomeBar } from '../entry/HomeBar';
+import { LatencyControl } from '../entry/LatencyControl';
 import { StartFrom } from '../entry/StartFrom';
 import { useLaunch } from '../LaunchContext';
 import type { WizardStepId } from '../wizard/steps';
@@ -25,6 +26,11 @@ export function LaunchHome({ onCustomize }: { onCustomize: (step: WizardStepId) 
         <Card>
           <div className={panel.cardStack}>
             <EnvironmentPicker />
+            {envRecords.length ? (
+              <div className={styles.latencyBlock} data-testid="home-latency">
+                <LatencyControl />
+              </div>
+            ) : null}
           </div>
         </Card>
         <Card>
@@ -33,7 +39,7 @@ export function LaunchHome({ onCustomize }: { onCustomize: (step: WizardStepId) 
           </div>
         </Card>
       </div>
-      <VersionsBlock onCustomize={() => onCustomize('where')} />
+      <VersionsBlock />
       {envRecords.length ? (
         <Card>
           <div className={panel.cardStack}>

@@ -77,7 +77,7 @@
  *
  * Pointers in a document are relative to env_overrides (`/LLM_OVERRIDES/…`); error and
  * focus pointers are document pointers (`/env_overrides/…`, `/slot_bindings/…`,
- * `/evaluator/…`, or `#name`, `#environments`, `#base`, `#versioning-details`,
+ * `/evaluator/…`, or `#name`, `#environments`, `#base`, `#latency`,
  * `#advanced-json`).
  */
 export * from './types';

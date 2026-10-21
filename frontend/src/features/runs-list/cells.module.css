@@ -210,6 +210,34 @@
   flex: none;
 }
 
+/* Every element beside the name keeps its size; only the name gives way (QA3-26). */
+.runName > span {
+  flex: none;
+}
+
+/* The leading slot of a run without passes: the chevron spacer's box (inline-block, 24 px, no height) with the
+   latency tag centred in it, so the head's line box (the card layout baseline-aligns it) and the name do not move. */
+.leadSlot {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: var(--control-height);
+}
+
+.leadSlot > .runLatencyTag {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: calc((var(--control-height) - var(--badge-height)) / 2);
+  transform: translateY(-50%);
+}
+
+.runLatencyTag {
+  flex: none;
+  justify-content: center;
+  inline-size: var(--badge-height);
+  padding: 0;
+}
+
 .chevronSpacer {
   display: inline-block;
   flex: none;

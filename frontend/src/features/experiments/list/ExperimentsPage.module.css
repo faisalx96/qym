@@ -38,7 +38,10 @@
 
 /* Name and the Latency-sensitive tag: the tag wraps under a long name (the name is never cut). */
 .nameLine {
-  display: inline-flex;
+  /* The name wraps, never truncated (QA3-35): TwoLine's primary line is nowrap, this block restores wrapping. */
+  display: flex;
+  white-space: normal;
+  overflow-wrap: anywhere;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-xs) var(--space-sm);

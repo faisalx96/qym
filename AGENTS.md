@@ -152,7 +152,7 @@ All commands support `--json` (structured JSON to stdout, human text to stderr).
 ```bash
 # Inspect runs
 qym run list [--limit 50] [--task TEXT] [--model TEXT] [--status TEXT] [--origin official|local|all] [--versioning KEY=VALUE ...] --json
-#   each run carries origin ("official"|"local"), experiment ({id, name, job_id} or null)
+#   each run carries origin ("official"|"local"), experiment ({id, name, job_id, latency_sensitive} or null)
 #   and versioning (the Evaluation Service's versioning_metadata, any key; {} when none)
 #   and versioning_details (free-form keys from the run's creator / experiment; {} when none)
 qym run get <run_id> --json   # run.versioning_details

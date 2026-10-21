@@ -1,6 +1,8 @@
-"""Experiments carry ``versioning_details`` into their runs (migration 0084)."""
+"""Experiments refuse ``versioning_details`` (QA2-1 to QA2-6; migration 0084 history)."""
 
 from __future__ import annotations
+
+import pytest
 
 from qym_platform.db.models import EvalExperiment
 
@@ -32,42 +34,118 @@ def _launch(client, env_id, conn_id, **extra):
     )
 
 
-def test_experiment_stores_returns_and_clones_versioning_details(
-    client, session_factory, env, conn
-):
-    details = {"agent_version": "v2", "kb": 381}
-    res = _launch(client, env.id, conn.id, versioning_details=details)
-    assert res.status_code == 200, res.text
-    experiment = res.json()
-    assert experiment["versioning_details"] == details
+REFUSED = (
+    "Versioning details are set by the Evaluation Service and cannot be sent "
+    "with an experiment."
+)
+
+
+def _counts(session_factory):
+    from qym_platform.db.models import EvalExperimentJob
+
     with session_factory() as db:
-        assert db.get(EvalExperiment, experiment["id"]).versioning_details == details
-
-    detail = client.get(_url(suffix=f"/{experiment['id']}"), headers=_headers(MEMBER))
-    assert detail.json()["versioning_details"] == details
-
-    prefill = client.post(
-        _url(suffix=f"/{experiment['id']}/clone"), headers=_headers(MEMBER)
-    )
-    assert prefill.status_code == 200, prefill.text
-    assert prefill.json()["versioning_details"] == details
+        return (
+            db.query(EvalExperiment).count(),
+            db.query(EvalExperimentJob).count(),
+        )
 
 
-def test_experiment_without_details_returns_empty(client, session_factory, env, conn):
-    res = _launch(client, env.id, conn.id)
+@pytest.mark.parametrize("dry_run", [False, True])
+@pytest.mark.parametrize(
+    "bad", [{"agent_version": "x"}, "x", ["a"], 3, True, {"": "x"}]
+)
+def test_non_empty_or_non_object_versioning_details_are_refused(
+    client, session_factory, env, conn, bad, dry_run
+):
+    """QA2-1 to QA2-3: 422 and the fixed text, nothing persisted."""
+    res = _launch(client, env.id, conn.id, versioning_details=bad, dry_run=dry_run)
+    assert res.status_code == 422, res.text
+    assert res.json()["detail"] == REFUSED
+    assert _counts(session_factory) == (0, 0)
+
+
+@pytest.mark.parametrize(
+    "extra", [{}, {"versioning_details": None}, {"versioning_details": {}}]
+)
+def test_null_empty_and_absent_versioning_details_are_accepted(
+    client, session_factory, env, conn, extra
+):
+    preview = _launch(client, env.id, conn.id, dry_run=True, **extra)
+    assert preview.status_code == 200, preview.text
+    config = preview.json()["jobs"][0]["request_body"]["evaluator"]["config"]
+    assert "versioning_details" not in config
+
+    res = _launch(client, env.id, conn.id, **extra)
     assert res.status_code == 200, res.text
     assert res.json()["versioning_details"] == {}
     with session_factory() as db:
         assert db.get(EvalExperiment, res.json()["id"]).versioning_details is None
 
 
-def test_invalid_experiment_details_are_refused(client, session_factory, env, conn):
-    for bad in (["a"], {"": "x"}, {f"k{i}": i for i in range(51)}):
-        res = _launch(client, env.id, conn.id, versioning_details=bad, dry_run=True)
-        assert res.status_code == 422, res.text
-        assert "versioning_details" in res.text
+def test_launch_sends_no_versioning_details_to_the_service(
+    client, session_factory, env, conn
+):
+    """QA2-4: not even to an environment whose schema declares the key."""
+    _give_evaluator_schema(session_factory, env.id)
+    res = _launch(client, env.id, conn.id)
+    assert res.status_code == 200, res.text
+    (body,) = _job_bodies(session_factory, res.json()["id"])
+    assert "versioning_details" not in body["evaluator"]["config"]
+
+
+def _legacy_experiment(session_factory, experiment_id):
+    """An experiment created before this change: it stored the user's keys."""
+    legacy = {"agent_version": "manual-1.0", "owner": "qa"}
     with session_factory() as db:
-        assert db.query(EvalExperiment).count() == 0
+        db.get(EvalExperiment, experiment_id).versioning_details = legacy
+        db.commit()
+    return legacy
+
+
+def test_clone_prefill_has_no_versioning_details(client, session_factory, env, conn):
+    """QA2-5: also for an experiment whose stored details are not empty."""
+    res = _launch(client, env.id, conn.id)
+    assert res.status_code == 200, res.text
+    experiment_id = res.json()["id"]
+    _legacy_experiment(session_factory, experiment_id)
+    prefill = client.post(
+        _url(suffix=f"/{experiment_id}/clone"), headers=_headers(MEMBER)
+    )
+    assert prefill.status_code == 200, prefill.text
+    assert "versioning_details" not in prefill.json()
+
+
+def test_legacy_experiment_stays_readable_and_retry_resends_the_stored_body(
+    client, session_factory, env, conn
+):
+    """QA2-6 and D-QB11: history is kept; retry never re-derives versioning."""
+    from qym_platform.db.models import EvalExperimentJob, EvalJobStatus
+
+    res = _launch(client, env.id, conn.id)
+    experiment_id = res.json()["id"]
+    legacy = _legacy_experiment(session_factory, experiment_id)
+    detail = client.get(_url(suffix=f"/{experiment_id}"), headers=_headers(MEMBER))
+    assert detail.json()["versioning_details"] == legacy
+    listed = client.get(_url(), headers=_headers(MEMBER)).json()
+    rows = (
+        listed
+        if isinstance(listed, list)
+        else next(v for v in listed.values() if isinstance(v, list))
+    )
+    assert [r["versioning_details"] for r in rows if r["id"] == experiment_id] == [
+        legacy
+    ]
+    with session_factory() as db:
+        job = db.query(EvalExperimentJob).filter_by(experiment_id=experiment_id).one()
+        job.status = EvalJobStatus.FAILED
+        job_id = job.id
+        db.commit()
+    retry = client.post(
+        _url(suffix=f"/{experiment_id}/jobs/{job_id}/retry"), headers=_headers(MEMBER)
+    )
+    assert retry.status_code == 200, retry.text
+    for body in _job_bodies(session_factory, experiment_id):
+        assert "versioning_details" not in body["evaluator"]["config"]
 
 
 # ------------------------------------------------------- guide v1.1 (B23)
@@ -108,31 +186,6 @@ def _job_bodies(session_factory, experiment_id):
                 experiment_id=experiment_id
             )
         ]
-
-
-def test_details_are_sent_to_environments_whose_schema_accepts_them(
-    client, session_factory, env, conn
-):
-    _give_evaluator_schema(session_factory, env.id)
-    details = {"agent_version": "v2", "kb": 381}
-    preview = _launch(client, env.id, conn.id, versioning_details=details, dry_run=True)
-    assert preview.status_code == 200, preview.text
-    sent = preview.json()["jobs"][0]["request_body"]["evaluator"]["config"]
-    assert sent["versioning_details"] == details
-
-    res = _launch(client, env.id, conn.id, versioning_details=details)
-    assert res.status_code == 200, res.text
-    (body,) = _job_bodies(session_factory, res.json()["id"])
-    assert body["evaluator"]["config"]["versioning_details"] == details
-
-
-def test_details_stay_platform_side_for_older_services(
-    client, session_factory, env, conn
-):
-    res = _launch(client, env.id, conn.id, versioning_details={"agent_version": "v2"})
-    assert res.status_code == 200, res.text
-    (body,) = _job_bodies(session_factory, res.json()["id"])
-    assert "versioning_details" not in body["evaluator"]["config"]
 
 
 def test_evaluator_config_is_validated_per_environment_schema(

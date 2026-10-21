@@ -37,28 +37,45 @@ def parse_origin_filter(raw: Optional[str]) -> Optional[RunOrigin]:
         ) from None
 
 
+def _ref(
+    job_id: str, experiment_id: str, name: Optional[str], latency: Any
+) -> Dict[str, Any]:
+    """The ``experiment`` reference of a run (``latency_sensitive`` is immutable)."""
+    return {
+        "id": experiment_id,
+        "name": name or "",
+        "job_id": job_id,
+        "latency_sensitive": bool(latency),
+    }
+
+
 def experiment_refs_for_jobs(
     db: Session, job_ids: Iterable[Optional[str]]
-) -> Dict[str, Dict[str, str]]:
-    """``{job_id: {"id", "name", "job_id"}}`` for the given jobs, in one query."""
+) -> Dict[str, Dict[str, Any]]:
+    """``{job_id: {"id", "name", "job_id", "latency_sensitive"}}``, in one query."""
     ids = {job_id for job_id in job_ids if job_id}
     if not ids:
         return {}
     rows = (
-        db.query(EvalExperimentJob.id, EvalExperiment.id, EvalExperiment.name)
+        db.query(
+            EvalExperimentJob.id,
+            EvalExperiment.id,
+            EvalExperiment.name,
+            EvalExperiment.latency_sensitive,
+        )
         .join(EvalExperiment, EvalExperiment.id == EvalExperimentJob.experiment_id)
         .filter(EvalExperimentJob.id.in_(ids))
         .all()
     )
     return {
-        job_id: {"id": experiment_id, "name": name or "", "job_id": job_id}
-        for job_id, experiment_id, name in rows
+        job_id: _ref(job_id, experiment_id, name, latency)
+        for job_id, experiment_id, name, latency in rows
     }
 
 
 def experiment_refs_and_versioning(
     db: Session, job_ids: Iterable[Optional[str]]
-) -> Tuple[Dict[str, Dict[str, str]], Dict[str, Dict[str, str]]]:
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, str]]]:
     """:func:`experiment_refs_for_jobs` plus each job's versioning, in one query."""
     from qym_platform.services.run_versioning import resolve_job_versioning
 
@@ -70,6 +87,7 @@ def experiment_refs_and_versioning(
             EvalExperimentJob.id,
             EvalExperiment.id,
             EvalExperiment.name,
+            EvalExperiment.latency_sensitive,
             EvalExperimentJob.remote_versioning,
             EvalExperimentJob.remote_status,
         )
@@ -78,17 +96,17 @@ def experiment_refs_and_versioning(
         .all()
     )
     refs = {
-        job_id: {"id": experiment_id, "name": name or "", "job_id": job_id}
-        for job_id, experiment_id, name, _, _ in rows
+        job_id: _ref(job_id, experiment_id, name, latency)
+        for job_id, experiment_id, name, latency, _, _ in rows
     }
     versioning = resolve_job_versioning(
-        db, ((job_id, stored, status) for job_id, _, _, stored, status in rows)
+        db, ((job_id, stored, status) for job_id, _, _, _, stored, status in rows)
     )
     return refs, versioning
 
 
 def run_origin_fields(
-    run: Any, experiments: Dict[str, Dict[str, str]]
+    run: Any, experiments: Dict[str, Dict[str, Any]]
 ) -> Dict[str, Any]:
     """The ``origin`` / ``experiment`` fields a run listing row carries."""
     origin = getattr(run.origin, "value", run.origin) or RunOrigin.LOCAL.value

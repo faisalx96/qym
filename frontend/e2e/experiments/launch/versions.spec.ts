@@ -1,6 +1,6 @@
 /**
- * Evaluation Service versions live on the home view (moved from the Models step): what a run started
- * now would record, per selected environment, with Refresh; the wizard only recaps them in the review.
+ * Evaluation Service versions live on the home view and on Customize step 1 (read only): what a run started
+ * now would record, per selected environment, with Refresh; the review recaps them. The QA-B specs are qa-b-versions.spec.ts.
  */
 import { expect, type Page } from '@playwright/test';
 import {
@@ -70,13 +70,15 @@ test.describe('versions on the home view', () => {
     await expect(card(page)).toContainText('agent-9.9.9');
   });
 
-  test('"Add versioning details" opens step 1; the Models step has no versions block; the review recaps them', async ({
+  test('no "Add versioning details" button; the Models step has no versions block; the review recaps them', async ({
     page,
   }) => {
     await openHome(page, f.project.slug, `?env=${f.env.id}`);
-    await card(page).getByRole('button', { name: 'Add versioning details' }).click();
+    await expect(card(page).getByRole('button')).toHaveText(['Refresh']);
+    await expect(page.getByText('Add versioning details')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Customize' }).click();
     await expect(page).toHaveURL(/step=where/);
-    await expect(page.getByLabel('Versioning details')).toBeVisible();
+    await expect(page.getByLabel('Versioning details')).toHaveCount(0);
     await goStep(page, 'models');
     await expect(card(page)).toHaveCount(0);
     await expect(page.getByText('Current versions')).toHaveCount(0);
