@@ -3,7 +3,7 @@
  * edits on drafts with the Text/JSON contract and sends only touched fields;
  * Prev/Next follow the list order (search/sort/label) via /neighbors.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBlocker } from 'react-router-dom';
 import {
@@ -36,6 +36,7 @@ import { DisabledBanner, EnableButton, useItemStateActions } from '../components
 import { FieldEditor } from '../components/FieldEditor';
 import { useItemEditor } from './useItemEditor';
 import { formatDate, relativeTime } from '../lib/itemValue';
+import { metaFiltersToParams, metaModesToParams, parseMetaFilters } from '../lib/metaFilter';
 import { ITEM_TABS, datasetPath, parseDatasetRoute, type ItemTab } from '../lib/route';
 import { ItemHistoryTab } from './ItemHistoryTab';
 import { ItemRunsTab } from './ItemRunsTab';
@@ -57,6 +58,12 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
   const toast = useToast();
   const visible = dataset.items_visible;
   const itemQuery = useDatasetItem(slug, dataset.slug, version.version, itemId, visible);
+  const metaFilters = useMemo(
+    () => parseMetaFilters(route.meta, route.metaMode),
+    [route.meta, route.metaMode],
+  );
+  const metaParams = useMemo(() => metaFiltersToParams(metaFilters), [metaFilters]);
+  const metaModes = useMemo(() => metaModesToParams(metaFilters), [metaFilters]);
   const neighbors = useItemNeighbors(
     slug,
     dataset.slug,
@@ -68,7 +75,8 @@ export function ItemPage({ slug, dataset, versions, version, itemId, readOnly }:
       label: route.label || undefined,
       // a disabled item opened under the Active list still finds its neighbours in the full list
       state: route.state === 'all' || itemQuery.data?.state === 'disabled' ? undefined : route.state,
-      meta: route.meta.length ? route.meta : undefined,
+      meta: metaParams.length ? metaParams : undefined,
+      meta_mode: metaModes.length ? metaModes : undefined,
     },
     visible && Boolean(itemQuery.data),
   );

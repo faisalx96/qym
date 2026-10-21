@@ -104,6 +104,7 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
         to={to}
         className={cls}
         data-interactive=""
+        data-link="block"
         aria-current={isSelected ? 'true' : undefined}
         {...data}
         {...rest}
@@ -119,6 +120,7 @@ export const Card = forwardRef<HTMLElement, CardProps>(function Card(
         href={href}
         className={cls}
         data-interactive=""
+        data-link="block"
         aria-current={isSelected ? 'true' : undefined}
         {...data}
         {...rest}

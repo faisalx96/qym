@@ -44,6 +44,7 @@ import {
   addMetaFilter,
   metaChipLabel,
   metaFiltersToParams,
+  metaModesToParams,
   parseMetaFilters,
   removeMetaFilter,
   type MetaFilter,
@@ -106,8 +107,12 @@ export function ItemsTab({
   const isDraft = version.status === 'draft';
   const canEdit = isDraft && !readOnly;
   const visible = dataset.items_visible;
-  const metaFilters = useMemo(() => parseMetaFilters(route.meta), [route.meta]);
+  const metaFilters = useMemo(
+    () => parseMetaFilters(route.meta, route.metaMode),
+    [route.meta, route.metaMode],
+  );
   const metaParams = useMemo(() => metaFiltersToParams(metaFilters), [metaFilters]);
+  const metaModes = useMemo(() => metaModesToParams(metaFilters), [metaFilters]);
 
   // Debounced server search mirrored to ?search= (page reset).
   useEffect(() => {
@@ -140,6 +145,7 @@ export function ItemsTab({
       label: route.label || undefined,
       state: route.state === 'active' ? undefined : route.state,
       meta: metaParams.length ? metaParams : undefined,
+      meta_mode: metaModes.length ? metaModes : undefined,
     },
     visible,
   );
@@ -165,6 +171,7 @@ export function ItemsTab({
           label: route.label || undefined,
           state: route.state === 'active' ? undefined : route.state,
           meta: metaParams.length ? metaParams : undefined,
+          meta_mode: metaModes.length ? metaModes : undefined,
         },
         query.data.total,
       );
@@ -174,13 +181,36 @@ export function ItemsTab({
     }
   }
 
-  function setMeta(next: MetaFilter[]) {
+  // QA1-29: after Add filter focus lands on the new chip, after a removal on the Metadata button. The popover
+  // returns focus to its trigger when it closes (in a later frame), so the move runs again after that.
+  const pendingFocus = useRef<string | null>(null);
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (target === null) return;
+    pendingFocus.current = null;
+    const move = () => {
+      const el =
+        target === ''
+          ? document.querySelector<HTMLElement>('[data-testid="metadata-filter"]')
+          : document.querySelector<HTMLElement>(
+              `[data-testid="meta-chip"][data-meta-path="${CSS.escape(target)}"]`,
+            );
+      if (el && document.activeElement !== el) el.focus();
+    };
+    // not cancelled by a re-render: the route object (and so metaFilters) is new on every render
+    for (const delay of [0, 80, 200]) setTimeout(move, delay);
+  }, [metaFilters]);
+
+  function setMeta(next: MetaFilter[], focusPath = '') {
+    pendingFocus.current = focusPath;
     onFilterChange?.();
     setParams(
       (prev) => {
         const params = new URLSearchParams(prev);
         params.delete('meta');
+        params.delete('meta_mode');
         for (const value of metaFiltersToParams(next)) params.append('meta', value);
+        for (const value of metaModesToParams(next)) params.append('meta_mode', value);
         params.delete('page');
         return params;
       },
@@ -194,7 +224,7 @@ export function ItemsTab({
     setParams(
       (prev) => {
         const params = new URLSearchParams(prev);
-        for (const key of ['search', 'label', 'meta', 'page']) params.delete(key);
+        for (const key of ['search', 'label', 'meta', 'meta_mode', 'page']) params.delete(key);
         return params;
       },
       { replace: true },
@@ -511,7 +541,7 @@ export function ItemsTab({
                 datasetRef={dataset.slug}
                 version={version.version}
                 filters={metaFilters}
-                onAdd={(f) => setMeta(addMetaFilter(metaFilters, f))}
+                onAdd={(f) => setMeta(addMetaFilter(metaFilters, f), f.path)}
               />
               <span data-testid="items-state">
                 <SegmentedControl<StateFilter>
@@ -559,6 +589,7 @@ export function ItemsTab({
                     onRemove={() => setMeta(removeMetaFilter(metaFilters, f))}
                     removeLabel={`Remove filter ${metaChipLabel(f)}`}
                     data-testid="meta-chip"
+                    data-meta-path={f.path}
                   >
                     {metaChipLabel(f)}
                   </Chip>

@@ -68,7 +68,11 @@ a {
   text-decoration: none;
 }
 
-a:hover {
+/* An underline on hover is for running text. A link that is a box (a card, a boxed button, a link with tags) opts out
+   with data-link="block" and keeps its own hover treatment (QD13). :where() keeps the selector at the old specificity
+   (0,1,1), so a component's own `.x:hover { text-decoration: none }` still wins (a bare :not([data-link]) would add 0,1,0
+   and silently beat every one of them). */
+a:hover:where(:not([data-link='block'])) {
   text-decoration: underline;
 }
 

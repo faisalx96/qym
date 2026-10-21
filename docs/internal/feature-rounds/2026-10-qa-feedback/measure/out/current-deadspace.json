@@ -1,0 +1,95 @@
+{
+  "390": {
+    "ds-general": {
+      "cardTop": 373.8,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": null,
+      "descH": null
+    },
+    "ds-visibility": {
+      "cardTop": 834.8,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": false,
+      "descH": 90
+    },
+    "ds-access": {
+      "cardTop": 1109.1,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": null,
+      "descH": null
+    },
+    "ds-danger": {
+      "cardTop": 1599.1,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": false,
+      "descH": 90
+    },
+    "labelAbove": true
+  },
+  "1024": {
+    "ds-general": {
+      "cardTop": 247,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": null,
+      "descH": null
+    },
+    "ds-visibility": {
+      "cardTop": 708,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": true,
+      "descH": 18
+    },
+    "ds-access": {
+      "cardTop": 910.3,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": null,
+      "descH": null
+    },
+    "ds-danger": {
+      "cardTop": 1297.4,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": true,
+      "descH": 18
+    },
+    "labelAbove": true
+  },
+  "1440": {
+    "ds-general": {
+      "cardTop": 205.4,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": null,
+      "descH": null
+    },
+    "ds-visibility": {
+      "cardTop": 666.5,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": true,
+      "descH": 18
+    },
+    "ds-access": {
+      "cardTop": 868.8,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": null,
+      "descH": null
+    },
+    "ds-danger": {
+      "cardTop": 1255.8,
+      "titleTop": 84,
+      "titleH": 22.5,
+      "descTruncated": true,
+      "descH": 18
+    },
+    "labelAbove": true
+  }
+}

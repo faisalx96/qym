@@ -657,7 +657,10 @@ def test_run_on_a_restricted_dataset_is_listed_but_item_contents_are_redacted(wo
     # F1: the placeholder names the right cause, in the table rows and in the details.
     from qym_platform.permissions import DATASET_ACCESS_PLACEHOLDER
 
-    assert DATASET_ACCESS_PLACEHOLDER == "Hidden: you don\u2019t have access to this dataset\u2019s items."
+    assert (
+        DATASET_ACCESS_PLACEHOLDER
+        == "Hidden: you don\u2019t have access to this dataset\u2019s items."
+    )
     assert details.json()["rows"][0]["input"] == DATASET_ACCESS_PLACEHOLDER
     assert DATASET_ACCESS_PLACEHOLDER in data.text
     assert "private test set" not in data.text.lower()
@@ -854,3 +857,66 @@ def test_launching_is_not_gated_by_dataset_access(world):
     with factory() as db:
         dataset = db.query(Dataset).filter(Dataset.slug == "qa").one()
         assert dataset.access_mode == "restricted" and dataset.project_id == "pa"
+
+
+# --------------------------------------------------------------- the Access tab payload (QA5-73 to QA5-76)
+
+
+def test_grant_added_by_and_date_are_stable_across_later_puts(world):
+    """QA5-74: a level change keeps ``created_at`` and ``granted_by``; a new grant gets the caller and now."""
+    client, factory, _ = world
+    _upload(client, MGR)
+    first = _restrict(client, [("mem", "view")])["grants"][0]
+    assert first["granted_by"]["id"] == "mgr" and first["created_at"]
+    again = _put(
+        client, ADMIN, "restricted", [("mem", "modify"), ("mem2", "view")]
+    ).json()
+    by_user = {g["user"]["id"]: g for g in again["grants"]}
+    assert by_user["mem"]["level"] == "modify"
+    assert by_user["mem"]["created_at"] == first["created_at"]
+    assert by_user["mem"]["granted_by"]["id"] == "mgr"
+    assert by_user["mem2"]["granted_by"]["id"] == "admin"
+    assert [g["user"]["id"] for g in again["grants"]][
+        0
+    ] == "mem"  # created_at ascending
+
+
+def test_granted_by_is_null_after_the_granting_user_is_gone(world):
+    """QA5-75: the payload carries ``granted_by: null``; the UI reads it as Unknown user."""
+    client, factory, _ = world
+    _upload(client, MGR)
+    _restrict(client, [("mem", "view")])
+    with factory() as db:
+        db.query(DatasetGrant).update({DatasetGrant.granted_by_user_id: None})
+        db.commit()
+    grant = _access(client, MGR).json()["grants"][0]
+    assert grant["granted_by"] is None and grant["created_at"]
+    assert (
+        DatasetGrant.__table__.c.granted_by_user_id.foreign_keys.pop().ondelete
+        == "SET NULL"
+    )
+
+
+def test_catalog_and_detail_carry_mode_and_grant_count(world):
+    """QA5-76: the tab count comes from the dataset payload."""
+    client, _, _ = world
+    _upload(client, MGR)
+    _restrict(client, [("mem", "view"), ("mem2", "modify")])
+    detail = client.get("/v1/datasets/qa", params=PARAMS, headers=MGR).json()["dataset"]
+    assert detail["access_mode"] == "restricted" and detail["grant_count"] == 2
+    listed = client.get("/v1/datasets", params=PARAMS, headers=MGR).json()["datasets"]
+    assert [
+        (d["access_mode"], d["grant_count"]) for d in listed if d["slug"] == "qa"
+    ] == [("restricted", 2)]
+
+
+def test_put_without_manage_keeps_its_text(world):
+    """QA5-77."""
+    client, _, _ = world
+    _upload(client, MGR)
+    denied = _put(client, MEM, "restricted", [])
+    assert denied.status_code == 403
+    assert (
+        denied.json()["detail"]
+        == "Only project managers and admins can change dataset access"
+    )

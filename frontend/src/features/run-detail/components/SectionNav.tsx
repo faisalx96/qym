@@ -140,6 +140,7 @@ export function SectionNav({ onSection }: SectionNavProps) {
       key={id}
       href={`#run-section-${id}`}
       className={styles.link}
+      data-link="block"
       aria-current={active === id ? 'location' : undefined}
       data-section={id}
       data-tone={opts.danger ? 'danger' : undefined}

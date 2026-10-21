@@ -6,6 +6,7 @@ import { Round4Mocks } from './Round4Mocks';
 import { Round5Mocks } from './Round5Mocks';
 import { Round7Mocks } from './Round7Mocks';
 import { DatasetAccessMocks } from './DatasetAccessMocks';
+import { QaDatasetsMocks } from './QaDatasetsMocks';
 import { EvalFlagsMocks } from './EvalFlagsMocks';
 import { QaExperimentsMocks } from './QaExperimentsMocks';
 import type { Key } from 'react-aria-components';
@@ -921,6 +922,7 @@ export default function UiGalleryPage() {
       <Round5Mocks Section={Section} Case={Case} />
       <Round7Mocks Section={Section} Case={Case} />
       <DatasetAccessMocks Section={Section} Case={Case} />
+      <QaDatasetsMocks Section={Section} Case={Case} />
       {/* After the round mocks so the hash anchors above keep their offsets. */}
       <Section id="radio-group" title="RadioGroup">
         <Case label="RadioGroup">

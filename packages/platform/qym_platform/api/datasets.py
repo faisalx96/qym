@@ -65,6 +65,7 @@ from qym_platform.permissions import (
 from qym_platform.services.dataset_read_tokens import HEADER as DATASET_READ_TOKEN_HEADER
 from qym_platform.services.dataset_read_tokens import token_grants_project
 from qym_platform.services.dataset_meta import (
+    MetaFilter,
     apply_meta_filters,
     meta_pairs_from_mapping,
     metadata_facets,
@@ -2753,7 +2754,7 @@ def _filtered_items_query(
     search: Optional[str],
     label: Optional[str],
     state: str = "all",
-    meta: Optional[list[tuple[str, str]]] = None,
+    meta: Optional[list[MetaFilter]] = None,
 ):
     """Items of ``version`` matching the list criteria; ``state`` is ``active``,
     ``disabled`` or ``all`` (the default for internal callers)."""
@@ -2844,6 +2845,10 @@ def list_items(
     label: Optional[str] = Query(default=None),
     state: str = Query(default="active", description="active (default), disabled or all."),
     meta: list[str] = Query(default_factory=list, description="Repeatable path:value metadata filter."),
+    meta_mode: list[str] = Query(
+        default_factory=list,
+        description="Repeatable path:any or path:all; how the values of one meta path combine (default all). Partial = any, full match = all.",
+    ),
     include_context: bool = Query(
         default=True,
         description="Include the dataset and version payloads. The dashboard passes false: it already has them.",
@@ -2858,7 +2863,7 @@ def list_items(
     _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
     _check_state(state)
-    meta_pairs = parse_meta_params(meta)
+    meta_pairs = parse_meta_params(meta, meta_mode)
     query = _filtered_items_query(db, version, search, label, state, meta_pairs)
 
     sort_raw = sort or "index_asc"
@@ -3331,7 +3336,7 @@ def batch_items(
                 "filter": {
                     "search": search,
                     "label": label,
-                    "meta": dict(meta_pairs),
+                    "meta": dict(criteria.meta or {}),
                     "item_ids": len(item_ids),
                     "state": criteria.state,
                 },
@@ -3778,6 +3783,10 @@ def item_neighbors(
     label: Optional[str] = Query(default=None),
     state: str = Query(default="all", description="active, disabled or all (default), as on the list."),
     meta: list[str] = Query(default_factory=list, description="Repeatable path:value metadata filter."),
+    meta_mode: list[str] = Query(
+        default_factory=list,
+        description="Repeatable path:any or path:all; how the values of one meta path combine (default all). Partial = any, full match = all.",
+    ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
@@ -3787,7 +3796,7 @@ def item_neighbors(
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _check_state(state)
-    query = _filtered_items_query(db, version, search, label, state, parse_meta_params(meta))
+    query = _filtered_items_query(db, version, search, label, state, parse_meta_params(meta, meta_mode))
     sort_key = (sort or "index_asc").lower()
     if sort_key.startswith(_COMPUTED_SORT_PREFIXES):
         ordered_ids = _computed_sort_ids(db, version, query, sort or "index_asc")
@@ -4512,6 +4521,10 @@ def download_version(
     project_slug: Optional[str] = Query(default=None),
     include_disabled: bool = Query(default=False, description="Also write disabled items."),
     meta: list[str] = Query(default_factory=list, description="Repeatable path:value metadata filter."),
+    meta_mode: list[str] = Query(
+        default_factory=list,
+        description="Repeatable path:any or path:all; how the values of one meta path combine (default all). Partial = any, full match = all.",
+    ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
     read_token: Optional[str] = Header(default=None, alias=DATASET_READ_TOKEN_HEADER),
@@ -4521,7 +4534,7 @@ def download_version(
     dataset = _get_dataset(db, project, dataset_ref, principal, read_token=read_token)
     _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
-    meta_pairs = parse_meta_params(meta)
+    meta_pairs = parse_meta_params(meta, meta_mode)
     filename = f"{dataset.slug}-{version.version}.jsonl"
     fallback = f"{_ascii_name(dataset.slug, 'dataset')}-{_ascii_name(version.version, 'version')}.jsonl"
     session_factory = sessionmaker(bind=db.get_bind(), autoflush=False)
@@ -4543,7 +4556,7 @@ def _jsonl_chunks(
     version_id: str,
     *,
     include_disabled: bool = True,
-    meta: Optional[list[tuple[str, str]]] = None,
+    meta: Optional[list[MetaFilter]] = None,
 ) -> Iterator[bytes]:
     """The version's JSONL, one chunk per batch of items, in index order.
 

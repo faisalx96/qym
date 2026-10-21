@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Tab, TabList, TabPanel as AriaTabPanel, Tabs as AriaTabs, type Key } from 'react-aria-components';
 import styles from './Tabs.module.css';
 
@@ -34,6 +34,29 @@ export function Tabs({
   className,
   orientation = 'horizontal',
 }: TabsProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+  // A strip wider than its column (five dataset tabs at 279 px) scrolls: the selected tab is kept in view. Counts and the
+  // webfont arrive after the first paint and widen the tabs, so the check runs again whenever a tab or the strip resizes
+  // (never on a scroll: a reader who scrolls the strip by hand is left alone).
+  const shape = items.map((i) => `${i.id}:${i.count ?? ''}`).join('|');
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || orientation !== 'horizontal') return undefined;
+    const keepInView = () => {
+      const tab = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      if (!tab || list.scrollWidth <= list.clientWidth) return;
+      const box = list.getBoundingClientRect();
+      const at = tab.getBoundingClientRect();
+      if (at.left < box.left) list.scrollLeft += at.left - box.left - 8;
+      else if (at.right > box.right) list.scrollLeft += at.right - box.right + 8;
+    };
+    keepInView();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(keepInView);
+    observer.observe(list);
+    list.querySelectorAll('[role="tab"]').forEach((tab) => observer.observe(tab));
+    return () => observer.disconnect();
+  }, [selected, orientation, shape]);
   return (
     <AriaTabs
       selectedKey={selected}
@@ -43,7 +66,7 @@ export function Tabs({
       className={[styles.tabs, className].filter(Boolean).join(' ')}
       data-variant={variant}
     >
-      <TabList aria-label={label} className={styles.list}>
+      <TabList ref={listRef} aria-label={label} className={styles.list}>
         {items.map((item) => (
           <Tab key={item.id} id={item.id} className={styles.tab} data-tone={item.tone}>
             <span>{item.label}</span>

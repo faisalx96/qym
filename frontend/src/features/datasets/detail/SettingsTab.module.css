@@ -1,15 +1,36 @@
-/* Settings cards: composes SectionHeader/TextField/Textarea/Chip/Button. */
+/* Settings: a container-query grid (form column + 360 px side column from 900 px), cards with the header slot.
+   Spec QA5-1 to QA5-16; the recipe is features/dev/QaDatasetsMocks.module.css. */
 .wrap {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  max-width: 760px;
+  container-type: inline-size;
 }
 
-.stack {
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+}
+
+@container (min-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    align-items: start;
+  }
+}
+
+.side {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+}
+
+.fields > :last-child > div {
+  border-block-end: 0;
 }
 
 .tags {
@@ -22,4 +43,37 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
+}
+
+.footRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.cardHeadText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.cardHeadText h2,
+.cardHeadText p {
+  margin: 0;
+}
+
+.cardHeadAside {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
 }

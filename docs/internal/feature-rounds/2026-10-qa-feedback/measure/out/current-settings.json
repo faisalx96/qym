@@ -1,0 +1,1318 @@
+{
+  "project-1440": {
+    "panelW": 1193,
+    "wrapW": 760,
+    "emptyRight": 433,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 760,
+        "h": 447.1,
+        "y": 205.4
+      },
+      {
+        "id": "ds-visibility",
+        "w": 760,
+        "h": 188.3,
+        "y": 666.5
+      },
+      {
+        "id": "ds-access",
+        "w": 760,
+        "h": 373,
+        "y": 868.8
+      },
+      {
+        "id": "ds-danger",
+        "w": 760,
+        "h": 195.5,
+        "y": 1255.8
+      }
+    ],
+    "gaps": [
+      14,
+      14,
+      14
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 718,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 718,
+        "x": 21
+      }
+    ],
+    "ths": [],
+    "rowH": null,
+    "mode": {
+      "w": 718,
+      "h": 115.2
+    },
+    "people": null,
+    "table": null,
+    "add": null,
+    "saveBar": {
+      "w": 718,
+      "h": 33
+    },
+    "tablist": {
+      "w": 1193,
+      "h": 34
+    }
+  },
+  "restricted12-1440": {
+    "panelW": 1193,
+    "wrapW": 760,
+    "emptyRight": 433,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 760,
+        "h": 447.1,
+        "y": 205.4
+      },
+      {
+        "id": "ds-visibility",
+        "w": 760,
+        "h": 188.3,
+        "y": 666.5
+      },
+      {
+        "id": "ds-access",
+        "w": 760,
+        "h": 978.8,
+        "y": 868.8
+      },
+      {
+        "id": "ds-danger",
+        "w": 760,
+        "h": 195.5,
+        "y": 1861.6
+      }
+    ],
+    "gaps": [
+      14,
+      14,
+      14
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 718,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 718,
+        "x": 21
+      }
+    ],
+    "ths": [
+      {
+        "t": "Person",
+        "w": 360
+      },
+      {
+        "t": "Level",
+        "w": 160
+      },
+      {
+        "t": "Added by",
+        "w": 150
+      },
+      {
+        "t": "Remove",
+        "w": 48
+      }
+    ],
+    "rowH": 40,
+    "mode": {
+      "w": 718,
+      "h": 115.2
+    },
+    "people": {
+      "w": 718,
+      "h": 591.8
+    },
+    "table": {
+      "w": 718,
+      "h": 514
+    },
+    "add": {
+      "w": 718,
+      "h": 43.4
+    },
+    "saveBar": {
+      "w": 718,
+      "h": 33
+    },
+    "tablist": {
+      "w": 1193,
+      "h": 34
+    }
+  },
+  "restricted0-1440": {
+    "panelW": 1193,
+    "wrapW": 760,
+    "emptyRight": 433,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 760,
+        "h": 413.1,
+        "y": 205.4
+      },
+      {
+        "id": "ds-visibility",
+        "w": 760,
+        "h": 188.3,
+        "y": 632.5
+      },
+      {
+        "id": "ds-access",
+        "w": 760,
+        "h": 520.3,
+        "y": 834.8
+      },
+      {
+        "id": "ds-danger",
+        "w": 760,
+        "h": 195.5,
+        "y": 1369.1
+      }
+    ],
+    "gaps": [
+      14,
+      14,
+      14
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 718,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 718,
+        "x": 21
+      }
+    ],
+    "ths": [],
+    "rowH": null,
+    "mode": {
+      "w": 718,
+      "h": 115.2
+    },
+    "people": {
+      "w": 718,
+      "h": 133.3
+    },
+    "table": null,
+    "add": {
+      "w": 718,
+      "h": 43.4
+    },
+    "saveBar": {
+      "w": 718,
+      "h": 33
+    },
+    "tablist": {
+      "w": 1193,
+      "h": 34
+    }
+  },
+  "restricted1-1440": {
+    "panelW": 1193,
+    "wrapW": 760,
+    "emptyRight": 433,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 760,
+        "h": 413.1,
+        "y": 205.4
+      },
+      {
+        "id": "ds-visibility",
+        "w": 760,
+        "h": 188.3,
+        "y": 632.5
+      },
+      {
+        "id": "ds-access",
+        "w": 760,
+        "h": 538.8,
+        "y": 834.8
+      },
+      {
+        "id": "ds-danger",
+        "w": 760,
+        "h": 195.5,
+        "y": 1387.6
+      }
+    ],
+    "gaps": [
+      14,
+      14,
+      14
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 718,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 718,
+        "x": 21
+      }
+    ],
+    "ths": [
+      {
+        "t": "Person",
+        "w": 360
+      },
+      {
+        "t": "Level",
+        "w": 160
+      },
+      {
+        "t": "Added by",
+        "w": 150
+      },
+      {
+        "t": "Remove",
+        "w": 48
+      }
+    ],
+    "rowH": 40,
+    "mode": {
+      "w": 718,
+      "h": 115.2
+    },
+    "people": {
+      "w": 718,
+      "h": 151.8
+    },
+    "table": {
+      "w": 718,
+      "h": 74
+    },
+    "add": {
+      "w": 718,
+      "h": 43.4
+    },
+    "saveBar": {
+      "w": 718,
+      "h": 33
+    },
+    "tablist": {
+      "w": 1193,
+      "h": 34
+    }
+  },
+  "project-1024": {
+    "panelW": 777,
+    "wrapW": 760,
+    "emptyRight": 17,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 760,
+        "h": 447.1,
+        "y": 247
+      },
+      {
+        "id": "ds-visibility",
+        "w": 760,
+        "h": 188.3,
+        "y": 708
+      },
+      {
+        "id": "ds-access",
+        "w": 760,
+        "h": 373,
+        "y": 910.3
+      },
+      {
+        "id": "ds-danger",
+        "w": 760,
+        "h": 195.5,
+        "y": 1297.4
+      }
+    ],
+    "gaps": [
+      13.9,
+      14,
+      14.1
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 718,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 718,
+        "x": 21
+      }
+    ],
+    "ths": [],
+    "rowH": null,
+    "mode": {
+      "w": 718,
+      "h": 115.2
+    },
+    "people": null,
+    "table": null,
+    "add": null,
+    "saveBar": {
+      "w": 718,
+      "h": 33
+    },
+    "tablist": {
+      "w": 777,
+      "h": 34
+    }
+  },
+  "restricted12-1024": {
+    "panelW": 777,
+    "wrapW": 760,
+    "emptyRight": 17,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 760,
+        "h": 447.1,
+        "y": 247
+      },
+      {
+        "id": "ds-visibility",
+        "w": 760,
+        "h": 188.3,
+        "y": 708
+      },
+      {
+        "id": "ds-access",
+        "w": 760,
+        "h": 978.8,
+        "y": 910.3
+      },
+      {
+        "id": "ds-danger",
+        "w": 760,
+        "h": 195.5,
+        "y": 1903.2
+      }
+    ],
+    "gaps": [
+      13.9,
+      14,
+      14.1
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 718,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 718,
+        "x": 21
+      }
+    ],
+    "ths": [
+      {
+        "t": "Person",
+        "w": 360
+      },
+      {
+        "t": "Level",
+        "w": 160
+      },
+      {
+        "t": "Added by",
+        "w": 150
+      },
+      {
+        "t": "Remove",
+        "w": 48
+      }
+    ],
+    "rowH": 40,
+    "mode": {
+      "w": 718,
+      "h": 115.2
+    },
+    "people": {
+      "w": 718,
+      "h": 591.8
+    },
+    "table": {
+      "w": 718,
+      "h": 514
+    },
+    "add": {
+      "w": 718,
+      "h": 43.4
+    },
+    "saveBar": {
+      "w": 718,
+      "h": 33
+    },
+    "tablist": {
+      "w": 777,
+      "h": 34
+    }
+  },
+  "restricted0-1024": {
+    "panelW": 777,
+    "wrapW": 760,
+    "emptyRight": 17,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 760,
+        "h": 413.1,
+        "y": 247
+      },
+      {
+        "id": "ds-visibility",
+        "w": 760,
+        "h": 188.3,
+        "y": 674
+      },
+      {
+        "id": "ds-access",
+        "w": 760,
+        "h": 520.3,
+        "y": 876.3
+      },
+      {
+        "id": "ds-danger",
+        "w": 760,
+        "h": 195.5,
+        "y": 1410.7
+      }
+    ],
+    "gaps": [
+      13.9,
+      14,
+      14.1
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 718,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 718,
+        "x": 21
+      }
+    ],
+    "ths": [],
+    "rowH": null,
+    "mode": {
+      "w": 718,
+      "h": 115.2
+    },
+    "people": {
+      "w": 718,
+      "h": 133.3
+    },
+    "table": null,
+    "add": {
+      "w": 718,
+      "h": 43.4
+    },
+    "saveBar": {
+      "w": 718,
+      "h": 33
+    },
+    "tablist": {
+      "w": 777,
+      "h": 34
+    }
+  },
+  "restricted1-1024": {
+    "panelW": 777,
+    "wrapW": 760,
+    "emptyRight": 17,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 760,
+        "h": 413.1,
+        "y": 247
+      },
+      {
+        "id": "ds-visibility",
+        "w": 760,
+        "h": 188.3,
+        "y": 674
+      },
+      {
+        "id": "ds-access",
+        "w": 760,
+        "h": 538.8,
+        "y": 876.3
+      },
+      {
+        "id": "ds-danger",
+        "w": 760,
+        "h": 195.5,
+        "y": 1429.2
+      }
+    ],
+    "gaps": [
+      13.9,
+      14,
+      14.1
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 718,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 718,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 718,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 718,
+        "x": 21
+      }
+    ],
+    "ths": [
+      {
+        "t": "Person",
+        "w": 360
+      },
+      {
+        "t": "Level",
+        "w": 160
+      },
+      {
+        "t": "Added by",
+        "w": 150
+      },
+      {
+        "t": "Remove",
+        "w": 48
+      }
+    ],
+    "rowH": 40,
+    "mode": {
+      "w": 718,
+      "h": 115.2
+    },
+    "people": {
+      "w": 718,
+      "h": 151.8
+    },
+    "table": {
+      "w": 718,
+      "h": 74
+    },
+    "add": {
+      "w": 718,
+      "h": 43.4
+    },
+    "saveBar": {
+      "w": 718,
+      "h": 33
+    },
+    "tablist": {
+      "w": 777,
+      "h": 34
+    }
+  },
+  "project-390": {
+    "panelW": 279,
+    "wrapW": 279,
+    "emptyRight": 0,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 279,
+        "h": 447.1,
+        "y": 373.8
+      },
+      {
+        "id": "ds-visibility",
+        "w": 279,
+        "h": 260.3,
+        "y": 834.8
+      },
+      {
+        "id": "ds-access",
+        "w": 279,
+        "h": 476,
+        "y": 1109.1
+      },
+      {
+        "id": "ds-danger",
+        "w": 279,
+        "h": 267.5,
+        "y": 1599.1
+      }
+    ],
+    "gaps": [
+      13.9,
+      14,
+      14
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 237,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 237,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 237,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 237,
+        "x": 21
+      }
+    ],
+    "ths": [],
+    "rowH": null,
+    "mode": {
+      "w": 237,
+      "h": 161.3
+    },
+    "people": null,
+    "table": null,
+    "add": null,
+    "saveBar": {
+      "w": 237,
+      "h": 56.4
+    },
+    "tablist": {
+      "w": 279,
+      "h": 34
+    }
+  },
+  "restricted12-390": {
+    "panelW": 279,
+    "wrapW": 279,
+    "emptyRight": 0,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 279,
+        "h": 447.1,
+        "y": 401.8
+      },
+      {
+        "id": "ds-visibility",
+        "w": 279,
+        "h": 260.3,
+        "y": 862.8
+      },
+      {
+        "id": "ds-access",
+        "w": 279,
+        "h": 2183.6,
+        "y": 1137.1
+      },
+      {
+        "id": "ds-danger",
+        "w": 279,
+        "h": 267.5,
+        "y": 3334.7
+      }
+    ],
+    "gaps": [
+      13.9,
+      14,
+      14
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 237,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 237,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 237,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 237,
+        "x": 21
+      }
+    ],
+    "ths": [],
+    "rowH": null,
+    "mode": {
+      "w": 237,
+      "h": 161.3
+    },
+    "people": {
+      "w": 237,
+      "h": 1693.6
+    },
+    "table": {
+      "w": 237,
+      "h": 1583.8
+    },
+    "add": {
+      "w": 237,
+      "h": 75.4
+    },
+    "saveBar": {
+      "w": 237,
+      "h": 56.4
+    },
+    "tablist": {
+      "w": 279,
+      "h": 34
+    }
+  },
+  "restricted0-390": {
+    "panelW": 279,
+    "wrapW": 279,
+    "emptyRight": 0,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 279,
+        "h": 413.1,
+        "y": 401.8
+      },
+      {
+        "id": "ds-visibility",
+        "w": 279,
+        "h": 260.3,
+        "y": 828.8
+      },
+      {
+        "id": "ds-access",
+        "w": 279,
+        "h": 691.3,
+        "y": 1103.1
+      },
+      {
+        "id": "ds-danger",
+        "w": 279,
+        "h": 267.5,
+        "y": 1808.4
+      }
+    ],
+    "gaps": [
+      13.9,
+      14,
+      14
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 237,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 237,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 237,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 237,
+        "x": 21
+      }
+    ],
+    "ths": [],
+    "rowH": null,
+    "mode": {
+      "w": 237,
+      "h": 161.3
+    },
+    "people": {
+      "w": 237,
+      "h": 201.3
+    },
+    "table": null,
+    "add": {
+      "w": 237,
+      "h": 75.4
+    },
+    "saveBar": {
+      "w": 237,
+      "h": 56.4
+    },
+    "tablist": {
+      "w": 279,
+      "h": 34
+    }
+  },
+  "restricted1-390": {
+    "panelW": 279,
+    "wrapW": 279,
+    "emptyRight": 0,
+    "docH": 900,
+    "cards": [
+      {
+        "id": "ds-general",
+        "w": 279,
+        "h": 413.1,
+        "y": 432.2
+      },
+      {
+        "id": "ds-visibility",
+        "w": 279,
+        "h": 260.3,
+        "y": 859.2
+      },
+      {
+        "id": "ds-access",
+        "w": 279,
+        "h": 731.8,
+        "y": 1133.5
+      },
+      {
+        "id": "ds-danger",
+        "w": 279,
+        "h": 267.5,
+        "y": 1879.3
+      }
+    ],
+    "gaps": [
+      13.9,
+      14,
+      14
+    ],
+    "inputs": [
+      {
+        "name": "Name*",
+        "w": 237,
+        "h": 24
+      },
+      {
+        "name": "Description",
+        "w": 237,
+        "h": 72
+      },
+      {
+        "name": "Tags",
+        "w": 237,
+        "h": 24
+      },
+      {
+        "name": "Private test set (admins only)",
+        "w": 13,
+        "h": 13
+      }
+    ],
+    "labels": [
+      {
+        "t": "Name*",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Description",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Tags",
+        "w": 237,
+        "x": 21
+      },
+      {
+        "t": "Private test set (admins only)",
+        "w": 237,
+        "x": 21
+      }
+    ],
+    "ths": [],
+    "rowH": null,
+    "mode": {
+      "w": 237,
+      "h": 161.3
+    },
+    "people": {
+      "w": 237,
+      "h": 241.8
+    },
+    "table": {
+      "w": 237,
+      "h": 132
+    },
+    "add": {
+      "w": 237,
+      "h": 75.4
+    },
+    "saveBar": {
+      "w": 237,
+      "h": 56.4
+    },
+    "tablist": {
+      "w": 279,
+      "h": 34
+    }
+  }
+}

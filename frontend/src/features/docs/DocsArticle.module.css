@@ -109,7 +109,7 @@
   text-decoration: none;
 }
 
-.article a:hover {
+.article a:hover:where(:not([data-link='block'])) {
   text-decoration: underline;
 }
 

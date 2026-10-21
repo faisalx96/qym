@@ -42,7 +42,7 @@ export function StartCard({
   const className = [styles.card, compact ? styles.cardCompact : ''].filter(Boolean).join(' ');
   if (to) {
     return (
-      <Link className={className} to={to}>
+      <Link className={className} to={to} data-link="block">
         {content}
       </Link>
     );

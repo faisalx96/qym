@@ -1,16 +1,22 @@
 /* 6. Interactive filters — rounded outline chips. */
+/* A chip never grows past its row; its text wraps instead of being cut (DESIGN_LANGUAGE 7, QA1-20). */
 .wrap {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
+  min-inline-size: 0;
   min-height: var(--chip-height);
-  padding: 0 var(--space-md);
+  padding: var(--space-xs) var(--space-md);
+  overflow-wrap: anywhere;
+  text-align: start;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-pill);
   background: transparent;
@@ -18,7 +24,7 @@
   font-family: var(--font-sans);
   font-size: var(--font-sm);
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.3;
   cursor: pointer;
   transition:
     border-color var(--transition-fast),

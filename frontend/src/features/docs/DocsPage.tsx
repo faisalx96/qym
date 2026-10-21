@@ -151,7 +151,13 @@ export function DocsPage() {
                 footer={
                   <nav aria-label="Previous and next page" className={styles.pager}>
                     {prev ? (
-                      <LinkButton to={docsPath(prev)} variant="neutral" size="md" className={styles.prev}>
+                      <LinkButton
+                        to={docsPath(prev)}
+                        variant="neutral"
+                        size="md"
+                        className={styles.prev}
+                        data-link="block"
+                      >
                         <span className={styles.pagerLabel}>Previous</span>
                         <span>{prev.title}</span>
                       </LinkButton>
@@ -159,7 +165,13 @@ export function DocsPage() {
                       <span />
                     )}
                     {next ? (
-                      <LinkButton to={docsPath(next)} variant="neutral" size="md" className={styles.next}>
+                      <LinkButton
+                        to={docsPath(next)}
+                        variant="neutral"
+                        size="md"
+                        className={styles.next}
+                        data-link="block"
+                      >
                         <span className={styles.pagerLabel}>Next</span>
                         <span>{next.title}</span>
                       </LinkButton>
