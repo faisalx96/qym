@@ -1,0 +1,136 @@
+/* QA-B mocks (visual contract for docs/internal/feature-rounds/2026-10-qa-feedback/spec-b.md). Tokens only.
+   Frames use the real column widths: launch step-1 column 821 / 777 / 279 px, home content 1193 / 777 / 279 px,
+   Run cell 260 px, card head 273 px, Experiments name column 220 px. The CSS marked "recipe" moves into the components. */
+
+.col,
+.home {
+  inline-size: min(100%, var(--qb-w));
+}
+
+.col {
+  --qb-w: 821px;
+}
+
+.home {
+  --qb-w: 1193px;
+}
+
+@media (width <= 1100px) {
+  .col,
+  .home {
+    --qb-w: 777px;
+  }
+}
+
+@media (width <= 480px) {
+  .col,
+  .home {
+    --qb-w: 279px;
+  }
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.label {
+  margin-block: var(--space-md) var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.label[data-kind='spec'] {
+  color: var(--accent-primary);
+}
+
+/* recipe: the latency control under the environment list on the home view (EnvironmentPicker's card). */
+.latencyBlock {
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/* recipe: a loading row keeps the loaded row's height (a 20 px tag), so the block does not move when it fills. */
+.versionRow {
+  min-height: var(--badge-height);
+}
+
+/* recipe: the Runs page tag, a 20 x 20 square (the clock glyph, 12 px), after Official. */
+.runLatencyTag {
+  flex: none;
+  justify-content: center;
+  inline-size: var(--badge-height);
+  padding: 0;
+}
+
+.runsCell,
+.runsCard {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  block-size: 32px;
+  border: 1px dashed var(--border-subtle);
+}
+
+.runsCell {
+  inline-size: 260px;
+  padding-inline: var(--space-sm);
+}
+
+.runsCard {
+  inline-size: 273px;
+}
+
+/* the Experiments list name cell as it is today */
+.listCell {
+  box-sizing: border-box;
+  inline-size: 220px;
+  padding: var(--space-sm);
+  border: 1px dashed var(--border-subtle);
+}
+
+.nameLine {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+}
+
+/* recipe: a loading row is the loaded DOM with a 20 x 64 px placeholder per value, so loaded and loading rows are the same height at every width. */
+.skelValue {
+  display: block;
+  inline-size: 64px;
+  block-size: var(--badge-height);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* recipe: every tag in the Run cell keeps its size; the name is the only element that gives way (ellipsis, as today). */
+.runsCell [data-testid='run-cell'] > span,
+.runsCard [data-testid='run-cell'] > span {
+  flex: none;
+}
+
+/* recipe: the leading slot of a run without passes: 24 px wide (the chevron spacer's width), the tag centred in it. */
+.leadSlot {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--control-height);
+}
