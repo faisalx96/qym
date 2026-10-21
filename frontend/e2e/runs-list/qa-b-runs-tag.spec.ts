@@ -49,7 +49,7 @@ async function seed(request: Parameters<typeof seedProject>[0]) {
   return { project };
 }
 
-const tag = (l: Locator) => l.getByTestId('run-latency-tag');
+const tag = (l: Page | Locator) => l.getByTestId('run-latency-tag');
 
 test.describe('Runs page latency tag', () => {
   for (const width of [1440, 1024] as const) {
