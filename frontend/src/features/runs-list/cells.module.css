@@ -210,6 +210,27 @@
   flex: none;
 }
 
+/* Every element beside the name keeps its size; only the name gives way (QA3-26). */
+.runName > span {
+  flex: none;
+}
+
+/* The leading slot of a run without passes: the chevron spacer's width, the latency tag centred in it. */
+.leadSlot {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--control-height);
+}
+
+.runLatencyTag {
+  flex: none;
+  justify-content: center;
+  inline-size: var(--badge-height);
+  padding: 0;
+}
+
 .chevronSpacer {
   display: inline-block;
   flex: none;

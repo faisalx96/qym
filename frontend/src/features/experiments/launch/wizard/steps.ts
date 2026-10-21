@@ -53,6 +53,7 @@ export function heldOnHome(item: ValidationItem): boolean {
   return (
     p === PSEUDO.name ||
     p === PSEUDO.environments ||
+    p === PSEUDO.latency ||
     p === PSEUDO.base ||
     p === '/evaluator/dataset' ||
     p === '/evaluator/dataset_version'

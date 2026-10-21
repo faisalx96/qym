@@ -252,7 +252,6 @@ export interface CloneResponse {
   priority?: Priority | null;
   latency_sensitive?: boolean;
   spec: LaunchConfig;
-  versioning_details?: Record<string, JsonValue> | null;
   combo?: {
     job_id: string;
     combo_index: number;
@@ -399,8 +398,6 @@ export interface LaunchDocument {
   description: string;
   /** '' = environment default. */
   priority: Priority | '';
-  /** `key=value` lines. */
-  versioningText: string;
   /** Latency-sensitive run: starts on a quiet gateway and makes other jobs wait (guide v1.3 §2.2). */
   latencySensitive: boolean;
   base: BaseInfo;
@@ -501,7 +498,6 @@ export interface LaunchRequest {
   secrets: Record<string, string>;
   save_to_project_models: string[];
   priority?: Priority;
-  versioning_details?: Record<string, string>;
   acknowledge_preemption?: boolean;
   /** Sent only when true. */
   latency_sensitive?: boolean;

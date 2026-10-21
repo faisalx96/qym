@@ -117,8 +117,7 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
       changes =
         (datasetChanged(doc) ? 1 : 0) +
         (doc.priority ? 1 : 0) +
-        (doc.latencySensitive ? 1 : 0) +
-        (doc.versioningText.trim() ? 1 : 0);
+        (doc.latencySensitive ? 1 : 0);
     else if (s.id === 'models') changes = sectionSummary('models').changes;
     else if (s.id === 'settings') changes = sectionSummary('settings').changes + swept;
     else if (s.id === 'evaluation') changes = sectionSummary('evaluation').changes;

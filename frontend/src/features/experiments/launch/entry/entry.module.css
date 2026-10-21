@@ -444,6 +444,7 @@
 .versionRow {
   display: flex;
   align-items: baseline;
+  min-height: var(--badge-height);
   gap: var(--space-md);
   flex-wrap: wrap;
 }
@@ -544,4 +545,28 @@
 
 .datasetLabel {
   overflow-wrap: anywhere;
+}
+
+/* The latency control under the environment list on the home view (QA3-11). */
+.latencyBlock {
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/* A loading version row is the loaded DOM with a placeholder per value (QA4-7). */
+.skelValue {
+  display: block;
+  inline-size: 64px;
+  block-size: var(--badge-height);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

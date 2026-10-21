@@ -113,7 +113,8 @@ export interface RunRow {
   trace_stats: TraceStats | null;
   ingest_incomplete: boolean;
   origin: RunOrigin;
-  experiment: { id: string; name: string; job_id: string } | null;
+  /** `latency_sensitive` is absent on a run not republished since the field was added (reads as false). */
+  experiment: { id: string; name: string; job_id: string; latency_sensitive?: boolean } | null;
   versioning: Record<string, string>;
   versioning_details: Record<string, unknown>;
   langfuse_url?: string | null;

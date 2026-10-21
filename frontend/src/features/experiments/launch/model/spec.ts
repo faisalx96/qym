@@ -20,43 +20,6 @@ import type {
   Priority,
 } from './types';
 
-export const VERSIONING_MAX_KEYS = 50;
-export const VERSIONING_KEY_MAX = 100;
-
-// ── Versioning details (B21) ─────────────────────────────────────────────
-
-/** `{details, errors}` from "key=value" lines; blank lines are skipped. */
-export function parseVersioning(text: string): { details: Record<string, string>; errors: string[] } {
-  const details: Record<string, string> = {};
-  const errors: string[] = [];
-  String(text || '')
-    .split('\n')
-    .forEach((line, index) => {
-      if (!line.trim()) return;
-      const at = line.indexOf('=');
-      const key = at > 0 ? line.slice(0, at).trim() : '';
-      if (!key) errors.push(`Line ${index + 1}: write key=value.`);
-      else if (key.length > VERSIONING_KEY_MAX)
-        errors.push(`Line ${index + 1}: keys are at most ${VERSIONING_KEY_MAX} characters.`);
-      else details[key] = line.slice(at + 1).trim();
-    });
-  if (Object.keys(details).length > VERSIONING_MAX_KEYS)
-    errors.push(`At most ${VERSIONING_MAX_KEYS} versioning details.`);
-  return { details, errors };
-}
-
-/** "key=value" lines for a stored versioning_details object (non-strings as JSON). */
-export function versioningText(details: unknown): string {
-  if (!isPlainObject(details)) return '';
-  return Object.keys(details)
-    .sort()
-    .filter((k) => details[k] != null)
-    .map(
-      (k) => `${k}=${typeof details[k] === 'string' ? (details[k] as string) : JSON.stringify(details[k])}`,
-    )
-    .join('\n');
-}
-
 // ── Spec ─────────────────────────────────────────────────────────────────
 
 /** The §8.1 document the form sends. */
@@ -161,8 +124,6 @@ export function buildLaunchRequest(
   };
   if (doc.description.trim()) body.description = doc.description.trim();
   if (doc.priority) body.priority = doc.priority as Priority;
-  const versioning = parseVersioning(doc.versioningText).details;
-  if (Object.keys(versioning).length) body.versioning_details = versioning;
   if (options.acknowledgePreemption) body.acknowledge_preemption = true;
   // Platform-owned: a request field, never part of the editable document.
   if (doc.latencySensitive) body.latency_sensitive = true;
@@ -186,7 +147,7 @@ export function specKey(doc: LaunchDocument, panel?: EvaluatorPanel | null): str
 
 /**
  * Stable serialisation of everything a dry run sends (no key values: only refs), for
- * debouncing. Name, priority, versioning and description are part of it (run names and
+ * debouncing. Name, priority, latency and description are part of it (run names and
  * the preemption warning depend on them) but are not `specChanged`.
  */
 export function dryRunKey(doc: LaunchDocument, panel?: EvaluatorPanel | null): string {
@@ -195,13 +156,12 @@ export function dryRunKey(doc: LaunchDocument, panel?: EvaluatorPanel | null): s
     name: doc.name.trim(),
     priority: doc.priority,
     latency: doc.latencySensitive,
-    versioning: parseVersioning(doc.versioningText).details,
     description: doc.description.trim(),
   });
 }
 
 /**
- * Did the §8.1 document change? Name, priority, versioning details and description are
+ * Did the §8.1 document change? Name, priority, latency and description are
  * request fields, not the document: those edits skip the sweeps/evaluator panel
  * updates (`specChanged: false`) but still debounce a new dry run (`dryRunKey`).
  */

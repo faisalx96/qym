@@ -28,7 +28,6 @@ import {
   splitPointer,
 } from './pointers';
 import { jsonFallback, parseInput } from './descriptor';
-import { versioningText } from './spec';
 import type { SecretStore } from './secrets';
 import type {
   Baseline,
@@ -617,7 +616,6 @@ export interface ClonePrefill {
     | 'description'
     | 'environmentIds'
     | 'priority'
-    | 'versioningText'
     | 'latencySensitive'
     | 'clone'
     | 'base'
@@ -699,7 +697,6 @@ export function prefillFromClone(
       description: String(res.description || ''),
       environmentIds: envIds,
       priority: res.priority ?? '',
-      versioningText: versioningText(res.versioning_details),
       latencySensitive: Boolean(res.latency_sensitive),
       clone,
       base: { ...emptyBaseInfo('clone'), loaded: false, notes },

@@ -475,7 +475,6 @@ describe('clone prefill', () => {
     unavailable_environment_ids: ['gone-env'],
     base_source: { kind: 'clone', experiment_id: 'x1' },
     priority: 'HIGH',
-    versioning_details: { agent: 'v2', n: 3 },
     spec: {
       evaluator: { dataset: 'support-qa' },
       slot_bindings: {
@@ -495,8 +494,8 @@ describe('clone prefill', () => {
       description: 'why',
       environmentIds: [PRODUCTION, 'gone-env'],
       priority: 'HIGH',
-      versioningText: 'agent=v2\nn=3',
     });
+    expect(p.patch).not.toHaveProperty('versioningText');
     expect(p.patch.base).toMatchObject({ kind: 'clone', loaded: false });
     expect(p.needsKeyReentry).toEqual(['endpoint:primary', 'flat:VIZ_LLM']);
     expect(p.unavailableEnvironments).toBe(1);

@@ -5,6 +5,7 @@ import { Button, Card, Tag, Text } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import styles from './entry.module.css';
 
+const VERSIONS_HELP = 'Read from each environment. Runs record what its Evaluation Service reports.';
 const VERSION_KEYS = ['agent_version', 'image_version', 'kb_version'];
 const VERSION_LABELS: Record<string, string> = {
   agent_version: 'agent',
@@ -35,7 +36,8 @@ function VersionRow({
   const query = useEnvVersioning(projectId, env.id, true);
   const { refetch } = query;
   useEffect(() => {
-    if (refreshKey > 0) void refetch();
+    // A request already in flight is kept (no cancel and re-issue): Refresh twice is harmless.
+    if (refreshKey > 0) void refetch({ cancelRefetch: false });
   }, [refreshKey, refetch]);
   const data = query.data;
   const status =
@@ -55,7 +57,20 @@ function VersionRow({
     <div className={styles.versionRow} data-env-version={env.id} data-status={status}>
       <span className={styles.versionName}>{env.name}</span>
       {status === 'loading' ? (
-        <span className={styles.help}>Reading…</span>
+        // The loaded DOM with a placeholder per value: the block keeps its height when it fills (rule 7).
+        <dl className={styles.versionList} aria-busy="true">
+          <span className={styles.srOnly} role="status">
+            Reading…
+          </span>
+          {VERSION_KEYS.map((key) => (
+            <div key={key} className={styles.versionItem}>
+              <dt>{VERSION_LABELS[key]}</dt>
+              <dd>
+                <span className={styles.skelValue} aria-hidden="true" />
+              </dd>
+            </div>
+          ))}
+        </dl>
       ) : status === 'unsupported' ? (
         <span className={styles.help}>
           Not supported by this environment (its Evaluation Service is older than v1.2).
@@ -86,11 +101,11 @@ function VersionRow({
 }
 
 /**
- * Home view: the Evaluation Service versions a run started now would record (`versioning_details`),
- * read once when an environment is ticked and again on Refresh. Nothing to decide: it is what each
- * environment reports; a custom value goes in "Versioning details" (Customize, step 1).
+ * The Evaluation Service versions a run started now would record, read once per ticked environment
+ * (one react-query entry shared by the home view and Customize step 1) and again on Refresh. Read
+ * only: nothing user-typed is stored on an experiment.
  */
-export function VersionsBlock({ onCustomize }: { onCustomize?: () => void }) {
+export function VersionsBlock() {
   const { selectedEnvs, projectId } = useLaunch();
   const [tick, setTick] = useState(0);
   if (!selectedEnvs.length) return null;
@@ -105,13 +120,8 @@ export function VersionsBlock({ onCustomize }: { onCustomize?: () => void }) {
           <Text variant="md" weight={600} as="span">
             Evaluation Service versions
           </Text>
-          <span className={styles.help}>What a run started now records as its versioning details.</span>
+          <span className={styles.help}>{VERSIONS_HELP}</span>
           <span className={styles.versionsActions}>
-            {onCustomize ? (
-              <Button variant="ghost" onPress={onCustomize}>
-                Add versioning details
-              </Button>
-            ) : null}
             <Button variant="ghost" onPress={() => setTick((n) => n + 1)}>
               Refresh
             </Button>

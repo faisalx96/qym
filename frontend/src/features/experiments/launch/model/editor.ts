@@ -130,7 +130,7 @@ export function editorReviewItems(
   ctx: FormContext,
   rebind: readonly RebindItem[],
 ): ValidationItem[] {
-  const skip = new Set<string>([PSEUDO.name, PSEUDO.description, PSEUDO.versioning, '/evaluator/dataset']);
+  const skip = new Set<string>([PSEUDO.name, PSEUDO.description, '/evaluator/dataset']);
   const kept = items.filter(
     (i) => !skip.has(i.pointer) && i.pointer !== '/links' && !i.pointer.startsWith('/links/'),
   );

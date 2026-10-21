@@ -5,9 +5,10 @@ import panel from '../components/launch.module.css';
 import { DatasetPicker } from './DatasetPicker';
 import { EnvironmentPicker } from './EnvironmentPicker';
 import { RunSettings } from './RunSettings';
+import { VersionsBlock } from './VersionsBlock';
 import styles from './entry.module.css';
 
-/** Step 1, "Where it runs": name and priority, the environments and the dataset. */
+/** Step 1, "Where it runs": name, priority and latency, the environments and the dataset, then the Evaluation Service versions. */
 export function EntryBlock() {
   const { readOnly } = useLaunch();
   return (
@@ -32,6 +33,7 @@ export function EntryBlock() {
           </div>
         </Card>
       </div>
+      <VersionsBlock />
     </div>
   );
 }

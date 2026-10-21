@@ -11,10 +11,8 @@ import {
   buildPresetConfig,
   buildSpec,
   dryRunKey,
-  parseVersioning,
   specChanged,
   specKey,
-  versioningText,
 } from './spec';
 import type { LaunchDocument, SlotBinding } from './types';
 
@@ -30,31 +28,15 @@ function doc(extra: Partial<LaunchDocument> = {}): LaunchDocument {
   });
 }
 
-describe('versioning details (B21)', () => {
-  it('parses key=value lines, trimming and skipping blanks', () => {
-    expect(parseVersioning('agent = v2\n\nprompt=p=17\n  kb=381  ')).toEqual({
-      details: { agent: 'v2', prompt: 'p=17', kb: '381' },
-      errors: [],
-    });
-  });
-
-  it('reports lines without a key, long keys and more than 50 keys', () => {
-    expect(parseVersioning('novalue\n=x\nok=1').errors).toEqual([
-      'Line 1: write key=value.',
-      'Line 2: write key=value.',
-    ]);
-    expect(parseVersioning('k'.repeat(101) + '=1').errors).toEqual([
-      'Line 1: keys are at most 100 characters.',
-    ]);
-    expect(parseVersioning('k'.repeat(100) + '=1').errors).toEqual([]);
-    const many = Array.from({ length: 51 }, (_, i) => `k${i}=v`).join('\n');
-    expect(parseVersioning(many).errors).toEqual(['At most 50 versioning details.']);
-    expect(parseVersioning(many.split('\n').slice(0, 50).join('\n')).errors).toEqual([]);
-  });
-
-  it('writes stored details back as lines (non-strings as JSON, nulls skipped)', () => {
-    expect(versioningText({ b: 2, a: 'x', c: null, d: { z: 1 } })).toBe('a=x\nb=2\nd={"z":1}');
-    expect(versioningText(null)).toBe('');
+describe('versioning details (QA2-12)', () => {
+  it('are no part of the request or of the dry-run key', () => {
+    const base = doc({ name: 'run' });
+    const body = buildLaunchRequest(base, secrets(), { dryRun: false });
+    expect(body).not.toHaveProperty('versioning_details');
+    const dry = buildLaunchRequest(base, secrets(), { dryRun: true });
+    expect(dry).not.toHaveProperty('versioning_details');
+    expect(dryRunKey(base)).not.toMatch(/versioning/);
+    expect(Object.keys(base)).not.toContain('versioningText');
   });
 });
 
@@ -171,12 +153,11 @@ describe('buildLaunchRequest', () => {
     needsKey: false,
   });
 
-  it('builds the body with name, environments, priority and versioning details', () => {
+  it('builds the body with name, environments and priority', () => {
     const body = buildLaunchRequest(
       doc({
         environmentIds: [PRODUCTION, STAGING],
         priority: 'LOW',
-        versioningText: 'agent=v2',
         description: ' why ',
       }),
       secrets(),
@@ -188,7 +169,6 @@ describe('buildLaunchRequest', () => {
       environment_ids: [PRODUCTION, STAGING],
       dry_run: false,
       priority: 'LOW',
-      versioning_details: { agent: 'v2' },
       base_source: { kind: 'blank' },
       save_to_project_models: [],
       secrets: {},
@@ -262,12 +242,12 @@ describe('buildLaunchRequest', () => {
 describe('change detection', () => {
   const a = doc({ values: { '/BRIEF_ENABLED': true } });
 
-  it('name, priority, description and versioning are not spec changes', () => {
+  it('name, priority, description and latency are not spec changes', () => {
     for (const patch of [
       { name: 'other' },
       { priority: 'HIGH' as const },
       { description: 'd' },
-      { versioningText: 'a=b' },
+      { latencySensitive: true },
     ]) {
       expect(specChanged(a, { ...a, ...patch })).toBe(false);
     }

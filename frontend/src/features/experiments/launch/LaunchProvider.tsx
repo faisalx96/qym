@@ -942,7 +942,6 @@ export function LaunchProvider({
     Boolean(
       doc.name.trim() ||
         doc.description.trim() ||
-        doc.versioningText.trim() ||
         doc.priority ||
         doc.latencySensitive,
     );
