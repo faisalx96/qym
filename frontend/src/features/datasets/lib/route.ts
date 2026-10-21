@@ -3,9 +3,9 @@
  * `:path` on the server, so everything after `datasets/` up to an optional
  * trailing `/compare` is the ref.
  */
-export type DetailTab = 'items' | 'runs' | 'lineage' | 'settings';
+export type DetailTab = 'items' | 'runs' | 'lineage' | 'access' | 'settings';
 export type ItemTab = 'details' | 'runs' | 'history';
-export const DETAIL_TABS: DetailTab[] = ['items', 'runs', 'lineage', 'settings'];
+export const DETAIL_TABS: DetailTab[] = ['items', 'runs', 'lineage', 'access', 'settings'];
 export const ITEM_TABS: ItemTab[] = ['details', 'runs', 'history'];
 export const ITEM_PAGE_SIZES = [25, 50, 100, 250];
 export const DEFAULT_ITEM_PAGE_SIZE = 50;
@@ -29,6 +29,8 @@ export interface DatasetRoute {
   state: 'active' | 'disabled' | 'all';
   /** repeatable `path:value` metadata filters (`meta=` in the URL) */
   meta: string[];
+  /** repeatable `path:any|all` modes of the multi-value metadata filters (`meta_mode=`) */
+  metaMode: string[];
   q: string;
   catalogSort: string;
   base: string | null;
@@ -87,6 +89,7 @@ export function parseDatasetRoute(splat: string | undefined, params: URLSearchPa
     label: params.get('label') ?? '',
     state: parseItemStateParam(params.get('state')),
     meta: params.getAll('meta').filter(Boolean),
+    metaMode: params.getAll('meta_mode').filter(Boolean),
     q: params.get('q') ?? '',
     catalogSort: params.get('sort') ?? '',
     base: params.get('base') || null,

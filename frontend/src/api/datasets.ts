@@ -384,6 +384,8 @@ export interface ItemsParams {
   state?: ItemState;
   /** repeatable `path:value` metadata filters */
   meta?: string[];
+  /** repeatable `path:any|all`; how the values of one meta path combine (API default all) */
+  meta_mode?: string[];
 }
 
 export interface NeighborParams {
@@ -392,6 +394,7 @@ export interface NeighborParams {
   label?: string;
   state?: ItemState;
   meta?: string[];
+  meta_mode?: string[];
 }
 
 // ---------------------------------------------------------------- queries
@@ -435,7 +438,7 @@ export async function fetchMatchingItemIds(
   slug: string,
   ref: string,
   version: string,
-  params: Pick<ItemsParams, 'search' | 'label' | 'state' | 'meta'>,
+  params: Pick<ItemsParams, 'search' | 'label' | 'state' | 'meta' | 'meta_mode'>,
   total: number,
 ): Promise<string[]> {
   const ids: string[] = [];
@@ -449,6 +452,7 @@ export async function fetchMatchingItemIds(
         label: params.label,
         state: params.state,
         meta: params.meta,
+        meta_mode: params.meta_mode,
         include_context: 'false',
       }),
     );
@@ -477,6 +481,7 @@ export function useDatasetItems(
           label: params.label,
           state: params.state,
           meta: params.meta,
+          meta_mode: params.meta_mode,
           include_context: 'false',
         }),
       ),
@@ -517,6 +522,7 @@ export function useItemNeighbors(
           label: params.label,
           state: params.state,
           meta: params.meta,
+          meta_mode: params.meta_mode,
         }),
       ),
     enabled: enabled && Boolean(ref && version && itemId),
@@ -651,6 +657,14 @@ export function useDatasetAccess(slug: string, ref: string, enabled = true) {
   });
 }
 
+/** Warms the Access tab's query so the tab opens without a skeleton (QA5-23); the cache entry is the tab's own. */
+export function prefetchDatasetAccess(qc: QueryClient, slug: string, ref: string): Promise<void> {
+  return qc.prefetchQuery({
+    queryKey: dsKeys.access(slug, ref),
+    queryFn: () => api.get<DatasetAccess>(withSlug(`/v1/datasets/${enc(ref)}/access`, slug)),
+  });
+}
+
 export function useSaveDatasetAccess(slug: string, ref: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -670,6 +684,8 @@ export function useSaveDatasetAccess(slug: string, ref: string) {
 
 export interface MetaFacetPath {
   path: string;
+  /** `list` and `mixed` paths hold lists (on all or some items): their values are the list elements */
+  kind: 'scalar' | 'list' | 'mixed';
   values: { value: string; count: number }[];
   truncated: boolean;
   value_count: number;
@@ -941,7 +957,7 @@ export type BatchAction = 'disable' | 'enable' | 'delete';
 export interface BatchFilterBody {
   search?: string;
   label?: string;
-  meta?: Record<string, string>;
+  meta?: Record<string, string | { values: string[]; mode: 'any' | 'all' }>;
   item_ids?: string[];
   state?: ItemState;
 }

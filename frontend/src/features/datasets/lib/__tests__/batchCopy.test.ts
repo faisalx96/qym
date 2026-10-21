@@ -13,8 +13,8 @@ import {
 
 const criteria = {
   meta: [
-    { path: 'domain', value: 'finance' },
-    { path: 'source.region.code', value: 'sa' },
+    { path: 'domain', values: ['finance'], mode: 'any' as const },
+    { path: 'source.region.code', values: ['sa'], mode: 'any' as const },
   ],
 };
 
@@ -77,5 +77,14 @@ describe('labels (A3-16, A3-31 to A3-36)', () => {
     expect(batchToast('delete', 1)).toBe('Deleted 1 item');
     expect(menuLabel('enable', 0)).toBe('Enable all 0 matching…');
     expect(menuLabel('delete', 42)).toBe('Delete all 42 matching…');
+  });
+});
+
+describe('multi-value filters (QA1-25)', () => {
+  it('names a list filter with its values and mode', () => {
+    const tags = { meta: [{ path: 'tags', values: ['billing', 'refund'], mode: 'any' as const }] };
+    expect(batchSentence('disable', tags, 46, 130)).toBe(
+      '46 of 130 items match tags: billing, refund (any) and are active.',
+    );
   });
 });
