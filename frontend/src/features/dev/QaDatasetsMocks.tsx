@@ -29,6 +29,7 @@ import {
   TextField,
   Textarea,
   type Column,
+  TabPanel,
 } from '@/ui';
 import { Note } from '@/features/datasets/components/Note';
 import { UserPill } from '@/features/datasets/components/UserPill';
@@ -397,7 +398,7 @@ export function SettingsMock({ variant }: { variant: SettingsVariant }) {
                     help="Press Enter to add a tag."
                   />
                 )}
-                <div className={styles.chipRow} role="list" aria-label="Tags">
+                <div className={styles.chipRow} role="group" aria-label="Tags">
                   {tags.map((t) => (
                     <Chip
                       key={t}
@@ -1000,7 +1001,9 @@ export function QaDatasetsMocks({
             ]}
             selected="access"
             onSelect={noop}
-          />
+          >
+            <TabPanel id="access">{null}</TabPanel>
+          </Tabs>
           <Lbl>Project-wide (no count)</Lbl>
           <Tabs
             label="Dataset sections"
@@ -1013,7 +1016,9 @@ export function QaDatasetsMocks({
             ]}
             selected="access"
             onSelect={noop}
-          />
+          >
+            <TabPanel id="access">{null}</TabPanel>
+          </Tabs>
         </div>
       </Case>
 
