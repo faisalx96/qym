@@ -64,7 +64,9 @@ def test_non_empty_or_non_object_versioning_details_are_refused(
     assert _counts(session_factory) == (0, 0)
 
 
-@pytest.mark.parametrize("extra", [{}, {"versioning_details": None}, {"versioning_details": {}}])
+@pytest.mark.parametrize(
+    "extra", [{}, {"versioning_details": None}, {"versioning_details": {}}]
+)
 def test_null_empty_and_absent_versioning_details_are_accepted(
     client, session_factory, env, conn, extra
 ):
@@ -125,10 +127,14 @@ def test_legacy_experiment_stays_readable_and_retry_resends_the_stored_body(
     detail = client.get(_url(suffix=f"/{experiment_id}"), headers=_headers(MEMBER))
     assert detail.json()["versioning_details"] == legacy
     listed = client.get(_url(), headers=_headers(MEMBER)).json()
-    rows = listed if isinstance(listed, list) else next(
-        v for v in listed.values() if isinstance(v, list)
+    rows = (
+        listed
+        if isinstance(listed, list)
+        else next(v for v in listed.values() if isinstance(v, list))
     )
-    assert [r["versioning_details"] for r in rows if r["id"] == experiment_id] == [legacy]
+    assert [r["versioning_details"] for r in rows if r["id"] == experiment_id] == [
+        legacy
+    ]
     with session_factory() as db:
         job = db.query(EvalExperimentJob).filter_by(experiment_id=experiment_id).one()
         job.status = EvalJobStatus.FAILED

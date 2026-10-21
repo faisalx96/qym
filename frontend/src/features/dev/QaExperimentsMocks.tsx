@@ -3,7 +3,7 @@
  * Primitives, tokens and the real entry / runs-list CSS modules only; nothing here reads the API.
  * The CSS in QaExperimentsMocks.module.css is the proposed recipe (only what changes). Cases:
  * qb-home (QA3-a: latency control on the launch home view), qb-versions (QA2, QA4: the read-only block and its states),
- * qb-step1 (QA2, QA3, QA4: Customize step 1 without the Versioning details box, with the block below the environments),
+ * qb-step1 (QA2, QA3, QA4: Customize step 1 without the versioning box, with the block below the environments),
  * qb-runs (QA3-d: the Runs page tag in the table and card layouts), qb-list (QA3-c: the Experiments list tag, kept).
  */
 import type { ReactNode } from 'react';
@@ -232,7 +232,7 @@ function VersionsBlockMock({ rows }: { rows: Array<[string, VersionState]> }) {
 
 /* ───────────────────────────── Customize step 1 ───────────────────────────── */
 
-/** Name, priority and the latency control; the Versioning details box is gone (QA2). */
+/** Name, priority and the latency control; the versioning box is gone (QA2). */
 function RunSettingsMock({ mode }: { mode: LatencyMode }) {
   return (
     <Card as="section" aria-label="Name and priority">
@@ -432,7 +432,7 @@ export function QaExperimentsMocks({
           />
         </div>
       </Case>
-      <Case wide label="qb-step1 (QA2, QA3, QA4: Customize step 1; no Versioning details box; the block below the environments)">
+      <Case wide label="qb-step1 (QA2, QA3, QA4: Customize step 1; no versioning box; the block below the environments)">
         <div className={styles.col}>
           <L>No environment selected: no block</L>
           <Step1Mock mode="off" rows={null} />

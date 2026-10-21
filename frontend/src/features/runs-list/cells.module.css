@@ -215,13 +215,20 @@
   flex: none;
 }
 
-/* The leading slot of a run without passes: the chevron spacer's width, the latency tag centred in it. */
+/* The leading slot of a run without passes: the chevron spacer's box (inline-block, 24 px, no height) with the
+   latency tag centred in it, so the head's line box (the card layout baseline-aligns it) and the name do not move. */
 .leadSlot {
-  display: inline-flex;
+  position: relative;
+  display: inline-block;
   flex: none;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--control-height);
+  width: var(--control-height);
+}
+
+.leadSlot > .runLatencyTag {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: calc((var(--control-height) - var(--badge-height)) / 2);
+  transform: translateY(-50%);
 }
 
 .runLatencyTag {

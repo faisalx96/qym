@@ -323,6 +323,17 @@ Amendments to the previous round (this spec wins): previous `spec-b.md` criteria
 5. Frontend runs list: `cells.tsx` `RunNameCell` (leading slot / after Official), `RunLatencyTag`, `cells.module.css` (`.leadSlot`, `.runLatencyTag`, `flex: none` rule); `RunRow` type.
 6. Tests and e2e (section 7); `cd frontend && npm run check` through `scripts/heavy.sh --cost 3`; `pytest tests/platform` in chunks; update `docs/USER_GUIDE.md` (launch form: no versioning box; versions shown read-only) and `docs/internal/OPERATIONS.md` if it mentions the field.
 
+## 8b. Amendments made while implementing (implementation stage)
+
+| Id | Was | Is (measured in the app) | Why |
+|---|---|---|---|
+| QA3-13, QA3-14 (amended) | Environments card 304.2 / 334.9 / 374.3 px off, 343 / 373.7 / 429.9 on (gallery frame, 2 environments with 3 tags each) | The card's absolute height depends on the environments' tag rows (seed: Alpha with a default preset, Bare). The control's contribution is what is pinned: on minus off = 38.8 px at 1440 (callout 34.8 px), as in the gallery (343 - 304.2). App value with the e2e seed at 1440: 275 off, 313.8 on. | The gallery frame shows two environments with the preset tag; the number depends on the seed, the delta does not. The e2e asserts the delta and the callout height. |
+| QA3-30 (amended) | Card head 23 px | The Run cell (`[data-testid="run-cell"]`) in the card head is 20 px with and without the tag; the card is 162.8 px with and without it (delta 0). The 23 px of the baseline measurement was the line box of the title; it is unchanged by construction (the tag lives inside the spacer's box). | The first implementation put the tag in an inline-flex slot: it changed the head's baseline and the card became 1.8 px shorter (161 px). The slot is now the chevron spacer's own box (`position: relative`, the tag absolutely centred), so the geometry is identical. |
+| QA3-37 (clarified) | `filter-latency` test id | Added `data-testid="filter-latency"` to the list's checkbox (it had none). | Needed by the spec's own assertion. |
+| QA2-1 (clarified) | any non-empty object | `{"": "x"}` and other non-empty objects, and every non-object (`"x"`, `["a"]`, `3`, `true`, `false`) answer the 422; only `null`, `{}` and an absent field pass. | D-QB2 |
+| QA4-6 (clarified) | `Refresh` calls `refetch` | `refetch({ cancelRefetch: false })`: a request already in flight is kept, so a double press reads once more per row, never cancels. | QA4-11 |
+| QA3-1 (clarified) | "the single run experiment panel" | `run_origin_fields` (runs list, run detail origin fields, dashboard descriptor) carries `latency_sensitive`; the separate `run_experiment_panel` payload (`experiment_name`, `job_status`, ...) is unchanged. | The ref is built in one place; the panel is a different shape. |
+
 ## 9. Limits of this design stage
 
 - The gallery mocks are static: states that need the API (the request counts of QA4-6, the 422 text in the launch error region QA2-16, the polling of QA3-33, the descriptor republish QA3-3) are specified from the code and have no mock; the reviewer verifies them in the running app.

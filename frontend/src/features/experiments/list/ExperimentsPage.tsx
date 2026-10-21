@@ -234,6 +234,7 @@ export function ExperimentsPage() {
       </Checkbox>
       <Checkbox
         isSelected={latency}
+        data-testid="filter-latency"
         onChange={(on) =>
           update((next) => {
             if (on) next.set('latency', '1');

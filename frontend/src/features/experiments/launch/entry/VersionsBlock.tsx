@@ -58,19 +58,21 @@ function VersionRow({
       <span className={styles.versionName}>{env.name}</span>
       {status === 'loading' ? (
         // The loaded DOM with a placeholder per value: the block keeps its height when it fills (rule 7).
-        <dl className={styles.versionList} aria-busy="true">
+        <>
           <span className={styles.srOnly} role="status">
             Reading…
           </span>
-          {VERSION_KEYS.map((key) => (
-            <div key={key} className={styles.versionItem}>
-              <dt>{VERSION_LABELS[key]}</dt>
-              <dd>
-                <span className={styles.skelValue} aria-hidden="true" />
-              </dd>
-            </div>
-          ))}
-        </dl>
+          <dl className={styles.versionList} aria-busy="true">
+            {VERSION_KEYS.map((key) => (
+              <div key={key} className={styles.versionItem}>
+                <dt>{VERSION_LABELS[key]}</dt>
+                <dd>
+                  <span className={styles.skelValue} aria-hidden="true" />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </>
       ) : status === 'unsupported' ? (
         <span className={styles.help}>
           Not supported by this environment (its Evaluation Service is older than v1.2).

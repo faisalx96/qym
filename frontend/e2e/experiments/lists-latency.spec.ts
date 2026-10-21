@@ -92,3 +92,36 @@ test('the queue note measures the amended heights at the three widths (B5-65)', 
   expect(heights[1440]).toBe(25.4);
   expect(heights[1024]).toBe(40.8);
 });
+
+test('the list tag keeps its numbers at three widths and never changes a row height (QA3-34, QA3-36, QA3-37)', async ({
+  page,
+  request,
+}) => {
+  const { project } = await seed(request);
+  for (const width of [1440, 1024, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await gotoApp(page, expPath(project.slug));
+    // Below 760 px the list is a card layout (no grid role): the tag is looked up on the page.
+    const tag = page.getByTestId('latency-tag');
+    await expect(tag).toHaveCount(1);
+    await expect(tag).toHaveText('Latency-sensitive');
+    await expect(tag).toHaveAttribute('data-tone', 'info');
+    const look = await tag.evaluate((el) => {
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return [Math.round(r.width * 10) / 10, Math.round(r.height), s.fontSize, s.fontWeight];
+    });
+    expect(look).toEqual([98.4, 20, '10px', '650']);
+    if (width > 760) {
+      const grid = page.getByRole('grid', { name: 'Experiments' });
+      // Optional content never changes geometry: flagged and plain rows are both 40 px.
+      const heights = await grid
+        .getByRole('row')
+        .evaluateAll((rows) => rows.slice(1).map((r) => Math.round(r.getBoundingClientRect().height)));
+      expect(heights).toEqual([40, 40]);
+      const filter = await page.getByTestId('filter-latency').boundingBox();
+      expect([Math.round(filter!.width * 10) / 10, Math.round(filter!.height * 10) / 10]).toEqual([141.9, 16.8]);
+    }
+    expect(await pageOverflow(page)).toBe('');
+  }
+});

@@ -137,9 +137,11 @@ describe('VersionsBlock', () => {
     renderBlock();
     const list = row().querySelector('dl') as HTMLElement;
     expect(list).toHaveAttribute('aria-busy', 'true');
+    // The hidden status is not a child of the definition list (axe: dl may hold only dt / dd groups).
+    expect(list.querySelector('[role="status"]')).toBeNull();
     expect(within(list).getAllByText(/^(agent|image|kb)$/, { selector: 'dt' })).toHaveLength(3);
     expect(list.querySelectorAll('dd')).toHaveLength(3);
-    expect(within(list).getByRole('status')).toHaveTextContent('Reading…');
+    expect(within(row()).getByRole('status')).toHaveTextContent('Reading…');
   });
 
   it('Refresh pressed twice while loading asks once more, not twice (QA4-11)', async () => {
