@@ -1003,9 +1003,9 @@ schema rejects. The evaluator call never fails a refresh:
 | `unsupported` | The service answered 404/405 (older than v1.1) | The static `EvaluatorRequestConfig` |
 
 A 401, timeout or 5xx on the evaluator call keeps the stored evaluator schema and
-is returned as `evaluator.error`. With an evaluator schema, the experiment's
-`versioning_details` are also sent as `evaluator.config.versioning_details`
-(decision B23); at link time the run's values then win over the experiment's.
+is returned as `evaluator.error`. New experiments refuse
+`versioning_details` (422, QA round 2026-10): the service fills the run's versions itself.
+Experiments created earlier keep theirs, merged at link time under the run's own values.
 
 One environment URL belongs to one project. qym normalizes the URL (lower-case host,
 no default port, no trailing `/` or `/evals`), and a platform-wide unique index refuses
