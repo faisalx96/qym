@@ -57,7 +57,13 @@ export function MetadataFilter({ slug, datasetRef, version, filters, onAdd }: Me
     return <Tooltip content={META_LIMIT_HINT}>{button}</Tooltip>;
   }
   return (
-    <Popover label="Filter by metadata" isOpen={open} onOpenChange={setOpen} trigger={button}>
+    <Popover
+      label="Filter by metadata"
+      isOpen={open}
+      onOpenChange={setOpen}
+      trigger={button}
+      testId="meta-popover"
+    >
       {({ close }) => (
         <FacetPanel
           slug={slug}
@@ -107,7 +113,8 @@ function FacetPanel({
   const [typed, setTyped] = useState('');
   const paths = useMemo(() => facets.data?.paths ?? [], [facets.data]);
   const current = paths.find((p) => p.path === (path ?? paths[0]?.path)) ?? null;
-  const multi = current !== null && current.kind !== 'scalar';
+  // a payload without `kind` (an older server) is scalar-style
+  const multi = current !== null && (current.kind === 'list' || current.kind === 'mixed');
   const shown = useMemo(() => {
     if (!current) return [];
     const needle = typed.trim().toLowerCase();
@@ -287,7 +294,7 @@ function FacetPanel({
     );
   }
   return (
-    <div className={styles.panel} data-testid="meta-popover">
+    <div className={styles.panel}>
       <Text variant="md" weight={600} as="h3">
         Filter by metadata
       </Text>

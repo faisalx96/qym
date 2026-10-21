@@ -15,6 +15,8 @@ export interface PopoverProps {
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   className?: string;
+  /** `data-testid` of the popover surface (the bordered box), for geometry checks. */
+  testId?: string;
   children: ReactNode | ((api: { close: () => void }) => ReactNode);
 }
 
@@ -26,6 +28,7 @@ export function Popover({
   isOpen,
   onOpenChange,
   className,
+  testId,
   children,
 }: PopoverProps) {
   return (
@@ -34,6 +37,7 @@ export function Popover({
       <AriaPopover
         placement={placement}
         offset={6}
+        data-testid={testId}
         className={[styles.popover, className].filter(Boolean).join(' ')}
       >
         <Dialog aria-label={label} className={styles.dialog}>

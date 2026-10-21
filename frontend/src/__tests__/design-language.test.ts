@@ -484,11 +484,13 @@ describe('visual language (redesign round 2)', () => {
 
   it('keeps the hover underline for running text only (QG1-9, QG1-16)', () => {
     const base = read(join(SRC, 'styles/base.css'));
-    expect(base).toContain("a:hover:not([data-link='block'])");
+    expect(base).toContain("a:hover:where(:not([data-link='block']))");
     const hovers = [...base.matchAll(/(^|\n)([^{}\n]*a:hover[^{}]*)\{([^{}]*)\}/g)].filter((m) =>
       /text-decoration\s*:\s*underline/.test(m[3]!),
     );
-    expect(hovers.map((m) => m[2]!.trim())).toEqual(["a:hover:not([data-link='block'])"]);
+    expect(hovers.map((m) => m[2]!.trim())).toEqual(["a:hover:where(:not([data-link='block']))"]);
+    // :where keeps the rule at specificity (0,1,1): a component's own `.x:hover` override must still win
+    expect(base).not.toMatch(/a:hover:not\(/);
     expect(read(join(SRC, 'ui/Card/Card.tsx'))).toContain('data-link="block"');
     expect(read(join(SRC, 'features/experiments/launch/entry/StartCard.tsx'))).toContain('data-link="block"');
     expect(read(join(SRC, 'features/docs/DocsPage.tsx'))).toContain('data-link="block"');

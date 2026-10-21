@@ -20,8 +20,10 @@ offline viewer below is a separate, smaller tool that needs no platform.
 ### Who can open a dataset
 
 Every dataset starts open to the whole project: each member can view and modify it. A project manager or admin can restrict one
-in **Dataset → Settings → Access**: choose **Only people listed below**, add project members with the level **View** or **Modify**,
-and press **Save access** (one save for the whole list). Managers, admins and the dataset's creator always have full access.
+in the dataset's **Access** tab (next to Lineage and Settings; its count shows how many people are listed): choose **Only people listed
+below**, add project members with the level **View** or **Modify** (the add row sits above the list; each row shows who added the
+person and when), and press **Save access** (one save for the whole list; the bar stays on screen while the list scrolls, and leaving the
+tab with unsaved changes asks first). Managers, admins and the dataset's creator always have full access.
 Switching back to **Everyone in the project** keeps the saved list, and it applies again if you restrict the dataset later.
 
 - A restricted dataset is absent from the catalog for people without access; its page answers "You don't have access to this
@@ -41,10 +43,19 @@ of its parent. SDK runs and downloads use the active items only (`state=active`)
 ### Filter and edit by metadata
 
 **Metadata** in the items toolbar filters on a key of the item metadata, including nested keys written as dotted paths up to three
-levels (`source.region.code`). Up to five filters combine (AND) and are kept in the URL (`meta=path:value`). With a filter, search or
+levels (`source.region.code`). Up to five keys combine (AND) and are kept in the URL (`meta=path:value`). With a filter, search or
 label active, **All matching** disables, enables or deletes every matching item of a draft. The confirm dialog shows how many items
 would change and the first ids before anything is written; deleting more than 50 asks you to type the number. Selected rows offer
 **Disable N…**, **Enable N** and **Delete N**. API: `POST …/items:batch` (dry run by default), `GET …/items:metadata-facets`.
+
+**Keys that hold a list** (for example `tags: ["billing", "refund"]`) are in the key list too, marked `· list`; a key that is a list on
+some items and a plain value on others is marked `· list or value`. For these keys you choose one or more values and a match mode:
+**Partial** keeps the items that have at least one of the chosen values, **Full match** keeps the items that have every chosen value
+(the list may hold more). With one value the mode makes no difference. A list filter shows as one chip, `tags: billing, refund (any)`
+(any = Partial, all = Full match), and is kept in the URL as repeated `meta` values plus `meta_mode=tags:any` or `meta_mode=tags:all`
+(without `meta_mode` several values mean all). Up to 20 values per key. In the API `meta=path:value` matches an item whose value at
+`path` equals it or whose list at `path` contains it; the same shape works in the batch body, where a list filter is
+`{"meta": {"tags": {"values": ["billing", "refund"], "mode": "any"}}}`. Lists of objects and empty lists are not offered as keys.
 
 ## Local results viewer (offline)
 

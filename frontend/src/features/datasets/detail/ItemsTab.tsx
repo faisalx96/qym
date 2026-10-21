@@ -182,22 +182,23 @@ export function ItemsTab({
   }
 
   // QA1-29: after Add filter focus lands on the new chip, after a removal on the Metadata button. The popover
-  // returns focus to its trigger when it closes, so the move waits one task.
+  // returns focus to its trigger when it closes (in a later frame), so the move runs again after that.
   const pendingFocus = useRef<string | null>(null);
   useEffect(() => {
     const target = pendingFocus.current;
     if (target === null) return;
     pendingFocus.current = null;
-    const timer = setTimeout(() => {
+    const move = () => {
       const el =
         target === ''
           ? document.querySelector<HTMLElement>('[data-testid="metadata-filter"]')
           : document.querySelector<HTMLElement>(
               `[data-testid="meta-chip"][data-meta-path="${CSS.escape(target)}"]`,
             );
-      el?.focus();
-    }, 0);
-    return () => clearTimeout(timer);
+      if (el && document.activeElement !== el) el.focus();
+    };
+    // not cancelled by a re-render: the route object (and so metaFilters) is new on every render
+    for (const delay of [0, 80, 200]) setTimeout(move, delay);
   }, [metaFilters]);
 
   function setMeta(next: MetaFilter[], focusPath = '') {
