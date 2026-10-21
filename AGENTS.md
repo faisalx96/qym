@@ -113,6 +113,8 @@ A feedback round is three stages, each by a different agent (`docs/internal/ui-m
 1. **Design**: measure the current page and the legacy page at the real column widths, write a spec with
    numbered acceptance criteria (each names the DOM element, the width and the number), static mocks in the
    gallery (`/__ui`), screenshots. "Clear", "cluttered" and "refer to the old design" become numbers here.
+   Every surface gets a **composed page mock first** (the whole page in the app shell, realistic data, default
+   state, real size, shots at 1440 and 390), then the component state sheets as the appendix (playbook).
 2. **Implement** criterion by criterion with a criterion -> change -> test table and after-screenshots;
    full gate through `heavy.sh` before the hand-back; backend touched means `tests/platform` runs.
 3. **Review**: an independent agent measures every criterion in the browser and writes MEETS / MEETS WITH

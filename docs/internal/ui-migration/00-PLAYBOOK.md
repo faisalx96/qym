@@ -113,6 +113,12 @@ rounds that went from a prose brief straight to code had to be redone (`POSTMORT
    `redesign<N>/<area>.md` with the owner's words quoted, one section per point (Problem measured, Legacy
    reference, Design per width, numbered acceptance criteria that name the element and the number, tests),
    static mocks in the gallery (`/__ui#round<N>`), screenshots `legacy-*`, `current-*`, `mock-*`. One hand-back.
+   **Composed page mocks first (rule since the October 2026 QA round):** for every surface the spec touches, the
+   gallery anchor opens with one composed page mock, the whole page as the user sees it inside the app shell
+   (sidebar, topbar, page header, the real tab bar) with realistic data in its default state, at the real page
+   size (never a scaled column), screenshot `mock-page-<surface>-<width>.png` at 1440 and 390. The component
+   state sheets (every state stacked under a label) follow it as the appendix for the reviewer. The owner judges
+   hierarchy and proportions on the composed mock; state sheets alone were rejected as unreadable.
 2. **Implementation agent**: one branch and worktree per area, criterion -> change -> test table in
    `impl-notes.md`, `after-*` screenshots, deviations with reasons, full gate through `scripts/heavy.sh`.
 3. **Review agent**: measures every criterion in the browser, `review-<area>.md` with the criterion table,
