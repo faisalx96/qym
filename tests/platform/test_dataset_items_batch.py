@@ -110,7 +110,7 @@ def test_meta_nested_paths_and_misses_match_nothing_without_error(draft):
         "domain.sub:x",
         "source:web",
         "source.region:sa",
-        "tags:x",
+        "tags:zzz",  # a list that does not hold the value (QA1-41 supersedes A3-43)
         "tags.0:x",
     ):
         response = _items(client, meta=miss)
@@ -159,6 +159,7 @@ def test_facets_payload(draft):
     assert body["truncated"] is False
     by_path = {p["path"]: p for p in body["paths"]}
     assert set(by_path) == {
+        "tags",
         "domain",
         "difficulty",
         "flag",
@@ -176,9 +177,9 @@ def test_facets_payload(draft):
     assert domain["truncated"] is False and domain["value_count"] == 3
     assert [v["value"] for v in by_path["difficulty"]["values"]] == ["0", "1", "2", "3"]
     assert {v["value"] for v in by_path["flag"]["values"]} == {"true", "false"}
-    assert "tags" not in by_path and not any(
-        p.startswith("deep") for p in by_path
-    )  # arrays and depth > 3 skipped
+    assert by_path["tags"]["kind"] == "list" and by_path["tags"]["value_count"] == 2
+    assert all(p["kind"] == "scalar" for k, p in by_path.items() if k != "tags")
+    assert not any(p.startswith("deep") for p in by_path)  # depth > 3 skipped
     assert [p["path"] for p in body["paths"]] == sorted(by_path)
 
 
@@ -762,7 +763,7 @@ def test_meta_sql_semantics_on_each_dialect(meta_db):
     )  # a path through a string value matches nothing
     assert _match(db, "domain:1") == []  # objects never match a scalar
     assert (
-        _match(db, "tags:x") == []
+        _match(db, "tags:zzz") == []
         and _match(db, "missing:x") == []
         and _match(db, "difficulty:null") == []
     )
