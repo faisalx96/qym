@@ -69,41 +69,61 @@ def test_item_history_follows_the_source_item_not_the_raw_id(env):
     assert union in ids and single not in ids
 
 
+def _entries_only_run(client, tickets, billing):
+    """A union run with its dataset rows and no items (so a hard delete meets no other child)."""
+    created = client.post(
+        "/v1/runs",
+        headers=auth(),
+        json={
+            "task": "t",
+            "dataset": "support-tickets@v3 + billing-faq@v7",
+            "datasets": [
+                {"dataset": "support-tickets", "dataset_id": tickets["id"],
+                 "dataset_version_id": tickets["versions"]["v3"], "version": "v3"},
+                {"dataset": "billing-faq", "dataset_id": billing["id"],
+                 "dataset_version_id": billing["versions"]["v7"], "version": "v7"},
+            ],
+        },
+    )
+    assert created.status_code == 200, created.text
+    return created.json()["run_id"]
+
+
 def test_hard_delete_cascades_to_run_datasets(env):
-    _, factory, *_rest, union = env
+    client, factory, tickets, billing, *_ = env
+    run_id = _entries_only_run(client, tickets, billing)
     from qym_platform.db.models import Run, RunDataset
 
     with factory() as session:
-        engine = session.get_bind()
-        if engine.dialect.name != "postgresql":
+        if session.get_bind().dialect.name != "postgresql":
             pytest.skip("SQLite does not enforce foreign keys here")
-        session.execute(__import__("sqlalchemy").text("DELETE FROM runs WHERE id = :r"), {"r": union})
+        assert session.query(RunDataset).filter(RunDataset.run_id == run_id).count() == 2
+        session.execute(__import__("sqlalchemy").text("DELETE FROM runs WHERE id = :r"), {"r": run_id})
         session.commit()
-        assert session.query(RunDataset).filter(RunDataset.run_id == union).count() == 0
-        assert session.get(Run, union) is None
+        assert session.query(RunDataset).filter(RunDataset.run_id == run_id).count() == 0
+        assert session.get(Run, run_id) is None
 
 
 def test_deleting_a_dataset_keeps_entry_text(env):
-    _, factory, tickets, billing, _, union = env
+    client, factory, tickets, billing, *_ = env
+    run_id = _entries_only_run(client, tickets, billing)
     from qym_platform.db.models import RunDataset
 
     with factory() as session:
-        engine = session.get_bind()
-        if engine.dialect.name != "postgresql":
+        if session.get_bind().dialect.name != "postgresql":
             pytest.skip("SQLite does not enforce foreign keys here")
         sa = __import__("sqlalchemy")
-        for table, column in (("dataset_items", "dataset_version_id"),):
-            session.execute(
-                sa.text(f"DELETE FROM {table} WHERE {column} IN (SELECT id FROM dataset_versions WHERE dataset_id = :d)"),
-                {"d": billing["id"]},
-            )
-        session.execute(sa.text("UPDATE run_items SET dataset_item_pk = NULL WHERE run_id = :r"), {"r": union})
-        session.execute(sa.text("DELETE FROM dataset_versions WHERE dataset_id = :d"), {"d": billing["id"]})
-        session.execute(sa.text("DELETE FROM datasets WHERE id = :d"), {"d": billing["id"]})
+        for statement in (
+            "UPDATE run_items SET dataset_item_pk = NULL",
+            "DELETE FROM dataset_items WHERE dataset_version_id IN (SELECT id FROM dataset_versions WHERE dataset_id = :d)",
+            "DELETE FROM dataset_versions WHERE dataset_id = :d",
+            "DELETE FROM datasets WHERE id = :d",
+        ):
+            session.execute(sa.text(statement), {"d": billing["id"]} if ":d" in statement else {})
         session.commit()
         row = (
             session.query(RunDataset)
-            .filter(RunDataset.run_id == union, RunDataset.dataset == "billing-faq")
+            .filter(RunDataset.run_id == run_id, RunDataset.dataset == "billing-faq")
             .one()
         )
         assert row.dataset_id is None and row.dataset_version_id is None

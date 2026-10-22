@@ -480,6 +480,7 @@ def build_overview_postgres(
         _search_condition,
         _sort,
         _versioning_facets,
+        dataset_facet_values,
     )
     from qym_platform.db.dashboard_models import DashboardRunOverview as Facts
 
@@ -635,6 +636,10 @@ def build_overview_postgres(
     filtered = _assemble_chart(raw)
     filtered["kpis"] = _kpi_result(raw["kpis"], filtered=bool(active))
     filtered["facets"]["versioning"] = _versioning_facets(
+        db, _base_conditions(project), filters
+    )
+    # Union runs list their member datasets, never their label (QC-66).
+    filtered["facets"]["datasets"] = dataset_facet_values(
         db, _base_conditions(project), filters
     )
     return whole, filtered

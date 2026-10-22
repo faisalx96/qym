@@ -538,40 +538,51 @@ def _freshness(db, project):
     return copy.deepcopy(db.info[key])
 
 
-def _facets(db, base, filters):
-    result = {}
-    for name, column in _FILTER_COLUMNS.items():
-        conditions = [*base, *_filter_conditions(filters, skip=name, facets=True)]
-        if name == "datasets":
-            # Real dataset names: a union run lists its members, never its label.
-            values = list(
-                db.scalars(
-                    _query(column)
-                    .where(
-                        *conditions,
-                        Dimension.run_key.notin_(select(RunDataset.run_id)),
-                    )
-                    .distinct()
+def _facet_values(db, base, filters, name, column):
+    """The sorted values of one facet among the runs matching the other filters."""
+    conditions = [*base, *_filter_conditions(filters, skip=name, facets=True)]
+    if name == "datasets":
+        # Real dataset names: a union run lists its members, never its label.
+        values = list(
+            db.scalars(
+                _query(column)
+                .where(
+                    *conditions,
+                    Dimension.run_key.notin_(select(RunDataset.run_id)),
                 )
-            ) + list(
-                db.scalars(
-                    select(_union_member_value())
-                    .select_from(RunDataset)
-                    .join(Dimension, Dimension.run_key == RunDataset.run_id)
-                    .join(Summary, Summary.run_key == Dimension.run_key)
-                    .where(*conditions)
-                    .distinct()
-                )
+                .distinct()
             )
-        else:
-            values = db.scalars(_query(column).where(*conditions).distinct())
-        normalized = {
-            str(value) if value is not None and str(value).strip() else "__empty__"
-            for value in values
-        }
-        result[name] = sorted(normalized - {"__empty__"}, key=str.casefold) + (
-            ["__empty__"] if "__empty__" in normalized else []
+        ) + list(
+            db.scalars(
+                select(_union_member_value())
+                .select_from(RunDataset)
+                .join(Dimension, Dimension.run_key == RunDataset.run_id)
+                .join(Summary, Summary.run_key == Dimension.run_key)
+                .where(*conditions)
+                .distinct()
+            )
         )
+    else:
+        values = db.scalars(_query(column).where(*conditions).distinct())
+    normalized = {
+        str(value) if value is not None and str(value).strip() else "__empty__"
+        for value in values
+    }
+    return sorted(normalized - {"__empty__"}, key=str.casefold) + (
+        ["__empty__"] if "__empty__" in normalized else []
+    )
+
+
+def dataset_facet_values(db, base, filters):
+    """The ``datasets`` facet (the PostgreSQL overview computes the others in one statement)."""
+    return _facet_values(db, base, filters, "datasets", _FILTER_COLUMNS["datasets"])
+
+
+def _facets(db, base, filters):
+    result = {
+        name: _facet_values(db, base, filters, name, column)
+        for name, column in _FILTER_COLUMNS.items()
+    }
     result["versioning"] = _versioning_facets(db, base, filters)
     return result
 
