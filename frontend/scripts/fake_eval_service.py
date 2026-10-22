@@ -15,11 +15,21 @@ next read, never finishing by itself) and exposes /__control to drive them:
     POST /__control/health      {"down": true}   next requests answer 503
     POST /__control/schema      {"array_leaves": true}   serve three list settings in the schema (reset restores)
     POST /__control/versioning  {"agent_version": "..."}   what /evals/versioning-details/current answers (reset restores)
+    POST /__control/capabilities {"datasets": true, "task": true}   the evaluator schema declares them (reset restores)
+    POST /__control/tasks       {"tasks": [{"id","name","description","default"}], "status": 200|404|422|503, "delay_ms": 0}
+                                what GET /evals/tasks answers (reset restores)
+
+    python frontend/scripts/fake_eval_service.py 8906 --datasets --tasks
+        change request v1.4: the evaluator schema declares `datasets` and `task`, GET /evals/tasks lists the tasks,
+        a submit stores and echoes `datasets` / `task` and answers 422 "unknown task: <id>" for a task outside the list.
+        Without the flags the service behaves like v1.3: it drops those keys and GET /evals/tasks answers the 422 of
+        the /evals/{job_id} UUID route.
 Valid API key: any non-empty bearer token.
 """
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import sys
@@ -35,6 +45,12 @@ from fastapi.responses import JSONResponse
 FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "platform" / "fixtures"
 SCHEMA = json.loads((FIXTURES / "eval_env_overrides_schema.json").read_text())
 EVALUATOR = json.loads((FIXTURES / "eval_evaluator_schema.json").read_text())
+EVALUATOR_V14 = json.loads((FIXTURES / "eval_evaluator_schema-v14.json").read_text())
+DEFAULT_TASKS = [
+    {"id": "answer-ticket", "name": "Answer a ticket", "description": "Reply to a support ticket from the knowledge base", "default": True},
+    {"id": "route-ticket", "name": "Route a ticket", "description": "Pick the team that should handle the ticket", "default": False},
+    {"id": "summarise-ticket", "name": "Summarise a ticket", "description": None, "default": False},
+]
 
 app = FastAPI()
 JOBS: Dict[str, Dict[str, Any]] = {}
@@ -67,6 +83,11 @@ STATE: Dict[str, Any] = {
     "versioning": dict(DEFAULT_VERSIONING),
     "array_leaves": False,
     "flags": "--flags" in sys.argv[2:],
+    "datasets": "--datasets" in sys.argv[2:],
+    "task": "--tasks" in sys.argv[2:],
+    "tasks": copy.deepcopy(DEFAULT_TASKS),
+    "tasks_status": 200,
+    "tasks_delay_ms": 0,
 }
 # Control fields a test may set on a job.
 CONTROL_FIELDS = {
@@ -114,7 +135,33 @@ def env_schema() -> Any:
 
 @app.get("/evals/evaluator/schema")
 def evaluator_schema() -> Any:
-    return copy.deepcopy(EVALUATOR)
+    if not (STATE["datasets"] or STATE["task"]):
+        return copy.deepcopy(EVALUATOR)
+    schema = copy.deepcopy(EVALUATOR_V14)
+    for key in ("datasets", "task"):
+        if not STATE[key]:
+            schema["properties"].pop(key, None)
+    if not STATE["datasets"]:
+        schema["$defs"].pop("DatasetRef", None)
+    return schema
+
+
+@app.get("/evals/tasks")
+async def tasks() -> Any:
+    """Change request v1.4. A v1.3 service routes this to /evals/{job_id}: a UUID 422."""
+    if not STATE["task"]:
+        return JSONResponse(
+            {"detail": [{"type": "uuid_parsing", "loc": ["path", "job_id"], "msg": "Input should be a valid UUID"}]},
+            status_code=422,
+        )
+    if STATE["tasks_delay_ms"]:
+        await asyncio.sleep(STATE["tasks_delay_ms"] / 1000)
+    status = STATE["tasks_status"]
+    if status == 503:
+        return JSONResponse({"detail": "could not list tasks: registry offline"}, status_code=503)
+    if status != 200:
+        return JSONResponse({"detail": "not available"}, status_code=status)
+    return {"tasks": copy.deepcopy(STATE["tasks"])}
 
 
 @app.get("/evals/versioning-details/current")
@@ -131,6 +178,14 @@ def list_jobs(status: Optional[str] = None, limit: int = 50, offset: int = 0) ->
 @app.post("/evals", status_code=202)
 async def submit(request: Request) -> Any:
     body = await request.json()
+    evaluator = dict(body.get("evaluator") or {})
+    # A v1.3 service silently drops keys it does not know.
+    for key in ("datasets", "task"):
+        if not STATE[key]:
+            evaluator.pop(key, None)
+    if STATE["task"] and evaluator.get("task") and STATE["tasks"]:
+        if evaluator["task"] not in {t["id"] for t in STATE["tasks"]}:
+            return JSONResponse({"detail": f"unknown task: {evaluator['task']}"}, status_code=422)
     priority = body.get("priority") or "NORMAL"
     if priority != "HIGH":
         for j in JOBS.values():
@@ -146,7 +201,7 @@ async def submit(request: Request) -> Any:
         "updated_at": None,
         "env_overrides": body.get("env_overrides") or {},
         "latency_sensitive": body.get("latency_sensitive"),
-        "eval_input": body.get("evaluator") or {},
+        "eval_input": evaluator,
         "result": None,
         "error": None,
     }
@@ -199,9 +254,36 @@ async def control_flags(request: Request) -> Any:
     return {"flags": STATE["flags"]}
 
 
+@app.post("/__control/capabilities")
+async def control_capabilities(request: Request) -> Any:
+    """{"datasets": bool, "task": bool} declares the v1.4 evaluator keys (a schema refresh picks them up)."""
+    body = await request.json()
+    for key in ("datasets", "task"):
+        if key in body:
+            STATE[key] = bool(body[key])
+    return {"datasets": STATE["datasets"], "task": STATE["task"]}
+
+
+@app.post("/__control/tasks")
+async def control_tasks(request: Request) -> Any:
+    body = await request.json()
+    if "tasks" in body:
+        STATE["tasks"] = list(body["tasks"])
+    if "status" in body:
+        STATE["tasks_status"] = int(body["status"])
+    if "delay_ms" in body:
+        STATE["tasks_delay_ms"] = int(body["delay_ms"])
+    return {"tasks": STATE["tasks"], "status": STATE["tasks_status"], "delay_ms": STATE["tasks_delay_ms"]}
+
+
 @app.post("/__control/reset")
 def control_reset() -> Any:
     JOBS.clear()
+    STATE["datasets"] = "--datasets" in sys.argv[2:]
+    STATE["task"] = "--tasks" in sys.argv[2:]
+    STATE["tasks"] = copy.deepcopy(DEFAULT_TASKS)
+    STATE["tasks_status"] = 200
+    STATE["tasks_delay_ms"] = 0
     STATE["down"] = False
     STATE["versioning"] = dict(DEFAULT_VERSIONING)
     STATE["array_leaves"] = False

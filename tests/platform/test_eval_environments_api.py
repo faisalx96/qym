@@ -79,6 +79,10 @@ class FakeService:
         # service (404); versioning_error answers 503 with that detail.
         self.versioning = None
         self.versioning_error = None
+        # GET /evals/tasks (change request v1.4): None = a v1.3 service, whose
+        # /evals/{job_id} route answers a UUID 422; tasks_status forces another answer.
+        self.tasks = None
+        self.tasks_status = None
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -104,6 +108,16 @@ class FakeService:
             if self.versioning is None:
                 return httpx.Response(404, json={"detail": "Not Found"})
             return httpx.Response(200, json=self.versioning)
+        if path.endswith("/evals/tasks"):
+            if self.tasks_status == 503:
+                return httpx.Response(503, json={"detail": "could not list tasks: x"})
+            if self.tasks_status is not None:
+                return httpx.Response(self.tasks_status, json={"detail": "nope"})
+            if self.tasks is None:
+                return httpx.Response(
+                    422, json={"detail": [{"loc": ["path", "job_id"], "msg": "bad uuid"}]}
+                )
+            return httpx.Response(200, json={"tasks": self.tasks})
         if path.endswith("/evals"):
             return httpx.Response(
                 200, json={"total": 0, "limit": 1, "offset": 0, "items": []}
