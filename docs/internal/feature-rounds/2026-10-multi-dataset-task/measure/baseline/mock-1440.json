@@ -1,0 +1,1655 @@
+{
+  "md-page-home": {
+    "shell": {
+      "x": 139,
+      "w": 1440,
+      "h": 900,
+      "font": "12px/400",
+      "overflow": 0
+    },
+    "header": {
+      "x": 351,
+      "w": 1193,
+      "h": 48.4,
+      "font": "12px/400",
+      "overflow": 0
+    },
+    "where": {
+      "x": 351,
+      "w": 1193,
+      "h": 447,
+      "font": "12px/400",
+      "overflow": 0
+    },
+    "cards": [
+      {
+        "x": 351,
+        "w": 589.5,
+        "h": 447,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "EnvironmentsproductionHealthyPriorit"
+      },
+      {
+        "x": 954,
+        "w": 589.5,
+        "h": 447,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Datasetssupport-ticketsVersions· 2v3"
+      }
+    ],
+    "envBoxes": [
+      {
+        "x": 372,
+        "w": 547.5,
+        "h": 143,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      },
+      {
+        "x": 372,
+        "w": 547.5,
+        "h": 115,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "stagingHealthyPriority up to HIGHDef"
+      }
+    ],
+    "versionLines": [
+      {
+        "x": 381,
+        "w": 529.5,
+        "h": 53,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 381,
+        "w": 529.5,
+        "h": 53,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      }
+    ],
+    "taskLines": [
+      {
+        "x": 381,
+        "w": 529.5,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskTask of productionAnswer a ticke"
+      }
+    ],
+    "taskSelect": [
+      {
+        "x": 418,
+        "w": 492.1,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Answer a ticketReply to a support ti"
+      }
+    ],
+    "shapeTags": [
+      {
+        "x": 546,
+        "w": 88.6,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "1 combined run"
+      },
+      {
+        "x": 668,
+        "w": 229.2,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "4 runs, one per dataset version (old"
+      }
+    ],
+    "dsFieldset": [
+      {
+        "x": 975,
+        "w": 547.5,
+        "h": 264,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Datasetssupport-ticketsVersions· 2v3"
+      }
+    ],
+    "dsBoxes": [
+      {
+        "x": 975,
+        "w": 547.5,
+        "h": 67,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "support-ticketsVersions· 2v3v4"
+      },
+      {
+        "x": 975,
+        "w": 547.5,
+        "h": 67,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "billing-faqRestrictedVersions· 2v1v2"
+      }
+    ],
+    "dsRefs": [
+      {
+        "x": 984,
+        "w": 529.5,
+        "h": 29,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versions· 2v3v4"
+      },
+      {
+        "x": 984,
+        "w": 529.5,
+        "h": 29,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versions· 2v1v2"
+      }
+    ],
+    "dsTrigger": [
+      {
+        "x": 1490,
+        "w": 24,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": ""
+      },
+      {
+        "x": 984,
+        "w": 97,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Versions· 2"
+      },
+      {
+        "x": 1490,
+        "w": 24,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": ""
+      },
+      {
+        "x": 984,
+        "w": 97,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Versions· 2"
+      }
+    ],
+    "refTags": [
+      {
+        "x": 1089,
+        "w": 28,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "v3"
+      },
+      {
+        "x": 1121,
+        "w": 28,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "v4"
+      },
+      {
+        "x": 1089,
+        "w": 28,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "v1"
+      },
+      {
+        "x": 1121,
+        "w": 28,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "v2"
+      }
+    ],
+    "runShape": [
+      {
+        "x": 975,
+        "w": 547.5,
+        "h": 67.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Combine into one runOne run eachOne "
+      }
+    ],
+    "runShapeControl": [
+      {
+        "x": 975,
+        "w": 547.5,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Combine into one runOne run each"
+      }
+    ],
+    "runShapeOptions": [],
+    "pairCount": [
+      {
+        "x": 1352,
+        "w": 170.6,
+        "h": 15.4,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "4 dataset versions from 2 datasets"
+      }
+    ],
+    "addButton": [
+      {
+        "x": 975,
+        "w": 159,
+        "h": 24,
+        "font": "11px/600",
+        "overflow": 0,
+        "text": "Add another dataset"
+      }
+    ],
+    "bar": [
+      {
+        "x": 351,
+        "w": 1193,
+        "h": 56,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Experiment nameReady: Default preset"
+      }
+    ],
+    "reviewAside": [],
+    "reviewRows": [],
+    "reviewEnvLines": [],
+    "detailCard": [],
+    "groups": [],
+    "matrix": [],
+    "jobsTable": [],
+    "strip": [],
+    "back": [],
+    "raw": [],
+    "layout": [],
+    "pageOverflow": 139
+  },
+  "md-page-step1": {
+    "shell": {
+      "x": 139,
+      "w": 1440,
+      "h": 900,
+      "font": "12px/400",
+      "overflow": 0
+    },
+    "header": {
+      "x": 351,
+      "w": 1193,
+      "h": 48.4,
+      "font": "12px/400",
+      "overflow": 0
+    },
+    "where": {
+      "x": 351,
+      "w": 821,
+      "h": 453.8,
+      "font": "12px/400",
+      "overflow": 0
+    },
+    "cards": [
+      {
+        "x": 351,
+        "w": 403.5,
+        "h": 453.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "EnvironmentsproductionHealthyPriorit"
+      },
+      {
+        "x": 768,
+        "w": 403.5,
+        "h": 453.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Datasetssupport-ticketsVersions· 2v3"
+      }
+    ],
+    "envBoxes": [
+      {
+        "x": 372,
+        "w": 361.5,
+        "h": 167,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      },
+      {
+        "x": 372,
+        "w": 361.5,
+        "h": 163,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "stagingHealthyPriority up to HIGHDef"
+      }
+    ],
+    "versionLines": [
+      {
+        "x": 381,
+        "w": 343.5,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 381,
+        "w": 343.5,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      }
+    ],
+    "taskLines": [
+      {
+        "x": 381,
+        "w": 343.5,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskTask of productionAnswer a ticke"
+      }
+    ],
+    "taskSelect": [
+      {
+        "x": 418,
+        "w": 306.1,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Answer a ticketReply to a support ti"
+      }
+    ],
+    "shapeTags": [
+      {
+        "x": 546,
+        "w": 88.6,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "1 combined run"
+      },
+      {
+        "x": 381,
+        "w": 229.2,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "4 runs, one per dataset version (old"
+      }
+    ],
+    "dsFieldset": [
+      {
+        "x": 789,
+        "w": 361.5,
+        "h": 264,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Datasetssupport-ticketsVersions· 2v3"
+      }
+    ],
+    "dsBoxes": [
+      {
+        "x": 789,
+        "w": 361.5,
+        "h": 67,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "support-ticketsVersions· 2v3v4"
+      },
+      {
+        "x": 789,
+        "w": 361.5,
+        "h": 67,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "billing-faqRestrictedVersions· 2v1v2"
+      }
+    ],
+    "dsRefs": [
+      {
+        "x": 798,
+        "w": 343.5,
+        "h": 29,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versions· 2v3v4"
+      },
+      {
+        "x": 798,
+        "w": 343.5,
+        "h": 29,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versions· 2v1v2"
+      }
+    ],
+    "dsTrigger": [
+      {
+        "x": 1118,
+        "w": 24,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": ""
+      },
+      {
+        "x": 798,
+        "w": 97,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Versions· 2"
+      },
+      {
+        "x": 1118,
+        "w": 24,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": ""
+      },
+      {
+        "x": 798,
+        "w": 97,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Versions· 2"
+      }
+    ],
+    "refTags": [
+      {
+        "x": 903,
+        "w": 28,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "v3"
+      },
+      {
+        "x": 935,
+        "w": 28,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "v4"
+      },
+      {
+        "x": 903,
+        "w": 28,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "v1"
+      },
+      {
+        "x": 935,
+        "w": 28,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "v2"
+      }
+    ],
+    "runShape": [
+      {
+        "x": 789,
+        "w": 361.5,
+        "h": 67.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Combine into one runOne run eachOne "
+      }
+    ],
+    "runShapeControl": [
+      {
+        "x": 789,
+        "w": 361.5,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Combine into one runOne run each"
+      }
+    ],
+    "runShapeOptions": [],
+    "pairCount": [
+      {
+        "x": 980,
+        "w": 170.6,
+        "h": 15.4,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "4 dataset versions from 2 datasets"
+      }
+    ],
+    "addButton": [
+      {
+        "x": 789,
+        "w": 159,
+        "h": 24,
+        "font": "11px/600",
+        "overflow": 0,
+        "text": "Add another dataset"
+      }
+    ],
+    "bar": [],
+    "reviewAside": [
+      {
+        "x": 1192,
+        "w": 352,
+        "h": 700.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "ReviewReadyEnvironmentsproduction1 c"
+      }
+    ],
+    "reviewRows": [
+      {
+        "x": 1213,
+        "w": 310,
+        "h": 107.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Environmentsproduction1 combined run"
+      },
+      {
+        "x": 1213,
+        "w": 310,
+        "h": 57,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Datasetssupport-tickets v3, v4billin"
+      },
+      {
+        "x": 1213,
+        "w": 310,
+        "h": 36.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Run shapeCombine into one run"
+      },
+      {
+        "x": 1213,
+        "w": 310,
+        "h": 36.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Start fromDefault preset v1 · produc"
+      },
+      {
+        "x": 1213,
+        "w": 310,
+        "h": 36.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "PriorityEnvironment default"
+      },
+      {
+        "x": 1213,
+        "w": 310,
+        "h": 71.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsproduction: agent-1.4.2 · im"
+      }
+    ],
+    "reviewEnvLines": [
+      {
+        "x": 1213,
+        "w": 310,
+        "h": 34.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "production1 combined run of 4 datase"
+      },
+      {
+        "x": 1213,
+        "w": 310,
+        "h": 49.6,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "staging4 runs, one per dataset versi"
+      }
+    ],
+    "detailCard": [],
+    "groups": [],
+    "matrix": [],
+    "jobsTable": [],
+    "strip": [],
+    "back": [],
+    "raw": [],
+    "layout": [
+      {
+        "x": 351,
+        "w": 1193,
+        "h": 700.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "1Where it runs2Starting point3Models"
+      }
+    ],
+    "pageOverflow": 139
+  },
+  "md-page-review": {
+    "shell": {
+      "x": 139,
+      "w": 1440,
+      "h": 1394.9,
+      "font": "12px/400",
+      "overflow": 0
+    },
+    "header": {
+      "x": 351,
+      "w": 1193,
+      "h": 48.4,
+      "font": "12px/400",
+      "overflow": 0
+    },
+    "where": null,
+    "cards": [],
+    "envBoxes": [],
+    "versionLines": [],
+    "taskLines": [],
+    "taskSelect": [],
+    "shapeTags": [],
+    "dsFieldset": [],
+    "dsBoxes": [],
+    "dsRefs": [],
+    "dsTrigger": [],
+    "refTags": [],
+    "runShape": [],
+    "runShapeControl": [],
+    "runShapeOptions": [],
+    "pairCount": [],
+    "addButton": [],
+    "bar": [],
+    "reviewAside": [
+      {
+        "x": 351,
+        "w": 1193,
+        "h": 653.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "ReviewReadyEnvironmentsproduction1 c"
+      }
+    ],
+    "reviewRows": [
+      {
+        "x": 372,
+        "w": 1151,
+        "h": 91.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Environmentsproduction1 combined run"
+      },
+      {
+        "x": 372,
+        "w": 1151,
+        "h": 57,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Datasetssupport-tickets v3, v4billin"
+      },
+      {
+        "x": 372,
+        "w": 1151,
+        "h": 36.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Run shapeCombine into one run"
+      },
+      {
+        "x": 372,
+        "w": 1151,
+        "h": 36.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Start fromDefault preset v1 · produc"
+      },
+      {
+        "x": 372,
+        "w": 1151,
+        "h": 36.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "PriorityEnvironment default"
+      },
+      {
+        "x": 372,
+        "w": 1151,
+        "h": 55,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsproduction: agent-1.4.2 · im"
+      }
+    ],
+    "reviewEnvLines": [
+      {
+        "x": 372,
+        "w": 1151,
+        "h": 34.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "production1 combined run of 4 datase"
+      },
+      {
+        "x": 372,
+        "w": 1151,
+        "h": 34.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "staging4 runs, one per dataset versi"
+      }
+    ],
+    "detailCard": [],
+    "groups": [],
+    "matrix": [],
+    "jobsTable": [],
+    "strip": [],
+    "back": [],
+    "raw": [
+      {
+        "x": 372,
+        "w": 1151,
+        "h": 279.6,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "{\n  \"evaluator\": {\n    \"dataset\": \"s"
+      }
+    ],
+    "layout": [
+      {
+        "x": 351,
+        "w": 1193,
+        "h": 1230.5,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "1Where it runs2Starting point3Models"
+      }
+    ],
+    "pageOverflow": 139
+  },
+  "md-page-detail": {
+    "shell": {
+      "x": 139,
+      "w": 1440,
+      "h": 1674.4,
+      "font": "12px/400",
+      "overflow": 0
+    },
+    "header": {
+      "x": 351,
+      "w": 1193,
+      "h": 69.2,
+      "font": "12px/400",
+      "overflow": 0
+    },
+    "where": null,
+    "cards": [],
+    "envBoxes": [],
+    "versionLines": [],
+    "taskLines": [],
+    "taskSelect": [],
+    "shapeTags": [],
+    "dsFieldset": [],
+    "dsBoxes": [],
+    "dsRefs": [],
+    "dsTrigger": [],
+    "refTags": [],
+    "runShape": [],
+    "runShapeControl": [],
+    "runShapeOptions": [],
+    "pairCount": [],
+    "addButton": [],
+    "bar": [],
+    "reviewAside": [],
+    "reviewRows": [],
+    "reviewEnvLines": [],
+    "detailCard": [
+      {
+        "x": 351,
+        "w": 1193,
+        "h": 213.3,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Datasetssupport-tickets · v3support-"
+      }
+    ],
+    "groups": [
+      {
+        "x": 405,
+        "w": 208.4,
+        "h": 20,
+        "font": "12px/650",
+        "overflow": 0,
+        "text": "All 4 dataset versions · one combine"
+      },
+      {
+        "x": 405,
+        "w": 107.5,
+        "h": 20,
+        "font": "12px/650",
+        "overflow": 0,
+        "text": "support-tickets · v3"
+      },
+      {
+        "x": 405,
+        "w": 107.5,
+        "h": 20,
+        "font": "12px/650",
+        "overflow": 0,
+        "text": "support-tickets · v4"
+      },
+      {
+        "x": 405,
+        "w": 83.8,
+        "h": 20,
+        "font": "12px/650",
+        "overflow": 0,
+        "text": "billing-faq · v1"
+      },
+      {
+        "x": 405,
+        "w": 83.8,
+        "h": 20,
+        "font": "12px/650",
+        "overflow": 0,
+        "text": "billing-faq · v2"
+      }
+    ],
+    "matrix": [
+      {
+        "x": 351,
+        "w": 1193,
+        "h": 413.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Matrix1 combination × 3 environments"
+      }
+    ],
+    "jobsTable": [
+      {
+        "x": 373,
+        "w": 1149,
+        "h": 559,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "EnvironmentTaskStatusRunUpdatedAll 4"
+      }
+    ],
+    "strip": [
+      {
+        "x": 351,
+        "w": 1193,
+        "h": 81.4,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Jobs9Succeeded2Failed0In progress3Ca"
+      }
+    ],
+    "back": [
+      {
+        "x": 351,
+        "w": 97.1,
+        "h": 16.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "← All experiments"
+      }
+    ],
+    "raw": [],
+    "layout": [],
+    "pageOverflow": 139
+  },
+  "md-s-single": {
+    "cards": [
+      {
+        "x": 139,
+        "w": 589.5,
+        "h": 224.4,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "EnvironmentsproductionHealthyPriorit"
+      },
+      {
+        "x": 742,
+        "w": 589.5,
+        "h": 224.4,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "DatasetChoose a dataset billing-faqr"
+      },
+      {
+        "x": 139,
+        "w": 589.5,
+        "h": 309.4,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "EnvironmentsproductionHealthyPriorit"
+      },
+      {
+        "x": 742,
+        "w": 589.5,
+        "h": 309.4,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Datasetssupport-ticketsVersions· 1La"
+      }
+    ],
+    "envBoxes": [
+      {
+        "x": 160,
+        "w": 547.5,
+        "h": 143,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      }
+    ],
+    "taskLines": [
+      {
+        "x": 169,
+        "w": 529.5,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskTask of productionWorker default"
+      }
+    ],
+    "taskSelect": [
+      {
+        "x": 206,
+        "w": 492.1,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Worker default"
+      }
+    ],
+    "versionLines": [
+      {
+        "x": 169,
+        "w": 529.5,
+        "h": 53,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      }
+    ],
+    "dsFieldset": [
+      {
+        "x": 763,
+        "w": 547.5,
+        "h": 117.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Datasetssupport-ticketsVersions· 1La"
+      }
+    ],
+    "dsBoxes": [
+      {
+        "x": 763,
+        "w": 547.5,
+        "h": 67,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "support-ticketsVersions· 1Latest ver"
+      }
+    ],
+    "shapeBlocks": [],
+    "popovers": [],
+    "shapeTags": [],
+    "selects": [
+      {
+        "x": 763,
+        "w": 547.5,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Choose a dataset"
+      },
+      {
+        "x": 206,
+        "w": 492.1,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Worker default"
+      }
+    ],
+    "review": [],
+    "raw": []
+  },
+  "md-s-picker": {
+    "cards": [],
+    "envBoxes": [],
+    "taskLines": [],
+    "taskSelect": [],
+    "versionLines": [],
+    "dsFieldset": [
+      {
+        "x": 160,
+        "w": 310,
+        "h": 298.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Datasetssupport-ticketsVersions· 1La"
+      }
+    ],
+    "dsBoxes": [
+      {
+        "x": 160,
+        "w": 310,
+        "h": 67,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "support-ticketsVersions· 1Latest ver"
+      },
+      {
+        "x": 160,
+        "w": 310,
+        "h": 67,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "billing-faqRestrictedVersions· 1alia"
+      }
+    ],
+    "shapeBlocks": [
+      {
+        "x": 160,
+        "w": 310,
+        "h": 83.2,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Combine into one runOne run eachOne "
+      }
+    ],
+    "popovers": [
+      {
+        "x": 139,
+        "w": 288,
+        "h": 264.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versions of support-tickets. Tick se"
+      },
+      {
+        "x": 139,
+        "w": 288,
+        "h": 264.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versions of support-tickets. Tick se"
+      }
+    ],
+    "shapeTags": [],
+    "selects": [],
+    "review": [],
+    "raw": []
+  },
+  "md-s-shape": {
+    "cards": [],
+    "envBoxes": [],
+    "taskLines": [],
+    "taskSelect": [],
+    "versionLines": [],
+    "dsFieldset": [],
+    "dsBoxes": [],
+    "shapeBlocks": [
+      {
+        "x": 541,
+        "w": 352,
+        "h": 67.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Combine into one runOne run eachOne "
+      },
+      {
+        "x": 541,
+        "w": 352,
+        "h": 67.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Combine into one runOne run each4 ru"
+      },
+      {
+        "x": 541,
+        "w": 352,
+        "h": 67.8,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Combine into one runOne run eachOne "
+      }
+    ],
+    "popovers": [],
+    "shapeTags": [],
+    "selects": [],
+    "review": [],
+    "raw": []
+  },
+  "md-s-task": {
+    "cards": [],
+    "envBoxes": [
+      {
+        "x": 943,
+        "w": 352,
+        "h": 167,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      },
+      {
+        "x": 943,
+        "w": 352,
+        "h": 167,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      },
+      {
+        "x": 943,
+        "w": 352,
+        "h": 167,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      },
+      {
+        "x": 943,
+        "w": 352,
+        "h": 167,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      },
+      {
+        "x": 943,
+        "w": 352,
+        "h": 167,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      },
+      {
+        "x": 943,
+        "w": 352,
+        "h": 139,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "stagingHealthyPriority up to HIGHDet"
+      },
+      {
+        "x": 943,
+        "w": 352,
+        "h": 167,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      }
+    ],
+    "taskLines": [
+      {
+        "x": 952,
+        "w": 334,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskTask of productionAnswer a ticke"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskTask of productionWorker default"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskReading tasks…"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskTask of productionNo tasks liste"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskCouldn’t read tasks: registry of"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskTask of productionAnswer a ticke"
+      }
+    ],
+    "taskSelect": [
+      {
+        "x": 990,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Answer a ticketReply to a support ti"
+      },
+      {
+        "x": 990,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Worker default"
+      },
+      {
+        "x": 990,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "No tasks listed"
+      },
+      {
+        "x": 990,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Answer a ticketReply to a support ti"
+      }
+    ],
+    "versionLines": [
+      {
+        "x": 952,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 952,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      }
+    ],
+    "dsFieldset": [],
+    "dsBoxes": [],
+    "shapeBlocks": [],
+    "popovers": [],
+    "shapeTags": [],
+    "selects": [
+      {
+        "x": 990,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Answer a ticketReply to a support ti"
+      },
+      {
+        "x": 990,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Worker default"
+      },
+      {
+        "x": 990,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "No tasks listed"
+      },
+      {
+        "x": 990,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Answer a ticketReply to a support ti"
+      }
+    ],
+    "review": [],
+    "raw": []
+  },
+  "md-s-env": {
+    "cards": [],
+    "envBoxes": [
+      {
+        "x": 139,
+        "w": 352,
+        "h": 167,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      },
+      {
+        "x": 139,
+        "w": 352,
+        "h": 167,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "productionHealthyPriority up to HIGH"
+      },
+      {
+        "x": 139,
+        "w": 352,
+        "h": 163,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "stagingHealthyPriority up to HIGH4 r"
+      },
+      {
+        "x": 139,
+        "w": 352,
+        "h": 139,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "stagingHealthyPriority up to HIGH4 r"
+      },
+      {
+        "x": 139,
+        "w": 352,
+        "h": 163,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "qa-labHealthyPriority up to HIGHNo s"
+      }
+    ],
+    "taskLines": [
+      {
+        "x": 148,
+        "w": 334,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskTask of productionRoute a ticket"
+      },
+      {
+        "x": 148,
+        "w": 334,
+        "h": 24,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "TaskTask of productionWorker default"
+      }
+    ],
+    "taskSelect": [
+      {
+        "x": 185,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Route a ticketPick the queue a ticke"
+      },
+      {
+        "x": 185,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Worker default"
+      }
+    ],
+    "versionLines": [
+      {
+        "x": 148,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 148,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 148,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 148,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      },
+      {
+        "x": 148,
+        "w": 334,
+        "h": 77,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Versionsagentagent-1.4.2imageimg-202"
+      }
+    ],
+    "dsFieldset": [],
+    "dsBoxes": [],
+    "shapeBlocks": [],
+    "popovers": [],
+    "shapeTags": [
+      {
+        "x": 313,
+        "w": 88.6,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "1 combined run"
+      },
+      {
+        "x": 313,
+        "w": 160,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "4 runs, one per dataset version"
+      },
+      {
+        "x": 148,
+        "w": 229.2,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "4 runs, one per dataset version (old"
+      },
+      {
+        "x": 313,
+        "w": 160,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "4 runs, one per dataset version"
+      },
+      {
+        "x": 148,
+        "w": 229.2,
+        "h": 20,
+        "font": "10px/650",
+        "overflow": 0,
+        "text": "4 runs, one per dataset version (old"
+      }
+    ],
+    "selects": [
+      {
+        "x": 185,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Route a ticketPick the queue a ticke"
+      },
+      {
+        "x": 185,
+        "w": 296.6,
+        "h": 24,
+        "font": "11px/400",
+        "overflow": 0,
+        "text": "Worker default"
+      }
+    ],
+    "review": [],
+    "raw": []
+  },
+  "md-s-problems": {
+    "cards": [],
+    "envBoxes": [],
+    "taskLines": [],
+    "taskSelect": [],
+    "versionLines": [],
+    "dsFieldset": [],
+    "dsBoxes": [],
+    "shapeBlocks": [],
+    "popovers": [],
+    "shapeTags": [],
+    "selects": [],
+    "review": [
+      {
+        "x": 541,
+        "w": 352,
+        "h": 795.1,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "Review3 problemsEnvironmentsproducti"
+      },
+      {
+        "x": 541,
+        "w": 352,
+        "h": 788.5,
+        "font": "12px/400",
+        "overflow": 0,
+        "text": "ReviewReadyEnvironmentsproduction13 "
+      }
+    ],
+    "raw": []
+  },
+  "md-s-raw": {
+    "cards": [],
+    "envBoxes": [],
+    "taskLines": [],
+    "taskSelect": [],
+    "versionLines": [],
+    "dsFieldset": [],
+    "dsBoxes": [],
+    "shapeBlocks": [],
+    "popovers": [],
+    "shapeTags": [],
+    "selects": [],
+    "review": [],
+    "raw": [
+      {
+        "x": 964,
+        "w": 310,
+        "h": 279.6,
+        "font": "11px/400",
+        "overflow": 208,
+        "text": "{\n  \"evaluator\": {\n    \"dataset\": \"s"
+      },
+      {
+        "x": 964,
+        "w": 310,
+        "h": 279.6,
+        "font": "11px/400",
+        "overflow": 208,
+        "text": "{\n  \"evaluator\": {\n    \"dataset\": \"s"
+      }
+    ]
+  }
+}

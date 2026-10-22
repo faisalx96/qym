@@ -1,0 +1,354 @@
+{
+  "width": 390,
+  "homeEmpty": [
+    {
+      "x": 76,
+      "y": 146,
+      "w": 279,
+      "h": 375.1,
+      "font": "12px/400",
+      "text": "EnvironmentsproductionHealthyPriority up"
+    },
+    {
+      "x": 97,
+      "y": 161,
+      "w": 237,
+      "h": 233.8,
+      "font": "12px/400",
+      "text": "EnvironmentsproductionHealthyPriority up"
+    },
+    {
+      "x": 76,
+      "y": 536,
+      "w": 279,
+      "h": 73.4,
+      "font": "12px/400",
+      "text": "DatasetChoose a dataset billing-faqrefun"
+    },
+    {
+      "x": 77,
+      "y": 624,
+      "w": 277,
+      "h": 383.3,
+      "font": "12px/400",
+      "text": "Start fromDefault presetPick an environm"
+    },
+    {
+      "x": 85,
+      "y": 822,
+      "w": 261,
+      "h": 24,
+      "font": "12px/400",
+      "text": "Experiment name"
+    },
+    {
+      "x": 85,
+      "y": 850,
+      "w": 261,
+      "h": 16.8,
+      "font": "12px/400",
+      "text": "Pick an environment."
+    },
+    {
+      "x": 85,
+      "y": 871,
+      "w": 261,
+      "h": 24,
+      "font": "12px/400",
+      "text": "Launch as isCustomize →"
+    }
+  ],
+  "clicksToReady": [
+    "tick staging",
+    "open Dataset",
+    "choose support-tickets"
+  ],
+  "homeCards": [
+    {
+      "x": 76,
+      "y": 146,
+      "w": 279,
+      "h": 723.9,
+      "font": "12px/400",
+      "text": "EnvironmentsproductionHealthyPriority up"
+    },
+    {
+      "x": 76,
+      "y": 884,
+      "w": 279,
+      "h": 786,
+      "font": "12px/400",
+      "text": "Start fromRecommendedDefault preset v1Wh"
+    },
+    {
+      "x": 76,
+      "y": 817,
+      "w": 279,
+      "h": 82.8,
+      "font": "12px/400",
+      "text": "Experiment name1 problem to fixName the "
+    }
+  ],
+  "homeEnvBoxes": [
+    {
+      "x": 97,
+      "y": 180,
+      "w": 237,
+      "h": 163,
+      "font": "12px/400",
+      "text": "productionHealthyPriority up to HIGHDeta"
+    },
+    {
+      "x": 97,
+      "y": 347,
+      "w": 237,
+      "h": 187,
+      "font": "12px/400",
+      "text": "stagingHealthyPriority up to HIGHDefault"
+    }
+  ],
+  "homeVersionLine": [
+    {
+      "x": 106,
+      "y": 237,
+      "w": 219,
+      "h": 101,
+      "font": "12px/400",
+      "text": "Versionsagentagent-1.4.2imageimg-2026100"
+    },
+    {
+      "x": 106,
+      "y": 428,
+      "w": 219,
+      "h": 101,
+      "font": "12px/400",
+      "text": "Versionsagentagent-1.4.2imageimg-2026100"
+    }
+  ],
+  "homeDatasetCard": [
+    {
+      "x": 106,
+      "y": 188,
+      "w": 147.3,
+      "h": 16.8,
+      "font": "12px/400",
+      "text": "production"
+    },
+    {
+      "x": 106,
+      "y": 355,
+      "w": 147.3,
+      "h": 16.8,
+      "font": "12px/400",
+      "text": "staging"
+    },
+    {
+      "x": 97,
+      "y": 634,
+      "w": 237,
+      "h": 16.8,
+      "font": "12px/400",
+      "text": "Latency-sensitive run"
+    },
+    {
+      "x": 97,
+      "y": 780,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "text": "support-tickets"
+    },
+    {
+      "x": -1,
+      "y": 2,
+      "w": 106,
+      "h": 15,
+      "font": "12px/400",
+      "text": "billing-faqrefund-casessupport-tickets"
+    },
+    {
+      "x": 97,
+      "y": 831,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "text": "Latest version"
+    },
+    {
+      "x": -1,
+      "y": 2,
+      "w": 112,
+      "h": 15,
+      "font": "12px/400",
+      "text": "Latest versionVersion v3Version v2Versio"
+    },
+    {
+      "x": 97,
+      "y": 1514,
+      "w": 237,
+      "h": 24,
+      "font": "11px/400",
+      "text": "staging"
+    },
+    {
+      "x": -1,
+      "y": 2,
+      "w": 81,
+      "h": 15,
+      "font": "12px/400",
+      "text": "stagingproduction"
+    },
+    {
+      "x": 85,
+      "y": 822,
+      "w": 1,
+      "h": 1,
+      "font": "11px/600",
+      "text": "Experiment name"
+    }
+  ],
+  "homeDatasetStack": {
+    "stack": {
+      "w": 237,
+      "h": 94.8
+    },
+    "card": {
+      "w": 277,
+      "h": 122.8
+    }
+  },
+  "homeBar": [
+    {
+      "x": 76,
+      "y": 817,
+      "w": 279,
+      "h": 82.8,
+      "font": "12px/400",
+      "text": "Experiment name1 problem to fixName the "
+    },
+    {
+      "x": 296,
+      "y": 850,
+      "w": 31,
+      "h": 16.8,
+      "font": "12px/400",
+      "text": "Show"
+    },
+    {
+      "x": 85,
+      "y": 871,
+      "w": 126.5,
+      "h": 24,
+      "font": "11px/600",
+      "text": "Launch as is"
+    },
+    {
+      "x": 220,
+      "y": 871,
+      "w": 126.5,
+      "h": 24,
+      "font": "11px/600",
+      "text": "Customize →"
+    }
+  ],
+  "homeStatus": [
+    "Based on Default preset v1 · staging0 changes on topUndo all changes",
+    "1 problem to fix"
+  ],
+  "step1Cards": [
+    {
+      "x": 76,
+      "y": -300,
+      "w": 279,
+      "h": 227.1,
+      "font": "12px/400",
+      "text": "Experiment namePriorityEnvironment defau"
+    },
+    {
+      "x": 76,
+      "y": -59,
+      "w": 279,
+      "h": 612.5,
+      "font": "12px/400",
+      "text": "EnvironmentsproductionHealthyPriority up"
+    }
+  ],
+  "step1Env": [
+    {
+      "x": 97,
+      "y": -44,
+      "w": 237,
+      "h": 443.8,
+      "font": "12px/400",
+      "text": "EnvironmentsproductionHealthyPriority up"
+    },
+    {
+      "x": 97,
+      "y": -26,
+      "w": 237,
+      "h": 163,
+      "font": "12px/400",
+      "text": "productionHealthyPriority up to HIGHDeta"
+    },
+    {
+      "x": 97,
+      "y": 141,
+      "w": 237,
+      "h": 187,
+      "font": "12px/400",
+      "text": "stagingHealthyPriority up to HIGHDefault"
+    }
+  ],
+  "step1Dataset": [],
+  "review": [
+    {
+      "x": 76,
+      "y": 567,
+      "w": 279,
+      "h": 606.6,
+      "font": "12px/400",
+      "text": "Review1 problemEnvironmentsstaging, prod"
+    },
+    {
+      "x": 97,
+      "y": 616,
+      "w": 237,
+      "h": 36.2,
+      "font": "12px/400",
+      "text": "Environmentsstaging, production"
+    },
+    {
+      "x": 97,
+      "y": 661,
+      "w": 237,
+      "h": 36.2,
+      "font": "12px/400",
+      "text": "Datasetsupport-tickets"
+    },
+    {
+      "x": 97,
+      "y": 705,
+      "w": 237,
+      "h": 36.2,
+      "font": "12px/400",
+      "text": "Start fromDefault preset v1 · staging"
+    },
+    {
+      "x": 97,
+      "y": 749,
+      "w": 237,
+      "h": 36.2,
+      "font": "12px/400",
+      "text": "PriorityEnvironment default"
+    },
+    {
+      "x": 97,
+      "y": 793,
+      "w": 237,
+      "h": 88.6,
+      "font": "12px/400",
+      "text": "Versionsstaging: agent-1.4.2 · img-20261"
+    }
+  ],
+  "reviewText": "Review\n1 PROBLEM\nENVIRONMENTS\nstaging, production\nDATASET\nsupport-tickets\nSTART FROM\nDefault preset v1 · staging\nPRIORITY\nEnvironment default\nVERSIONS\nstaging: agent-1.4.2 · img-20261001 · kb-77\nproduction: agent-1.4.2 · img-20261001 · kb-77\n2\nruns to launch\n\n= 1 combination × 2 environments = 2 runs\n\nChanges by step\n\nNothing changed on top of the starting point.\n\n1 problem to fix\nName\nName the experiment.\nRun names"
+}
