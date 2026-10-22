@@ -71,7 +71,7 @@ list; **F4** this document.
   case (`dataset_version` and `config.dataset_alias` both unset).
 - The same `dataset` may appear several times with different versions. **Order is the evaluation order** and the order of the
   items in the union.
-- At most **50** entries (the qym platform never sends more than 20).
+- At most **50** entries (the qym platform never sends more than 20; the SDK accepts up to 50).
 - `datasets` wins. When it is present, the worker ignores `dataset_version`, `config.dataset_version` and `config.dataset_alias`
   for resolution. They stay in the echo as submitted. The platform still sends `dataset` (= first entry) and `dataset_version`
   (= first entry's version) so that a reader of the echo that only knows v1.3 sees the first pair.
@@ -81,16 +81,30 @@ list; **F4** this document.
 The worker runs **one** evaluation over the concatenation of the resolved datasets and produces **one** run, one `result`, one
 report. `samples`, `report_k`, `max_concurrency` and every other `config` field apply to the whole union.
 
-What a union run must record is defined by the qym SDK, so the service gets it by passing the list through to the SDK's
-`Evaluator` (per WP-C of this round, SDK 2.1, details in `docs/internal/feature-rounds/2026-10-multi-dataset-task/spec-c.md`
-once merged; the qym platform team keeps this paragraph in step with it):
+What a union run must record is defined by the qym SDK (2.1.0), so the service gets it by passing the list through to the SDK's
+`Evaluator` (`docs/internal/feature-rounds/2026-10-multi-dataset-task/spec-c.md`, section 7 is the contract for this document):
 
-- every item records its source: `item_metadata.qym_dataset` and `item_metadata.qym_dataset_version` (the resolved version,
-  never the alias);
-- items of different datasets may share an `item_id`; the SDK keeps them apart in the run, the service does not have to;
-- the run upload carries `datasets: [{dataset, version, alias, resolved_version}]` (per WP-C), and the run's own `dataset`,
-  `dataset_id` and `dataset_version_id` stay the first entry's, so an older platform reads a union run as a run on its first
-  dataset.
+- `evaluator.datasets[i]` maps 1:1 onto the SDK's `DatasetRef`: `DatasetRef.from_dict({"dataset": ..., "version": ..., "alias": ...})`;
+  the worker passes the list to `Evaluator(dataset=[...])`. **SDK >= 2.1.0 is required for `datasets`: a worker with an older SDK
+  must not declare `datasets` in its evaluator schema**, which is how the qym platform detects it (F3).
+- every item records its source: `item_metadata.qym_dataset`, `qym_dataset_version` (the resolved version, never the alias),
+  `qym_dataset_index`, `qym_item_id` and `qym_dataset_version_id`. Item ids of a union run are `"{name}@{version}/{raw}"`: a
+  service that post-processes items must not assume an `item_id` is a dataset item id. Items of different datasets may share a
+  raw id; the SDK keeps them apart in the run, the service does not have to;
+- the run upload (`POST /v1/runs`, built by the SDK) carries `datasets: [{dataset, dataset_id, dataset_version_id, version,
+  alias, items, disabled_items}]` when there are two or more entries. `version` is the **resolved** label even when the request
+  named an alias; `alias` is the alias used (`production` for an entry that named neither). The run's own `dataset` is the
+  **label** (`"a@v3 + a@v4 + b@production"`, what every grouping on the platform keys on); `dataset_id`, `dataset_version_id`
+  and `dataset_alias` stay the first entry's, so an older platform reads a union run as a run on its first dataset. A
+  single-dataset job uploads the byte-identical payload of 2.0.0;
+- `GET /evals/{id}` `result.datasets` echoes `describe()` of the worker's union dataset (the same keys as the upload entry);
+  `eval_input.datasets` stays as submitted (`version` / `alias` null as sent).
+- A combined job's run cannot be ranked or used as a best-run base by the qym platform (`reason: "union_run"`).
+
+**Caps.** The service accepts at most 50 entries and the SDK 50. The qym platform's launch accepts at most 20 dataset versions per
+experiment (`QYM_EVAL_MAX_DATASETS`). Both the service and the SDK answer `422` for a repeated pair: the service for two equal
+entries (`datasets[<j>] repeats datasets[<i>]`), the SDK additionally after resolving aliases
+(`dataset {name} {version} is listed twice`).
 
 Failure: a dataset or version that cannot be resolved fails the job as today (`status: FAILED`, `error` names the entry:
 `dataset not found: billing-faq` or `dataset version not found: support-tickets@v9`), after the structural validation of
@@ -195,9 +209,9 @@ before. **Nothing new is added to `config`**: a v1.3 service answers `422` to an
     "run_name": "nightly",
     "dataset": "support-tickets",
     "datasets": [
-      { "dataset": "support-tickets", "version": "v3", "alias": null, "resolved_version": "v3", "items": 120 },
-      { "dataset": "support-tickets", "version": "v4", "alias": null, "resolved_version": "v4", "items": 132 },
-      { "dataset": "billing-faq", "version": null, "alias": "production", "resolved_version": "v2", "items": 48 }
+      { "dataset": "support-tickets", "dataset_id": "…", "dataset_version_id": "…", "version": "v3", "alias": null, "items": 120, "disabled_items": 0 },
+      { "dataset": "support-tickets", "dataset_id": "…", "dataset_version_id": "…", "version": "v4", "alias": null, "items": 132, "disabled_items": 2 },
+      { "dataset": "billing-faq", "dataset_id": "…", "dataset_version_id": "…", "version": "v2", "alias": "production", "items": 48, "disabled_items": 0 }
     ],
     "task": "answer-ticket",
     "versioning_metadata": { "agent_version": "v2.4.0", "kb_version": "4b0535c" },
@@ -206,8 +220,9 @@ before. **Nothing new is added to `config`**: a v1.3 service answers `422` to an
 }
 ```
 
-- `result.datasets`: what was evaluated, in evaluation order. `resolved_version` is the version the entry resolved to (the
-  alias target when an alias or nothing was given), `items` the number of items it contributed. Present for every succeeded job
+- `result.datasets`: what was evaluated, in evaluation order (`describe()` of the worker's union dataset, the keys of the SDK's
+  upload entry). `version` is the **resolved** version (the alias target when an alias or nothing was given), `alias` the alias
+  used (`production` when none was given), `items` the number of items it contributed and `disabled_items` those left out. Present for every succeeded job
   of a service that implements the field; a single-dataset job lists one entry.
 - `result.dataset` stays the first entry's name (v1.3).
 - `result.task`: the id that ran. When the request sent `task: null`, the id of the default task, so the result is always explicit.
@@ -356,7 +371,7 @@ with httpx.Client(base_url=BASE, headers=H, timeout=30) as c:
     # ... poll GET /evals/{job_id} until SUCCEEDED, then:
     result = c.get(f"/evals/{job_id}").json()["result"]
     for entry in result["datasets"]:
-        print(entry["dataset"], entry["resolved_version"], entry["items"])
+        print(entry["dataset"], entry["version"], entry["items"])
 ```
 
 ## 11. Checklist for the Evaluation Service team
@@ -366,8 +381,8 @@ with httpx.Client(base_url=BASE, headers=H, timeout=30) as c:
 - [ ] `GET /evals/tasks`, registered before `/{job_id}`, `200` / `503`, exactly one `default` when non-empty.
 - [ ] Task registry used by both the API validation and the workers.
 - [ ] Worker: resolve every `datasets` entry first, then run **one** evaluation over the concatenation (pass the list to the qym SDK
-      `Evaluator`, SDK 2.1 per WP-C), run the selected task, apply `task_name` fallback to the task's `name`.
-- [ ] `eval_input.datasets`, `eval_input.task` stored and echoed; `result.datasets` (with `resolved_version`, `items`) and `result.task`.
+      `Evaluator`, SDK >= 2.1.0), run the selected task, apply `task_name` fallback to the task's `name`.
+- [ ] `eval_input.datasets`, `eval_input.task` stored and echoed; `result.datasets` (the SDK's `describe()` entries: resolved `version`, `alias`, `items`, `disabled_items`) and `result.task`.
 - [ ] `GET /evals/evaluator/schema` declares `datasets`, `task` and `$defs.DatasetRef` **only when the above is deployed**.
 - [ ] v1.3 requests unchanged (run the existing contract tests untouched).
 - [ ] Tests: a union of two datasets, the same dataset at two versions, an alias entry, an empty list, both version and alias,
@@ -385,11 +400,11 @@ with httpx.Client(base_url=BASE, headers=H, timeout=30) as c:
 | 2 | `GET /evals/tasks`, `404` = unsupported | `404`, `405` **and `422`** = unsupported; register it before `/{job_id}` | a v1.3 service parses `tasks` as the `{job_id}` UUID and answers `422`, not `404` |
 | 3 | an empty `datasets` is "absent" | an empty list is `422` | an empty list is always a client bug; silently running the single `dataset` hides it |
 | 4 | `datasets` wins over `dataset` / `dataset_version` | same, plus `dataset` must equal `datasets[0].dataset` (`422` otherwise) and the version fields are ignored, not compared | catches a client that edits one and not the other, without a cross-check of aliases |
-| 5 | `result.datasets` "lists what was evaluated" | each entry carries `resolved_version` and `items`; `result.task` added | the platform shows what an alias resolved to and the per-dataset item counts without re-reading the datasets |
+| 5 | `result.datasets` "lists what was evaluated" | each entry is the SDK's `describe()` (`dataset`, `dataset_id`, `dataset_version_id`, resolved `version`, `alias`, `items`, `disabled_items`); `result.task` added | the platform shows what an alias resolved to and the per-dataset item counts without re-reading the datasets, with the same keys as the run upload |
 | 6 | the task label becomes the task's `name` when `task_name` is null | same, and the registry's `default` flag is added to `GET /evals/tasks` | the platform needs to show which task "Worker default" means |
 | 7 | no limits | at most 50 `datasets` entries, 200 tasks, id pattern | bounded payloads; the platform itself caps lower |
 | 8 | task support = `/evals/tasks` not 404 | schema declares `task` **and** the list answers `200` with at least one task | one signal for "the field is honoured", one for "there is something to choose" |
-| 9 | upload details | "per WP-C" | the SDK side is another work package; this paragraph is updated when its spec merges |
+| 9 | upload details | fixed by the SDK package (section 3.2 and `spec-c.md` section 7): the run's `dataset` is the label, the single fields stay the first entry's, `datasets` entries carry resolved `version` and `alias` | the brief said "the single fields hold the first entry"; that stays true for the ids, while the name string is the label every platform grouping keys on |
 
 ## Appendix: draft v1.4 guide sections (text to merge)
 
@@ -458,13 +473,13 @@ Duplicates and an empty list are **422**. Each item records its source (`item_me
 ```markdown
   "run_name": "...",
   "dataset": "...",                 // the first entry's name
-  "datasets": [ { "dataset": "...", "version": "v3", "alias": null, "resolved_version": "v3", "items": 120 } ],   // v1.4
+  "datasets": [ { "dataset": "...", "dataset_id": "...", "dataset_version_id": "...", "version": "v3", "alias": null, "items": 120, "disabled_items": 0 } ],   // v1.4
   "task": "answer-ticket",          // v1.4: the id that ran (the default's id when none was sent)
 ```
 
 ```markdown
 | `eval_input.datasets` / `eval_input.task` | v1.4. As submitted (`null` when not sent) |
-| `result.datasets[].resolved_version` / `.items` | v1.4. The version each entry resolved to, and the items it contributed |
+| `result.datasets[]` | v1.4. The SDK's `describe()` entries: `dataset`, `dataset_id`, `dataset_version_id`, resolved `version`, `alias`, `items`, `disabled_items` |
 ```
 
 ### F. Section 6 (errors): two rows for `422`
