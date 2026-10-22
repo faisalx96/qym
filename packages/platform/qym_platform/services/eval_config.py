@@ -213,6 +213,16 @@ class EvaluatorRequestConfig(BaseModel):
     live_mode: Literal["local", "platform", "auto"] = "platform"
 
 
+class DatasetRef(BaseModel):
+    """One dataset version of ``evaluator.datasets`` (change request v1.4)."""
+
+    model_config = ConfigDict(extra="forbid", title="DatasetRef")
+
+    dataset: str = Field(..., min_length=1)
+    version: Optional[str] = None
+    alias: Optional[str] = None
+
+
 class EvaluatorInputs(BaseModel):
     """``evaluator`` of the document and of ``EvalJobCreate`` (guide §4.1).
 
@@ -224,6 +234,10 @@ class EvaluatorInputs(BaseModel):
 
     dataset: str = Field(..., min_length=1)
     dataset_version: Optional[str] = None
+    # Change request v1.4: several dataset versions and the task to run. Only sent to
+    # services whose stored schema declares them (``eval_datasets``).
+    datasets: Optional[List[DatasetRef]] = None
+    task: Optional[str] = None
     model: Optional[Union[str, List[str]]] = None
     config: EvaluatorRequestConfig = Field(default_factory=EvaluatorRequestConfig)
     report_k: Optional[int] = Field(None, ge=1)
@@ -693,6 +707,8 @@ def _materialize(
     evaluator = document.get("evaluator")
     env = document.get("env_overrides")
     evaluator = _strip(evaluator) if isinstance(evaluator, Mapping) else {}
+    # The run shape is the platform's own choice; no service ever receives it.
+    evaluator.pop("run_shape", None)
     env = _strip(env) if isinstance(env, Mapping) else {}
     result = _Materialized(body={"evaluator": evaluator, "env_overrides": env})
 

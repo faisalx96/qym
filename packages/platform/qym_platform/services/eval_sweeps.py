@@ -453,9 +453,15 @@ def combo_label(
     return label if len(label) <= LABEL_MAX else label[: LABEL_MAX - 1] + "…"
 
 
-def run_name(name: str, label: str = "", environment_name: Optional[str] = None) -> str:
-    """``{name} · {label}`` plus ``· {environment}`` when launching on several."""
-    parts = [name] + [p for p in (label, environment_name) if p]
+def run_name(
+    name: str,
+    label: str = "",
+    environment_name: Optional[str] = None,
+    dataset_label: Optional[str] = None,
+) -> str:
+    """``{name} · {label}`` plus ``· {environment}`` when launching on several, plus
+    ``· {dataset} {version}`` for a job that runs one pair of several datasets."""
+    parts = [name] + [p for p in (label, environment_name, dataset_label) if p]
     return " · ".join(parts)[:RUN_NAME_MAX]
 
 
@@ -491,6 +497,7 @@ def expand(
     environment_count: int,
     max_jobs: Optional[int] = None,
     connection_labels: Optional[Mapping[str, str]] = None,
+    unit_label: str = "environments",
 ) -> SweepPlan:
     """Expand ``spec`` into combinations (see the module docstring).
 
@@ -514,7 +521,7 @@ def expand(
                 "sweep_cap",
                 f"This launch would create {plan.job_count} jobs "
                 f"({plan.combo_count} combinations × {environment_count} "
-                f"environments); the limit is {cap}",
+                f"{unit_label}); the limit is {cap}",
             )
         ]
         return plan
