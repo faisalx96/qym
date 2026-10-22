@@ -207,13 +207,17 @@ export function runEstimate(
   spec: SpecLike | null | undefined,
   envCount: number,
   cap: number | null,
+  /** Jobs per combination over all environments (several dataset versions fan out) and their math text. */
+  units?: { total: number; text: string | null },
 ): RunEstimate {
   const { axes } = axesOf(spec);
   const combos = comboCount(axes);
-  const runs = combos * envCount;
+  const perCombo = units ? units.total : envCount;
+  const runs = combos * perCombo;
+  const where = units?.text ?? `${envCount} environment${envCount === 1 ? '' : 's'}`;
   const math =
     axes.map((a) => String(a.length)).join(' × ') +
-    ` = ${combos} combination${combos === 1 ? '' : 's'} × ${envCount} environment${envCount === 1 ? '' : 's'} = ${runs} run${runs === 1 ? '' : 's'}`;
+    ` = ${combos} combination${combos === 1 ? '' : 's'} × ${where} = ${runs} run${runs === 1 ? '' : 's'}`;
   return { combos, envs: envCount, runs, cap, over: cap != null && runs > cap, math };
 }
 

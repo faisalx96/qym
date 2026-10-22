@@ -12,7 +12,14 @@ import {
   stripBoundFields,
   unconfirmedEndpoints,
 } from './bindings';
-import { datasetValue, emptyBaseInfo } from './document';
+import {
+  changedTasks,
+  copySelection,
+  datasetsListChanged,
+  pairCount,
+  runShapeChanged,
+} from './datasets';
+import { datasetValue, emptyBaseInfo, emptySelection } from './document';
 import { evaluatorChangedCount, resetInputs, syncMetaSeed } from './evaluator';
 import { bestRunHeader } from './bestRun';
 import {
@@ -45,6 +52,7 @@ import type {
   JsonValue,
   LaunchConfig,
   LaunchDocument,
+  LaunchSelection,
   Preset,
   PresetRemap,
   PresetVersionResponse,
@@ -86,6 +94,7 @@ export function changedSlots(doc: LaunchDocument): string[] {
 }
 
 export function datasetChanged(doc: LaunchDocument): boolean {
+  if (datasetsListChanged(doc, doc.baseline.selection)) return true;
   const b = doc.baseline.dataset;
   if (!b) return false;
   const c = doc.dataset;
@@ -97,15 +106,21 @@ export interface DiffCount {
   settings: number;
   models: number;
   dataset: number;
+  /** The run shape differs from the starting point (counted only with two or more dataset versions). */
+  shape: number;
+  /** Environments whose task differs from the starting point. */
+  tasks: number;
   total: number;
 }
 
-/** "Diff vs base": changed settings, model bindings and dataset (evaluation inputs excluded, B19). */
+/** "Diff vs base": changed settings, model bindings, datasets, run shape and tasks (evaluation inputs excluded, B19). */
 export function diffCount(doc: LaunchDocument): DiffCount {
   const settings = changedPointers(doc).length;
   const models = changedSlots(doc).length;
   const dataset = datasetChanged(doc) ? 1 : 0;
-  return { settings, models, dataset, total: settings + models + dataset };
+  const shape = pairCount(doc) >= 2 && runShapeChanged(doc, doc.baseline.selection) ? 1 : 0;
+  const tasks = changedTasks(doc, doc.baseline.selection).length;
+  return { settings, models, dataset, shape, tasks, total: settings + models + dataset + shape + tasks };
 }
 
 export function diffText(doc: LaunchDocument, editor = false): string {
@@ -244,7 +259,14 @@ export function resetRoles(doc: LaunchDocument, rowPointers: readonly string[]):
   return next;
 }
 
-/** Undo every change: settings, models, dataset, links (clone) and evaluation inputs. */
+/** The baseline's list, shape and tasks; tasks of environments that are not ticked are not carried. */
+function restoreSelection(doc: LaunchDocument): LaunchDocument['selection'] {
+  const base = copySelection(doc.baseline.selection ?? emptySelection());
+  base.tasks = Object.fromEntries(Object.entries(base.tasks).filter(([id]) => doc.environmentIds.includes(id)));
+  return base;
+}
+
+/** Undo every change: settings, models, datasets, tasks, links (clone) and evaluation inputs. */
 export function resetAll(doc: LaunchDocument, ctx: FormContext, secrets?: SecretStore): LaunchDocument {
   const bindings: Bindings = {};
   for (const k of Object.keys(doc.baseline.bindings)) {
@@ -259,6 +281,7 @@ export function resetAll(doc: LaunchDocument, ctx: FormContext, secrets?: Secret
     bindings,
     links: doc.base.kind === 'clone' && doc.clone ? deepCopy(doc.clone.linkedGroups) : doc.links,
     dataset: doc.baseline.dataset ? { ...doc.baseline.dataset } : doc.dataset,
+    selection: restoreSelection(doc),
   };
   next = resetInputs(next, ctx.evaluatorPanel);
   next = deriveGlobalModel(next, ctx);
@@ -273,8 +296,77 @@ export interface BaselineResult extends Baseline {
   notes: string[];
 }
 
+export interface BaselineOptions {
+  /**
+   * A preset's `evaluator.task` is a string that belongs to its own environment: only that
+   * environment's row is seeded. Without it a string applies to every ticked environment that
+   * offers tasks (a clone).
+   */
+  taskEnvId?: string | null;
+  /** Names for the "not carried" notes of environments that are no longer part of the launch. */
+  envNames?: Readonly<Record<string, string>>;
+}
+
+/** `evaluator.datasets` / `run_shape` / `task` of a base config -> selection (the primary entry is returned separately). */
+function selectionFrom(
+  evaluator: JsonObject,
+  ctx: FormContext,
+  options: BaselineOptions,
+  notes: string[],
+): { entries: Array<{ name: string; refs: string[] }>; selection: LaunchSelection } {
+  const selection = emptySelection();
+  const entries: Array<{ name: string; refs: string[] }> = [];
+  const list = evaluator['datasets'];
+  if (Array.isArray(list)) {
+    for (const item of list) {
+      if (!isPlainObject(item) || typeof item['dataset'] !== 'string') continue;
+      const name = item['dataset'] as string;
+      const ref =
+        typeof item['version'] === 'string' && item['version']
+          ? `v:${item['version']}`
+          : typeof item['alias'] === 'string' && item['alias']
+            ? `a:${item['alias']}`
+            : '';
+      const known = entries.find((e) => e.name === name);
+      if (known) {
+        if (!known.refs.includes(ref)) known.refs.push(ref);
+      } else entries.push({ name, refs: [ref] });
+    }
+  }
+  const shape = evaluator['run_shape'];
+  if (shape === 'one_each' || shape === 'combined') selection.runShape = shape;
+  const task = evaluator['task'];
+  const accepting = ctx.envs.filter((e) => e.capabilities?.task);
+  const listed = (e: (typeof ctx.envs)[number], id: string) =>
+    !e.taskList || e.taskList.status !== 'ok' || e.taskList.ids.includes(id);
+  if (typeof task === 'string' && task) {
+    const targets = options.taskEnvId ? accepting.filter((e) => e.id === options.taskEnvId) : accepting;
+    for (const e of targets) {
+      if (listed(e, task)) selection.tasks[e.id] = task;
+      else notes.push(`The task “${task}” is not listed by ${e.name}; it was left at the worker default.`);
+    }
+  } else if (isPlainObject(task)) {
+    for (const [envId, value] of Object.entries(task)) {
+      if (typeof value !== 'string' || !value) continue;
+      const env = ctx.envs.find((e) => e.id === envId);
+      if (!env) {
+        notes.push(`Task for ${options.envNames?.[envId] ?? 'an environment'} was not carried (environment not selected)`);
+      } else if (!env.capabilities?.task) {
+        notes.push(`Task for ${env.name} was not carried (it does not offer task selection)`);
+      } else if (!listed(env, value)) {
+        notes.push(`The task “${value}” is not listed by ${env.name}; it was left at the worker default.`);
+      } else selection.tasks[envId] = value;
+    }
+  }
+  return { entries, selection };
+}
+
 /** Form state of a base config (preset, run, clone): settings, bindings, dataset, extras. */
-export function baselineFrom(config: LaunchConfig | null | undefined, ctx: FormContext): BaselineResult {
+export function baselineFrom(
+  config: LaunchConfig | null | undefined,
+  ctx: FormContext,
+  options: BaselineOptions = {},
+): BaselineResult {
   const cfg: LaunchConfig = isPlainObject(config) ? config : {};
   const fields = ctx.union.fields;
   const values = flattenOverrides(isPlainObject(cfg.env_overrides) ? cfg.env_overrides : {}, fields);
@@ -305,8 +397,26 @@ export function baselineFrom(config: LaunchConfig | null | undefined, ctx: FormC
   const evaluator: JsonObject = isPlainObject(cfg.evaluator) ? (deepCopy(cfg.evaluator) as JsonObject) : {};
   const evConfig: JsonObject = isPlainObject(evaluator['config']) ? (evaluator['config'] as JsonObject) : {};
   let dataset: DatasetChoice | null = null;
+  const multi = selectionFrom(evaluator, ctx, options, notes);
+  delete evaluator['datasets'];
+  delete evaluator['run_shape'];
+  delete evaluator['task'];
+  const known = multi.entries.filter((e) => ctx.datasetNames.includes(e.name));
+  if (multi.entries.length >= 1 && known.length) {
+    // The list wins over the mirrored scalars: its first entry is the primary dataset.
+    const [first, ...rest] = known;
+    for (const e of multi.entries)
+      if (!known.includes(e)) notes.push(`${e.name} was dropped: not a dataset of this project.`);
+    const [ref = '', ...extraRefs] = (first as { refs: string[] }).refs;
+    dataset = { mode: 'project', name: (first as { name: string }).name, custom: '', ref };
+    multi.selection.extraRefs = extraRefs;
+    multi.selection.more = rest.map((e) => ({ name: e.name, refs: e.refs.slice() }));
+    delete evaluator['dataset'];
+    delete evaluator['dataset_version'];
+    delete evConfig['dataset_alias'];
+  }
   const evDataset = evaluator['dataset'];
-  if (typeof evDataset === 'string' && evDataset) {
+  if (!dataset && typeof evDataset === 'string' && evDataset) {
     if (ctx.datasetNames.includes(evDataset)) {
       const alias =
         typeof evConfig['dataset_alias'] === 'string' ? (evConfig['dataset_alias'] as string) : '';
@@ -326,7 +436,7 @@ export function baselineFrom(config: LaunchConfig | null | undefined, ctx: FormC
   delete evaluator['dataset'];
   if (isPlainObject(evaluator['config']) && !Object.keys(evaluator['config']).length)
     delete evaluator['config'];
-  return { values: stripped, bindings, dataset, evaluatorExtra: evaluator, notes };
+  return { values: stripped, bindings, dataset, selection: multi.selection, evaluatorExtra: evaluator, notes };
 }
 
 export interface LoadedBase {
@@ -347,12 +457,16 @@ export function applyBaseline(
       values: deepCopy(base.values),
       bindings: deepCopy(base.bindings),
       dataset: base.dataset ? { ...base.dataset } : null,
+      selection: copySelection(base.selection ?? emptySelection()),
     },
     values: deepCopy(base.values),
     invalid: {},
     bindings: deepCopy(base.bindings),
     evaluatorExtra: deepCopy(base.evaluatorExtra),
     dataset: base.dataset ? { ...base.dataset } : doc.dataset,
+    selection: base.dataset
+      ? copySelection(base.selection ?? emptySelection())
+      : { ...copySelection(base.selection ?? emptySelection()), extraRefs: [], more: [] },
     base: info,
     links: links === 'keep' || links === undefined ? doc.links : links,
   };
@@ -365,6 +479,10 @@ export interface CapturedEdits {
   values: Record<string, { value: JsonValue } | { invalid: InvalidText } | { unset: true }>;
   bindings: Record<string, SlotBinding | null>;
   dataset: DatasetChoice | null;
+  /** The parts of the selection the user changed: the list, the run shape, tasks by environment. */
+  list: Pick<LaunchSelection, 'extraRefs' | 'more'> | null;
+  runShape: LaunchSelection['runShape'] | null;
+  tasks: Record<string, string | null>;
 }
 
 /** The user's edits relative to the current base. */
@@ -380,7 +498,13 @@ export function captureEdits(doc: LaunchDocument): CapturedEdits {
     bindings[k] = doc.bindings[k] ? deepCopy(doc.bindings[k] as SlotBinding) : null;
   const dataset =
     datasetValue(doc) && (datasetChanged(doc) || !doc.baseline.dataset) ? { ...doc.dataset } : null;
-  return { values, bindings, dataset };
+  const list = datasetsListChanged(doc, doc.baseline.selection)
+    ? { extraRefs: doc.selection.extraRefs.slice(), more: copySelection(doc.selection).more }
+    : null;
+  const runShape = runShapeChanged(doc, doc.baseline.selection) ? doc.selection.runShape : null;
+  const tasks: Record<string, string | null> = {};
+  for (const id of changedTasks(doc, doc.baseline.selection)) tasks[id] = doc.selection.tasks[id] ?? null;
+  return { values, bindings, dataset, list, runShape, tasks };
 }
 
 export interface ReplayResult {
@@ -433,6 +557,16 @@ export function replayEdits(
     bindings,
   };
   if (edits.dataset) next = { ...next, dataset: { ...edits.dataset } };
+  if (edits.list) next = { ...next, selection: { ...next.selection, ...copySelection({ ...next.selection, ...edits.list }) } };
+  if (edits.runShape) next = { ...next, selection: { ...next.selection, runShape: edits.runShape } };
+  for (const id of Object.keys(edits.tasks)) {
+    if (!next.environmentIds.includes(id)) continue;
+    const tasks = { ...next.selection.tasks };
+    const value = edits.tasks[id];
+    if (value) tasks[id] = value;
+    else delete tasks[id];
+    next = { ...next, selection: { ...next.selection, tasks } };
+  }
   return { doc: next, kept, dropped: droppedItems.length, droppedItems };
 }
 

@@ -173,6 +173,10 @@ export interface EnvData {
   optionsError?: string;
   /** Extra endpoint name → the slot the server proposed (null: this env cannot add it). */
   extra?: Record<string, ModelSlot | null>;
+  /** What the service accepts beyond guide v1.3 (from its stored evaluator schema). */
+  capabilities?: { datasets: boolean; task: boolean };
+  /** The service's tasks as last read (`ids` only; the names live in the launch page's query). */
+  taskList?: { status: 'ok' | 'unsupported' | 'error'; ids: string[] };
 }
 
 // ── Presets, best runs, clone ────────────────────────────────────────────
@@ -323,6 +327,27 @@ export interface DatasetChoice {
   custom: string;
 }
 
+/** One dataset of the Datasets card and the references chosen on it ('' latest, `v:<version>`, `a:<alias>`). */
+export interface DatasetEntry {
+  name: string;
+  refs: string[];
+}
+
+export type RunShape = 'combined' | 'one_each';
+
+/**
+ * What the user chose beyond one dataset (change request v1.4). The primary dataset stays
+ * `LaunchDocument.dataset` (its first reference is `dataset.ref`); `extraRefs` are its further
+ * references and `more` the datasets after it, so a one-dataset document is exactly what it was.
+ */
+export interface LaunchSelection {
+  extraRefs: string[];
+  more: DatasetEntry[];
+  runShape: RunShape;
+  /** Task id per environment id; `null` or absent = the worker's default task. */
+  tasks: Record<string, string | null>;
+}
+
 export type BaseKind = 'default' | 'best_run' | 'saved' | 'scratch' | 'clone' | 'official-edit';
 
 export interface BaseInfo {
@@ -360,6 +385,8 @@ export interface Baseline {
   values: Values;
   bindings: Bindings;
   dataset: DatasetChoice | null;
+  /** Further dataset references, run shape and tasks of the starting point. */
+  selection?: LaunchSelection;
 }
 
 export interface MetaRow {
@@ -394,6 +421,8 @@ export interface CloneInfo {
 export interface LaunchDocument {
   environmentIds: string[];
   dataset: DatasetChoice;
+  /** Further dataset references, the run shape and the task per environment. */
+  selection: LaunchSelection;
   name: string;
   description: string;
   /** '' = environment default. */
@@ -530,9 +559,13 @@ export interface DryRunJob {
   environment_id: string;
   environment_name?: string;
   combo_index: number;
+  dataset_index?: number;
   label?: string;
   run_name?: string;
   params?: Record<string, unknown>;
+  dataset?: { dataset: string; version?: string | null; alias?: string | null } | null;
+  datasets?: Array<{ dataset: string; version?: string | null; alias?: string | null }> | null;
+  task?: { id: string; name: string } | null;
   errors?: ServerError[];
   warnings?: Array<{ message: string; [key: string]: unknown }>;
 }
@@ -550,6 +583,16 @@ export interface DryRunResponse {
   /** Launch-level warnings (never block): `vllm_ceiling_unset`, `dataset_token_not_declared`. */
   warnings?: LaunchWarning[];
   jobs?: DryRunJob[];
+  /** What each environment receives (change request v1.4). */
+  datasets_plan?: DatasetsPlanItem[];
+}
+
+export interface DatasetsPlanItem {
+  environment_id: string;
+  environment_name: string;
+  mode: 'single' | 'combined' | 'fan_out';
+  units: number;
+  reason: null | 'service_without_datasets' | 'run_shape';
 }
 
 export interface LaunchWarning {

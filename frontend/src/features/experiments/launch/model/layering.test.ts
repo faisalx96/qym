@@ -148,7 +148,7 @@ describe('baseline vs edits', () => {
   const { doc } = laid();
 
   it('a freshly laid base has no changes', () => {
-    expect(diffCount(doc)).toEqual({ settings: 0, models: 0, dataset: 0, total: 0 });
+    expect(diffCount(doc)).toEqual({ settings: 0, models: 0, dataset: 0, shape: 0, tasks: 0, total: 0 });
     expect(diffText(doc)).toBe('0 changes on top');
     expect(doc.values).toEqual(doc.baseline.values);
     expect(doc.dataset).toEqual({ mode: 'project', name: 'support-qa', ref: 'v:3', custom: '' });
@@ -162,7 +162,7 @@ describe('baseline vs edits', () => {
     expect(changedPointers(d).sort()).toEqual(['/BRIEF_ENABLED', '/MILVUS_SEARCH_THRESHOLD']);
     expect(changedSlots(d)).toEqual(['endpoint:primary']);
     expect(datasetChanged(d)).toBe(true);
-    expect(diffCount(d)).toEqual({ settings: 2, models: 1, dataset: 1, total: 4 });
+    expect(diffCount(d)).toEqual({ settings: 2, models: 1, dataset: 1, shape: 0, tasks: 0, total: 4 });
     expect(diffText(d)).toBe('4 changes on top');
     expect(diffText(setValue(doc, '/BRIEF_ENABLED', true))).toBe('1 change on top');
   });

@@ -4,6 +4,7 @@
  * the authority: these only cover the cheap checks.
  */
 import { LATENCY_REVIEW_LABEL, latencyGateMessage } from '../copy';
+import { acceptsTask, DATASETS_MAX, datasetPairs, envUnits, refLabel, unitTotal } from './datasets';
 import { datasetValue, DESCRIPTION_MAX, PRIORITY_ORDER } from './document';
 import { latencyGate } from './latencyGate';
 import { envsMissing, envName, leafSchema, notInEnvMessage } from './descriptor';
@@ -83,6 +84,14 @@ export function locate(pointer: string, ctx: FormContext): Located {
   if (pointer === '/evaluator/dataset') return { label: 'Dataset', stepId: 'where' };
   if (pointer === '/evaluator/dataset_version') return { label: 'Dataset version', stepId: 'where' };
   if (pointer === '/evaluator') return { label: 'Evaluation inputs', stepId: 'where' };
+  if (pointer === '/evaluator/datasets' || pointer.startsWith('/evaluator/datasets/'))
+    return { label: 'Datasets', stepId: 'where' };
+  if (pointer === '/evaluator/run_shape') return { label: 'Run shape', stepId: 'where' };
+  if (pointer === '/evaluator/task' || pointer.startsWith('/evaluator/task/')) {
+    const id = splitPointer(pointer)[2];
+    const name = id ? ctx.envs.find((e) => e.id === id)?.name : undefined;
+    return { label: name ? `Task of ${name}` : 'Task', stepId: 'where' };
+  }
   if (pointer === '/links' || pointer.startsWith('/links/'))
     return { label: 'Sweeps › linked values', stepId: 'env' };
   if (pointer.startsWith('/slot_bindings')) {
@@ -145,6 +154,67 @@ function item(
 /** Builds a validation item for a pointer (used by the default-preset editor's own checks). */
 export { item as validationItem };
 
+// ── Datasets and tasks ───────────────────────────────────────────────────
+
+interface LocalIssue {
+  pointer: string;
+  message: string;
+  rule: string;
+  environmentId?: string;
+}
+
+/** Cheap checks of the dataset list (the server repeats them; a clone or Raw JSON can break them). */
+function datasetErrors(doc: LaunchDocument): LocalIssue[] {
+  const out: LocalIssue[] = [];
+  const pairs = datasetPairs(doc);
+  if (pairs.length > DATASETS_MAX)
+    out.push({
+      pointer: '/evaluator/datasets',
+      message: `At most ${DATASETS_MAX} dataset versions per experiment.`,
+      rule: 'datasets_limit',
+    });
+  const seen = new Set<string>();
+  for (const p of pairs) {
+    const ref = p.version != null ? `v:${p.version}` : p.alias != null ? `a:${p.alias}` : '';
+    const key = `${p.dataset}|${ref}`;
+    if (seen.has(key))
+      out.push({
+        pointer: '/evaluator/datasets',
+        message: `${p.dataset} ${p.version ?? p.alias ?? refLabel('').toLowerCase()} is chosen twice.`,
+        rule: 'datasets_duplicate',
+      });
+    seen.add(key);
+  }
+  return out;
+}
+
+/** A task on an environment that does not offer one, or one its service does not list. */
+function taskErrors(doc: LaunchDocument, ctx: FormContext): LocalIssue[] {
+  const out: LocalIssue[] = [];
+  for (const id of doc.environmentIds) {
+    const task = doc.selection.tasks[id];
+    if (!task) continue;
+    const env = ctx.envs.find((e) => e.id === id);
+    if (!env) continue;
+    const pointer = `/evaluator/task/${id}`;
+    if (!acceptsTask(env))
+      out.push({
+        pointer,
+        message: `${env.name}: this Evaluation Service does not offer task selection.`,
+        rule: 'task_unsupported',
+        environmentId: id,
+      });
+    else if (env.taskList?.status === 'ok' && !env.taskList.ids.includes(task))
+      out.push({
+        pointer,
+        message: `${env.name}: the service does not list the task “${task}”.`,
+        rule: 'task_unknown',
+        environmentId: id,
+      });
+  }
+  return out;
+}
+
 // ── Local errors ─────────────────────────────────────────────────────────
 
 export interface LocalErrorOptions {
@@ -175,6 +245,8 @@ export function localErrors(
     );
   }
   if (!datasetValue(doc)) push('/evaluator/dataset', 'Choose a dataset.');
+  datasetErrors(doc).forEach((e) => push(e.pointer, e.message, { rule: e.rule }));
+  taskErrors(doc, ctx).forEach((e) => push(e.pointer, e.message, { rule: e.rule, environmentId: e.environmentId }));
   for (const p of Object.keys(doc.invalid))
     push('/env_overrides' + p, (doc.invalid[p] as { message: string }).message);
   for (const p of Object.keys(doc.values)) {
@@ -309,7 +381,8 @@ export function runCount(
   preview: DryRunResponse | null | undefined,
   previewLoading = false,
 ): RunCount {
-  const estimate = jobEstimate(buildSpec(doc, ctx.evaluatorPanel), doc.environmentIds.length);
+  const units = unitTotal(envUnits(doc, ctx.envs));
+  const estimate = jobEstimate(buildSpec(doc, ctx.evaluatorPanel), units);
   const cap = preview?.max_jobs ?? ctx.maxJobs;
   const runs = preview && !previewLoading && preview.job_count != null ? preview.job_count : estimate;
   return { runs, cap: cap ?? null, over: cap != null && (estimate > cap || runs > cap) };

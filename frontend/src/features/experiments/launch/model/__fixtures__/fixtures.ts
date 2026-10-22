@@ -73,6 +73,9 @@ export interface EnvOptions {
   /** Overrides the confirmed slots. */
   slots?: ModelSlot[];
   noOptions?: boolean;
+  /** What the service accepts beyond guide v1.3 (default: neither). */
+  capabilities?: EnvData['capabilities'];
+  taskList?: EnvData['taskList'];
 }
 
 export function makeEnv(id: string, name: string, opts: EnvOptions = {}): EnvData {
@@ -101,6 +104,8 @@ export function makeEnv(id: string, name: string, opts: EnvOptions = {}): EnvDat
     schemaHash: 'hash-' + id,
   });
   env.loading = opts.loading;
+  if (opts.capabilities) env.capabilities = opts.capabilities;
+  if (opts.taskList) env.taskList = opts.taskList;
   return env;
 }
 
