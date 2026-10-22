@@ -162,3 +162,37 @@ def test_breakdown_statement_count_does_not_grow(database):
                 event.remove(engine, "before_cursor_execute", count)
             counts[size] = len(statements)
     assert counts[10] == counts[200], counts
+
+
+def _dashboard_rows(client, database, **filters):
+    from test_dashboard_durable_summaries import drain
+
+    drain(database, max_partitions=50)
+    return client.post(
+        "/api/dashboard/runs",
+        json={"project_slug": "test", "limit": 50, "filters": filters, "include_overview": True},
+    ).json()
+
+
+def test_runs_list_rows_filter_and_facets(env, database):
+    """QC-65 and QC-66: count and entries on the list rows, the filter matches a member, the facet lists names."""
+    client, _, tickets, billing = env
+    union = _make(client, tickets, billing, external_run_id="union")
+    single = post_union_run(client, [with_items(tickets, "v3")], label="support-tickets", external_run_id="single")
+    body = _dashboard_rows(client, database)
+    rows = {r["run_id"]: r for r in body["rows"]}
+    assert set(rows) == {union, single}
+    assert rows[union]["dataset_count"] == 2
+    assert rows[union]["datasets"] == [
+        {"dataset": "support-tickets", "version": "v3"},
+        {"dataset": "billing-faq", "version": "v7"},
+    ]
+    assert rows[single]["dataset_count"] == 1 and "datasets" not in rows[single]
+    # Filtering by a member's value finds the single run on it and the union run that includes it.
+    both = _dashboard_rows(client, database, datasets=["support-tickets␟v3"])
+    assert {r["run_id"] for r in both["rows"]} == {union, single}
+    only_billing = _dashboard_rows(client, database, datasets=["billing-faq␟v7"])
+    assert [r["run_id"] for r in only_billing["rows"]] == [union]
+    facets = body["overview"]["facets"]["datasets"]
+    assert sorted(facets) == ["billing-faq␟v7", "support-tickets␟v3"]
+    assert not any("+" in f for f in facets)  # never a label
