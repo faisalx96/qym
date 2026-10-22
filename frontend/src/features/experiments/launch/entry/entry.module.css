@@ -648,6 +648,8 @@
 }
 
 .dsName {
+  grid-row: 1;
+  grid-column: 1;
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
@@ -658,7 +660,14 @@
   overflow-wrap: anywhere;
 }
 
+.dsRemove {
+  grid-row: 1;
+  grid-column: 2;
+  display: inline-flex;
+}
+
 .dsRefs {
+  grid-row: 2;
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;

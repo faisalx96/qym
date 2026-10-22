@@ -110,12 +110,6 @@ function DatasetBox({
         <span>{entry.name}</span>
         {chip ? <Tag data-testid="dataset-chip">{chip}</Tag> : null}
       </span>
-      <IconButton
-        label={`Remove ${entry.name}`}
-        icon="close"
-        isDisabled={readOnly}
-        onPress={onRemove}
-      />
       <div
         className={styles.dsRefs}
         ref={(el) => registerField(pointerToFieldName(`/evaluator/datasets/${index}`), el)}
@@ -131,7 +125,7 @@ function DatasetBox({
           onlyAction={false}
           triggerVariant="bar"
           summary={(set) => String(set.size)}
-          isDisabled={readOnly || versions.isPending}
+          isDisabled={readOnly}
           renderItem={(item) => (
             <span>
               {item.label}
@@ -147,6 +141,10 @@ function DatasetBox({
           ))}
         </span>
       </div>
+      {/* After the versions in the DOM (Tab order: Versions, Remove), in the first row of the grid. */}
+      <span className={styles.dsRemove}>
+        <IconButton label={`Remove ${entry.name}`} icon="close" isDisabled={readOnly} onPress={onRemove} />
+      </span>
     </li>
   );
 }
