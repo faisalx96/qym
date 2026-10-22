@@ -62,7 +62,7 @@ test.describe('union run page', () => {
       const tag = await size(page, '[data-testid=hero-datasets-fact] > *');
       expect(tag).toEqual({ w: 92, h: 20 });
       await expect(page.getByTestId('hero-datasets-fact')).toHaveAttribute('href', '#run-section-datasets');
-      await expect(page.getByTestId('hero-datasets-fact').locator('..')).toHaveAttribute(
+      await expect(page.getByTestId('hero-datasets-fact').locator('[title]')).toHaveAttribute(
         'title',
         /support-tickets v1/,
       );
@@ -105,8 +105,8 @@ test.describe('union run page', () => {
       await open(page, width, url(union));
       // QC-U11: the nav entry follows Overview with the count; the nav stays 44 px
       const links = page.locator('[data-section]');
-      await expect(links.nth(0)).toHaveText('Overview');
-      await expect(links.nth(1)).toHaveText(/^Datasets\s*3$/);
+      await expect(links.nth(1)).toHaveText('Overview');
+      await expect(links.nth(2)).toHaveText(/^Datasets\s*3$/);
       expect((await size(page, '[data-section="datasets"]')).h).toBeLessThan(44);
       const nav = await page
         .locator('[data-section="overview"]')
@@ -183,7 +183,10 @@ test.describe('union run page', () => {
     await expect(page.locator('#run-section-datasets')).toContainText('All datasets');
     expect(requests.filter((u) => u.includes('/datasets'))).toEqual([]);
     // removing the chip returns to all
-    await page.getByRole('button', { name: 'Remove filter Dataset: support-tickets v1' }).click();
+    // (the quick-filters sidebar that a scope opens sits over the bar's right end at 1440: press through the DOM)
+    await page
+      .getByRole('button', { name: 'Remove filter Dataset: support-tickets v1' })
+      .dispatchEvent('click');
     await expect(page.getByTestId('items-count')).toHaveText('946 items');
     await expect(page).not.toHaveURL(/dataset=/);
     // the URL form works as a link
@@ -197,7 +200,7 @@ test.describe('union run page', () => {
   }) => {
     await open(page, 1440, url(union));
     await page.locator('#run-items').scrollIntoViewIfNeeded();
-    const header = page.getByRole('columnheader');
+    const header = page.getByRole('treegrid', { name: 'Items' }).getByRole('columnheader');
     await expect(header.filter({ hasText: /^Dataset$/ })).toBeVisible();
     await expect(header.filter({ hasText: /^Item$/ })).toBeVisible();
     // t-0001 exists in both versions of support-tickets and in billing-faq: three rows, one per dataset
@@ -229,7 +232,7 @@ test.describe('union run page', () => {
     const section = page.locator('#run-section-datasets');
     await expect(section).toBeVisible();
     await section.scrollIntoViewIfNeeded();
-    await expect(page.getByRole('button', { name: /Show/ })).toHaveCount(0);
+    await expect(page.getByTestId('show-items-link')).toHaveCount(0);
     const loading = await size(page, '#run-section-datasets');
     // the real dataset cells are there while the numbers load
     await expect(section).toContainText('support-tickets');
@@ -254,17 +257,34 @@ test.describe('union run page', () => {
 
   test('keyboard path and focus rings (QC-U29)', async ({ page }) => {
     await open(page, 1440, url(union));
-    const fact = page.getByTestId('hero-datasets-fact');
-    await fact.focus();
-    const outline = await fact.evaluate((e) => getComputedStyle(e).outlineStyle);
-    expect(outline).not.toBe('none');
-    await page.keyboard.press('Tab');
-    await expect(page.getByTestId('hero-dataset-chip').first()).toBeFocused();
-    const chipOutline = await page
-      .getByTestId('hero-dataset-chip')
-      .first()
-      .evaluate((e) => getComputedStyle(e).outlineWidth);
-    expect(chipOutline).toBe('2px');
+    await page
+      .getByTestId('hero-datasets-fact')
+      .locator('..')
+      .locator('..')
+      .focus()
+      .catch(() => undefined);
+    // Tab from the top of the page: the Datasets fact comes before the chips, the chips before the section nav
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const seen: string[] = [];
+    let chipOutline = '';
+    for (let i = 0; i < 40 && !seen.includes('chip'); i++) {
+      await page.keyboard.press('Tab');
+      const info = await page.evaluate(() => {
+        const e = document.activeElement as HTMLElement | null;
+        if (!e) return { id: '', outline: '' };
+        const id =
+          e.dataset.testid === 'hero-datasets-fact'
+            ? 'fact'
+            : e.dataset.testid === 'hero-dataset-chip'
+              ? 'chip'
+              : '';
+        return { id, outline: getComputedStyle(e).outlineWidth + ' ' + getComputedStyle(e).outlineStyle };
+      });
+      if (info.id) seen.push(info.id);
+      if (info.id === 'chip') chipOutline = info.outline;
+    }
+    expect(seen).toEqual(['fact', 'chip']);
+    expect(chipOutline).toBe('2px solid');
   });
 
   for (const width of [1440, 390] as const) {

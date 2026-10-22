@@ -166,3 +166,21 @@ def test_best_run_index_never_ranks_union_runs():
         ).compile(compile_kwargs={"literal_binds": False})
     )
     assert "runs.dataset_count" in sql
+
+
+def test_a_union_run_is_restricted_when_any_dataset_is(env):
+    """QC-62: one private entry hides the items of the whole run from a non-admin reader."""
+    client, factory, tickets, billing, single, union = env
+    from qym_platform.auth import Principal
+    from qym_platform.db.models import Dataset, Run, User, UserRole
+    from qym_platform.permissions import run_item_hidden_reasons
+
+    with factory() as session:
+        session.get(Dataset, billing["id"]).private_test_set = True
+        reader = User(id="reader", email="reader@example.test", role=UserRole.MEMBER)
+        session.add(reader)
+        session.commit()
+        runs = [session.get(Run, rid) for rid in (single, union)]
+        reasons = run_item_hidden_reasons(session, Principal(user=reader, auth_type="proxy_headers"), runs)
+    # The single run is on support-tickets (public): visible. The union run includes billing-faq: hidden.
+    assert reasons == {union: "private_test_set"}

@@ -283,3 +283,40 @@ def test_upload_field_datasets_sets_rows_and_positions(env):
         files={"file": ("r.csv", b"a,b\n1,2\n", "text/csv")},
     )
     assert bad.status_code == 422
+
+
+def test_union_ingest_adds_a_constant_number_of_statements(database):
+    """QC-58, QC-80: positions come from a dict lookup, so a union run costs the same per item as a single run."""
+    from sqlalchemy import event
+
+    factory = sessionmaker(bind=database, autoflush=False)
+    extra = {}
+    for size in (10, 40):
+        ids_a = [f"a{n}" for n in range(size // 2)]
+        ids_b = [f"b{n}" for n in range(size // 2)]
+        with factory() as session:
+            if size == 10:
+                seed_api_key(session)
+            a = seed_dataset(session, f"ds-a-{size}", {"v1": ids_a})
+            b = seed_dataset(session, f"ds-b-{size}", {"v1": ids_b})
+            whole = seed_dataset(session, f"ds-all-{size}", {"v1": ids_a + ids_b})
+        with app_client(factory) as client:
+            counts = {}
+            for name, entries in (
+                ("single", [with_items(whole, "v1")]),
+                ("union", [with_items(a, "v1"), with_items(b, "v1")]),
+            ):
+                statements = []
+
+                def count(conn, cursor, statement, *args):
+                    statements.append(statement)
+
+                event.listen(database, "before_cursor_execute", count)
+                try:
+                    post_union_run(client, entries, label=name)
+                finally:
+                    event.remove(database, "before_cursor_execute", count)
+                counts[name] = len(statements)
+        extra[size] = counts["union"] - counts["single"]
+    assert extra[10] == extra[40], extra
+    assert extra[10] <= 12, extra  # entry resolution and the rows: a handful, whatever the size
