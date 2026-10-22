@@ -1,6 +1,7 @@
 import { useLatestExperiment } from '@/api/launch';
 import { Select } from '@/ui';
 import { launchPath } from '../../paths';
+import { datasetEntries } from '../model';
 import { useLaunch, type BaseChoice } from '../LaunchContext';
 import { BestRunPicker } from '../sections/BestRunPicker';
 import { BaseStatus } from './BaseStatus';
@@ -50,7 +51,7 @@ export function StartFrom() {
             title="Top-scoring run"
             body={
               bestAvail.ok
-                ? `The configuration of a top-scoring official run${doc.dataset.name ? ` on ${doc.dataset.name}` : ''}.`
+                ? `The configuration of a top-scoring official run${bestRunDatasets(doc)}.`
                 : (bestAvail.reason ?? 'Not available.')
             }
             meta={bestAvail.ok ? 'Choose what “best” means after picking it.' : undefined}
@@ -119,4 +120,13 @@ export function StartFrom() {
       <BaseStatus />
     </div>
   );
+}
+
+/** " on support-tickets" / " on support-tickets and 1 more dataset": the first dataset names the scope (QD-D9). */
+function bestRunDatasets(doc: Parameters<typeof datasetEntries>[0]): string {
+  const entries = datasetEntries(doc);
+  const first = entries[0]?.name;
+  if (!first) return '';
+  const more = entries.length - 1;
+  return ` on ${first}${more > 0 ? ` and ${more} more dataset${more === 1 ? '' : 's'}` : ''}`;
 }

@@ -21,6 +21,7 @@ import { ChartCard } from './ChartCard';
 import { Credentials } from './Credentials';
 import { JobHistoryCard } from './JobHistoryCard';
 import { MatrixCard } from './MatrixCard';
+import { SelectionCard } from './SelectionCard';
 import { QueueStrip } from './QueueStrip';
 import { useExperimentFlows } from './useExperimentFlows';
 import styles from './detail.module.css';
@@ -178,6 +179,7 @@ function Loaded({ detail: x }: { detail: ExperimentDetail }) {
             : 'Only the experiment’s creator or a project manager can cancel or retry jobs.'}
         </Text>
       ) : null}
+      <SelectionCard detail={x} />
       <StatStrip
         aria-label="Job totals"
         items={[

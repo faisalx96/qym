@@ -26,8 +26,14 @@ export function splitJobs(jobs: QueueJob[]): JobSplit {
   return split;
 }
 
+/** `#2` for a combination, `#2 · 3` for the third dataset version of a fanned-out combination. */
+export function comboText(job: Pick<QueueJob, 'combo_index' | 'dataset_index' | 'params'>): string {
+  const fanned = Boolean(job.params && typeof job.params === 'object' && job.params['dataset']);
+  return `#${job.combo_index}${fanned ? ` · ${(job.dataset_index ?? 0) + 1}` : ''}`;
+}
+
 export function jobLabel(job: QueueJob): string {
-  return `${job.experiment_name || 'Experiment'} #${job.combo_index} on ${job.environment_name || 'an environment'}`;
+  return `${job.experiment_name || 'Experiment'} ${comboText(job)} on ${job.environment_name || 'an environment'}`;
 }
 
 export interface SplitSection {

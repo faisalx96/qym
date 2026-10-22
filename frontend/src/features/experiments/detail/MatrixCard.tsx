@@ -42,7 +42,8 @@ export function MatrixCard({
   canPromote,
   onPromote,
 }: MatrixCardProps) {
-  const { envs, combos, cells, liveRunIds } = matrix;
+  const { envs, combos, rows, cells, liveRunIds } = matrix;
+  const byDataset = rows.length > combos.length;
   const selectedSet = new Set(selected);
   return (
     <Card as="section" aria-labelledby="matrix-title" data-exp-matrix>
@@ -51,7 +52,7 @@ export function MatrixCard({
           <SectionHeader
             id="matrix-title"
             title="Matrix"
-            description={`${plural(combos.length, 'combination')} × ${plural(envs.length, 'environment')}. Each cell is the latest attempt; earlier attempts stay in the job history.`}
+            description={`${plural(combos.length, 'combination')} × ${plural(envs.length, 'environment')}${byDataset ? ', one row per dataset version where an environment ran them one by one' : ''}. Each cell is the latest attempt; earlier attempts stay in the job history.`}
           />
           <div className={styles.toolbar} role="group" aria-label="Compare runs">
             <Button
@@ -86,16 +87,19 @@ export function MatrixCard({
               </tr>
             </thead>
             <tbody>
-              {combos.map((combo) => (
-                <tr key={combo.index} data-combo-index={combo.index}>
+              {rows.map((row) => (
+                <tr key={row.key} data-combo-index={row.combo.index} data-dataset-row={byDataset ? row.key : undefined}>
                   <th scope="row">
-                    <span className={styles.comboLabel} title={combo.label}>
-                      {combo.label || (combos.length === 1 ? 'Configuration' : 'Combination')}
+                    <span className={styles.comboLabel} title={row.label || row.combo.label}>
+                      {row.label ||
+                        row.combo.label ||
+                        (combos.length === 1 ? 'Configuration' : 'Combination')}
                     </span>
-                    <span className={`${styles.sub} ${styles.mono}`}>#{combo.index}</span>
+                    <span className={`${styles.sub} ${styles.mono}`}>{row.sub}</span>
                   </th>
                   {envs.map((env) => {
-                    const cell = cells.get(cellKey(combo.index, env.id));
+                    const cell = cells.get(cellKey(row.key, env.id));
+                    const comboLabel = row.label || row.combo.label || `#${row.combo.index}`;
                     return (
                       <td key={env.id}>
                         {cell?.current ? (
@@ -104,7 +108,7 @@ export function MatrixCard({
                             job={cell.current}
                             earlier={cell.earlier.length}
                             env={env}
-                            comboLabel={combo.label || `#${combo.index}`}
+                            comboLabel={comboLabel}
                             selected={cell.current.run_id ? selectedSet.has(cell.current.run_id) : false}
                             onToggle={onToggle}
                             onShowAttempts={onShowAttempts}

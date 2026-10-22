@@ -1,4 +1,5 @@
 /** Every job, current attempts first; earlier (superseded) attempts on demand. */
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { ExperimentDetail, ExperimentJob } from '@/api/experiments';
 import { runPath } from '@/app/routes';
@@ -17,6 +18,7 @@ import { JobStatusBadge } from '../components/StatusBadges';
 import { isCancellable, isRetryable } from '../lib/cancel';
 import { admissionLine } from '../lib/admission';
 import { sweepSummary } from '../lib/format';
+import { jobGroup } from '../lib/matrix';
 import type { ExperimentFlows } from './useExperimentFlows';
 import styles from './detail.module.css';
 
@@ -40,7 +42,23 @@ export function JobHistoryCard({
   live,
 }: JobHistoryCardProps) {
   const supersededCount = detail.jobs.filter((j) => j.superseded).length;
-  const rows = showEarlier ? detail.jobs : detail.jobs.filter((j) => !j.superseded);
+  const visible = showEarlier ? detail.jobs : detail.jobs.filter((j) => !j.superseded);
+  // With several dataset versions the history is grouped by dataset version, the combined job first.
+  const grouped = visible.some((j) => jobGroup(j));
+  const rows = useMemo(
+    () =>
+      grouped
+        ? [...visible].sort(
+            (a, b) =>
+              (jobGroup(a)?.order ?? -2) - (jobGroup(b)?.order ?? -2) ||
+              a.combo_index - b.combo_index ||
+              (a.environment_name ?? '').localeCompare(b.environment_name ?? '') ||
+              a.attempt - b.attempt,
+          )
+        : visible,
+    [grouped, visible],
+  );
+  const hasTask = detail.jobs.some((j) => j.task);
   const latency = detail.latency_sensitive;
   const columns: Column<ExperimentJob>[] = [
     {
@@ -64,6 +82,21 @@ export function JobHistoryCard({
       priority: 2,
       cell: (j) => <span className={styles.truncate}>{j.environment_name || j.environment_id}</span>,
     },
+    ...(grouped || hasTask
+      ? [
+          {
+            id: 'task',
+            header: 'Task',
+            width: 170,
+            priority: 3,
+            cell: (j: ExperimentJob) => (
+              <span className={styles.truncate} title={j.task?.id}>
+                {j.task?.name ?? 'Worker default'}
+              </span>
+            ),
+          } satisfies Column<ExperimentJob>,
+        ]
+      : []),
     {
       id: 'params',
       header: 'Params',
@@ -212,6 +245,19 @@ export function JobHistoryCard({
           rowState={(j) => (j.status === 'FAILED' || j.status === 'TIMED_OUT' ? 'error' : undefined)}
           density="regular"
           refreshing={live}
+          groupBy={
+            grouped
+              ? {
+                  key: (j) => jobGroup(j)?.key ?? 'plain',
+                  label: (key, groupRows) => (
+                    <span data-job-group={key}>
+                      <Tag kind="dataset">{(groupRows[0] && jobGroup(groupRows[0])?.label) || key}</Tag>
+                    </span>
+                  ),
+                  collapsible: true,
+                }
+              : undefined
+          }
         >
           <DataTable.Footer summary={`${rows.length} ${rows.length === 1 ? 'job' : 'jobs'}`} />
         </DataTable>
