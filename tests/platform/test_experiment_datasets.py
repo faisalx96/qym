@@ -518,3 +518,29 @@ def test_rate_limit_and_priority_rules_still_apply(client, two_envs):  # QD-89
     production, _ = two_envs
     res = _create(client, [production.id], spec=multi_spec(PAIRS[:2]), priority="HIGH")
     assert res.status_code in (403, 422)
+
+
+# --------------------------------------------------------------------------- clone, queue
+
+
+def test_clone_returns_the_stored_selection_and_relaunches_identically(client, session_factory, two_envs):  # QD-63
+    production, staging = two_envs
+    spec = multi_spec(PAIRS, run_shape="one_each", task={production.id: "answer-ticket"})
+    first = _create(client, [production.id, staging.id], spec=spec).json()
+    prefill = client.post(_url(suffix=f"/{first['id']}/clone"), headers=_headers(MEMBER)).json()
+    evaluator = prefill["spec"]["evaluator"]
+    assert len(evaluator["datasets"]) == 4 and evaluator["run_shape"] == "one_each"
+    assert evaluator["task"] == {production.id: "answer-ticket"}
+    again = _create(client, prefill["environment_ids"], spec=prefill["spec"], name="copy").json()
+    key = lambda d: sorted(  # noqa: E731
+        (j["environment_name"], j["dataset_index"], json.dumps(j["dataset"], sort_keys=True), json.dumps(j["task"], sort_keys=True))
+        for j in d["jobs"]
+    )
+    assert key(again) == key(first) and len(again["jobs"]) == 8
+
+
+def test_queue_rows_carry_the_pair_index(client, session_factory, two_envs):  # QD-60
+    _, staging = two_envs
+    _create(client, [staging.id], spec=multi_spec(PAIRS[:3]))
+    rows = client.get(f"/v1/projects/{P1}/eval-queue", headers=_headers(MEMBER)).json()["jobs"]
+    assert sorted(r["dataset_index"] for r in rows) == [0, 1, 2]

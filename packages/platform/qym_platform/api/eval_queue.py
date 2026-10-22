@@ -13,7 +13,7 @@ checked **per job**. Cancelling an orphan remote job needs a project manager.
         {
           "jobs": [{
             "id", "experiment_id", "experiment_name", "environment_id",
-            "environment_name", "combo_index", "attempt", "run_name",
+            "environment_name", "combo_index", "dataset_index", "attempt", "run_name",
             "params",                  # swept values + slot bindings, secret refs stripped
             "priority",                # "LOW" | "NORMAL" | "HIGH" (as submitted)
             "status",                  # QUEUED | SUBMITTING | SUBMITTED | RUNNING |
@@ -306,6 +306,7 @@ def get_queue(
                 "environment_id": job.environment_id,
                 "environment_name": env_names.get(job.environment_id),
                 "combo_index": job.combo_index,
+                "dataset_index": job.dataset_index or 0,
                 "attempt": job.attempt,
                 "run_name": _job_run_name(job),
                 "params": strip_secret_refs(job.params or {}),
