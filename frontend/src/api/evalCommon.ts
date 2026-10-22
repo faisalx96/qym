@@ -37,6 +37,8 @@ export interface EvalEnvironment {
   current_evaluator_schema_id: string | null;
   evaluator_schema_hash: string | null;
   evaluator_schema_fetched_at: string | null;
+  /** What the service accepts beyond guide v1.3, from its stored evaluator schema. */
+  evaluator_capabilities?: { datasets: boolean; task: boolean };
   health_status: 'ok' | 'error' | 'unknown' | string | null;
   health_checked_at: string | null;
   health_error: string | null;

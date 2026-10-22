@@ -2,7 +2,7 @@ import { Card } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import { Callout } from '../components/Callout';
 import panel from '../components/launch.module.css';
-import { DatasetPicker } from './DatasetPicker';
+import { DatasetsCard } from './DatasetsCard';
 import { EnvironmentPicker } from './EnvironmentPicker';
 import { RunSettings } from './RunSettings';
 import styles from './entry.module.css';
@@ -28,7 +28,7 @@ export function EntryBlock() {
         </Card>
         <Card>
           <div className={panel.cardStack}>
-            <DatasetPicker />
+            <DatasetsCard />
           </div>
         </Card>
       </div>

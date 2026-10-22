@@ -4,6 +4,7 @@ import { useLaunch } from '@/features/experiments/launch/LaunchContext';
 import { Callout } from '@/features/experiments/launch/components/Callout';
 import panel from '@/features/experiments/launch/components/launch.module.css';
 import { DatasetPicker } from '@/features/experiments/launch/entry/DatasetPicker';
+import { EnvTask } from '@/features/experiments/launch/entry/TaskRow';
 import entry from '@/features/experiments/launch/entry/entry.module.css';
 import { Button, Tag, Text } from '@/ui';
 
@@ -29,7 +30,7 @@ function List({ items }: { items: string[] }) {
 }
 
 export function EditorEntry() {
-  const { doc, editor, selectedEnvs, resetAll, readOnly } = useLaunch();
+  const { doc, editor, selectedEnvs, resetAll, readOnly, projectId } = useLaunch();
   const count = useEditorChangeCount();
   const base = doc.base;
   const envName = selectedEnvs[0]?.name ?? '—';
@@ -40,6 +41,8 @@ export function EditorEntry() {
         <div className={entry.stack}>
           <div className={entry.legend}>Environment</div>
           <Text variant="base">{envName}</Text>
+          {/* A preset may hold the task of its own environment (a string); the row exists when the service lists tasks. */}
+          {selectedEnvs[0] ? <EnvTask env={selectedEnvs[0]} projectId={projectId} /> : null}
         </div>
         <DatasetPicker />
       </div>

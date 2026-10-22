@@ -14,6 +14,7 @@ import {
   fetchProposal,
   fetchSlots,
   launchKeys,
+  type EnvTasksPayload,
   type ModelSlotsPayload,
 } from '@/api/launch';
 import { envDataFrom, type EnvData, type FormResponse, type ModelOptions, type ModelSlot } from '../model';
@@ -34,7 +35,12 @@ interface Group {
   pending: boolean;
 }
 
-function toEnvData(env: EvalEnvironment, group: Group | undefined): EnvData {
+/** The ids of a service's task list as the validation reads them (nothing before it was read). */
+function taskListOf(payload: EnvTasksPayload | undefined): EnvData['taskList'] {
+  return payload ? { status: payload.status, ids: payload.tasks.map((t) => t.id) } : undefined;
+}
+
+function toEnvData(env: EvalEnvironment, group: Group | undefined, tasks?: EnvTasksPayload): EnvData {
   const data = envDataFrom({
     id: env.id,
     name: env.name,
@@ -49,7 +55,12 @@ function toEnvData(env: EvalEnvironment, group: Group | undefined): EnvData {
     schemaHash: env.schema_hash,
     extra: group?.extra,
   });
-  return { ...data, loading: !group || group.pending };
+  return {
+    ...data,
+    loading: !group || group.pending,
+    capabilities: env.evaluator_capabilities ?? { datasets: false, task: false },
+    taskList: taskListOf(tasks),
+  };
 }
 
 /** EnvData of the selected environments, in selection order (`loading` until all parts arrived). */
@@ -57,6 +68,7 @@ export function useEnvData(
   projectId: string,
   selected: readonly EvalEnvironment[],
   extraEndpoints: readonly string[],
+  taskLists: Readonly<Record<string, EnvTasksPayload | undefined>> = {},
 ): EnvData[] {
   const selectedKey = selected.map((e) => e.id).join(',');
   const extraKey = extraEndpoints.join(',');
@@ -124,7 +136,10 @@ export function useEnvData(
     [parts],
   );
   const groups = useQueries({ queries, combine });
-  return useMemo(() => selected.map((e) => toEnvData(e, groups[e.id])), [selected, groups]);
+  return useMemo(
+    () => selected.map((e) => toEnvData(e, groups[e.id], taskLists[e.id])),
+    [selected, groups, taskLists],
+  );
 }
 
 /**
@@ -186,7 +201,7 @@ export async function loadEnvDataNow(
         extra: Object.fromEntries(extras),
         pending: false,
       };
-      return toEnvData(e, group);
+      return toEnvData(e, group, qc.getQueryData<EnvTasksPayload>(launchKeys.tasks(projectId, e.id)));
     }),
   );
 }

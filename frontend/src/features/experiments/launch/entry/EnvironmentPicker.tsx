@@ -4,19 +4,36 @@ import { AddEnvironmentDialog } from '@/features/environments/AddEnvironmentDial
 import { SlotEditorDialog } from '@/features/environments/SlotEditor';
 import { Button, Checkbox, Icon, LinkButton, Tag } from '@/ui';
 import { environmentPath } from '../../paths';
-import { PSEUDO, pointerToFieldName } from '../model';
+import { pairCount, PSEUDO, pointerToFieldName, unitsFor } from '../model';
 import { useLaunch } from '../LaunchContext';
+import { EnvTask } from './TaskRow';
 import { EnvVersions } from './VersionsBlock';
 import styles from './entry.module.css';
+
+/** What a ticked environment will receive when the experiment names two or more dataset versions. */
+export function shapeTag(
+  pairs: number,
+  runShape: 'combined' | 'one_each',
+  acceptsDatasets: boolean,
+): { text: string; tone: 'info' | 'warning' } | null {
+  const units = unitsFor(pairs, runShape, acceptsDatasets);
+  if (units.mode === 'single') return null;
+  if (units.mode === 'combined') return { text: '1 combined run', tone: 'info' };
+  return units.reason === 'service_without_datasets'
+    ? { text: `${units.units} runs, one per dataset version (older service)`, tone: 'warning' }
+    : { text: `${units.units} runs, one per dataset version`, tone: 'info' };
+}
 
 function EnvironmentTags({
   env,
   checking,
   error,
+  shape,
 }: {
   env: EvalEnvironment;
   checking: boolean;
   error: string;
+  shape: { text: string; tone: 'info' | 'warning' } | null;
 }) {
   return (
     <span className={styles.envTags}>
@@ -41,6 +58,11 @@ function EnvironmentTags({
       {env.official_preset_version != null ? (
         <Tag kind="version">Default preset v{env.official_preset_version}</Tag>
       ) : null}
+      {shape ? (
+        <Tag tone={shape.tone} data-testid="env-shape-tag">
+          {shape.text}
+        </Tag>
+      ) : null}
     </span>
   );
 }
@@ -62,6 +84,7 @@ export function EnvironmentPicker() {
     reloadSlots,
     registerField,
   } = useLaunch();
+  const pairs = pairCount(doc);
   const [adding, setAdding] = useState(false);
   const [grouping, setGrouping] = useState<EvalEnvironment | null>(null);
   return (
@@ -80,7 +103,16 @@ export function EnvironmentPicker() {
               <Checkbox isSelected={selected} isDisabled={readOnly} onChange={(on) => toggleEnv(env.id, on)}>
                 {env.name}
               </Checkbox>
-              <EnvironmentTags env={env} checking={Boolean(status?.checking)} error={status?.error ?? ''} />
+              <EnvironmentTags
+                env={env}
+                checking={Boolean(status?.checking)}
+                error={status?.error ?? ''}
+                shape={
+                  selected
+                    ? shapeTag(pairs, doc.selection.runShape, Boolean(env.evaluator_capabilities?.datasets))
+                    : null
+                }
+              />
               <span className={styles.envActions}>
                 {canManage && env.model_slots?.needs_confirmation ? (
                   <Button size="sm" variant="neutral" onPress={() => setGrouping(env)}>
@@ -98,6 +130,7 @@ export function EnvironmentPicker() {
                 </LinkButton>
               </span>
               {selected ? <EnvVersions env={env} projectId={projectId} /> : null}
+              {selected ? <EnvTask env={env} projectId={projectId} /> : null}
             </li>
           );
         })}

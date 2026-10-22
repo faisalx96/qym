@@ -257,8 +257,7 @@ describe('starting points', () => {
           task: { [PRODUCTION]: 'answer-ticket', 'gone-env': 'x' },
         },
       },
-      ctx,
-      { envNames: { 'gone-env': 'canary' } },
+      { ...ctx, envNames: { 'gone-env': 'canary' } },
     );
     expect(base.dataset).toMatchObject({ name: 'support-tickets', ref: 'v:v3' });
     expect(base.selection?.more).toEqual([{ name: 'billing-faq', refs: ['a:production'] }]);

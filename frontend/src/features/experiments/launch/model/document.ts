@@ -71,6 +71,14 @@ export function datasetValue(doc: Pick<LaunchDocument, 'dataset'>): string {
 export function toggleEnvironment(doc: LaunchDocument, id: string, on: boolean): LaunchDocument {
   const has = doc.environmentIds.includes(id);
   if (on && !has) return { ...doc, environmentIds: [...doc.environmentIds, id] };
-  if (!on && has) return { ...doc, environmentIds: doc.environmentIds.filter((e) => e !== id) };
+  if (!on && has) {
+    // The environment's task goes with it: a later tick starts at the worker default.
+    const { [id]: _dropped, ...tasks } = doc.selection.tasks;
+    return {
+      ...doc,
+      environmentIds: doc.environmentIds.filter((e) => e !== id),
+      selection: { ...doc.selection, tasks },
+    };
+  }
   return doc;
 }

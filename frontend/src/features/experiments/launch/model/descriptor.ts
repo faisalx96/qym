@@ -198,6 +198,7 @@ export interface ContextInput {
   evaluatorPanel?: EvaluatorPanel | null;
   maxJobs?: number | null;
   isManager?: boolean;
+  envNames?: Readonly<Record<string, string>>;
 }
 
 /** Everything the pure functions need to know about the loaded environments. */
@@ -211,6 +212,7 @@ export function buildContext(input: ContextInput): FormContext {
     evaluatorPanel: input.evaluatorPanel ?? null,
     maxJobs: input.maxJobs ?? null,
     isManager: Boolean(input.isManager),
+    envNames: { ...(input.envNames ?? {}) },
   };
 }
 

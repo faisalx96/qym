@@ -1,5 +1,5 @@
 import type { EvalEnvironment } from '@/api/evalCommon';
-import { useEnvVersioning } from '@/api/launch';
+import { useEnvTasks, useEnvVersioning } from '@/api/launch';
 import { Button, Tag } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import styles from './entry.module.css';
@@ -30,6 +30,10 @@ function show(value: unknown): string {
  */
 export function EnvVersions({ env, projectId }: { env: EvalEnvironment; projectId: string }) {
   const query = useEnvVersioning(projectId, env.id, true);
+  // The box's Refresh reads the tasks too, when the environment offers them (the Task row below).
+  const offersTasks = Boolean(env.evaluator_capabilities?.task);
+  const tasksQuery = useEnvTasks(projectId, env.id, offersTasks);
+  const hasTaskRow = offersTasks && tasksQuery.data?.status !== 'unsupported';
   const data = query.data;
   const status =
     query.isPending || query.isFetching ? 'loading' : query.isError ? 'error' : data?.status;
@@ -89,9 +93,12 @@ export function EnvVersions({ env, projectId }: { env: EvalEnvironment; projectI
         <Button
           variant="ghost"
           size="sm"
-          aria-label={`Refresh versions of ${env.name}`}
+          aria-label={hasTaskRow ? `Refresh versions and tasks of ${env.name}` : `Refresh versions of ${env.name}`}
           // A request already in flight is kept (no cancel and re-issue): Refresh twice is harmless.
-          onPress={() => void query.refetch({ cancelRefetch: false })}
+          onPress={() => {
+            void query.refetch({ cancelRefetch: false });
+            if (offersTasks) void tasksQuery.refetch({ cancelRefetch: false });
+          }}
         >
           Refresh
         </Button>

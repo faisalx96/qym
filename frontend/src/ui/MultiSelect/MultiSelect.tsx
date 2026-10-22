@@ -37,6 +37,8 @@ export interface MultiSelectProps<T extends MultiSelectItem> {
   summary?: (selected: Set<Key>) => string;
   /** `data-testid` of the popover panel (e2e hook). */
   panelTestId?: string;
+  /** Accessible name of the trigger (a 'bar' trigger is otherwise "<label> filter, N selected"). */
+  triggerLabel?: string;
 }
 
 /**
@@ -60,6 +62,7 @@ export function MultiSelect<T extends MultiSelectItem>({
   triggerVariant = 'field',
   summary: summaryOf,
   panelTestId,
+  triggerLabel,
 }: MultiSelectProps<T>) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -221,9 +224,10 @@ export function MultiSelect<T extends MultiSelectItem>({
         aria-haspopup="dialog"
         aria-controls={open ? listId : undefined}
         aria-label={
-          triggerVariant === 'bar'
+          triggerLabel ??
+          (triggerVariant === 'bar'
             ? `${label} filter${selectedCount ? `, ${selectedCount} selected` : ''}`
-            : undefined
+            : undefined)
         }
         data-variant={triggerVariant}
         data-active={selectedCount ? '' : undefined}

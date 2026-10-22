@@ -303,8 +303,6 @@ export interface BaselineOptions {
    * offers tasks (a clone).
    */
   taskEnvId?: string | null;
-  /** Names for the "not carried" notes of environments that are no longer part of the launch. */
-  envNames?: Readonly<Record<string, string>>;
 }
 
 /** `evaluator.datasets` / `run_shape` / `task` of a base config -> selection (the primary entry is returned separately). */
@@ -350,7 +348,7 @@ function selectionFrom(
       if (typeof value !== 'string' || !value) continue;
       const env = ctx.envs.find((e) => e.id === envId);
       if (!env) {
-        notes.push(`Task for ${options.envNames?.[envId] ?? 'an environment'} was not carried (environment not selected)`);
+        notes.push(`Task for ${ctx.envNames?.[envId] ?? 'an environment'} was not carried (environment not selected)`);
       } else if (!env.capabilities?.task) {
         notes.push(`Task for ${env.name} was not carried (it does not offer task selection)`);
       } else if (!listed(env, value)) {
@@ -654,7 +652,7 @@ export function loadedBaseFromPreset(
   }
   const version = res.version;
   const { dropped, errors } = dropMessages(res.remap);
-  const base = baselineFrom(res.remap.config, ctx);
+  const base = baselineFrom(res.remap.config, ctx, { taskEnvId: envId });
   return {
     base,
     info: {
@@ -678,7 +676,7 @@ export function loadedBaseFromPreset(
 /** A best run's base (GET …/best-runs/{run}/base). */
 export function loadedBaseFromBestRun(envId: string, res: BestRunBaseResponse, ctx: FormContext): LoadedBase {
   const { dropped, errors } = dropMessages(res.remap);
-  const base = baselineFrom(res.config, ctx);
+  const base = baselineFrom(res.config, ctx, { taskEnvId: envId });
   const info: BaseInfo = {
     ...emptyBaseInfo('best_run'),
     envId,

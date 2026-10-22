@@ -483,6 +483,8 @@ export interface FormContext {
   /** The run cap from the last dry run. */
   maxJobs: number | null;
   isManager: boolean;
+  /** Names of every active environment of the project (notes about environments that are not ticked). */
+  envNames?: Record<string, string>;
 }
 
 export interface EvaluatorPanel {

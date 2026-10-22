@@ -29,6 +29,7 @@ import {
   postExperiment,
   refreshSchema,
   useEnvPresets,
+  useEnvTaskLists,
   useEvaluatorConfig,
   useLaunchDatasets,
 } from '@/api/launch';
@@ -252,7 +253,14 @@ export function LaunchProvider({
     () => (datasets ? datasets.map((d) => d.name) : null),
     [datasets],
   );
-  const envs = useEnvData(projectId, selectedEnvs, doc.extraEndpoints);
+  const envNames = useMemo(() => Object.fromEntries(envRecords.map((e) => [e.id, e.name])), [envRecords]);
+  const taskLists = useEnvTaskLists(projectId, selectedEnvs);
+  const taskListsKey = JSON.stringify(
+    selectedEnvs.map((e) => [e.id, taskLists[e.id]?.status, taskLists[e.id]?.tasks.map((t) => t.id)]),
+  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the ids the validation reads
+  const stableTaskLists = useMemo(() => taskLists, [taskListsKey]);
+  const envs = useEnvData(projectId, selectedEnvs, doc.extraEndpoints, stableTaskLists);
   const targets = useMemo(
     () =>
       selectedEnvs.map((e) => ({
@@ -273,8 +281,9 @@ export function LaunchProvider({
         evaluatorPanel: panel,
         maxJobs: null,
         isManager: canManage,
+        envNames,
       }),
-    [envs, doc.extraEndpoints, datasetNames, panel, canManage],
+    [envs, doc.extraEndpoints, datasetNames, panel, canManage, envNames],
   );
   const envsLoading = selectedEnvs.length > 0 && contextLoading(ctxBase);
   const baseLoading = doc.base.loading;
@@ -363,6 +372,7 @@ export function LaunchProvider({
         evaluatorPanel,
         maxJobs: ctxRef.current.maxJobs,
         isManager: canManage,
+        envNames: Object.fromEntries(records.map((r) => [r.id, r.name])),
       });
     },
     [qc, projectId, canManage],
