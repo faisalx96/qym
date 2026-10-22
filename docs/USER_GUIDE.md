@@ -57,6 +57,70 @@ some items and a plain value on others is marked `· list or value`. For these k
 `path` equals it or whose list at `path` contains it; the same shape works in the batch body, where a list filter is
 `{"meta": {"tags": {"values": ["billing", "refund"], "mode": "any"}}}`. Lists of objects and empty lists are not offered as keys.
 
+## Evaluating several datasets
+
+One evaluation can run over several datasets, or several versions of one dataset, as a single run
+(SDK 2.1.0). A single dataset, written the way it always was, is unchanged.
+
+### From Python
+
+```python
+from qym import Evaluator, DatasetRef, CsvDataset
+
+Evaluator(task, "support-tickets", ["exact_match"])                        # one dataset, as before
+Evaluator(task, ["support-tickets"], ["exact_match"])                      # the same call
+
+Evaluator(
+    task,
+    dataset=[
+        DatasetRef("support-tickets", version="v3"),
+        DatasetRef("support-tickets", version="v4"),     # another version of the same dataset
+        DatasetRef("billing-faq", alias="production"),
+        "refund-cases",                                    # a plain name: config.dataset_version / dataset_alias, else production
+        CsvDataset("./local-cases.csv"),                   # objects mix in
+    ],
+    metrics=["answer_correctness"],
+).run()
+```
+
+- `DatasetRef(name, version=None, alias=None)`: a version or an alias, not both; neither means the
+  dataset's `production` alias. A string in a list is always a dataset name (never parsed for `@`).
+- The items of the datasets are evaluated in list order as one run. Every item keeps its source:
+  its id becomes `name@version/raw-id` (two versions that share ids stay apart; the raw id is kept in
+  `item_metadata.qym_item_id`) and its metadata gains `qym_dataset`, `qym_dataset_version`,
+  `qym_dataset_index` and `qym_dataset_version_id`.
+- At most 50 datasets per run. The same dataset version listed twice is an error. A dataset or version
+  that does not exist fails before the run starts.
+- The run's name is its label, for example `support-tickets@v3 + support-tickets@v4 + billing-faq@production`;
+  `result.run_metadata["datasets"]` lists each entry with its resolved version and item count.
+- Results files (`csv`, `xlsx`) of a union run have `dataset` and `dataset_version` columns after `item_id`.
+  Resuming (`resume_from`) checks that every dataset still resolves to the version the file used and stops with
+  `Pin the version (name@v3) to resume` when an alias moved.
+
+### From the command line
+
+```bash
+qym run create --task-file t.py --task-function f --metrics answer_correctness \
+    --dataset support-tickets@v3 --dataset support-tickets@v4 \
+    --dataset billing-faq@alias:production --dataset ./local.csv
+```
+
+`name@v3` pins a version, `name@alias:production` an alias, a bare name takes `--dataset-version` /
+`--dataset-alias` (a suffix beats them for its dataset). A value that is an existing path is a local file, so
+`./a@b.csv` works. `--dataset-file` cannot be combined with several `--dataset`.
+`qym run list --dataset NAME` finds runs that evaluated a dataset; `qym run get --json` lists a run's `datasets`.
+
+### On the platform
+
+A union run is an ordinary run with extras: the header's fact strip shows **Datasets** with a count, the first
+chip group lists each dataset (name, version, alias, item count; a link to that version while the dataset
+exists), a **Datasets** section gives each dataset's items, errors and mean per metric next to the run's own mean,
+and the items table has a Dataset column and a Dataset filter (`?dataset=name@version`). **Show N** in the section
+sets the filter. The runs list shows `3 datasets` and its Dataset filter and search match any dataset of the run;
+compare adds a notice when the runs evaluated different sets of dataset versions. Union runs are never ranked
+against single-dataset runs (best-run index, best-run bases, a version's trend): their scores cover other items.
+The local viewer (`qym ui FILE`, `--local-ui`) shows the same table, column and filter from the file's rows.
+
 ## Local results viewer (offline)
 
 The SDK ships a small browser viewer that needs no platform account and no network.
