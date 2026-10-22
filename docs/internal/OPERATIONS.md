@@ -141,12 +141,12 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0088`, following `0050` through
+The combined migration chain has one head, `0089`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084` and `0086`–`0088` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0084` and `0086`–`0089` are quick DDL or small job/queue inserts.
 `0085` switches `spans` to daily partitions; it locks `spans` for an instant only
 to drop still-empty monthly partitions that start after today.
 
@@ -454,7 +454,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0088`.
+deployment only after the API has migrated to `0089`.
 
 ```yaml
 apiVersion: apps/v1
