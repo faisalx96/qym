@@ -107,6 +107,7 @@ def dispatch_order() -> Tuple[Any, ...]:
         func.coalesce(job.next_attempt_at, job.created_at),
         job.created_at,
         job.combo_index,
+        job.dataset_index,
         job.id,
     )
 

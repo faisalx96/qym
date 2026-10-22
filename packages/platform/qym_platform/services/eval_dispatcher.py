@@ -701,6 +701,7 @@ class EvalDispatcher:
                     func.coalesce(job.next_attempt_at, job.created_at),
                     job.created_at,
                     job.combo_index,
+                    job.dataset_index,
                 )
                 .limit(self.batch)
             )
