@@ -4350,21 +4350,17 @@ def delete_run_pass(
     """Delete one full pass from a completed repeat run."""
     run = _lock_pass_mutation_run(db, run_id, expected_pass_version)
     _require_pass_deletion_allowed(db, principal, run)
+    # Read before the commit: it expires the principal's user, and a user loaded by
+    # another session (the tests, a worker) cannot be refreshed afterwards.
+    actor_user_id = principal.user.id if principal.auth_type != "none" else None
 
     try:
-        result = delete_repeat_pass(
-            db,
-            run,
-            pass_number,
-            actor_user_id=(
-                principal.user.id if principal.auth_type != "none" else None
-            ),
-        )
+        result = delete_repeat_pass(db, run, pass_number, actor_user_id=actor_user_id)
     except RepeatPassDeletionError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     sync_run_scores(db, run)  # re-score: refresh the best-run index
     db.commit()
-    logger.info("Run %s pass %s deleted by user %s", run.id, pass_number, principal.user.id)
+    logger.info("Run %s pass %s deleted by user %s", run_id, pass_number, actor_user_id)
     return result
 
 

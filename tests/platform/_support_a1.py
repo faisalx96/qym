@@ -2,7 +2,7 @@
 
 ``share_with_react`` pins a server payload as a golden JSON file under
 ``tests/platform/fixtures/golden``. The pytest side proves the server still
-produces exactly that payload; the Vitest side
+produces that payload (up to float rounding); the Vitest side
 (``frontend/src/**/__tests__/cutover-*.test.ts``) feeds the same rows to the
 React libraries and asserts the numbers the server computed. Regenerate with
 ``QYM_UPDATE_GOLDEN=1 pytest <file>``.
@@ -11,6 +11,7 @@ React libraries and asserts the numbers the server computed. Regenerate with
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -64,10 +65,34 @@ def share_with_react(name: str, payload: dict[str, Any]) -> None:
         path.write_text(text, encoding="utf-8")
         return
     assert path.exists(), f"{path} is missing: run with QYM_UPDATE_GOLDEN=1"
-    assert path.read_text(encoding="utf-8") == text, (
+    stored = path.read_text(encoding="utf-8")
+    assert stored == text or _same_up_to_float_noise(
+        json.loads(stored), json.loads(text)
+    ), (
         f"{path.name} no longer matches the server payload: "
         "regenerate it with QYM_UPDATE_GOLDEN=1 and re-run the Vitest suites"
     )
+
+
+def _same_up_to_float_noise(stored: Any, live: Any) -> bool:
+    """Equal except for float rounding: Postgres sums a mean in row order, Python in
+    its own, so the same payload reads 0.325 on one and 0.32499999999999996 on the
+    other. The Vitest side compares with ``toBeCloseTo(…, 9)`` for the same reason."""
+    if isinstance(stored, float) or isinstance(live, float):
+        return (
+            isinstance(stored, (int, float))
+            and isinstance(live, (int, float))
+            and math.isclose(stored, live, rel_tol=1e-9, abs_tol=1e-9)
+        )
+    if isinstance(stored, dict) and isinstance(live, dict):
+        return stored.keys() == live.keys() and all(
+            _same_up_to_float_noise(stored[k], live[k]) for k in stored
+        )
+    if isinstance(stored, list) and isinstance(live, list):
+        return len(stored) == len(live) and all(
+            _same_up_to_float_noise(a, b) for a, b in zip(stored, live)
+        )
+    return stored == live
 
 
 def share_run_page(
