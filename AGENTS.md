@@ -36,7 +36,7 @@ This is a monorepo with two independently-buildable packages under `packages/`:
 - Run CLI: `qym --help`
 - Format: `black . && isort .`
 - Type check: `mypy packages/sdk/qym`
-- Tests: `pytest -q -n auto` (parallel via `pytest-xdist`; on a low-memory machine `-n 4` can be faster); set `QYM_TEST_POSTGRES_URL` to run the PostgreSQL cases, which otherwise skip (no instance at hand: start one with Docker, see "Working on a shared or small machine")
+- Tests: `pytest -q -n 4` (parallel via `pytest-xdist`; never `-n auto` on the shared desktop: it spawns one worker per core, 28 here at about 250 MB each, and systemd-oomd then kills the run and the desktop's own apps); set `QYM_TEST_POSTGRES_URL` to run the PostgreSQL cases, which otherwise skip (no instance at hand: start one with Docker, see "Working on a shared or small machine")
 - Frontend (Node 24): `cd frontend && npm ci && npm run check && npm run build && npm run build:sdk` (`build` writes `packages/platform/qym_platform/_static/app/`, `build:sdk` writes `packages/sdk/qym/_static/ui/`; both gitignored). Dev: `npm run dev` (Vite on 5800, proxies the API to the platform on 8800; `frontend/README.md`). Browser tests: `npm run e2e` (platform UI), `npm run e2e:sdk` (SDK viewer); they boot their own servers. On a shared or small machine run full suites and builds through `scripts/heavy.sh -- <command>` (memory-gated, cgroup-isolated; `frontend/README.md`)
 - Build SDK wheel: `pip wheel packages/sdk/ --no-deps -w dist/` (run `npm run build:sdk` first so the viewer is in the wheel)
 - Build platform wheel: `pip wheel packages/platform/ --no-deps -w dist/` (requires the built `_static/app/`, so run `npm run build` first; the Docker image builds it in a Node stage)
@@ -82,7 +82,9 @@ open `http://127.0.0.1:5800/` (`/__ui` is the primitive gallery). Details in
 Two sessions were killed in October 2026 (kernel OOM, then `systemd-oomd` on sustained memory pressure
 of the whole user slice; see `docs/internal/ui-migration/POSTMORTEM.md` section 1). Therefore:
 - Every full suite, build and `pytest -n` goes through `scripts/heavy.sh [--cost GB] [--name L] -- <cmd>`.
-  Never pass `--workers`; the script exports `VITEST_MAX_WORKERS` / `QYM_PW_WORKERS` from the budget.
+  Never pass `--workers`; the script exports `VITEST_MAX_WORKERS` / `QYM_PW_WORKERS` from the budget. It does not
+  size pytest: pass `-n 4` yourself, never `-n auto` (2026-10-22: three `-n auto` chunks were killed by systemd-oomd and
+  took GNOME apps with them).
 - Cost guide: 2 = Vitest subset, tsc, builds, one Playwright spec file; 3 = `npm run check`, one Playwright
   folder, `pytest tests/sdk`; 4 = full `npm run e2e`, `pytest tests/platform` in chunks of about 48 files
   (`ls tests/platform/test_*.py | split -l 48`). Cost + reserve (max of 2 GB and 20% of RAM) must fit under
