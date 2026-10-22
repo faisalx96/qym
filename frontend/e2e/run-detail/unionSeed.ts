@@ -59,15 +59,24 @@ interface Made {
 const rawId = (n: number) => `t-${String(n + 1).padStart(4, '0')}`;
 
 /** One platform dataset with one published version per entry that names it (later versions extend the earlier). */
-async function makeDatasets(client: SeedClient, slug: string, entries: UnionEntry[]): Promise<Map<string, Made>> {
+async function makeDatasets(
+  client: SeedClient,
+  slug: string,
+  entries: UnionEntry[],
+): Promise<Map<string, Made>> {
   const made = new Map<string, Made>();
   for (const entry of entries) {
     let ds = made.get(entry.name);
     if (!ds) {
-      const created = await call<{ dataset: { id: string; name: string; slug: string } }>(client, 'POST', '/v1/datasets', {
-        name: entry.name,
-        project_slug: slug,
-      });
+      const created = await call<{ dataset: { id: string; name: string; slug: string } }>(
+        client,
+        'POST',
+        '/v1/datasets',
+        {
+          name: entry.name,
+          project_slug: slug,
+        },
+      );
       ds = { ...created.dataset, versions: [] };
       made.set(entry.name, ds);
     }
@@ -153,7 +162,10 @@ export async function seedUnionRun(client: SeedClient, o: UnionOptions = {}): Pr
     disabled_items: 0,
   }));
   const specs = Object.fromEntries(
-    UNION_METRICS.map((m) => [m, { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 }]),
+    UNION_METRICS.map((m) => [
+      m,
+      { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
+    ]),
   );
   const total = entries.reduce((n, e) => n + e.items, 0);
   const first = entryList[0]!;
@@ -171,7 +183,9 @@ export async function seedUnionRun(client: SeedClient, o: UnionOptions = {}): Pr
     run_metadata: { datasets: entryList, total_items: total },
     run_config: { run_name: name, max_concurrency: 8 },
   };
-  const created = await call<{ run_id: string }>(client, 'POST', '/v1/runs', runBody, { Authorization: `Bearer ${token}` });
+  const created = await call<{ run_id: string }>(client, 'POST', '/v1/runs', runBody, {
+    Authorization: `Bearer ${token}`,
+  });
   const runId = created.run_id;
   const sent = new Date(Date.UTC(2026, 9, 22, 12, 0, 0)).toISOString();
   let seq = 0;
@@ -221,12 +235,23 @@ export async function seedUnionRun(client: SeedClient, o: UnionOptions = {}): Pr
         },
       });
       if (n < entry.errors) {
-        push('item_failed', { item_id: id, index, error: 'Timeout calling the ticket model', latency_ms: 30000 });
+        push('item_failed', {
+          item_id: id,
+          index,
+          error: 'Timeout calling the ticket model',
+          latency_ms: 30000,
+        });
       } else {
         UNION_METRICS.forEach((metric, k) => {
           // a constant score s with `errors` items counting as 0 gives the target mean over all items
           const s = Math.min(1, (entry.means[k]! * entry.items) / (entry.items - entry.errors));
-          push('metric_scored', { item_id: id, metric_name: metric, score_numeric: s, score_value: s, score_raw: s });
+          push('metric_scored', {
+            item_id: id,
+            metric_name: metric,
+            score_numeric: s,
+            score_value: s,
+            score_raw: s,
+          });
         });
         push('item_completed', {
           item_id: id,
@@ -247,7 +272,8 @@ export async function seedUnionRun(client: SeedClient, o: UnionOptions = {}): Pr
       lines.slice(i, i + 400).join('\n') + '\n',
       { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-ndjson' },
     );
-    if (res.rejected) throw new Error(`events rejected: ${JSON.stringify(res.rejected_events).slice(0, 600)}`);
+    if (res.rejected)
+      throw new Error(`events rejected: ${JSON.stringify(res.rejected_events).slice(0, 600)}`);
   }
   for (const gone of o.deleteAfter ?? []) {
     const ds = datasets.get(gone);
@@ -268,7 +294,10 @@ export async function seedSingleRunOn(
   const ds = union.datasets.get(datasetName)!;
   const version = ds.versions[0]!;
   const specs = Object.fromEntries(
-    UNION_METRICS.map((m) => [m, { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 }]),
+    UNION_METRICS.map((m) => [
+      m,
+      { score_type: 'percentage', direction: 'maximize', pass_threshold: 0.7, schema_version: 2 },
+    ]),
   );
   const created = await call<{ run_id: string }>(
     client,
@@ -283,7 +312,8 @@ export async function seedSingleRunOn(
       metric_specs: specs,
       dataset_id: ds.id,
       dataset_version_id: version.id,
-      run_config: { run_name: name },
+      versioning_details: { agent_version: 'v2.4.1' },
+      run_config: { run_name: name, max_concurrency: 8 },
     },
     { Authorization: `Bearer ${union.token}` },
   );
@@ -293,7 +323,15 @@ export async function seedSingleRunOn(
   const lines: string[] = [];
   const push = (type: string, payload: Record<string, unknown>) =>
     lines.push(
-      JSON.stringify({ schema_version: 1, event_id: randomUUID(), sequence: ++seq, sent_at: sent, type, run_id: runId, payload }),
+      JSON.stringify({
+        schema_version: 1,
+        event_id: randomUUID(),
+        sequence: ++seq,
+        sent_at: sent,
+        type,
+        run_id: runId,
+        payload,
+      }),
     );
   push('run_started', {
     external_run_id: name,
@@ -310,11 +348,27 @@ export async function seedSingleRunOn(
   });
   for (let n = 0; n < items; n++) {
     const id = rawId(n);
-    push('item_started', { item_id: id, index: n, input: `Customer ticket ${n + 1}`, expected: 'Refunds take 5 business days.' });
+    push('item_started', {
+      item_id: id,
+      index: n,
+      input: `Customer ticket ${n + 1}`,
+      expected: 'Refunds take 5 business days.',
+    });
     UNION_METRICS.forEach((metric) =>
-      push('metric_scored', { item_id: id, metric_name: metric, score_numeric: mean, score_value: mean, score_raw: mean }),
+      push('metric_scored', {
+        item_id: id,
+        metric_name: metric,
+        score_numeric: mean,
+        score_value: mean,
+        score_raw: mean,
+      }),
     );
-    push('item_completed', { item_id: id, index: n, output: 'Your refund arrives within 5 business days.', latency_ms: 900 });
+    push('item_completed', {
+      item_id: id,
+      index: n,
+      output: 'Your refund arrives within 5 business days.',
+      latency_ms: 900,
+    });
   }
   push('run_completed', { ended_at: sent, final_status: 'COMPLETED' });
   for (let i = 0; i < lines.length; i += 400) {
@@ -324,4 +378,15 @@ export async function seedSingleRunOn(
     });
   }
   return runId;
+}
+
+/** The design mock's twelve-dataset run: four names, three versions each. */
+export function manyEntries(): UnionEntry[] {
+  const names = ['support-tickets', 'billing-faq', 'refund-cases', 'onboarding-checks'];
+  return Array.from({ length: 12 }, (_, i) => ({
+    name: names[i % 4]!,
+    items: 80 + i * 17,
+    errors: i % 5 === 0 ? 1 : 0,
+    means: [0.6 + (i % 5) / 20, 0.8 + (i % 3) / 30, 0.75 + (i % 4) / 40] as [number, number, number],
+  }));
 }
