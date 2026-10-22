@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0088"]
+    assert heads == ["0090"]
 
 
 def test_operations_docs_name_the_current_migration_head() -> None:
@@ -746,8 +746,28 @@ _REVISION_0088_NAMES = (
 )
 
 
+def _is_0090(diff: Any) -> bool:
+    """0090 adds ``eval_experiment_jobs.dataset_index`` and widens the job key to include
+    it (``test_migrations_0090.py`` checks it); the older revisions know neither."""
+    if "dataset_index" in repr(diff):
+        return True
+    if isinstance(diff, tuple) and diff and diff[0] == "remove_constraint":
+        constraint = diff[1]
+        table = getattr(constraint, "table", None)
+        return (
+            isinstance(constraint, sa.UniqueConstraint)
+            and table is not None
+            and table.name == "eval_experiment_jobs"
+        )
+    return False
+
+
 def _without_0088(diffs: list[Any]) -> list[Any]:
-    return [d for d in diffs if not any(name in repr(d) for name in _REVISION_0088_NAMES)]
+    return [
+        d
+        for d in diffs
+        if not _is_0090(d) and not any(name in repr(d) for name in _REVISION_0088_NAMES)
+    ]
 
 
 def test_eval_environments_migration_matches_models(

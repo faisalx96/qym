@@ -1,10 +1,26 @@
+# October 2026 — Platform 2.1.0 / SDK 2.1.0
+
+Experiments can run several datasets, each at several versions, and can choose the task an Evaluation Service runs. Both need the Evaluation Service integration guide v1.4 (`docs/evaluation-service-change-request-v1.4.md`); services on v1.3 keep working and receive one job per dataset version.
+
+## Before you update
+
+- **Migration `0090` (head `0090`).** Quick DDL: `eval_experiment_jobs.dataset_index` (default 0) and a unique job key widened by it. Existing jobs get 0. The downgrade refuses while a per-dataset fan-out exists. New setting `QYM_EVAL_MAX_DATASETS` (default 20).
+
+## What changed
+
+### Experiments
+
+- **Several datasets and versions per experiment.** The launch form's Datasets card takes any number of datasets, each with any number of versions or aliases, and a run shape: **Combine into one run** (one run over every dataset version) or **One run each** (one run per dataset version, grouped under the experiment). An Evaluation Service whose evaluator schema does not declare `datasets` gets one job per dataset version even when you combine; the environment box says so. A launch is capped at `QYM_EVAL_MAX_DATASETS` dataset versions and, with fan-out, at `QYM_EVAL_SWEEP_MAX_JOBS` jobs.
+- **Task per environment.** A ticked environment whose service declares `task` shows a **Task** control listing the tasks the service reports live (`GET /evals/tasks`, new platform route `GET /v1/projects/{id}/eval-environments/{env_id}/tasks`). The default is the worker's own task.
+- **Experiment page.** A **Datasets and task** card, one matrix row per dataset version, job history grouped by dataset version and a **Task** column.
+
 # October 2026 — Platform 2.0.0 / SDK 2.0.0
 
 Datasets get per-dataset access, disabled items and batch edits by metadata; experiments get a per-experiment dataset read token and a latency-sensitive queue option; the SDK ships the rebuilt local viewer and skips disabled items. Platform 2.0.0 still accepts SDK 1.9.0 and 1.8.0 runs, but only SDK 2.0.0 leaves disabled items out of a run.
 
 ## Before you update
 
-- **Migrations `0087`–`0088` (head `0088`).** Both are quick DDL. `0087` adds per-dataset access (`datasets.access_mode`, the `dataset_grants` table) and the disabled-item columns on `dataset_items` (`disabled_at`, `disabled_by_user_id`, `disabled_reason`). `0088` adds the per-experiment dataset read token and the latency-sensitive flag to `eval_experiments`, the environments' `latency_sensitive_min_role`, the token `kind` / `experiment_id` on `dataset_read_tokens`, and the admission columns (`admitted_at`, `deferrals`, `deferral_reason`, `contaminated_attempts`) on `eval_experiment_jobs`. Existing datasets stay visible to the whole project (`access_mode = project`); existing items stay active.
+- **Migrations `0087`–`0088`.** Both are quick DDL. `0087` adds per-dataset access (`datasets.access_mode`, the `dataset_grants` table) and the disabled-item columns on `dataset_items` (`disabled_at`, `disabled_by_user_id`, `disabled_reason`). `0088` adds the per-experiment dataset read token and the latency-sensitive flag to `eval_experiments`, the environments' `latency_sensitive_min_role`, the token `kind` / `experiment_id` on `dataset_read_tokens`, and the admission columns (`admitted_at`, `deferrals`, `deferral_reason`, `contaminated_attempts`) on `eval_experiment_jobs`. Existing datasets stay visible to the whole project (`access_mode = project`); existing items stay active.
 - **Evaluation Service integration guide v1.3.** Per-experiment dataset read tokens are sent as `env_overrides.QYM_DATASET_READ_TOKEN` only when the environment's settings schema declares that key, and `latency_sensitive` is sent only when set. The platform's own address is sent as `env_overrides.QYM_BASE_URL` under the same rule. Presets that set `env_overrides.QYM_DATASET_READ_TOKEN`, `env_overrides.QYM_BASE_URL` or `latency_sensitive` themselves fail validation until edited: all three are platform-owned now (`docs/evaluation-service-api-integration-v1.3.md`, `docs/internal/EVAL_OPEN_QUESTIONS.md` D-B11).
 - **Dataset item reads default to active items.** `GET …/items` returns active items unless `state=disabled` or `state=all` is passed; published versions report `disabled_count`. Clients that paged a version's items by count should pass `state=all`.
 
