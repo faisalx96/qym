@@ -13,10 +13,12 @@ import {
   type StatusFilter,
   type ViewState,
 } from './lib/table-model';
+import { Datasets } from './components/Datasets';
 import { Detail } from './components/Detail';
 import { RowList } from './components/RowList';
 import { Summary } from './components/Summary';
 import { downloadText, safeFilename, STATUS_LABEL } from './components/format';
+import { datasetEntries, datasetKeyLabel } from './lib/datasets';
 import s from './App.module.css';
 
 function useUrlView(): [
@@ -56,6 +58,10 @@ function useUrlView(): [
 
 function Header({ data }: { data: ViewerData }) {
   const { run, source } = data;
+  const entries = useMemo(
+    () => datasetEntries(data.snapshot?.rows ?? [], data.snapshot?.metric_names.length ?? 0),
+    [data.snapshot],
+  );
   const file = run.file_path?.split(/[\\/]/).pop();
   let badge = <Badge tone="neutral">Waiting</Badge>;
   if (data.error) badge = <Badge tone="danger">Unavailable</Badge>;
@@ -79,7 +85,14 @@ function Header({ data }: { data: ViewerData }) {
       <span className={s.wordmark} lang="ar" dir="rtl">
         قيِّم
       </span>
-      {run.dataset_name ? (
+      {entries.length ? (
+        entries.map((e) => (
+          <span key={e.position} className={s.chip} title={`${e.name} ${e.version ?? ''}, ${e.items} items`.trim()}>
+            {e.name}
+            {e.version ? ` ${e.version}` : ''} · {e.items} items
+          </span>
+        ))
+      ) : run.dataset_name ? (
         <span className={s.chip} title={run.dataset_name}>
           {run.dataset_name}
         </span>
@@ -190,6 +203,7 @@ export function App() {
   const rows = useMemo(() => data.snapshot?.rows ?? [], [data.snapshot]);
   const names = useMemo(() => data.snapshot?.metric_names ?? [], [data.snapshot]);
   const shown = useMemo(() => sortRows(filterRows(rows, view), view.sort, view.dir), [rows, view]);
+  const datasets = useMemo(() => datasetEntries(rows, names.length), [rows, names.length]);
   const visible = useMemo(() => new Set(shown.map((r) => r.index)), [shown]);
   const selected = useMemo(() => rows.find((r) => r.index === selectedIndex) ?? null, [rows, selectedIndex]);
   const fileMode = data.source.mode === 'file' && !!data.run.file_path;
@@ -284,6 +298,7 @@ export function App() {
               selected={selectedIndex}
               onOpen={open}
             />
+            <Datasets rows={rows} metricNames={names} onShow={(key) => updateView({ dataset: key })} />
             <div className={s.toolbar} role="search">
               <input
                 className={s.control}
@@ -305,10 +320,26 @@ export function App() {
                   </option>
                 ))}
               </select>
+              {datasets.length ? (
+                <select
+                  className={s.control}
+                  aria-label="Filter by dataset"
+                  data-testid="dataset-filter"
+                  value={view.dataset}
+                  onChange={(e) => updateView({ dataset: e.target.value })}
+                >
+                  <option value="">All datasets</option>
+                  {datasets.map((d) => (
+                    <option key={d.key} value={d.key}>
+                      {datasetKeyLabel(d.key)} ({d.items})
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <span className={s.count} role="status">
                 {shown.length} of {rows.length} rows
               </span>
-              {view.q || view.status !== 'all' || view.sort !== 'index' || view.dir !== 'asc' ? (
+              {view.q || view.status !== 'all' || view.sort !== 'index' || view.dir !== 'asc' || view.dataset ? (
                 <button type="button" className={s.btn} onClick={() => updateView(DEFAULT_VIEW)}>
                   Reset view
                 </button>

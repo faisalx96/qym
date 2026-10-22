@@ -4,6 +4,7 @@ import type { Row } from '../types';
 import type { SortDir, SortKey } from '../lib/table-model';
 import { metricCell, formatScore } from '../lib/metric-cell';
 import { formatLatency } from '../lib/stats';
+import { rowDataset, datasetKeyLabel, datasetKey, rowRawItemId } from '../lib/datasets';
 import { StatusBadge } from './StatusBadge';
 import s from './RowList.module.css';
 
@@ -35,6 +36,7 @@ export function RowList({ rows, metricNames, selected, sort, dir, onSort, onOpen
   const [limit, setLimit] = useState(PAGE);
   const body = useRef<HTMLTableSectionElement>(null);
   const empty = rows.length === 0;
+  const union = rows.some((r) => rowDataset(r));
   useEffect(() => setLimit(PAGE), [empty]);
   const shown = rows.slice(
     0,
@@ -104,6 +106,7 @@ export function RowList({ rows, metricNames, selected, sort, dir, onSort, onOpen
         <colgroup>
           <col style={{ width: '6ch' }} />
           <col style={{ width: '11ch' }} />
+          {union ? <col style={{ width: '24ch' }} /> : null}
           <col />
           <col />
           {metricNames.map((name) => (
@@ -118,6 +121,7 @@ export function RowList({ rows, metricNames, selected, sort, dir, onSort, onOpen
           <tr>
             {th('index', '#', 'Row number', true)}
             {th('status', 'Status', 'Status')}
+            {union ? <th scope="col">Dataset</th> : null}
             <th scope="col">Input</th>
             <th scope="col">Output</th>
             {metricNames.map((name, k) => th(`metric:${k}`, name, name, true))}
@@ -139,6 +143,14 @@ export function RowList({ rows, metricNames, selected, sort, dir, onSort, onOpen
               <td>
                 <StatusBadge status={r.status} />
               </td>
+              {union ? (
+                <td title={r.item_id}>
+                  {(() => {
+                    const d = rowDataset(r);
+                    return d ? `${datasetKeyLabel(datasetKey(d.name, d.version))} · ${rowRawItemId(r)}` : '—';
+                  })()}
+                </td>
+              ) : null}
               <td className={s.text} {...textDirAttrs(r.input)}>
                 <span className={s.clamp}>{r.input_full}</span>
               </td>

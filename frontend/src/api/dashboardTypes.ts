@@ -94,6 +94,9 @@ export interface RunRow {
   dataset_version: string | null;
   dataset_aliases: string[];
   dataset_slug: string | null;
+  /** Dataset versions the run evaluated (absent = 1); `datasets` lists them for a union run only. */
+  dataset_count?: number;
+  datasets?: { dataset: string; version: string | null }[];
   timestamp: string;
   started_at: string | null;
   last_event_at: string;

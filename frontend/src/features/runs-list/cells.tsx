@@ -23,6 +23,7 @@ import { useRunIntent } from '@/app/prefetch';
 import { projectPath, runPath } from '@/app/routes';
 import { runHref } from '@/lib/runs-order';
 import { textDirAttrs } from '@/lib/text';
+import { DatasetCountTag } from '@/features/run-detail/components/DatasetChip';
 import { AnalyzeAction } from './AnalyzeAction';
 import { useRunsCtx } from './context';
 import { modelKeyOf, modelShape, modelSlot, plainModelName, smartDigits, STATUS_LABEL } from './model';
@@ -89,6 +90,15 @@ export function OwnerCell({ row }: { row: RunRow }) {
 }
 
 export function DatasetCell({ row }: { row: RunRow }) {
+  // A run over several dataset versions: a count tag (the full list is its title), never an ellipsis.
+  if ((row.dataset_count ?? 1) > 1)
+    return (
+      <DatasetCountTag
+        count={row.dataset_count ?? 0}
+        title={(row.datasets ?? []).map((d) => `${d.dataset}${d.version ? ` ${d.version}` : ''}`).join(' · ')}
+        testId="dataset-count-tag"
+      />
+    );
   return <DatasetTag name={row.dataset_name} version={row.dataset_version} aliases={row.dataset_aliases} />;
 }
 

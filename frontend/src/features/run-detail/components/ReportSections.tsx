@@ -17,6 +17,7 @@ import { errorBucketCount } from '../lib/panelCounts';
 import { getRowRootCauseAnalyses } from '../lib/rowMeta';
 import { useRunPage } from '../RunContext';
 import { BlockSkeleton, ErrorsSkeleton, OverviewSkeleton } from './StageSkeletons';
+import { DatasetsSection } from './panels/DatasetsSection';
 
 // Every analysis panel is its own chunk, fetched when its section mounts (the Overview's starts with the page, below).
 const panel = <K extends string>(load: () => Promise<Record<K, React.ComponentType>>, name: K) =>
@@ -43,12 +44,22 @@ function Staged({
 }
 
 export type SectionKey =
-  'reviews' | 'overview' | 'repeat' | 'latency' | 'deep' | 'categories' | 'errors' | 'root-cause' | 'items';
+  | 'reviews'
+  | 'overview'
+  | 'datasets'
+  | 'repeat'
+  | 'latency'
+  | 'deep'
+  | 'categories'
+  | 'errors'
+  | 'root-cause'
+  | 'items';
 
 /** Every section a link (`#overview`, `?panel=`, nav) can name, in page order. */
 export const SECTION_KEYS: SectionKey[] = [
   'reviews',
   'overview',
+  'datasets',
   'repeat',
   'latency',
   'deep',
@@ -101,6 +112,9 @@ export function useSectionEntries(): SectionEntry[] {
   return [
     ...(reviewCount ? [{ id: 'reviews' as const, label: 'Reviews', count: reviewCount }] : []),
     { id: 'overview', label: 'Overview' },
+    ...((payload.run.dataset_count ?? 1) > 1
+      ? [{ id: 'datasets' as const, label: 'Datasets', count: payload.run.dataset_count }]
+      : []),
     ...(model.isRepeat && !model.viewPass ? [{ id: 'repeat' as const, label: 'Repeat' }] : []),
     { id: 'latency', label: 'Latency' },
     { id: 'deep', label: 'Deep' },
@@ -169,6 +183,7 @@ export function ReportSections({ scopeNote }: { scopeNote?: string }) {
           <OverviewTab />
         </Staged>
       </ReportSection>
+      {(payload.run.dataset_count ?? 1) > 1 ? <DatasetsSection /> : null}
       <ReportSection
         id={sectionDomId('repeat')}
         title="Repeat run analysis"

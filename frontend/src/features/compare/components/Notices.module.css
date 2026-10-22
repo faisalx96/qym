@@ -18,3 +18,26 @@
   background: var(--bg-surface);
   color: var(--text-secondary);
 }
+
+/* Runs that evaluated different sets of dataset versions: an info status, not a warning. */
+.info {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--info);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--info);
+}
+
+.infoTitle {
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.infoBody {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+}

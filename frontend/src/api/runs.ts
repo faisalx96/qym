@@ -9,6 +9,7 @@ import { api, ApiError } from '@/lib/http';
 import type { RunRow, RunsPage } from '@/api/dashboardTypes';
 import type {
   CategoryCatalog,
+  DatasetBreakdown,
   GroupMetricsPayload,
   ItemDetailsPayload,
   ItemReasonsPayload,
@@ -39,6 +40,7 @@ export const runKeys = {
   rows: (runId: string, group: RowGroup) => ['run', runId, 'rows', group] as const,
   live: (runId: string) => ['run', runId, 'live-status'] as const,
   passes: (runId: string) => ['run', runId, 'passes'] as const,
+  datasets: (runId: string, pass: number | null) => ['run', runId, 'datasets', pass] as const,
   groupMetrics: (runId: string, metric: string, threshold: number) =>
     ['run', runId, 'group-metrics', metric, threshold] as const,
   stepLatency: (runId: string, pass: number | null) => ['run', runId, 'step-latency', pass] as const,
@@ -119,6 +121,21 @@ export function runFromListRow(row: RunRow, project?: RunPayload['run']['project
     dataset_version: row.dataset_version,
     dataset_aliases: row.dataset_aliases,
     dataset_slug: row.dataset_slug,
+    // The count reserves the hero's Datasets group before the summary arrives.
+    ...(row.dataset_count && row.dataset_count > 1
+      ? {
+          dataset_count: row.dataset_count,
+          datasets: (row.datasets ?? []).map((d, position) => ({
+            position,
+            dataset: d.dataset,
+            dataset_slug: null,
+            version: d.version,
+            alias: null,
+            items: null,
+            deleted: false,
+          })),
+        }
+      : {}),
     model_name: row.model_name,
     run_name: row.run_name,
     external_run_id: row.external_run_id,
@@ -281,6 +298,21 @@ export function useLiveStatusQuery(runId: string, enabled: boolean, intervalMs: 
     refetchIntervalInBackground: false,
     staleTime: 0,
     retry: false,
+  });
+}
+
+/** The per-dataset score breakdown of a union run; requested with the page's core queries, never for a single dataset. */
+export function useDatasetBreakdownQuery(runId: string, pass: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: runKeys.datasets(runId, pass),
+    queryFn: async () =>
+      classifyEnvelope(
+        await api.get<DatasetBreakdown & { error?: string }>(
+          runUrl(runId, `/datasets${pass ? `?pass=${pass}` : ''}`),
+        ),
+      ),
+    enabled,
+    staleTime: 10_000,
   });
 }
 

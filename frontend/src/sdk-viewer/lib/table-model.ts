@@ -1,4 +1,5 @@
 import type { Row, RowStatus } from '../types';
+import { rowDatasetKey } from './datasets';
 import { metricCell } from './metric-cell';
 
 export type StatusFilter = 'all' | RowStatus;
@@ -10,17 +11,20 @@ export interface ViewState {
   status: StatusFilter;
   sort: SortKey;
   dir: SortDir;
+  /** Union runs: the source dataset (`name@version`) the rows are narrowed to; '' = all. */
+  dataset: string;
 }
 
-export const DEFAULT_VIEW: ViewState = { q: '', status: 'all', sort: 'index', dir: 'asc' };
+export const DEFAULT_VIEW: ViewState = { q: '', status: 'all', sort: 'index', dir: 'asc', dataset: '' };
 export const STATUS_FILTERS: StatusFilter[] = ['all', 'completed', 'in_progress', 'error', 'pending'];
 
 const STATUS_RANK: Record<RowStatus, number> = { error: 0, pending: 1, in_progress: 2, completed: 3 };
 
-export function filterRows(rows: Row[], view: Pick<ViewState, 'q' | 'status'>): Row[] {
+export function filterRows(rows: Row[], view: Pick<ViewState, 'q' | 'status'> & { dataset?: string }): Row[] {
   const q = view.q.trim().toLowerCase();
   return rows.filter((row) => {
     if (view.status !== 'all' && row.status !== view.status) return false;
+    if (view.dataset && rowDatasetKey(row) !== view.dataset) return false;
     if (!q) return true;
     return [row.input_full, row.output_full, row.expected_full].some((t) =>
       String(t ?? '')
@@ -62,6 +66,7 @@ export function parseView(search: string): ViewState {
     status: status && STATUS_FILTERS.includes(status) ? status : 'all',
     sort: validSort ? (sort as SortKey) : 'index',
     dir: p.get('dir') === 'desc' ? 'desc' : 'asc',
+    dataset: p.get('dataset') ?? '',
   };
 }
 
@@ -70,6 +75,7 @@ export function viewToSearch(view: ViewState): string {
   const p = new URLSearchParams();
   if (view.q) p.set('q', view.q);
   if (view.status !== 'all') p.set('status', view.status);
+  if (view.dataset) p.set('dataset', view.dataset);
   if (view.sort !== 'index' || view.dir !== 'asc') {
     p.set('sort', view.sort);
     p.set('dir', view.dir);
@@ -101,9 +107,11 @@ function metaColumns(rows: Row[], metricNames: string[]): Array<{ metric: string
 
 export function rowsToCsv(rows: Row[], metricNames: string[]): string {
   const meta = metaColumns(rows, metricNames);
+  const union = rows.some((r) => rowDatasetKey(r));
   const header = [
     'index',
     'status',
+    ...(union ? ['dataset', 'dataset_version'] : []),
     'input',
     'output',
     'expected',
@@ -119,6 +127,7 @@ export function rowsToCsv(rows: Row[], metricNames: string[]): string {
       [
         row.index + 1,
         row.status,
+        ...(union ? [row.item_metadata?.qym_dataset ?? '', row.item_metadata?.qym_dataset_version ?? ''] : []),
         row.input_full,
         row.output_full,
         row.expected_full,

@@ -20,6 +20,8 @@ export interface Row {
   trace_id: string | null;
   trace_url: string | null;
   item_id?: string;
+  /** Item metadata (files carry all of it; a live run only the union tags `qym_*`). */
+  item_metadata?: Record<string, unknown>;
 }
 
 export interface Stats {

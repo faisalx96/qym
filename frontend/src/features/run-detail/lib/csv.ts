@@ -1,6 +1,7 @@
 /** CSV export of the filtered rows with a column picker (brief 04 J7, run.html performExport). */
 import { isInternalMetaKey } from '@/lib/metrics';
 import { bodyText } from './itemText';
+import { rowDatasetKey } from './datasetFilter';
 import { pickReason } from './itemReasons';
 import { rootCauseIssues } from './rowMeta';
 import type { RunModel } from './runModel';
@@ -68,6 +69,18 @@ export function discoverColumns(rows: Row[], model: RunModel): CsvColumn[] {
   const cols: CsvColumn[] = [
     { id: 'index', label: 'index', header: '#', group: 'Core', value: (r) => String(r.index + 1) },
     { id: 'item_id', label: 'item_id', group: 'Core', value: (r) => r.item_id },
+    // A union run (several datasets): where the item came from, right after the id (QC-U28).
+    ...(rows.some((r) => rowDatasetKey(r))
+      ? [
+          { id: 'dataset', label: 'dataset', group: 'Core', value: (r: Row) => scalar(r.item_metadata?.qym_dataset) },
+          {
+            id: 'dataset_version',
+            label: 'dataset_version',
+            group: 'Core',
+            value: (r: Row) => scalar(r.item_metadata?.qym_dataset_version),
+          },
+        ]
+      : []),
     { id: 'status', label: 'status', group: 'Core', value: (r) => String(r.status ?? '') },
     { id: 'error', label: 'error', group: 'Core', value: (r) => String(r.error ?? '') },
     {

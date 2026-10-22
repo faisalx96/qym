@@ -1,7 +1,7 @@
 /** Hero derivations (run.html renderSummary / runEntityLinks / buildExecutionContextSectionHtml). */
 import { projectPath } from '@/app/routes';
 import { stringify } from './rowErrors';
-import type { IngestIncomplete, PassSummary, Run } from '../types';
+import type { IngestIncomplete, PassSummary, Run, RunDatasetEntry } from '../types';
 
 const HIDDEN_CONFIG_KEYS = new Set([
   'run_name',
@@ -37,6 +37,8 @@ const HIDDEN_METADATA_KEYS = new Set([
   'git_commit',
   'ingest_incomplete',
   'ingest_rejected',
+  // the SDK's per-dataset list: the hero's Datasets group shows it
+  'datasets',
   'pass_revision',
   'analysis_aggregation',
   'has_repeat_pass_context',
@@ -270,6 +272,8 @@ export function clip(text: string, max: number): string {
 }
 
 export interface HeaderChip {
+  /** The dataset a Datasets-group chip stands for (it renders as a dataset chip, not a key/value tag). */
+  dataset?: RunDatasetEntry;
   key: string;
   /** Clipped key (at most 20 characters). */
   label: string;
@@ -282,8 +286,25 @@ export interface HeaderChip {
 }
 
 export interface HeaderChipGroup {
-  label: 'Versioning' | 'Config' | 'Metadata';
+  label: 'Datasets' | 'Versioning' | 'Config' | 'Metadata';
   chips: HeaderChip[];
+}
+
+/** A run over several dataset versions (SDK 2.1.0 lists, `dataset_count` above 1). */
+export function isUnionRun(run: Pick<Run, 'dataset_count'>): boolean {
+  return (run.dataset_count ?? 1) > 1;
+}
+
+/** `name vN` of every dataset entry, comma separated: the title of the Datasets fact. */
+export function datasetsTitle(entries: RunDatasetEntry[]): string {
+  return entries.map((e) => (e.version ? `${e.dataset} ${e.version}` : e.dataset)).join(', ');
+}
+
+/** Link of a dataset chip to that version's page; null for a deleted dataset or a local file. */
+export function datasetEntryLink(slug: string | undefined, e: RunDatasetEntry): string | null {
+  if (!slug || e.deleted || !e.dataset_slug) return null;
+  const base = projectPath(slug, `datasets/${encodeURIComponent(e.dataset_slug)}`);
+  return e.version ? `${base}?v=${encodeURIComponent(e.version)}` : base;
 }
 
 function parsedObject(value: unknown): unknown {
@@ -330,8 +351,19 @@ export function headerChips(run: Run): HeaderChipGroup[] {
   const context = executionContextEntries(run);
   const config = context.filter((c) => c.group === 'Config').map((c) => headerChip(c.key, c.raw));
   const metadata = context.filter((c) => c.group === 'Metadata').map((c) => headerChip(c.key, c.raw));
+  // A run over several dataset versions: the Datasets group leads the band, one chip per entry.
+  const datasets: HeaderChip[] = isUnionRun(run)
+    ? (run.datasets ?? []).map((e) => ({
+        dataset: e,
+        key: `dataset:${e.position}`,
+        label: e.dataset,
+        text: e.version ?? '',
+        title: `${e.dataset}${e.version ? ` ${e.version}` : ''}`,
+      }))
+    : [];
   return (
     [
+      { label: 'Datasets', chips: datasets },
       { label: 'Versioning', chips: versioning },
       { label: 'Config', chips: config },
       { label: 'Metadata', chips: metadata },

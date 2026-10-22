@@ -1,6 +1,7 @@
 /** What the run summary cards show: counts, owner, version, and which config / version keys differ between the runs. */
 import { isErrorRow } from '@/lib/metrics';
 import type { Run, RunPayload } from '@/features/run-detail/types';
+import { datasetSummary, datasetSetsDiffer } from './datasetSets';
 
 export interface RunCounts {
   items: number;
@@ -30,7 +31,7 @@ const asText = (v: unknown): string =>
 const SKIP_KEYS = new Set(['qym_config', 'qym_launch', 'run_name', 'started_at', 'task_started_at_ms']);
 
 export interface DifferingKey {
-  group: 'Git' | 'Config' | 'Versioning';
+  group: 'Datasets' | 'Git' | 'Config' | 'Versioning';
   key: string;
   /** One value per run, in the order given ('' = not set). */
   values: string[];
@@ -43,6 +44,8 @@ export function differingContext(runs: Run[]): DifferingKey[] {
   const consider = (group: DifferingKey['group'], key: string, values: string[]) => {
     if (new Set(values).size > 1) out.push({ group, key, values });
   };
+  // Runs over different dataset versions (a union run among them): `3 datasets` / `support-tickets v3`.
+  if (datasetSetsDiffer(runs)) out.push({ group: 'Datasets', key: 'datasets', values: runs.map(datasetSummary) });
   consider(
     'Git',
     'branch',

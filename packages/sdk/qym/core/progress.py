@@ -72,6 +72,21 @@ class ProgressTracker(ProgressObserver):
                 "trace_id": None,
                 "trace_url": None,
             }
+            # Union runs (several datasets): the viewer attributes the row to its source.
+            metadata = getattr(item, "metadata", None)
+            if isinstance(metadata, dict) and "qym_dataset_index" in metadata:
+                self.item_statuses[idx]["union"] = {
+                    "item_id": str(getattr(item, "id", "")),
+                    "item_metadata": {
+                        key: metadata.get(key)
+                        for key in (
+                            "qym_dataset",
+                            "qym_dataset_version",
+                            "qym_dataset_index",
+                            "qym_item_id",
+                        )
+                    },
+                }
 
     def start_item(self, index: int):
         """Mark an item as started."""
@@ -215,7 +230,7 @@ class ProgressTracker(ProgressObserver):
             except Exception:
                 meta_block[name] = {}
 
-        return {
+        row = {
             'index': idx,
             'status': s['status'],
             'input': str(s['input']),
@@ -234,6 +249,9 @@ class ProgressTracker(ProgressObserver):
             'trace_id': s.get('trace_id'),
             'trace_url': s.get('trace_url'),
         }
+        if s.get('union'):
+            row.update(s['union'])
+        return row
 
     def _strip_tags(self, text: str) -> str:
         """Strip rich tags from text."""
