@@ -1,0 +1,23 @@
+{
+  "width": 390,
+  "pane": {
+    "width": 279,
+    "height": 756.1
+  },
+  "envLines": {
+    "width": 237,
+    "height": 103.2
+  },
+  "datasetLines": {
+    "width": 237,
+    "height": 40
+  },
+  "lineHeights": [
+    49.6,
+    49.6
+  ],
+  "reviewStepPane": {
+    "width": 279,
+    "height": 802.1
+  }
+}
