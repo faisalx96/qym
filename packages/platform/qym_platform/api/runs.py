@@ -2480,8 +2480,12 @@ def legacy_list_runs(
                 "dataset_aliases"
             ],
             "dataset_count": int(r.dataset_count or 1),
-            # Union runs list their datasets (names and versions); empty otherwise.
-            "datasets": union_summary.get(r.id, []),
+            # Union runs list their datasets (names and versions); the key is absent otherwise.
+            **(
+                {"datasets": union_summary[r.id]}
+                if r.id in union_summary
+                else {}
+            ),
             "timestamp": _iso(started_at),
             "file_path": r.id,
             "metrics": metrics,
