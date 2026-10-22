@@ -116,7 +116,7 @@ function DatasetBox({
       >
         <MultiSelect
           label="Versions"
-          triggerLabel={`Versions of ${entry.name}`}
+          nameSuffix={`of ${entry.name}`}
           items={items}
           value={value}
           onChange={onChange}

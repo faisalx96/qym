@@ -37,8 +37,11 @@ export interface MultiSelectProps<T extends MultiSelectItem> {
   summary?: (selected: Set<Key>) => string;
   /** `data-testid` of the popover panel (e2e hook). */
   panelTestId?: string;
-  /** Accessible name of the trigger (a 'bar' trigger is otherwise "<label> filter, N selected"). */
-  triggerLabel?: string;
+  /**
+   * Appended to the visible trigger text in the accessible name ("Versions · 2 of support-tickets"): it names what
+   * the list belongs to and keeps the visible text inside the name. Replaces the 'bar' trigger's "<label> filter" name.
+   */
+  nameSuffix?: string;
 }
 
 /**
@@ -62,7 +65,7 @@ export function MultiSelect<T extends MultiSelectItem>({
   triggerVariant = 'field',
   summary: summaryOf,
   panelTestId,
-  triggerLabel,
+  nameSuffix,
 }: MultiSelectProps<T>) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -224,10 +227,11 @@ export function MultiSelect<T extends MultiSelectItem>({
         aria-haspopup="dialog"
         aria-controls={open ? listId : undefined}
         aria-label={
-          triggerLabel ??
-          (triggerVariant === 'bar'
-            ? `${label} filter${selectedCount ? `, ${selectedCount} selected` : ''}`
-            : undefined)
+          nameSuffix
+            ? `${label}${selectedCount && triggerVariant === 'bar' ? ` · ${summaryOf ? summaryOf(value) : selectedCount}` : ''} ${nameSuffix}`
+            : triggerVariant === 'bar'
+              ? `${label} filter${selectedCount ? `, ${selectedCount} selected` : ''}`
+              : undefined
         }
         data-variant={triggerVariant}
         data-active={selectedCount ? '' : undefined}

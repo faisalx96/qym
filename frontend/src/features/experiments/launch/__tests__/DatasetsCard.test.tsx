@@ -75,7 +75,7 @@ describe('DatasetsCard', () => {
   it('QD-3/QD-4 a box names its versions trigger and shows the chosen references as tags', async () => {
     render(setEntryRefs(addDataset(empty(), 'support-tickets'), 'support-tickets', ['v:v3', 'v:v4']));
     const b = box('support-tickets');
-    const trigger = within(b).getByRole('button', { name: 'Versions of support-tickets' });
+    const trigger = within(b).getByRole('button', { name: /^Versions.* of support-tickets$/ });
     expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
     expect(trigger).toHaveTextContent('Versions');
     expect(trigger).toHaveTextContent('· 2');
@@ -87,7 +87,7 @@ describe('DatasetsCard', () => {
   it('QD-5/QD-6 ticking a version updates the tags and the count at once; QD-7 the last one snaps back to Latest', async () => {
     render(addDataset(empty(), 'support-tickets'));
     const b = box('support-tickets');
-    await userEvent.click(within(b).getByRole('button', { name: 'Versions of support-tickets' }));
+    await userEvent.click(within(b).getByRole('button', { name: /^Versions.* of support-tickets$/ }));
     const panel = await screen.findByRole('dialog');
     // Latest first, then versions newest first (a draft is tagged), then aliases.
     const labels = within(panel).getAllByRole('checkbox').map((c) => c.closest('label')?.textContent ?? '');
@@ -171,7 +171,7 @@ describe('DatasetsCard', () => {
     render(addDataset(empty(), 'support-tickets'));
     const user = userEvent.setup();
     await user.tab();
-    expect(document.activeElement).toHaveAccessibleName('Versions of support-tickets');
+    expect(document.activeElement).toHaveAccessibleName('Versions · 1 of support-tickets');
     await user.tab();
     expect(document.activeElement).toHaveAccessibleName('Remove support-tickets');
     await user.tab();
