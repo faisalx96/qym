@@ -18,7 +18,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, String, and_, bindparam, case, cast, func, insert, literal, select
+from sqlalchemy import DateTime, String, and_, bindparam, case, cast, func, insert, literal, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
@@ -40,6 +40,7 @@ from qym_platform.db.models import (
     ProjectMembership,
     ProjectRole,
     Run,
+    RunDataset,
     RunItem,
     RunItemScore,
     User,
@@ -62,6 +63,7 @@ from qym_platform.permissions import (
     project_for_read_by_slug,
     require_project_writable,
 )
+from qym_platform.services.run_datasets import run_has_version, runs_of_dataset
 from qym_platform.services.dataset_read_tokens import HEADER as DATASET_READ_TOKEN_HEADER
 from qym_platform.services.dataset_read_tokens import token_grants_project
 from qym_platform.services.dataset_meta import (
@@ -546,12 +548,25 @@ def _version_payloads(
             .order_by(DatasetAlias.alias)
         ):
             aliases[version_id].append(alias)
-    run_counts = dict(
+    # Each run counts once per version: single-dataset runs by their own column,
+    # union runs once per entry (QC-74).
+    run_counts: Dict[str, int] = dict(
         db.query(Run.dataset_version_id, func.count(Run.id))
-        .filter(Run.dataset_version_id.in_(ids), Run.deleted_at.is_(None))
+        .filter(
+            Run.dataset_version_id.in_(ids),
+            Run.deleted_at.is_(None),
+            Run.dataset_count == 1,
+        )
         .group_by(Run.dataset_version_id)
         .all()
     )
+    for version_id, count in (
+        db.query(RunDataset.dataset_version_id, func.count(RunDataset.id))
+        .join(Run, Run.id == RunDataset.run_id)
+        .filter(RunDataset.dataset_version_id.in_(ids), Run.deleted_at.is_(None))
+        .group_by(RunDataset.dataset_version_id)
+    ):
+        run_counts[version_id] = run_counts.get(version_id, 0) + int(count)
     disabled_counts = dict(
         db.query(DatasetItem.dataset_version_id, func.count(DatasetItem.id))
         .filter(DatasetItem.dataset_version_id.in_(ids), DatasetItem.disabled_at.isnot(None))
@@ -678,12 +693,20 @@ def _dataset_payloads(
     wanted = {version_id for version_id in production_ids.values() if version_id in by_id}
     wanted.update(version.id for version in latest.values())
     version_payloads = _version_payloads(db, [by_id[version_id] for version_id in wanted], include_aliases=False)
-    run_counts = dict(
+    run_counts: Dict[str, int] = dict(
         db.query(Run.dataset_id, func.count(Run.id))
-        .filter(Run.dataset_id.in_(ids), Run.deleted_at.is_(None))
+        .filter(Run.dataset_id.in_(ids), Run.deleted_at.is_(None), Run.dataset_count == 1)
         .group_by(Run.dataset_id)
         .all()
     )
+    # A union run counts once for every dataset it evaluated, not once per entry.
+    for dataset_id, count in (
+        db.query(RunDataset.dataset_id, func.count(func.distinct(RunDataset.run_id)))
+        .join(Run, Run.id == RunDataset.run_id)
+        .filter(RunDataset.dataset_id.in_(ids), Run.deleted_at.is_(None))
+        .group_by(RunDataset.dataset_id)
+    ):
+        run_counts[dataset_id] = run_counts.get(dataset_id, 0) + int(count)
     users = _user_map(db, [dataset.created_by_user_id for dataset in datasets] + [dataset.deleted_by_user_id for dataset in datasets])
     manager = _can_manage_datasets(db, principal, datasets[0].project_id) if principal is not None else None
     levels = dataset_access_levels(db, principal, datasets) if principal is not None else {}
@@ -909,7 +932,13 @@ def _item_result_summaries(
         item = by_pk.get(dataset_item_pk) if dataset_item_pk is not None else None
         return item if item is not None else by_item_id.get(run_item_id)
 
-    scope = [Run.deleted_at.is_(None), Run.dataset_version_id == version.id]
+    scope = [
+        Run.deleted_at.is_(None),
+        or_(
+            and_(Run.dataset_version_id == version.id, Run.dataset_count == 1),
+            and_(Run.dataset_count > 1, run_has_version(version.id)),
+        ),
+    ]
     if len(items) <= _ITEM_FILTER_LIMIT:
         # A page of items: let the indexes narrow the rows. A whole-version
         # sort reads every group instead of binding thousands of parameters;
@@ -1053,7 +1082,7 @@ def _version_metric_directions(
         .join(Run, Run.id == RunItemScore.run_id)
         .filter(
             Run.deleted_at.is_(None),
-            Run.dataset_version_id == version.id,
+            run_has_version(version.id),
         )
         .distinct()
         .all()
@@ -1068,7 +1097,7 @@ def _version_metric_names(db: Session, version: DatasetVersion) -> list[str]:
         .join(Run, Run.id == RunItemScore.run_id)
         .filter(
             Run.deleted_at.is_(None),
-            Run.dataset_version_id == version.id,
+            run_has_version(version.id),
         )
         .distinct()
         .order_by(RunItemScore.metric_name)
@@ -1077,7 +1106,7 @@ def _version_metric_names(db: Session, version: DatasetVersion) -> list[str]:
     names.update(str(metric_name) for (metric_name,) in score_rows if metric_name)
     run_rows = (
         db.query(Run.metrics)
-        .filter(Run.deleted_at.is_(None), Run.dataset_version_id == version.id)
+        .filter(Run.deleted_at.is_(None), run_has_version(version.id))
         .all()
     )
     for (metrics,) in run_rows:
@@ -2335,10 +2364,10 @@ def list_dataset_runs(
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref, principal)
 
-    query = db.query(Run).filter(Run.deleted_at.is_(None), Run.dataset_id == dataset.id)
+    query = db.query(Run).filter(Run.deleted_at.is_(None), runs_of_dataset(dataset.id))
     if version:
         target = _resolve_version(db, dataset, version)
-        query = query.filter(Run.dataset_version_id == target.id)
+        query = query.filter(run_has_version(target.id))
 
     total = query.count()
     runs = (
@@ -2354,6 +2383,16 @@ def list_dataset_runs(
         for v in db.query(DatasetVersion).filter(DatasetVersion.dataset_id == dataset.id).all()
     }
     run_ids = [run.id for run in runs]
+    # A union run shows the version of THIS dataset among its entries.
+    entry_labels: Dict[str, str] = {}
+    if any(int(run.dataset_count or 1) > 1 for run in runs):
+        entry_labels = {
+            run_id: version_label
+            for run_id, version_label in db.query(RunDataset.run_id, RunDataset.version).filter(
+                RunDataset.run_id.in_(run_ids), RunDataset.dataset_id == dataset.id
+            )
+            if version_label
+        }
     items_counts: Dict[str, int] = {}
     avg_latencies: Dict[str, float] = {}
     # (sum, count) of the numeric scores per run and metric, and per run.
@@ -2377,12 +2416,12 @@ def list_dataset_runs(
             )
             if avg_latency is not None
         }
-        for run_id, metric_name, total, count in _run_metric_sums(db, run_ids):
+        for run_id, metric_name, score_total, count in _run_metric_sums(db, run_ids):
             pair = metric_values_by_run[run_id][metric_name]
-            pair[0] += total
+            pair[0] += score_total
             pair[1] += count
             run_pair = eval_values_by_run[run_id]
-            run_pair[0] += total
+            run_pair[0] += score_total
             run_pair[1] += count
 
     metric_names = sorted({metric for metrics in metric_values_by_run.values() for metric in metrics})
@@ -2418,7 +2457,9 @@ def list_dataset_runs(
                 "eval_score": run_eval_score(run.id),
                 "metric_averages": run_metric_averages(run.id),
                 "metric_directions": run_directions.get(run.id, {}),
-                "version_label": version_labels.get(run.dataset_version_id),
+                "version_label": entry_labels.get(run.id)
+                or version_labels.get(run.dataset_version_id),
+                "dataset_count": int(run.dataset_count or 1),
                 "items_count": int(items_counts.get(run.id, 0)),
             }
             for run in runs
@@ -3665,7 +3706,11 @@ def item_runs(
             Run.project_id == project.id,
             (
                 (RunItem.dataset_item_pk == item.id)
-                | ((Run.dataset_version_id == version.id) & (RunItem.item_id == item.item_id))
+                | (
+                    (Run.dataset_version_id == version.id)
+                    & (Run.dataset_count == 1)
+                    & (RunItem.item_id == item.item_id)
+                )
             ),
         )
         .order_by(Run.created_at.desc())

@@ -169,7 +169,8 @@ def project_insights(
         for version_id, version in (
             db.query(DatasetVersion.id, DatasetVersion.version)
             .join(Run, Run.dataset_version_id == DatasetVersion.id)
-            .filter(*base_criteria)
+            # Union runs score several datasets: never part of one version's trend.
+            .filter(*base_criteria, Run.dataset_count == 1)
             .distinct()
             .all()
         )
@@ -202,7 +203,9 @@ def project_insights(
     if selected_datasets:
         query = query.filter(Run.dataset.in_(selected_datasets))
     if selected_versions:
-        query = query.filter(Run.dataset_version_id.in_(selected_versions))
+        query = query.filter(
+            Run.dataset_version_id.in_(selected_versions), Run.dataset_count == 1
+        )
     if selected_models:
         query = query.filter(Run.model.in_(selected_models))
     if selected_statuses:

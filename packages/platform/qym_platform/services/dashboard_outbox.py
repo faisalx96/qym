@@ -601,7 +601,7 @@ def enqueue_job_run_refresh(session, job_ids):
 def _after_flush(session, flush_context):
     if session.info.get("dashboard_projection_worker"):
         return
-    from qym_platform.db.models import Approval, Run
+    from qym_platform.db.models import Approval, Run, RunDataset
 
     pending = session.info.pop("dashboard_source_changes", [])
     users, versions, jobs = session.info.pop(
@@ -618,6 +618,12 @@ def _after_flush(session, flush_context):
                     )
                 ),
                 Run.dataset_version_id.in_(versions),
+                # Union runs: any entry whose version's aliases moved.
+                Run.id.in_(
+                    select(RunDataset.run_id).where(
+                        RunDataset.dataset_version_id.in_(versions)
+                    )
+                ),
                 Run.experiment_job_id.in_(jobs),
             )
         )

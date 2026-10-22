@@ -20,7 +20,7 @@ from qym_platform.db.dashboard_models import (
     DashboardRunDimension as Dimension,
     DashboardRunSummary as Summary,
 )
-from qym_platform.db.models import Project, ProjectMembership, UserRole
+from qym_platform.db.models import Project, ProjectMembership, RunDataset, UserRole
 from qym_platform.deps import get_db
 from qym_platform.db.dashboard_models import DashboardRunVersion as RunVersion
 from qym_platform.permissions import project_for_read_by_slug
@@ -213,6 +213,17 @@ def _base_conditions(project):
     return conditions
 
 
+def _union_member_value():
+    """``name`` + U+241F + ``version``: the value a single-dataset run filters on."""
+    return case(
+        (
+            RunDataset.version.isnot(None),
+            RunDataset.dataset + "\u241f" + RunDataset.version,
+        ),
+        else_=RunDataset.dataset,
+    )
+
+
 def _filter_conditions(filters, *, skip=None, skip_versioning=None, facets=False):
     conditions = versioning_conditions(
         Dimension.run_key,
@@ -234,6 +245,18 @@ def _filter_conditions(filters, *, skip=None, skip_versioning=None, facets=False
             continue
         ordinary = [value for value in values if value != "__empty__"]
         terms = [column.in_(ordinary)] if ordinary else []
+        if name == "datasets" and ordinary:
+            # A union run matches when any of its datasets does (QC-66).
+            terms.append(
+                Dimension.run_key.in_(
+                    select(RunDataset.run_id).where(
+                        or_(
+                            _union_member_value().in_(ordinary),
+                            RunDataset.dataset.in_(ordinary),
+                        )
+                    )
+                )
+            )
         if "__empty__" in values:
             terms.append(or_(column.is_(None), func.trim(column) == ""))
         conditions.append(or_(*terms))
@@ -298,6 +321,12 @@ def _search_condition(text, table=Dimension):
             _descriptor_search_text(table).contains(needle, autoescape=True),
         ),
         func.lower(table.run_key).startswith(needle, autoescape=True),
+        # A union run is found by the name of any of its datasets (QC-66).
+        table.run_key.in_(
+            select(RunDataset.run_id).where(
+                func.lower(RunDataset.dataset).contains(needle, autoescape=True)
+            )
+        ),
     )
 
 
@@ -512,11 +541,30 @@ def _freshness(db, project):
 def _facets(db, base, filters):
     result = {}
     for name, column in _FILTER_COLUMNS.items():
-        values = db.scalars(
-            _query(column)
-            .where(*base, *_filter_conditions(filters, skip=name, facets=True))
-            .distinct()
-        )
+        conditions = [*base, *_filter_conditions(filters, skip=name, facets=True)]
+        if name == "datasets":
+            # Real dataset names: a union run lists its members, never its label.
+            values = list(
+                db.scalars(
+                    _query(column)
+                    .where(
+                        *conditions,
+                        Dimension.run_key.notin_(select(RunDataset.run_id)),
+                    )
+                    .distinct()
+                )
+            ) + list(
+                db.scalars(
+                    select(_union_member_value())
+                    .select_from(RunDataset)
+                    .join(Dimension, Dimension.run_key == RunDataset.run_id)
+                    .join(Summary, Summary.run_key == Dimension.run_key)
+                    .where(*conditions)
+                    .distinct()
+                )
+            )
+        else:
+            values = db.scalars(_query(column).where(*conditions).distinct())
         normalized = {
             str(value) if value is not None and str(value).strip() else "__empty__"
             for value in values

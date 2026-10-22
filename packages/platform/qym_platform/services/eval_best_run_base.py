@@ -137,6 +137,7 @@ def official_run_job(
                     Run.status,
                     Run.ended_at,
                     Run.dataset_version_id,
+                    Run.dataset_count,
                 )
             ],
         )
@@ -392,6 +393,10 @@ def run_base(
             "status": run.status.value if run.status else None,
             "completed_at": to_api_timestamp(completed),
             "dataset_version_id": run.dataset_version_id,
+            "dataset_count": int(run.dataset_count or 1),
+            # A run over several datasets is never ranked against single-dataset
+            # runs (their scores cover different items); it can still seed a form.
+            **({"reason": "union_run"} if int(run.dataset_count or 1) > 1 else {}),
         },
         "base_source": {
             "kind": "best_run",
