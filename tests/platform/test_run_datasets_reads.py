@@ -199,6 +199,9 @@ def test_runs_list_rows_filter_and_facets(env, database):
     assert {r["run_id"] for r in both["rows"]} == {union, single}
     only_billing = _dashboard_rows(client, database, datasets=["billing-faq␟v7"])
     assert [r["run_id"] for r in only_billing["rows"]] == [union]
+    # The search box finds a union run by the name of any of its datasets (QC-66).
+    searched = _dashboard_rows(client, database, q="billing")
+    assert [r["run_id"] for r in searched["rows"]] == [union]
     facets = body["overview"]["facets"]["datasets"]
     assert sorted(facets) == ["billing-faq␟v7", "support-tickets␟v3"]
     assert not any("+" in f for f in facets)  # never a label

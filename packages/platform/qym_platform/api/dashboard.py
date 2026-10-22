@@ -12,8 +12,8 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import and_, case, false, func, or_, select, true
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, case, false, func, or_, select, true, union
+from sqlalchemy.orm import Session, aliased
 
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.db.dashboard_models import (
@@ -265,7 +265,7 @@ def _filter_conditions(filters, *, skip=None, skip_versioning=None, facets=False
     if filters.get("until") is not None:
         conditions.append(Dimension.timestamp < filters["until"])
     if filters.get("q"):
-        conditions.append(_search_condition(filters["q"]))
+        conditions.append(search_semijoin(filters["q"]))
     return conditions
 
 
@@ -306,6 +306,22 @@ def _descriptor_search_text(table=Dimension):
     )
 
 
+def search_semijoin(text):
+    """The Runs search as a semi-join: the stored text's index serves one arm, a union run is
+    found by the name of any of its datasets (QC-66) in the other. A plain OR with the
+    dataset subquery would keep the planner from using the trigram index."""
+    searched = aliased(Dimension)
+    needle = text.lower()
+    return Dimension.run_key.in_(
+        union(
+            select(searched.run_key).where(_search_condition(text, searched)),
+            select(RunDataset.run_id).where(
+                func.lower(RunDataset.dataset).contains(needle, autoescape=True)
+            ),
+        )
+    )
+
+
 def _search_condition(text, table=Dimension):
     """Find a run by the name the list shows, its run name, or its id.
 
@@ -321,12 +337,6 @@ def _search_condition(text, table=Dimension):
             _descriptor_search_text(table).contains(needle, autoescape=True),
         ),
         func.lower(table.run_key).startswith(needle, autoescape=True),
-        # A union run is found by the name of any of its datasets (QC-66).
-        table.run_key.in_(
-            select(RunDataset.run_id).where(
-                func.lower(RunDataset.dataset).contains(needle, autoescape=True)
-            )
-        ),
     )
 
 
