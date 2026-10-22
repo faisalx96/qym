@@ -235,14 +235,15 @@ export function DatasetsSection() {
           onRetry={() => void query.refetch()}
         />
       ) : (
-        <DataTable<Line>
-          aria-label="Scores per dataset"
-          density="regular"
-          rows={lines}
-          rowKey={(l) => l.key}
-          columns={columns}
-          data-testid="dataset-breakdown"
-        />
+        <div data-testid="dataset-breakdown">
+          <DataTable<Line>
+            aria-label="Scores per dataset"
+            density="regular"
+            rows={lines}
+            rowKey={(l) => l.key}
+            columns={columns}
+          />
+        </div>
       )}
     </ReportSection>
   );
