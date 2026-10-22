@@ -43,7 +43,7 @@ const payload = {
 
 describe('the filter', () => {
   it('keeps two items that share a raw id apart and narrows to one dataset', () => {
-    const model = buildRunModel(payload);
+    const model = buildRunModel(payload, null);
     const ctx = { model, thresholds: {}, selectedMetric: null, repeatAggregate: false };
     const all = applyItemFilters(ctx, emptyView(), []);
     expect(all.map((i) => i.row.item_id)).toEqual(['a@v1/t-1', 'a@v2/t-1', 'b@v1/b-1']);
@@ -52,7 +52,7 @@ describe('the filter', () => {
   });
 
   it('round-trips through the dataset URL param and leaves other views alone', () => {
-    const model = buildRunModel(payload);
+    const model = buildRunModel(payload, null);
     const ctx = { model, metricNames: ['m'], metadataKeys: [], rows: model.rows, repeatAggregate: false };
     const view = readRunView(new URLSearchParams('dataset=a%40v2'), ctx);
     expect(view.dataset).toBe('a@v2');
@@ -64,7 +64,7 @@ describe('the filter', () => {
 
 describe('the CSV export', () => {
   it('adds dataset and dataset_version after the item id for a union run only', () => {
-    const model = buildRunModel(payload);
+    const model = buildRunModel(payload, null);
     const union = discoverColumns(payload.snapshot.rows, model).map((c) => c.id);
     expect(union.slice(union.indexOf('item_id'), union.indexOf('item_id') + 3)).toEqual([
       'item_id',
