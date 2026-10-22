@@ -280,6 +280,32 @@ def prepare_config(
             )
         )
 
+    evaluator = document.get("evaluator")
+    if isinstance(evaluator, Mapping):
+        for key in ("datasets", "run_shape"):
+            if key in evaluator:
+                errors.append(
+                    _issue(
+                        "not_in_preset",
+                        "A preset does not hold a dataset list or a run shape; "
+                        "choose them at launch.",
+                        section="evaluator",
+                        pointer=f"/evaluator/{key}",
+                    )
+                )
+        if "task" in evaluator and not (
+            evaluator["task"] is None or isinstance(evaluator["task"], str)
+        ):
+            errors.append(
+                _issue(
+                    "not_in_preset",
+                    "A preset holds the task of its own environment as a task id, "
+                    "not an object keyed by environment.",
+                    section="evaluator",
+                    pointer="/evaluator/task",
+                )
+            )
+
     for slot_key, binding in _bindings(document).items():
         if binding_kind(binding) != "temporary":
             continue
