@@ -139,3 +139,30 @@ def test_union_runs_stay_out_of_version_insights(env):
     version_id = tickets["versions"]["v3"]
     filtered = client.get(f"{base}&dataset_version_id={version_id}").json()
     assert [p["run_id"] if "run_id" in p else p.get("id") for p in filtered["runs"]] == [single]
+
+
+def test_openapi_lists_the_union_schema(env):
+    """QC-82: the schema names the entry model, the request field and the breakdown route."""
+    client, *_ = env
+    spec = client.get("/openapi.json").json()
+    schemas = spec["components"]["schemas"]
+    assert {"dataset", "dataset_id", "dataset_version_id", "version", "alias", "items", "disabled_items"} <= set(
+        schemas["RunDatasetEntry"]["properties"]
+    )
+    assert "datasets" in schemas["CreateRunRequest"]["properties"]
+    assert "/api/runs/{run_id}/datasets" in spec["paths"]
+
+
+def test_best_run_index_never_ranks_union_runs():
+    """QC-76: the eligibility join of the best-run index carries the single-dataset guard."""
+    from qym_platform.db.models import EvalEnvironment
+    from qym_platform.services import eval_best_run
+    from sqlalchemy import select
+    from qym_platform.db.models import EvalRunScore
+
+    sql = str(
+        eval_best_run._eligible(
+            select(EvalRunScore.run_id), EvalEnvironment(id="e", project_id="p")
+        ).compile(compile_kwargs={"literal_binds": False})
+    )
+    assert "runs.dataset_count" in sql
