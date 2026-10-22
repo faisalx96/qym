@@ -36,7 +36,7 @@ This is a monorepo with two independently-buildable packages under `packages/`:
 - Run CLI: `qym --help`
 - Format: `black . && isort .`
 - Type check: `mypy packages/sdk/qym`
-- Tests: `pytest -q -n auto` (parallel via `pytest-xdist`; on a low-memory machine `-n 4` can be faster); set `QYM_TEST_POSTGRES_URL` to run the PostgreSQL cases, which otherwise skip
+- Tests: `pytest -q -n auto` (parallel via `pytest-xdist`; on a low-memory machine `-n 4` can be faster); set `QYM_TEST_POSTGRES_URL` to run the PostgreSQL cases, which otherwise skip (no instance at hand: start one with Docker, see "Working on a shared or small machine")
 - Frontend (Node 24): `cd frontend && npm ci && npm run check && npm run build && npm run build:sdk` (`build` writes `packages/platform/qym_platform/_static/app/`, `build:sdk` writes `packages/sdk/qym/_static/ui/`; both gitignored). Dev: `npm run dev` (Vite on 5800, proxies the API to the platform on 8800; `frontend/README.md`). Browser tests: `npm run e2e` (platform UI), `npm run e2e:sdk` (SDK viewer); they boot their own servers. On a shared or small machine run full suites and builds through `scripts/heavy.sh -- <command>` (memory-gated, cgroup-isolated; `frontend/README.md`)
 - Build SDK wheel: `pip wheel packages/sdk/ --no-deps -w dist/` (run `npm run build:sdk` first so the viewer is in the wheel)
 - Build platform wheel: `pip wheel packages/platform/ --no-deps -w dist/` (requires the built `_static/app/`, so run `npm run build` first; the Docker image builds it in a Node stage)
@@ -101,6 +101,13 @@ of the whole user slice; see `docs/internal/ui-migration/POSTMORTEM.md` section 
 - Per-agent files: each agent keeps its own env file, e2e DB (`QYM_E2E_DB=<worktree>/.qym-e2e-<branch>.db`) and
   ports; never share a scratchpad file name such as `env.sh` across agents (one overwrote another's and ran
   Playwright against the other agent's database).
+- Postgres tests are part of every backend gate, not optional. When `QYM_TEST_POSTGRES_URL` is unset, or another
+  agent's run is already using the configured instance (concurrent migration or lock tests on one database conflict),
+  start a fresh instance if Docker is available (`docker` here is Podman):
+  `docker run -d --name qym-test-pg-<branch> -e POSTGRES_USER=qym -e POSTGRES_PASSWORD=qymtest -e POSTGRES_DB=qym_test -p 127.0.0.1:<port>:5432 docker.io/library/postgres:16`,
+  then `export QYM_TEST_POSTGRES_URL=postgresql+psycopg2://qym:qymtest@127.0.0.1:<port>/qym_test` (the driver is
+  `psycopg2`). One container per agent, its own port, removed when the gate ends (`docker rm -f <name>`). "No Postgres
+  on this machine" is only true when `docker run` itself fails.
 - Agents: at most one sub-agent each; `free -h` with at least 3 GB available before starting another agent;
   one hand-back per task (an agent that re-sends the same report is stopped, not answered).
 - Environment for anything that boots the platform: `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"`
