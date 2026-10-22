@@ -1,0 +1,19 @@
+{
+  "width": 1024,
+  "card": {
+    "width": 777,
+    "height": 214.5
+  },
+  "strip": {
+    "width": 777,
+    "height": 81.4
+  },
+  "matrix": {
+    "width": 777,
+    "height": 667.5
+  },
+  "history": {
+    "width": 777,
+    "height": 624.5
+  }
+}

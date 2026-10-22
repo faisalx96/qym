@@ -1323,9 +1323,17 @@ def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any
         creator_email=emails.get(experiment.created_by_user_id or ""),
         job_counts=_status_counts(jobs),
     )
+    # In the order the experiment was launched with (then any environment only seen on jobs).
+    launch_order = list(experiment.environment_ids or [])
     payload["environments"] = [
         {"id": env.id, "name": env.name, "is_active": env.is_active}
-        for env in sorted(envs, key=lambda e: env_ids.index(e.id))
+        for env in sorted(
+            envs,
+            key=lambda e: (
+                launch_order.index(e.id) if e.id in launch_order else len(launch_order),
+                env_ids.index(e.id),
+            ),
+        )
     ]
     ranking = {env.id: env.ranking_metric for env in envs}
     payload["ranking_metrics"] = ranking
@@ -2179,11 +2187,19 @@ def clone_experiment(
             EvalEnvironment.is_active.is_(True),
         )
     }
+    names = {
+        env.id: env.name
+        for env in db.query(EvalEnvironment).filter(
+            EvalEnvironment.project_id == project_id, EvalEnvironment.id.in_(wanted)
+        )
+    }
     prefill: Dict[str, Any] = {
         "name": f"{experiment.name} (copy)"[:200],
         "description": experiment.description,
         "environment_ids": [e for e in wanted if e in active],
         "unavailable_environment_ids": [e for e in wanted if e not in active],
+        # So a note can name an environment that is no longer part of the launch.
+        "environment_names": names,
         "base_source": {"kind": "clone", "experiment_id": experiment.id},
         "cloned_base_source": strip_secret_refs(experiment.base_source or {}),
         "priority": experiment.priority.value,

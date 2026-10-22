@@ -822,6 +822,7 @@ export function prefillFromClone(
     linkedGroups: !job && Array.isArray(spec.links) ? deepCopy(spec.links) : undefined,
     sourceName,
     notes,
+    envNames: { ...(res.environment_names ?? {}) },
   };
   return {
     patch: {
@@ -846,7 +847,8 @@ export function cloneExtraEndpoints(clone: CloneInfo, ctx: Pick<FormContext, 'en
 
 /** The clone's spec as a base (settings, models, dataset, extras). */
 export function loadedBaseFromClone(clone: CloneInfo, ctx: FormContext): LoadedBase {
-  const base = baselineFrom(clone.spec, ctx);
+  // A task of an environment that is gone is dropped with a note that names it.
+  const base = baselineFrom(clone.spec, { ...ctx, envNames: { ...clone.envNames, ...ctx.envNames } });
   return {
     base,
     info: { ...emptyBaseInfo('clone'), loaded: true, notes: [...clone.notes, ...base.notes] },

@@ -251,6 +251,8 @@ export interface CloneResponse {
   description?: string;
   environment_ids: string[];
   unavailable_environment_ids?: string[];
+  /** Names of the original's environments (notes about the ones that are gone). */
+  environment_names?: Record<string, string>;
   base_source: Record<string, unknown>;
   cloned_base_source?: Record<string, unknown> | null;
   priority?: Priority | null;
@@ -410,6 +412,8 @@ export interface EvaluatorEdits {
 }
 
 export interface CloneInfo {
+  /** Names of the original's environments by id. */
+  envNames?: Record<string, string>;
   experimentId: string;
   jobId: string | null;
   spec: LaunchConfig;
