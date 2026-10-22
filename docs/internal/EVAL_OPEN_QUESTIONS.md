@@ -650,6 +650,21 @@ win over the minted token in `EvalDispatcher._submit_body`.
 attempt starts (the status cell then shows it in red, B5-13); `DELETE .../dataset-read-tokens/{id}` is idempotent for
 experiment tokens (the dispatcher may have revoked them) and stays a 400 for an already revoked admin token.
 
+### B26. The platform sends its own `QYM_BASE_URL` to declaring environments (Decided 2026-10-22)
+
+**Question.** Guide v1.3 §4.3 added `env_overrides.QYM_BASE_URL` ("the qym instance this run reports to") so one
+Evaluation Service can serve several qym instances. The platform injected its `qym_api_key` on every submit but never its
+address, so a shared service reported runs to whichever instance its worker was configured with.
+
+**Decision.** `EvalDispatcher._submit_body` sets `env_overrides.QYM_BASE_URL` to the platform's `QYM_BASE_URL` setting
+(trailing slash removed) for a job whose schema declares the key, exactly like the dataset read token; undeclaring
+schemas get nothing (an older service answers 422 on unknown keys). The key joins `PLATFORM_OWNED_ENV_OVERRIDES`: the
+launch form hides it and a document that sets it is rejected with `platform_owned`. Reason: the injected API key belongs
+to this instance, so a run pointed elsewhere could never upload; one owner of the pair.
+
+**To reverse.** Drop the key from `PLATFORM_OWNED_ENV_OVERRIDES` and the `BASE_URL_ENV_KEY` entry in
+`_submit_body`; `EvalDispatcher(base_url=...)` is the seam for tests.
+
 ---
 
 ## C. Operational follow-ups (not blocking)

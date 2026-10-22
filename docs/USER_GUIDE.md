@@ -150,6 +150,9 @@ project, private test sets and restricted datasets included, so any member who c
 project; people without access to a restricted dataset still see the run's scores, not its item contents. The token is
 sent only to environments whose schema declares `QYM_DATASET_READ_TOKEN`; for the others the experiment page says the
 service reads with its own token. It is revoked when the experiment settles and replaced when you retry a job.
+The launch also tells the service which qym instance to report to: `QYM_BASE_URL` is sent to environments whose
+schema declares it, so an Evaluation Service shared by several qym instances returns the run to the one that launched
+it. Both keys are set by the platform; a configuration or preset that sets them itself fails validation until edited.
 
 The experiment page shows a **Credentials** row (API key and dataset read token: *active*, *revoked*, *not issued*,
 *not sent*); no secret is ever shown. In Project settings, API keys, **Dataset read tokens** also lists experiment tokens

@@ -96,9 +96,10 @@ from typing import Any
 DESCRIPTOR_VERSION = 1
 
 # ``env_overrides`` keys the platform fills at dispatch (the per-experiment dataset read
-# token, ``services/eval_dataset_tokens``): the form hides them and a document that sets
-# one is rejected as ``platform_owned``.
-PLATFORM_OWNED_ENV_OVERRIDES = ("QYM_DATASET_READ_TOKEN",)
+# token, ``services/eval_dataset_tokens``, and this platform's ``QYM_BASE_URL``, guide
+# v1.3 §4.3): the form hides them and a document that sets one is rejected as
+# ``platform_owned``.
+PLATFORM_OWNED_ENV_OVERRIDES = ("QYM_DATASET_READ_TOKEN", "QYM_BASE_URL")
 
 
 def schema_declares_env_key(schema: Any, key: str) -> bool:

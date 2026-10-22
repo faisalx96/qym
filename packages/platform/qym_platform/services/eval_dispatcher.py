@@ -78,6 +78,10 @@ Seams for later issues (all constructor arguments):
   disabled or no longer in the project) the job is ``BLOCKED`` with that reason
   instead of being submitted. The raw key is also scrubbed, as a literal, from
   whatever the service answers before anything of it is kept.
+- ``base_url``: the public URL of this platform, sent as ``env_overrides.QYM_BASE_URL``
+  (guide v1.3 §4.3) to a job whose schema declares the key, so a service shared by
+  several qym instances reports the run to the one that submitted it. The default is
+  ``QYM_BASE_URL`` from the settings; the key is platform-owned like the dataset token.
 - ``slot_bindings_for_job(job, experiment)``: the combination's bindings. The default is
   ``job.params["slot_bindings"]``, then the ``qym_config`` copy in the stored body.
 - ``secret_lookup_for(experiment)``: resolves temporary-model key refs (#12). The default
@@ -266,6 +270,22 @@ def configured_job_timeout() -> timedelta:
     except Exception:  # noqa: BLE001 - settings unavailable (e.g. no database URL)
         logger.debug("eval job timeout setting unavailable; using the default", exc_info=True)
         return JOB_TIMEOUT
+
+
+# ``env_overrides.QYM_BASE_URL`` (guide v1.3 §4.3): the qym instance a run reports to.
+BASE_URL_ENV_KEY = "QYM_BASE_URL"
+
+
+def configured_base_url() -> Optional[str]:
+    """``QYM_BASE_URL`` from the settings, or ``None`` when they are unavailable."""
+    try:
+        return PlatformSettings().base_url
+    except Exception:  # noqa: BLE001 - settings unavailable (e.g. no database URL)
+        logger.debug(
+            "base url setting unavailable; QYM_BASE_URL is not sent", exc_info=True
+        )
+        return None
+
 
 # Submitted (or being submitted) and not finished yet.
 INFLIGHT_JOB_STATUSES = ACTIVE_JOB_STATUSES
@@ -574,6 +594,7 @@ class EvalDispatcher:
         secret_lookup_for: Optional[SecretLookupFor] = None,
         submitter_key_for: Optional[SubmitterKeyFor] = None,
         dataset_token_for: Optional[DatasetTokenFor] = None,
+        base_url: Optional[str] = None,
         job_timeout: Optional[timedelta] = None,
     ) -> None:
         self.session_factory = session_factory
@@ -591,6 +612,7 @@ class EvalDispatcher:
         self.secret_lookup_for = secret_lookup_for or default_secret_lookup_for
         self.submitter_key_for = submitter_key_for or resolve_submitter_key
         self.dataset_token_for = dataset_token_for or resolve_dataset_token
+        self.base_url = base_url
         self._stop = threading.Event()
         self._wait = wait or self._stop.wait
         self._thread: Optional[threading.Thread] = None
@@ -1020,10 +1042,11 @@ class EvalDispatcher:
         experiment: EvalExperiment,
         qym_api_key: str,
         dataset_token: Optional[str] = None,
+        base_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Final in-memory body: user, priority, ``qym_launch`` token, ``qym_api_key``,
-        the dataset read token (only when the job's schema declares it) and
-        ``latency_sensitive`` (only when true).
+        the dataset read token and this platform's ``QYM_BASE_URL`` (each only when the
+        job's schema declares it) and ``latency_sensitive`` (only when true).
 
         ``run_metadata`` is the stored one, not the placeholder-filled copy: it is
         persisted by the run, so it must never carry a resolved key.
@@ -1052,11 +1075,17 @@ class EvalDispatcher:
             body = self.add_launch_token(body, job.id)
         # Always the platform's value: nothing stored can choose whose key is sent.
         body["qym_api_key"] = qym_api_key
-        if dataset_token:
+        # Both platform-owned: nothing stored can point the run at another instance.
+        for key, value in (
+            (DATASET_TOKEN_ENV_KEY, dataset_token),
+            (BASE_URL_ENV_KEY, base_url),
+        ):
+            if not value:
+                continue
             env = body.get("env_overrides")
             if not isinstance(env, dict):
                 env = body["env_overrides"] = {}
-            env[DATASET_TOKEN_ENV_KEY] = dataset_token
+            env[key] = value
         # Older services answer 422 on unknown top-level fields: send it only when true.
         if experiment.latency_sensitive:
             body["latency_sensitive"] = True
@@ -1183,7 +1212,12 @@ class EvalDispatcher:
                     return
                 try:
                     body = self._submit_body(
-                        prep.body or {}, job, experiment, qym_api_key, dataset_token
+                        prep.body or {},
+                        job,
+                        experiment,
+                        qym_api_key,
+                        dataset_token,
+                        self._base_url_for_job(db, job),
                     )
                 except LaunchTokenUnavailable:
                     del prep
@@ -1254,6 +1288,20 @@ class EvalDispatcher:
         ):
             return None
         return self.dataset_token_for(db, experiment)
+
+    def _base_url_for_job(self, db: Session, job: EvalExperimentJob) -> Optional[str]:
+        """This platform's public URL for a job whose schema declares ``QYM_BASE_URL``.
+
+        ``None`` when the schema does not declare the key (an older service would answer
+        422) or when no URL is configured.
+        """
+        schema = db.get(EvalEnvironmentSchema, job.schema_id)
+        if schema is None or not schema_declares_env_key(
+            schema.schema_json, BASE_URL_ENV_KEY
+        ):
+            return None
+        url = self.base_url if self.base_url is not None else configured_base_url()
+        return (url or "").rstrip("/") or None
 
     def _post(self, client: EvalServiceClient, body: Dict[str, Any]) -> _Outcome:
         try:

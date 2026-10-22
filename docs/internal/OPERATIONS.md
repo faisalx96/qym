@@ -669,7 +669,7 @@ Shared (all three, same values):
 | `QYM_LLM_CONFIG_ENCRYPTION_KEY` | yes (split) | — | Same key everywhere: main encrypts queued product-eval secrets and LLM connections, workers decrypt them. `..._KEYS_PREVIOUS` as for rotation |
 | `QYM_AUTH_MODE` | yes | `none` | Ingestion only authenticates Bearer API keys, but `none` vs others changes key handling |
 | `QYM_MAINTENANCE_MODE` | no | `false` | Ingestion answers 503 + `Retry-After`; set on all services for one window |
-| `QYM_BASE_URL` | yes | `http://localhost:8000` | Public URL of the ingress (OIDC redirect URIs, same-origin guard, link fallback) |
+| `QYM_BASE_URL` | yes | `http://localhost:8000` | Public URL of the ingress (OIDC redirect URIs, same-origin guard, link fallback); sent to Evaluation Services as `env_overrides.QYM_BASE_URL` when their settings schema declares it, so their runs report back here |
 | `QYM_ROOT_PATH`, `QYM_MAIN_PREFIX`, `QYM_INGESTION_PREFIX`, `QYM_WORKERS_PREFIX` | no | `""`, `""`, `/ingestion`, `/workers` | Keep identical on all services and in the ingress |
 | `QYM_DB_LOCK_TIMEOUT_MS`, `QYM_DB_STATEMENT_TIMEOUT_MS`, `QYM_DB_POOL_TIMEOUT_SECONDS` | no | `5000`, `30000`, `10` | |
 
