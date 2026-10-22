@@ -234,3 +234,131 @@ def entries_by_run(db: Session, run_ids: Iterable[str]) -> Dict[str, List[RunDat
         ):
             grouped[row.run_id].append(row)
     return grouped
+
+
+def dataset_version_info(db: Session, version_ids: Iterable[str]) -> Dict[str, Dict[str, Any]]:
+    """Version label, current aliases and live dataset slug per dataset version id.
+
+    ``dataset_slug`` is set while the managed dataset exists (not soft-deleted), so a
+    page can link to it. Aliases reflect what points at the version now.
+    """
+    ids = {vid for vid in version_ids if vid}
+    if not ids:
+        return {}
+    versions = {
+        v.id: v for v in db.query(DatasetVersion).filter(DatasetVersion.id.in_(ids)).all()
+    }
+    dataset_ids = {v.dataset_id for v in versions.values() if v.dataset_id}
+    slugs = (
+        {
+            dataset_id: slug
+            for dataset_id, slug in db.query(Dataset.id, Dataset.slug)
+            .filter(Dataset.id.in_(dataset_ids), Dataset.deleted_at.is_(None))
+            .all()
+        }
+        if dataset_ids
+        else {}
+    )
+    aliases: Dict[str, List[str]] = defaultdict(list)
+    for alias in (
+        db.query(DatasetAlias).filter(DatasetAlias.dataset_version_id.in_(ids)).all()
+    ):
+        aliases[alias.dataset_version_id].append(alias.alias)
+    info: Dict[str, Dict[str, Any]] = {}
+    for vid in ids:
+        v = versions.get(vid)
+        info[vid] = {
+            "dataset_version": v.version if v else None,
+            "dataset_aliases": sorted(aliases.get(vid, [])),
+            "dataset_slug": slugs.get(v.dataset_id) if v else None,
+        }
+    return info
+
+
+def _live_dataset_slugs(db: Session, dataset_ids: Iterable[Optional[str]]) -> Dict[str, str]:
+    ids = {d for d in dataset_ids if d}
+    if not ids:
+        return {}
+    return {
+        did: slug
+        for did, slug in db.query(Dataset.id, Dataset.slug).filter(
+            Dataset.id.in_(ids), Dataset.deleted_at.is_(None)
+        )
+    }
+
+
+def datasets_for_runs(
+    db: Session, runs: Sequence[Run], info: Dict[str, Dict[str, Any]]
+) -> Dict[str, List[Dict[str, Any]]]:
+    """The ``datasets`` list of each run's payload (QC-63).
+
+    Always present: a single-dataset run returns one synthesised entry. ``info`` is
+    ``api.runs._dataset_version_info_map`` for the runs' own version ids; the union
+    members' versions are added here. Statements: a constant number whatever the
+    number of runs (none extra when no run is a union run).
+    """
+    union = [r for r in runs if int(r.dataset_count or 1) > 1]
+    rows = entries_by_run(db, [r.id for r in union]) if union else {}
+    missing = {
+        row.dataset_version_id
+        for rs in rows.values()
+        for row in rs
+        if row.dataset_version_id and row.dataset_version_id not in info
+    }
+    if missing:
+        info = {**info, **dataset_version_info(db, missing)}
+    slugs = _live_dataset_slugs(
+        db,
+        [row.dataset_id for rs in rows.values() for row in rs]
+        + [r.dataset_id for r in runs if int(r.dataset_count or 1) <= 1],
+    )
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for run in runs:
+        if int(run.dataset_count or 1) > 1 and rows.get(run.id):
+            entries = []
+            for row in rows[run.id]:
+                version_info = info.get(row.dataset_version_id or "") or {}
+                slug = slugs.get(row.dataset_id or "") or version_info.get("dataset_slug")
+                # A dataset deleted after the run: its ids were set to NULL (or it
+                # is in the Trash). A local file never had ids and no version.
+                deleted = bool(
+                    (row.dataset_id is None and row.version is not None)
+                    or (row.dataset_id is not None and not slugs.get(row.dataset_id))
+                )
+                entries.append(
+                    {
+                        "position": row.position,
+                        "dataset": row.dataset,
+                        "dataset_id": row.dataset_id,
+                        "dataset_slug": None if deleted else slug,
+                        "dataset_version_id": row.dataset_version_id,
+                        "version": row.version,
+                        "aliases": list(version_info.get("dataset_aliases") or []),
+                        "alias": row.alias,
+                        "items": row.item_count,
+                        "disabled_items": row.disabled_count,
+                        "deleted": deleted,
+                    }
+                )
+            out[run.id] = entries
+            continue
+        version_info = info.get(run.dataset_version_id or "") or {}
+        deleted = bool(
+            run.dataset_id is not None and not slugs.get(run.dataset_id)
+        )
+        out[run.id] = [
+            {
+                "position": 0,
+                "dataset": run.dataset,
+                "dataset_id": run.dataset_id,
+                "dataset_slug": None if deleted else version_info.get("dataset_slug"),
+                "dataset_version_id": run.dataset_version_id,
+                "version": version_info.get("dataset_version"),
+                "aliases": list(version_info.get("dataset_aliases") or []),
+                "alias": None,
+                "items": None,
+                "disabled_items": None,
+                "deleted": deleted,
+            }
+        ]
+    return out

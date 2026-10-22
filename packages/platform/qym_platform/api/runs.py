@@ -92,6 +92,7 @@ from qym_platform.services.run_lifecycle import (
     stop_requested_job_ids,
 )
 from qym_platform.services.eval_run_linking import strip_launch_token
+from qym_platform.services.run_datasets import datasets_for_runs
 from qym_platform.services.run_experiment_panel import run_experiment_panel
 from qym_platform.services.run_origin import (
     experiment_refs_and_versioning,
@@ -3745,7 +3746,8 @@ def _build_run_data(
     if not run_name:
         run_name = run.external_run_id or run.id
 
-    _dsv = _dataset_version_fields(run, _dataset_version_info_map(db, [run]))
+    _dsv_info = _dataset_version_info_map(db, [run])
+    _dsv = _dataset_version_fields(run, _dsv_info)
 
     return finalize_compare_alignment(
         {
@@ -3758,6 +3760,10 @@ def _build_run_data(
                 "dataset_aliases": _dsv["dataset_aliases"],
                 # Managed dataset behind the run (None for a label-only run).
                 "dataset_slug": _dsv["dataset_slug"],
+                # Union runs (several dataset versions): the count and every entry.
+                # A single-dataset run returns one synthesised entry.
+                "dataset_count": int(run.dataset_count or 1),
+                "datasets": datasets_for_runs(db, [run], _dsv_info)[run.id],
                 "model_name": _strip_model_provider(run.model or ""),
                 "run_name": run_name,
                 "external_run_id": run.external_run_id or "",

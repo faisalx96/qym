@@ -15,6 +15,7 @@ from qym_platform.db.models import (
     ProjectMembership,
     ProjectRole,
     Run,
+    RunDataset,
     UserRole,
 )
 
@@ -233,7 +234,11 @@ def _runs_on_datasets(db: Session, runs: list[Run], datasets: list[Any]) -> set[
             .all()
         }
     out: set[str] = set()
+    union_runs = {run.id: run for run in runs if int(run.dataset_count or 1) > 1}
     for run in runs:
+        if run.id in union_runs:
+            # The label is not a dataset name; every entry of the run is checked.
+            continue
         if run.dataset_id:
             if run.dataset_id in dataset_ids:
                 out.add(run.id)
@@ -242,6 +247,17 @@ def _runs_on_datasets(db: Session, runs: list[Run], datasets: list[Any]) -> set[
                 out.add(run.id)
         elif (run.project_id, run.dataset) in names:
             out.add(run.id)
+    if union_runs:
+        # A union run is restricted when ANY of its datasets is (QC-62).
+        for run_id, entry_dataset_id, entry_name in db.query(
+            RunDataset.run_id, RunDataset.dataset_id, RunDataset.dataset
+        ).filter(RunDataset.run_id.in_(list(union_runs))):
+            run = union_runs[run_id]
+            if entry_dataset_id:
+                if entry_dataset_id in dataset_ids:
+                    out.add(run_id)
+            elif (run.project_id, entry_name) in names:
+                out.add(run_id)
     return out
 
 
