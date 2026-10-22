@@ -62,7 +62,12 @@ export function Notices() {
         </div>
       ) : null}
       {datasetsNote ? (
-        <div className={styles.info} role="status" data-testid="compare-datasets-notice" data-notice="different-datasets">
+        <div
+          className={styles.info}
+          role="status"
+          data-testid="compare-datasets-notice"
+          data-notice="different-datasets"
+        >
           <Icon name="info" size={16} />
           <div>
             <div className={styles.infoTitle}>The runs evaluated different datasets</div>
@@ -70,9 +75,10 @@ export function Notices() {
               {datasetsNote.sentences.length === 2
                 ? datasetsNote.sentences.join(' and ')
                 : `${datasetsNote.sentences.slice(0, -1).join(', ')} and ${datasetsNote.sentences.at(-1)}`}
-              . Items are matched by dataset and item id, so the {datasetsNote.sentences.length === 2 ? 'two ' : ''}
-              runs share <b>{datasetsNote.shared}</b> {datasetsNote.shared === 1 ? 'item' : 'items'}; the metric
-              averages below are still comparable as run means.
+              . Items are matched by dataset and item id, so the{' '}
+              {datasetsNote.sentences.length === 2 ? 'two ' : ''}
+              runs share <b>{datasetsNote.shared}</b> {datasetsNote.shared === 1 ? 'item' : 'items'}; the
+              metric averages below are still comparable as run means.
             </p>
           </div>
         </div>

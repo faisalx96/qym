@@ -72,7 +72,12 @@ export function discoverColumns(rows: Row[], model: RunModel): CsvColumn[] {
     // A union run (several datasets): where the item came from, right after the id (QC-U28).
     ...(rows.some((r) => rowDatasetKey(r))
       ? [
-          { id: 'dataset', label: 'dataset', group: 'Core', value: (r: Row) => scalar(r.item_metadata?.qym_dataset) },
+          {
+            id: 'dataset',
+            label: 'dataset',
+            group: 'Core',
+            value: (r: Row) => scalar(r.item_metadata?.qym_dataset),
+          },
           {
             id: 'dataset_version',
             label: 'dataset_version',

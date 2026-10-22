@@ -127,7 +127,9 @@ export function rowsToCsv(rows: Row[], metricNames: string[]): string {
       [
         row.index + 1,
         row.status,
-        ...(union ? [row.item_metadata?.qym_dataset ?? '', row.item_metadata?.qym_dataset_version ?? ''] : []),
+        ...(union
+          ? [row.item_metadata?.qym_dataset ?? '', row.item_metadata?.qym_dataset_version ?? '']
+          : []),
         row.input_full,
         row.output_full,
         row.expected_full,

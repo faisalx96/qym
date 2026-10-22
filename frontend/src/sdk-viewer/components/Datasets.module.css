@@ -14,39 +14,8 @@
   color: var(--text-primary);
 }
 
-.scroll {
-  overflow-x: auto;
-}
-
-.table {
-  inline-size: 100%;
-  border-collapse: collapse;
-  font-size: var(--font-base);
-}
-
-.table th,
-.table td {
-  padding: var(--space-xs) var(--space-sm);
-  border-bottom: 1px solid var(--border-subtle);
-  text-align: start;
-  white-space: nowrap;
-}
-
-.table th {
-  font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.num {
-  font-family: var(--font-mono);
-  text-align: end !important;
-  font-variant-numeric: tabular-nums;
-}
-
 .name {
   color: var(--text-primary);
-  white-space: normal !important;
   overflow-wrap: anywhere;
 }
 
@@ -57,7 +26,7 @@
   color: var(--accent-primary);
 }
 
-.sum td {
+.sumLabel {
   font-weight: 650;
   color: var(--text-primary);
 }

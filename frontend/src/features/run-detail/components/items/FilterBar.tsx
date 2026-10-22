@@ -116,7 +116,9 @@ export function FilterBar({ display }: { display: DisplayState }) {
               renderItem={(item) => (
                 <>
                   {item.label}
-                  {item.count != null ? <span className={styles.optionCount}>{item.count.toLocaleString('en-US')}</span> : null}
+                  {item.count != null ? (
+                    <span className={styles.optionCount}>{item.count.toLocaleString('en-US')}</span>
+                  ) : null}
                 </>
               )}
             />

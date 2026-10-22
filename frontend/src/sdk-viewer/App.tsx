@@ -87,7 +87,11 @@ function Header({ data }: { data: ViewerData }) {
       </span>
       {entries.length ? (
         entries.map((e) => (
-          <span key={e.position} className={s.chip} title={`${e.name} ${e.version ?? ''}, ${e.items} items`.trim()}>
+          <span
+            key={e.position}
+            className={s.chip}
+            title={`${e.name} ${e.version ?? ''}, ${e.items} items`.trim()}
+          >
             {e.name}
             {e.version ? ` ${e.version}` : ''} · {e.items} items
           </span>
@@ -339,7 +343,11 @@ export function App() {
               <span className={s.count} role="status">
                 {shown.length} of {rows.length} rows
               </span>
-              {view.q || view.status !== 'all' || view.sort !== 'index' || view.dir !== 'asc' || view.dataset ? (
+              {view.q ||
+              view.status !== 'all' ||
+              view.sort !== 'index' ||
+              view.dir !== 'asc' ||
+              view.dataset ? (
                 <button type="button" className={s.btn} onClick={() => updateView(DEFAULT_VIEW)}>
                   Reset view
                 </button>

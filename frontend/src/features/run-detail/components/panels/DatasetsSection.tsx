@@ -123,8 +123,16 @@ export function DatasetsSection() {
       priority: 2,
       type: 'number',
       cell: (l) =>
-        loading || l.items == null ? skeleton(36) : <span className={styles.num}>{l.items.toLocaleString('en-US')}</span>,
-      summary: total ? <span className={styles.num}>{total.items.toLocaleString('en-US')}</span> : skeleton(36),
+        loading || l.items == null ? (
+          skeleton(36)
+        ) : (
+          <span className={styles.num}>{l.items.toLocaleString('en-US')}</span>
+        ),
+      summary: total ? (
+        <span className={styles.num}>{total.items.toLocaleString('en-US')}</span>
+      ) : (
+        skeleton(36)
+      ),
     },
     {
       id: 'errors',
@@ -133,7 +141,11 @@ export function DatasetsSection() {
       priority: 2,
       type: 'number',
       cell: (l) =>
-        l.position == null ? null : loading || l.errors == null ? skeleton(20) : <span className={styles.num}>{l.errors}</span>,
+        l.position == null ? null : loading || l.errors == null ? (
+          skeleton(20)
+        ) : (
+          <span className={styles.num}>{l.errors}</span>
+        ),
       summary: total ? <span className={styles.num}>{total.errors}</span> : skeleton(20),
     },
     ...model.metricNames.map<Column<Line>>((m) => {
@@ -164,7 +176,9 @@ export function DatasetsSection() {
           return (
             <span className={styles.scoreCell}>
               <ScoreValue value={mean} type={type} direction={direction} text={text(mean)} />
-              <span className={styles.delta}>{deltaText(mean, total?.metrics[m]?.mean ?? null, percent)}</span>
+              <span className={styles.delta}>
+                {deltaText(mean, total?.metrics[m]?.mean ?? null, percent)}
+              </span>
             </span>
           );
         },
@@ -189,7 +203,13 @@ export function DatasetsSection() {
       priority: 1,
       cell: (l) =>
         l.position == null || l.items == null ? null : (
-          <button type="button" className={styles.showLink} data-link="block" data-testid="show-items-link" onClick={() => show(l)}>
+          <button
+            type="button"
+            className={styles.showLink}
+            data-link="block"
+            data-testid="show-items-link"
+            onClick={() => show(l)}
+          >
             Show {l.items.toLocaleString('en-US')} <Icon name="chevron-right" size={12} />
           </button>
         ),

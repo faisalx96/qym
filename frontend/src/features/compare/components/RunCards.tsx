@@ -209,10 +209,7 @@ function RunCard({
                 <Fact label="Owner">{owner}</Fact>
                 {runDatasetCount(run) > 1 ? (
                   <Fact label="Datasets">
-                    <DatasetCountTag
-                      count={runDatasetCount(run)}
-                      title={datasetsTitle(run.datasets ?? [])}
-                    />
+                    <DatasetCountTag count={runDatasetCount(run)} title={datasetsTitle(run.datasets ?? [])} />
                   </Fact>
                 ) : (
                   <Fact label="Dataset">

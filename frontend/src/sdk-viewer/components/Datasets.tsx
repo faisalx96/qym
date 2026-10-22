@@ -1,15 +1,27 @@
 import { useMemo } from 'react';
+import { DataTable, type Column } from '@/ui/DataTable';
 import type { Row } from '../types';
 import { datasetEntries } from '../lib/datasets';
 import { metricCell } from '../lib/metric-cell';
 import s from './Datasets.module.css';
 
-const fmt = (value: number | null): string => (value === null ? '—' : String(Math.round(value * 1000) / 1000));
+const fmt = (value: number | null): string =>
+  value === null ? '—' : String(Math.round(value * 1000) / 1000);
 
 export interface DatasetsProps {
   rows: Row[];
   metricNames: string[];
   onShow: (key: string) => void;
+}
+
+interface Line {
+  key: string;
+  label: string;
+  version: string | null;
+  items: number;
+  failed: number;
+  means: Array<number | null>;
+  all?: boolean;
 }
 
 /** One row per source dataset of a union file, then the whole run; renders nothing for a single dataset. */
@@ -26,67 +38,82 @@ export function Datasets({ rows, metricNames, onShow }: DatasetsProps) {
     [rows, metricNames],
   );
   if (!entries.length) return null;
-  const items = entries.reduce((n, e) => n + e.items, 0);
-  const failed = entries.reduce((n, e) => n + e.failed, 0);
+  const lines: Line[] = entries.map((e) => ({
+    key: e.key,
+    label: e.name,
+    version: e.version,
+    items: e.items,
+    failed: e.failed,
+    means: e.means,
+  }));
+  const columns: Column<Line>[] = [
+    {
+      id: 'dataset',
+      header: 'Dataset',
+      flex: true,
+      minWidth: 160,
+      priority: 1,
+      cardTitle: true,
+      cell: (l) => (
+        <span className={s.name}>
+          {l.label}
+          {l.version ? <span className={s.version}>{l.version}</span> : null}
+        </span>
+      ),
+      summary: <span className={s.sumLabel}>All datasets</span>,
+    },
+    {
+      id: 'items',
+      header: 'Items',
+      width: 72,
+      type: 'number',
+      priority: 2,
+      cell: (l) => l.items,
+      summary: entries.reduce((n, e) => n + e.items, 0),
+    },
+    {
+      id: 'failed',
+      header: 'Failed',
+      width: 72,
+      type: 'number',
+      priority: 2,
+      cell: (l) => l.failed,
+      summary: entries.reduce((n, e) => n + e.failed, 0),
+    },
+    ...metricNames.map<Column<Line>>((name, k) => ({
+      id: `metric:${name}`,
+      header: name,
+      label: name,
+      width: 120,
+      type: 'number',
+      priority: 2,
+      cell: (l) => fmt(l.means[k] ?? null),
+      summary: fmt(totals[k] ?? null),
+    })),
+    {
+      id: 'show',
+      header: '',
+      label: 'Show rows',
+      hideLabel: true,
+      width: 88,
+      priority: 1,
+      cell: (l) => (
+        <button type="button" className={s.show} data-testid="show-rows" onClick={() => onShow(l.key)}>
+          Show {l.items}
+        </button>
+      ),
+    },
+  ];
   return (
     <section className={s.box} aria-label="Scores per dataset" data-testid="dataset-breakdown">
       <h2 className={s.title}>Datasets</h2>
-      <div className={s.scroll}>
-        <table className={s.table}>
-          <thead>
-            <tr>
-              <th scope="col">Dataset</th>
-              <th scope="col" className={s.num}>
-                Items
-              </th>
-              <th scope="col" className={s.num}>
-                Failed
-              </th>
-              {metricNames.map((name) => (
-                <th key={name} scope="col" className={s.num}>
-                  {name}
-                </th>
-              ))}
-              <th scope="col">
-                <span className={s.srOnly}>Show rows</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((e) => (
-              <tr key={e.position}>
-                <td className={s.name}>
-                  {e.name}
-                  {e.version ? <span className={s.version}>{e.version}</span> : null}
-                </td>
-                <td className={s.num}>{e.items}</td>
-                <td className={s.num}>{e.failed}</td>
-                {e.means.map((m, k) => (
-                  <td key={metricNames[k]} className={s.num}>
-                    {fmt(m)}
-                  </td>
-                ))}
-                <td>
-                  <button type="button" className={s.show} data-testid="show-rows" onClick={() => onShow(e.key)}>
-                    Show {e.items}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            <tr className={s.sum}>
-              <td>All datasets</td>
-              <td className={s.num}>{items}</td>
-              <td className={s.num}>{failed}</td>
-              {totals.map((m, k) => (
-                <td key={metricNames[k]} className={s.num}>
-                  {fmt(m)}
-                </td>
-              ))}
-              <td />
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <DataTable<Line>
+        aria-label="Scores per dataset"
+        density="regular"
+        rows={lines}
+        rowKey={(l) => l.key}
+        columns={columns}
+      />
     </section>
   );
 }

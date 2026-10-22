@@ -45,7 +45,8 @@ export function differingContext(runs: Run[]): DifferingKey[] {
     if (new Set(values).size > 1) out.push({ group, key, values });
   };
   // Runs over different dataset versions (a union run among them): `3 datasets` / `support-tickets v3`.
-  if (datasetSetsDiffer(runs)) out.push({ group: 'Datasets', key: 'datasets', values: runs.map(datasetSummary) });
+  if (datasetSetsDiffer(runs))
+    out.push({ group: 'Datasets', key: 'datasets', values: runs.map(datasetSummary) });
   consider(
     'Git',
     'branch',
