@@ -25,6 +25,12 @@ class _Response:
         return None
 
 
+@pytest.fixture(autouse=True)
+def _auth_none(monkeypatch):
+    """The UI routes read as the dev user: other test modules leave their auth mode in the environment."""
+    monkeypatch.setenv("QYM_AUTH_MODE", "none")
+
+
 @pytest.fixture()
 def wired(database, monkeypatch):
     """The SDK's HTTP calls routed to the in-process platform."""

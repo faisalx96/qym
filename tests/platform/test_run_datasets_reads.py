@@ -18,6 +18,12 @@ def _score(position, raw, metric):
     return base if metric == "exact_match" else base / 2 + (0.1 if raw.endswith("1") else 0.0)
 
 
+@pytest.fixture(autouse=True)
+def _auth_none(monkeypatch):
+    """The UI routes read as the dev user: other test modules leave their auth mode in the environment."""
+    monkeypatch.setenv("QYM_AUTH_MODE", "none")
+
+
 @pytest.fixture()
 def env(database):
     factory = sessionmaker(bind=database, autoflush=False)

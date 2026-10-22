@@ -8,6 +8,12 @@ from _union_run import auth, post_union_run, seed_api_key, seed_dataset, with_it
 from sqlalchemy.orm import sessionmaker
 
 
+@pytest.fixture(autouse=True)
+def _auth_none(monkeypatch):
+    """The UI routes read as the dev user: other test modules leave their auth mode in the environment."""
+    monkeypatch.setenv("QYM_AUTH_MODE", "none")
+
+
 @pytest.fixture()
 def env(database):
     factory = sessionmaker(bind=database, autoflush=False)
