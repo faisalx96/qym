@@ -403,7 +403,7 @@ The edits below are against `evaluation-service-api-integration-v1.3.md`. Sectio
 `datasets` / `task` in `eval_input` and `result`. A request that does not use them behaves exactly as in v1.3.
 ```
 
-### B. New section 3.8, before "3.6" renumbering is not needed: add after 3.5
+### B. New section 3.8 (added after 3.7; no renumbering)
 
 ```markdown
 ### 3.8 `GET /evals/tasks` — tasks a job can evaluate
