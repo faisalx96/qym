@@ -1141,9 +1141,13 @@ class PlatformClient:
         dataset_alias: Optional[str] = None,
         timeout: Optional[float] = None,
         versioning_details: Optional[Dict[str, Any]] = None,
+        datasets: Optional[List[Dict[str, Any]]] = None,
     ) -> PlatformRunHandle:
         """``POST /v1/runs``. ``versioning_details`` is a free-form JSON object
-        stored on the run (platforms before it ignore the field)."""
+        stored on the run (platforms before it ignore the field). ``datasets`` is
+        the list of dataset versions of a union run; it is sent only when it has
+        two or more entries, so a single-dataset run's payload is unchanged
+        (platforms before 2.1.0 ignore the key)."""
         payload = {
             "external_run_id": external_run_id,
             "task": task,
@@ -1159,6 +1163,8 @@ class PlatformClient:
         }
         if versioning_details:
             payload["versioning_details"] = versioning_details
+        if datasets and len(datasets) >= 2:
+            payload["datasets"] = datasets
         data = _post_json(
             f"{self.platform_url}/v1/runs",
             payload,

@@ -133,6 +133,45 @@ def ui(
         server.stop()
 
 
+def _datasets_of_results_file(name: str, raw: bytes) -> list:
+    """The datasets of a union run's results file (rows tagged ``qym_dataset_*``), else ``[]``."""
+    import csv
+    import io
+
+    entries: dict = {}
+    seen: set = set()
+    try:
+        text = raw.decode("utf-8")
+        if name.lower().endswith(".json"):
+            listed = (json.loads(text) or {}).get("datasets")
+            return [e for e in listed if isinstance(e, dict)] if isinstance(listed, list) else []
+        if not name.lower().endswith(".csv"):
+            return []
+        for row in csv.DictReader(io.StringIO(text)):
+            meta = json.loads(row.get("item_metadata") or "{}")
+            index = meta.get("qym_dataset_index") if isinstance(meta, dict) else None
+            if not isinstance(index, int) or isinstance(index, bool):
+                continue
+            entry = entries.setdefault(
+                index,
+                {
+                    "dataset": meta.get("qym_dataset") or "",
+                    "dataset_id": None,
+                    "dataset_version_id": meta.get("qym_dataset_version_id"),
+                    "version": meta.get("qym_dataset_version"),
+                    "alias": None,
+                    "items": 0,
+                    "disabled_items": 0,
+                },
+            )
+            if row.get("item_id") not in seen:
+                seen.add(row.get("item_id"))
+                entry["items"] += 1
+    except Exception:
+        return []
+    return [entries[i] for i in sorted(entries)]
+
+
 @app.command("submit")
 def submit(
     file: str = typer.Option(..., "--file", help="Path to results file (.csv or .json)"),
@@ -158,8 +197,14 @@ def submit(
     raw = file_path.read_bytes()
     ctype = mimetypes.guess_type(str(file_path.name))[0] or "application/octet-stream"
 
+    fields = {"task": task, "dataset": dataset, "model": model_name or ""}
+    datasets = _datasets_of_results_file(file_path.name, raw)
+    if len(datasets) >= 2:
+        # A union run's file: its datasets, so the platform shows the breakdown.
+        fields["datasets"] = json.dumps(datasets)
+
     body, boundary = _encode_multipart_formdata(
-        fields={"task": task, "dataset": dataset, "model": model_name or ""},
+        fields=fields,
         files={"file": (file_path.name, raw, ctype)},
     )
 

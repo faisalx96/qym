@@ -1544,6 +1544,29 @@ def _dataset_version_info_map(
     return info
 
 
+def _union_dataset_summary(
+    db: Session, runs: List[Run], dataset_info: Dict[str, Dict[str, Any]]
+) -> Dict[str, List[Dict[str, Any]]]:
+    """``{run_id: [{dataset, version, aliases, items, deleted}]}`` for union runs only."""
+    if not any(int(r.dataset_count or 1) > 1 for r in runs):
+        return {}
+    union = [r for r in runs if int(r.dataset_count or 1) > 1]
+    full = datasets_for_runs(db, union, dataset_info)
+    return {
+        run_id: [
+            {
+                "dataset": e["dataset"],
+                "version": e["version"],
+                "aliases": e["aliases"],
+                "items": e["items"],
+                "deleted": e["deleted"],
+            }
+            for e in entries
+        ]
+        for run_id, entries in full.items()
+    }
+
+
 def _dataset_version_fields(
     run: Run, info_map: Dict[str, Dict[str, Any]]
 ) -> Dict[str, Any]:
@@ -2345,6 +2368,7 @@ def legacy_list_runs(
 
     # --- Build summaries from pre-fetched data ---
     dataset_info = _dataset_version_info_map(db, runs)
+    union_summary = _union_dataset_summary(db, runs, dataset_info)
     experiment_refs, job_versioning = experiment_refs_and_versioning(
         db, (r.experiment_job_id for r in runs)
     )
@@ -2455,6 +2479,9 @@ def legacy_list_runs(
             "dataset_aliases": _dataset_version_fields(r, dataset_info)[
                 "dataset_aliases"
             ],
+            "dataset_count": int(r.dataset_count or 1),
+            # Union runs list their datasets (names and versions); empty otherwise.
+            "datasets": union_summary.get(r.id, []),
             "timestamp": _iso(started_at),
             "file_path": r.id,
             "metrics": metrics,

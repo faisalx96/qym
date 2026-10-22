@@ -20,6 +20,7 @@ from .evaluator import Evaluator
 from .observers import CompositeEvaluationObserver, EvaluationObserver
 from .results import EvaluationResult, render_results_summary, summary_display_enabled
 from .config import RunSpec, EvaluatorConfig
+from .dataset import DatasetRef, dataset_label
 
 
 class MultiModelRunner:
@@ -191,7 +192,10 @@ class MultiModelRunner:
         for index, spec in enumerate(self.specs):
             model_name = spec.config.model or spec.config.run_metadata.get("model")
             ds_name = spec.dataset
-            if hasattr(spec.dataset, "name"):
+            if isinstance(spec.dataset, (list, tuple, DatasetRef)):
+                # Several datasets (or a reference): the run label, nothing loaded.
+                ds_name = dataset_label(spec.dataset)
+            elif hasattr(spec.dataset, "name"):
                 ds_name = spec.dataset.name
             total_items = None
             try:
@@ -309,7 +313,10 @@ class MultiModelRunner:
 
             # Handle dataset name for display
             ds_name = spec.dataset
-            if hasattr(spec.dataset, "name"):
+            if isinstance(spec.dataset, (list, tuple, DatasetRef)):
+                # Several datasets (or a reference): the run label, nothing loaded.
+                ds_name = dataset_label(spec.dataset)
+            elif hasattr(spec.dataset, "name"):
                 ds_name = spec.dataset.name
 
             dashboard_configs.append(
