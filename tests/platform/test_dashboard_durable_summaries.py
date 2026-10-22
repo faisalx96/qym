@@ -686,7 +686,11 @@ def test_is_lock_busy_classifies_sqlstates():
 
 def test_live_rebuild_does_not_wait_for_a_held_summary_row_on_postgres(database):
     """PostgreSQL: with the summary row locked by another session the rebuild
-    returns at once (NOWAIT) instead of waiting for ``lock_timeout``."""
+    returns at once (NOWAIT) instead of waiting for ``lock_timeout``.
+
+    The row is held only while the deferred rebuild runs: the partition step
+    before it increments the same row with a plain UPDATE, which (by design)
+    waits for the holder up to ``lock_timeout``."""
     if database.dialect.name != "postgresql":
         pytest.skip("NOWAIT is a PostgreSQL feature")
     import time as _time
@@ -696,12 +700,15 @@ def test_live_rebuild_does_not_wait_for_a_held_summary_row_on_postgres(database)
         item(db, "a")
         db.commit()
     worker = service.DashboardSummaryWorker(
-        sessionmaker(database, autoflush=False), live_refresh_interval=0
+        sessionmaker(database, autoflush=False), live_refresh_interval=3600
     )
     worker.tick()
     with Session(database) as db:
         item(db, "b")
         db.commit()
+    worker.tick()  # applies "b"; the rebuild is deferred (interval not elapsed)
+    assert worker._live_refresh["r"][1] is True, "rebuild pending"
+    worker.live_refresh_interval = 0
     holder = Session(database)
     holder.execute(
         select(Summary).where(Summary.run_key == "r").with_for_update()
