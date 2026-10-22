@@ -6,6 +6,7 @@ import { Button, Checkbox, Icon, LinkButton, Tag } from '@/ui';
 import { environmentPath } from '../../paths';
 import { PSEUDO, pointerToFieldName } from '../model';
 import { useLaunch } from '../LaunchContext';
+import { EnvVersions } from './VersionsBlock';
 import styles from './entry.module.css';
 
 function EnvironmentTags({
@@ -44,7 +45,10 @@ function EnvironmentTags({
   );
 }
 
-/** The environments checkbox list: health, schema, grouping and preset tags, "Details", "+ New environment". */
+/**
+ * The environments checkbox list: health, schema, grouping and preset tags, "Details", "+ New environment".
+ * A ticked environment's box also shows the Evaluation Service versions it would record (`EnvVersions`).
+ */
 export function EnvironmentPicker() {
   const {
     envRecords,
@@ -93,6 +97,7 @@ export function EnvironmentPicker() {
                   Details
                 </LinkButton>
               </span>
+              {selected ? <EnvVersions env={env} projectId={projectId} /> : null}
             </li>
           );
         })}

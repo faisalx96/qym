@@ -421,7 +421,62 @@
   overflow-wrap: anywhere;
 }
 
-/* Evaluation Service versions card (home view) */
+/* Evaluation Service versions inside a ticked environment box (home view and step 1):
+   row 1 = label | Refresh, then the values in a grid whose column count depends on the box width
+   only (never on the values), so the loading placeholders and the loaded tags wrap identically and
+   the box keeps its height when it fills (rule 7). */
+.versionLine {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  padding-block-start: var(--space-xs);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.versionLabel {
+  grid-row: 1;
+  grid-column: 1;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  line-height: var(--badge-height);
+  color: var(--text-secondary);
+}
+
+.versionRefresh {
+  grid-row: 1;
+  grid-column: 2;
+  display: inline-flex;
+  justify-self: end;
+}
+
+.versionLine .versionList {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: var(--space-xs) var(--space-md);
+}
+
+.versionLine .versionItem {
+  min-width: 0;
+  /* A loaded row is exactly the placeholder's height: the key's line box matches the tag, and the
+     value cell is a flex box so the inline tag adds no descender space. */
+  line-height: var(--badge-height);
+}
+
+.versionLine .versionItem dd {
+  display: flex;
+  min-width: 0;
+}
+
+.versionState {
+  grid-column: 1 / -1;
+  min-width: 0;
+  line-height: var(--badge-height);
+}
+
+/* The gallery mocks of the earlier block design (QaExperimentsMocks) keep these recipes. */
 .versionsHead {
   display: flex;
   align-items: center;

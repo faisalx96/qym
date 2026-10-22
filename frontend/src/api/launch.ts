@@ -116,7 +116,7 @@ export interface VersioningDetailsPayload {
   error: string | null;
   fetched_at: string | null;
 }
-/** Live service call: never fetched on its own, `refetch()` it (the "Current versions" block). */
+/** Live service call: enabled only for a ticked environment (its box's versions line), read again on its Refresh. */
 export function useEnvVersioning(projectId: string | undefined, envId: string | undefined, enabled = false) {
   return useQuery({
     queryKey: launchKeys.versioning(projectId ?? '', envId ?? ''),

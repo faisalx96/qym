@@ -3,7 +3,6 @@ import { Callout } from '../components/Callout';
 import panel from '../components/launch.module.css';
 import { DatasetPicker } from '../entry/DatasetPicker';
 import { EnvironmentPicker } from '../entry/EnvironmentPicker';
-import { VersionsBlock } from '../entry/VersionsBlock';
 import { HomeBar } from '../entry/HomeBar';
 import { LatencyControl } from '../entry/LatencyControl';
 import { StartFrom } from '../entry/StartFrom';
@@ -39,7 +38,6 @@ export function LaunchHome({ onCustomize }: { onCustomize: (step: WizardStepId) 
           </div>
         </Card>
       </div>
-      <VersionsBlock />
       {envRecords.length ? (
         <Card>
           <div className={panel.cardStack}>

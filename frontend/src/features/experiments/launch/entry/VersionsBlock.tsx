@@ -1,11 +1,9 @@
-import { useEffect, useState } from 'react';
 import type { EvalEnvironment } from '@/api/evalCommon';
 import { useEnvVersioning } from '@/api/launch';
-import { Button, Card, Tag, Text } from '@/ui';
+import { Button, Tag } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import styles from './entry.module.css';
 
-const VERSIONS_HELP = 'Read from each environment. Runs record what its Evaluation Service reports.';
 const VERSION_KEYS = ['agent_version', 'image_version', 'kb_version'];
 const VERSION_LABELS: Record<string, string> = {
   agent_version: 'agent',
@@ -24,28 +22,17 @@ function show(value: unknown): string {
   return String(value);
 }
 
-function VersionRow({
-  env,
-  projectId,
-  refreshKey,
-}: {
-  env: EvalEnvironment;
-  projectId: string;
-  refreshKey: number;
-}) {
+/**
+ * The Evaluation Service versions a run started now would record, shown inside the environment's
+ * own box (home view and Customize step 1 share the picker) for a ticked environment only. One
+ * react-query entry per environment, read when the box is first ticked and again on its Refresh.
+ * Read only: nothing user-typed is stored on an experiment.
+ */
+export function EnvVersions({ env, projectId }: { env: EvalEnvironment; projectId: string }) {
   const query = useEnvVersioning(projectId, env.id, true);
-  const { refetch } = query;
-  useEffect(() => {
-    // A request already in flight is kept (no cancel and re-issue): Refresh twice is harmless.
-    if (refreshKey > 0) void refetch({ cancelRefetch: false });
-  }, [refreshKey, refetch]);
   const data = query.data;
   const status =
-    query.isPending || (query.isFetching && refreshKey > 0)
-      ? 'loading'
-      : query.isError
-        ? 'error'
-        : data?.status;
+    query.isPending || query.isFetching ? 'loading' : query.isError ? 'error' : data?.status;
   const details = data?.versioning_details ?? {};
   const keys = [
     ...VERSION_KEYS,
@@ -54,10 +41,10 @@ function VersionRow({
       .sort(),
   ];
   return (
-    <div className={styles.versionRow} data-env-version={env.id} data-status={status}>
-      <span className={styles.versionName}>{env.name}</span>
+    <div className={styles.versionLine} data-env-version={env.id} data-status={status}>
+      <span className={styles.versionLabel}>Versions</span>
       {status === 'loading' ? (
-        // The loaded DOM with a placeholder per value: the block keeps its height when it fills (rule 7).
+        // The loaded DOM with a placeholder per value: the box keeps its height when it fills (rule 7).
         <>
           <span className={styles.srOnly} role="status">
             Reading…
@@ -74,7 +61,7 @@ function VersionRow({
           </dl>
         </>
       ) : status === 'unsupported' ? (
-        <span className={styles.help}>
+        <span className={[styles.help, styles.versionState].join(' ')}>
           Not supported by this environment (its Evaluation Service is older than v1.2).
         </span>
       ) : status === 'ok' ? (
@@ -93,50 +80,23 @@ function VersionRow({
           ))}
         </dl>
       ) : (
-        <span className={styles.errorText}>
+        <span className={[styles.errorText, styles.versionState].join(' ')}>
           Couldn’t read:{' '}
           {data?.error || (query.error instanceof Error ? query.error.message : 'unknown error')}
         </span>
       )}
+      <span className={styles.versionRefresh}>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`Refresh versions of ${env.name}`}
+          // A request already in flight is kept (no cancel and re-issue): Refresh twice is harmless.
+          onPress={() => void query.refetch({ cancelRefetch: false })}
+        >
+          Refresh
+        </Button>
+      </span>
     </div>
-  );
-}
-
-/**
- * The Evaluation Service versions a run started now would record, read once per ticked environment
- * (one react-query entry shared by the home view and Customize step 1) and again on Refresh. Read
- * only: nothing user-typed is stored on an experiment.
- */
-export function VersionsBlock() {
-  const { selectedEnvs, projectId } = useLaunch();
-  const [tick, setTick] = useState(0);
-  if (!selectedEnvs.length) return null;
-  return (
-    <Card
-      as="section"
-      tone="meta"
-      aria-label="Current versions"
-      role="group"
-      header={
-        <div className={styles.versionsHead}>
-          <Text variant="md" weight={600} as="span">
-            Evaluation Service versions
-          </Text>
-          <span className={styles.help}>{VERSIONS_HELP}</span>
-          <span className={styles.versionsActions}>
-            <Button variant="ghost" onPress={() => setTick((n) => n + 1)}>
-              Refresh
-            </Button>
-          </span>
-        </div>
-      }
-    >
-      <div className={styles.versionRows}>
-        {selectedEnvs.map((env) => (
-          <VersionRow key={env.id} env={env} projectId={projectId} refreshKey={tick} />
-        ))}
-      </div>
-    </Card>
   );
 }
 
@@ -153,7 +113,7 @@ function SummaryLine({ env, projectId, many }: { env: EvalEnvironment; projectId
   );
 }
 
-/** Read-only recap of the versions chosen on the home view (the review's "Versions" row). */
+/** Read-only recap of the versions of the ticked environments (the review's "Versions" row). */
 export function VersionsSummary() {
   const { selectedEnvs, projectId } = useLaunch();
   return (

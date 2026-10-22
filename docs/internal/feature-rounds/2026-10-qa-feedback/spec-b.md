@@ -336,6 +336,23 @@ Amendments to the previous round (this spec wins): previous `spec-b.md` criteria
 | QA4-6 (clarified) | `Refresh` calls `refetch` | `refetch({ cancelRefetch: false })`: a request already in flight is kept, so a double press reads once more per row, never cancels. | QA4-11 |
 | QA3-1 (clarified) | "the single run experiment panel" | `run_origin_fields` (runs list, run detail origin fields, dashboard descriptor) carries `latency_sensitive`; the separate `run_experiment_panel` payload (`experiment_name`, `job_status`, ...) is unchanged. | The ref is built in one place; the panel is a different shape. |
 
+### 8c. Owner amendment after delivery (2026-10-22): versions inside the environment box
+
+Owner: "for the versioning details make it show within the environment box and just show the versioning details for the
+chosen environment ... not just the customize page even the creation home page should follow the same logic."
+
+| Id | Was | Is | Why |
+|---|---|---|---|
+| QA4-1 (amended) | One `section[aria-label="Current versions"]` block under the Where row (step 1) and under the cards (home view), one row per ticked environment. | No block. Each **ticked** environment's `li[data-selected="true"]` in the Environments picker ends with one `[data-env-version]` line (`EnvVersions`, `entry/VersionsBlock.tsx`); an unticked box has none and issues no request. Home view and step 1 share the picker, so both follow it. | owner |
+| QA4-2, QA4-3 (amended) | Block 821 / 777 / 279 px wide, 131 px high (2 loaded); rows 20 px. | The line spans the box's content width (box 361.5 / 339.5 / 237 px, line 343.5 / 321.5 / 219 px at 1440 / 1024 / 390) and is a two-row grid: `label \| Refresh` (24 px), then the values in `repeat(auto-fit, minmax(8.5rem, 1fr))` columns, so the column count follows the box width only and placeholders and tags wrap alike: line 77 px and box 139 px at 1440 and 1024 (two value columns in the step-1 box; three, one row, in the wider home-view box), one column at 390 (line 101 px, box 187 px). Loading frame = loaded line height at all three widths (QA4-7: 77 / 77 / 101; the box itself is not compared because its `Checking schema…` tag comes and goes on its own clock). Measured by `qa-b-versions.spec.ts`. | layout, rule 7 |
+| QA4-4 (amended) | Block title `Evaluation Service versions`, help text, one `Refresh`. | Line label `Versions`, no title or help text, one `Refresh` per line with the accessible name `Refresh versions of {environment}` (visible text `Refresh`). | copy |
+| QA4-6 (amended) | `Refresh` reads every ticked environment. | A box's `Refresh` reads that environment only. | one owner per box |
+| QA4-13 (amended) | Tab order ends on `Refresh` after the dataset selects. | `Refresh` follows `Details of {name}` inside its box, before `New environment`. | placement |
+| QA4-16 (amended) | Step column 483.5 / 498.9 / 947.8 px. | The step column no longer carries the block; each ticked box grows by the line (25 px + the row gap above 390). | layout |
+
+After-shots: `shots/after-qb-versions-inline-step1-{1440,1024,390}.png`, `shots/after-qb-versions-inline-home-{1440,390}.png`.
+The gallery mocks of the block design (`/__ui#qa-experiments`) are kept as the record of the delivered round.
+
 ## 9. Limits of this design stage
 
 - The gallery mocks are static: states that need the API (the request counts of QA4-6, the 422 text in the launch error region QA2-16, the polling of QA3-33, the descriptor republish QA3-3) are specified from the code and have no mock; the reviewer verifies them in the running app.

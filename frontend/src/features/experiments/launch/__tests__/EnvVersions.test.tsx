@@ -1,14 +1,14 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LaunchTestProvider } from '../LaunchContext';
-import { VersionsBlock } from '../entry/VersionsBlock';
+import { EnvVersions } from '../entry/VersionsBlock';
 import { envRecord, newClient, Providers } from './helpers';
 
 /**
- * "Current versions" on the home view: what a job started now would record as versioning_details,
- * read once when the step is shown and again on Refresh (never on a re-render), with the service's
- * reason when it cannot be read and a notice for a service that predates the endpoint.
+ * The versions line inside a ticked environment box (home view and Customize step 1): what a job
+ * started now would record as versioning_details, read once when the box is ticked and again on its
+ * Refresh (never on a re-render), with the service's reason when it cannot be read and a notice for
+ * a service that predates the endpoint.
  */
 
 const json = (status: number, body: unknown) =>
@@ -39,45 +39,44 @@ const ok = (details: Record<string, unknown>) => () =>
   });
 
 const client = newClient();
-const block = (
+const line = (
   <Providers client={client}>
-    <LaunchTestProvider overrides={{ selectedEnvs: [envRecord({ name: 'Staging' })], projectId: 'p1' }}>
-      <VersionsBlock />
-    </LaunchTestProvider>
+    <EnvVersions env={envRecord({ name: 'Staging' })} projectId="p1" />
   </Providers>
 );
-const renderBlock = () => render(block);
+const renderLine = () => render(line);
 
 const row = () => document.querySelector('[data-env-version="e1"]') as HTMLElement;
 const value = (label: string) => {
   const dt = within(row()).getByText(label, { selector: 'dt' });
   return dt.nextElementSibling?.textContent;
 };
+const refresh = () => screen.getByRole('button', { name: 'Refresh versions of Staging' });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   client.clear();
 });
 
-describe('VersionsBlock', () => {
+describe('EnvVersions', () => {
   it('reads the versions once, shows "not set" for a missing key and reads again only on Refresh', async () => {
     const reads = stubVersioning([
       ok({ agent_version: 'v2.4.0', kb_version: '4b0535c' }),
       ok({ agent_version: 'v2.4.0', kb_version: '4b0535c', image_version: '2026.10.11' }),
     ]);
     const user = userEvent.setup();
-    const { rerender } = renderBlock();
-    expect(screen.getByRole('group', { name: 'Current versions' })).toHaveTextContent('Staging');
+    const { rerender } = renderLine();
+    expect(row()).toHaveTextContent('Versions');
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
     expect(value('agent')).toBe('v2.4.0');
     expect(value('kb')).toBe('4b0535c');
     expect(value('image')).toBe('not set');
     expect(reads).toHaveLength(1);
 
-    rerender(block);
+    rerender(line);
     expect(reads).toHaveLength(1);
 
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(refresh());
     await waitFor(() => expect(value('image')).toBe('2026.10.11'));
     expect(reads).toHaveLength(2);
   });
@@ -93,7 +92,7 @@ describe('VersionsBlock', () => {
           fetched_at: null,
         }),
     ]);
-    renderBlock();
+    renderLine();
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'unsupported'));
     expect(row()).toHaveTextContent('Not supported by this environment');
   });
@@ -109,32 +108,31 @@ describe('VersionsBlock', () => {
           fetched_at: null,
         }),
     ]);
-    renderBlock();
+    renderLine();
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'error'));
     expect(row()).toHaveTextContent('Couldn’t read: No API key configured');
   });
 
   it('shows a failed request in place of the versions', async () => {
     stubVersioning([() => json(500, { detail: 'boom' })]);
-    renderBlock();
+    renderLine();
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'error'));
     expect(row()).toHaveTextContent('Couldn’t read:');
   });
 
-  it('has one Refresh button, the new help text, no "Add versioning details" and no inputs (QA2-11, QA4-4)', async () => {
+  it('has one Refresh button named for its environment, no "Add versioning details" and no inputs (QA2-11, QA4-4)', async () => {
     stubVersioning([ok({ agent_version: 'v1' })]);
-    renderBlock();
+    renderLine();
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
-    const group = screen.getByRole('group', { name: 'Current versions' });
-    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
-    expect(group).toHaveTextContent('Read from each environment. Runs record what its Evaluation Service reports.');
-    expect(group).not.toHaveTextContent('Add versioning details');
-    expect(group.querySelector('input, textarea, select, [contenteditable]')).toBeNull();
+    expect(within(row()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
+    expect(refresh()).toHaveAccessibleName('Refresh versions of Staging');
+    expect(row()).not.toHaveTextContent('Add versioning details');
+    expect(row().querySelector('input, textarea, select, [contenteditable]')).toBeNull();
   });
 
-  it('loads as the loaded layout: names, placeholders, aria-busy and a hidden status (QA4-7)', async () => {
+  it('loads as the loaded layout: label, placeholders, aria-busy and a hidden status (QA4-7)', async () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
-    renderBlock();
+    renderLine();
     const list = row().querySelector('dl') as HTMLElement;
     expect(list).toHaveAttribute('aria-busy', 'true');
     // The hidden status is not a child of the definition list (axe: dl may hold only dt / dd groups).
@@ -147,10 +145,10 @@ describe('VersionsBlock', () => {
   it('Refresh pressed twice while loading asks once more, not twice (QA4-11)', async () => {
     const reads = stubVersioning([ok({ agent_version: 'v1' })]);
     const user = userEvent.setup();
-    renderBlock();
+    renderLine();
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
-    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await user.click(refresh());
+    await user.click(refresh());
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
     expect(reads.length).toBeLessThanOrEqual(3);
     expect(reads.length).toBeGreaterThanOrEqual(2);
@@ -158,10 +156,10 @@ describe('VersionsBlock', () => {
 
   it('a second instance reads nothing again (one query shared by home and step 1, QA4-6)', async () => {
     const reads = stubVersioning([ok({ agent_version: 'v1' })]);
-    const { unmount } = renderBlock();
+    const { unmount } = renderLine();
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
     unmount();
-    render(block);
+    render(line);
     expect(row()).toHaveAttribute('data-status', 'ok');
     expect(reads).toHaveLength(1);
   });
