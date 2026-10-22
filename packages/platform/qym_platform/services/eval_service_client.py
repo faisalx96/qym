@@ -164,6 +164,14 @@ class VersioningUnavailable(EvalServiceError):
         super().__init__(detail, status_code=503, detail=detail)
 
 
+class TasksUnavailable(EvalServiceError):
+    """``GET /evals/tasks`` answered 503 (change request v1.4): the service could not
+    list its tasks; ``detail`` says why."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail, status_code=503, detail=detail)
+
+
 # --------------------------------------------------------------------------- #
 # Redaction helpers
 # --------------------------------------------------------------------------- #
@@ -458,6 +466,34 @@ class EvalServiceClient:
                 status_code=200,
             )
         return redact_payload(dict(data))
+
+    async def tasks_list(self) -> Optional[List[Dict[str, Any]]]:
+        """``GET /evals/tasks`` (change request v1.4): the tasks a job may run.
+
+        Each entry is ``{id, name, description, default}`` (as the service sends it,
+        redacted). ``None`` when the service does not have the endpoint: 404 or 405,
+        and 422 because a v1.3 service routes ``/evals/{job_id}`` and answers a UUID
+        validation error. A 503 raises :class:`TasksUnavailable` with the service's
+        reason; an invalid body raises :class:`EvalServiceError`.
+        """
+        try:
+            data = await self._request("GET", "/evals/tasks")
+        except RemoteNotFound:
+            return None
+        except EvalServiceError as exc:
+            if exc.status_code in (405, 422):
+                return None
+            if exc.status_code == 503:
+                raise TasksUnavailable(
+                    exc.detail or "Evaluation service could not list its tasks"
+                ) from None
+            raise
+        items = data.get("tasks") if isinstance(data, Mapping) else None
+        if not isinstance(items, list):
+            raise EvalServiceError(
+                "Evaluation service returned an invalid task list", status_code=200
+            )
+        return [redact_payload(dict(item)) for item in items if isinstance(item, Mapping)]
 
     # -- transport ----------------------------------------------------------- #
 
