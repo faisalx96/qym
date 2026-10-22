@@ -12,10 +12,10 @@ export interface ViewState {
   sort: SortKey;
   dir: SortDir;
   /** Union runs: the source dataset (`name@version`) the rows are narrowed to; '' = all. */
-  dataset: string;
+  dataset?: string;
 }
 
-export const DEFAULT_VIEW: ViewState = { q: '', status: 'all', sort: 'index', dir: 'asc', dataset: '' };
+export const DEFAULT_VIEW: ViewState = { q: '', status: 'all', sort: 'index', dir: 'asc' };
 export const STATUS_FILTERS: StatusFilter[] = ['all', 'completed', 'in_progress', 'error', 'pending'];
 
 const STATUS_RANK: Record<RowStatus, number> = { error: 0, pending: 1, in_progress: 2, completed: 3 };
@@ -66,7 +66,7 @@ export function parseView(search: string): ViewState {
     status: status && STATUS_FILTERS.includes(status) ? status : 'all',
     sort: validSort ? (sort as SortKey) : 'index',
     dir: p.get('dir') === 'desc' ? 'desc' : 'asc',
-    dataset: p.get('dataset') ?? '',
+    ...(p.get('dataset') ? { dataset: p.get('dataset') as string } : {}),
   };
 }
 

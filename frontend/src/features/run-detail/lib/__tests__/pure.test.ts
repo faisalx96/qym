@@ -383,6 +383,7 @@ describe('filter rules', () => {
       metric: 'halluc',
       threshold: '40',
       show: 'failed',
+      dataset: null,
       filters: null,
       page: '3',
       hide_field: ['domain'],

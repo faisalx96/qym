@@ -329,7 +329,7 @@ export function App() {
                   className={s.control}
                   aria-label="Filter by dataset"
                   data-testid="dataset-filter"
-                  value={view.dataset}
+                  value={view.dataset ?? ''}
                   onChange={(e) => updateView({ dataset: e.target.value })}
                 >
                   <option value="">All datasets</option>
