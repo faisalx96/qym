@@ -1184,15 +1184,41 @@ function DataTableInner<R>({
 
   /* layout */
   const headMin = (c: Column<R>) => (pseudoOf(c) ? 0 : headerMinWidth(c, sortable(c)));
-  const widthStyle = (c: Column<R>) => {
+  const fixedWidth = (c: Column<R>) => {
     const w = model.widths[c.id] ?? c.width;
     if (c.flex && model.widths[c.id] === undefined) return undefined;
     return Math.max(w ?? 120, headMin(c));
   };
-  const minTotal = renderCols.reduce(
-    (n, c) => n + (widthStyle(c) ?? Math.max(c.minWidth ?? 0, headMin(c), FLEX_MIN_WIDTH)),
-    0,
-  );
+  const floorWidth = (c: Column<R>) => fixedWidth(c) ?? Math.max(c.minWidth ?? 0, headMin(c), FLEX_MIN_WIDTH);
+  const minTotal = renderCols.reduce((n, c) => n + floorWidth(c), 0);
+  /* A flex column takes the slack of a table wider than its scroller (`minWidth`). Frozen, it could then grow past the
+     scroller: a sticky cell stays inside its row, so a frozen column wider than the viewport scrolls away with the content
+     (the Experiments list at 660 px: a 680 px name in a 588 px scroller stopped sticking at scrollLeft 320). The frozen flex
+     column is capped at `maxPinShare` of the scroller, like the frozen block, and the slack goes to the other columns as
+     explicit widths (a fixed table layout would otherwise hand the largest share of it back to the widest column). */
+  const frozenFlex =
+    scrollerWidth > 0
+      ? renderCols.find(
+          (c) => c.flex && model.widths[c.id] === undefined && effectivePin(c, pins) === 'start',
+        )
+      : undefined;
+  const capped = (() => {
+    if (!frozenFlex) return null;
+    const others = renderCols.reduce((n, x) => (x.id === frozenFlex.id ? n : n + floorWidth(x)), 0);
+    const tableW = Math.max(minWidth ?? 0, minTotal, scrollerWidth);
+    const natural = tableW - others;
+    const cap = Math.floor(scrollerWidth * maxPinShare);
+    if (natural <= cap) return null;
+    const pinnedW = Math.max(cap, frozenFlex.minWidth ?? 0, headMin(frozenFlex));
+    const extra = Math.max(0, tableW - pinnedW - others);
+    return { pinnedW, share: others > 0 ? extra / others : 0 };
+  })();
+  const widthStyle = (c: Column<R>) => {
+    if (!capped) return fixedWidth(c);
+    if (c.id === frozenFlex!.id) return capped.pinnedW;
+    const w = floorWidth(c);
+    return w + w * capped.share;
+  };
   const zebraOn =
     zebra === 'auto' ? !embedded && model.density !== 'comfortable' && dataRows.length > 8 : zebra;
 

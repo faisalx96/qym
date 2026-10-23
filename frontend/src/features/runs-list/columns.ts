@@ -28,7 +28,9 @@ export const BASE_COLUMNS: ColumnDef[] = [
   { ...base('run', 'Run', 260, 'run') },
   base('status', 'Status', 144, 'status'),
   { ...base('signals', 'Signals', 60), visKey: null },
-  base('task', 'Task', 90, 'task'),
+  // 86 (was 90): the Dataset column grew to 120 for the union count tag (QC-U33) and Date, the default sort, must stay
+  // fully on screen before the frozen Actions column at 1280, where Owner is hidden (Date overhung by 4 px).
+  base('task', 'Task', 86, 'task'),
   base('model', 'Model', 132, 'model'),
   base('dataset', 'Dataset', 120, 'dataset'),
   base('owner', 'Owner', 120, 'owner'),

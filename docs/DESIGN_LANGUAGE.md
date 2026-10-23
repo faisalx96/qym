@@ -444,7 +444,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   cancels), visibility checkbox, muted group tag and a freeze toggle (`aria-pressed`, "Freeze Status"); the line between
   the frozen block and the scrolling columns can be dragged across. A menu header names the frozen count and any column
   suspended by the cap (the frozen block never takes more than `maxPinShare` = 50% of the scroller; the first frozen
-  column always stays). The header menu has Freeze / Unfreeze, Move left / right / to start, Hide, and
+  column always stays, and a frozen flex column is capped at that share too: a sticky cell stays inside its row, so a
+  frozen column wider than the scroller would scroll away with the content). The header menu has Freeze / Unfreeze, Move left / right / to start, Hide, and
   `Alt+Shift+Arrow` moves the focused header. Layout (order, pins, widths, hidden, density) is one object saved under
   `qym:data-table:v2:<storageKey>:<userId>`; an unscoped layout is adopted once. Handles and freeze toggles hide under 640px.
 

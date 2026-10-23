@@ -99,7 +99,7 @@ export function RowList({ rows, metricNames, selected, sort, dir, onSort, onOpen
 
   return (
     <div className={s.wrap} id="rows">
-      <table className={s.table}>
+      <table className={s.table} data-testid="rows-table">
         <caption className={s.srOnly}>
           Evaluation rows. Arrow keys move between rows, Enter opens the detail.
         </caption>
