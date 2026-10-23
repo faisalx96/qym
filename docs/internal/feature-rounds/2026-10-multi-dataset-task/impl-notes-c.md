@@ -152,3 +152,23 @@ Branch `feat/multi-dataset-sdk` (from `UI-redesign` 0d725715). Spec: `spec-c.md`
 | QC-U44 | 12 datasets: clamp, table | `e2e/run-detail/multi-dataset-states.spec.ts`, `e2e/run-detail/multi-dataset.spec.ts` |
 | QC-U45 | `sdk-viewer` Datasets table, Dataset column and filter | `e2e/sdk-viewer/multi-dataset-viewer.spec.ts` |
 | QC-U46 | copy as in the spec | review |
+
+## Gate (resumed run, 2026-10-23, partial)
+
+Platform chunks of 24 files, `pytest -q -n 2` through `gated-heavy.sh --cost 3` on tip 1d372cab (no fix commits were needed):
+
+| Chunk | SQLite | PostgreSQL |
+|---|---|---|
+| c_aa | 517 passed, 101 skipped | not re-run |
+| c_ab | 387 passed, 116 skipped | not re-run |
+| c_ac | 569 passed, 156 skipped | not re-run |
+| c_ad | 293 passed, 90 skipped | not re-run |
+| c_ae | 295 passed, 92 skipped | not re-run |
+| c_af | 227 passed, 63 skipped | not re-run |
+| c_ag | 370 passed, 80 skipped | not re-run |
+| c_ah | 329 passed, 91 skipped | 419 passed, 1 skipped (the search-index job test passes) |
+| c_ai | 74 passed, 23 skipped | not re-run |
+
+`tsc --noEmit` in frontend/: clean. The after-screenshots are present in `shots/`.
+
+Not run on the final code in this pass (swap stayed at 0 free, held by desktop apps, for over 30 minutes, so the memory rule blocked every further heavy run): PostgreSQL chunks c_aa..c_ag and c_ai (they passed on the earlier tip before 1d372cab, which only touches the dataset-name search), `pytest tests/sdk`, `test_design_language.py`, `npm run check`, `npm run build`, `npm run build:sdk` and the Playwright specs.
