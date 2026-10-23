@@ -36,6 +36,7 @@ import {
   SegmentedControl,
   Skeleton,
   StatStrip,
+  TabPanel,
   Tabs,
   Tag,
   Text,
@@ -809,7 +810,7 @@ const CHAT_END: Msg[] = [
   },
   {
     role: 'assistant',
-    raw: 'That is everything I need. One thing to know first: FB-0031 already asks for a PDF export of the comparison, so this looks like a duplicate. I put a proposal below. Check the description, priority and size, change what is wrong, then submit.',
+    raw: 'That is everything I need. One thing to know first: FB-0031 already asks for a PDF export of the comparison, so this looks like a duplicate. I put a proposal below. Check the description, priority and complexity, change what is wrong, then submit.',
     text: null,
     time: '12:38',
   },
@@ -1322,7 +1323,10 @@ function RequestPage({ tab = 'request', admin }: { tab?: 'request' | 'conversati
         ]}
         selected={tab}
         onSelect={noop}
-      />
+      >
+        <TabPanel id="request">{null}</TabPanel>
+        <TabPanel id="conversation">{null}</TabPanel>
+      </Tabs>
       {tab === 'request' ? (
         <div className={styles.split} data-request-split>
           <RequestMain />
@@ -1456,7 +1460,13 @@ function AdminPage({ state = 'ok' }: { state?: AdminState }) {
         ]}
         selected="feedback"
         onSelect={noop}
-      />
+      >
+        <TabPanel id="runs">{null}</TabPanel>
+        <TabPanel id="projects">{null}</TabPanel>
+        <TabPanel id="users">{null}</TabPanel>
+        <TabPanel id="maintenance">{null}</TabPanel>
+        <TabPanel id="feedback">{null}</TabPanel>
+      </Tabs>
       <div className={styles.stackCol}>
         <ConnectionCard state={state} />
         <BehaviourCard />
@@ -1511,14 +1521,16 @@ function ChatStates() {
         height={360}
         messages={CHAT_START.slice(0, 4)}
         extra={
-          <li className={styles.errorLine} role="alert" data-testid="agent-unavailable">
-            <Icon name="warning" size={14} />
-            <span className={styles.errorText}>
-              The assistant could not answer: the model endpoint is not reachable. Your message is saved.
-            </span>
-            <Button size="sm" variant="neutral" icon={<Icon name="retry" size={12} />}>
-              Retry
-            </Button>
+          <li>
+            <div className={styles.errorLine} role="alert" data-testid="agent-unavailable">
+              <Icon name="warning" size={14} />
+              <span className={styles.errorText}>
+                The assistant could not answer: the model endpoint is not reachable. Your message is saved.
+              </span>
+              <Button size="sm" variant="neutral" icon={<Icon name="retry" size={12} />}>
+                Retry
+              </Button>
+            </div>
           </li>
         }
         draft=""

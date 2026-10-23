@@ -11,15 +11,19 @@ test.beforeAll(async ({ request }) => {
   seedFeedback(0);
 });
 
-async function refOf(page: Page, title: string): Promise<string> {
+/** The ref of the request with this title; `duplicate` picks the one an administrator linked (other specs submit the same title). */
+async function refOf(page: Page, title: string, duplicate = false): Promise<string> {
   const res = await page.request.get('/v1/feedback?page_size=100&q=' + encodeURIComponent(title));
-  const body = (await res.json()) as { items: { ref: string; title: string }[]; children: Record<string, { ref: string; title: string }[]> };
-  const all = [...body.items, ...Object.values(body.children).flat()];
-  return all.find((r) => r.title === title)!.ref;
+  const body = (await res.json()) as {
+    items: { ref: string; title: string; duplicate_of: string | null }[];
+    children: Record<string, { ref: string; title: string; duplicate_of: string | null }[]>;
+  };
+  const all = [...body.items, ...Object.values(body.children).flat()].filter((r) => r.title === title);
+  return (duplicate ? all.find((r) => r.duplicate_of) : all[0])!.ref;
 }
 
 test('QE-77 to QE-84: header, tabs, card, history and related panel at three widths', async ({ page }) => {
-  const dup = await refOf(page, 'PDF export of the compare page');
+  const dup = await refOf(page, 'PDF export of the compare page', true);
   for (const w of WIDTHS) {
     await setViewport(page, w);
     await gotoApp(page, `/feedback/${dup}`);
@@ -43,7 +47,7 @@ test('QE-77 to QE-84: header, tabs, card, history and related panel at three wid
 });
 
 test('QE-78, QE-86, QE-91: the Conversation tab is a read-only transcript in the URL', async ({ page }) => {
-  const ref = await refOf(page, 'PDF export of the compare page');
+  const ref = await refOf(page, 'PDF export of the compare page', true);
   for (const w of WIDTHS) {
     await setViewport(page, w);
     await gotoApp(page, `/feedback/${ref}?tab=conversation`);

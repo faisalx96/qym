@@ -43,14 +43,16 @@ export function MsgItem({ item, who, onRetry }: { item: LogItem; who: string; on
     );
   if (item.role === 'error')
     return (
-      <li className={styles.errorLine} role="alert" data-testid="agent-unavailable">
-        <Icon name="warning" size={14} />
-        <span className={styles.errorText}>{item.text}</span>
-        {onRetry && item.retryable ? (
-          <Button size="sm" variant="neutral" icon={<Icon name="retry" size={12} />} onPress={onRetry}>
-            Retry
-          </Button>
-        ) : null}
+      <li>
+        <div className={styles.errorLine} role="alert" data-testid="agent-unavailable">
+          <Icon name="warning" size={14} />
+          <span className={styles.errorText}>{item.text}</span>
+          {onRetry && item.retryable ? (
+            <Button size="sm" variant="neutral" icon={<Icon name="retry" size={12} />} onPress={onRetry}>
+              Retry
+            </Button>
+          ) : null}
+        </div>
       </li>
     );
   const user = item.role === 'user';
