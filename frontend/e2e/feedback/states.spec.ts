@@ -2,7 +2,7 @@
 /** QE-123 to QE-138: loading frames at the loaded height, errors, empty, resume, limits. */
 import { test, expect } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { box, configureAgent, near, record, seedFeedback, setViewport, shot, WIDTHS, tableOf } from './support';
+import { box, configureAgent, near, record, seedFeedback, setViewport, shot, WIDTHS } from './support';
 
 test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ request }) => {

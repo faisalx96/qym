@@ -41,7 +41,7 @@ test('QE-174, QE-177, QE-182: CSV and JSON downloads carry the current filter', 
   expect(csv.suggestedFilename()).toMatch(/^feedback-\d{4}-\d{2}-\d{2}\.csv$/);
   const text = fs.readFileSync((await csv.path())!, 'utf8');
   expect(text.charCodeAt(0)).toBe(0xfeff);
-  expect(text.replace(/^﻿/, '').split('\r\n')[0]).toBe(
+  expect(text.replace(/^\uFEFF/, '').split('\r\n')[0]).toBe(
     'id,title,subject,project,target_kind,target_id,priority,complexity,status,submitter,created_at,confirmed_at,duplicate_of,conflicts,summary,description,business_need,justification,agent_priority,agent_complexity',
   );
   const [json] = await Promise.all([page.waitForEvent('download'), (async () => {
