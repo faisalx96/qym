@@ -23,6 +23,15 @@ implementation time to the head of `UI-redesign` then).
 | G3 | Which LLM? | **A platform-level connection set by admins.** New Admin setting: one OpenAI-compatible connection (base URL, model, key; same encryption as project connections) for the feedback agent, independent of projects. Feedback shows "not configured" until an admin sets it. |
 | G4 | Priority and complexity? | **Agent proposes, user confirms, admin can override.** Priority `low / medium / high / critical`; complexity `S / M / L / XL`; the agent's reasoning is shown; the user confirms or changes both before submitting; admins can revise later with a note (history kept). |
 
+## 2b. Owner amendments after the design (2026-10-23)
+
+Owner feedback after reviewing the mocks, verbatim: "1- size wording is not clear (maybe change it to complexity or something else more technical) 2- allow the admins to export the list of feedbacks." Follow-up: "allow multiple format export (CSV, Excel, json, jsonl)"
+
+| Id | Decision |
+|---|---|
+| G5 | The word "Size" becomes **Complexity** everywhere the person sees it (list column and facet, URL parameter `complexity=`, proposal card, request page, triage panel, history). Scale S / M / L / XL and its guidance words are unchanged; API fields already say `complexity`. |
+| G6 | Platform administrators can **export the feedback list** as CSV, Excel, JSON or JSON Lines (`GET /v1/feedback/export?format=csv|xlsx|json|jsonl`, ADMIN only, same filters as the list, drafts never, every matching row, one audit entry per export). The request page still has no export. |
+
 ## 3. What exists today (survey 2026-10-23)
 
 - LLM: `project_llm_connections` (`db/models.py:523`: name, base URL, model, encrypted key + last4, default flag),

@@ -549,3 +549,44 @@ Migration `0091_ai_feedback.py`: `down_revision` set at implementation time to t
 - The mock chat does not auto-scroll or stream; `Streaming` is drawn as a static state (`ae-s-chat`).
 - Measurements were taken in headless Chromium on a seeded SQLite dev DB; browser-native scrolling behaviour (QE-38) can only be verified in a real browser.
 - Real-model quality (does the model follow the checklist?) is outside what the stub proves; the review stage runs five scripted topics against a real endpoint if one is configured and records the transcripts.
+
+## 12. Owner amendments after the design (G5 and G6, 2026-10-23; see BRIEF section 2b)
+
+These amend the text above; where they disagree, this section wins. Wherever the criteria above say "Size", the person sees "Complexity"; the
+URL parameter is `complexity` (not `size`), the list API filter is `complexity`, and API/data fields already say `complexity`.
+
+### Amended criteria
+
+| Id | Amended text |
+|---|---|
+| QE-9 | Third data column is **Complexity**, not Size. Widths: Request flex (min 200), About 130, Priority 84, **Complexity 96**, Status 96, Submitted 130 (the smallest width at which the 11/600 header "Complexity" does not wrap, taken from the flexible Request column; Request is 32 px narrower than before). Horizontal overflow 0 at 1440 and 1024. |
+| QE-12 | Complexity is a mono `Tag kind="data"` with S, M, L or XL. |
+| QE-15 | Facets: Status, About, Project, Priority, Complexity (`complexity=M`). |
+| QE-17 | Complexity sorts XL to S (`?sort=complexity:desc`). |
+| QE-19 | Cards: About, Priority, Complexity, Submitted. |
+| QE-59 | Fields "Priority" and "Complexity"; "Assistant proposed X" under each. |
+| QE-61 | Complexity options S "a day or two", M "about a week", L "several weeks", XL "a project of its own". |
+| QE-72 | Tab order Title, Description, Priority, Complexity. |
+| QE-83 | History event kinds read "Priority" and "Complexity". |
+| QE-92 | Print is out of scope; the request page has no export. The list has the administrator export (QE-173 to QE-180). |
+| QE-98 | Controls: Status, Priority and Complexity, Duplicate of, Pending, Note. |
+| QE-108 | Tab order Status, Priority, Complexity, Duplicate of, Note, Reset, Save changes. |
+
+### New criteria
+
+| Id | Criterion |
+|---|---|
+| QE-171 | The word "Size" does not appear in any visible text, accessible name, URL parameter, CSV header or API parameter of the feedback pages (grep of the feature folder = 0 except the word in unrelated English). |
+| QE-172 | The list's Complexity column header ("Complexity", 11/600) does not wrap: the header cell is 96 px, `scrollWidth <= clientWidth`, table overflow 0 at 1440 and 1024. |
+| QE-173 | `GET /v1/feedback/export?format=csv\|xlsx\|json\|jsonl` (`export.csv` is an alias of `format=csv`) returns 200 for a platform ADMIN, 403 `not_admin` for a MEMBER, 401 for an SDK API key. |
+| QE-174 | It honours the list's query parameters `status, about, project_id, priority, complexity, q, sort`; `mine` and paging are ignored; rows = every matching request (not one page); the same filter yields the same ids as the list. |
+| QE-175 | Drafts are never exported, whatever the filter. |
+| QE-176 | Columns in this order: id, title, subject, project, target_kind, target_id, priority, complexity, status, submitter, created_at, confirmed_at, duplicate_of, conflicts (request ids joined by `;`), summary, description, business_need, justification, agent_priority, agent_complexity. |
+| QE-177 | For `format=csv` the file starts with the UTF-8 byte order mark, quotes per RFC 4180 (fields with commas, quotes or newlines), and has `Content-Disposition: attachment; filename="feedback-YYYY-MM-DD.csv"`, `text/csv; charset=utf-8`. |
+| QE-178 | One audit log entry per export: action `feedback.export`, `after` = the format, the filter and the row count, never the rows. |
+| QE-179 | The list toolbar has an `Export` `DropdownMenu` (neutral, `size="sm"`, download icon) at the end of the toolbar, rendered for administrators only (not in the DOM for members), with four items "CSV", "Excel (.xlsx)", "JSON", "JSON Lines"; each downloads the current filter's rows in that format. Opens with Enter, Space or ArrowDown like every `DropdownMenu`. |
+| QE-180 | The menu button is disabled with the tooltip "No requests to export" when the filtered count is 0. |
+| QE-181 | `format=xlsx`: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `feedback-YYYY-MM-DD.xlsx`; one sheet "Feedback", bold frozen header row (the QE-176 columns), dates as real date cells, `conflicts` joined by `;`, column widths from the header; written with openpyxl into a `BytesIO`. |
+| QE-182 | `format=json`: `application/json`, `feedback-YYYY-MM-DD.json`, a UTF-8 JSON array of objects with the QE-176 keys (`conflicts` a list of ids, timestamps ISO 8601, nulls as null). |
+| QE-183 | `format=jsonl`: `application/x-ndjson`, `feedback-YYYY-MM-DD.jsonl`, one such object per line. |
+| QE-184 | An unknown `format` answers 422 listing the accepted values; the audit entry is written once per successful export only. |

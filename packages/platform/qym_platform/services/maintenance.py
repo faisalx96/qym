@@ -323,6 +323,9 @@ class MaintenanceWorker:
             )
         except Exception:  # noqa: BLE001
             logger.exception("scheduled retention failed")
+        from qym_platform.feedback_agent.retention import run_purge
+
+        run_purge(self.session_factory)
 
     def _run(self) -> None:
         while not self._stop.is_set():

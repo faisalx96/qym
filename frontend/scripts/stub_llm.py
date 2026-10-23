@@ -14,6 +14,11 @@ import argparse
 import json
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import feedback_llm_engine as feedback_stub  # noqa: E402
 
 ANALYSIS = {
     "root_cause_issues": [
@@ -63,6 +68,9 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             req = {}
         model = str(req.get("model") or "")
+        if feedback_stub.is_feedback_model(model):
+            self._feedback(req, model)
+            return
         if model == "bad-model":
             self.send_response(500)
             self.end_headers()
@@ -90,6 +98,46 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+
+def _feedback(self, req, model):
+    status, message, script = feedback_stub.build_reply(req)
+    if script.get("sleep"):
+        time.sleep(float(script["sleep"]))
+    if status != 200:
+        body = json.dumps(message).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return
+    if not req.get("stream"):
+        body = json.dumps(feedback_stub.completion_body(model, message)).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return
+    self.send_response(200)
+    self.send_header("Content-Type", "text/event-stream")
+    self.send_header("Cache-Control", "no-cache")
+    self.end_headers()
+    delay = float(script.get("chunk_delay", 0.0))
+    try:
+        for chunk in feedback_stub.stream_chunks(model, message):
+            self.wfile.write(b"data: " + json.dumps(chunk).encode() + b"\n\n")
+            self.wfile.flush()
+            if delay:
+                time.sleep(delay)
+        self.wfile.write(b"data: [DONE]\n\n")
+        self.wfile.flush()
+    except (BrokenPipeError, ConnectionResetError):
+        return
+
+
+Handler._feedback = _feedback
 
 
 def main() -> None:
