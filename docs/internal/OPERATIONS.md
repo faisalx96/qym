@@ -42,6 +42,7 @@ sure one process runs a given job.
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` | `10` / `10` | API connection pool |
 | `QYM_HTTP_THREADPOOL_SIZE` | `0` (= `QYM_DB_POOL_SIZE` + `QYM_DB_MAX_OVERFLOW`) | Threads for sync request handlers, per web process. AnyIO's default (40) exceeded the API pool, so under load the extra threads waited `QYM_DB_POOL_TIMEOUT_SECONDS` and failed with pool timeouts; capped, extra requests queue for a thread instead. Raise the pool and this together, keeping pods x processes x pool under `max_connections` |
 | `QYM_MIGRATION_LOCK_TIMEOUT` | `10s` | `lock_timeout` for the migration session (`0` disables). See "Migrations and large tables" |
+| `QYM_FEEDBACK_MESSAGES_PER_HOUR` / `QYM_FEEDBACK_DRAFTS_PER_DAY` | `30` / `5` | Feedback assistant limits per user (0 disables); see "Feedback assistant" |
 | `QYM_PRODUCT_EVAL_MAX_RETAINED_JOBS` | `100` | Finished product evals kept in each process's memory; older ones are served from `background_jobs` |
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
@@ -57,6 +58,35 @@ sure one process runs a given job.
 | `QYM_PLATFORM_FLUSH_INTERVAL` | `1.0` | SDK cadence (s) for flushing a partly filled batch. It stretches up to 5 s while POSTs take over 1 s; full batches (200 events / 2 MB) still go at once |
 | `QYM_PLATFORM_MAX_FIELD_BYTES` | `262144` (256 KB) | Largest string (task output, input, span attribute) the SDK uploads in a run event; longer ones are cut and marked `…[truncated by qym: N bytes omitted]`, and the event payload carries `_qym_truncated`. `0` disables the cap. Local results keep full values |
 | `INSIGHTOR_TIMINGS_FILE` | unset | Opt-in JSONL file for `insightor_eval.py` timings. Unset, timings are DEBUG log lines; point it at a mounted volume if you need the file |
+
+## Feedback assistant
+
+AI-assisted feedback (Feedback in the sidebar, `/v1/feedback*`) needs one **platform-level** connection to an
+OpenAI-compatible model that supports tool calls: **Admin, Feedback agent** (base URL, model, API key, a **Test
+connection** button). It is independent of project LLM connections.
+
+- **Encryption.** The key is stored encrypted with `QYM_LLM_CONFIG_ENCRYPTION_KEY` (the same key and rotation as project
+  connections; `python -m qym_platform.tools.reencrypt_llm_keys` re-encrypts it too). Without that variable the page says
+  so and saving is refused (`400 encryption_not_configured`). The key is never returned (only its last four characters),
+  never logged and never written to a message or an audit entry. Base URLs follow the project rule: `https://`, and a
+  private address only with `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true`.
+- **Behaviour settings** (same page, stored in `feedback_agent_connection`): *Keep drafts for (days)* (1 to 365, default 30) and
+  *Most messages per request* (6 to 100, default 30).
+- **Retention.** The hourly maintenance pass deletes drafts idle longer than the setting, with their messages, and writes one
+  `feedback.drafts_purged` audit entry with the count. Submitted requests are never deleted by it.
+- **Rate limits** (per user): 30 messages per hour (`QYM_FEEDBACK_MESSAGES_PER_HOUR`) and 5 new requests per day
+  (`QYM_FEEDBACK_DRAFTS_PER_DAY`); `0` disables a limit; over it answers `429` with `Retry-After`.
+- **Streaming.** A turn answers `text/event-stream` (a `: ping` comment every 15 s). Behind a proxy, disable response buffering for
+  `/v1/feedback/*/messages` and `/turn` (`X-Accel-Buffering: no` is sent). A turn finishes and is stored even if the browser leaves.
+- **Knowledge pack.** The `platform` documentation cards are the committed file
+  `packages/platform/qym_platform/feedback_agent/knowledge_platform.json`, generated from `docs/USER_GUIDE.md` and the in-app
+  guide by `python -m qym_platform.tools.build_feedback_pack` (`--check` fails when stale; a test does the same). Rebuild it after
+  editing those documents.
+- **Audit actions** (entity `feedback_request`): `feedback.confirmed`, `.status_changed`, `.declined`, `.priority_revised`,
+  `.complexity_revised`, `.duplicate_marked`, `.duplicate_cleared`, `.draft_deleted`, `.drafts_purged`, `.export` (format, filter and row
+  count, never the rows) and `feedback.agent_connection_updated`, `_tested`, `_removed`.
+- **Export.** `GET /v1/feedback/export?format=csv|xlsx|json|jsonl` (administrators) uses `openpyxl` for `.xlsx`.
+- **Migration `0091`** adds four empty tables (instant DDL); it follows `0090`.
 
 ## Logging
 
@@ -141,12 +171,12 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0090`, following `0050` through
+The combined migration chain has one head, `0091`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084` and `0086`–`0090` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0084` and `0086`–`0091` are quick DDL or small job/queue inserts.
 `0085` switches `spans` to daily partitions; it locks `spans` for an instant only
 to drop still-empty monthly partitions that start after today.
 
@@ -183,8 +213,9 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
-| 0089 | Empty `run_datasets` table (the dataset versions of a run over several datasets: one row per entry, FK to the run `ON DELETE CASCADE`, FKs to the dataset and version `ON DELETE SET NULL`); `runs.dataset_count` (constant default 1); `run_items.dataset_position` (nullable `SMALLINT`) | None: no backfill, every existing run reads as a single-dataset run; no index on `run_items` |
+| 0091 | Four empty tables: `feedback_requests`, `feedback_messages`, `feedback_request_events` and the singleton `feedback_agent_connection` (checks, indexes) | None: Feedback shows "not configured" until an administrator saves the connection in Admin → Feedback agent. |
 | 0090 | `eval_experiment_jobs.dataset_index` (constant default 0, `CHECK >= 0`); the unique key `uq_eval_experiment_job_attempt` widens to `(experiment_id, environment_id, combo_index, dataset_index, attempt)` (PostgreSQL alters in place; SQLite rebuilds the table and restores the run links) | None: existing jobs get `dataset_index = 0`. The downgrade refuses while any job has `dataset_index > 0` (a per-dataset fan-out) |
+| 0089 | Empty `run_datasets` table (the dataset versions of a run over several datasets: one row per entry, FK to the run `ON DELETE CASCADE`, FKs to the dataset and version `ON DELETE SET NULL`); `runs.dataset_count` (constant default 1); `run_items.dataset_position` (nullable `SMALLINT`) | None: no backfill, every existing run reads as a single-dataset run; no index on `run_items` |
 | 0088 | `eval_experiments.dataset_read_token_id` (nullable FK) / `dataset_read_token_encrypted` (nullable) / `latency_sensitive` (constant default false); `eval_environments.latency_sensitive_min_role` (constant default `member`); `dataset_read_tokens.kind` (constant default `admin`) / `experiment_id` (nullable FK); `eval_experiment_jobs.admitted_at` / `deferral_reason` (nullable), `deferrals` / `contaminated_attempts` (constant default 0) | None: existing experiments keep using the worker's own dataset read token until retried, nothing is latency-sensitive, every environment allows latency-sensitive runs to any member |
 | 0087 | `datasets.access_mode` (constant default `project`), empty `dataset_grants` table, `dataset_items.disabled_at` / `disabled_by_user_id` (nullable) and `disabled_reason` (constant default empty) plus the index `(dataset_version_id, disabled_at)` | None: every dataset stays open to the whole project and every item stays active |
 | 0086 | Empty `eval_environment_evaluator_schemas` table; `eval_environments.current_evaluator_schema_id` (nullable) and `evaluator_schema_status` (constant default `unknown`) | None: each environment fetches its evaluator schema on its next **Test**, schema refresh or selection in the launch form |
@@ -274,7 +305,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0090` and a healthy API. The API process then runs every queued job itself.
+   `0091` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -456,7 +487,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0090`.
+deployment only after the API has migrated to `0091`.
 
 ```yaml
 apiVersion: apps/v1

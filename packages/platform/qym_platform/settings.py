@@ -200,6 +200,9 @@ class PlatformSettings(BaseSettings):
     # Evaluation Service experiments: launches per user per window (0 disables).
     # Dry-run previews are not counted.
     eval_experiment_create_rate_limit: int = Field(default=30, ge=0)
+    # Feedback assistant (QE-D19): messages per user per hour and new drafts per user per day (0 disables).
+    feedback_messages_per_hour: int = Field(default=30, ge=0)
+    feedback_drafts_per_day: int = Field(default=5, ge=0)
     eval_experiment_create_rate_window_seconds: int = Field(default=3600, ge=1)
     # Jobs one experiment launch may create (combinations × environments).
     eval_sweep_max_jobs: int = Field(default=64, ge=1)

@@ -2,11 +2,13 @@
 
 One evaluation can run over several datasets, and several versions of one dataset, at once. SDK 2.1.0 takes a list for `dataset=`, `qym run create` repeats `--dataset`, and the platform shows such a run (a union run) with a Datasets group in its header, a per-dataset score table and a Dataset column and filter on its items. A single dataset, written as before, behaves exactly as in 2.0.0: same item ids, same upload, same results file. Platform 2.1.0 still accepts SDK 2.0.0 runs; SDK 2.1.0 union runs reach a 2.0.0 platform as a plain run named by its label (the per-dataset view needs 2.1.0).
 
-Experiments can run several datasets, each at several versions, and can choose the task an Evaluation Service runs. Both need the Evaluation Service integration guide v1.4 (`docs/evaluation-service-change-request-v1.4.md`); services on v1.3 keep working and receive one job per dataset version.
+Experiments can run several datasets, each at several versions, and can choose the task an Evaluation Service runs.
+
+Feedback gets an assistant: anyone signed in describes a need, the assistant collects the business case and proposes a prioritised request, and administrators triage and export the list (new Admin tab, Feedback agent; `openpyxl` joins the platform dependencies). Both need the Evaluation Service integration guide v1.4 (`docs/evaluation-service-change-request-v1.4.md`); services on v1.3 keep working and receive one job per dataset version.
 
 ## Before you update
 
-- **Migrations `0089`–`0090` (head `0090`).** `0089`: Quick DDL: the `run_datasets` table, `runs.dataset_count` (default 1) and `run_items.dataset_position` (nullable). There is no backfill: existing runs read as single-dataset runs, and no index is added to `run_items`. `0090`: `eval_experiment_jobs.dataset_index` (default 0) and a unique job key widened by it. Existing jobs get 0. The downgrade refuses while a per-dataset fan-out exists. New setting `QYM_EVAL_MAX_DATASETS` (default 20).
+- **Migrations `0089`–`0091` (head `0091`).** `0091`: four empty tables for AI-assisted feedback (quick DDL), nothing to backfill. `0089`: Quick DDL: the `run_datasets` table, `runs.dataset_count` (default 1) and `run_items.dataset_position` (nullable). There is no backfill: existing runs read as single-dataset runs, and no index is added to `run_items`. `0090`: `eval_experiment_jobs.dataset_index` (default 0) and a unique job key widened by it. Existing jobs get 0. The downgrade refuses while a per-dataset fan-out exists. New setting `QYM_EVAL_MAX_DATASETS` (default 20).
 - **Union runs are not ranked.** The best-run index, best-run bases and a dataset version's trend ignore union runs (their scores cover different items than a single-dataset run's). They form their own combo in the dashboard, named by the run's label.
 
 ## SDK 2.1.0
@@ -35,6 +37,12 @@ Experiments can run several datasets, each at several versions, and can choose t
 - **Task column 86 px (was 90).** The Dataset column grew to 120 px for the union count tag, which pushed the Date column, the default sort, 4 px under the frozen Actions column at 1280. Task gives those pixels back; saved column widths are untouched.
 - **A frozen flex column never outgrows its table's scroller.** In a table wider than its scroller (the experiments, environments and queue lists have a minimum width of about 1000 px) the flexible name column took all the slack, and at tablet widths it grew wider than the scroller itself; a sticky cell cannot leave its row, so the frozen name scrolled away with the content. It is now capped at the freeze share (60% of the scroller) and the other columns share the rest.
 - **The local viewer's bundle is self-contained again.** The per-dataset score table of the SDK viewer had been built on the app's data table, which pulled the router and the menu library into the offline bundle (745 KB, with external URLs); it is a plain table again (398 KB, no external references).
+
+### Feedback
+
+- **AI-assisted feedback.** Everyone signed in can describe a need (about qym itself or about a product they evaluate) and chat with an assistant that asks for the business need, who is affected, the workaround, the expected outcome, urgency and scope, searches existing requests and proposes a description, a priority (low to critical) and a complexity (S, M, L, XL) with its reasoning. Duplicates and conflicts are real requests; a possible duplicate is flagged on the card. You confirm or change the proposal before anything is submitted; the conversation stays on the request. Drafts are private and deleted after 30 days (a setting). Administrators set the status, revise priority and complexity with a note, link duplicates and decline with a reason; every action is in the history and the audit log. The list groups confirmed duplicates and, for administrators, exports the filtered rows as CSV, Excel, JSON or JSON Lines.
+- **New Admin tab, Feedback agent.** One platform-level OpenAI-compatible connection (base URL, model, key encrypted like project connections, a test button) and two numbers (draft retention days, most messages per request). Feedback shows "not set up" until it exists. New variables `QYM_FEEDBACK_MESSAGES_PER_HOUR` and `QYM_FEEDBACK_DRAFTS_PER_DAY` (rate limits, 0 disables); `openpyxl` joins the platform dependencies.
+
 
 # October 2026 — Platform 2.0.0 / SDK 2.0.0
 

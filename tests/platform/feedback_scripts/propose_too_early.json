@@ -1,0 +1,48 @@
+{
+ "turns": [
+  [
+   {
+    "tool_calls": [
+     {
+      "name": "update_checklist",
+      "arguments": {
+       "items": [
+        {
+         "key": "business_need",
+         "state": "filled",
+         "value": "Share compare results"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "tool_calls": [
+     {
+      "name": "propose_request",
+      "arguments": {
+       "title": "PDF export of the compare page",
+       "summary": "Export the compare page as a PDF so results can be shared without an account.",
+       "description": "Add an export action to the Compare page that produces a PDF containing the charts, the metric table and the selected runs, so that analysts can share results with people who do not have an account.",
+       "business_need": "Share comparison results with people outside the platform.",
+       "justification": "Five analysts do this weekly with screenshots, which loses the table and is slow.",
+       "priority": {
+        "level": "medium",
+        "reasoning": "Useful with a workaround; a team repeats the manual step weekly."
+       },
+       "complexity": {
+        "level": "M",
+        "reasoning": "About a week: a new export path in one area with layout work."
+       },
+       "related": []
+      }
+     }
+    ]
+   },
+   {
+    "text": "Before I propose anything, what would a finished result look like for you?"
+   }
+  ]
+ ]
+}

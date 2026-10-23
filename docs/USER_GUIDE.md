@@ -253,3 +253,31 @@ The experiment page shows a **Credentials** row (API key and dataset read token:
 *not sent*); no secret is ever shown. In Project settings, API keys, **Dataset read tokens** also lists experiment tokens
 with an *experiment* tag and a link to the experiment; admins can revoke one by hand (a retry issues a new one).
 
+
+## Feedback
+
+Feedback turns a need into a well-formed request. Open **Feedback** in the sidebar (every signed-in person sees it, in a project or not).
+
+### Submitting
+
+1. **New feedback** asks what the feedback is about: **qym itself** (a need or change for the platform, SDK or CLI) or **a product you evaluate with qym** (pick one of your projects and, if you like, point at one run, experiment or dataset). Then describe the need in your own words, in English or Arabic. Do not paste secrets or customer data: every signed-in person can read a submitted request and its conversation.
+2. **The assistant** answers with the questions an administrator would ask later: the business need, who is affected and how often, what you do today, what a good result looks like, any deadline and what is in or out of scope. A checklist beside the chat shows what it knows ("Known", "Partly known", "Not asked yet", "Not known"). It reads the qym documentation (or your project's setup, never its data) and searches existing requests so that duplicates and conflicts are real requests, not guesses. **Enter** sends, **Shift+Enter** starts a new line, **Stop** ends an answer.
+3. **The proposal.** When it has enough, the assistant shows a **Proposed request** card: a title, a detailed description, the business need and justification, a **priority** (low, medium, high, critical) and a **complexity** (S a day or two, M about a week, L several weeks, XL a project of its own), each with its reasoning, and related requests marked **Duplicate**, **Conflict** or **Related**. You can change the title, description, priority and complexity (the card keeps showing what the assistant proposed). **Keep talking** continues the conversation; a new message replaces the proposal. Nothing is submitted until you press **Submit request** (or **Submit as a possible duplicate**).
+
+Your submitted request keeps the conversation: open its **Conversation** tab to read it.
+
+### Drafts
+
+Until you submit, the conversation is a **draft** that only you can see. Drafts are listed above the Feedback list (**Resume**, **Discard**) and are deleted after the number of days an administrator set (30 by default) without activity. Closing the page mid-answer does not lose the answer.
+
+### Triage (administrators)
+
+A platform administrator sees a **Triage** panel on every request: set the status (New, Accepted, Planned, Done, Declined), revise priority or complexity, or mark the request as a duplicate of another. A revision, a duplicate link and a decline need a note; a decline reason is shown to everyone. Every change appears in the request's **History** and in the audit log. The list groups confirmed duplicates under their original request.
+
+### Exporting the list (administrators)
+
+The **Export** menu in the Feedback list's toolbar downloads the rows that match the current filters (not just the page you see) as **CSV**, **Excel (.xlsx)**, **JSON** or **JSON Lines**. Every format has the same columns: id, title, subject, project, target_kind, target_id, priority, complexity, status, submitter, created_at, confirmed_at, duplicate_of, conflicts (request ids joined by `;`), summary, description, business_need, justification, agent_priority, agent_complexity. Drafts are never exported. Each export is written to the audit log (format, filters and the row count).
+
+### If the assistant is not set up
+
+An administrator connects an OpenAI-compatible model once under **Admin, Feedback agent**. Until then the list is readable and **New feedback** is disabled.

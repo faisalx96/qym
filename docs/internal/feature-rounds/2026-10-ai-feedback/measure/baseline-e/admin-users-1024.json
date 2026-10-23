@@ -1,0 +1,74 @@
+{
+  "page": {
+    "x": 192,
+    "y": 50,
+    "w": 817,
+    "h": 523.3,
+    "font": "12px/400",
+    "family": "Qym Sans",
+    "color": "rgb(237, 237, 240)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "gap": "normal",
+    "pad": "20px 20px 32px",
+    "scrollW": 817,
+    "clientW": 817
+  },
+  "tabs": {
+    "x": 212,
+    "y": 138,
+    "w": 777,
+    "h": 34,
+    "font": "12px/400",
+    "family": "Qym Sans",
+    "color": "rgb(237, 237, 240)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "gap": "4px",
+    "pad": "0px",
+    "scrollW": 777,
+    "clientW": 777
+  },
+  "panel": {
+    "x": 212,
+    "y": 172,
+    "w": 777,
+    "h": 368.9,
+    "font": "12px/400",
+    "family": "Qym Sans",
+    "color": "rgb(237, 237, 240)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "gap": "normal",
+    "pad": "14px 0px 0px",
+    "scrollW": 777,
+    "clientW": 777
+  },
+  "table": {
+    "x": 213,
+    "y": 426,
+    "w": 775,
+    "h": 74,
+    "font": "12px/400",
+    "family": "Qym Sans",
+    "color": "rgb(237, 237, 240)",
+    "bg": "rgba(0, 0, 0, 0)",
+    "gap": "normal",
+    "pad": "0px",
+    "scrollW": 775,
+    "clientW": 775
+  },
+  "rows": [
+    {
+      "x": 213,
+      "y": 460,
+      "w": 775,
+      "h": 40,
+      "font": "12px/400",
+      "family": "Qym Sans",
+      "color": "rgb(237, 237, 240)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "gap": "normal",
+      "pad": "0px",
+      "scrollW": 775,
+      "clientW": 775
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+import { open, BASE } from './lib.mjs';
+const { browser, page } = await open(1440);
+await page.route(/\/v1\/feedback\?/, r => r.abort());
+await page.goto(BASE + '/feedback'); await page.waitForTimeout(9000);
+console.log((await page.locator('[data-testid=feedback-list-page]').innerText()).replace(/\n+/g, ' | '));
+await page.unroute(/\/v1\/feedback\?/);
+await page.reload(); await page.waitForTimeout(1500);
+await page.route(/\/v1\/feedback\?/, r => r.abort());
+await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); });
+await page.waitForTimeout(9000);
+console.log('--- after failed refresh'); console.log((await page.locator('[data-testid=feedback-list-page]').innerText()).replace(/\n+/g, ' | ').slice(0, 400));
+await browser.close();

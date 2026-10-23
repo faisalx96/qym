@@ -17,6 +17,7 @@ export interface NavItem {
 export const GLOBAL_NAV: NavItem[] = [
   { id: 'projects', label: 'Projects', icon: 'folder', to: '/' },
   { id: 'docs', label: 'Docs', icon: 'book', to: '/docs-guide' },
+  { id: 'feedback', label: 'Feedback', icon: 'feedback', to: '/feedback' },
 ];
 
 export function projectNav(slug: string): NavItem[] {
@@ -74,6 +75,7 @@ const PAGE_LABELS: Record<string, string> = {
   compare: 'Compare',
   reviews: 'Reviews',
   docs: 'Docs',
+  feedback: 'Feedback',
   runs: 'Runs',
   overview: 'Dashboard',
   charts: 'Charts',

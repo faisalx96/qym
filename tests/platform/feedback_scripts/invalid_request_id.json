@@ -1,0 +1,134 @@
+{
+ "turns": [
+  [
+   {
+    "tool_calls": [
+     {
+      "name": "update_checklist",
+      "arguments": {
+       "items": [
+        {
+         "key": "business_need",
+         "state": "filled",
+         "value": "Analysts need to share compare results with people who have no account"
+        },
+        {
+         "key": "affected",
+         "state": "filled",
+         "value": "Five analysts, weekly"
+        },
+        {
+         "key": "workaround",
+         "state": "filled",
+         "value": "Screenshots pasted into slides"
+        },
+        {
+         "key": "outcome",
+         "state": "filled",
+         "value": "One PDF per comparison with the charts and the table"
+        },
+        {
+         "key": "urgency",
+         "state": "declined",
+         "value": "No deadline"
+        },
+        {
+         "key": "scope",
+         "state": "declined",
+         "value": "Not discussed"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "tool_calls": [
+     {
+      "name": "propose_request",
+      "arguments": {
+       "title": "PDF export of the compare page",
+       "summary": "Export the compare page as a PDF so results can be shared without an account.",
+       "description": "Add an export action to the Compare page that produces a PDF containing the charts, the metric table and the selected runs, so that analysts can share results with people who do not have an account.",
+       "business_need": "Share comparison results with people outside the platform.",
+       "justification": "Five analysts do this weekly with screenshots, which loses the table and is slow.",
+       "priority": {
+        "level": "medium",
+        "reasoning": "Useful with a workaround; a team repeats the manual step weekly."
+       },
+       "complexity": {
+        "level": "M",
+        "reasoning": "About a week: a new export path in one area with layout work."
+       },
+       "related": [
+        {
+         "request_id": "FB-9999",
+         "kind": "related",
+         "note": "Does not exist"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "tool_calls": [
+     {
+      "name": "propose_request",
+      "arguments": {
+       "title": "PDF export of the compare page",
+       "summary": "Export the compare page as a PDF so results can be shared without an account.",
+       "description": "Add an export action to the Compare page that produces a PDF containing the charts, the metric table and the selected runs, so that analysts can share results with people who do not have an account.",
+       "business_need": "Share comparison results with people outside the platform.",
+       "justification": "Five analysts do this weekly with screenshots, which loses the table and is slow.",
+       "priority": {
+        "level": "medium",
+        "reasoning": "Useful with a workaround; a team repeats the manual step weekly."
+       },
+       "complexity": {
+        "level": "M",
+        "reasoning": "About a week: a new export path in one area with layout work."
+       },
+       "related": [
+        {
+         "request_id": "FB-9999",
+         "kind": "related",
+         "note": "Does not exist"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "tool_calls": [
+     {
+      "name": "propose_request",
+      "arguments": {
+       "title": "PDF export of the compare page",
+       "summary": "Export the compare page as a PDF so results can be shared without an account.",
+       "description": "Add an export action to the Compare page that produces a PDF containing the charts, the metric table and the selected runs, so that analysts can share results with people who do not have an account.",
+       "business_need": "Share comparison results with people outside the platform.",
+       "justification": "Five analysts do this weekly with screenshots, which loses the table and is slow.",
+       "priority": {
+        "level": "medium",
+        "reasoning": "Useful with a workaround; a team repeats the manual step weekly."
+       },
+       "complexity": {
+        "level": "M",
+        "reasoning": "About a week: a new export path in one area with layout work."
+       },
+       "related": [
+        {
+         "request_id": "FB-9999",
+         "kind": "related",
+         "note": "Does not exist"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  ]
+ ]
+}

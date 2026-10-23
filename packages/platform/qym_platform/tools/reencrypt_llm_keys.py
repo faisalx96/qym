@@ -6,6 +6,7 @@ decrypting through the previous keys; this command rewrites them with the curren
 key so the previous keys can be dropped. Columns covered:
 
 - ``project_llm_connections.llm_api_key_encrypted`` (project LLM connections)
+- ``feedback_agent_connection.llm_api_key_encrypted`` (the feedback assistant's key)
 - ``eval_environments.api_key_encrypted`` (Evaluation Service keys)
 - ``eval_experiments.secrets_encrypted`` (temporary-model keys of live experiments)
 - ``eval_experiments.qym_api_key_encrypted`` (the creator's per-experiment qym API
@@ -41,6 +42,7 @@ from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from qym_platform.db.feedback_models import FeedbackAgentConnection
 from qym_platform.db.models import EvalEnvironment, EvalExperiment, ProjectLlmConnection
 from qym_platform.secrets import (
     encryption_available,
@@ -55,6 +57,7 @@ logger = get_logger(__name__)
 # (label, model, column attribute name)
 ENCRYPTED_COLUMNS: Tuple[Tuple[str, Any, str], ...] = (
     ("project_llm_connections.llm_api_key_encrypted", ProjectLlmConnection, "llm_api_key_encrypted"),
+    ("feedback_agent_connection.llm_api_key_encrypted", FeedbackAgentConnection, "llm_api_key_encrypted"),
     ("eval_environments.api_key_encrypted", EvalEnvironment, "api_key_encrypted"),
     ("eval_experiments.secrets_encrypted", EvalExperiment, "secrets_encrypted"),
     ("eval_experiments.qym_api_key_encrypted", EvalExperiment, "qym_api_key_encrypted"),

@@ -35,6 +35,8 @@ dependencies = [
     "openai>=1.40.0",
     "scipy>=1.9.0",
     "cryptography>=42.0.0",
+    # feedback list export (.xlsx), written with openpyxl directly
+    "openpyxl>=3.0.0",
     # Draft 2020-12 validation of eval config documents (services/eval_config.py)
     "jsonschema>=4.0.0",
     # used by qym_platform.tools.backfill_item_domain
@@ -49,4 +51,4 @@ where = ["."]
 include = ["qym_platform", "qym_platform.*"]
 
 [tool.setuptools.package-data]
-qym_platform = ["_static/app/**/*", "export_templates/run/*", "migrations/*", "migrations/versions/*"]
+qym_platform = ["_static/app/**/*", "feedback_agent/*.json", "export_templates/run/*", "migrations/*", "migrations/versions/*"]

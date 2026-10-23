@@ -39,6 +39,7 @@ export type IconName =
   | 'flask'
   | 'sparkles'
   | 'review'
+  | 'feedback'
   | 'database'
   | 'shield'
   | 'archive'
@@ -103,6 +104,7 @@ const PATHS: Record<IconName, string> = {
   flask: 'M9 3h6M10 3v6l-6 10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2l-6-10V3',
   sparkles: 'M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2zM5 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1z',
   review: 'M4 4h16v12H8l-4 4zM8 9h8M8 12h5',
+  feedback: 'M4 4h16v12H8l-4 4zM12 8v5M9.500 10.500h5',
   database:
     'M12 3c5 0 8 1.3 8 3s-3 3-8 3-8-1.3-8-3 3-3 8-3zM4 6v12c0 1.7 3 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3 3 8 3s8-1.3 8-3',
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',

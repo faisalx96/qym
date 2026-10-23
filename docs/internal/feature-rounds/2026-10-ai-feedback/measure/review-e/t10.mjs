@@ -1,0 +1,10 @@
+import { open, BASE } from './lib.mjs';
+import fs from 'node:fs';
+const ids = JSON.parse(fs.readFileSync('ids.json', 'utf8'));
+const { browser, page } = await open(1440);
+await page.goto(BASE + '/feedback/' + ids.focus); await page.waitForSelector('[data-testid=chat]'); await page.waitForTimeout(700);
+const ta = page.getByLabel('Your reply'); await ta.click(); await ta.type('A short answer'); await page.keyboard.press('Enter');
+await page.waitForTimeout(300); const during = await page.evaluate(() => document.activeElement?.tagName);
+await page.waitForFunction(() => !document.querySelector('[data-testid=chat] textarea')?.disabled, null, { timeout: 20000 }); await page.waitForTimeout(400);
+console.log('QE-140 focus during:', during, '| after turn:', await page.evaluate(() => document.activeElement?.tagName + ':' + document.activeElement?.id + ':' + document.activeElement?.textContent?.slice(0,30)));
+await browser.close();

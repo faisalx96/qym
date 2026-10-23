@@ -1,0 +1,13 @@
+{
+ "entry": {
+  "w": 36,
+  "h": 32
+ },
+ "items": [
+  "projects",
+  "docs",
+  "feedback",
+  "admin",
+  "trash"
+ ]
+}

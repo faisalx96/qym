@@ -77,7 +77,9 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
       icon: i.icon,
       run: go(i.to),
     }));
-    const actions: Entry[] = [];
+    const actions: Entry[] = [
+      { id: 'action:new-feedback', group: 'Actions', label: 'New feedback', icon: 'feedback', run: go('/feedback/new') },
+    ];
     if (canCreateProject(me))
       actions.push({
         id: 'action:create',
