@@ -153,22 +153,23 @@ Branch `feat/multi-dataset-sdk` (from `UI-redesign` 0d725715). Spec: `spec-c.md`
 | QC-U45 | `sdk-viewer` Datasets table, Dataset column and filter | `e2e/sdk-viewer/multi-dataset-viewer.spec.ts` |
 | QC-U46 | copy as in the spec | review |
 
-## Gate (resumed run, 2026-10-23, partial)
+## Gate (resumed run, 2026-10-23)
 
-Platform chunks of 24 files, `pytest -q -n 2` through `gated-heavy.sh --cost 3` on tip 1d372cab (no fix commits were needed):
+All runs through `gated-heavy.sh` on tip 1d372cab plus the fix below; logs are in the session scratchpad (`msdk-final-*`, `msdk-sqlite-*`). Before each run the check was available memory >= 4 GB and memory pressure full avg60 < 10 % (the swap check was withdrawn); no run had to wait.
 
-| Chunk | SQLite | PostgreSQL |
+Fix made today: `e2e/sdk-viewer/multi-dataset-viewer.spec.ts` located the Dataset column header with a page-wide role query that matched two elements (strict mode violation); it now scopes to `data-table`. The code under test was right.
+
+| Command | Cost | Result |
 |---|---|---|
-| c_aa | 517 passed, 101 skipped | not re-run |
-| c_ab | 387 passed, 116 skipped | not re-run |
-| c_ac | 569 passed, 156 skipped | not re-run |
-| c_ad | 293 passed, 90 skipped | not re-run |
-| c_ae | 295 passed, 92 skipped | not re-run |
-| c_af | 227 passed, 63 skipped | not re-run |
-| c_ag | 370 passed, 80 skipped | not re-run |
-| c_ah | 329 passed, 91 skipped | 419 passed, 1 skipped (the search-index job test passes) |
-| c_ai | 74 passed, 23 skipped | not re-run |
+| pytest chunk c_aa / c_ab / c_ac / c_ad / c_ae / c_af / c_ag / c_ah / c_ai, SQLite, `-n 2` | 3 each | 517/387/569/293/295/227/370/329/74 passed, 0 failed (101/116/156/90/92/63/80/91/23 skipped) |
+| same chunks, PostgreSQL 16, `-n 2` | 3 each | c_aa 607, c_ab 500, c_ac 721, c_ad 374, c_ae 366, c_af 290, c_ag 448, c_ah 419, c_ai 97 passed, 0 failed |
+| `pytest tests/sdk -q -n 2` | 3 | 556 passed, 4 skipped |
+| `pytest tests/platform/test_design_language.py -q` | 2 | 1 passed |
+| `npm run check` | 3 | passed (Vitest 54 passed) |
+| `npm run build`, `npm run build:sdk` | 2 each | both built |
+| Playwright e2e/run-detail/multi-dataset* | 3 | 18 passed |
+| Playwright e2e/runs-list/multi-dataset-cell.spec.ts | 3 | 3 passed |
+| Playwright e2e/compare/multi-dataset-notice.spec.ts | 3 | 5 passed |
+| Playwright SDK viewer multi-dataset-viewer.spec.ts | 3 | first run 1 failed (the spec bug above), after the fix 2 passed |
 
-`tsc --noEmit` in frontend/: clean. The after-screenshots are present in `shots/`.
-
-Not run on the final code in this pass (swap stayed at 0 free, held by desktop apps, for over 30 minutes, so the memory rule blocked every further heavy run): PostgreSQL chunks c_aa..c_ag and c_ai (they passed on the earlier tip before 1d372cab, which only touches the dataset-name search), `pytest tests/sdk`, `test_design_language.py`, `npm run check`, `npm run build`, `npm run build:sdk` and the Playwright specs.
+The after-screenshots are in `shots/after-c-*.png`.

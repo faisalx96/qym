@@ -25,7 +25,7 @@ test('a union file shows its datasets, a Dataset column and a Dataset filter, co
   await expect(breakdown).toContainText('1');
   await expect(breakdown).toContainText('0.625');
   // the Dataset column carries the source and the raw id
-  await expect(page.getByRole('columnheader', { name: 'Dataset' })).toBeVisible();
+  await expect(page.getByTestId('data-table').getByRole('columnheader', { name: 'Dataset' })).toBeVisible();
   await expect(rows(page).first()).toContainText('alpha v1 · i0');
   // the filter narrows the rows and the URL
   await page.getByTestId('dataset-filter').selectOption('beta@v2');
@@ -46,5 +46,5 @@ test('a file without the tags opens exactly as before', async ({ page, request }
   await expect(rows(page)).toHaveCount(8);
   await expect(page.getByTestId('dataset-breakdown')).toHaveCount(0);
   await expect(page.getByTestId('dataset-filter')).toHaveCount(0);
-  await expect(page.getByRole('columnheader', { name: 'Dataset' })).toHaveCount(0);
+  await expect(page.getByTestId('data-table').getByRole('columnheader', { name: 'Dataset' })).toHaveCount(0);
 });
