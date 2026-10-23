@@ -640,6 +640,18 @@ KEY_ONLY = [
 
 # Allowed on purpose, with the reason.
 ALLOWED = {
+    # Feedback is platform-level (one list for everyone, administrators triage); a product request names a project the
+    # person can access but stores no project data, so an archived project does not refuse it.
+    ("POST", "/v1/feedback"): "feedback: a new draft",
+    ("POST", "/v1/feedback/{ref}/messages"): "feedback: a message to the assistant",
+    ("POST", "/v1/feedback/{ref}/turn"): "feedback: the assistant's turn",
+    ("POST", "/v1/feedback/{ref}/stop"): "feedback: stops the assistant's turn",
+    ("POST", "/v1/feedback/{ref}/confirm"): "feedback: submits a proposal",
+    ("DELETE", "/v1/feedback/{ref}"): "feedback: deletes the caller's draft",
+    ("PATCH", "/v1/feedback/{ref}/triage"): "feedback: administrator triage",
+    ("PUT", "/v1/admin/feedback-agent"): "feedback: the assistant's connection (platform admin)",
+    ("DELETE", "/v1/admin/feedback-agent"): "feedback: removes the assistant's connection (platform admin)",
+    ("POST", "/v1/admin/feedback-agent/test"): "feedback: tests the connection (platform admin)",
     # Not project data: sign-in, users, new projects, platform maintenance.
     ("POST", "/v1/auth/login/password"): "sign-in",
     ("POST", "/v1/auth/signup/password"): "sign-up",
