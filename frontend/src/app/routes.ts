@@ -3,7 +3,7 @@
  * (relative to the router basename = the platform root path). Area agents replace the placeholder
  * elements in router.tsx; the paths here are the contract.
  */
-export const ADMIN_TABS = ['runs', 'projects', 'users', 'maintenance'] as const;
+export const ADMIN_TABS = ['runs', 'projects', 'users', 'maintenance', 'feedback'] as const;
 export type AdminTab = (typeof ADMIN_TABS)[number];
 
 export const ROUTES = {
@@ -14,6 +14,9 @@ export const ROUTES = {
   adminTab: '/admin/:tab',
   adminSplat: '/admin/*',
   trash: '/trash',
+  feedback: '/feedback',
+  feedbackNew: '/feedback/new',
+  feedbackItem: '/feedback/:ref',
   compare: '/compare',
   reviews: '/reviews',
   docs: '/docs-guide',

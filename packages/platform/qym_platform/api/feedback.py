@@ -240,6 +240,55 @@ def create_feedback(
     return {"id": req.id, "status": "draft"}
 
 
+@router.get("/v1/feedback/targets")
+def feedback_targets(
+    project_id: str,
+    kind: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> dict[str, Any]:
+    """Items a product request can point at (names only; the person picks, never types: QE-D5)."""
+    from qym_platform.db.models import Dataset, EvalExperiment, Project, Run
+    from qym_platform.permissions import has_project_access
+    from sqlalchemy import or_
+
+    project = db.query(Project).filter(or_(Project.id == project_id, Project.slug == project_id)).first()
+    if project is None:
+        raise error(404, "not_found", "Project not found")
+    if not has_project_access(db, principal, project.id):
+        raise error(403, "no_project_access", "You do not have access to this project")
+    if kind == "run":
+        rows = (
+            db.query(Run.id, Run.task, Run.dataset)
+            .filter(Run.project_id == project.id, Run.deleted_at.is_(None))
+            .order_by(Run.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        items = [{"id": r[0], "label": f"{r[1]} on {r[2]}"} for r in rows]
+    elif kind == "experiment":
+        rows = (
+            db.query(EvalExperiment.id, EvalExperiment.name)
+            .filter(EvalExperiment.project_id == project.id)
+            .order_by(EvalExperiment.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        items = [{"id": r[0], "label": r[1]} for r in rows]
+    elif kind == "dataset":
+        rows = (
+            db.query(Dataset.id, Dataset.name)
+            .filter(Dataset.project_id == project.id, Dataset.deleted_at.is_(None))
+            .order_by(Dataset.name)
+            .limit(100)
+            .all()
+        )
+        items = [{"id": r[0], "label": r[1]} for r in rows]
+    else:
+        raise error(422, "validation", "Unknown kind", field="kind")
+    return {"items": items}
+
+
 # ------------------------------------------------------------------------------------------------ read
 
 

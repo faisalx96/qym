@@ -55,6 +55,11 @@ export function Breadcrumbs({ route, project }: BreadcrumbsProps) {
     } else {
       crumbs.push({ label: route.label });
     }
+  } else if (route.page === 'feedback' && /^\/feedback\/.+/.test(pathname)) {
+    crumbs.push(
+      { label: 'Feedback', to: '/feedback' },
+      { label: pathname === '/feedback/new' ? 'New feedback' : pageLabel || 'Request' },
+    );
   } else {
     crumbs.push({ label: route.label });
   }

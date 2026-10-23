@@ -43,6 +43,9 @@ const EnvironmentsRoute = lazyPage(
   () => import('@/features/environments/EnvironmentsRoutes'),
   'EnvironmentsRoute',
 );
+const FeedbackIndexRoute = lazyPage(() => import('@/features/feedback/FeedbackRoutes'), 'FeedbackIndexRoute');
+const FeedbackNewRoute = lazyPage(() => import('@/features/feedback/FeedbackRoutes'), 'FeedbackNewRoute');
+const FeedbackItemRoute = lazyPage(() => import('@/features/feedback/FeedbackRoutes'), 'FeedbackItemRoute');
 const ModelsPage = lazyPage(() => import('@/features/models/ModelsPage'), 'ModelsPage');
 
 const C = ROUTES.projectChildren;
@@ -110,6 +113,9 @@ export const routes: RouteObject[] = [
             path: ROUTES.trash,
             element: <TrashPage />,
           },
+          { path: ROUTES.feedback, element: <FeedbackIndexRoute /> },
+          { path: ROUTES.feedbackNew, element: <FeedbackNewRoute /> },
+          { path: ROUTES.feedbackItem, element: <FeedbackItemRoute /> },
           { path: ROUTES.compare, element: <ComparePage /> },
           { path: ROUTES.reviews, element: <ReviewsPage /> },
           { path: ROUTES.docs, element: <DocsRedirect /> },

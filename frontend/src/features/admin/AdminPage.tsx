@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useAdminUsers, useAllProjects, useMaintenance } from '@/api/admin';
+import { useAgentAdmin } from '@/api/feedback';
 import { ADMIN_TABS, type AdminTab } from '@/app/routes';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
 import { PageHeader, StatStrip, TabPanel, Tabs } from '@/ui';
+import { FeedbackAgentTab } from './feedback/FeedbackAgentTab';
 import { MaintenanceTab } from './maintenance/MaintenanceTab';
 import { ProjectsTab } from './projects/ProjectsTab';
 import { RunsTab } from './runs/RunsTab';
@@ -20,6 +22,7 @@ export function AdminPage() {
   const users = useAdminUsers();
   const projects = useAllProjects();
   const maint = useMaintenance(selected === 'maintenance');
+  const agent = useAgentAdmin(selected === 'feedback');
   const [status, setStatus] = useState('');
   useEffect(() => {
     if (!status) return;
@@ -34,7 +37,7 @@ export function AdminPage() {
   ).length;
   return (
     <div className={constrained} data-admin-page>
-      <PageHeader title="Admin" description="Platform-wide runs, projects, users and maintenance." />
+      <PageHeader title="Admin" description="Platform-wide runs, projects, users, maintenance and the feedback assistant." />
       <p className={styles.srOnly} role="status" aria-live="polite" data-status-line>
         {status}
       </p>
@@ -63,6 +66,20 @@ export function AdminPage() {
           ]}
         />
       ) : null}
+      {selected === 'feedback' ? (
+        <StatStrip
+          aria-label="Feedback totals"
+          items={[
+            { label: 'Requests', value: agent.data?.counts.requests ?? '—', sub: agent.data ? `${agent.data.counts.new} new` : undefined },
+            {
+              label: 'Open drafts',
+              value: agent.data?.counts.open_drafts ?? '—',
+              sub: agent.data ? `deleted after ${agent.data.behaviour.draft_retention_days} days` : undefined,
+            },
+            { label: 'Assistant calls, 7 days', value: agent.data?.counts.assistant_calls_7d ?? '—' },
+          ]}
+        />
+      ) : null}
       <Tabs
         label="Admin sections"
         items={[
@@ -70,6 +87,7 @@ export function AdminPage() {
           { id: 'projects', label: 'Projects', count: projects.data?.length },
           { id: 'users', label: 'Users', count: users.data?.length },
           { id: 'maintenance', label: 'Maintenance', count: activeJobs || undefined },
+          { id: 'feedback', label: 'Feedback agent' },
         ]}
         selected={selected}
         onSelect={(id) => navigate(`/admin/${id as AdminTab}`)}
@@ -78,6 +96,7 @@ export function AdminPage() {
         <TabPanel id="projects">{selected === 'projects' ? <ProjectsTab /> : null}</TabPanel>
         <TabPanel id="users">{selected === 'users' ? <UsersTab /> : null}</TabPanel>
         <TabPanel id="maintenance">{selected === 'maintenance' ? <MaintenanceTab /> : null}</TabPanel>
+        <TabPanel id="feedback">{selected === 'feedback' ? <FeedbackAgentTab /> : null}</TabPanel>
       </Tabs>
     </div>
   );

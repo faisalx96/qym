@@ -336,4 +336,5 @@ def add_event(
 def draft_days_left(row: FeedbackRequest, retention_days: int, now: Optional[datetime] = None) -> int:
     now = now or datetime.utcnow()
     deadline = row.last_activity_at + timedelta(days=retention_days)
-    return max(0, (deadline - now).days)
+    seconds = (deadline - now).total_seconds()
+    return max(0, int(-(-seconds // 86400)))
