@@ -323,6 +323,64 @@ test.describe('review of WP-D', () => {
     });
   }
 
+  test('QD-5, QD-6, QD-12, QD-13, QD-16: panel rows, counts, help text and legend', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await openHome(page, f.project.slug, both());
+    await chooseDataset(page, 'support-tickets');
+    await expect(page.getByTestId('pair-count')).toHaveText('1 dataset version');
+    await dsBox(page, 'support-tickets')
+      .getByRole('button', { name: /^Versions.* of support-tickets$/ })
+      .click();
+    const panel = page.getByRole('dialog', { name: /Versions options/ });
+    const rows = panel.getByRole('checkbox');
+    const names = await rows.evaluateAll((els) =>
+      els.map((e) => (e.closest('label') ?? e.parentElement)?.textContent?.trim() ?? ''),
+    );
+    const rowHeights = await panel
+      .locator('label')
+      .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height * 10) / 10));
+    const search = await panel.getByRole('searchbox').count();
+    const selectAll = await panel.getByText(/select all/i).count();
+    const only = await panel.getByRole('button', { name: /^Only/ }).count();
+    await page.keyboard.press('Escape');
+    await addDataset(page, 'billing-faq');
+    await expect(page.getByTestId('pair-count')).toHaveText('2 dataset versions from 2 datasets');
+    const help = await page.getByTestId('run-shape').locator('p').first().textContent();
+    const radios = await page
+      .getByTestId('run-shape')
+      .getByRole('radio')
+      .evaluateAll((els) =>
+        els.map((e) => e.getAttribute('aria-label') ?? e.parentElement?.textContent ?? ''),
+      );
+    await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
+    const helpEach = await page.getByTestId('run-shape').locator('p').first().textContent();
+    const style = (l: Locator) =>
+      l.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return `${cs.fontSize}/${cs.fontWeight}`;
+      });
+    const legends = {
+      datasets: await style(page.getByTestId('datasets-fieldset').locator('legend')),
+      environments: await style(page.locator('legend', { hasText: 'Environments' })),
+    };
+    save('review-d-panel', { names, rowHeights, search, selectAll, only, help, helpEach, radios, legends });
+    expect(names[0]).toMatch(/^Latest version/);
+    expect(names.slice(1).map((n) => n.replace(/\s+/g, ' '))).toEqual(
+      [
+        expect.stringMatching(/v3/),
+        expect.stringMatching(/v2/),
+        expect.stringMatching(/v1/),
+        expect.stringMatching(/production/),
+      ].slice(0, names.length - 1),
+    );
+    expect(search + selectAll + only).toBe(0);
+    expect(help).toBe(
+      'One run over the 2 dataset versions together. Every item records its dataset and version, and scores break down per dataset.',
+    );
+    expect(helpEach).toBe('2 runs per environment, one per dataset version, grouped under this experiment.');
+    expect(legends.datasets).toBe(legends.environments);
+  });
+
   test('QD-8 and QD-7 keyboard: Remove returns to the zero state and the select', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openHome(page, f.project.slug);
