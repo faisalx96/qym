@@ -14,6 +14,7 @@ test('QE-1 to QE-3: Feedback is the third global entry, 32 px high, active on ev
     await setViewport(page, w);
     await gotoApp(page, '/feedback');
     const entry = page.locator('[data-nav="feedback"]');
+    await expect(entry).toBeVisible();
     const global = page.getByRole('navigation', { name: /Global|Main/i }).first();
     const ids = await page.locator('[data-nav]').evaluateAll((els) => els.map((e) => e.getAttribute('data-nav')));
     expect(ids.slice(0, 3)).toEqual(['projects', 'docs', 'feedback']);
