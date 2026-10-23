@@ -202,7 +202,15 @@ export function DatasetsSection() {
       width: 88,
       priority: 1,
       cell: (l) =>
-        l.position == null || l.items == null ? null : (
+        l.position == null ? null : l.items == null ? (
+          loading ? (
+            // Same line box as the loaded link, so a card (390 px) keeps its height while the numbers load.
+            <span className={styles.showLink} aria-hidden="true">
+              {'\u00a0'}
+              <Skeleton kind="value" width={64} height={12} />
+            </span>
+          ) : null
+        ) : (
           <button
             type="button"
             className={styles.showLink}

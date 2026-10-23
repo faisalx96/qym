@@ -113,7 +113,7 @@ export function FilterBar({ display }: { display: DisplayState }) {
               items={datasetItems}
               value={view.dataset ?? ALL_DATASETS}
               onChange={(k) => k && api.setView({ dataset: String(k) === ALL_DATASETS ? null : String(k) })}
-              width="clamp(14ch, 12vw, 20ch)"
+              width="max-content"
               renderValue={(item) => item.label}
               renderItem={(item) => (
                 <>

@@ -25,6 +25,7 @@
 
 .showLink {
   display: inline-flex;
+  vertical-align: top; /* no baseline gap under the link: a 390 px card is one line box tighter and equals its loading frame */
   align-items: center;
   gap: var(--space-xs);
   padding: 0;
