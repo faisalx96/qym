@@ -1148,7 +1148,7 @@ class PlatformClient:
         the list of dataset versions of a union run; it is sent only when it has
         two or more entries, so a single-dataset run's payload is unchanged
         (platforms before 2.1.0 ignore the key)."""
-        payload = {
+        payload: Dict[str, Any] = {
             "external_run_id": external_run_id,
             "task": task,
             "dataset": dataset,
