@@ -4,6 +4,7 @@
  * a literal key typed into the text is refused (never applied, stored or sent).
  */
 import { deriveGlobalModel, pruneSecrets } from './bindings';
+import { DATASETS_MAX, type DatasetPair } from './datasets';
 import { leafSchema } from './descriptor';
 import {
   baseConfig,
@@ -39,16 +40,28 @@ import type {
   JsonObject,
   JsonValue,
   LaunchDocument,
+  RunShape,
   SlotBinding,
   SweepModelItem,
   Values,
 } from './types';
 
 const DOCUMENT_KEYS = ['schema_hash', 'evaluator', 'slot_bindings', 'env_overrides', 'links', 'base_source'];
-const EVALUATOR_KEYS = ['dataset', 'dataset_version', 'config', 'report_k', 'model'];
+const EVALUATOR_KEYS = [
+  'dataset',
+  'dataset_version',
+  'datasets',
+  'run_shape',
+  'task',
+  'config',
+  'report_k',
+  'model',
+];
 const TEMPORARY_KEYS = ['label', 'model', 'base_url', 'api_key'];
 const CONNECTION_KEYS = ['connection_id', 'name', 'model'];
 const DATASET_SWEEP_MESSAGE = 'The dataset cannot be swept in this form';
+const DATASETS_SWEEP_MESSAGE = 'Dataset versions cannot be swept; choose “One run each” to run each one.';
+const TASK_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
 
 export interface RawJsonError {
   pointer: string;
@@ -58,6 +71,11 @@ export interface RawJsonError {
 export interface ReadEvaluator {
   dataset: string | null;
   dataset_version: string | null;
+  /** `evaluator.datasets` (null when the text has none). */
+  datasets: DatasetPair[] | null;
+  run_shape: RunShape | null;
+  /** Task id by environment id (a string applies to every ticked environment). */
+  task: Record<string, string> | string | null;
   report_k: number | null;
   config: JsonObject;
   meta: Array<{ key: string; raw: string }>;
@@ -341,8 +359,142 @@ function temporaryItem(b: Extract<SlotBinding, { kind: 'temporary' }>) {
   return t;
 }
 
-function readEvaluator(raw: unknown, panel: EvaluatorPanel | null, errors: RawJsonError[]): ReadEvaluator {
-  const out: ReadEvaluator = { dataset: null, dataset_version: null, report_k: null, config: {}, meta: [] };
+/** `evaluator.datasets` and `run_shape`, with the server's messages and pointers. */
+function readDatasets(
+  ev: JsonObject,
+  out: ReadEvaluator,
+  errors: RawJsonError[],
+  datasetNames: readonly string[],
+): void {
+  const raw = ev['datasets'];
+  const shape = ev['run_shape'];
+  if (shape != null) {
+    if (isSweepValue(shape)) errors.push({ pointer: '/evaluator/run_shape', message: DATASETS_SWEEP_MESSAGE });
+    else if (shape !== 'combined' && shape !== 'one_each')
+      errors.push({ pointer: '/evaluator/run_shape', message: 'Must be “combined” or “one_each”' });
+    else out.run_shape = shape;
+  }
+  if (raw == null) return;
+  if (isSweepValue(raw)) {
+    errors.push({ pointer: '/evaluator/datasets', message: DATASETS_SWEEP_MESSAGE });
+    return;
+  }
+  if (!Array.isArray(raw) || !raw.length) {
+    errors.push({ pointer: '/evaluator/datasets', message: 'Must be a list with at least one dataset' });
+    return;
+  }
+  const pairs: DatasetPair[] = [];
+  const seen = new Set<string>();
+  raw.forEach((item, i) => {
+    const pointer = `/evaluator/datasets/${i}`;
+    if (!isPlainObject(item)) {
+      errors.push({ pointer, message: 'Each entry must be an object' });
+      return;
+    }
+    const unknown = Object.keys(item).filter((k) => !['dataset', 'version', 'alias'].includes(k));
+    if (unknown.length) {
+      errors.push({ pointer, message: `Unknown key “${unknown[0]}”: use dataset, version or alias.` });
+      return;
+    }
+    const name = item['dataset'];
+    if (typeof name !== 'string' || !name.trim()) {
+      errors.push({ pointer, message: 'Give the dataset a name.' });
+      return;
+    }
+    const version = item['version'] ?? null;
+    const alias = item['alias'] ?? null;
+    if ((version != null && typeof version !== 'string') || (alias != null && typeof alias !== 'string')) {
+      errors.push({ pointer, message: 'version and alias must be text.' });
+      return;
+    }
+    if (version && alias) {
+      errors.push({ pointer, message: 'Give a version or an alias, not both.' });
+      return;
+    }
+    if (datasetNames.length && !datasetNames.includes(name.trim())) {
+      errors.push({ pointer, message: `${name.trim()} is not a dataset of this project.` });
+      return;
+    }
+    const pair: DatasetPair = { dataset: name.trim(), version: version || null, alias: alias || null };
+    const key = `${pair.dataset}|${pair.version ?? ''}|${pair.alias ?? ''}`;
+    if (seen.has(key)) {
+      errors.push({
+        pointer,
+        message: `${pair.dataset} ${pair.version ?? pair.alias ?? 'latest'} is chosen twice.`,
+      });
+      return;
+    }
+    seen.add(key);
+    pairs.push(pair);
+  });
+  if (pairs.length > DATASETS_MAX)
+    errors.push({ pointer: '/evaluator/datasets', message: `At most ${DATASETS_MAX} dataset versions per experiment.` });
+  const first = pairs[0];
+  if (first && pairs.length === raw.length) {
+    if (out.dataset != null && out.dataset !== first.dataset)
+      errors.push({
+        pointer: '/evaluator/dataset',
+        message: 'evaluator.dataset must equal the first dataset in evaluator.datasets',
+      });
+    if (out.dataset_version != null && out.dataset_version !== first.version)
+      errors.push({
+        pointer: '/evaluator/dataset_version',
+        message: 'evaluator.dataset_version must equal the first dataset’s version',
+      });
+    out.datasets = pairs;
+  }
+}
+
+/** `evaluator.task`: a task id, or an object keyed by environment id. */
+function readTask(
+  raw: unknown,
+  out: ReadEvaluator,
+  errors: RawJsonError[],
+  doc: Pick<LaunchDocument, 'environmentIds'>,
+): void {
+  if (raw == null) return;
+  if (typeof raw === 'string') {
+    if (!TASK_ID.test(raw))
+      errors.push({ pointer: '/evaluator/task', message: 'A task id is letters, digits and “_ . : -”.' });
+    else out.task = raw;
+    return;
+  }
+  if (!isPlainObject(raw)) {
+    errors.push({ pointer: '/evaluator/task', message: 'Must be a task id or an object by environment id' });
+    return;
+  }
+  const tasks: Record<string, string> = {};
+  for (const [envId, value] of Object.entries(raw)) {
+    const pointer = '/evaluator/task/' + escapeSegment(envId);
+    if (value == null) continue;
+    if (isSweepValue(value)) {
+      errors.push({ pointer, message: 'A task cannot be swept in this form' });
+    } else if (!doc.environmentIds.includes(envId)) {
+      errors.push({ pointer, message: 'This environment is not selected' });
+    } else if (typeof value !== 'string' || !TASK_ID.test(value)) {
+      errors.push({ pointer, message: 'A task id is letters, digits and “_ . : -”.' });
+    } else tasks[envId] = value;
+  }
+  out.task = tasks;
+}
+
+function readEvaluator(
+  raw: unknown,
+  panel: EvaluatorPanel | null,
+  errors: RawJsonError[],
+  doc: Pick<LaunchDocument, 'environmentIds'>,
+  datasetNames: readonly string[],
+): ReadEvaluator {
+  const out: ReadEvaluator = {
+    dataset: null,
+    dataset_version: null,
+    datasets: null,
+    run_shape: null,
+    task: null,
+    report_k: null,
+    config: {},
+    meta: [],
+  };
   if (!isPlainObject(raw)) {
     errors.push({ pointer: '/evaluator', message: 'evaluator must be an object' });
     return out;
@@ -359,14 +511,21 @@ function readEvaluator(raw: unknown, panel: EvaluatorPanel | null, errors: RawJs
         message: `${key} is set by the platform (from the primary model slot); remove it`,
       });
   }
+  const hasList = ev['datasets'] != null;
   for (const key of ['dataset', 'dataset_version'] as const) {
     const v = ev[key];
     if (v == null) continue;
-    if (isSweepValue(v)) errors.push({ pointer: '/evaluator/' + key, message: DATASET_SWEEP_MESSAGE });
+    if (isSweepValue(v))
+      errors.push({
+        pointer: '/evaluator/' + key,
+        message: hasList ? DATASETS_SWEEP_MESSAGE : DATASET_SWEEP_MESSAGE,
+      });
     else if (typeof v !== 'string')
       errors.push({ pointer: '/evaluator/' + key, message: 'Must be a string' });
     else out[key] = v;
   }
+  readDatasets(ev, out, errors, datasetNames);
+  readTask(ev['task'], out, errors, doc);
   if (ev['report_k'] != null) {
     const k = ev['report_k'];
     if (typeof k !== 'number' || !Number.isInteger(k) || k < 1)
@@ -466,7 +625,7 @@ export function readRawDocument(
     errors.push({ pointer, message: PLACEHOLDER_PREFIX + ' is reserved for platform slot placeholders' });
   }
   const panel = ctx.evaluatorPanel;
-  const evaluator = readEvaluator(body['evaluator'], panel, errors);
+  const evaluator = readEvaluator(body['evaluator'], panel, errors, doc, ctx.datasetNames);
   const bindings = readBindings(body['slot_bindings'], doc, ctx, secrets, errors);
   const values: Values = {};
   const env = body['env_overrides'] == null ? {} : body['env_overrides'];
@@ -498,6 +657,23 @@ export function readRawDocument(
       links = deepCopy(body['links']) as string[][];
   }
   return { errors, evaluator, bindings, values, links };
+}
+
+/** `evaluator.datasets` as the primary choice and the rest of the selection (entries grouped by dataset). */
+function listFrom(
+  ev: ReadEvaluator,
+): { dataset: DatasetChoice; extraRefs: string[]; more: Array<{ name: string; refs: string[] }> } | null {
+  if (!ev.datasets || !ev.datasets.length) return null;
+  const entries: Array<{ name: string; refs: string[] }> = [];
+  for (const p of ev.datasets) {
+    const ref = p.version != null ? `v:${p.version}` : p.alias != null ? `a:${p.alias}` : '';
+    const known = entries.find((e) => e.name === p.dataset);
+    if (known) known.refs.push(ref);
+    else entries.push({ name: p.dataset, refs: [ref] });
+  }
+  const [first, ...rest] = entries as [{ name: string; refs: string[] }, ...Array<{ name: string; refs: string[] }>];
+  const [ref = '', ...extraRefs] = first.refs;
+  return { dataset: { mode: 'project', name: first.name, ref, custom: '' }, extraRefs, more: rest };
 }
 
 function datasetFrom(
@@ -538,7 +714,10 @@ export function applyRawDocument(
 ): LaunchDocument {
   const ev = read.evaluator as ReadEvaluator;
   const config = deepCopy(ev.config);
-  const { dataset, leftoverVersion } = datasetFrom(ev, config, doc, ctx);
+  const list = listFrom(ev);
+  const { dataset, leftoverVersion } = list
+    ? { dataset: list.dataset, leftoverVersion: null }
+    : datasetFrom(ev, config, doc, ctx);
   const edits: Record<string, JsonValue | null> = {};
   for (const name of Object.keys(config)) {
     if (!sameValue(config[name], baseValue(doc, name))) edits[name] = config[name] as JsonValue;
@@ -555,9 +734,21 @@ export function applyRawDocument(
   const evaluatorExtra = { ...doc.evaluatorExtra };
   if (ev.report_k == null) delete evaluatorExtra['report_k'];
   if (!leftoverVersion) delete evaluatorExtra['dataset_version'];
+  const tasks: Record<string, string | null> = {};
+  if (typeof ev.task === 'string') {
+    for (const id of doc.environmentIds) tasks[id] = ev.task;
+  } else if (ev.task) {
+    for (const [id, value] of Object.entries(ev.task)) tasks[id] = value;
+  }
   let next: LaunchDocument = {
     ...doc,
     dataset,
+    selection: {
+      extraRefs: list ? list.extraRefs : [],
+      more: list ? list.more : [],
+      runShape: ev.run_shape ?? doc.selection.runShape,
+      tasks,
+    },
     bindings: read.bindings ?? {},
     values: read.values ?? {},
     invalid: {},

@@ -131,7 +131,8 @@ export async function openHome(page: Page, slug: string, q = ''): Promise<void> 
 export async function openLaunch(page: Page, slug: string, q = '', step: StepId = 'where'): Promise<void> {
   const sep = q.includes('?') ? '&' : '?';
   await page.goto(APP_BASE + launchUrl(slug, `${q}${sep}step=${step}`));
-  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible();
+  // 25 s: the first page load of a worker compiles the app in Vite; with two workers that exceeded the 8 s default.
+  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible({ timeout: 25_000 });
 }
 
 export const rail = (page: Page): Locator => page.getByRole('navigation', { name: 'Steps' });
@@ -145,12 +146,14 @@ export async function goStep(page: Page, step: StepId): Promise<void> {
       await jump.click();
       await page.getByRole('option', { name: new RegExp(STEP_LABELS[step]) }).click();
     }
-    await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible();
+    // 25 s: the first page load of a worker compiles the app in Vite; with two workers that exceeded the 8 s default.
+  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible({ timeout: 25_000 });
     return;
   }
   const button = rail(page).getByRole('button', { name: new RegExp(`^\\d\\s*${STEP_LABELS[step]}`) });
   if ((await button.getAttribute('aria-current')) !== 'step') await button.click();
-  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible();
+  // 25 s: the first page load of a worker compiles the app in Vite; with two workers that exceeded the 8 s default.
+  await expect(page.getByRole('heading', { name: STEP_LABELS[step], level: 2 })).toBeVisible({ timeout: 25_000 });
 }
 
 export const nameBox = (page: Page): Locator => page.getByRole('textbox', { name: 'Experiment name' });

@@ -141,12 +141,12 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0089`, following `0050` through
+The combined migration chain has one head, `0090`, following `0050` through
 `0051`–`0085`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0084` and `0086`–`0089` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0084` and `0086`–`0090` are quick DDL or small job/queue inserts.
 `0085` switches `spans` to daily partitions; it locks `spans` for an instant only
 to drop still-empty monthly partitions that start after today.
 
@@ -184,6 +184,7 @@ replica and worker.
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
 | 0089 | Empty `run_datasets` table (the dataset versions of a run over several datasets: one row per entry, FK to the run `ON DELETE CASCADE`, FKs to the dataset and version `ON DELETE SET NULL`); `runs.dataset_count` (constant default 1); `run_items.dataset_position` (nullable `SMALLINT`) | None: no backfill, every existing run reads as a single-dataset run; no index on `run_items` |
+| 0090 | `eval_experiment_jobs.dataset_index` (constant default 0, `CHECK >= 0`); the unique key `uq_eval_experiment_job_attempt` widens to `(experiment_id, environment_id, combo_index, dataset_index, attempt)` (PostgreSQL alters in place; SQLite rebuilds the table and restores the run links) | None: existing jobs get `dataset_index = 0`. The downgrade refuses while any job has `dataset_index > 0` (a per-dataset fan-out) |
 | 0088 | `eval_experiments.dataset_read_token_id` (nullable FK) / `dataset_read_token_encrypted` (nullable) / `latency_sensitive` (constant default false); `eval_environments.latency_sensitive_min_role` (constant default `member`); `dataset_read_tokens.kind` (constant default `admin`) / `experiment_id` (nullable FK); `eval_experiment_jobs.admitted_at` / `deferral_reason` (nullable), `deferrals` / `contaminated_attempts` (constant default 0) | None: existing experiments keep using the worker's own dataset read token until retried, nothing is latency-sensitive, every environment allows latency-sensitive runs to any member |
 | 0087 | `datasets.access_mode` (constant default `project`), empty `dataset_grants` table, `dataset_items.disabled_at` / `disabled_by_user_id` (nullable) and `disabled_reason` (constant default empty) plus the index `(dataset_version_id, disabled_at)` | None: every dataset stays open to the whole project and every item stays active |
 | 0086 | Empty `eval_environment_evaluator_schemas` table; `eval_environments.current_evaluator_schema_id` (nullable) and `evaluator_schema_status` (constant default `unknown`) | None: each environment fetches its evaluator schema on its next **Test**, schema refresh or selection in the launch form |
@@ -273,7 +274,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0089` and a healthy API. The API process then runs every queued job itself.
+   `0090` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -455,7 +456,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0089`.
+deployment only after the API has migrated to `0090`.
 
 ```yaml
 apiVersion: apps/v1
@@ -855,7 +856,8 @@ API, because it decrypts keys and calls the services.
 |---|---|---|
 | `QYM_LLM_CONFIG_ENCRYPTION_KEY` | empty | **Required.** Fernet key that encrypts environment keys, LLM connection keys and temporary-model keys. It also derives the one-time launch tokens (HMAC). Without it, creating an environment answers 400, launching or retrying an experiment answers 400, and queued jobs wait with `Launch tokens need QYM_LLM_CONFIG_ENCRYPTION_KEY`. Same value on every API and worker process. |
 | `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS` | empty | Comma-separated keys that were current before a rotation. Still used to decrypt, and to derive launch tokens of jobs launched before the rotation; never used to encrypt. Drop after running `reencrypt_llm_keys` (see below). |
-| `QYM_EVAL_SWEEP_MAX_JOBS` | `64` | Maximum jobs per launch (combinations × environments). Larger launches are refused before anything is written. |
+| `QYM_EVAL_SWEEP_MAX_JOBS` | `64` | Maximum jobs per launch (combinations × the jobs each environment receives: one combined job, or one per dataset version for a service without `datasets` and for "One run each"). Larger launches are refused before anything is written. |
+| `QYM_EVAL_MAX_DATASETS` | `20` | Maximum dataset versions (`evaluator.datasets`) one experiment may name. More answer 422 `datasets_limit`. |
 | `QYM_EVAL_EXPERIMENT_CREATE_RATE_LIMIT` | `30` | Launches per user per window (`0` disables). Counted from `eval_experiments` rows, so it holds across API processes. Dry-run previews are not counted. Over the limit: 429 with `Retry-After`. |
 | `QYM_EVAL_EXPERIMENT_CREATE_RATE_WINDOW_SECONDS` | `3600` | Window of the launch rate limit. |
 | `QYM_EVAL_JOB_TIMEOUT_SECONDS` | `8100` (2h15m) | A `RUNNING` job with no remote status change and no linked-run activity for this long becomes `TIMED_OUT`; also how long a failing remote cancel is retried. Keep it above the Evaluation Service's Celery hard limit (`time_limit`, 7200s); raise both together to allow longer evaluations. |

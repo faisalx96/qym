@@ -33,6 +33,8 @@ export interface QueueJob {
   environment_id: string;
   environment_name: string;
   combo_index: number;
+  /** Position of a fanned-out job's dataset pair (0 for any other job). */
+  dataset_index?: number;
   attempt: number;
   run_name: string | null;
   params: Record<string, unknown>;

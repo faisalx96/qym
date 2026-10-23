@@ -84,6 +84,7 @@ export * from './types';
 export * from './pointers';
 export * from './secrets';
 export * from './document';
+export * from './datasets';
 export * from './descriptor';
 export * from './sweeps';
 export * from './bindings';

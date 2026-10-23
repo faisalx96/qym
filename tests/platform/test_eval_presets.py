@@ -354,6 +354,37 @@ def test_invalid_config_is_rejected(client, env):
     assert _create(client, env["id"], name="sweep", config=sweep).status_code == 422
 
 
+def test_preset_refuses_a_dataset_list_and_a_run_shape(client, env):  # QD-65
+    for key, value in (
+        ("datasets", [{"dataset": "a"}, {"dataset": "b"}]),
+        ("run_shape", "one_each"),
+    ):
+        doc = _doc()
+        doc["evaluator"][key] = value
+        res = _create(client, env["id"], name=f"no-{key}", config=doc)
+        assert res.status_code == 422, res.text
+        errors = res.json()["detail"]["errors"]
+        assert [(e["rule"], e["pointer"]) for e in errors if e["rule"] == "not_in_preset"] == [
+            ("not_in_preset", f"/evaluator/{key}")
+        ]
+        assert errors[0]["message"] == (
+            "A preset does not hold a dataset list or a run shape; choose them at launch."
+        )
+
+
+def test_preset_task_is_a_string_only(client, env):  # QD-65
+    ok = _doc()
+    ok["evaluator"]["task"] = "answer-ticket"
+    res = _create(client, env["id"], name="with-task", config=ok)
+    assert res.status_code == 200, res.text
+    assert res.json()["preset"]["current_version"]["config"]["evaluator"]["task"] == "answer-ticket"
+    bad = _doc()
+    bad["evaluator"]["task"] = {env["id"]: "answer-ticket"}
+    res = _create(client, env["id"], name="object-task", config=bad)
+    assert res.status_code == 422
+    assert "not_in_preset" in {e["rule"] for e in res.json()["detail"]["errors"]}
+
+
 def test_disabled_environment_refuses_writes(client, env, session_factory):
     preset = _official(client, env["id"])
     with session_factory() as s:

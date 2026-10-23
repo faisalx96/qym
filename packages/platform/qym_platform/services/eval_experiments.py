@@ -361,8 +361,12 @@ def build_qym_launch(
     combo_index: int,
     attempt: int = 0,
     retry_of_job_id: Optional[str] = None,
+    dataset_index: Optional[int] = None,
 ) -> dict[str, Any]:
-    """``run_metadata.qym_launch`` as stored: the token is only added at dispatch."""
+    """``run_metadata.qym_launch`` as stored: the token is only added at dispatch.
+
+    ``dataset_index`` is set only for a job that runs one pair of several datasets.
+    """
     launch: dict[str, Any] = {
         "experiment_id": experiment_id,
         "job_id": job_id,
@@ -372,6 +376,8 @@ def build_qym_launch(
     }
     if retry_of_job_id:
         launch["retry_of_job_id"] = retry_of_job_id
+    if dataset_index is not None:
+        launch["dataset_index"] = dataset_index
     return launch
 
 

@@ -108,9 +108,17 @@ def dataset_token_warnings(
     refs: List[str] = []
     for doc in documents:
         evaluator = doc.get("evaluator")
-        ref = evaluator.get("dataset") if isinstance(evaluator, Mapping) else None
-        if isinstance(ref, str) and ref.strip() and ref.strip() not in refs:
-            refs.append(ref.strip())
+        if not isinstance(evaluator, Mapping):
+            continue
+        listed = evaluator.get("datasets")
+        candidates = [evaluator.get("dataset")] + [
+            entry.get("dataset")
+            for entry in (listed if isinstance(listed, list) else [])
+            if isinstance(entry, Mapping)
+        ]
+        for ref in candidates:
+            if isinstance(ref, str) and ref.strip() and ref.strip() not in refs:
+                refs.append(ref.strip())
     out: List[dict] = []
     names = ", ".join(env.name for env in missing)
     for ref in refs:

@@ -2,9 +2,11 @@
 
 One evaluation can run over several datasets, and several versions of one dataset, at once. SDK 2.1.0 takes a list for `dataset=`, `qym run create` repeats `--dataset`, and the platform shows such a run (a union run) with a Datasets group in its header, a per-dataset score table and a Dataset column and filter on its items. A single dataset, written as before, behaves exactly as in 2.0.0: same item ids, same upload, same results file. Platform 2.1.0 still accepts SDK 2.0.0 runs; SDK 2.1.0 union runs reach a 2.0.0 platform as a plain run named by its label (the per-dataset view needs 2.1.0).
 
+Experiments can run several datasets, each at several versions, and can choose the task an Evaluation Service runs. Both need the Evaluation Service integration guide v1.4 (`docs/evaluation-service-change-request-v1.4.md`); services on v1.3 keep working and receive one job per dataset version.
+
 ## Before you update
 
-- **Migrations `0089` (head `0089`).** Quick DDL: the `run_datasets` table, `runs.dataset_count` (default 1) and `run_items.dataset_position` (nullable). There is no backfill: existing runs read as single-dataset runs, and no index is added to `run_items`.
+- **Migrations `0089`–`0090` (head `0090`).** `0089`: Quick DDL: the `run_datasets` table, `runs.dataset_count` (default 1) and `run_items.dataset_position` (nullable). There is no backfill: existing runs read as single-dataset runs, and no index is added to `run_items`. `0090`: `eval_experiment_jobs.dataset_index` (default 0) and a unique job key widened by it. Existing jobs get 0. The downgrade refuses while a per-dataset fan-out exists. New setting `QYM_EVAL_MAX_DATASETS` (default 20).
 - **Union runs are not ranked.** The best-run index, best-run bases and a dataset version's trend ignore union runs (their scores cover different items than a single-dataset run's). They form their own combo in the dashboard, named by the run's label.
 
 ## SDK 2.1.0
@@ -16,6 +18,12 @@ One evaluation can run over several datasets, and several versions of one datase
 
 ## What changed
 
+### Experiments
+
+- **Several datasets and versions per experiment.** The launch form's Datasets card takes any number of datasets, each with any number of versions or aliases, and a run shape: **Combine into one run** (one run over every dataset version) or **One run each** (one run per dataset version, grouped under the experiment). An Evaluation Service whose evaluator schema does not declare `datasets` gets one job per dataset version even when you combine; the environment box says so. A launch is capped at `QYM_EVAL_MAX_DATASETS` dataset versions and, with fan-out, at `QYM_EVAL_SWEEP_MAX_JOBS` jobs.
+- **Task per environment.** A ticked environment whose service declares `task` shows a **Task** control listing the tasks the service reports live (`GET /evals/tasks`, new platform route `GET /v1/projects/{id}/eval-environments/{env_id}/tasks`). The default is the worker's own task.
+- **Experiment page.** A **Datasets and task** card, one matrix row per dataset version, job history grouped by dataset version and a **Task** column.
+
 ### Runs
 
 - **Datasets group.** The run header's fact strip reads **Datasets** with a count tag that jumps to the new **Datasets** section; the first group of the chip band lists every dataset with its version, alias and item count (a deleted dataset stays, marked, without a link).
@@ -23,6 +31,7 @@ One evaluation can run over several datasets, and several versions of one datase
 - **Runs list and compare.** A union run shows `3 datasets` in the Dataset column; the Dataset filter and the search match any of its datasets. Compare shows a notice when the compared runs evaluated different sets of dataset versions, and "What differs" lists them.
 - **Upload.** `POST /v1/runs` accepts `datasets: [{dataset, dataset_id, dataset_version_id, version, alias, items, disabled_items}]` (1 to 50 entries; a repeated version is 422); `run_started` carries the same list; `POST /v1/runs:upload` takes an optional `datasets` form field. A run without the field is processed as before.
 - **Access.** A run is restricted when any of its datasets is restricted or private for the reader: scores and the per-dataset table stay visible, item contents are hidden.
+- **The runs table fills the page.** The runs list table reaches the bottom of the content area and scrolls inside, instead of stopping at a viewport-based cap that left empty space below its footer (132 px at 1440 x 900).
 
 # October 2026 — Platform 2.0.0 / SDK 2.0.0
 

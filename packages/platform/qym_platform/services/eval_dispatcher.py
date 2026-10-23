@@ -155,6 +155,7 @@ from .eval_bindings import (
     mark_job_blocked,
     prepare_dispatch,
 )
+from .eval_evaluator_schema import environment_evaluator_schema, evaluator_capabilities
 from .eval_dataset_tokens import (
     TOKEN_ENV_KEY as DATASET_TOKEN_ENV_KEY,
     DatasetTokenUnavailable,
@@ -576,6 +577,26 @@ class LeaseLost(Exception):
     """Another worker owns the job now; drop the in-memory work."""
 
 
+def _unsupported_evaluator_keys(
+    db: Session, env: EvalEnvironment, job: EvalExperimentJob
+) -> str:
+    """``datasets`` / ``task`` of the stored body that the environment's current stored
+    evaluator schema no longer declares (empty string when every key is accepted)."""
+    body = job.request_body if isinstance(job.request_body, dict) else {}
+    evaluator = body.get("evaluator")
+    if not isinstance(evaluator, dict):
+        return ""
+    used = [
+        key
+        for key in ("datasets", "task")
+        if evaluator.get(key) not in (None, "", [], {})
+    ]
+    if not used:
+        return ""
+    declared = evaluator_capabilities(environment_evaluator_schema(db, env))
+    return " and ".join(key for key in used if not declared[key])
+
+
 class EvalDispatcher:
     """Leased submit/poll loop for ``eval_experiment_jobs``; safe with many workers."""
 
@@ -701,6 +722,7 @@ class EvalDispatcher:
                     func.coalesce(job.next_attempt_at, job.created_at),
                     job.created_at,
                     job.combo_index,
+                    job.dataset_index,
                 )
                 .limit(self.batch)
             )
@@ -1055,6 +1077,8 @@ class EvalDispatcher:
         body.setdefault("user_id", _service_user_id(experiment))
         body.setdefault("priority", _enum_value(experiment.priority))
         evaluator = body.setdefault("evaluator", {})
+        # The run shape is the platform's own choice; no service ever receives it.
+        evaluator.pop("run_shape", None)
         config = evaluator.setdefault("config", {})
         stored = _stored_run_metadata(job)
         if stored is not None:
@@ -1173,6 +1197,22 @@ class EvalDispatcher:
                     db.commit()
                     return
                 client = access.client
+                dropped = _unsupported_evaluator_keys(db, env, job)
+                if dropped:
+                    # A service that dropped the key from its schema would silently
+                    # ignore it (202) and run the wrong dataset or task: don't send.
+                    reason = (
+                        f"The Evaluation Service no longer accepts {dropped}; "
+                        "launch again"
+                    )
+                    self._set_status(
+                        job, EvalJobStatus.BLOCKED, wait_reason=reason, error=reason
+                    )
+                    job.next_attempt_at = None
+                    self._save(job, changed=True)
+                    recompute_experiment_status(db, experiment.id, now=self.clock())
+                    db.commit()
+                    return
                 prep = self._prepare(db, job, experiment, env)
                 if not prep.ok:
                     mark_job_blocked(job, prep.problems)

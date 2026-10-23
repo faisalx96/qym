@@ -47,7 +47,7 @@ export function stepOfItem(item: ValidationItem): WizardStepId {
   return 'where';
 }
 
-/** Fields the home view holds: name, environments, dataset (and version), starting point. */
+/** Fields the home view holds: name, environments, datasets (versions, run shape), tasks, starting point. */
 export function heldOnHome(item: ValidationItem): boolean {
   const p = item.pointer;
   return (
@@ -56,7 +56,12 @@ export function heldOnHome(item: ValidationItem): boolean {
     p === PSEUDO.latency ||
     p === PSEUDO.base ||
     p === '/evaluator/dataset' ||
-    p === '/evaluator/dataset_version'
+    p === '/evaluator/dataset_version' ||
+    p === '/evaluator/datasets' ||
+    p.startsWith('/evaluator/datasets/') ||
+    p === '/evaluator/run_shape' ||
+    p === '/evaluator/task' ||
+    p.startsWith('/evaluator/task/')
   );
 }
 

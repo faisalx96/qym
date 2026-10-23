@@ -1,7 +1,7 @@
 import { Card } from '@/ui';
 import { Callout } from '../components/Callout';
 import panel from '../components/launch.module.css';
-import { DatasetPicker } from '../entry/DatasetPicker';
+import { DatasetsCard } from '../entry/DatasetsCard';
 import { EnvironmentPicker } from '../entry/EnvironmentPicker';
 import { HomeBar } from '../entry/HomeBar';
 import { LatencyControl } from '../entry/LatencyControl';
@@ -34,7 +34,7 @@ export function LaunchHome({ onCustomize }: { onCustomize: (step: WizardStepId) 
         </Card>
         <Card>
           <div className={panel.cardStack}>
-            <DatasetPicker />
+            <DatasetsCard />
           </div>
         </Card>
       </div>

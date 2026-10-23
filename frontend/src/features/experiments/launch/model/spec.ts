@@ -5,6 +5,7 @@
  */
 import { applyEvaluatorEdits } from './evaluator';
 import { bindingToSpec, docSecretRefs } from './bindings';
+import { activeTasks, datasetPairs, pairToJson } from './datasets';
 import { datasetValue } from './document';
 import { buildOverrides, deepCopy, isPlainObject, stableStringify } from './pointers';
 import type { SecretStore } from './secrets';
@@ -36,6 +37,14 @@ export function buildSpec(doc: LaunchDocument, panel?: EvaluatorPanel | null): L
       evaluator['config'] = { ...current, dataset_alias: doc.dataset.ref.slice(2) };
     }
   }
+  // Several dataset versions: the list and the run shape ride next to the mirrored first pair.
+  const pairs = datasetPairs(doc);
+  if (pairs.length >= 2) {
+    evaluator['datasets'] = pairs.map(pairToJson);
+    evaluator['run_shape'] = doc.selection.runShape;
+  }
+  const tasks = activeTasks(doc);
+  if (Object.keys(tasks).length) evaluator['task'] = { ...tasks };
   const slotBindings: Record<string, JsonValue> = {};
   for (const key of Object.keys(doc.bindings)) slotBindings[key] = bindingToSpec(doc.bindings[key] as never);
   const values: Record<string, JsonValue> = {};
@@ -58,6 +67,15 @@ export function buildPresetConfig(
   const spec = buildSpec(doc, panel);
   const evaluator = { ...spec.evaluator };
   if (!evaluator['dataset']) delete evaluator['dataset'];
+  // A preset holds neither a dataset list nor a run shape; its task is the environment's own, as a string.
+  delete evaluator['datasets'];
+  delete evaluator['run_shape'];
+  const task = evaluator['task'];
+  if (isPlainObject(task)) {
+    const own = Object.values(task).find((v) => typeof v === 'string');
+    if (own) evaluator['task'] = own;
+    else delete evaluator['task'];
+  }
   const slotBindings: Record<string, JsonValue> = {};
   for (const key of Object.keys(spec.slot_bindings)) {
     const b = spec.slot_bindings[key];

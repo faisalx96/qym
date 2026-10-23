@@ -68,6 +68,8 @@ describe('LaunchPage', () => {
     await waitFor(() =>
       expect(screen.getByText('Default preset v1', { selector: 'strong' })).toBeInTheDocument(),
     );
+    // The preset's dataset shows as a box; removing it brings back the single Select.
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove ds1' }));
     await waitFor(() => expect(screen.getByRole('button', { name: /Dataset$/ })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: /Dataset$/ }));
     await userEvent.click(await screen.findByRole('option', { name: 'ds2' }));

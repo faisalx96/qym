@@ -112,12 +112,32 @@ export interface JobQymConfig {
   [key: string]: unknown;
 }
 
+/** One dataset version of an experiment (`evaluator.datasets`, a job's `dataset`). */
+export interface DatasetRef {
+  dataset: string;
+  version?: string | null;
+  alias?: string | null;
+}
+
+/** The task a job ran: its id and the name the service listed. */
+export interface JobTask {
+  id: string;
+  name: string;
+}
+
 export interface ExperimentJob {
   id: string;
   experiment_id: string;
   environment_id: string;
   environment_name: string | null;
   combo_index: number;
+  /** Position of the job's dataset pair when the platform ran the datasets one by one; 0 otherwise. */
+  dataset_index?: number;
+  /** The one pair a fanned-out job ran. */
+  dataset?: DatasetRef | null;
+  /** The list a combined job ran. */
+  datasets?: DatasetRef[] | null;
+  task?: JobTask | null;
   combo_label: string;
   attempt: number;
   retry_of_job_id: string | null;
@@ -183,6 +203,14 @@ export interface ExperimentDetail extends Experiment {
   sweep_keys: Record<string, string>;
   jobs: ExperimentJob[];
   credentials: ExperimentCredentials;
+  /** The datasets, run shape and per-environment tasks the experiment was launched with. */
+  selection?: ExperimentSelection;
+}
+
+export interface ExperimentSelection {
+  datasets: DatasetRef[];
+  run_shape: 'combined' | 'one_each' | null;
+  tasks: Record<string, JobTask | null>;
 }
 
 export interface ExperimentListParams {

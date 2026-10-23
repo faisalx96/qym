@@ -203,6 +203,8 @@ class PlatformSettings(BaseSettings):
     eval_experiment_create_rate_window_seconds: int = Field(default=3600, ge=1)
     # Jobs one experiment launch may create (combinations × environments).
     eval_sweep_max_jobs: int = Field(default=64, ge=1)
+    # Dataset versions (``evaluator.datasets``) one experiment may name.
+    eval_max_datasets: int = Field(default=20, ge=2)
     # A RUNNING Evaluation Service job with no remote status change and no linked-run
     # activity for this long becomes TIMED_OUT (best-effort remote cancel first). Keep
     # it above the service's own hard limit (Celery time_limit, 7200s by default).

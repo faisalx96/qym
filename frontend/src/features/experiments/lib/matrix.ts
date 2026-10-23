@@ -1,5 +1,5 @@
 /** Combination x environment matrix model for the experiment detail page (pure). */
-import type { ExperimentDetail, ExperimentJob, JobQymConfig } from '@/api/experiments';
+import type { DatasetRef, ExperimentDetail, ExperimentJob, JobQymConfig } from '@/api/experiments';
 import { isTerminalJob } from '@/api/experiments';
 import { formatParam } from './format';
 
@@ -22,15 +22,65 @@ export interface MatrixCell {
   earlier: ExperimentJob[];
 }
 
+/**
+ * A matrix row. A plain experiment has one row per combination. With several dataset versions a row is a
+ * (combination, dataset) pair: the combined job sits on its own `combined` row, every fanned-out pair on a `pair` row.
+ */
+export interface MatrixRow {
+  key: string;
+  combo: MatrixCombo;
+  kind: 'plain' | 'combined' | 'pair';
+  /** 0-based position of the pair (`dataset_index`). */
+  pairIndex: number;
+  label: string;
+  /** Second line: `#0`, `combined`, `#0 · pair 2`. */
+  sub: string;
+}
+
 export interface Matrix {
   envs: MatrixEnv[];
   combos: MatrixCombo[];
+  rows: MatrixRow[];
   cells: Map<string, MatrixCell>;
   /** Run ids of current attempts whose run exists and is not deleted. */
   liveRunIds: string[];
 }
 
-export const cellKey = (comboIndex: number, envId: string) => `${comboIndex}|${envId}`;
+export const rowKey = (comboIndex: number, kind: MatrixRow['kind'], pairIndex = 0) =>
+  kind === 'plain' ? String(comboIndex) : kind === 'combined' ? `${comboIndex}.c` : `${comboIndex}.${pairIndex}`;
+
+export const cellKey = (row: number | string, envId: string) => `${row}|${envId}`;
+
+/** `v3`, the alias, or `latest`. */
+export function refText(ref: Pick<DatasetRef, 'version' | 'alias'>): string {
+  return ref.version || ref.alias || 'latest';
+}
+
+/** `support-tickets · v3`. */
+export function datasetText(ref: DatasetRef): string {
+  return `${ref.dataset} · ${refText(ref)}`;
+}
+
+/** Which kind of dataset row a job belongs to. */
+export function jobRowKind(job: Pick<ExperimentJob, 'dataset' | 'datasets'>): MatrixRow['kind'] {
+  return job.datasets ? 'combined' : job.dataset ? 'pair' : 'plain';
+}
+
+/** Group label and order of the job history: the combined job first, then each dataset version. */
+export function jobGroup(job: Pick<ExperimentJob, 'dataset' | 'datasets' | 'dataset_index'>): {
+  key: string;
+  order: number;
+  label: string;
+} | null {
+  if (job.datasets)
+    return {
+      key: 'combined',
+      order: -1,
+      label: `All ${job.datasets.length} dataset versions · one combined run`,
+    };
+  if (job.dataset) return { key: `pair-${job.dataset_index ?? 0}`, order: job.dataset_index ?? 0, label: datasetText(job.dataset) };
+  return null;
+}
 
 /** A run exists and was not deleted. */
 export function usableRun(job: ExperimentJob | null | undefined): boolean {
@@ -44,6 +94,7 @@ export function currentJobs(detail: Pick<ExperimentDetail, 'jobs'>): ExperimentJ
 export function buildMatrix(detail: ExperimentDetail): Matrix {
   const byIndex = new Map<number, MatrixCombo>();
   const cells = new Map<string, MatrixCell>();
+  const rows = new Map<string, MatrixRow>();
   for (const job of detail.jobs) {
     let combo = byIndex.get(job.combo_index);
     if (!combo) {
@@ -53,7 +104,30 @@ export function buildMatrix(detail: ExperimentDetail): Matrix {
     if (job.combo_label && !combo.label) combo.label = job.combo_label;
     const sweep = job.params?.sweep;
     if (sweep && typeof sweep === 'object' && !Object.keys(combo.sweep).length) combo.sweep = sweep;
-    const key = cellKey(job.combo_index, job.environment_id);
+    const kind = jobRowKind(job);
+    const pairIndex = job.dataset_index ?? 0;
+    const rKey = rowKey(job.combo_index, kind, pairIndex);
+    if (!rows.has(rKey)) {
+      rows.set(rKey, {
+        key: rKey,
+        combo,
+        kind,
+        pairIndex,
+        label:
+          kind === 'combined'
+            ? `All ${job.datasets?.length ?? 0} dataset versions`
+            : kind === 'pair' && job.dataset
+              ? datasetText(job.dataset)
+              : '',
+        sub:
+          kind === 'combined'
+            ? 'combined'
+            : kind === 'pair'
+              ? `#${job.combo_index} · pair ${pairIndex + 1}`
+              : `#${job.combo_index}`,
+      });
+    }
+    const key = cellKey(rKey, job.environment_id);
     const cell = cells.get(key) ?? { current: null, earlier: [] };
     if (job.superseded) cell.earlier.push(job);
     else cell.current = job;
@@ -70,10 +144,12 @@ export function buildMatrix(detail: ExperimentDetail): Matrix {
     }
   }
   const combos = [...byIndex.values()].sort((a, b) => a.index - b.index);
+  const order = (r: MatrixRow) => (r.kind === 'combined' ? -1 : r.pairIndex);
+  const sortedRows = [...rows.values()].sort((a, b) => a.combo.index - b.combo.index || order(a) - order(b));
   const liveRunIds = currentJobs(detail)
     .filter(usableRun)
     .map((j) => j.run_id as string);
-  return { envs, combos, cells, liveRunIds };
+  return { envs, combos, rows: sortedRows, cells, liveRunIds };
 }
 
 /** Keep only selected runs that are still comparable (selection survives polls). */

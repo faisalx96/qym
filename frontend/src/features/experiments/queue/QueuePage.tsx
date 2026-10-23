@@ -57,6 +57,7 @@ import { relTime } from '../lib/format';
 import { CancelSplitDialog, type CancelSplitDialogProps } from './CancelSplitDialog';
 import { RemoteQueueSection } from './RemoteQueueSection';
 import {
+  comboText,
   elapsedSeconds,
   formatElapsed,
   jobLabel,
@@ -227,7 +228,7 @@ export function QueuePage() {
           primary={
             <span className={styles.jobTitle}>
               <Link to={experimentPath(slug, j.experiment_id)} className={styles.link}>
-                {j.experiment_name || 'Experiment'} #{j.combo_index}
+                {j.experiment_name || 'Experiment'} {comboText(j)}
               </Link>
               {j.priority === 'HIGH' ? <Tag tone="warning">HIGH</Tag> : null}
               {j.latency_sensitive ? <LatencyTag /> : null}

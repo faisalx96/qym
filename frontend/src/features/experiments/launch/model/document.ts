@@ -1,5 +1,13 @@
 /** Constructors for the LaunchDocument and its parts. */
-import type { BaseInfo, BaseKind, DatasetChoice, EvaluatorEdits, LaunchDocument, Priority } from './types';
+import type {
+  BaseInfo,
+  BaseKind,
+  DatasetChoice,
+  EvaluatorEdits,
+  LaunchDocument,
+  LaunchSelection,
+  Priority,
+} from './types';
 
 export const PRIORITY_ORDER: Record<Priority, number> = { LOW: 0, NORMAL: 1, HIGH: 2 };
 export const NAME_MAX = 200;
@@ -22,6 +30,10 @@ export function emptyDataset(): DatasetChoice {
   return { mode: 'project', name: '', ref: '', custom: '' };
 }
 
+export function emptySelection(): LaunchSelection {
+  return { extraRefs: [], more: [], runShape: 'combined', tasks: {} };
+}
+
 export function emptyEvaluator(): EvaluatorEdits {
   return { config: {}, invalid: {}, meta: [], metaTouched: false, metaSeed: null, nextMetaId: 1, extra: {} };
 }
@@ -30,12 +42,13 @@ export function createDocument(init: Partial<LaunchDocument> = {}): LaunchDocume
   return {
     environmentIds: [],
     dataset: emptyDataset(),
+    selection: emptySelection(),
     name: '',
     description: '',
     priority: '',
     latencySensitive: false,
     base: emptyBaseInfo('scratch'),
-    baseline: { values: {}, bindings: {}, dataset: null },
+    baseline: { values: {}, bindings: {}, dataset: null, selection: emptySelection() },
     evaluatorExtra: {},
     values: {},
     invalid: {},
@@ -58,6 +71,14 @@ export function datasetValue(doc: Pick<LaunchDocument, 'dataset'>): string {
 export function toggleEnvironment(doc: LaunchDocument, id: string, on: boolean): LaunchDocument {
   const has = doc.environmentIds.includes(id);
   if (on && !has) return { ...doc, environmentIds: [...doc.environmentIds, id] };
-  if (!on && has) return { ...doc, environmentIds: doc.environmentIds.filter((e) => e !== id) };
+  if (!on && has) {
+    // The environment's task goes with it: a later tick starts at the worker default.
+    const { [id]: _dropped, ...tasks } = doc.selection.tasks;
+    return {
+      ...doc,
+      environmentIds: doc.environmentIds.filter((e) => e !== id),
+      selection: { ...doc.selection, tasks },
+    };
+  }
   return doc;
 }

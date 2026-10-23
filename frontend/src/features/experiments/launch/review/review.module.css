@@ -182,3 +182,38 @@
   font-size: var(--font-sm);
   color: var(--success);
 }
+
+/* Environments and Datasets rows of the summary when several dataset versions or a task are chosen. */
+.envLines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.envLine {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.envLineName {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.envLineDetail {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.pairLines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

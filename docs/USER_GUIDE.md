@@ -176,6 +176,37 @@ Do this before `pip wheel packages/sdk` so the wheel contains it. For developmen
 `npm run dev:sdk` serves it on port 5808 and proxies `/api` to a local viewer on 8818
 (start one with `qym ui FILE --port 8818` or `qym run create ... --local-ui --ui-port 8818`).
 
+## Experiments: several datasets and a task per environment
+
+### Datasets and versions
+
+On the launch home view, the **Datasets** card starts as one list: pick a dataset (it runs on its Latest version, as before).
+From then on each dataset is a box with a **Versions** menu: tick Latest version, any version (newest first, drafts are
+tagged) and aliases; the chosen ones show as tags next to it. **Add another dataset** lists the project's other datasets. The
+card counts what you chose (`4 dataset versions from 2 datasets`). An experiment may name up to 20 dataset versions
+(`QYM_EVAL_MAX_DATASETS`).
+
+From two dataset versions the card shows the **Run shape**:
+
+- **Combine into one run** (default): one run over all dataset versions together. Every item records its dataset and version
+  and scores break down per dataset. It needs an Evaluation Service on integration guide v1.4 (its schema declares
+  `datasets`). An older service receives one job per dataset version instead; its environment box says
+  `N runs, one per dataset version (older service)`.
+- **One run each**: one run per dataset version and environment, grouped under the experiment.
+
+The run count follows (`1 combination × (production: 1 combined run + staging: 4 runs) = 5 runs`) and the limit of
+`QYM_EVAL_SWEEP_MAX_JOBS` applies to it. A one-dataset experiment is stored and sent exactly as before. Sweeps cannot cover the
+dataset list or the shape (use **One run each** to run each one); starting points (presets) hold no dataset list.
+
+### Task per environment
+
+When an environment's service declares `task` and lists tasks (`GET /evals/tasks`), its box gets a **Task** row under
+Versions: **Worker default** first, then the service's tasks with their descriptions. The list is read live when the
+environment is ticked and again on its **Refresh**. A service that cannot list its tasks shows the reason; one that answers
+404, 405 or 422 shows no row. The task is stored on the experiment per environment and shown on the experiment page, where the
+**Datasets and task** card, one matrix row per dataset version and a job history grouped by dataset version replace the plain
+matrix. A preset may hold the task of its own environment.
+
 ## Experiments: latency-sensitive runs and credentials
 
 ### Latency-sensitive runs

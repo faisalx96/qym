@@ -9,7 +9,7 @@
  * reads them imperatively (`queryClient.ensureQueryData`) to build a fresh form context while
  * it lays a starting point under the document.
  */
-import { keepPreviousData, useQuery, type QueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQueries, useQuery, type QueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/http';
 import {
   bestRunQuery,
@@ -41,6 +41,7 @@ export const launchKeys = {
   options: (pid: string, eid: string) => ['eval-model-options', pid, eid] as const,
   extraSlot: (pid: string, eid: string, name: string) => ['env-extra-slot', pid, eid, name] as const,
   versioning: (pid: string, eid: string) => ['eval-versioning-details', pid, eid] as const,
+  tasks: (pid: string, eid: string) => ['eval-environment-tasks', pid, eid] as const,
   presets: presetsKey,
   presetVersion: (pid: string, eid: string, presetId: string, version: number) =>
     ['preset-version', pid, eid, presetId, version, 'remap'] as const,
@@ -124,6 +125,55 @@ export function useEnvVersioning(projectId: string | undefined, envId: string | 
     staleTime: Infinity,
     queryFn: () => api.get<VersioningDetailsPayload>(`${env(projectId!, envId!)}/versioning-details`),
   });
+}
+
+// ── Tasks (change request v1.4) ──────────────────────────────────────────
+
+export interface ServiceTask {
+  id: string;
+  name: string;
+  description: string | null;
+  default: boolean;
+}
+export interface EnvTasksPayload {
+  environment_id: string;
+  status: 'ok' | 'unsupported' | 'error';
+  tasks: ServiceTask[];
+  error: string | null;
+  fetched_at: string | null;
+}
+export const fetchEnvTasks = (projectId: string, envId: string) =>
+  api.get<EnvTasksPayload>(`${env(projectId, envId)}/tasks`);
+
+/**
+ * The tasks an Evaluation Service can run, read live. Enabled only for a ticked environment whose stored
+ * evaluator schema declares `task`; one entry per environment, shared by the home view and Customize, read
+ * again on the box's Refresh.
+ */
+export function useEnvTasks(projectId: string | undefined, envId: string | undefined, enabled = false) {
+  return useQuery({
+    queryKey: launchKeys.tasks(projectId ?? '', envId ?? ''),
+    enabled: Boolean(projectId && envId && enabled),
+    staleTime: Infinity,
+    queryFn: () => fetchEnvTasks(projectId!, envId!),
+  });
+}
+
+/** The same entries for several environments (the review and validation need the ids). */
+export function useEnvTaskLists(projectId: string, envs: ReadonlyArray<Pick<EvalEnvironment, 'id' | 'evaluator_capabilities'>>) {
+  const results = useQueries({
+    queries: envs.map((e) => ({
+      queryKey: launchKeys.tasks(projectId, e.id),
+      enabled: Boolean(e.evaluator_capabilities?.task),
+      staleTime: Infinity,
+      queryFn: () => fetchEnvTasks(projectId, e.id),
+    })),
+  });
+  const out: Record<string, EnvTasksPayload | undefined> = {};
+  envs.forEach((e, i) => {
+    out[e.id] = results[i]?.data;
+  });
+  return out;
 }
 
 // ── Presets ──────────────────────────────────────────────────────────────

@@ -6,13 +6,63 @@ import { baseSourceLabel, formatMetric, formatParam, relTime, tallyJobCounts } f
 import {
   buildMatrix,
   buildQueueStrip,
+  cellKey,
   compareHref,
+  jobGroup,
   jobStats,
   presetConfig,
   pruneSelection,
   temporaryModels,
 } from './matrix';
 import { makeDetail, makeJob, makeRun } from './testData';
+
+describe('buildMatrix with dataset versions', () => {
+  const ref = (dataset: string, version: string) => ({ dataset, version, alias: null });
+  const combined = [ref('a', 'v1'), ref('a', 'v2'), ref('b', 'v1'), ref('b', 'v2')];
+  const jobs = [
+    makeJob({ id: 'c', environment_id: 'e1', datasets: combined, combo_label: '' }),
+    ...combined.map((d, k) =>
+      makeJob({ id: `p${k}`, environment_id: 'e2', dataset_index: k, dataset: d, combo_label: '' }),
+    ),
+    makeJob({ id: 'p1r', environment_id: 'e2', dataset_index: 1, dataset: combined[1], attempt: 1, retry_of_job_id: 'p1' }),
+  ];
+  jobs[2] = { ...jobs[2]!, superseded: true };
+  const matrix = buildMatrix(makeDetail(jobs));
+
+  it('QD-56 has a combined row first, then one row per pair, "—" where an environment has no job', () => {
+    expect(matrix.rows.map((r) => [r.label, r.sub])).toEqual([
+      ['All 4 dataset versions', 'combined'],
+      ['a · v1', '#0 · pair 1'],
+      ['a · v2', '#0 · pair 2'],
+      ['b · v1', '#0 · pair 3'],
+      ['b · v2', '#0 · pair 4'],
+    ]);
+    expect(matrix.cells.get(cellKey('0.c', 'e1'))?.current?.id).toBe('c');
+    expect(matrix.cells.get(cellKey('0.c', 'e2'))).toBeUndefined();
+    expect(matrix.cells.get(cellKey('0.1', 'e1'))).toBeUndefined();
+  });
+
+  it('QD-59 a retried pair keeps its row and counts the earlier attempt', () => {
+    const cell = matrix.cells.get(cellKey('0.1', 'e2'));
+    expect(cell?.current?.id).toBe('p1r');
+    expect(cell?.earlier.map((j) => j.id)).toEqual(['p1']);
+  });
+
+  it('QD-57 groups: the combined job first, then each dataset version', () => {
+    const groups = jobs.map((j) => jobGroup(j));
+    expect(groups[0]).toEqual({ key: 'combined', order: -1, label: 'All 4 dataset versions · one combined run' });
+    expect(groups[3]).toEqual({ key: 'pair-2', order: 2, label: 'b · v1' });
+    expect(jobGroup(makeJob())).toBeNull();
+  });
+
+  it('a plain experiment keeps one row per combination', () => {
+    const plain = buildMatrix(makeDetail([makeJob({ id: 'x' }), makeJob({ id: 'y', combo_index: 1 })]));
+    expect(plain.rows.map((r) => [r.kind, r.sub])).toEqual([
+      ['plain', '#0'],
+      ['plain', '#1'],
+    ]);
+  });
+});
 
 describe('buildMatrix', () => {
   const jobs = [

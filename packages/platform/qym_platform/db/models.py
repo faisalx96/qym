@@ -937,6 +937,11 @@ class EvalExperimentJob(Base):
         ForeignKey("eval_environments.id", ondelete="CASCADE"), nullable=False
     )
     combo_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Position of this job's dataset pair in ``evaluator.datasets`` when the platform
+    # fanned the experiment out (one job per pair); 0 for every other job (0090).
+    dataset_index: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
     # 0 for the first submission of a combination; each retry adds a row with +1.
     attempt: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
@@ -1015,6 +1020,7 @@ class EvalExperimentJob(Base):
             "experiment_id",
             "environment_id",
             "combo_index",
+            "dataset_index",
             "attempt",
             name="uq_eval_experiment_job_attempt",
         ),
@@ -1023,6 +1029,9 @@ class EvalExperimentJob(Base):
         # A run links to at most one job (the launch token is single-use).
         Index("ix_eval_experiment_jobs_run_id", "run_id", unique=True),
         CheckConstraint("combo_index >= 0", name="ck_eval_experiment_jobs_combo_index"),
+        CheckConstraint(
+            "dataset_index >= 0", name="ck_eval_experiment_jobs_dataset_index"
+        ),
         CheckConstraint("attempt >= 0", name="ck_eval_experiment_jobs_attempt"),
         CheckConstraint(
             "submit_attempts >= 0", name="ck_eval_experiment_jobs_submit_attempts"

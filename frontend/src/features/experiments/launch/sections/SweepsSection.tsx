@@ -19,6 +19,7 @@ import {
   matchTemplate,
   pointerToFieldName,
   runEstimate,
+  unitsInfo,
   sweepLocalErrors,
   unlinkGroup,
   type Axis,
@@ -36,7 +37,8 @@ export function SweepsSection() {
 
   const spec = useMemo(() => buildSpec(doc, ctx.evaluatorPanel), [doc, ctx.evaluatorPanel]);
   const model = useMemo(() => axesOf(spec), [spec]);
-  const estimate = runEstimate(spec, doc.environmentIds.length, review.count.cap);
+  const info = unitsInfo(doc, ctx.envs);
+  const estimate = runEstimate(spec, doc.environmentIds.length, review.count.cap, info);
   const label = (pointer: string) => locate(pointer, ctx).label;
   const linkProblems = useMemo(
     () => sweepLocalErrors(spec, (p) => locate(p, ctx).label).filter((e) => e.pointer.startsWith('/links/')),

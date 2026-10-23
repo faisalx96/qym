@@ -127,6 +127,26 @@ def accepts_config_key(schema_json: Optional[Mapping[str, Any]], key: str) -> bo
     return key in config_keys(schema_json)
 
 
+def evaluator_properties(schema_json: Optional[Mapping[str, Any]]) -> List[str]:
+    """Top-level ``evaluator`` properties a stored schema declares."""
+    if not isinstance(schema_json, Mapping):
+        return []
+    props = schema_json.get("properties")
+    return list(props) if isinstance(props, Mapping) else []
+
+
+def evaluator_capabilities(schema_json: Optional[Mapping[str, Any]]) -> Dict[str, bool]:
+    """What the service accepts beyond guide v1.3 (change request v1.4).
+
+    ``datasets`` (several dataset versions in one job) and ``task`` (which task to
+    run) are accepted when the stored evaluator schema declares the property. No
+    stored schema means neither: a service that drops unknown keys would otherwise
+    run the first dataset and the default task with a ``202``.
+    """
+    declared = set(evaluator_properties(schema_json))
+    return {"datasets": "datasets" in declared, "task": "task" in declared}
+
+
 def evaluator_config_descriptor_for(
     schema_json: Mapping[str, Any],
     *,

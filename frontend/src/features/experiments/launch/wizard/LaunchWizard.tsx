@@ -8,7 +8,7 @@ import { StaticSections } from '../components/LaunchSection';
 import panel from '../components/launch.module.css';
 import { useLaunch } from '../LaunchContext';
 import styles from '../LaunchPage.module.css';
-import { axesOf, buildSpec, datasetChanged } from '../model';
+import { axesOf, buildSpec, datasetChanged, diffCount } from '../model';
 import { ReviewPane } from '../review/ReviewPane';
 import { WizardBar } from '../review/WizardBar';
 import { EvaluationSection } from '../sections/EvaluationSection';
@@ -116,6 +116,8 @@ export function LaunchWizard({ step, next, prev, onGo, onCancel }: Props) {
     if (s.id === 'where')
       changes =
         (datasetChanged(doc) ? 1 : 0) +
+        diffCount(doc).shape +
+        diffCount(doc).tasks +
         (doc.priority ? 1 : 0) +
         (doc.latencySensitive ? 1 : 0);
     else if (s.id === 'models') changes = sectionSummary('models').changes;

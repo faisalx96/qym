@@ -95,6 +95,31 @@ export async function setFakeFlags(request: APIRequestContext, port: number, dec
   await control(request, port, '/flags', { declared });
 }
 
+/**
+ * Makes a fake's evaluator schema declare `datasets` and/or `task` (change request v1.4) until the next
+ * `resetFakes`. Call before `createEnvironment`, or refresh the environment's schema afterwards.
+ */
+export async function setFakeCapabilities(
+  request: APIRequestContext,
+  port: number,
+  caps: { datasets?: boolean; task?: boolean },
+): Promise<void> {
+  await control(request, port, '/capabilities', caps);
+}
+
+/** What a fake's `GET /evals/tasks` answers until the next `resetFakes` (status, delay and list). */
+export async function setFakeTasks(
+  request: APIRequestContext,
+  port: number,
+  tasks: {
+    tasks?: { id: string; name: string; description?: string | null; default?: boolean }[];
+    status?: number;
+    delay_ms?: number;
+  },
+): Promise<void> {
+  await control(request, port, '/tasks', tasks);
+}
+
 /** What a fake's versioning-details endpoint answers until the next `resetFakes`. */
 export async function setFakeVersioning(
   request: APIRequestContext,
@@ -329,7 +354,9 @@ export async function waitForExperiment(
         last = await getExperiment(request, projectId, experimentId);
         return ready(last);
       },
-      { message: what, timeout: 25_000, intervals: [400] },
+      // 60 s: the job sync of the platform is slow while two workers and the browsers share a small machine
+      // (a11y `every page` waited out 25 s once under load; it takes about 1 s alone).
+      { message: what, timeout: 60_000, intervals: [400] },
     )
     .toBe(true);
   return last as unknown as ExperimentView;

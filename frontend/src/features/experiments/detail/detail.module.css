@@ -479,3 +479,37 @@
     flex-basis: 100%;
   }
 }
+
+/* "Datasets and task" card. */
+.refTags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  min-inline-size: 0;
+}
+
+.envLines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.envLine {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.envLineName {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.envLineDetail {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}

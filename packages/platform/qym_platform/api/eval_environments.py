@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
@@ -62,6 +63,8 @@ from qym_platform.services.eval_evaluator_schema import (
     adopt_evaluator_schema,
     current_evaluator_schema,
     descriptor_for_row,
+    environment_evaluator_schema,
+    evaluator_capabilities,
     evaluator_schema_diff,
 )
 from qym_platform.services.eval_evaluator_schema import (
@@ -86,6 +89,7 @@ from qym_platform.services.eval_service_client import (
     RemoteNotFound,
     RequestRejected,
     RetryableError,
+    TasksUnavailable,
     VersioningUnavailable,
     redact_text,
 )
@@ -644,6 +648,10 @@ def _serialize_environment(
         "evaluator_schema_fetched_at": (
             to_api_timestamp(evaluator_schema.fetched_at) if evaluator_schema else None
         ),
+        # What the service accepts beyond guide v1.3, read from the stored schema.
+        "evaluator_capabilities": evaluator_capabilities(
+            evaluator_schema.schema_json if evaluator_schema else None
+        ),
         "health_status": env.health_status,
         "health_checked_at": to_api_timestamp(env.health_checked_at),
         "health_error": env.health_error,
@@ -1156,6 +1164,92 @@ async def get_environment_versioning_details(
         "environment_id": env.id,
         "status": status,
         "versioning_details": details,
+        "error": error,
+        "fetched_at": to_api_timestamp(utc_now_naive()),
+    }
+
+
+_TASK_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")
+_MAX_TASKS = 200
+
+
+def _trim_tasks(items: Any) -> List[Dict[str, Any]]:
+    """Entries trimmed to the contract: valid ids only, bounded text, at most 200."""
+    out: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        task_id = item.get("id")
+        if not isinstance(task_id, str) or not _TASK_ID_RE.match(task_id):
+            continue
+        if task_id in seen:
+            continue
+        seen.add(task_id)
+        name = item.get("name")
+        description = item.get("description")
+        out.append(
+            {
+                "id": task_id,
+                "name": name.strip()[:120] if isinstance(name, str) and name.strip() else task_id,
+                "description": (
+                    description.strip()[:500]
+                    if isinstance(description, str) and description.strip()
+                    else None
+                ),
+                "default": item.get("default") is True,
+            }
+        )
+        if len(out) >= _MAX_TASKS:
+            break
+    return out
+
+
+@router.get(_PREFIX + "/{env_id}/tasks")
+async def get_environment_tasks(
+    project_id: str,
+    env_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+    client_factory: EvalClientFactory = Depends(get_eval_client_factory),
+) -> Dict[str, Any]:
+    """The tasks the environment's service can run (change request v1.4).
+
+    Read live from ``GET /evals/tasks`` on every call; nothing is stored. Any project
+    member may read it. ``status`` is ``ok``, ``unsupported`` (the stored evaluator
+    schema does not declare ``task`` and no call is made, or the service answers 404,
+    405 or 422, as a v1.3 service does) or ``error`` (``error`` says why). Always 200
+    so the launch page can show the state in place.
+    """
+    _require_project_access(db, principal, project_id)
+    settings = PlatformSettings()
+    env = _get_environment(db, project_id, env_id)
+    status = "ok"
+    tasks: List[Dict[str, Any]] = []
+    error: Optional[str] = None
+    schema_json = environment_evaluator_schema(db, env)
+    if not evaluator_capabilities(schema_json)["task"]:
+        status = "unsupported"
+    else:
+        api_key = _stored_key(env, settings)
+        client = client_factory(env.base_url, api_key)
+        try:
+            data = await client.tasks_list()
+        except TasksUnavailable as exc:
+            status, error = "error", _safe_message(exc, api_key)
+        except _REMOTE_ERRORS as exc:
+            status, error = "error", _remote_http_error(exc, api_key).detail
+        else:
+            if data is None:
+                status = "unsupported"
+            else:
+                tasks = _trim_tasks(data)
+        finally:
+            await client.aclose()
+    return {
+        "environment_id": env.id,
+        "status": status,
+        "tasks": tasks,
         "error": error,
         "fetched_at": to_api_timestamp(utc_now_naive()),
     }

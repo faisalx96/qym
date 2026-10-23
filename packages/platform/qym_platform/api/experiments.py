@@ -90,6 +90,7 @@ Secret refs (``{"$secret": ref}``) are stripped from every response and from clo
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 from uuid import uuid4
@@ -120,8 +121,12 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.permissions import is_project_manager, require_project_writable
-from qym_platform.secrets import encryption_available
-from qym_platform.services import eval_sweeps
+from qym_platform.secrets import decrypt_llm_api_key, encryption_available
+from qym_platform.api.eval_environments import (
+    EvalClientFactory,
+    get_eval_client_factory,
+)
+from qym_platform.services import eval_datasets, eval_sweeps
 from qym_platform.services.eval_best_run import BestRunError
 from qym_platform.services.eval_best_run_base import official_run_job
 from qym_platform.services.eval_bindings import resolve_slot_bindings
@@ -149,6 +154,8 @@ from qym_platform.services.eval_schema_form import schema_declares_env_key
 from qym_platform.services.eval_evaluator_schema import (
     current_evaluator_schema,
     descriptor_for_row,
+    environment_evaluator_schema,
+    evaluator_capabilities,
     evaluator_schema_json,
 )
 from qym_platform.services.eval_experiments import (
@@ -865,6 +872,100 @@ def _preview_body(
     return out
 
 
+@dataclass
+class _PlannedJob:
+    """One job of a launch, planned before anything is written."""
+
+    combo: Any
+    env: EvalEnvironment
+    schema: Optional[EvalEnvironmentSchema]
+    plan: Dict[str, Any]
+    params: Dict[str, Any]
+    run_name: str
+    unit: eval_datasets.Unit
+    document: Dict[str, Any]
+
+
+def _datasets_plan(
+    envs: List[EvalEnvironment],
+    evaluator: Mapping[str, Any],
+    capabilities: Mapping[str, Mapping[str, bool]],
+) -> List[Dict[str, Any]]:
+    """What each environment receives: ``single``, one ``combined`` job or a fan-out."""
+    out = []
+    for env in envs:
+        mode, reason, units = eval_datasets.plan_units(
+            evaluator, accepts_datasets=capabilities[env.id]["datasets"]
+        )
+        out.append(
+            {
+                "environment_id": env.id,
+                "environment_name": env.name,
+                "mode": mode,
+                "units": len(units),
+                "reason": reason,
+            }
+        )
+    return out
+
+
+def _task_error(env: EvalEnvironment, rule: str, message: str) -> Dict[str, Any]:
+    pointer = f"/evaluator/task/{env.id}"
+    return {
+        "section": "evaluator",
+        "pointer": pointer,
+        "form_pointer": pointer,
+        "field": None,
+        "params": {},
+        "rule": rule,
+        "message": message,
+        "environment_id": env.id,
+        "environment_name": env.name,
+    }
+
+
+def _read_task_lists(
+    sweep: Any,
+    envs: List[EvalEnvironment],
+    capabilities: Mapping[str, Mapping[str, bool]],
+    client_factory: EvalClientFactory,
+) -> Dict[str, eval_datasets.TaskList]:
+    """``GET /evals/tasks`` of each environment that has a task chosen (in parallel).
+
+    Only environments whose schema declares ``task`` are asked, once per request. A
+    failure is an ``unverified`` entry, never an error (the service checks at submit).
+    """
+    wanted: set = set()
+    for combo in sweep.combos:
+        evaluator = combo.document.get("evaluator")
+        for env in envs:
+            if capabilities[env.id]["task"] and eval_datasets.task_for_environment(
+                evaluator, env.id
+            ):
+                wanted.add(env.id)
+    if not wanted:
+        return {}
+    settings = _settings()
+    targets: Dict[str, Tuple[str, str]] = {}
+    out: Dict[str, eval_datasets.TaskList] = {}
+    for env in envs:
+        if env.id not in wanted:
+            continue
+        try:
+            key = decrypt_llm_api_key(env.api_key_encrypted or "", settings)
+        except Exception:  # noqa: BLE001 - an unreadable key only means "unverified"
+            out[env.id] = eval_datasets.TaskList("unverified", {}, "no readable key")
+            continue
+        targets[env.id] = (env.base_url, key)
+    out.update(eval_datasets.check_tasks(targets, client_factory))
+    return out
+
+
+def _launch_dataset_index(params: Mapping[str, Any], index: int) -> Optional[int]:
+    """``dataset_index`` for ``qym_launch``: only a per-pair job has one."""
+    return index if isinstance(params.get("dataset"), Mapping) else None
+
+
 def _request_body(
     body: Mapping[str, Any],
     *,
@@ -878,6 +979,7 @@ def _request_body(
     run_name: str,
     qym_config: Mapping[str, Any],
     retry_of_job_id: Optional[str] = None,
+    dataset_index: Optional[int] = None,
 ) -> Dict[str, Any]:
     out = copy.deepcopy(dict(body))
     out["user_id"] = user_id
@@ -894,6 +996,7 @@ def _request_body(
         combo_index=combo_index,
         attempt=attempt,
         retry_of_job_id=retry_of_job_id,
+        dataset_index=dataset_index,
     )
     metadata["qym_config"] = redact_secret_refs(qym_config)
     return out
@@ -914,6 +1017,12 @@ def _qym_config(
         models=models,
         sweep=sweep,
     )
+
+
+def _job_param(job: EvalExperimentJob, key: str) -> Any:
+    """A secret-free copy of ``params[key]`` (``dataset``, ``datasets`` or ``task``)."""
+    params = job.params if isinstance(job.params, Mapping) else {}
+    return strip_secret_refs(params.get(key))
 
 
 def _job_run_name(job: EvalExperimentJob) -> Optional[str]:
@@ -995,6 +1104,10 @@ def _serialize_job(
         "environment_name": env_names.get(job.environment_id),
         "combo_index": job.combo_index,
         "combo_label": (combo_labels or {}).get(job.combo_index, ""),
+        "dataset_index": job.dataset_index or 0,
+        "dataset": _job_param(job, "dataset"),
+        "datasets": _job_param(job, "datasets"),
+        "task": _job_param(job, "task"),
         "attempt": job.attempt,
         "retry_of_job_id": job.retry_of_job_id,
         "superseded": job.id in superseded,
@@ -1132,6 +1245,44 @@ def _job_dataset_tokens(
     }
 
 
+def _selection(
+    experiment: EvalExperiment, jobs: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """The datasets, run shape and per-environment tasks the experiment was launched with.
+
+    Read from the spec (user intent). A scalar-only spec gives one dataset and no run
+    shape; ``tasks`` is empty unless the spec names a task.
+    """
+    spec = experiment.spec if isinstance(experiment.spec, Mapping) else {}
+    evaluator = spec.get("evaluator") if isinstance(spec.get("evaluator"), Mapping) else {}
+    datasets = eval_datasets.entries(evaluator)
+    if not datasets and isinstance(evaluator.get("dataset"), str):
+        config = evaluator.get("config") if isinstance(evaluator.get("config"), Mapping) else {}
+        datasets = [
+            {
+                "dataset": evaluator["dataset"],
+                "version": evaluator.get("dataset_version"),
+                "alias": config.get("dataset_alias"),
+            }
+        ]
+    tasks: Dict[str, Any] = {}
+    if evaluator.get("task"):
+        for env_id in experiment.environment_ids or []:
+            tasks[env_id] = next(
+                (
+                    j["task"]
+                    for j in jobs
+                    if j["environment_id"] == env_id and j.get("task")
+                ),
+                None,
+            )
+    return {
+        "datasets": datasets,
+        "run_shape": eval_datasets.run_shape_of(evaluator) if len(datasets) > 1 else None,
+        "tasks": tasks,
+    }
+
+
 def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any]:
     """The experiment with every job, as the detail matrix (#35) renders it.
 
@@ -1146,6 +1297,7 @@ def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any
         .filter(EvalExperimentJob.experiment_id == experiment.id)
         .order_by(
             EvalExperimentJob.combo_index,
+            EvalExperimentJob.dataset_index,
             EvalExperimentJob.environment_id,
             EvalExperimentJob.attempt,
         )
@@ -1171,9 +1323,17 @@ def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any
         creator_email=emails.get(experiment.created_by_user_id or ""),
         job_counts=_status_counts(jobs),
     )
+    # In the order the experiment was launched with (then any environment only seen on jobs).
+    launch_order = list(experiment.environment_ids or [])
     payload["environments"] = [
         {"id": env.id, "name": env.name, "is_active": env.is_active}
-        for env in sorted(envs, key=lambda e: env_ids.index(e.id))
+        for env in sorted(
+            envs,
+            key=lambda e: (
+                launch_order.index(e.id) if e.id in launch_order else len(launch_order),
+                env_ids.index(e.id),
+            ),
+        )
     ]
     ranking = {env.id: env.ranking_metric for env in envs}
     payload["ranking_metrics"] = ranking
@@ -1213,6 +1373,7 @@ def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any
         for j in jobs
     ]
     payload["credentials"] = _credentials(db, experiment)
+    payload["selection"] = _selection(experiment, payload["jobs"])
     return payload
 
 
@@ -1227,6 +1388,7 @@ def create_experiment(
     req: ExperimentCreateRequest,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    client_factory: EvalClientFactory = Depends(get_eval_client_factory),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
     require_project_writable(db, project_id)
@@ -1247,13 +1409,20 @@ def create_experiment(
     if gate_message and not req.dry_run:
         raise HTTPException(status_code=403, detail=gate_message)
     base_source = _base_source(db, project_id, req, envs)
+    settings = _settings()
     spec = {k: v for k, v in req.spec.items() if k != "base_source"}
+    # Several dataset versions, the run shape and the task: validated and normalized
+    # first, so the stored spec is the user's intent (one pair collapsed to scalars).
+    spec, dataset_errors = eval_datasets.normalize(
+        spec, [env.id for env in envs], max_datasets=settings.eval_max_datasets
+    )
     saved_connection_ids = _save_to_project_models(db, principal, project_id, req, spec)
 
     errors = [
         {**e, "environment_id": None, "combo_index": None}
         for e in _document_errors(spec, req.secrets)
     ]
+    errors += [{**e, "environment_id": None, "combo_index": None} for e in dataset_errors]
     if gate_message:
         errors.append(
             {
@@ -1268,12 +1437,27 @@ def create_experiment(
                 "combo_index": None,
             }
         )
-    sweep = eval_sweeps.expand(
-        spec,
-        environment_count=len(envs),
-        max_jobs=_settings().eval_sweep_max_jobs,
-        connection_labels=eval_sweeps.connection_labels(db, project_id, spec),
-    )
+    capabilities = {
+        env.id: evaluator_capabilities(environment_evaluator_schema(db, env))
+        for env in envs
+    }
+    spec_evaluator = spec.get("evaluator") if isinstance(spec.get("evaluator"), dict) else {}
+    datasets_plan = _datasets_plan(envs, spec_evaluator, capabilities)
+    units_per_combo = sum(item["units"] for item in datasets_plan)
+    if dataset_errors:
+        sweep = eval_sweeps.SweepPlan(max_jobs=settings.eval_sweep_max_jobs)
+    else:
+        sweep = eval_sweeps.expand(
+            spec,
+            environment_count=units_per_combo,
+            max_jobs=settings.eval_sweep_max_jobs,
+            connection_labels=eval_sweeps.connection_labels(db, project_id, spec),
+            unit_label=(
+                "environments"
+                if units_per_combo == len(envs)
+                else "environment runs (one per dataset version where it applies)"
+            ),
+        )
     errors += [{**e, "environment_id": None, "combo_index": None} for e in sweep.errors]
     if not req.dry_run and any(e["rule"] == "sweep_cap" for e in sweep.errors):
         # Over the cap: refuse before validating or creating anything.
@@ -1288,53 +1472,121 @@ def create_experiment(
     experiment_id = str(uuid4())
     multi_env = len(envs) > 1
     contexts = {env.id: _environment_context(db, env) for env in envs}
-    planned = []
+    task_lists = _read_task_lists(sweep, envs, capabilities, client_factory)
+    planned: List[_PlannedJob] = []
+    warnings_extra: List[Dict[str, Any]] = []
+    unverified: set = set()
     for combo in sweep.combos:
+        combo_evaluator = combo.document.get("evaluator")
+        combo_evaluator = combo_evaluator if isinstance(combo_evaluator, dict) else {}
         for env in envs:
-            schema, plan = _environment_plan(db, env, combo.document, contexts[env.id])
-            plan["errors"] = [
-                {
-                    **item,
-                    "environment_id": env.id,
-                    "environment_name": env.name,
-                    "combo_index": combo.index,
-                }
-                for item in plan["errors"]
-            ]
-            errors += plan["errors"]
-            bindings = _stored_bindings(
-                combo.document.get("slot_bindings"), plan["models"]
+            caps = capabilities[env.id]
+            _mode, _reason, units = eval_datasets.plan_units(
+                combo_evaluator, accepts_datasets=caps["datasets"]
             )
-            params: Dict[str, Any] = {"slot_bindings": bindings}
-            if sweep.swept:
-                params["sweep"] = combo.params
-            run_name = eval_sweeps.run_name(
-                req.name, combo.label, env.name if multi_env else None
-            )
-            planned.append(
+            task_id = eval_datasets.task_for_environment(combo_evaluator, env.id)
+            task_name: Optional[str] = None
+            task_problems: List[Dict[str, Any]] = []
+            if task_id is not None and not caps["task"]:
+                task_problems.append(
+                    _task_error(
+                        env,
+                        "task_unsupported",
+                        f'Environment "{env.name}" does not offer task selection; '
+                        "clear its task or deselect it.",
+                    )
+                )
+            elif task_id is not None:
+                listed = task_lists.get(env.id)
+                if listed is not None and listed.status == "ok":
+                    if task_id not in listed.names:
+                        task_problems.append(
+                            _task_error(
+                                env,
+                                "task_unknown",
+                                f'Environment "{env.name}" does not list the task '
+                                f'"{task_id}".',
+                            )
+                        )
+                    task_name = listed.names.get(task_id)
+                elif env.id not in unverified:
+                    unverified.add(env.id)
+                    warnings_extra.append(
+                        {
+                            "code": "task_unverified",
+                            "environment_id": env.id,
+                            "message": (
+                                f"Couldn't confirm the tasks of {env.name}; the service "
+                                "checks them when the job starts."
+                            ),
+                        }
+                    )
+            errors += [{**p, "combo_index": combo.index} for p in task_problems]
+            for unit in units:
+                document = eval_datasets.unit_document(
+                    combo.document,
+                    unit,
+                    environment_id=env.id,
+                    task=task_id,
+                    supports_task=caps["task"],
+                )
+                schema, plan = _environment_plan(db, env, document, contexts[env.id])
+                plan["errors"] = [
+                    {
+                        **item,
+                        "environment_id": env.id,
+                        "environment_name": env.name,
+                        "combo_index": combo.index,
+                    }
+                    for item in plan["errors"]
+                ]
+                errors += plan["errors"]
+                bindings = _stored_bindings(
+                    document.get("slot_bindings"), plan["models"]
+                )
+                params: Dict[str, Any] = {"slot_bindings": bindings}
+                if sweep.swept:
+                    params["sweep"] = combo.params
+                if unit.mode == eval_datasets.MODE_FAN_OUT and unit.pair is not None:
+                    params["dataset"] = dict(unit.pair)
+                elif unit.mode == eval_datasets.MODE_COMBINED:
+                    params["datasets"] = [dict(p) for p in unit.datasets or []]
+                if task_id is not None and caps["task"]:
+                    params["task"] = {"id": task_id, "name": task_name or task_id}
+                run_name = eval_sweeps.run_name(
+                    req.name,
+                    combo.label,
+                    env.name if multi_env else None,
+                    eval_datasets.pair_label(unit),
+                )
                 # params keep temporary key refs (never keys) for the dispatcher.
-                (combo, env, schema, plan, params, run_name)
-            )
+                planned.append(
+                    _PlannedJob(combo, env, schema, plan, params, run_name, unit, document)
+                )
 
     preview = [
         {
-            "environment_id": env.id,
-            "environment_name": env.name,
-            "combo_index": combo.index,
-            "label": combo.label,
-            "run_name": run_name,
-            "params": strip_secret_refs(params),
-            "errors": plan["errors"],
+            "environment_id": item.env.id,
+            "environment_name": item.env.name,
+            "combo_index": item.combo.index,
+            "dataset_index": item.unit.index,
+            "label": item.combo.label,
+            "run_name": item.run_name,
+            "dataset": item.params.get("dataset"),
+            "datasets": item.params.get("datasets"),
+            "task": item.params.get("task"),
+            "params": strip_secret_refs(item.params),
+            "errors": item.plan["errors"],
             "warnings": [
-                {**w, "environment_id": env.id, "combo_index": combo.index}
-                for w in plan["warnings"]
+                {**w, "environment_id": item.env.id, "combo_index": item.combo.index}
+                for w in item.plan["warnings"]
             ],
             "request_body": _preview_body(
-                plan["body"],
+                item.plan["body"],
                 latency_sensitive=req.latency_sensitive,
             ),
         }
-        for combo, env, schema, plan, params, run_name in planned
+        for item in planned
     ]
 
     if req.dry_run:
@@ -1346,11 +1598,13 @@ def create_experiment(
             if ceiling is not None:
                 warnings.append(ceiling)
         warnings += dataset_token_warnings(db, project_id, envs, schemas, documents)
+        warnings += warnings_extra
         return {
             "dry_run": True,
             "ok": not errors,
             "warnings": warnings,
             **sweep.summary(),
+            "datasets_plan": datasets_plan,
             "priority": priority.value,
             "preemption_warning": (
                 high_priority_warning(env.name for env in envs)
@@ -1377,8 +1631,8 @@ def create_experiment(
         # Keep names next to connection ids, so "Model X no longer exists" can name it.
         named = {
             b["connection_id"]: b
-            for *_, params, _name in planned
-            for b in params["slot_bindings"].values()
+            for item in planned
+            for b in item.params["slot_bindings"].values()
             if isinstance(b, Mapping) and b.get("connection_id")
         }
         stored_spec["slot_bindings"] = _named_spec_bindings(
@@ -1409,36 +1663,38 @@ def create_experiment(
     issue_experiment_api_key(db, experiment, _settings())
     # And its dataset read token (``QYM_DATASET_READ_TOKEN``), same lifecycle.
     issue_experiment_dataset_token(db, experiment, _settings())
-    for combo, env, schema, plan, params, run_name in planned:
-        assert schema is not None and plan["body"] is not None
+    for item in planned:
+        assert item.schema is not None and item.plan["body"] is not None
         job_id = str(uuid4())
         db.add(
             EvalExperimentJob(
                 id=job_id,
                 experiment_id=experiment_id,
-                environment_id=env.id,
-                combo_index=combo.index,
+                environment_id=item.env.id,
+                combo_index=item.combo.index,
+                dataset_index=item.unit.index,
                 attempt=0,
-                params=params,
+                params=item.params,
                 request_body=_request_body(
-                    plan["body"],
+                    item.plan["body"],
                     experiment_id=experiment_id,
                     job_id=job_id,
-                    env=env,
-                    combo_index=combo.index,
+                    env=item.env,
+                    combo_index=item.combo.index,
+                    dataset_index=_launch_dataset_index(item.params, item.unit.index),
                     attempt=0,
                     user_id=principal.user.id,
                     priority=priority,
-                    run_name=run_name,
+                    run_name=item.run_name,
                     qym_config=_qym_config(
-                        combo.document,
-                        schema,
+                        item.document,
+                        item.schema,
                         base_source,
-                        plan["models"],
-                        sweep=params.get("sweep"),
+                        item.plan["models"],
+                        sweep=item.params.get("sweep"),
                     ),
                 ),
-                schema_id=schema.id,
+                schema_id=item.schema.id,
                 launch_token_hash=launch_token_hash_for_job(job_id),
                 status=EvalJobStatus.QUEUED,
                 next_attempt_at=now,
@@ -1459,6 +1715,7 @@ def create_experiment(
             "latency_sensitive": req.latency_sensitive,
             "combo_count": sweep.combo_count,
             "job_count": len(planned),
+            "dataset_count": max(len(eval_datasets.entries(spec_evaluator)), 1),
             "saved_connection_ids": saved_connection_ids,
         },
     )
@@ -1467,7 +1724,10 @@ def create_experiment(
     logger.info(
         "Experiment %s created in project %s with %d job(s)", experiment.id, project_id, len(planned)
     )
-    return _experiment_detail(db, experiment)
+    detail = _experiment_detail(db, experiment)
+    if warnings_extra:
+        detail["warnings"] = warnings_extra
+    return detail
 
 
 # Registered before ``/{experiment_id}`` so the static path is not captured by it.
@@ -1843,6 +2103,7 @@ def retry_experiment_job(
         combo_index=job.combo_index,
         attempt=attempt,
         retry_of_job_id=job.id,
+        dataset_index=_launch_dataset_index(job.params or {}, job.dataset_index or 0),
     )
     if "qym_config" in metadata:
         metadata["qym_config"] = redact_secret_refs(metadata["qym_config"])
@@ -1851,6 +2112,7 @@ def retry_experiment_job(
         experiment_id=experiment.id,
         environment_id=job.environment_id,
         combo_index=job.combo_index,
+        dataset_index=job.dataset_index or 0,
         attempt=attempt,
         retry_of_job_id=job.id,
         params=copy.deepcopy(job.params or {}),
@@ -1925,11 +2187,19 @@ def clone_experiment(
             EvalEnvironment.is_active.is_(True),
         )
     }
+    names = {
+        env.id: env.name
+        for env in db.query(EvalEnvironment).filter(
+            EvalEnvironment.project_id == project_id, EvalEnvironment.id.in_(wanted)
+        )
+    }
     prefill: Dict[str, Any] = {
         "name": f"{experiment.name} (copy)"[:200],
         "description": experiment.description,
         "environment_ids": [e for e in wanted if e in active],
         "unavailable_environment_ids": [e for e in wanted if e not in active],
+        # So a note can name an environment that is no longer part of the launch.
+        "environment_names": names,
         "base_source": {"kind": "clone", "experiment_id": experiment.id},
         "cloned_base_source": strip_secret_refs(experiment.base_source or {}),
         "priority": experiment.priority.value,

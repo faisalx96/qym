@@ -38,7 +38,11 @@ function PickerName({ item }: { item: PickerItem }) {
   );
 }
 
-/** Project dataset + version/alias, and the callout for a dataset string a starting point carried. */
+/**
+ * One project dataset + version/alias, and the callout for a dataset string a starting point carried. The launch
+ * form uses `DatasetsCard` (several dataset versions); the default-preset editor keeps this single picker, because a
+ * preset holds one optional dataset and never a list.
+ */
 export function DatasetPicker() {
   const { doc, setDoc, slug, datasetNames, datasets, readOnly, registerField } = useLaunch();
   const name = doc.dataset.mode === 'project' ? doc.dataset.name : '';
