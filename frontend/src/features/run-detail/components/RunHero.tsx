@@ -4,7 +4,7 @@
  * (three on a phone) with "+ N more". Nothing hides behind a chevron.
  */
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { exportHtmlUrl } from '@/api/runs';
 import { platformUrl } from '@/lib/runtime';
 import {
@@ -222,6 +222,7 @@ function ContextBand({
 }
 
 export function RunHero({ run, model, live, passSummary, slug, listParam, basePath }: RunHeroProps) {
+  const location = useLocation();
   const samples = model.samples;
   const viewPass = model.viewPass;
   const pass = viewPass ? passSummary : null;
@@ -402,14 +403,15 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
           </Fact>
           {isUnionRun(run) ? (
             <Fact label="Datasets">
-              <a
+              {/* A router link, not a bare "#hash" anchor: the document's base would send the hash to the app root. */}
+              <Link
                 className={datasetChipStyles.countLink}
-                href="#run-section-datasets"
+                to={{ search: location.search, hash: '#run-section-datasets' }}
                 data-link="block"
                 data-testid="hero-datasets-fact"
               >
                 <DatasetCountTag count={run.dataset_count ?? 0} title={datasetsTitle(run.datasets ?? [])} />
-              </a>
+              </Link>
             </Fact>
           ) : (
             <Fact label="Dataset">

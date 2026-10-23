@@ -61,7 +61,7 @@ test.describe('union run page', () => {
       // QC-U3: the count tag is a link to the section, 92 x 20
       const tag = await size(page, '[data-testid=hero-datasets-fact] > *');
       expect(tag).toEqual({ w: 92, h: 20 });
-      await expect(page.getByTestId('hero-datasets-fact')).toHaveAttribute('href', '#run-section-datasets');
+      await expect(page.getByTestId('hero-datasets-fact')).toHaveAttribute('href', /#run-section-datasets$/);
       await expect(page.getByTestId('hero-datasets-fact').locator('[title]')).toHaveAttribute(
         'title',
         /support-tickets v1/,
