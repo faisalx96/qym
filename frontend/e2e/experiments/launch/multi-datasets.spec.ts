@@ -207,6 +207,7 @@ test.describe('the Datasets card', () => {
     // Remove the first dataset: focus moves to the next box's trigger (QD-8).
     await dsBox(page, 'support-tickets').getByRole('button', { name: 'Remove support-tickets' }).click();
     await expect(dsBox(page, 'support-tickets')).toHaveCount(0);
+    await expect(dsBox(page, 'billing-faq').getByRole('button', { name: /^Versions/ })).toBeFocused();
     // Removing the last one returns to the single Select.
     await dsBox(page, 'billing-faq').getByRole('button', { name: 'Remove billing-faq' }).click();
     await expect(datasetsCard(page)).toHaveCount(0);

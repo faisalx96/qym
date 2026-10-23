@@ -152,6 +152,9 @@ test.describe('review, Raw JSON and launch', () => {
     const raw = page.getByRole('region', { name: /^Raw JSON/ });
     await expect(raw).toContainText('"datasets": [');
     await expect(raw).toContainText('"run_shape": "combined"');
+    if (SHOTS) {
+      await page.screenshot({ path: path.join(SHOTS, 'after-d-raw-1440.png'), fullPage: true });
+    }
     expect(doc.evaluator.datasets).toEqual([
       { dataset: 'support-tickets', version: 'v3' },
       { dataset: 'support-tickets', version: 'v2' },
@@ -178,12 +181,19 @@ test.describe('review, Raw JSON and launch', () => {
     expect(again.evaluator.task).toBeUndefined();
     // Invalid text is rejected and nothing changes.
     const bad = { ...again, evaluator: { ...again.evaluator, datasets: [{ dataset: 'support-tickets', version: 'v3', alias: 'x' }, ...again.evaluator.datasets.slice(1)] } };
+    await showRaw(page);
     await setRaw(page, JSON.stringify(bad));
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(page.getByRole('region', { name: /^Raw JSON/ })).toContainText('/evaluator/datasets/0');
     await expect(page.getByRole('region', { name: /^Raw JSON/ })).toContainText('Give a version or an alias, not both.');
     await goStep(page, 'where');
     await expect(page.getByTestId('pair-count')).toHaveText('3 dataset versions from 2 datasets');
+    if (SHOTS) {
+      await page.setViewportSize({ width: 390, height: 1000 });
+      await expect(page.getByRole('button', { name: /Go to step/ })).toBeVisible();
+      await showRaw(page);
+      await page.screenshot({ path: path.join(SHOTS, 'after-d-raw-390.png'), fullPage: true });
+    }
   });
 
   test('QD-49, QD-50, QD-51: problems carry their pointer; a task the service cannot confirm is only a warning', async ({ page, request }) => {
@@ -200,6 +210,12 @@ test.describe('review, Raw JSON and launch', () => {
     await expect(pane).toContainText('staging: this Evaluation Service does not offer task selection.');
     await expect(pane).toContainText('production: the service does not list the task “zzz-unknown”.');
     await expect(launchButton(page)).toBeDisabled();
+    if (SHOTS) {
+      await page.screenshot({ path: path.join(SHOTS, 'after-d-problems-1440.png'), fullPage: true });
+      await page.setViewportSize({ width: 390, height: 1000 });
+      await page.screenshot({ path: path.join(SHOTS, 'after-d-problems-390.png'), fullPage: true });
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
     // The problem focuses the field (the task row of production on step 1).
     await pane.getByRole('button', { name: /production: the service does not list the task/ }).click();
     await expect(page.getByRole('heading', { name: 'Where it runs', level: 2 })).toBeVisible();

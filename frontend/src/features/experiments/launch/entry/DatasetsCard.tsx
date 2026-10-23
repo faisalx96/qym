@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Key } from 'react-aria-components';
 import { useDatasetVersions } from '@/api/launch';
 import type { LaunchDataset } from '@/api/launch';
@@ -182,6 +182,7 @@ function RunShapeControl({ pairs }: { pairs: number }) {
 export function DatasetsCard() {
   const { doc, setDoc, datasetNames, datasets, readOnly, registerField } = useLaunch();
   const [polite, setPolite] = useState('');
+  const fieldsetRef = useRef<HTMLFieldSetElement>(null);
   const entries = datasetEntries(doc);
   const pairs = pairCount(doc);
   const items = useMemo<PickerItem[]>(
@@ -252,7 +253,7 @@ export function DatasetsCard() {
   const chosenNames = new Set(entries.map((e) => e.name));
   const remaining = items.filter((i) => !chosenNames.has(i.key));
   return (
-    <fieldset className={styles.fieldset} data-testid="datasets-fieldset">
+    <fieldset className={styles.fieldset} data-testid="datasets-fieldset" ref={fieldsetRef}>
       <legend className={styles.legend}>Datasets</legend>
       <ul className={styles.dsList}>
         {entries.map((entry, index) => (
@@ -263,7 +264,18 @@ export function DatasetsCard() {
             chip={chipByName(entry.name)}
             readOnly={readOnly}
             announce={setPolite}
-            onRemove={() => setDoc((d) => removeDataset(d, entry.name))}
+            onRemove={() => {
+              setDoc((d) => removeDataset(d, entry.name));
+              // Focus follows the removal: the next box's Versions trigger, else the foot's button (QD-8).
+              const at = entries.findIndex((e) => e.name === entry.name);
+              requestAnimationFrame(() => {
+                const root = fieldsetRef.current;
+                const boxes = root?.querySelectorAll<HTMLElement>('li[data-dataset-box]');
+                const next = boxes && boxes.length ? boxes[Math.min(at, boxes.length)] : undefined;
+                (next?.querySelector<HTMLElement>('button[aria-haspopup]') ??
+                  root?.querySelector<HTMLElement>('[data-add-dataset]'))?.focus();
+              });
+            }}
           />
         ))}
       </ul>
@@ -285,6 +297,7 @@ export function DatasetsCard() {
               variant="neutral"
               icon={<Icon name="plus" />}
               isDisabled={readOnly || !remaining.length}
+              data-add-dataset=""
             >
               Add another dataset
             </Button>
