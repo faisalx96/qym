@@ -2,7 +2,7 @@
 /** QE-35 to QE-76: the chat on a draft, the checklist and the proposal card (stub model, scripted conversations). */
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { box, configureAgent, near, overflowX, record, setViewport, shot, WIDTHS } from './support';
+import { box, configureAgent, near, overflowX, record, seedFeedback, setViewport, shot, WIDTHS } from './support';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -192,4 +192,31 @@ test('QE-50, QE-148: Stop keeps the partial text marked stopped', async ({ page,
   await expect(stop).toBeVisible({ timeout: 10_000 });
   await stop.click();
   await expect(composer(page)).toBeEnabled();
+});
+
+test('QE-62, QE-63, QE-64: a duplicate and a conflict are real requests; the submit label says possible duplicate', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  await configureAgent(request, 'ask_then_propose');
+  seedFeedback(0);
+  await configureAgent(request, 'duplicate_found');
+  try {
+    const id = await newDraft(request, 'We need a PDF export of the comparison.');
+    for (const w of WIDTHS) {
+      await setViewport(page, w);
+      await gotoApp(page, `/feedback/${id}`);
+      const card = page.getByTestId('proposal');
+      await expect(card).toBeVisible({ timeout: 25_000 });
+      if (w === 1440) await expect(page.getByTestId('chat-status')).toHaveText(/answered|proposed/, { timeout: 25_000 });
+      await expect(card.getByText(/This looks like a duplicate of FB-0001/)).toBeVisible();
+      await expect(card.getByRole('button', { name: 'Submit as a possible duplicate' })).toBeVisible();
+      const related = card.getByTestId('related');
+      await expect(related.getByText('Duplicate', { exact: true })).toBeVisible();
+      await expect(related.getByText('Conflict', { exact: true })).toBeVisible();
+      await expect(related.locator('[data-related="FB-0001"]')).not.toHaveText('');
+      record(`proposal-duplicate-${w}`, { card: await box(card), related: await box(related) });
+      await shot(page, 'proposal-duplicate', w);
+    }
+  } finally {
+    await configureAgent(request);
+  }
 });
