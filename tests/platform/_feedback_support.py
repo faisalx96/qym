@@ -97,7 +97,7 @@ class Env:
                 confirmed_at=datetime.utcnow(),
                 created_at=fields.pop("created_at", datetime.utcnow()),
                 checklist={},
-                conflicts=[],
+                conflicts=fields.pop("conflicts", []),
                 agent_reasoning={},
                 **fields,
             )

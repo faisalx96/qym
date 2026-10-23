@@ -482,7 +482,7 @@ def confirm(db: Session, principal: Principal, req: FeedbackRequest, body: dict[
     req.status, req.phase = "new", None
     req.confirmed_at = req.last_activity_at = req.updated_at = now
     for attempt in range(6):
-        number = int(db.query(func.coalesce(func.max(FeedbackRequest.number), 0)).scalar() or 0) + 1 + attempt
+        number = int(db.query(func.coalesce(func.max(FeedbackRequest.number), 0)).scalar() or 0) + 1
         try:
             with db.begin_nested():
                 req.number = number
