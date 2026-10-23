@@ -81,6 +81,8 @@ test.describe('review of WP-D', () => {
     clicks++;
     expect(clicks).toBe(2);
     await nameBox(page).fill('single path');
+    // The dry run of this exact state has been posted and answered before Launch is pressed (QD-24).
+    await expect.poll(() => posts.dryRuns.length, { timeout: 15_000 }).toBeGreaterThan(0);
     await expect(page.getByRole('button', { name: /^Launch/ })).toBeEnabled({ timeout: 15_000 });
     await page.getByRole('button', { name: /^Launch/ }).click();
     await expect.poll(() => posts.launches.length, { timeout: 15_000 }).toBe(1);
@@ -275,6 +277,10 @@ test.describe('review of WP-D', () => {
         });
       out.rowEnvironments = await rowOf(pane.getByTestId('review-env-lines'));
       out.rowDatasets = await rowOf(pane.getByTestId('review-datasets'));
+      out.datasetLineHeights = await pane
+        .getByTestId('review-datasets')
+        .getByRole('listitem')
+        .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height * 10) / 10));
       out.rowRunShape = await rowOf(pane.getByText('Run shape', { exact: true }));
       // Detail with three environments: production (list + task) and two v1.3 services (4 + 4 pairs) = 9 jobs.
       const staging2 = await createEnvironment(request, f.project.id, 'staging-eu', { port: FAKE_B });
@@ -318,8 +324,30 @@ test.describe('review of WP-D', () => {
         .first()
         .evaluate((el) => Math.round(el.getBoundingClientRect().height * 10) / 10)
         .catch(() => null);
+      out.historyGroupTag = await page
+        .locator('[data-exp-jobs] [data-job-group] > *')
+        .first()
+        .evaluate((el) => Math.round(el.getBoundingClientRect().height * 10) / 10)
+        .catch(() => null);
+      out.historyGroupRow = await page
+        .locator('[data-exp-jobs] [data-job-group]')
+        .first()
+        .evaluate((el) => {
+          const row = el.closest('tr, [role="row"], header, div');
+          return Math.round((row ?? el).getBoundingClientRect().height * 10) / 10;
+        })
+        .catch(() => null);
       out.header = await h(page.locator('header').first());
       save(`review-d-numbers-${width}`, out);
+      // The spec's numbers (QD-40, QD-41, QD-53, QD-55, QD-57) measured on three environments and nine jobs.
+      expect(out.jobs).toBe(9);
+      expect(out.rowDatasets).toBe(57);
+      expect(out.rowRunShape).toBe(36.2);
+      if (width === 1440) expect(out.rowEnvironments).toBe(107.2);
+      expect(out.card).toBe({ 1440: 213.3, 1024: 268.1, 390: 318.3 }[width]);
+      expect(out.strip).toBe(width === 390 ? 242.1 : 81.4);
+      if (width !== 390) expect(out.historyTable).toBe(559);
+      expect(out.historyGroupTag).toBe(width === 390 ? 26 : 20);
     });
   }
 

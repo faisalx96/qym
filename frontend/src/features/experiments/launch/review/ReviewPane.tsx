@@ -215,10 +215,10 @@ function DatasetLines() {
     <ul className={styles.pairLines} data-testid="review-datasets">
       {datasetEntries(doc).map((e) => (
         <li key={e.name}>
-          <Text variant="base" as="span" mono>
+          <Text variant="sm" as="span" mono>
             {e.name}
           </Text>{' '}
-          <Text variant="base" as="span" tone="muted">
+          <Text variant="sm" as="span" tone="muted">
             {e.refs.map((r) => refLabel(r).replace(/^Latest version$/, 'latest')).join(', ')}
           </Text>
         </li>
