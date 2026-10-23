@@ -53,7 +53,7 @@ function columns(skeleton: boolean): Column<FeedbackRow>[] {
       id: 'title',
       header: 'Request',
       flex: true,
-      minWidth: 200,
+      minWidth: 160,
       pin: 'start',
       hideable: false,
       priority: 1,
@@ -86,7 +86,7 @@ function columns(skeleton: boolean): Column<FeedbackRow>[] {
     {
       id: 'complexity',
       header: 'Complexity',
-      width: 96,
+      width: 118,
       priority: 2,
       sort: { key: 'complexity', first: 'desc', compare: keep },
       cell: (r) => (skeleton ? bone(40) : <ComplexityTag value={r.complexity} />),

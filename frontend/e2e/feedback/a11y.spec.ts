@@ -3,7 +3,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
 import { axeSeriousViolations, describeViolations } from '../shell/support';
-import { box, configureAgent, near, seedFeedback, setViewport } from './support';
+import { box, configureAgent, near, seedFeedback, setViewport, tableOf } from './support';
 
 test.describe.configure({ mode: 'serial' });
 let draftId = '';
@@ -31,7 +31,7 @@ test('QE-145: axe finds nothing serious on any feedback surface', async ({ page 
   for (const w of [1440, 390]) {
     await setViewport(page, w);
     const surfaces: [string, () => Promise<void>][] = [
-      ['list', async () => { await gotoApp(page, '/feedback'); await expect(page.getByRole('grid', { name: 'Feedback requests' })).toBeVisible(); }],
+      ['list', async () => { await gotoApp(page, '/feedback'); await expect(tableOf(page)).toBeVisible(); }],
       ['new', async () => { await gotoApp(page, '/feedback/new'); await expect(page.getByTestId('new-form')).toBeVisible(); }],
       ['draft', async () => { await gotoApp(page, `/feedback/${draftId}`); await expect(page.getByTestId('chat')).toBeVisible(); }],
       ['proposal', async () => { await gotoApp(page, `/feedback/${proposalId}`); await expect(page.getByTestId('proposal')).toBeVisible(); }],
@@ -61,8 +61,8 @@ test('QE-142, QE-72: the proposal card heading takes focus and tab order follows
 test('QE-150: the list is a keyboard grid and / focuses the search', async ({ page }) => {
   await setViewport(page, 1440);
   await gotoApp(page, '/feedback');
-  await expect(page.getByRole('grid', { name: 'Feedback requests' })).toBeVisible();
-  await page.getByRole('grid', { name: 'Feedback requests' }).locator('tbody tr').first().focus();
+  await expect(tableOf(page)).toBeVisible();
+  await tableOf(page).locator('tbody tr').first().focus();
   await page.keyboard.press('ArrowDown');
 });
 
@@ -70,7 +70,7 @@ test('QE-125: the loading frames have the loaded height (list 0 ± 1 px)', async
   for (const w of [1440, 1024]) {
     await setViewport(page, w);
     await gotoApp(page, '/feedback');
-    const grid = page.getByRole('grid', { name: 'Feedback requests' });
+    const grid = tableOf(page);
     await expect(grid.locator('tbody tr').first()).toBeVisible();
     await expect(page.getByTestId('dup-note')).toBeVisible();
     const loaded = await box(page.locator('[data-dt-card], .dt, [data-testid="feedback-list-page"] > div').last());

@@ -116,6 +116,8 @@ test('QE-57 to QE-72: the proposal card, its fields, duplicate callout and submi
   await expect(card).toContainText('You changed it from Medium.');
   await expect(card).toContainText('Assistant proposed Medium');
   // QE-67: submit once, move to the request, toast
+  const srv = (await (await request.get(`/v1/feedback/${id}`)).json()) as { proposal: { seq: number } };
+  const msgs = (await (await request.get(`/v1/feedback/${id}/messages`)).json()) as { messages: { seq: number; role: string; tool_name: string }[] };
   await card.getByRole('button', { name: 'Submit request' }).click();
   await expect(page).toHaveURL(/\/feedback\/FB-\d{4}$/, { timeout: 15_000 });
   await expect(page.getByText(/Submitted as FB-/)).toBeVisible();
@@ -140,8 +142,10 @@ test('QE-68: a stale proposal keeps the person\'s edits', async ({ page, request
   await setViewport(page, 1440);
   await toProposal(page, id);
   await page.getByLabel('Title').fill('My own title');
+  await expect(composer(page)).toBeEnabled({ timeout: 20_000 });
   // the conversation moves on in another window
-  await request.post(`/v1/feedback/${id}/messages`, { data: { content: 'Actually also the item table.' }, headers: { Accept: 'application/json' } });
+  const other = await request.post(`/v1/feedback/${id}/messages`, { data: { content: 'Actually also the item table.' }, headers: { Accept: 'application/json' } });
+  expect(other.status(), await other.text()).toBe(200);
   await page.getByTestId('proposal').getByRole('button', { name: 'Submit request' }).click();
   await expect(page.getByText('The conversation moved on. Ask the assistant to propose again.')).toBeVisible();
   await expect(page.getByLabel('Title')).toHaveValue('My own title');

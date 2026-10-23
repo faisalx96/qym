@@ -49,7 +49,7 @@ test('QE-27, QE-33: product fields in order, preselected from the URL', async ({
   const fields = page.getByTestId('product-fields');
   await expect(fields).toBeVisible();
   await expect(fields.getByRole('button', { name: /Project/ })).toContainText('Support agent');
-  await expect(page.getByRole('radio', { name: 'Dataset' })).toBeChecked();
+  await expect(fields.getByRole('radio', { name: 'Dataset' })).toBeChecked();
   const start = page.getByRole('button', { name: 'Start conversation' });
   await page.getByLabel('What do you need?').fill('Mark a nightly run red.');
   await expect(start).toBeEnabled();
@@ -94,7 +94,7 @@ test('QE-34, QE-123: not configured replaces the form with the not-set-up page',
     await shot(page, 'unconfigured', 1440);
     await gotoApp(page, '/feedback');
     await expect(page.getByText('The feedback assistant is not set up')).toBeVisible();
-    await expect(page.getByTestId('new-feedback-disabled')).toHaveAttribute('title', 'An administrator has to connect a model first');
+    await expect(page.getByTestId('new-feedback-disabled').first()).toHaveAttribute('title', 'An administrator has to connect a model first');
   } finally {
     await configureAgent(request);
   }

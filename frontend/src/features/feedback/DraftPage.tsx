@@ -15,7 +15,7 @@ import { useAuth } from '@/features/shell/AuthContext';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
 import { useCrumbLabel } from '@/lib/crumb-label';
-import { ApiError } from '@/lib/http';
+import { api, ApiError } from '@/lib/http';
 import { useSubmitLock } from '@/lib/pending';
 import { Button, Card, ConfirmDialog, ErrorState, PageHeader, Skeleton, Tag, useToast } from '@/ui';
 import { useQueryClient } from '@tanstack/react-query';
@@ -153,8 +153,7 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const started = useRef(false);
-  const runRef = useRef<((path: string, body?: unknown, key?: string) => Promise<void>) | null>(null);
-  const retried = useRef(false);
+  const wantFocus = useRef(false);
   const proposalTitle = state.proposal && !state.proposal.superseded ? state.proposal.title : '';
   useDocumentTitle(proposalTitle || 'New feedback');
   useCrumbLabel('New feedback');
@@ -166,6 +165,16 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
     window.addEventListener('beforeunload', on);
     return () => window.removeEventListener('beforeunload', on);
   }, [dirty]);
+
+  // The server finished (or is finishing) a turn this page did not start: show what it stored.
+  const reloadFromServer = useCallback(async () => {
+    const [d, m] = await Promise.all([
+      qc.fetchQuery({ queryKey: feedbackKeys.detail(refId), queryFn: () => api.get<FeedbackDetail>(`/v1/feedback/${encodeURIComponent(refId)}`), staleTime: 0 }),
+      api.get<{ messages: FeedbackMessage[] }>(`/v1/feedback/${encodeURIComponent(refId)}/messages?limit=50`),
+    ]);
+    dispatch({ type: 'init', state: initialState(itemsFromMessages(m.messages, clock), d.checklist, d.proposal) });
+    return d.request.phase;
+  }, [refId, qc]);
 
   const run = useCallback(
     async (path: string, body?: unknown, optimisticKey?: string) => {
@@ -190,12 +199,22 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
         if (e instanceof DOMException && e.name === 'AbortError') return;
         if (e instanceof ApiError) {
           if (optimisticKey) dispatch({ type: 'refused', key: optimisticKey });
+          if (e.status === 409 && e.code === 'nothing_to_answer') {
+            await reloadFromServer();
+            return;
+          }
           if (e.status === 409 && e.code === 'turn_in_progress') {
-            setNote('The assistant is already answering in another window.');
-            if (!retried.current) {
-              retried.current = true;
-              setTimeout(() => void runRef.current?.(path, body, undefined), 2000);
+            if (path === 'turn') {
+              // Another window (or this one before a reload) is mid-turn: wait for its stored answer.
+              dispatch({ type: 'start' });
+              for (let i = 0; i < 40; i += 1) {
+                await new Promise((r) => setTimeout(r, 1500));
+                if ((await reloadFromServer()) !== 'thinking') return;
+                dispatch({ type: 'start' });
+              }
+              return;
             }
+            setNote('The assistant is already answering in another window.');
             return;
           }
           if (e.status === 429) {
@@ -215,12 +234,8 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
         void qc.invalidateQueries({ queryKey: feedbackKeys.detail(refId) });
       }
     },
-    [refId, qc],
+    [refId, qc, reloadFromServer],
   );
-
-  useEffect(() => {
-    runRef.current = run;
-  }, [run]);
 
   // QE-35: a draft whose last message is the person's gets its answer; one that ends with the assistant makes no call.
   useEffect(() => {
@@ -228,6 +243,14 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
     started.current = true;
     if (needsAnswer(messages)) setTimeout(() => void run('turn'), 0);
   }, [messages, run]);
+
+  // QE-142: "Keep talking" pressed while the closing message streams focuses the composer once it is enabled again.
+  useEffect(() => {
+    if (!state.running && wantFocus.current) {
+      wantFocus.current = false;
+      composerRef.current?.focus();
+    }
+  }, [state.running]);
 
   // QE-58: a new proposal moves focus to its heading.
   useEffect(() => {
@@ -245,7 +268,6 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
     if (!value || state.running) return;
     const key = `u${Date.now()}`;
     setNote('');
-    retried.current = false;
     dispatch({ type: 'sent', text: value, key });
     setText('');
     writeComposer(refId, '');
@@ -353,10 +375,14 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
               proposal={state.proposal}
               checklist={state.checklist}
               submitting={confirm.isPending}
+              waiting={state.running}
               stale={stale}
               fieldErrors={fieldErrors}
               onSubmit={(f) => void submit(f)}
-              onKeepTalking={() => composerRef.current?.focus()}
+              onKeepTalking={() => {
+                if (state.running) wantFocus.current = true;
+                else composerRef.current?.focus();
+              }}
               onDirty={setDirty}
             />
           ) : null}

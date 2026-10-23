@@ -2,7 +2,7 @@
 /** QE-123 to QE-138: loading frames at the loaded height, errors, empty, resume, limits. */
 import { test, expect } from '@playwright/test';
 import { gotoApp } from '../helpers';
-import { box, configureAgent, near, record, seedFeedback, setViewport, shot, WIDTHS } from './support';
+import { box, configureAgent, near, record, seedFeedback, setViewport, shot, WIDTHS, tableOf } from './support';
 
 test.describe.configure({ mode: 'serial' });
 test.beforeAll(async ({ request }) => {
@@ -16,7 +16,7 @@ test('QE-125: the list loading frame is as tall as the loaded table at three wid
     await setViewport(page, w);
     // warm the app so the page loads its code, then reload with the list held back
     await gotoApp(page, '/feedback');
-    const grid = page.getByRole('grid', { name: 'Feedback requests' });
+    const grid = tableOf(page);
     await expect(page.getByTestId('dup-note')).toBeVisible();
     const target = page.locator('[data-dt-toolbar]').locator('xpath=ancestor::*[contains(@class,"root") or @role="group" or self::section or self::div][1]');
     void target;

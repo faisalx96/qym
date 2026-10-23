@@ -102,3 +102,8 @@ export function countCalls(page: Page, prefix: string): { count: () => number; u
   });
   return { count: () => urls.length, urls: () => urls };
 }
+
+/** The requests table: a treegrid (rows can hold duplicate children) or a grid. */
+export function tableOf(page: Page): Locator {
+  return page.locator('[aria-label="Feedback requests"][role="treegrid"], [aria-label="Feedback requests"][role="grid"], table[aria-label="Feedback requests"], ul[aria-label="Feedback requests"]').first();
+}

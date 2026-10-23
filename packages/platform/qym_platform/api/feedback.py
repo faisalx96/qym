@@ -390,8 +390,7 @@ async def _turn_response(
 
 
 def _begin_turn(db: Session, req: FeedbackRequest) -> None:
-    if req.id in agent_mod.RUNNING and not agent_mod.RUNNING[req.id].done():
-        raise error(409, "turn_in_progress", "The assistant is already answering in another window.")
+    # The stored phase is the truth (it is committed before the `done` event); a task that is still unwinding is not a turn.
     if lifecycle.turn_in_progress(req):
         raise error(409, "turn_in_progress", "The assistant is already answering in another window.")
 

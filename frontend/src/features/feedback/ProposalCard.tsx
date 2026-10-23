@@ -28,6 +28,8 @@ export interface ProposalCardProps {
   proposal: Proposal;
   checklist: ChecklistItem[];
   submitting: boolean;
+  /** The assistant is still writing its closing message: Submit waits for it. */
+  waiting?: boolean;
   /** Messages from the server: 409 stale, 422 field errors, network failure. */
   stale?: string;
   fieldErrors?: { title?: string; description?: string };
@@ -88,7 +90,7 @@ export function ProposalCard(p: ProposalCardProps) {
             </Button>
             <Button
               variant="accent"
-              isDisabled={!canSubmit(form, proposal, p.submitting)}
+              isDisabled={!canSubmit(form, proposal, p.submitting) || Boolean(p.waiting)}
               loading={p.submitting}
               aria-busy={p.submitting ? true : undefined}
               onPress={() => {

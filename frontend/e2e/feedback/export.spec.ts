@@ -3,7 +3,7 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import { gotoApp } from '../helpers';
-import { asMember, configureAgent, seedFeedback, setViewport, shot } from './support';
+import { asMember, configureAgent, seedFeedback, setViewport, shot, tableOf } from './support';
 
 test.beforeAll(async ({ request }) => {
   test.setTimeout(180_000);
@@ -33,7 +33,7 @@ test('QE-179: an administrator opens the menu with four items; the member sees n
 test('QE-174, QE-177, QE-182: CSV and JSON downloads carry the current filter', async ({ page }) => {
   await setViewport(page, 1440);
   await gotoApp(page, '/feedback?priority=high');
-  await expect(page.getByRole('grid', { name: 'Feedback requests' })).toBeVisible();
+  await expect(tableOf(page)).toBeVisible();
   const [csv] = await Promise.all([page.waitForEvent('download'), (async () => {
     await page.getByTestId('export-menu').click();
     await page.getByRole('menuitem', { name: 'CSV' }).click();

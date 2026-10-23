@@ -357,7 +357,7 @@ def _propose(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     ctx.req.proposal = stored
     if ctx.req.status == "draft":
         ctx.req.title = proposal.title
-    ctx.req.phase = "proposed"
+    # phase stays "thinking" until the turn ends (the closing message is still being written)
     ctx.stored_proposal = True
     ctx.db.flush()
     events: list[tuple[str, dict[str, Any]]] = [
