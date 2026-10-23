@@ -307,7 +307,7 @@ export function DatasetsCard() {
             label: i.chip ? (
               <span className={styles.datasetName}>
                 <span className={styles.datasetLabel}>{i.label}</span>
-                <Tag>{i.chip}</Tag>
+                <Tag data-testid="dataset-chip">{i.chip}</Tag>
               </span>
             ) : (
               i.label

@@ -5,6 +5,7 @@
  */
 import { expect, type Locator, type Page } from '@playwright/test';
 import { createEnvironment, fakeJobsOf, getExperiment, resetFakes, setFakeFlags, FAKE_A, test } from '../support';
+import { datasetSelect, dsBox } from './multiSupport';
 import { launchButton, nameBox, openLaunch, review, seedLaunch, type LaunchFixture } from './launchSupport';
 
 test.setTimeout(120_000);
@@ -147,17 +148,34 @@ test.describe('Dataset picker', () => {
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 900 });
       await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
-      const trigger = page.getByRole('button', { name: /^(golden|secret-set|Choose a dataset) Dataset$/ });
-      await trigger.click();
-      const options = page.getByRole('option');
-      await expect(options).toHaveCount(2);
-      const chip = options.filter({ hasText: 'secret-set' }).getByTestId('dataset-chip');
+      // QD-D1: the starting point carries `golden`, a dataset box. The `Add another dataset` menu lists the rest.
+      await expect(dsBox(page, 'golden')).toBeVisible();
+      await expect(dsBox(page, 'golden').getByTestId('dataset-chip')).toHaveCount(0);
+      await page.getByRole('button', { name: 'Add another dataset' }).click();
+      const items = page.getByRole('menuitem');
+      await expect(items).toHaveCount(1);
+      const chip = items.filter({ hasText: 'secret-set' }).getByTestId('dataset-chip');
       await expect(chip).toHaveText('Private test set');
       // F2 (B4-22): the badge is 99 x 20 in the open list, as in the trigger.
       const chipBox = await box(chip);
       expect([Math.round(chipBox.width * 10) / 10, Math.round(chipBox.height)]).toEqual([99, 20]);
+      // No launch gate: every item is selectable.
+      await expect(items.first()).not.toHaveAttribute('aria-disabled', 'true');
+      await items.filter({ hasText: 'secret-set' }).click();
+      // The box carries the chip and the help line; the plain dataset keeps neither.
+      await expect(dsBox(page, 'secret-set').getByTestId('dataset-chip')).toHaveText('Private test set');
+      await expect(dsBox(page, 'golden').getByTestId('dataset-chip')).toHaveCount(0);
+      // The zero-state select lists the same chips (Remove the carried dataset, then both are offered).
+      await dsBox(page, 'secret-set').getByRole('button', { name: 'Remove secret-set' }).click();
+      await dsBox(page, 'golden').getByRole('button', { name: 'Remove golden' }).click();
+      await datasetSelect(page).click();
+      const options = page.getByRole('option');
+      await expect(options).toHaveCount(2);
+      const zeroChip = options.filter({ hasText: 'secret-set' }).getByTestId('dataset-chip');
+      await expect(zeroChip).toHaveText('Private test set');
+      const zeroBox = await box(zeroChip);
+      expect([Math.round(zeroBox.width * 10) / 10, Math.round(zeroBox.height)]).toEqual([99, 20]);
       await expect(options.filter({ hasText: 'golden' }).getByTestId('dataset-chip')).toHaveCount(0);
-      // No launch gate: every option is selectable.
       for (const o of await options.all()) await expect(o).not.toHaveAttribute('aria-disabled', 'true');
       await options.filter({ hasText: 'secret-set' }).click();
       await expect(page.getByTestId('dataset-token-help')).toContainText('Private test set. The experiment reads it');
@@ -180,7 +198,9 @@ test.describe('Token warning', () => {
       await page.setViewportSize({ width, height: 900 });
       await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
       await nameBox(page).fill('token');
-      await page.getByRole('button', { name: /^(golden|golden-private|Choose a dataset) Dataset$/ }).click();
+      // QD-D1: replace the carried `golden` (Remove, then choose in the zero-state select).
+      await dsBox(page, 'golden').getByRole('button', { name: 'Remove golden' }).click();
+      await datasetSelect(page).click();
       await page.getByRole('option', { name: /golden-private/ }).click();
       const callout = review(page).getByRole('note').filter({ hasText: 'Dataset read token will not be sent' });
       await expect(callout).toBeVisible({ timeout: 15_000 });
