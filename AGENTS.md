@@ -110,6 +110,15 @@ of the whole user slice; see `docs/internal/ui-migration/POSTMORTEM.md` section 
   then `export QYM_TEST_POSTGRES_URL=postgresql+psycopg2://qym:qymtest@127.0.0.1:<port>/qym_test` (the driver is
   `psycopg2`). One container per agent, its own port, removed when the gate ends (`docker rm -f <name>`). "No Postgres
   on this machine" is only true when `docker run` itself fails.
+- Before any heavy run: `free -h` must show at least 4 GB available and `/proc/pressure/memory` `full avg60`
+  under 10 %. A full swap alone is not a reason to wait (it holds cold desktop pages); available memory and
+  pressure are. Chunks that carry stub-LLM tests (analyzer, feedback agent) run at `--cost 4 -n 1`: at 3 GB the
+  cgroup is killed (`journalctl --user -b | grep "systemd-oomd killed"` shows which unit) and the chunk is re-run.
+- Heavy runs of parallel agents never overlap: the orchestrator wraps `heavy.sh` in one `flock <lock file>` per
+  session (`scratchpad/gated-heavy.sh`) and every agent runs its gates through that wrapper. On 2026-10-22 two
+  agents' gates admitted by `heavy.sh` separately pushed the user slice past the oomd limit and killed the session.
+- No scratch venvs: every agent uses the project `.venv` (Python 3.11) through `source .venv/bin/activate`. The
+  scratchpad is tmpfs, so a venv there is memory, and a second interpreter version is not the one the gate runs.
 - Agents: at most one sub-agent each; `free -h` with at least 3 GB available before starting another agent;
   one hand-back per task (an agent that re-sends the same report is stopped, not answered).
 - Environment for anything that boots the platform: `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"`
