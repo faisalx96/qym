@@ -208,7 +208,7 @@ test.describe('frozen names stay put on real scrolling', () => {
       .locator('[data-dt-scroller]')
       .evaluateAll((scrollers) =>
         scrollers.flatMap((sc, i) =>
-          [...sc.querySelectorAll<HTMLElement>('thead th[data-pin]')]
+          Array.from(sc.querySelectorAll<HTMLElement>('thead th[data-pin]'))
             .filter((th) => th.getBoundingClientRect().width > sc.clientWidth * 0.75)
             .map(
               (th) =>
