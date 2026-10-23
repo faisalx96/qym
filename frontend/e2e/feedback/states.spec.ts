@@ -44,8 +44,34 @@ test('QE-126: a failed list is an error with Retry, never an empty list', async 
 
 test('QE-127: filtered to nothing says so; QE-136 is covered by the platform rate-limit test', async ({ page }) => {
   await setViewport(page, 1440);
-  await gotoApp(page, '/feedback?q=zzzz-nothing');
+  await gotoApp(page, '/feedback?q=zzzz-nothing&sort=priority:desc');
   await expect(page.getByText('No requests match.')).toBeVisible();
+  // The empty state offers the way out (review fix): Clear filters drops the search and keeps the sort.
+  await page.getByRole('button', { name: 'Clear filters' }).click();
+  await expect(page).toHaveURL(/\/feedback\?sort=priority/);
+  await expect(page.getByRole('link', { name: 'FB-0001' }).first()).toBeVisible();
+});
+
+test('QE-125: the chat loading frame is as tall as the loaded chat at three widths (0 ± 1 px)', async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const id = ((await (await request.post('/v1/feedback', { data: { subject: 'platform', message: 'A draft for the loading frame.' } })).json()) as { id: string }).id;
+  await request.post(`/v1/feedback/${id}/turn`, { headers: { Accept: 'application/json' } });
+  for (const w of WIDTHS) {
+    await setViewport(page, w);
+    await gotoApp(page, `/feedback/${id}`);
+    await expect(page.getByTestId('feedback-chat-page')).toBeVisible();
+    const loaded = await box(page.getByTestId('feedback-chat-page'));
+    await page.route(new RegExp(`/v1/feedback/${id}$`), async (route) => {
+      await new Promise((r) => setTimeout(r, 2500));
+      await route.continue().catch(() => undefined);
+    });
+    await page.reload();
+    await expect(page.getByTestId('chat-loading')).toBeVisible();
+    await page.waitForTimeout(600);
+    const frame = await box(page.getByTestId('chat-loading'));
+    near(frame.h, loaded.h, 1);
+    await page.unroute(new RegExp(`/v1/feedback/${id}$`));
+  }
 });
 
 test('QE-129: the message limit callout and a forced proposal', async ({ page, request }) => {

@@ -75,6 +75,8 @@
   gap: var(--space-xs);
   min-inline-size: 0;
   padding-block: var(--space-xs);
+  /* The table cell is nowrap + ellipsis; a request title wraps at its words and is never cut (QE-10). */
+  white-space: normal;
 }
 
 .titleLine {

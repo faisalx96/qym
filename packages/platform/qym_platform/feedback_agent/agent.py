@@ -190,6 +190,11 @@ class TurnRunner:
             await self._run(db)
         except asyncio.CancelledError:
             self._stopped(db)
+            # QE-153: a stream ends with exactly one terminal event, a stopped turn included.
+            self.emit(
+                "done",
+                {"message_id": None, "seq": None, "phase": "asking", "stopped": True},
+            )
             raise
         except Exception as exc:  # noqa: BLE001
             err = map_exception(exc)

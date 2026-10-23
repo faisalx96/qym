@@ -147,7 +147,7 @@ export function applyEvent(state: TurnState, ev: SseEvent, clock: (iso: string) 
           {
             key: 'error',
             role: 'error',
-            text: `The assistant could not answer: ${message}. Your message is saved.`,
+            text: `The assistant could not answer: ${message.replace(/[.\s]+$/, '')}. Your message is saved.`,
             retryable: d.retryable !== false,
           },
         ],

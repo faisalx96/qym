@@ -250,6 +250,40 @@ def test_a_second_turn_while_one_runs_is_409_and_a_stale_phase_proceeds(env):
     assert events[-1][0] == "done"
 
 
+def test_a_stopped_turn_ends_with_exactly_one_done_event(env):
+    """QE-153: a turn cancelled through /stop still closes its stream with one terminal event."""
+    import asyncio
+
+    from qym_platform.feedback_agent import agent as agent_mod
+
+    rid = start(env)
+
+    async def go():
+        queue: asyncio.Queue = asyncio.Queue()
+        runner = agent_mod.TurnRunner(env.factory, rid, queue=queue)
+
+        async def hang(_db):
+            await asyncio.sleep(30)
+
+        runner._run = hang  # type: ignore[assignment]
+        task = asyncio.create_task(runner.run())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        out = []
+        while True:
+            item = queue.get_nowait()
+            if item is None:
+                return out
+            out.append(item)
+
+    events = asyncio.run(go())
+    assert [e for e, _ in events] == ["done"]
+    assert events[0][1]["stopped"] is True and events[0][1]["phase"] == "asking"
+    assert row(env, rid).phase == "asking"
+
+
 def test_json_fallback_returns_one_body(env):
     rid = start(env)
     r = env.client.post(

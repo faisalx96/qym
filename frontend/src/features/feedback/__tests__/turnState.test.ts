@@ -64,6 +64,18 @@ describe('turn state', () => {
     expect(s.running).toBe(false);
   });
 
+  it('does not double the full stop when the cause ends with one (QE-124)', () => {
+    let s = userSent(initialState([], empty, null), 'x', 'u1', '12:00');
+    s = applyEvent(
+      s,
+      ev('error', { code: 'agent_unavailable', message: 'The stored key cannot be decrypted. Save the connection again.', retryable: false }),
+      clock,
+    );
+    expect(s.items.at(-1)!.text).toBe(
+      'The assistant could not answer: The stored key cannot be decrypted. Save the connection again. Your message is saved.',
+    );
+  });
+
   it('drops an empty streaming item, and a lost connection reads as not reachable', () => {
     let s = userSent(initialState([], empty, null), 'x', 'u1', '12:00');
     s = connectionLost(s);

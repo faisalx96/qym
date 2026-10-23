@@ -104,6 +104,19 @@ test('QE-19, QE-22, QE-16: below 640 px the table is cards and the page does not
   await expect(page.getByRole('dialog', { name: 'Filters' })).toBeVisible();
 });
 
+test('QE-10: a request title is never cut, at any width (review fix: the table cell\'s nowrap no longer reaches the title)', async ({ page }) => {
+  for (const w of WIDTHS) {
+    await setViewport(page, w);
+    await gotoApp(page, '/feedback');
+    await expect(page.getByRole('link', { name: 'FB-0001' }).first()).toBeVisible();
+    const cut = await page.evaluate(() => {
+      const titles = Array.from(document.querySelectorAll<HTMLElement>('[aria-label="Feedback requests"] [class*="titleText"]'));
+      return titles.filter((t) => t.scrollWidth > t.clientWidth + 1 || getComputedStyle(t).whiteSpace === 'nowrap').length;
+    });
+    expect(cut, `cut titles at ${w}`).toBe(0);
+  }
+});
+
 test('QE-21, QE-24: a row opens the request; the title is Feedback', async ({ page }) => {
   await setViewport(page, 1440);
   await gotoApp(page, '/feedback');

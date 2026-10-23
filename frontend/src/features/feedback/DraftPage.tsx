@@ -18,11 +18,12 @@ import { constrained } from '@/features/shell/layout';
 import { useCrumbLabel } from '@/lib/crumb-label';
 import { api, ApiError } from '@/lib/http';
 import { useSubmitLock } from '@/lib/pending';
-import { Button, Card, ConfirmDialog, ErrorState, PageHeader, Skeleton, Tag, useToast } from '@/ui';
+import { Button, ConfirmDialog, ErrorState, PageHeader, Tag, useToast } from '@/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { Chat } from './Chat';
 import { ChecklistRail } from './ChecklistRail';
 import { clock } from './format';
+import { ChatLoadingFrame } from './LoadingFrames';
 import { ProposalCard } from './ProposalCard';
 import type { ProposalForm } from './proposalForm';
 import { streamPost, type SseEvent } from './sse';
@@ -122,15 +123,7 @@ export function DraftPage({ refId }: { refId: string }) {
         />
       </div>
     );
-  if (!detail.data || !messages.data)
-    return (
-      <div className={`${constrained} ${styles.page}`} aria-busy="true">
-        <PageHeader title="New feedback" description="Answer the assistant’s questions." />
-        <Card as="section" aria-label="Loading conversation" flush className={styles.chatCard}>
-          <Skeleton kind="rows" rows={3} rowHeight={56} label="Loading conversation" />
-        </Card>
-      </div>
-    );
+  if (!detail.data || !messages.data) return <ChatLoadingFrame />;
   return (
     <DraftConversation
       refId={refId}
@@ -178,6 +171,7 @@ function DraftConversation({
   const abortRef = useRef<AbortController | null>(null);
   const started = useRef(false);
   const wantFocus = useRef(false);
+  const restoreFocus = useRef(false);
   const proposalTitle = state.proposal && !state.proposal.superseded ? state.proposal.title : '';
   useDocumentTitle(proposalTitle || 'New feedback');
   useCrumbLabel('New feedback');
@@ -287,9 +281,17 @@ function DraftConversation({
 
   // QE-142: "Keep talking" pressed while the closing message streams focuses the composer once it is enabled again.
   useEffect(() => {
-    if (!state.running && wantFocus.current) {
+    if (state.running) return;
+    if (wantFocus.current) {
       wantFocus.current = false;
       composerRef.current?.focus();
+    }
+    // QE-140: the composer is disabled while the assistant writes, which drops the focus the person had when they
+    // pressed Enter; give it back when the turn ends unless the focus already went somewhere on purpose (the proposal).
+    if (restoreFocus.current) {
+      restoreFocus.current = false;
+      const a = document.activeElement;
+      if (!a || a === document.body) composerRef.current?.focus();
     }
   }, [state.running]);
 
@@ -308,6 +310,7 @@ function DraftConversation({
     const value = text.trim();
     if (!value || state.running) return;
     const key = `u${Date.now()}`;
+    restoreFocus.current = document.activeElement === composerRef.current;
     setNote('');
     dispatch({ type: 'sent', text: value, key });
     setText('');
@@ -368,7 +371,8 @@ function DraftConversation({
 
   const [mountedAt] = useState(() => Date.now());
   const ageDays = Math.floor((mountedAt - new Date(info.last_activity_at).getTime()) / 86_400_000);
-  const count = userMessageCount(state);
+  // The log holds only the loaded page of messages, so a long conversation counts from the server's number (QE-129).
+  const count = Math.max(userMessageCount(state), info.user_message_count);
   const limit = info.max_user_messages;
   const stamp = state.items.filter((i) => i.time).at(-1)?.time;
   const subjectTag = req.subject === 'platform' ? 'Platform' : (req.project?.name ?? 'Product');
