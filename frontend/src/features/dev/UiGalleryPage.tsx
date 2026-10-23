@@ -9,6 +9,7 @@ import { DatasetAccessMocks } from './DatasetAccessMocks';
 import { QaDatasetsMocks } from './QaDatasetsMocks';
 import { EvalFlagsMocks } from './EvalFlagsMocks';
 import { QaExperimentsMocks } from './QaExperimentsMocks';
+import { AiFeedbackMocks } from './AiFeedbackMocks';
 import type { Key } from 'react-aria-components';
 import {
   Badge,
@@ -947,6 +948,7 @@ export default function UiGalleryPage() {
       </Section>
       <EvalFlagsMocks Section={Section} Case={Case} />
       <QaExperimentsMocks Section={Section} Case={Case} />
+      <AiFeedbackMocks Section={Section} Case={Case} />
     </div>
   );
 }
