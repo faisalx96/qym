@@ -32,6 +32,9 @@ Experiments can run several datasets, each at several versions, and can choose t
 - **Upload.** `POST /v1/runs` accepts `datasets: [{dataset, dataset_id, dataset_version_id, version, alias, items, disabled_items}]` (1 to 50 entries; a repeated version is 422); `run_started` carries the same list; `POST /v1/runs:upload` takes an optional `datasets` form field. A run without the field is processed as before.
 - **Access.** A run is restricted when any of its datasets is restricted or private for the reader: scores and the per-dataset table stay visible, item contents are hidden.
 - **The runs table fills the page.** The runs list table reaches the bottom of the content area and scrolls inside, instead of stopping at a viewport-based cap that left empty space below its footer (132 px at 1440 x 900).
+- **Task column 86 px (was 90).** The Dataset column grew to 120 px for the union count tag, which pushed the Date column, the default sort, 4 px under the frozen Actions column at 1280. Task gives those pixels back; saved column widths are untouched.
+- **A frozen flex column never outgrows its table's scroller.** In a table wider than its scroller (the experiments, environments and queue lists have a minimum width of about 1000 px) the flexible name column took all the slack, and at tablet widths it grew wider than the scroller itself; a sticky cell cannot leave its row, so the frozen name scrolled away with the content. It is now capped at the freeze share (60% of the scroller) and the other columns share the rest.
+- **The local viewer's bundle is self-contained again.** The per-dataset score table of the SDK viewer had been built on the app's data table, which pulled the router and the menu library into the offline bundle (745 KB, with external URLs); it is a plain table again (398 KB, no external references).
 
 # October 2026 — Platform 2.0.0 / SDK 2.0.0
 

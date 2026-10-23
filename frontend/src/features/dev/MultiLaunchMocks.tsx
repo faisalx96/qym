@@ -828,7 +828,9 @@ function RawJsonCard({ error }: { error?: string }) {
           title="Raw JSON"
           description="The experiment document as it is sent. Apply to update the form from the text."
         />
-        <pre className={styles.code} data-testid="raw-json">
+        {/* scrollable region must be keyboard-focusable (axe scrollable-region-focusable), as in admin JobsTable */}
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+        <pre className={styles.code} data-testid="raw-json" aria-label="Raw JSON document" tabIndex={0}>
           {RAW_JSON}
         </pre>
         {error ? (
