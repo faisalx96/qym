@@ -38,14 +38,21 @@ COLUMNS = (
 )
 FORMATS = {
     "csv": ("text/csv; charset=utf-8", "csv"),
-    "xlsx": ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"),
+    "xlsx": (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "xlsx",
+    ),
     "json": ("application/json", "json"),
     "jsonl": ("application/x-ndjson", "jsonl"),
 }
 
 
 def _conflict_ids(row: FeedbackRequest) -> list[str]:
-    return [str(c.get("request_id")) for c in (row.conflicts or []) if isinstance(c, dict) and c.get("request_id")]
+    return [
+        str(c.get("request_id"))
+        for c in (row.conflicts or [])
+        if isinstance(c, dict) and c.get("request_id")
+    ]
 
 
 def export_records(
@@ -72,7 +79,9 @@ def export_records(
                 "submitter": user_name(users.get(r.submitter_user_id)),
                 "created_at": r.created_at,
                 "confirmed_at": r.confirmed_at,
-                "duplicate_of": refs.get(r.duplicate_of_id) if r.duplicate_of_id else None,
+                "duplicate_of": (
+                    refs.get(r.duplicate_of_id) if r.duplicate_of_id else None
+                ),
                 "conflicts": _conflict_ids(r),
                 "summary": r.summary,
                 "description": r.description,
@@ -88,7 +97,9 @@ def export_records(
 def _json_ready(record: dict[str, Any]) -> dict[str, Any]:
     out = dict(record)
     for key in ("created_at", "confirmed_at"):
-        out[key] = to_api_timestamp(out[key]) if isinstance(out[key], datetime) else out[key]
+        out[key] = (
+            to_api_timestamp(out[key]) if isinstance(out[key], datetime) else out[key]
+        )
     return out
 
 
@@ -99,17 +110,24 @@ def to_csv(records: list[dict[str, Any]]) -> bytes:
     for rec in records:
         r = _json_ready(rec)
         writer.writerow(
-            [";".join(r[c]) if c == "conflicts" else ("" if r[c] is None else r[c]) for c in COLUMNS]
+            [
+                ";".join(r[c]) if c == "conflicts" else ("" if r[c] is None else r[c])
+                for c in COLUMNS
+            ]
         )
     return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
 
 
 def to_json(records: list[dict[str, Any]]) -> bytes:
-    return json.dumps([_json_ready(r) for r in records], ensure_ascii=False).encode("utf-8")
+    return json.dumps([_json_ready(r) for r in records], ensure_ascii=False).encode(
+        "utf-8"
+    )
 
 
 def to_jsonl(records: list[dict[str, Any]]) -> bytes:
-    return "".join(json.dumps(_json_ready(r), ensure_ascii=False) + "\n" for r in records).encode("utf-8")
+    return "".join(
+        json.dumps(_json_ready(r), ensure_ascii=False) + "\n" for r in records
+    ).encode("utf-8")
 
 
 def to_xlsx(records: list[dict[str, Any]]) -> bytes:
@@ -145,7 +163,9 @@ def to_xlsx(records: list[dict[str, Any]]) -> bytes:
 
 
 def render(fmt: str, records: list[dict[str, Any]]) -> bytes:
-    return {"csv": to_csv, "xlsx": to_xlsx, "json": to_json, "jsonl": to_jsonl}[fmt](records)
+    return {"csv": to_csv, "xlsx": to_xlsx, "json": to_json, "jsonl": to_jsonl}[fmt](
+        records
+    )
 
 
 def filename(fmt: str, today: Optional[date] = None) -> str:

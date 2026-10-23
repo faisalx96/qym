@@ -11,28 +11,18 @@ import time
 from typing import Any, Optional
 
 import httpx
-from openai import (
-    APIConnectionError,
-    APIStatusError,
-    APITimeoutError,
-    AsyncOpenAI,
-    AuthenticationError,
-    BadRequestError,
-    PermissionDeniedError,
-    RateLimitError,
-)
-from sqlalchemy.orm import Session
-
+from openai import (APIConnectionError, APIStatusError, APITimeoutError,
+                    AsyncOpenAI, AuthenticationError, BadRequestError,
+                    PermissionDeniedError, RateLimitError)
 from qym_platform.db.feedback_models import FeedbackAgentConnection
-from qym_platform.llm_endpoint_security import (
-    LlmEndpointValidationError,
-    create_llm_http_client,
-    validate_llm_base_url,
-)
+from qym_platform.llm_endpoint_security import (LlmEndpointValidationError,
+                                                create_llm_http_client,
+                                                validate_llm_base_url)
 from qym_platform.log import get_logger
 from qym_platform.openai_compat import create_chat_completion_compat
 from qym_platform.secrets import decrypt_llm_api_key, encryption_available
 from qym_platform.settings import PlatformSettings
+from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
 
@@ -41,7 +31,11 @@ TEST_TOOL = {
     "function": {
         "name": "qym_ping",
         "description": "Call this tool to confirm that tool calls work.",
-        "parameters": {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]},
+        "parameters": {
+            "type": "object",
+            "properties": {"ok": {"type": "boolean"}},
+            "required": ["ok"],
+        },
     },
 }
 
@@ -69,14 +63,18 @@ def get_connection(db: Session) -> Optional[FeedbackAgentConnection]:
 
 
 def is_configured(conn: Optional[FeedbackAgentConnection]) -> bool:
-    return bool(conn and conn.llm_base_url and conn.llm_model and conn.llm_api_key_encrypted)
+    return bool(
+        conn and conn.llm_base_url and conn.llm_model and conn.llm_api_key_encrypted
+    )
 
 
 def api_key_hint(conn: Optional[FeedbackAgentConnection]) -> str:
     return ("••••" + conn.llm_api_key_last4) if conn and conn.llm_api_key_last4 else ""
 
 
-def read_api_key(conn: FeedbackAgentConnection, settings: Optional[PlatformSettings] = None) -> str:
+def read_api_key(
+    conn: FeedbackAgentConnection, settings: Optional[PlatformSettings] = None
+) -> str:
     try:
         return decrypt_llm_api_key(conn.llm_api_key_encrypted, settings)
     except RuntimeError as exc:
@@ -88,16 +86,27 @@ def read_api_key(conn: FeedbackAgentConnection, settings: Optional[PlatformSetti
         ) from exc
 
 
-def build_client(base_url: str, api_key: str, settings: Optional[PlatformSettings] = None) -> AsyncOpenAI:
+def build_client(
+    base_url: str, api_key: str, settings: Optional[PlatformSettings] = None
+) -> AsyncOpenAI:
     settings = settings or PlatformSettings()
     try:
-        url = validate_llm_base_url(base_url, allow_private=settings.allow_private_llm_base_urls)
+        url = validate_llm_base_url(
+            base_url, allow_private=settings.allow_private_llm_base_urls
+        )
     except LlmEndpointValidationError as exc:
-        raise AgentError("agent_unavailable", "The assistant is not available.", retryable=False, admin_detail=str(exc)) from exc
+        raise AgentError(
+            "agent_unavailable",
+            "The assistant is not available.",
+            retryable=False,
+            admin_detail=str(exc),
+        ) from exc
     return AsyncOpenAI(
         base_url=url,
         api_key=api_key or "unused",
-        http_client=create_llm_http_client(allow_private=settings.allow_private_llm_base_urls),
+        http_client=create_llm_http_client(
+            allow_private=settings.allow_private_llm_base_urls
+        ),
         max_retries=0,
     )
 
@@ -110,7 +119,9 @@ def map_exception(exc: BaseException) -> AgentError:
         return AgentError("agent_rejected_key", "the key was rejected", retryable=False)
     if isinstance(exc, RateLimitError):
         return AgentError("agent_rate_limited", "rate limited", retryable=True)
-    if isinstance(exc, (APITimeoutError, TimeoutError)) or isinstance(exc, httpx.TimeoutException):
+    if isinstance(exc, (APITimeoutError, TimeoutError)) or isinstance(
+        exc, httpx.TimeoutException
+    ):
         return AgentError("agent_timeout", "timed out", retryable=True)
     if isinstance(exc, APIConnectionError):
         return AgentError("agent_unavailable", "not reachable", retryable=True)
@@ -118,13 +129,25 @@ def map_exception(exc: BaseException) -> AgentError:
         text = str(exc).lower()
         if "tool" in text or "function" in text:
             return AgentError(
-                "agent_unavailable", "the model does not support tool calls", retryable=False
+                "agent_unavailable",
+                "the model does not support tool calls",
+                retryable=False,
             )
-        return AgentError("agent_unavailable", f"the model refused the request (HTTP 400)", retryable=False)
+        return AgentError(
+            "agent_unavailable",
+            f"the model refused the request (HTTP 400)",
+            retryable=False,
+        )
     if isinstance(exc, APIStatusError):
-        return AgentError("agent_unavailable", f"HTTP {exc.status_code}", retryable=exc.status_code >= 500)
+        return AgentError(
+            "agent_unavailable",
+            f"HTTP {exc.status_code}",
+            retryable=exc.status_code >= 500,
+        )
     if isinstance(exc, LlmEndpointValidationError):
-        return AgentError("agent_unavailable", "not reachable", retryable=False, admin_detail=str(exc))
+        return AgentError(
+            "agent_unavailable", "not reachable", retryable=False, admin_detail=str(exc)
+        )
     return AgentError("agent_bad_answer", "bad answer", retryable=True)
 
 
@@ -137,7 +160,9 @@ async def test_connection(base_url: str, model: str, api_key: str) -> dict[str, 
             response = await create_chat_completion_compat(
                 client,
                 model=model,
-                messages=[{"role": "user", "content": "Call the qym_ping tool with ok=true."}],
+                messages=[
+                    {"role": "user", "content": "Call the qym_ping tool with ok=true."}
+                ],
                 tools=[TEST_TOOL],
                 tool_choice="auto",
                 max_tokens=16,
@@ -149,19 +174,38 @@ async def test_connection(base_url: str, model: str, api_key: str) -> dict[str, 
         err = map_exception(exc)
         logger.warning("feedback connection test failed: %s", err.code)
         detail = err.admin_detail or err.message
-        if isinstance(exc, APIStatusError) and not isinstance(exc, (AuthenticationError, BadRequestError)):
+        if isinstance(exc, APIStatusError) and not isinstance(
+            exc, (AuthenticationError, BadRequestError)
+        ):
             detail = f"HTTP {exc.status_code}"
-        return {"ok": False, "model": model, "latency_ms": int((time.monotonic() - started) * 1000),
-                "tool_call": False, "detail": detail}
+        return {
+            "ok": False,
+            "model": model,
+            "latency_ms": int((time.monotonic() - started) * 1000),
+            "tool_call": False,
+            "detail": detail,
+        }
     latency = int((time.monotonic() - started) * 1000)
     choice = response.choices[0] if getattr(response, "choices", None) else None
     calls = getattr(getattr(choice, "message", None), "tool_calls", None) or []
-    called = any(getattr(getattr(c, "function", None), "name", "") == "qym_ping" for c in calls)
+    called = any(
+        getattr(getattr(c, "function", None), "name", "") == "qym_ping" for c in calls
+    )
     if not called:
-        return {"ok": False, "model": model, "latency_ms": latency, "tool_call": False,
-                "detail": "the model does not support tool calls"}
-    return {"ok": True, "model": getattr(response, "model", None) or model, "latency_ms": latency,
-            "tool_call": True, "detail": ""}
+        return {
+            "ok": False,
+            "model": model,
+            "latency_ms": latency,
+            "tool_call": False,
+            "detail": "the model does not support tool calls",
+        }
+    return {
+        "ok": True,
+        "model": getattr(response, "model", None) or model,
+        "latency_ms": latency,
+        "tool_call": True,
+        "detail": "",
+    }
 
 
 def encryption_ready(settings: Optional[PlatformSettings] = None) -> bool:

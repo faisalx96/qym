@@ -9,12 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
+from qym_platform.db.feedback_models import FeedbackRequest
+from qym_platform.feedback_agent.constants import (SEARCH_MAX_RESULTS,
+                                                   SEARCH_MIN_SCORE)
+from qym_platform.feedback_agent.text import normalize, stem, tokens
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-
-from qym_platform.db.feedback_models import FeedbackRequest
-from qym_platform.feedback_agent.constants import SEARCH_MAX_RESULTS, SEARCH_MIN_SCORE
-from qym_platform.feedback_agent.text import normalize, stem, tokens
 
 # Field weights: a query word in the title counts more than in the summary or the need.
 _W_TITLE, _W_SUMMARY, _W_NEED = 3.0, 2.0, 1.0

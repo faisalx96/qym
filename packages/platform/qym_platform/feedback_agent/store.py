@@ -6,24 +6,17 @@ import re
 from datetime import datetime, timedelta
 from typing import Any, Iterable, Optional
 
-from sqlalchemy import and_, case, func, or_
-from sqlalchemy.orm import Session
-
 from qym_platform.auth import Principal
 from qym_platform.datetime_utils import to_api_timestamp
-from qym_platform.db.feedback_models import (
-    FeedbackMessage,
-    FeedbackRequest,
-    FeedbackRequestEvent,
-)
+from qym_platform.db.feedback_models import (FeedbackMessage, FeedbackRequest,
+                                             FeedbackRequestEvent)
 from qym_platform.db.models import AuditLog, Project, User, UserRole
-from qym_platform.feedback_agent.constants import (
-    COMPLEXITIES,
-    PRIORITIES,
-    TRIAGE_STATUSES,
-)
+from qym_platform.feedback_agent.constants import (COMPLEXITIES, PRIORITIES,
+                                                   TRIAGE_STATUSES)
 from qym_platform.feedback_agent.search import request_ref
 from qym_platform.feedback_agent.text import normalize, stem, tokens
+from sqlalchemy import and_, case, func, or_
+from sqlalchemy.orm import Session
 
 REF_RE = re.compile(r"^(?:FB-)?0*(\d{1,9})$", re.IGNORECASE)
 UUID_RE = re.compile(r"^[0-9a-fA-F-]{36}$")
@@ -39,7 +32,14 @@ def is_admin(principal: Principal) -> bool:
 class FeedbackError(Exception):
     """An API error answered as ``{detail, code, ...}`` (spec-e section 6)."""
 
-    def __init__(self, status: int, code: str, detail: str, headers: Optional[dict[str, str]] = None, **extra: Any):
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        detail: str,
+        headers: Optional[dict[str, str]] = None,
+        **extra: Any,
+    ):
         super().__init__(detail)
         self.status = status
         self.code = code
@@ -95,7 +95,9 @@ def find_request(db: Session, ref: str) -> Optional[FeedbackRequest]:
 def load_visible(db: Session, principal: Principal, ref: str) -> FeedbackRequest:
     """Confirmed requests are visible to everyone signed in; a draft only to its submitter (QE-167)."""
     row = find_request(db, ref)
-    if row is None or (row.status == "draft" and row.submitter_user_id != principal.user.id):
+    if row is None or (
+        row.status == "draft" and row.submitter_user_id != principal.user.id
+    ):
         raise error(404, "not_found", "This request does not exist or is not yours")
     return row
 
@@ -103,7 +105,12 @@ def load_visible(db: Session, principal: Principal, ref: str) -> FeedbackRequest
 def load_own_draft(db: Session, principal: Principal, ref: str) -> FeedbackRequest:
     row = load_visible(db, principal, ref)
     if row.status != "draft":
-        raise error(409, "already_confirmed", "This request is already submitted", request=request_ref(row.number))
+        raise error(
+            409,
+            "already_confirmed",
+            "This request is already submitted",
+            request=request_ref(row.number),
+        )
     return row
 
 
@@ -127,7 +134,11 @@ def row_payload(
 ) -> dict[str, Any]:
     """One list row. ``refs`` maps request uuid to ``FB-nnnn`` for duplicate_of lookups."""
     possible = next(
-        (c.get("request_id") for c in (row.conflicts or []) if isinstance(c, dict) and c.get("kind") == "duplicate"),
+        (
+            c.get("request_id")
+            for c in (row.conflicts or [])
+            if isinstance(c, dict) and c.get("kind") == "duplicate"
+        ),
         None,
     )
     return {
@@ -137,11 +148,16 @@ def row_payload(
         "title": row.title,
         "summary": row.summary,
         "subject": row.subject,
-        "project": _project_payload(projects.get(row.project_id)) if row.project_id else None,
+        "project": (
+            _project_payload(projects.get(row.project_id)) if row.project_id else None
+        ),
         "priority": row.priority,
         "complexity": row.complexity,
         "status": row.status,
-        "submitter": {"id": row.submitter_user_id, "name": user_name(users.get(row.submitter_user_id))},
+        "submitter": {
+            "id": row.submitter_user_id,
+            "name": user_name(users.get(row.submitter_user_id)),
+        },
         "created_at": to_api_timestamp(row.created_at),
         "confirmed_at": to_api_timestamp(row.confirmed_at),
         "duplicate_of": refs.get(row.duplicate_of_id) if row.duplicate_of_id else None,
@@ -149,16 +165,28 @@ def row_payload(
     }
 
 
-def lookup_maps(db: Session, rows: Iterable[FeedbackRequest]) -> tuple[dict, dict, dict]:
+def lookup_maps(
+    db: Session, rows: Iterable[FeedbackRequest]
+) -> tuple[dict, dict, dict]:
     rows = list(rows)
     user_ids = {r.submitter_user_id for r in rows}
     project_ids = {r.project_id for r in rows if r.project_id}
     dup_ids = {r.duplicate_of_id for r in rows if r.duplicate_of_id}
-    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
-    projects = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()} if project_ids else {}
+    users = (
+        {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()}
+        if user_ids
+        else {}
+    )
+    projects = (
+        {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
+        if project_ids
+        else {}
+    )
     refs: dict[str, str] = {}
     if dup_ids:
-        for rid, number in db.query(FeedbackRequest.id, FeedbackRequest.number).filter(FeedbackRequest.id.in_(dup_ids)):
+        for rid, number in db.query(FeedbackRequest.id, FeedbackRequest.number).filter(
+            FeedbackRequest.id.in_(dup_ids)
+        ):
             refs[rid] = request_ref(number)
     return users, projects, refs
 
@@ -173,7 +201,11 @@ def _csv(value: Optional[str]) -> list[str]:
 def resolve_project_ids(db: Session, values: list[str]) -> list[str]:
     if not values:
         return []
-    rows = db.query(Project.id).filter(or_(Project.id.in_(values), Project.slug.in_(values))).all()
+    rows = (
+        db.query(Project.id)
+        .filter(or_(Project.id.in_(values), Project.slug.in_(values)))
+        .all()
+    )
     return [r[0] for r in rows] or ["__none__"]
 
 
@@ -217,7 +249,9 @@ def filter_conditions(
             parts.append(FeedbackRequest.number == number)
         words = [stem(t) for t in tokens(text)][:8]
         if words:
-            parts.append(and_(*[FeedbackRequest.search_text.like(f"%{w}%") for w in words]))
+            parts.append(
+                and_(*[FeedbackRequest.search_text.like(f"%{w}%") for w in words])
+            )
         elif number is None:
             parts.append(FeedbackRequest.search_text.like(f"%{normalize(text)}%"))
         conds.append(or_(*parts))
@@ -228,28 +262,52 @@ def order_clauses(sort: Optional[str]) -> list[Any]:
     field, _, direction = (sort or "created_at:desc").partition(":")
     desc = direction != "asc"
     if field == "priority":
-        expr = case(*[(FeedbackRequest.priority == k, v) for k, v in PRIORITY_RANK.items()], else_=0)
+        expr = case(
+            *[(FeedbackRequest.priority == k, v) for k, v in PRIORITY_RANK.items()],
+            else_=0,
+        )
     elif field == "complexity":
-        expr = case(*[(FeedbackRequest.complexity == k, v) for k, v in COMPLEXITY_RANK.items()], else_=0)
+        expr = case(
+            *[(FeedbackRequest.complexity == k, v) for k, v in COMPLEXITY_RANK.items()],
+            else_=0,
+        )
     elif field == "status":
         order = {"new": 0, "accepted": 1, "planned": 2, "done": 3, "declined": 4}
-        expr = case(*[(FeedbackRequest.status == k, v) for k, v in order.items()], else_=9)
+        expr = case(
+            *[(FeedbackRequest.status == k, v) for k, v in order.items()], else_=9
+        )
         desc = direction == "desc"
-        return [expr.desc() if desc else expr.asc(), FeedbackRequest.created_at.desc(), FeedbackRequest.id]
+        return [
+            expr.desc() if desc else expr.asc(),
+            FeedbackRequest.created_at.desc(),
+            FeedbackRequest.id,
+        ]
     else:
         expr = FeedbackRequest.created_at
-    return [expr.desc() if desc else expr.asc(), FeedbackRequest.created_at.desc(), FeedbackRequest.id]
+    return [
+        expr.desc() if desc else expr.asc(),
+        FeedbackRequest.created_at.desc(),
+        FeedbackRequest.id,
+    ]
 
 
 def next_number(db: Session) -> int:
-    return int(db.query(func.coalesce(func.max(FeedbackRequest.number), 0)).scalar() or 0) + 1
+    return (
+        int(db.query(func.coalesce(func.max(FeedbackRequest.number), 0)).scalar() or 0)
+        + 1
+    )
 
 
 def next_seq(db: Session, request_id: str) -> int:
-    return int(
-        db.query(func.coalesce(func.max(FeedbackMessage.seq), 0)).filter(FeedbackMessage.request_id == request_id).scalar()
-        or 0
-    ) + 1
+    return (
+        int(
+            db.query(func.coalesce(func.max(FeedbackMessage.seq), 0))
+            .filter(FeedbackMessage.request_id == request_id)
+            .scalar()
+            or 0
+        )
+        + 1
+    )
 
 
 def add_message(
@@ -282,7 +340,9 @@ def add_message(
     return msg
 
 
-def message_payload(m: FeedbackMessage, users: Optional[dict[str, User]] = None, author: str = "") -> dict[str, Any]:
+def message_payload(
+    m: FeedbackMessage, users: Optional[dict[str, User]] = None, author: str = ""
+) -> dict[str, Any]:
     payload = m.tool_payload if isinstance(m.tool_payload, dict) else {}
     return {
         "id": m.id,
@@ -333,7 +393,9 @@ def add_event(
     return ev
 
 
-def draft_days_left(row: FeedbackRequest, retention_days: int, now: Optional[datetime] = None) -> int:
+def draft_days_left(
+    row: FeedbackRequest, retention_days: int, now: Optional[datetime] = None
+) -> int:
     now = now or datetime.utcnow()
     deadline = row.last_activity_at + timedelta(days=retention_days)
     seconds = (deadline - now).total_seconds()

@@ -42,7 +42,9 @@ def upgrade() -> None:
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("number", sa.Integer(), nullable=True),
         sa.Column("subject", sa.String(16), nullable=False),
-        sa.Column("project_id", sa.String(36), sa.ForeignKey("projects.id"), nullable=True),
+        sa.Column(
+            "project_id", sa.String(36), sa.ForeignKey("projects.id"), nullable=True
+        ),
         sa.Column("target_kind", sa.String(16), nullable=True),
         sa.Column("target_id", sa.String(200), nullable=True),
         sa.Column("title", sa.String(200), nullable=False),
@@ -68,7 +70,12 @@ def upgrade() -> None:
         ),
         sa.Column("conflicts", _json(), nullable=False),
         sa.Column("search_text", sa.Text(), nullable=False),
-        sa.Column("submitter_user_id", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
+        sa.Column(
+            "submitter_user_id",
+            sa.String(36),
+            sa.ForeignKey("users.id"),
+            nullable=False,
+        ),
         sa.Column("model", sa.String(200), nullable=True),
         sa.Column("prompt_version", sa.String(32), nullable=True),
         sa.Column("turn_started_at", sa.DateTime(), nullable=True),
@@ -77,16 +84,20 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.UniqueConstraint("number", name="uq_feedback_number"),
-        sa.CheckConstraint(_in("subject", ("platform", "product")), name="ck_feedback_subject"),
         sa.CheckConstraint(
-            "subject <> 'product' OR project_id IS NOT NULL", name="ck_feedback_product_project"
+            _in("subject", ("platform", "product")), name="ck_feedback_subject"
+        ),
+        sa.CheckConstraint(
+            "subject <> 'product' OR project_id IS NOT NULL",
+            name="ck_feedback_product_project",
         ),
         sa.CheckConstraint(
             _in("status", ("draft", "new", "accepted", "planned", "done", "declined")),
             name="ck_feedback_status",
         ),
         sa.CheckConstraint(
-            "priority IS NULL OR " + _in("priority", ("low", "medium", "high", "critical")),
+            "priority IS NULL OR "
+            + _in("priority", ("low", "medium", "high", "critical")),
             name="ck_feedback_priority",
         ),
         sa.CheckConstraint(
@@ -94,11 +105,23 @@ def upgrade() -> None:
             name="ck_feedback_complexity",
         ),
     )
-    op.create_index("ix_feedback_status_created", "feedback_requests", ["status", "created_at"])
-    op.create_index("ix_feedback_submitter_status", "feedback_requests", ["submitter_user_id", "status"])
+    op.create_index(
+        "ix_feedback_status_created", "feedback_requests", ["status", "created_at"]
+    )
+    op.create_index(
+        "ix_feedback_submitter_status",
+        "feedback_requests",
+        ["submitter_user_id", "status"],
+    )
     op.create_index("ix_feedback_project", "feedback_requests", ["project_id"])
-    op.create_index("ix_feedback_duplicate_of", "feedback_requests", ["duplicate_of_id"])
-    op.create_index("ix_feedback_draft_activity", "feedback_requests", ["status", "last_activity_at"])
+    op.create_index(
+        "ix_feedback_duplicate_of", "feedback_requests", ["duplicate_of_id"]
+    )
+    op.create_index(
+        "ix_feedback_draft_activity",
+        "feedback_requests",
+        ["status", "last_activity_at"],
+    )
 
     op.create_table(
         "feedback_messages",
@@ -120,9 +143,12 @@ def upgrade() -> None:
         sa.Column("status", sa.String(16), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.UniqueConstraint("request_id", "seq", name="uq_feedback_message_seq"),
-        sa.CheckConstraint(_in("role", ("user", "assistant", "tool")), name="ck_feedback_message_role"),
         sa.CheckConstraint(
-            _in("status", ("ok", "stopped", "interrupted")), name="ck_feedback_message_status"
+            _in("role", ("user", "assistant", "tool")), name="ck_feedback_message_role"
+        ),
+        sa.CheckConstraint(
+            _in("status", ("ok", "stopped", "interrupted")),
+            name="ck_feedback_message_status",
         ),
     )
 
@@ -135,7 +161,9 @@ def upgrade() -> None:
             sa.ForeignKey("feedback_requests.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("actor_user_id", sa.String(36), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column(
+            "actor_user_id", sa.String(36), sa.ForeignKey("users.id"), nullable=True
+        ),
         sa.Column("kind", sa.String(24), nullable=False),
         sa.Column("before", _json(), nullable=False),
         sa.Column("after", _json(), nullable=False),
@@ -158,7 +186,9 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_feedback_events_request_created", "feedback_request_events", ["request_id", "created_at"]
+        "ix_feedback_events_request_created",
+        "feedback_request_events",
+        ["request_id", "created_at"],
     )
 
     op.create_table(
@@ -173,7 +203,12 @@ def upgrade() -> None:
         sa.Column("last_test_at", sa.DateTime(), nullable=True),
         sa.Column("last_test_ok", sa.Boolean(), nullable=True),
         sa.Column("last_test_detail", sa.String(500), nullable=True),
-        sa.Column("updated_by_user_id", sa.String(36), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column(
+            "updated_by_user_id",
+            sa.String(36),
+            sa.ForeignKey("users.id"),
+            nullable=True,
+        ),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint("id = 1", name="ck_feedback_agent_connection_singleton"),
@@ -182,7 +217,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("feedback_agent_connection")
-    op.drop_index("ix_feedback_events_request_created", table_name="feedback_request_events")
+    op.drop_index(
+        "ix_feedback_events_request_created", table_name="feedback_request_events"
+    )
     op.drop_table("feedback_request_events")
     op.drop_table("feedback_messages")
     op.drop_index("ix_feedback_draft_activity", table_name="feedback_requests")

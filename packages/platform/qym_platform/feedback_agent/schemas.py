@@ -6,7 +6,6 @@ import re
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
 from qym_platform.feedback_agent.constants import CHECKLIST_KEYS, MAX_RELATED
 
 
@@ -77,7 +76,9 @@ class ProposalArgs(BaseModel):
 
 class ChecklistUpdateItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    key: Literal["business_need", "affected", "workaround", "outcome", "urgency", "scope"]
+    key: Literal[
+        "business_need", "affected", "workaround", "outcome", "urgency", "scope"
+    ]
     state: Literal["open", "partial", "filled", "declined"]
     value: Optional[str] = None
 

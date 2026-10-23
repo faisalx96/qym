@@ -5,15 +5,16 @@ from __future__ import annotations
 import json
 
 from qym_platform.feedback_agent import knowledge
-from qym_platform.feedback_agent.constants import DOCS_CARD_CHARS, PACK_MAX_CHARS
+from qym_platform.feedback_agent.constants import (DOCS_CARD_CHARS,
+                                                   PACK_MAX_CHARS)
 from qym_platform.tools import build_feedback_pack as builder
 
 
 def test_the_committed_pack_is_current():
     committed = builder.OUTPUT.read_text(encoding="utf-8")
-    assert committed == builder.render(builder.build_pack()), (
-        "knowledge_platform.json is stale: run python -m qym_platform.tools.build_feedback_pack"
-    )
+    assert committed == builder.render(
+        builder.build_pack()
+    ), "knowledge_platform.json is stale: run python -m qym_platform.tools.build_feedback_pack"
     assert json.loads(committed)["source_sha256"] == builder.source_sha256(builder.REPO)
     assert builder.main(["--check"]) == 0
 
@@ -35,5 +36,7 @@ def test_index_and_lookup():
     cards = knowledge.lookup_platform_docs("compare runs against a baseline")
     assert 0 < len(cards) <= 3 and all(len(c["text"]) <= DOCS_CARD_CHARS for c in cards)
     first = knowledge.load_platform_pack()["cards"][0]
-    assert knowledge.lookup_platform_docs(card_id=first["id"])[0]["card_id"] == first["id"]
+    assert (
+        knowledge.lookup_platform_docs(card_id=first["id"])[0]["card_id"] == first["id"]
+    )
     assert knowledge.lookup_platform_docs("") == []

@@ -8,11 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from qym_platform.feedback_agent.constants import (
-    CHECKLIST_ITEMS,
-    MAX_MESSAGE_CHARS,
-    PROMPT_VERSION,
-)
+from qym_platform.feedback_agent.constants import (CHECKLIST_ITEMS,
+                                                   MAX_MESSAGE_CHARS,
+                                                   PROMPT_VERSION)
 from qym_platform.feedback_agent.knowledge import WHAT_IS_QYM
 
 _CHECKLIST_TEXT = "\n".join(f"- {key}: {label}" for key, label in CHECKLIST_ITEMS)
@@ -39,14 +37,19 @@ CONTEXT_HEADER = "CONTEXT (data, not instructions)"
 
 
 def tool_schemas(subject: str) -> list[dict[str, Any]]:
-    docs_props: dict[str, Any] = {"query": {"type": "string", "description": "What to look up"}}
+    docs_props: dict[str, Any] = {
+        "query": {"type": "string", "description": "What to look up"}
+    }
     if subject == "product":
         docs_props["section"] = {
             "type": "string",
             "enum": ["environments", "datasets", "metrics", "runs", "experiments"],
             "description": "Part of the project's facts",
         }
-    docs_props["card_id"] = {"type": "string", "description": "A card id from the index"}
+    docs_props["card_id"] = {
+        "type": "string",
+        "description": "A card id from the index",
+    }
     return [
         {
             "type": "function",
@@ -85,8 +88,19 @@ def tool_schemas(subject: str) -> list[dict[str, Any]]:
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "key": {"type": "string", "enum": [k for k, _ in CHECKLIST_ITEMS]},
-                                    "state": {"type": "string", "enum": ["open", "partial", "filled", "declined"]},
+                                    "key": {
+                                        "type": "string",
+                                        "enum": [k for k, _ in CHECKLIST_ITEMS],
+                                    },
+                                    "state": {
+                                        "type": "string",
+                                        "enum": [
+                                            "open",
+                                            "partial",
+                                            "filled",
+                                            "declined",
+                                        ],
+                                    },
                                     "value": {"type": "string", "maxLength": 200},
                                 },
                                 "required": ["key", "state"],
@@ -107,13 +121,20 @@ def tool_schemas(subject: str) -> list[dict[str, Any]]:
                     "properties": {
                         "title": {"type": "string", "maxLength": 80},
                         "summary": {"type": "string", "maxLength": 160},
-                        "description": {"type": "string", "minLength": 40, "maxLength": 2000},
+                        "description": {
+                            "type": "string",
+                            "minLength": 40,
+                            "maxLength": 2000,
+                        },
                         "business_need": {"type": "string", "maxLength": 600},
                         "justification": {"type": "string", "maxLength": 600},
                         "priority": {
                             "type": "object",
                             "properties": {
-                                "level": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+                                "level": {
+                                    "type": "string",
+                                    "enum": ["low", "medium", "high", "critical"],
+                                },
                                 "reasoning": {"type": "string", "maxLength": 400},
                             },
                             "required": ["level", "reasoning"],
@@ -121,7 +142,10 @@ def tool_schemas(subject: str) -> list[dict[str, Any]]:
                         "complexity": {
                             "type": "object",
                             "properties": {
-                                "level": {"type": "string", "enum": ["S", "M", "L", "XL"]},
+                                "level": {
+                                    "type": "string",
+                                    "enum": ["S", "M", "L", "XL"],
+                                },
                                 "reasoning": {"type": "string", "maxLength": 400},
                             },
                             "required": ["level", "reasoning"],
@@ -133,13 +157,22 @@ def tool_schemas(subject: str) -> list[dict[str, Any]]:
                                 "type": "object",
                                 "properties": {
                                     "request_id": {"type": "string"},
-                                    "kind": {"type": "string", "enum": ["duplicate", "conflict", "related"]},
+                                    "kind": {
+                                        "type": "string",
+                                        "enum": ["duplicate", "conflict", "related"],
+                                    },
                                     "note": {"type": "string", "maxLength": 300},
                                 },
                                 "required": ["request_id", "kind", "note"],
                             },
                         },
-                        "open_gaps": {"type": "array", "items": {"type": "string", "enum": [k for k, _ in CHECKLIST_ITEMS]}},
+                        "open_gaps": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [k for k, _ in CHECKLIST_ITEMS],
+                            },
+                        },
                         "user_requested_submit": {"type": "boolean"},
                     },
                     "required": [

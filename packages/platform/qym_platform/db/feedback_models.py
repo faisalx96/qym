@@ -12,19 +12,9 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import uuid4
 
-from sqlalchemy import (
-    JSON,
-    BigInteger,
-    Boolean,
-    CheckConstraint,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-)
+from sqlalchemy import (JSON, BigInteger, Boolean, CheckConstraint, DateTime,
+                        ForeignKey, Index, Integer, String, Text,
+                        UniqueConstraint)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -59,11 +49,15 @@ def _in(column: str, values: tuple[str, ...]) -> str:
 class FeedbackRequest(Base):
     __tablename__ = "feedback_requests"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
     # FB-0001 style; set at confirmation (drafts have none).
     number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     subject: Mapped[str] = mapped_column(String(16))
-    project_id: Mapped[Optional[str]] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    project_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("projects.id"), nullable=True
+    )
     target_kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     target_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     title: Mapped[str] = mapped_column(String(200), default="")
@@ -94,20 +88,26 @@ class FeedbackRequest(Base):
     model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     prompt_version: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     turn_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    last_activity_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_activity_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow
+    )
     confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
 
     __table_args__ = (
         UniqueConstraint("number", name="uq_feedback_number"),
         CheckConstraint(_in("subject", FEEDBACK_SUBJECTS), name="ck_feedback_subject"),
         CheckConstraint(
-            "subject <> 'product' OR project_id IS NOT NULL", name="ck_feedback_product_project"
+            "subject <> 'product' OR project_id IS NOT NULL",
+            name="ck_feedback_product_project",
         ),
         CheckConstraint(_in("status", FEEDBACK_STATUSES), name="ck_feedback_status"),
         CheckConstraint(
-            "priority IS NULL OR " + _in("priority", FEEDBACK_PRIORITIES), name="ck_feedback_priority"
+            "priority IS NULL OR " + _in("priority", FEEDBACK_PRIORITIES),
+            name="ck_feedback_priority",
         ),
         CheckConstraint(
             "complexity IS NULL OR " + _in("complexity", FEEDBACK_COMPLEXITIES),
@@ -125,7 +125,9 @@ class FeedbackMessage(Base):
     __tablename__ = "feedback_messages"
 
     id: Mapped[int] = mapped_column(_BIG_ID, primary_key=True, autoincrement=True)
-    request_id: Mapped[str] = mapped_column(ForeignKey("feedback_requests.id", ondelete="CASCADE"))
+    request_id: Mapped[str] = mapped_column(
+        ForeignKey("feedback_requests.id", ondelete="CASCADE")
+    )
     seq: Mapped[int] = mapped_column(Integer)
     role: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text, default="")
@@ -139,8 +141,12 @@ class FeedbackMessage(Base):
 
     __table_args__ = (
         UniqueConstraint("request_id", "seq", name="uq_feedback_message_seq"),
-        CheckConstraint(_in("role", FEEDBACK_MESSAGE_ROLES), name="ck_feedback_message_role"),
-        CheckConstraint(_in("status", FEEDBACK_MESSAGE_STATUSES), name="ck_feedback_message_status"),
+        CheckConstraint(
+            _in("role", FEEDBACK_MESSAGE_ROLES), name="ck_feedback_message_role"
+        ),
+        CheckConstraint(
+            _in("status", FEEDBACK_MESSAGE_STATUSES), name="ck_feedback_message_status"
+        ),
     )
 
 
@@ -150,8 +156,12 @@ class FeedbackRequestEvent(Base):
     __tablename__ = "feedback_request_events"
 
     id: Mapped[int] = mapped_column(_BIG_ID, primary_key=True, autoincrement=True)
-    request_id: Mapped[str] = mapped_column(ForeignKey("feedback_requests.id", ondelete="CASCADE"))
-    actor_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    request_id: Mapped[str] = mapped_column(
+        ForeignKey("feedback_requests.id", ondelete="CASCADE")
+    )
+    actor_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     kind: Mapped[str] = mapped_column(String(24))
     before: Mapped[dict[str, Any]] = mapped_column(_JSON, default=dict)
     after: Mapped[dict[str, Any]] = mapped_column(_JSON, default=dict)
@@ -159,7 +169,9 @@ class FeedbackRequestEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (
-        CheckConstraint(_in("kind", FEEDBACK_EVENT_KINDS), name="ck_feedback_event_kind"),
+        CheckConstraint(
+            _in("kind", FEEDBACK_EVENT_KINDS), name="ck_feedback_event_kind"
+        ),
         Index("ix_feedback_events_request_created", "request_id", "created_at"),
     )
 
@@ -179,8 +191,14 @@ class FeedbackAgentConnection(Base):
     last_test_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_test_ok: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     last_test_detail: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    updated_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
 
-    __table_args__ = (CheckConstraint("id = 1", name="ck_feedback_agent_connection_singleton"),)
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_feedback_agent_connection_singleton"),
+    )

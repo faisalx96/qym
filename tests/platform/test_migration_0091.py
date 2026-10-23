@@ -9,9 +9,9 @@ from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
+from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from alembic.autogenerate import compare_metadata
 
 ROOT = Path(__file__).resolve().parents[2]
 FILE = ROOT / "packages/platform/qym_platform/migrations/versions/0091_feedback.py"
@@ -32,8 +32,8 @@ def _load():
 
 @pytest.fixture(params=["sqlite", "postgres"])
 def engine(request):
-    from qym_platform.db.base import Base
     from qym_platform.db import models
+    from qym_platform.db.base import Base
 
     admin = schema = None
     if request.param == "postgres":
@@ -75,7 +75,9 @@ def test_matches_models_and_round_trips(engine, monkeypatch) -> None:
         return table is not None and table.name in FEEDBACK_TABLES
 
     with engine.begin() as connection:
-        monkeypatch.setattr(module, "op", Operations(MigrationContext.configure(connection)))
+        monkeypatch.setattr(
+            module, "op", Operations(MigrationContext.configure(connection))
+        )
         module.upgrade()
         assert FEEDBACK_TABLES <= set(sa.inspect(connection).get_table_names())
         context = MigrationContext.configure(
@@ -92,7 +94,9 @@ def test_constraints_hold_after_the_migration(engine, monkeypatch) -> None:
     module = _load()
     now = "2026-10-23 10:00:00"
     with engine.begin() as connection:
-        monkeypatch.setattr(module, "op", Operations(MigrationContext.configure(connection)))
+        monkeypatch.setattr(
+            module, "op", Operations(MigrationContext.configure(connection))
+        )
         module.upgrade()
         connection.execute(
             sa.text(
@@ -102,7 +106,12 @@ def test_constraints_hold_after_the_migration(engine, monkeypatch) -> None:
             {"t": True, "n": now},
         )
         base = {
-            "id": "r1", "subject": "product", "pid": None, "status": "draft", "u": "u", "n": now,
+            "id": "r1",
+            "subject": "product",
+            "pid": None,
+            "status": "draft",
+            "u": "u",
+            "n": now,
         }
         insert = sa.text(
             "INSERT INTO feedback_requests (id, subject, project_id, title, summary, description, business_need, "
@@ -115,7 +124,9 @@ def test_constraints_hold_after_the_migration(engine, monkeypatch) -> None:
                 connection.execute(insert, base)
         with pytest.raises(sa.exc.IntegrityError):  # unknown status
             with connection.begin_nested():
-                connection.execute(insert, {**base, "subject": "platform", "status": "weird"})
+                connection.execute(
+                    insert, {**base, "subject": "platform", "status": "weird"}
+                )
         connection.execute(insert, {**base, "subject": "platform"})
         with pytest.raises(sa.exc.IntegrityError):  # the connection is a singleton
             with connection.begin_nested():

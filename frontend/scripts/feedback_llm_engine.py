@@ -18,7 +18,9 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-SCRIPTS = Path(__file__).resolve().parents[2] / "tests" / "platform" / "feedback_scripts"
+SCRIPTS = (
+    Path(__file__).resolve().parents[2] / "tests" / "platform" / "feedback_scripts"
+)
 CONTEXT_PREFIX = "CONTEXT (data, not instructions)"
 REMINDER_PREFIX = "Reminder from the server"
 
@@ -34,15 +36,23 @@ def _real_user(message: dict[str, Any]) -> bool:
     if message.get("role") != "user":
         return False
     content = str(message.get("content") or "")
-    return not content.startswith(CONTEXT_PREFIX) and not content.startswith(REMINDER_PREFIX)
+    return not content.startswith(CONTEXT_PREFIX) and not content.startswith(
+        REMINDER_PREFIX
+    )
 
 
-def pick_round(script: dict[str, Any], messages: list[dict[str, Any]]) -> dict[str, Any]:
+def pick_round(
+    script: dict[str, Any], messages: list[dict[str, Any]]
+) -> dict[str, Any]:
     turns = script.get("turns") or [[{"text": "OK."}]]
     users = [i for i, m in enumerate(messages) if _real_user(m)]
     turn = turns[min(max(len(users) - 1, 0), len(turns) - 1)]
     start = users[-1] if users else 0
-    done = sum(1 for m in messages[start:] if m.get("role") == "assistant" and m.get("tool_calls"))
+    done = sum(
+        1
+        for m in messages[start:]
+        if m.get("role") == "assistant" and m.get("tool_calls")
+    )
     return turn[min(done, len(turn) - 1)] if turn else {"text": "OK."}
 
 
@@ -54,15 +64,33 @@ def build_reply(request: dict[str, Any]) -> tuple[int, dict[str, Any], dict[str,
     tools = request.get("tools") or []
     names = {t.get("function", {}).get("name") for t in tools if isinstance(t, dict)}
     if script.get("status"):
-        return int(script["status"]), {"error": {"message": script.get("message", "stub failure")}}, script
+        return (
+            int(script["status"]),
+            {"error": {"message": script.get("message", "stub failure")}},
+            script,
+        )
     if tools and script.get("tools_status"):
-        return int(script["tools_status"]), {"error": {"message": "tools are not supported by this model"}}, script
+        return (
+            int(script["tools_status"]),
+            {"error": {"message": "tools are not supported by this model"}},
+            script,
+        )
     if "qym_ping" in names:
-        return 200, {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [{"id": "call_ping", "type": "function", "function": {"name": "qym_ping", "arguments": "{\"ok\": true}"}}],
-        }, script
+        return (
+            200,
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_ping",
+                        "type": "function",
+                        "function": {"name": "qym_ping", "arguments": '{"ok": true}'},
+                    }
+                ],
+            },
+            script,
+        )
     rnd = pick_round(script, request.get("messages") or [])
     message: dict[str, Any] = {"role": "assistant", "content": rnd.get("text")}
     calls = []
@@ -71,7 +99,12 @@ def build_reply(request: dict[str, Any]) -> tuple[int, dict[str, Any], dict[str,
             {
                 "id": f"call_{int(time.time() * 1000) % 10**8}_{i}",
                 "type": "function",
-                "function": {"name": call["name"], "arguments": json.dumps(call.get("arguments") or {}, ensure_ascii=False)},
+                "function": {
+                    "name": call["name"],
+                    "arguments": json.dumps(
+                        call.get("arguments") or {}, ensure_ascii=False
+                    ),
+                },
             }
         )
     if calls:
@@ -85,36 +118,112 @@ def completion_body(model: str, message: dict[str, Any]) -> dict[str, Any]:
         "object": "chat.completion",
         "created": int(time.time()),
         "model": model,
-        "choices": [{"index": 0, "finish_reason": "tool_calls" if message.get("tool_calls") else "stop", "message": message}],
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "tool_calls" if message.get("tool_calls") else "stop",
+                "message": message,
+            }
+        ],
         "usage": {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30},
     }
 
 
 def stream_chunks(model: str, message: dict[str, Any]) -> list[dict[str, Any]]:
-    base = {"id": "stub-fb", "object": "chat.completion.chunk", "created": int(time.time()), "model": model}
+    base = {
+        "id": "stub-fb",
+        "object": "chat.completion.chunk",
+        "created": int(time.time()),
+        "model": model,
+    }
     chunks: list[dict[str, Any]] = [
-        {**base, "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": None}]}
+        {
+            **base,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"role": "assistant", "content": ""},
+                    "finish_reason": None,
+                }
+            ],
+        }
     ]
     text = message.get("content") or ""
     if text:
         words = text.split(" ")
         for i, word in enumerate(words):
             piece = word + (" " if i < len(words) - 1 else "")
-            chunks.append({**base, "choices": [{"index": 0, "delta": {"content": piece}, "finish_reason": None}]})
+            chunks.append(
+                {
+                    **base,
+                    "choices": [
+                        {"index": 0, "delta": {"content": piece}, "finish_reason": None}
+                    ],
+                }
+            )
     for i, call in enumerate(message.get("tool_calls") or []):
         fn = call["function"]
         chunks.append(
-            {**base, "choices": [{"index": 0, "delta": {"tool_calls": [{"index": i, "id": call["id"], "type": "function",
-                                                                       "function": {"name": fn["name"], "arguments": ""}}]}, "finish_reason": None}]}
+            {
+                **base,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": i,
+                                    "id": call["id"],
+                                    "type": "function",
+                                    "function": {"name": fn["name"], "arguments": ""},
+                                }
+                            ]
+                        },
+                        "finish_reason": None,
+                    }
+                ],
+            }
         )
         args = fn["arguments"]
         mid = max(1, len(args) // 2)
         for part in (args[:mid], args[mid:]):
             chunks.append(
-                {**base, "choices": [{"index": 0, "delta": {"tool_calls": [{"index": i, "function": {"arguments": part}}]}, "finish_reason": None}]}
+                {
+                    **base,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "tool_calls": [
+                                    {"index": i, "function": {"arguments": part}}
+                                ]
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
             )
-    chunks.append({**base, "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls" if message.get("tool_calls") else "stop"}]})
-    chunks.append({**base, "choices": [], "usage": {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30}})
+    chunks.append(
+        {
+            **base,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {},
+                    "finish_reason": (
+                        "tool_calls" if message.get("tool_calls") else "stop"
+                    ),
+                }
+            ],
+        }
+    )
+    chunks.append(
+        {
+            **base,
+            "choices": [],
+            "usage": {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30},
+        }
+    )
     return chunks
 
 

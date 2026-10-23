@@ -44,7 +44,14 @@ class Env:
 
         uid = f"user-{key}"
         with self.db() as db:
-            db.add(User(id=uid, email=f"{key}@example.test", display_name=key.title(), role=UserRole(role)))
+            db.add(
+                User(
+                    id=uid,
+                    email=f"{key}@example.test",
+                    display_name=key.title(),
+                    role=UserRole(role),
+                )
+            )
             db.commit()
         self.users[key] = uid
         return uid
@@ -58,13 +65,22 @@ class Env:
             with self.db() as db:
                 user = db.get(User, self.users[key])
                 db.expunge(user)
-            return Principal(user=user, auth_type="proxy_headers", provider="proxy_headers")
+            return Principal(
+                user=user, auth_type="proxy_headers", provider="proxy_headers"
+            )
 
         self.app.dependency_overrides[require_ui_principal] = principal
 
-    def configure(self, base_url: str, script: str = "ask_then_propose", **extra: Any) -> None:
+    def configure(
+        self, base_url: str, script: str = "ask_then_propose", **extra: Any
+    ) -> None:
         self.act_as("admin")
-        body = {"llm_base_url": base_url, "llm_model": f"feedback:{script}", "llm_api_key": SECRET, **extra}
+        body = {
+            "llm_base_url": base_url,
+            "llm_model": f"feedback:{script}",
+            "llm_api_key": SECRET,
+            **extra,
+        }
         r = self.client.put("/v1/admin/feedback-agent", json=body)
         assert r.status_code == 200, r.text
 
@@ -75,7 +91,16 @@ class Env:
             db.get(FeedbackAgentConnection, 1).llm_model = f"feedback:{script}"
             db.commit()
 
-    def confirmed(self, key: str, title: str, *, number: int, subject: str = "platform", status: str = "new", **fields: Any) -> str:
+    def confirmed(
+        self,
+        key: str,
+        title: str,
+        *,
+        number: int,
+        subject: str = "platform",
+        status: str = "new",
+        **fields: Any,
+    ) -> str:
         from datetime import datetime
 
         from qym_platform.db.feedback_models import FeedbackRequest
@@ -87,7 +112,9 @@ class Env:
                 subject=subject,
                 title=title,
                 summary=fields.pop("summary", title),
-                description=fields.pop("description", "A long enough description of the request."),
+                description=fields.pop(
+                    "description", "A long enough description of the request."
+                ),
                 business_need=fields.pop("business_need", ""),
                 justification="",
                 priority=fields.pop("priority", "medium"),
@@ -110,10 +137,9 @@ class Env:
 @contextmanager
 def make_env(monkeypatch, backend: str = "sqlite") -> Iterator[Env]:
     from fastapi.testclient import TestClient
-
     from qym_platform.app import create_app
-    from qym_platform.db.base import Base
     from qym_platform.db import models  # noqa: F401
+    from qym_platform.db.base import Base
     from qym_platform.deps import get_db
     from qym_platform.secrets import _fernet_for_key, _multi_fernet_for_keys
 
@@ -134,7 +160,9 @@ def make_env(monkeypatch, backend: str = "sqlite") -> Iterator[Env]:
             conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
     else:
-        engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+        engine = create_engine(
+            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+        )
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     app = create_app()

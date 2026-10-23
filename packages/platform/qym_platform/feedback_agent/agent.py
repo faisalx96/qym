@@ -16,22 +16,22 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Optional
 
-from sqlalchemy.orm import Session
-
-from qym_platform.db.feedback_models import FeedbackAgentConnection, FeedbackMessage, FeedbackRequest
+from qym_platform.db.feedback_models import (FeedbackAgentConnection,
+                                             FeedbackMessage, FeedbackRequest)
 from qym_platform.feedback_agent import knowledge, prompts, tools
-from qym_platform.feedback_agent.connection import AgentError, build_client, map_exception, read_api_key
-from qym_platform.feedback_agent.constants import (
-    DEFAULT_MAX_USER_MESSAGES,
-    MAX_HISTORY_MESSAGES,
-    MAX_HISTORY_TOKENS,
-    MAX_MODEL_CALLS_PER_TURN,
-    MODEL_CALL_TIMEOUT_SECONDS,
-    PROMPT_VERSION,
-)
+from qym_platform.feedback_agent.connection import (AgentError, build_client,
+                                                    map_exception,
+                                                    read_api_key)
+from qym_platform.feedback_agent.constants import (DEFAULT_MAX_USER_MESSAGES,
+                                                   MAX_HISTORY_MESSAGES,
+                                                   MAX_HISTORY_TOKENS,
+                                                   MAX_MODEL_CALLS_PER_TURN,
+                                                   MODEL_CALL_TIMEOUT_SECONDS,
+                                                   PROMPT_VERSION)
 from qym_platform.feedback_agent.store import add_message
 from qym_platform.feedback_agent.text import approx_tokens, clip
 from qym_platform.log import get_logger
+from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
 
@@ -68,11 +68,25 @@ def build_context_message(db: Session, req: FeedbackRequest) -> str:
     """First ``user`` message: the knowledge index or project facts, the checklist and any proposal (all data)."""
     parts = [prompts.CONTEXT_HEADER + f". Subject: {req.subject}."]
     if req.subject == "product" and req.project_id:
-        parts.append("Facts about the person's project:\n" + knowledge.build_project_facts(db, req.project_id, req.target_kind, req.target_id))
+        parts.append(
+            "Facts about the person's project:\n"
+            + knowledge.build_project_facts(
+                db, req.project_id, req.target_kind, req.target_id
+            )
+        )
     else:
-        parts.append("Documentation cards (read them with lookup_docs):\n" + knowledge.platform_index())
+        parts.append(
+            "Documentation cards (read them with lookup_docs):\n"
+            + knowledge.platform_index()
+        )
     items = tools.checklist_items(req.checklist)
-    parts.append("Checklist now: " + "; ".join(f"{i['key']}={i['state']}" + (f" ({i['value']})" if i["value"] else "") for i in items))
+    parts.append(
+        "Checklist now: "
+        + "; ".join(
+            f"{i['key']}={i['state']}" + (f" ({i['value']})" if i["value"] else "")
+            for i in items
+        )
+    )
     if req.proposal and not req.proposal.get("superseded"):
         parts.append("A proposal is stored: " + str(req.proposal.get("title") or ""))
     return "\n\n".join(parts)
@@ -95,11 +109,19 @@ def history_messages(rows: list[FeedbackMessage]) -> list[dict[str, Any]]:
                     "type": "function",
                     "function": {
                         "name": t.tool_name or "lookup_docs",
-                        "arguments": json.dumps(payload.get("arguments") or {}, ensure_ascii=False),
+                        "arguments": json.dumps(
+                            payload.get("arguments") or {}, ensure_ascii=False
+                        ),
                     },
                 }
             )
-            results.append({"role": "tool", "tool_call_id": call_id, "content": clip(str(payload.get("result") or t.content), 1500)})
+            results.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": clip(str(payload.get("result") or t.content), 1500),
+                }
+            )
         pending.clear()
         if calls:
             out.append({"role": "assistant", "content": None, "tool_calls": calls})
@@ -123,13 +145,21 @@ def history_messages(rows: list[FeedbackMessage]) -> list[dict[str, Any]]:
     carried = flush_tools()
     if carried:
         units.append(carried)
+
     # Bound by count and tokens: drop the oldest units, always keeping the first user message.
     def flat(us: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
         return [m for u in us for m in u]
 
     first = units[0] if units else []
     rest = units[1:]
-    while rest and (len(flat([first] + rest)) > MAX_HISTORY_MESSAGES or sum(approx_tokens(json.dumps(m, ensure_ascii=False)) for m in flat([first] + rest)) > MAX_HISTORY_TOKENS):
+    while rest and (
+        len(flat([first] + rest)) > MAX_HISTORY_MESSAGES
+        or sum(
+            approx_tokens(json.dumps(m, ensure_ascii=False))
+            for m in flat([first] + rest)
+        )
+        > MAX_HISTORY_TOKENS
+    ):
         rest.pop(0)
     return flat([first] + rest)
 
@@ -178,14 +208,26 @@ class TurnRunner:
             db.rollback()
             req = db.get(FeedbackRequest, self.request_id)
             if req is not None:
-                req.phase = "asking" if not (req.proposal and not req.proposal.get("superseded")) else "proposed"
+                req.phase = (
+                    "asking"
+                    if not (req.proposal and not req.proposal.get("superseded"))
+                    else "proposed"
+                )
                 req.turn_started_at = None
                 db.commit()
         except Exception:  # noqa: BLE001
             logger.exception("could not reset the feedback draft after a failed turn")
             db.rollback()
         self.result = {"error": err.code}
-        self.emit("error", {"code": err.code, "message": err.message, "retryable": err.retryable, "admin_detail": err.admin_detail})
+        self.emit(
+            "error",
+            {
+                "code": err.code,
+                "message": err.message,
+                "retryable": err.retryable,
+                "admin_detail": err.admin_detail,
+            },
+        )
 
     def _stopped(self, db: Session) -> None:
         try:
@@ -194,7 +236,14 @@ class TurnRunner:
             if req is None:
                 return
             if self.streamed.strip():
-                add_message(db, req.id, "assistant", self.streamed.strip(), model=req.model, status="stopped")
+                add_message(
+                    db,
+                    req.id,
+                    "assistant",
+                    self.streamed.strip(),
+                    model=req.model,
+                    status="stopped",
+                )
             req.phase = "asking"
             req.turn_started_at = None
             req.last_activity_at = datetime.utcnow()
@@ -208,13 +257,19 @@ class TurnRunner:
         req = db.get(FeedbackRequest, self.request_id)
         conn = db.get(FeedbackAgentConnection, 1)
         if req is None:
-            raise AgentError("agent_unavailable", "The assistant is not available.", retryable=False)
-        if conn is None or not (conn.llm_base_url and conn.llm_model and conn.llm_api_key_encrypted):
-            raise AgentError("agent_unavailable", "The assistant is not set up.", retryable=False)
+            raise AgentError(
+                "agent_unavailable", "The assistant is not available.", retryable=False
+            )
+        if conn is None or not (
+            conn.llm_base_url and conn.llm_model and conn.llm_api_key_encrypted
+        ):
+            raise AgentError(
+                "agent_unavailable", "The assistant is not set up.", retryable=False
+            )
         api_key = read_api_key(conn)
-        client = (self.client_factory or (lambda url, key, model: build_client(url, key)))(
-            conn.llm_base_url, api_key, conn.llm_model
-        )
+        client = (
+            self.client_factory or (lambda url, key, model: build_client(url, key))
+        )(conn.llm_base_url, api_key, conn.llm_model)
         self.emit("status", {"phase": "thinking"})
         try:
             await self._loop(db, req, conn, client)
@@ -226,9 +281,20 @@ class TurnRunner:
                 except Exception:  # noqa: BLE001
                     pass
 
-    async def _loop(self, db: Session, req: FeedbackRequest, conn: FeedbackAgentConnection, client: Any) -> None:
+    async def _loop(
+        self,
+        db: Session,
+        req: FeedbackRequest,
+        conn: FeedbackAgentConnection,
+        client: Any,
+    ) -> None:
         max_user = int(conn.max_user_messages or DEFAULT_MAX_USER_MESSAGES)
-        rows = db.query(FeedbackMessage).filter(FeedbackMessage.request_id == req.id).order_by(FeedbackMessage.seq).all()
+        rows = (
+            db.query(FeedbackMessage)
+            .filter(FeedbackMessage.request_id == req.id)
+            .order_by(FeedbackMessage.seq)
+            .all()
+        )
         user_rows = [r for r in rows if r.role == "user"]
         last_user = user_rows[-1].content if user_rows else ""
         ctx = tools.ToolContext(
@@ -255,25 +321,39 @@ class TurnRunner:
         while rounds < MAX_MODEL_CALLS_PER_TURN:
             rounds += 1
             if not ctx.checklist_updated:
-                choice: Any = {"type": "function", "function": {"name": "update_checklist"}} if force_ok else "auto"
+                choice: Any = (
+                    {"type": "function", "function": {"name": "update_checklist"}}
+                    if force_ok
+                    else "auto"
+                )
             elif ctx.stored_proposal:
                 choice = "none"
             elif forced_propose:
-                choice = {"type": "function", "function": {"name": "propose_request"}} if force_ok else "auto"
+                choice = (
+                    {"type": "function", "function": {"name": "propose_request"}}
+                    if force_ok
+                    else "auto"
+                )
             else:
                 choice = "auto"
             buffer_text = not ctx.checklist_updated
             self.emit("status", {"phase": "thinking"})
             try:
                 res = await asyncio.wait_for(
-                    self._model_round(client, conn.llm_model, messages, schemas, choice, buffer_text),
+                    self._model_round(
+                        client, conn.llm_model, messages, schemas, choice, buffer_text
+                    ),
                     MODEL_CALL_TIMEOUT_SECONDS,
                 )
             except asyncio.TimeoutError as exc:
                 raise AgentError("agent_timeout", "timed out") from exc
             except Exception as exc:  # noqa: BLE001
                 mapped = map_exception(exc)
-                if isinstance(choice, dict) and force_ok and "tool_choice" in str(exc).lower():
+                if (
+                    isinstance(choice, dict)
+                    and force_ok
+                    and "tool_choice" in str(exc).lower()
+                ):
                     force_ok = False
                     rounds -= 1
                     continue
@@ -288,7 +368,14 @@ class TurnRunner:
                         "role": "assistant",
                         "content": res.text or None,
                         "tool_calls": [
-                            {"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": c["arguments"]}}
+                            {
+                                "id": c["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": c["name"],
+                                    "arguments": c["arguments"],
+                                },
+                            }
                             for c in res.tool_calls
                         ],
                     }
@@ -298,7 +385,10 @@ class TurnRunner:
                     result, args = tools.execute(ctx, call["name"], call["arguments"])
                     if result.status_phase:
                         self.emit("status", {"phase": result.status_phase})
-                    if call["name"] in ("search_requests", "lookup_docs") and result.display:
+                    if (
+                        call["name"] in ("search_requests", "lookup_docs")
+                        and result.display
+                    ):
                         msg = add_message(
                             db,
                             req.id,
@@ -314,15 +404,37 @@ class TurnRunner:
                             },
                             model=conn.llm_model,
                         )
-                        self.emit("tool", {"seq": msg.seq, "name": call["name"], "summary": result.display, "ids": result.ids})
+                        self.emit(
+                            "tool",
+                            {
+                                "seq": msg.seq,
+                                "name": call["name"],
+                                "summary": result.display,
+                                "ids": result.ids,
+                            },
+                        )
                     if call["name"] == "propose_request" and result.proposal_stored:
                         seq = req.proposal.get("seq") if req.proposal else None
-                        self.emit("tool", {"seq": seq, "name": "propose_request", "summary": f"Proposed request: {req.proposal.get('title', '')}", "ids": []})
+                        self.emit(
+                            "tool",
+                            {
+                                "seq": seq,
+                                "name": "propose_request",
+                                "summary": f"Proposed request: {req.proposal.get('title', '')}",
+                                "ids": [],
+                            },
+                        )
                     for name, data in result.events:
                         self.emit(name, data)
                     if result.removed_reference:
                         ctx.corrected_events.append("removed")
-                    messages.append({"role": "tool", "tool_call_id": call["id"], "content": result.content})
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call["id"],
+                            "content": result.content,
+                        }
+                    )
                 db.commit()
                 continue
             # No tool call: the final text of the turn.
@@ -339,7 +451,9 @@ class TurnRunner:
         final_text = "\n\n".join(p.strip() for p in pieces if p.strip()).strip()
         lang = language_of(last_user)
         if not final_text:
-            final_text = FALLBACK_CLOSING[lang] if ctx.stored_proposal else FALLBACK_ASK[lang]
+            final_text = (
+                FALLBACK_CLOSING[lang] if ctx.stored_proposal else FALLBACK_ASK[lang]
+            )
             self.emit("delta", {"text": final_text})
         message = add_message(
             db,
@@ -352,12 +466,18 @@ class TurnRunner:
         )
         req.model = conn.llm_model
         req.prompt_version = PROMPT_VERSION
-        req.phase = "proposed" if (req.proposal and not req.proposal.get("superseded")) else "asking"
+        req.phase = (
+            "proposed"
+            if (req.proposal and not req.proposal.get("superseded"))
+            else "asking"
+        )
         req.turn_started_at = None
         req.last_activity_at = datetime.utcnow()
         db.commit()
         self.result = {"message_id": message.id, "seq": message.seq, "phase": req.phase}
-        self.emit("done", {"message_id": message.id, "seq": message.seq, "phase": req.phase})
+        self.emit(
+            "done", {"message_id": message.id, "seq": message.seq, "phase": req.phase}
+        )
 
     # -------------------------------------------------------------------------------------- one model call
     async def _model_round(
@@ -369,7 +489,13 @@ class TurnRunner:
         choice: Any,
         buffer_text: bool,
     ) -> RoundResult:
-        kwargs: dict[str, Any] = dict(model=model, messages=messages, tools=schemas, tool_choice=choice, stream=True)
+        kwargs: dict[str, Any] = dict(
+            model=model,
+            messages=messages,
+            tools=schemas,
+            tool_choice=choice,
+            stream=True,
+        )
         attempts = 0
         include_usage = True
         while True:
@@ -427,5 +553,11 @@ class TurnRunner:
             slot = calls[idx]
             if not slot["name"]:
                 continue
-            out.tool_calls.append({"id": slot["id"] or f"call_{uuid.uuid4().hex[:12]}", "name": slot["name"], "arguments": slot["arguments"] or "{}"})
+            out.tool_calls.append(
+                {
+                    "id": slot["id"] or f"call_{uuid.uuid4().hex[:12]}",
+                    "name": slot["name"],
+                    "arguments": slot["arguments"] or "{}",
+                }
+            )
         return out

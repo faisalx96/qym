@@ -22,10 +22,13 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from qym_platform.feedback_agent.constants import DOCS_CARD_CHARS, PACK_MAX_CHARS
+from qym_platform.feedback_agent.constants import (DOCS_CARD_CHARS,
+                                                   PACK_MAX_CHARS)
 
 PACK_VERSION = 1
-OUTPUT = Path(__file__).resolve().parents[1] / "feedback_agent" / "knowledge_platform.json"
+OUTPUT = (
+    Path(__file__).resolve().parents[1] / "feedback_agent" / "knowledge_platform.json"
+)
 REPO = Path(__file__).resolve().parents[4]
 DOCS_PARTIALS = "frontend/src/features/docs/partials"
 USER_GUIDE = "docs/USER_GUIDE.md"
@@ -36,9 +39,13 @@ CODE_BLOCK_MAX = 400
 def source_files(root: Path) -> list[str]:
     """Input paths relative to ``root`` in priority order."""
     guide = sorted(
-        str(p.relative_to(root)) for p in (root / DOCS_PARTIALS / "platform-guide").glob("*.html")
+        str(p.relative_to(root))
+        for p in (root / DOCS_PARTIALS / "platform-guide").glob("*.html")
     )
-    started = [f"{DOCS_PARTIALS}/get-started/what-is-qym.html", f"{DOCS_PARTIALS}/get-started/datasets.html"]
+    started = [
+        f"{DOCS_PARTIALS}/get-started/what-is-qym.html",
+        f"{DOCS_PARTIALS}/get-started/datasets.html",
+    ]
     return [USER_GUIDE, *guide, *started]
 
 
@@ -57,7 +64,20 @@ def slug(value: str) -> str:
 class _Html(HTMLParser):
     """HTML to ``[(heading_or_None, level, paragraph_text)]`` in reading order."""
 
-    BLOCK = {"p", "li", "tr", "div", "section", "ul", "ol", "table", "blockquote", "br", "dd", "dt"}
+    BLOCK = {
+        "p",
+        "li",
+        "tr",
+        "div",
+        "section",
+        "ul",
+        "ol",
+        "table",
+        "blockquote",
+        "br",
+        "dd",
+        "dt",
+    }
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -187,7 +207,9 @@ def _cards(source: str, sections: list[tuple[str, list[str]]]) -> list[dict[str,
         room = DOCS_CARD_CHARS - len(title) - 2
         cur = ""
         for para in paras:
-            while len(para) > room:  # split a very long paragraph at a sentence or space
+            while (
+                len(para) > room
+            ):  # split a very long paragraph at a sentence or space
                 cut = para.rfind(". ", 0, room)
                 cut = cut if cut > room // 2 else para.rfind(" ", 0, room)
                 cut = cut if cut > 0 else room
@@ -209,7 +231,14 @@ def _cards(source: str, sections: list[tuple[str, list[str]]]) -> list[dict[str,
             seen[card_id] = n + 1
             if n:
                 card_id = f"{card_id}-{n + 1}"
-            cards.append({"id": card_id, "title": title, "source": source, "text": f"{title}: {chunk}"})
+            cards.append(
+                {
+                    "id": card_id,
+                    "title": title,
+                    "source": source,
+                    "text": f"{title}: {chunk}",
+                }
+            )
     return cards
 
 
@@ -246,7 +275,9 @@ def render(pack: dict[str, Any]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="fail when the committed pack is stale")
+    parser.add_argument(
+        "--check", action="store_true", help="fail when the committed pack is stale"
+    )
     parser.add_argument("--root", default=str(REPO), help="repository root")
     args = parser.parse_args(argv)
     pack = build_pack(Path(args.root))
@@ -254,7 +285,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         current = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
         if current != text:
-            print("knowledge_platform.json is stale: run python -m qym_platform.tools.build_feedback_pack", file=sys.stderr)
+            print(
+                "knowledge_platform.json is stale: run python -m qym_platform.tools.build_feedback_pack",
+                file=sys.stderr,
+            )
             return 1
         return 0
     OUTPUT.write_text(text, encoding="utf-8")

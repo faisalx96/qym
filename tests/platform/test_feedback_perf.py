@@ -6,9 +6,8 @@ import time
 from datetime import datetime
 
 import pytest
-from sqlalchemy import event
-
 from _feedback_support import make_env
+from sqlalchemy import event
 
 
 @pytest.fixture(params=["sqlite", "postgres"])
@@ -26,10 +25,23 @@ def fill(env, count, offset=0):
         db.bulk_save_objects(
             [
                 FeedbackRequest(
-                    number=offset + i + 1, subject="platform", status="new", title=f"Request {offset + i}", summary="s", business_need="b",
-                    search_text=search_text(f"Request {offset + i}", "s", "b"), priority="medium", complexity="M",
-                    submitter_user_id=env.users["omar"], checklist={}, conflicts=[], agent_reasoning={}, last_activity_at=now,
-                    created_at=now, updated_at=now, confirmed_at=now,
+                    number=offset + i + 1,
+                    subject="platform",
+                    status="new",
+                    title=f"Request {offset + i}",
+                    summary="s",
+                    business_need="b",
+                    search_text=search_text(f"Request {offset + i}", "s", "b"),
+                    priority="medium",
+                    complexity="M",
+                    submitter_user_id=env.users["omar"],
+                    checklist={},
+                    conflicts=[],
+                    agent_reasoning={},
+                    last_activity_at=now,
+                    created_at=now,
+                    updated_at=now,
+                    confirmed_at=now,
                 )
                 for i in range(count)
             ]
@@ -62,7 +74,9 @@ def test_statement_count_is_the_same_at_50_and_5000_requests_and_fast(env):
     big, _, body = count_statements(env, "/v1/feedback?page_size=50")
     assert len(body["items"]) == 50 and body["total"] == 5000
     assert big == small
-    times = sorted(count_statements(env, "/v1/feedback?page_size=50")[1] for _ in range(20))
+    times = sorted(
+        count_statements(env, "/v1/feedback?page_size=50")[1] for _ in range(20)
+    )
     assert times[18] < 0.15, times
 
 
@@ -71,7 +85,16 @@ def test_drafts_are_limited_to_the_caller(env):
 
     with env.db() as db:
         for key in ("sara", "sara", "omar"):
-            db.add(FeedbackRequest(subject="platform", status="draft", submitter_user_id=env.users[key], checklist={}, conflicts=[], agent_reasoning={}))
+            db.add(
+                FeedbackRequest(
+                    subject="platform",
+                    status="draft",
+                    submitter_user_id=env.users[key],
+                    checklist={},
+                    conflicts=[],
+                    agent_reasoning={},
+                )
+            )
         db.commit()
     assert len(env.client.get("/v1/feedback").json()["drafts"]) == 2
     env.act_as("omar")

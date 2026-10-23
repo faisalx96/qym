@@ -13,26 +13,22 @@ from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import ValidationError
-from sqlalchemy.orm import Session
-
 from qym_platform.db.feedback_models import FeedbackRequest
 from qym_platform.feedback_agent import knowledge
-from qym_platform.feedback_agent.constants import (
-    CHECKLIST_ITEMS,
-    CHECKLIST_KEYS,
-    CHECKLIST_VALUE_CHARS,
-    DATA_PREFIX,
-    MAX_PROPOSAL_REPAIRS,
-    SEARCH_MAX_RESULTS,
-)
-from qym_platform.feedback_agent.schemas import (
-    ChecklistUpdate,
-    ProposalArgs,
-    validation_message,
-)
-from qym_platform.feedback_agent.search import LexicalRequestSearch, request_ref
-from qym_platform.feedback_agent.store import add_message, find_request, parse_ref
+from qym_platform.feedback_agent.constants import (CHECKLIST_ITEMS,
+                                                   CHECKLIST_KEYS,
+                                                   CHECKLIST_VALUE_CHARS,
+                                                   DATA_PREFIX,
+                                                   MAX_PROPOSAL_REPAIRS,
+                                                   SEARCH_MAX_RESULTS)
+from qym_platform.feedback_agent.schemas import (ChecklistUpdate, ProposalArgs,
+                                                 validation_message)
+from qym_platform.feedback_agent.search import (LexicalRequestSearch,
+                                                request_ref)
+from qym_platform.feedback_agent.store import (add_message, find_request,
+                                               parse_ref)
 from qym_platform.feedback_agent.text import clip, one_line
+from sqlalchemy.orm import Session
 
 LABELS = dict(CHECKLIST_ITEMS)
 
@@ -50,7 +46,11 @@ def checklist_items(checklist: Optional[dict[str, Any]]) -> list[dict[str, str]]
             {
                 "key": key,
                 "label": label,
-                "state": item.get("state") if item.get("state") in ("open", "partial", "filled", "declined") else "open",
+                "state": (
+                    item.get("state")
+                    if item.get("state") in ("open", "partial", "filled", "declined")
+                    else "open"
+                ),
                 "value": str(item.get("value") or ""),
             }
         )
@@ -72,13 +72,20 @@ def rule_allows(
         k
         for k in CHECKLIST_KEYS
         if (k in ("business_need", "outcome") and state[k] != "filled")
-        or (k not in ("business_need", "outcome") and state[k] not in ("filled", "declined"))
+        or (
+            k not in ("business_need", "outcome")
+            and state[k] not in ("filled", "declined")
+        )
     ]
     if not missing:
         return True, [], forced
     if forced:
         return True, missing, True
-    if user_requested_submit and len(last_user_text.strip()) >= 3 and state["business_need"] != "open":
+    if (
+        user_requested_submit
+        and len(last_user_text.strip()) >= 3
+        and state["business_need"] != "open"
+    ):
         return True, missing, False
     return False, missing, False
 
@@ -116,7 +123,9 @@ def _data(payload: Any) -> str:
 
 
 def _error(message: str) -> ToolResult:
-    return ToolResult(content=json.dumps({"error": message}, ensure_ascii=False), ok=False)
+    return ToolResult(
+        content=json.dumps({"error": message}, ensure_ascii=False), ok=False
+    )
 
 
 def _parse(raw: str) -> tuple[Optional[dict[str, Any]], Optional[str]]:
@@ -129,7 +138,9 @@ def _parse(raw: str) -> tuple[Optional[dict[str, Any]], Optional[str]]:
     return value, None
 
 
-def execute(ctx: ToolContext, name: str, raw_arguments: str) -> tuple[ToolResult, dict[str, Any]]:
+def execute(
+    ctx: ToolContext, name: str, raw_arguments: str
+) -> tuple[ToolResult, dict[str, Any]]:
     """Run one tool. Returns the result and the parsed arguments (for the stored message)."""
     args, bad = _parse(raw_arguments)
     if bad or args is None:
@@ -152,7 +163,9 @@ def _search(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     query = one_line(str(args.get("query") or ""))[:200]
     if not query:
         return _error("query is required")
-    subject = args.get("subject") if args.get("subject") in ("platform", "product") else None
+    subject = (
+        args.get("subject") if args.get("subject") in ("platform", "product") else None
+    )
     try:
         limit = int(args.get("limit") or 5)
     except (TypeError, ValueError):
@@ -169,7 +182,10 @@ def _search(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         from qym_platform.db.models import Project
 
         project_names = {
-            p.id: p.name for p in ctx.db.query(Project).filter(Project.id.in_({h.project_id for h in hits if h.project_id}))
+            p.id: p.name
+            for p in ctx.db.query(Project).filter(
+                Project.id.in_({h.project_id for h in hits if h.project_id})
+            )
         }
     results = [
         {
@@ -201,9 +217,17 @@ def _search(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
 def _lookup(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     query = one_line(str(args.get("query") or ""))
     if ctx.req.subject == "product" and ctx.req.project_id:
-        section = args.get("section") if args.get("section") in knowledge.PRODUCT_SECTIONS else None
+        section = (
+            args.get("section")
+            if args.get("section") in knowledge.PRODUCT_SECTIONS
+            else None
+        )
         facts = knowledge.build_project_facts(
-            ctx.db, ctx.req.project_id, ctx.req.target_kind, ctx.req.target_id, section=section
+            ctx.db,
+            ctx.req.project_id,
+            ctx.req.target_kind,
+            ctx.req.target_id,
+            section=section,
         )
         label = section or "project facts"
         return ToolResult(
@@ -212,7 +236,9 @@ def _lookup(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
             kind="docs",
             status_phase="reading",
         )
-    cards = knowledge.lookup_platform_docs(query, card_id=str(args.get("card_id") or ""))
+    cards = knowledge.lookup_platform_docs(
+        query, card_id=str(args.get("card_id") or "")
+    )
     titles = " · ".join(c["title"] for c in cards) or "nothing found"
     return ToolResult(
         content=_data({"cards": cards}),
@@ -235,13 +261,20 @@ def _update_checklist(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         previous = checklist.get(item.key) or {}
         checklist[item.key] = {
             "state": item.state,
-            "value": clip(one_line(item.value if item.value is not None else previous.get("value", "")), CHECKLIST_VALUE_CHARS),
+            "value": clip(
+                one_line(
+                    item.value if item.value is not None else previous.get("value", "")
+                ),
+                CHECKLIST_VALUE_CHARS,
+            ),
         }
     ctx.req.checklist = checklist
     ctx.checklist_updated = True
     ctx.db.flush()
     return ToolResult(
-        content=json.dumps({"ok": True, "checklist": {k: v["state"] for k, v in checklist.items()}}),
+        content=json.dumps(
+            {"ok": True, "checklist": {k: v["state"] for k, v in checklist.items()}}
+        ),
         events=[("checklist", {"items": checklist_items(checklist)})],
     )
 
@@ -249,7 +282,9 @@ def _update_checklist(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
 # -------------------------------------------------------------------------------------------- propose_request
 
 
-def _resolve_related(ctx: ToolContext, related: list[Any]) -> tuple[list[dict[str, Any]], list[str]]:
+def _resolve_related(
+    ctx: ToolContext, related: list[Any]
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Resolve model-spelled ids to rows; returns (valid items with server fields, invalid id strings)."""
     valid: list[dict[str, Any]] = []
     invalid: list[str] = []
@@ -329,15 +364,26 @@ def _propose(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         "description": proposal.description,
         "business_need": proposal.business_need,
         "justification": proposal.justification,
-        "priority": {"level": proposal.priority.level, "reasoning": proposal.priority.reasoning},
-        "complexity": {"level": proposal.complexity.level, "reasoning": proposal.complexity.reasoning},
+        "priority": {
+            "level": proposal.priority.level,
+            "reasoning": proposal.priority.reasoning,
+        },
+        "complexity": {
+            "level": proposal.complexity.level,
+            "reasoning": proposal.complexity.reasoning,
+        },
         "related": related,
         "open_gaps": gaps,
         "repaired": [f"related:{i}" for i in invalid] if removed else [],
         "superseded": False,
         "created_at": datetime.utcnow().isoformat() + "Z",
     }
-    result_text = json.dumps({"ok": True, "message": "Proposal stored. Now write one short closing message for the person."})
+    result_text = json.dumps(
+        {
+            "ok": True,
+            "message": "Proposal stored. Now write one short closing message for the person.",
+        }
+    )
     message = add_message(
         ctx.db,
         ctx.req.id,
@@ -361,7 +407,10 @@ def _propose(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     ctx.stored_proposal = True
     ctx.db.flush()
     events: list[tuple[str, dict[str, Any]]] = [
-        ("proposal", {"seq": message.seq, "proposal": stored, "repaired": stored["repaired"]})
+        (
+            "proposal",
+            {"seq": message.seq, "proposal": stored, "repaired": stored["repaired"]},
+        )
     ]
     return ToolResult(
         content=result_text,

@@ -13,21 +13,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
+from qym_platform.db.models import (Dataset, DatasetVersion,
+                                    DatasetVersionStatus, EvalEnvironment,
+                                    EvalExperiment, EvalRunScore, Project, Run)
+from qym_platform.feedback_agent.constants import (DOCS_CARD_CHARS,
+                                                   PRODUCT_FACTS_MAX_CHARS)
+from qym_platform.feedback_agent.text import clip, one_line, stem, tokens
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-
-from qym_platform.db.models import (
-    Dataset,
-    DatasetVersion,
-    DatasetVersionStatus,
-    EvalEnvironment,
-    EvalExperiment,
-    EvalRunScore,
-    Project,
-    Run,
-)
-from qym_platform.feedback_agent.constants import DOCS_CARD_CHARS, PRODUCT_FACTS_MAX_CHARS
-from qym_platform.feedback_agent.text import clip, one_line, stem, tokens
 
 PACK_PATH = Path(__file__).resolve().parent / "knowledge_platform.json"
 INDEX_MAX_CHARS = 6000  # about 1,500 tokens
@@ -51,14 +44,18 @@ def platform_index() -> str:
     for card in load_platform_pack().get("cards", []):
         line = f"- {card['id']}: {card['title']}"
         if size + len(line) > INDEX_MAX_CHARS:
-            lines.append(f"- (+{len(load_platform_pack()['cards']) - len(lines)} more cards, use lookup_docs)")
+            lines.append(
+                f"- (+{len(load_platform_pack()['cards']) - len(lines)} more cards, use lookup_docs)"
+            )
             break
         lines.append(line)
         size += len(line) + 1
     return "\n".join(lines)
 
 
-def lookup_platform_docs(query: str = "", card_id: str = "", limit: int = 3) -> list[dict[str, str]]:
+def lookup_platform_docs(
+    query: str = "", card_id: str = "", limit: int = 3
+) -> list[dict[str, str]]:
     cards = load_platform_pack().get("cards", [])
     if card_id:
         found = [c for c in cards if c["id"] == card_id.strip()]
@@ -70,7 +67,10 @@ def lookup_platform_docs(query: str = "", card_id: str = "", limit: int = 3) -> 
     for card in cards:
         title_tokens = {stem(t) for t in tokens(card["title"])}
         text_tokens = {stem(t) for t in tokens(card["text"])}
-        score = sum((2.0 if t in title_tokens else 0.0) + (1.0 if t in text_tokens else 0.0) for t in q)
+        score = sum(
+            (2.0 if t in title_tokens else 0.0) + (1.0 if t in text_tokens else 0.0)
+            for t in q
+        )
         if score > 0:
             scored.append((score, card))
     scored.sort(key=lambda item: -item[0])
@@ -78,7 +78,11 @@ def lookup_platform_docs(query: str = "", card_id: str = "", limit: int = 3) -> 
 
 
 def _public(card: dict[str, Any]) -> dict[str, str]:
-    return {"card_id": card["id"], "title": card["title"], "text": clip(card["text"], DOCS_CARD_CHARS)}
+    return {
+        "card_id": card["id"],
+        "title": card["title"],
+        "text": clip(card["text"], DOCS_CARD_CHARS),
+    }
 
 
 # ----------------------------------------------------------------------------------------- product facts
@@ -119,7 +123,8 @@ def _datasets(db: Session, project_id: str) -> list[dict[str, Any]]:
                 "name": ds.name,
                 "version": latest[0] if latest else "no published version",
                 "items": int(latest[1]) if latest else 0,
-                "restricted": ds.access_mode == "restricted" or bool(ds.private_test_set),
+                "restricted": ds.access_mode == "restricted"
+                or bool(ds.private_test_set),
             }
         )
     return out
@@ -178,17 +183,26 @@ def _experiments(db: Session, project_id: str, limit: int = 5) -> list[str]:
     }
     out = []
     for e in rows:
-        envs = ", ".join(names.get(i, "?") for i in (e.environment_ids or [])[:4]) or "none"
+        envs = (
+            ", ".join(names.get(i, "?") for i in (e.environment_ids or [])[:4])
+            or "none"
+        )
         status = e.status.value.lower() if e.status else "unknown"
         out.append(f"{one_line(e.name)[:80]} ({status}; environments: {envs})")
     return out
 
 
-def _target_line(db: Session, project_id: str, kind: Optional[str], target_id: Optional[str]) -> str:
+def _target_line(
+    db: Session, project_id: str, kind: Optional[str], target_id: Optional[str]
+) -> str:
     if not kind or not target_id:
         return ""
     if kind == "run":
-        run = db.query(Run).filter(Run.project_id == project_id, Run.id == target_id).first()
+        run = (
+            db.query(Run)
+            .filter(Run.project_id == project_id, Run.id == target_id)
+            .first()
+        )
         if run is None:
             return ""
         means = _run_means(db, [run.id]).get(run.id, [])
@@ -196,7 +210,9 @@ def _target_line(db: Session, project_id: str, kind: Optional[str], target_id: O
     if kind == "experiment":
         e = (
             db.query(EvalExperiment)
-            .filter(EvalExperiment.project_id == project_id, EvalExperiment.id == target_id)
+            .filter(
+                EvalExperiment.project_id == project_id, EvalExperiment.id == target_id
+            )
             .first()
         )
         if e is None:
@@ -205,15 +221,26 @@ def _target_line(db: Session, project_id: str, kind: Optional[str], target_id: O
     if kind == "dataset":
         ds = (
             db.query(Dataset)
-            .filter(Dataset.project_id == project_id, Dataset.id == target_id, Dataset.deleted_at.is_(None))
+            .filter(
+                Dataset.project_id == project_id,
+                Dataset.id == target_id,
+                Dataset.deleted_at.is_(None),
+            )
             .first()
         )
         if ds is None:
             return ""
         versions = (
-            db.query(func.count(DatasetVersion.id)).filter(DatasetVersion.dataset_id == ds.id).scalar() or 0
+            db.query(func.count(DatasetVersion.id))
+            .filter(DatasetVersion.dataset_id == ds.id)
+            .scalar()
+            or 0
         )
-        restricted = "restricted" if ds.access_mode == "restricted" or ds.private_test_set else "open"
+        restricted = (
+            "restricted"
+            if ds.access_mode == "restricted" or ds.private_test_set
+            else "open"
+        )
         return f"Chosen dataset: {one_line(ds.name)[:80]} ({versions} versions, {restricted})"
     return ""
 
@@ -233,7 +260,9 @@ def build_project_facts(
     runs = _recent_runs(db, project_id, 20)
     means = _run_means(db, [r.id for r in runs[:10]])
     sections: dict[str, list[str]] = {
-        "environments": [f"Environments: {', '.join(_env_lines(db, project_id)) or 'none'}"],
+        "environments": [
+            f"Environments: {', '.join(_env_lines(db, project_id)) or 'none'}"
+        ],
         "datasets": ["Datasets:"]
         + [
             f"- {d['name']} ({d['version']}, {d['items']} items, {'restricted' if d['restricted'] else 'open'})"
@@ -241,10 +270,24 @@ def build_project_facts(
         ],
         "metrics": [
             "Metrics seen in the last 20 runs: "
-            + (", ".join(sorted({m for r in runs for m in (r.metrics or []) if isinstance(m, str)})[:30]) or "none")
+            + (
+                ", ".join(
+                    sorted(
+                        {
+                            m
+                            for r in runs
+                            for m in (r.metrics or [])
+                            if isinstance(m, str)
+                        }
+                    )[:30]
+                )
+                or "none"
+            )
         ],
-        "runs": ["Last runs:"] + [f"- {_run_line(r, means.get(r.id, []))}" for r in runs[:10]],
-        "experiments": ["Last experiments:"] + [f"- {line}" for line in _experiments(db, project_id)],
+        "runs": ["Last runs:"]
+        + [f"- {_run_line(r, means.get(r.id, []))}" for r in runs[:10]],
+        "experiments": ["Last experiments:"]
+        + [f"- {line}" for line in _experiments(db, project_id)],
     }
     if section in sections:
         return clip("\n".join(sections[section]), PRODUCT_FACTS_MAX_CHARS)
