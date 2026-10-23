@@ -1,10 +1,13 @@
-/* Variant A: one-row command bar + chips, table hero. */
+/* Variant A: one-row command bar + chips, table hero. The page is as tall as the shell's content area
+   (`height: 100%`, not a viewport estimate), so the table card below the bar reaches the bottom edge and its
+   body scrolls inside; with few rows the card stays as tall as its rows (flex-shrink, no grow). */
 .runs {
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
   min-height: 0;
-  flex: 1;
-  padding: var(--space-sm) var(--space-md) 0;
+  padding: var(--space-sm) var(--space-md);
   gap: var(--space-sm);
 }
 
@@ -30,7 +33,7 @@
 }
 
 .table {
-  max-height: calc(100vh - 190px);
+  flex: 0 1 auto;
   min-height: 240px;
 }
 
