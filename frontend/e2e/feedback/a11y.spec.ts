@@ -52,7 +52,7 @@ test('QE-142, QE-72: the proposal card heading takes focus and tab order follows
   const card = page.getByTestId('proposal');
   await expect(card).toBeVisible();
   const order = await card.evaluate((el) => {
-    const fields = [...el.querySelectorAll<HTMLElement>('input, textarea, button')].filter((e) => !(e as HTMLButtonElement).disabled);
+    const fields = Array.from(el.querySelectorAll<HTMLElement>('input, textarea, button')).filter((e) => !(e as HTMLButtonElement).disabled);
     return fields.map((f) => f.getAttribute('aria-label') || f.textContent?.trim() || f.closest('label')?.textContent || f.id).slice(0, 12);
   });
   expect(order.length).toBeGreaterThan(4);
