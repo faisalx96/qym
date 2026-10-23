@@ -49,10 +49,10 @@ test('QE-116, QE-120, QE-121: behaviour numbers, keep the key, remove the connec
   await configureAgent(request);
   await setViewport(page, 1440);
   await gotoApp(page, '/admin/feedback');
-  await page.getByLabel('Keep drafts for (days)').fill('14');
+  await page.getByLabel('Keep drafts for (days)', { exact: true }).first().fill('14');
   await page.getByRole('button', { name: 'Save behaviour' }).click();
   await expect(page.getByText('Behaviour saved')).toBeVisible();
-  await page.getByLabel('Keep drafts for (days)').fill('30');
+  await page.getByLabel('Keep drafts for (days)', { exact: true }).first().fill('30');
   await page.getByRole('button', { name: 'Save behaviour' }).click();
   await page.getByLabel('Model').fill('feedback:ask_then_propose');
   await page.getByRole('button', { name: 'Save connection' }).click();

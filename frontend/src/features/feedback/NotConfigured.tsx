@@ -11,7 +11,10 @@ export function NotConfigured() {
   const { isAdmin } = useAuth();
   return (
     <div className={`${constrained} ${styles.page}`} data-testid="feedback-unconfigured-page">
-      <PageHeader title="New feedback" description="Tell the assistant what you need. It proposes a request for you to confirm." />
+      <PageHeader
+        title="New feedback"
+        description="Tell the assistant what you need. It proposes a request for you to confirm."
+      />
       <Card as="section" aria-label="Not set up">
         <EmptyState
           icon={<FeedbackGlyph size={48} />}

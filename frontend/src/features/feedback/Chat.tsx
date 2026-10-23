@@ -4,7 +4,6 @@ import { Button, Card, Icon, Kbd, Text, TextBlock, Textarea } from '@/ui';
 import type { LogItem } from './turnState';
 import styles from './feedback.module.css';
 
-
 /** Request ids become links only in tool lines (QE-90), never by scanning free text. */
 function ToolText({ item }: { item: LogItem }) {
   const ids = item.ids ?? [];
@@ -25,15 +24,7 @@ function ToolText({ item }: { item: LogItem }) {
   );
 }
 
-export function MsgItem({
-  item,
-  who,
-  onRetry,
-}: {
-  item: LogItem;
-  who: string;
-  onRetry?: () => void;
-}) {
+export function MsgItem({ item, who, onRetry }: { item: LogItem; who: string; onRetry?: () => void }) {
   if (item.role === 'tool')
     return (
       <li className={styles.toolLine} data-role="tool">
@@ -64,7 +55,12 @@ export function MsgItem({
     );
   const user = item.role === 'user';
   return (
-    <li className={styles.msg} data-role={item.role} data-streaming={item.streaming ? '' : undefined} aria-busy={item.streaming ? true : undefined}>
+    <li
+      className={styles.msg}
+      data-role={item.role}
+      data-streaming={item.streaming ? '' : undefined}
+      aria-busy={item.streaming ? true : undefined}
+    >
       <span className={styles.msgIcon} aria-hidden="true">
         <Icon name={user ? 'user' : 'bot'} size={14} />
       </span>
@@ -102,6 +98,8 @@ export interface ChatProps {
   limitReached?: boolean;
   height?: number;
   extra?: ReactNode;
+  /** Older messages exist on the server (QE-55). */
+  onLoadEarlier?: () => void;
 }
 
 const NEAR = 40;
@@ -156,6 +154,11 @@ export const Chat = forwardRef<HTMLTextAreaElement, ChatProps>(function Chat(p, 
         tabIndex={0}
         data-testid="chat-log"
       >
+        {p.onLoadEarlier ? (
+          <Button size="sm" variant="ghost" onPress={p.onLoadEarlier} data-testid="load-earlier">
+            Show earlier messages
+          </Button>
+        ) : null}
         <ol className={styles.msgs}>
           {p.items.map((m) => (
             <MsgItem key={m.key} item={m} who={p.who} onRetry={p.onRetry} />
@@ -204,7 +207,12 @@ export const Chat = forwardRef<HTMLTextAreaElement, ChatProps>(function Chat(p, 
               Stop
             </Button>
           ) : (
-            <Button variant="accent" isDisabled={!canSend} icon={<Icon name="next" size={14} />} onPress={p.onSend}>
+            <Button
+              variant="accent"
+              isDisabled={!canSend}
+              icon={<Icon name="next" size={14} />}
+              onPress={p.onSend}
+            >
               Send
             </Button>
           )}
@@ -213,4 +221,3 @@ export const Chat = forwardRef<HTMLTextAreaElement, ChatProps>(function Chat(p, 
     </Card>
   );
 });
-

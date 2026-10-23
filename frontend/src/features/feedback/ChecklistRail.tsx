@@ -23,7 +23,11 @@ export function ChecklistRail({ items }: { items: ChecklistItem[] }) {
         {items.map((i) => (
           <li key={i.key} className={styles.checkItem} data-state={i.state} data-check={i.key}>
             <span className={styles.checkGlyph} aria-hidden="true">
-              {i.state === 'filled' ? <Icon name="check" size={12} /> : i.state === 'declined' ? <Icon name="minus" size={12} /> : null}
+              {i.state === 'filled' ? (
+                <Icon name="check" size={12} />
+              ) : i.state === 'declined' ? (
+                <Icon name="minus" size={12} />
+              ) : null}
             </span>
             <span className={styles.checkText}>
               <span className={styles.checkLabel}>

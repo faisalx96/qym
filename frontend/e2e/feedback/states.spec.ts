@@ -11,36 +11,25 @@ test.beforeAll(async ({ request }) => {
   seedFeedback(0);
 });
 
-test('QE-125: the list loading frame is as tall as the loaded table at three widths', async ({ page }) => {
+test('QE-125: the list loading frame is as tall as the loaded table at three widths (0 ± 1 px)', async ({ page }) => {
   for (const w of WIDTHS) {
     await setViewport(page, w);
-    // warm the app so the page loads its code, then reload with the list held back
     await gotoApp(page, '/feedback');
-    const grid = tableOf(page);
     await expect(page.getByTestId('dup-note')).toBeVisible();
-    const target = page.locator('[data-dt-toolbar]').locator('xpath=ancestor::*[contains(@class,"root") or @role="group" or self::section or self::div][1]');
-    void target;
-    const wrapper = page.getByTestId('feedback-list-page').locator('> *').last();
-    const loaded = await box(wrapper);
-    let release: () => void = () => undefined;
-    const gate = new Promise<void>((r) => (release = r));
-    await page.route('**/v1/feedback?*', async (route) => {
-      await gate;
-      await route.continue();
-    });
-    await page.evaluate(() => sessionStorage.setItem('qym:probe', '1'));
-    await page.reload();
-    await expect(page.getByTestId('feedback-list-page')).toBeVisible();
     await page.waitForTimeout(700);
-    const frame = await box(page.getByTestId('feedback-list-page').locator('> *').last());
-    record(`loading-${w}`, { loaded, frame });
+    const loaded = await box(page.getByTestId('feedback-table-frame'));
+    await page.route('**/v1/feedback?*', async (route) => {
+      await new Promise((r) => setTimeout(r, 2500));
+      await route.continue().catch(() => undefined);
+    });
+    await page.reload();
+    await expect(page.getByTestId('feedback-table-frame')).toBeVisible();
+    await page.waitForTimeout(900);
+    const frame = await box(page.getByTestId('feedback-table-frame'));
+    record(`loading-${w}`, { loaded, frame, delta: Math.round((frame.h - loaded.h) * 10) / 10 });
     await shot(page, 'list-loading', w);
-    release();
+    near(frame.h, loaded.h);
     await page.unroute('**/v1/feedback?*');
-    await expect(grid.locator('tbody tr').first()).toBeVisible();
-    // the frame keeps the last known row count: with the same data, the heights match (0 ± 1 px)
-    void near;
-    expect(frame.h).toBeGreaterThan(200);
   }
 });
 
@@ -60,15 +49,24 @@ test('QE-127: filtered to nothing says so; QE-136 is covered by the platform rat
 });
 
 test('QE-129: the message limit callout and a forced proposal', async ({ page, request }) => {
+  test.setTimeout(120_000);
   await request.put('/v1/admin/feedback-agent', { data: { max_user_messages: 6 } });
   await configureAgent(request, 'forced_propose');
   try {
-    const res = await request.post('/v1/feedback', { data: { subject: 'platform', message: 'Forced proposal please.' } });
+    const res = await request.post('/v1/feedback', { data: { subject: 'platform', message: 'Message 1 of 6.' } });
     const id = ((await res.json()) as { id: string }).id;
+    await request.post(`/v1/feedback/${id}/turn`, { headers: { Accept: 'application/json' } });
+    for (let i = 2; i <= 5; i += 1)
+      await request.post(`/v1/feedback/${id}/messages`, { data: { content: `Message ${i} of 6.` }, headers: { Accept: 'application/json' } });
     await setViewport(page, 1440);
     await gotoApp(page, `/feedback/${id}`);
-    await expect(page.getByTestId('proposal')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('chat-log')).toContainText('Message 5 of 6.');
+    await page.getByLabel('Your reply').fill('Message 6 of 6.');
+    await page.getByLabel('Your reply').press('Enter');
+    await expect(page.getByText('6 of 6 messages used')).toBeVisible();
+    await expect(page.getByTestId('proposal')).toBeVisible({ timeout: 25_000 });
     await expect(page.getByTestId('proposal')).toContainText('The assistant did not learn:');
+    await shot(page, 'chat-limit', 1440);
   } finally {
     await request.put('/v1/admin/feedback-agent', { data: { max_user_messages: 30 } });
     await configureAgent(request);

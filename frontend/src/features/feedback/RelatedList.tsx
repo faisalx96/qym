@@ -19,7 +19,12 @@ export function RelatedList({ items, title }: { items: RelatedEntry[]; title?: s
       {title ? <Eyebrow>{title}</Eyebrow> : null}
       <ul className={styles.relatedList} aria-label="Related requests">
         {items.slice(0, 6).map((r) => (
-          <li key={`${r.kind}-${r.ref}`} className={styles.relatedItem} data-kind={r.kind} data-related={r.ref}>
+          <li
+            key={`${r.kind}-${r.ref}`}
+            className={styles.relatedItem}
+            data-kind={r.kind}
+            data-related={r.ref}
+          >
             <span className={styles.relatedHead}>
               <KindBadge kind={r.kind} />
               <RequestLink id={r.ref} />

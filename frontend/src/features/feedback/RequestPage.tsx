@@ -7,7 +7,7 @@ import { useDocumentTitle } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
 import { useCrumbLabel } from '@/lib/crumb-label';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Card, Eyebrow, Icon, PageHeader, StatStrip, Tabs, Tag, Text, TextBlock } from '@/ui';
+import { Card, Eyebrow, Icon, PageHeader, StatStrip, TabPanel, Tabs, Tag, Text, TextBlock } from '@/ui';
 import { StatusBadge, cap } from './badges';
 import { MsgItem } from './Chat';
 import { clock, dateTime, eventText, shortDate } from './format';
@@ -107,7 +107,8 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
   const priority = r.priority ? cap(r.priority) : '—';
   const sentence = (kind: 'priority' | 'complexity') => {
     const ev = kind === 'priority' ? priorityEvent : complexityEvent;
-    const agent = kind === 'priority' ? (r.agent.priority ? cap(r.agent.priority) : '') : (r.agent.complexity ?? '');
+    const agent =
+      kind === 'priority' ? (r.agent.priority ? cap(r.agent.priority) : '') : (r.agent.complexity ?? '');
     if (ev) {
       const was = String((ev.before as Record<string, string>)[kind] ?? '');
       return `Revised by ${ev.actor} on ${shortDate(ev.created_at)} (was ${kind === 'priority' ? cap(was) : was}).`;
@@ -137,7 +138,10 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
         ]}
       />
       {declined ? (
-        <Callout tone="error" title={`Declined by ${declineEvent?.actor || 'an administrator'} on ${shortDate(declineEvent?.created_at)}`}>
+        <Callout
+          tone="error"
+          title={`Declined by ${declineEvent?.actor || 'an administrator'} on ${shortDate(declineEvent?.created_at)}`}
+        >
           {r.decline_reason}
         </Callout>
       ) : null}
@@ -145,7 +149,8 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
         <Callout tone="warning" title={`Marked as a duplicate of ${dupOf}`}>
           <span>
             {dupEvent?.actor || 'An administrator'} linked this request to <RequestLink id={dupOf} /> on{' '}
-            {shortDate(dupEvent?.created_at)}. Administrators plan the canonical request; this one stays as a record.
+            {shortDate(dupEvent?.created_at)}. Administrators plan the canonical request; this one stays as a
+            record.
           </span>
         </Callout>
       ) : null}
@@ -157,57 +162,72 @@ export function RequestPage({ detail, routeRef }: { detail: FeedbackDetail; rout
         ]}
         selected={tab}
         onSelect={(id) => replaceUrlQuery({ tab: id === 'conversation' ? 'conversation' : null })}
-      />
-      {tab === 'request' ? (
-        <div className={styles.split} data-request-split>
-          <div className={styles.stackCol}>
-            <StatStrip
-              aria-label="Priority and complexity"
-              items={[
-                { label: 'Priority', value: priority, sub: sentence('priority') },
-                { label: 'Complexity', value: r.complexity ?? '—', sub: sentence('complexity') },
-              ]}
-            />
-            <Card as="section" aria-label="Request details" data-testid="request-card">
-              <div className={styles.sections}>
-                <Section label="Description" text={r.description} />
-                <Section label="Business need" text={r.business_need} />
-                <Section label="Justification" text={r.justification} />
-                <div className={styles.pair}>
-                  <Section label={`Why ${priority}`} text={r.agent.priority_reasoning ?? ''} />
-                  <Section label={`Why ${r.complexity ?? ''}`} text={r.agent.complexity_reasoning ?? ''} />
-                </div>
+      >
+        <TabPanel id="request">
+          {tab === 'request' ? (
+            <div className={styles.split} data-request-split>
+              <div className={styles.stackCol}>
+                <StatStrip
+                  aria-label="Priority and complexity"
+                  items={[
+                    { label: 'Priority', value: priority, sub: sentence('priority') },
+                    { label: 'Complexity', value: r.complexity ?? '—', sub: sentence('complexity') },
+                  ]}
+                />
+                <Card as="section" aria-label="Request details" data-testid="request-card">
+                  <div className={styles.sections}>
+                    <Section label="Description" text={r.description} />
+                    <Section label="Business need" text={r.business_need} />
+                    <Section label="Justification" text={r.justification} />
+                    <div className={styles.pair}>
+                      <Section label={`Why ${priority}`} text={r.agent.priority_reasoning ?? ''} />
+                      <Section
+                        label={`Why ${r.complexity ?? ''}`}
+                        text={r.agent.complexity_reasoning ?? ''}
+                      />
+                    </div>
+                  </div>
+                </Card>
+                <HistoryCard events={detail.events} />
               </div>
+              <div className={styles.stackCol}>
+                {isAdmin ? <TriagePanel detail={detail} /> : null}
+                {related.length ? (
+                  <Card
+                    as="aside"
+                    aria-label="Related requests"
+                    header={<Text variant="md">Related requests</Text>}
+                    data-testid="related-card"
+                  >
+                    <RelatedList items={related} />
+                  </Card>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </TabPanel>
+        <TabPanel id="conversation">
+          {tab === 'conversation' ? (
+            <Card as="section" aria-label="Conversation transcript" data-testid="transcript">
+              <div className={styles.transcriptNote}>
+                <Icon name="lock" size={12} /> Read only. The assistant’s proposal is the confirmed request on
+                the Request tab.
+              </div>
+              <ol className={styles.msgs}>
+                {transcript.map((m) => (
+                  <MsgItem key={m.key} item={m} who={r.submitter.name} />
+                ))}
+                <li className={styles.toolLine} data-role="tool">
+                  <Icon name="check" size={12} />
+                  <span>
+                    {r.submitter.name} submitted the proposal · {clock(r.confirmed_at)}
+                  </span>
+                </li>
+              </ol>
             </Card>
-            <HistoryCard events={detail.events} />
-          </div>
-          <div className={styles.stackCol}>
-            {isAdmin ? <TriagePanel detail={detail} /> : null}
-            {related.length ? (
-              <Card as="aside" aria-label="Related requests" header={<Text variant="md">Related requests</Text>} data-testid="related-card">
-                <RelatedList items={related} />
-              </Card>
-            ) : null}
-          </div>
-        </div>
-      ) : (
-        <Card as="section" aria-label="Conversation transcript" data-testid="transcript">
-          <div className={styles.transcriptNote}>
-            <Icon name="lock" size={12} /> Read only. The assistant’s proposal is the confirmed request on the Request tab.
-          </div>
-          <ol className={styles.msgs}>
-            {transcript.map((m) => (
-              <MsgItem key={m.key} item={m} who={r.submitter.name} />
-            ))}
-            <li className={styles.toolLine} data-role="tool">
-              <Icon name="check" size={12} />
-              <span>
-                {r.submitter.name} submitted the proposal · {clock(r.confirmed_at)}
-              </span>
-            </li>
-          </ol>
-        </Card>
-      )}
+          ) : null}
+        </TabPanel>
+      </Tabs>
     </div>
   );
 }

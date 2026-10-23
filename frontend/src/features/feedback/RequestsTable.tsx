@@ -47,7 +47,9 @@ const PLACEHOLDER = (id: number): FeedbackRow => ({
 });
 
 function columns(skeleton: boolean): Column<FeedbackRow>[] {
-  const bone = (w: number) => <span className={styles.bone} style={{ inlineSize: `${w}%` }} aria-hidden="true" />;
+  const bone = (w: number) => (
+    <span className={styles.bone} style={{ inlineSize: `${w}%` }} aria-hidden="true" />
+  );
   return [
     {
       id: 'title',
@@ -139,7 +141,10 @@ export function RequestsTable(p: RequestsTableProps) {
   const children = useMemo(() => p.data?.children ?? {}, [p.data]);
   const canonical = useMemo(() => new Set(Object.keys(children)), [children]);
   const [collapsed, setCollapsed] = useState<Set<Key>>(new Set());
-  const expanded = useMemo(() => new Set<Key>([...canonical].filter((id) => !collapsed.has(id))), [canonical, collapsed]);
+  const expanded = useMemo(
+    () => new Set<Key>([...canonical].filter((id) => !collapsed.has(id))),
+    [canonical, collapsed],
+  );
   const skeleton = p.loading && !p.data;
   const shown = skeleton ? Array.from({ length: Math.max(1, p.lastCount) }, (_, i) => PLACEHOLDER(i)) : rows;
   const cols = useMemo(() => columns(skeleton), [skeleton]);

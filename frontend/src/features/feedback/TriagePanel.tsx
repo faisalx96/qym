@@ -14,8 +14,14 @@ import { COMPLEXITY_ITEMS } from './ProposalCard';
 import { PRIORITY_LABEL } from './proposalForm';
 import styles from './feedback.module.css';
 
-const STATUSES = (['new', 'accepted', 'planned', 'done', 'declined'] as const).map((k) => ({ key: k, label: cap(k) }));
-const PRIORITIES = (Object.keys(PRIORITY_LABEL) as FeedbackPriority[]).map((k) => ({ key: k, label: PRIORITY_LABEL[k] }));
+const STATUSES = (['new', 'accepted', 'planned', 'done', 'declined'] as const).map((k) => ({
+  key: k,
+  label: cap(k),
+}));
+const PRIORITIES = (Object.keys(PRIORITY_LABEL) as FeedbackPriority[]).map((k) => ({
+  key: k,
+  label: PRIORITY_LABEL[k],
+}));
 const NONE = '__none__';
 
 interface Form {
@@ -29,7 +35,8 @@ interface Form {
 export function pendingChanges(base: Form, form: Form): string[] {
   const out: string[] = [];
   if (form.status !== base.status) out.push(`Status ${cap(base.status)} to ${cap(form.status)}`);
-  if (form.priority !== base.priority) out.push(`Priority ${PRIORITY_LABEL[base.priority]} to ${PRIORITY_LABEL[form.priority]}`);
+  if (form.priority !== base.priority)
+    out.push(`Priority ${PRIORITY_LABEL[base.priority]} to ${PRIORITY_LABEL[form.priority]}`);
   if (form.complexity !== base.complexity) out.push(`Complexity ${base.complexity} to ${form.complexity}`);
   if (form.duplicate !== base.duplicate)
     out.push(form.duplicate === NONE ? 'Duplicate link cleared' : `Duplicate of ${form.duplicate}`);
@@ -82,7 +89,9 @@ export function TriagePanel({ detail }: { detail: FeedbackDetail }) {
   const changes = pendingChanges(base, form);
   const needNote = noteRequired(base, form);
   const declining = form.status === 'declined' && base.status !== 'declined';
-  const noteMessage = declining ? 'Say why it is declined. The submitter sees this.' : 'Add a note: it is shown in the history.';
+  const noteMessage = declining
+    ? 'Say why it is declined. The submitter sees this.'
+    : 'Add a note: it is shown in the history.';
   const reset = () => {
     setForm(base);
     setError('');
@@ -101,16 +110,19 @@ export function TriagePanel({ detail }: { detail: FeedbackDetail }) {
     if (form.status !== base.status) body.status = form.status;
     if (form.priority !== base.priority) body.priority = form.priority;
     if (form.complexity !== base.complexity) body.complexity = form.complexity;
-    if (form.duplicate !== base.duplicate) body.duplicate_of = form.duplicate === NONE ? null : form.duplicate;
+    if (form.duplicate !== base.duplicate)
+      body.duplicate_of = form.duplicate === NONE ? null : form.duplicate;
     if (form.note.trim()) body.note = form.note.trim();
     if (declining) body.decline_reason = form.note.trim();
     try {
       await triage.mutateAsync(body);
       toast.show('Saved', { tone: 'success' });
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'stale') setError('Someone else changed this request. Reload to see their changes.');
+      if (e instanceof ApiError && e.code === 'stale')
+        setError('Someone else changed this request. Reload to see their changes.');
       else if (e instanceof ApiError && e.code === 'has_duplicates') setError('Move its duplicates first.');
-      else if (e instanceof ApiError && e.code === 'duplicate_chain') setError('That request is itself a duplicate. Pick the original.');
+      else if (e instanceof ApiError && e.code === 'duplicate_chain')
+        setError('That request is itself a duplicate. Pick the original.');
       else setError(e instanceof ApiError && e.detail ? e.detail : 'Couldn’t save. Nothing was changed.');
     }
   };
@@ -131,7 +143,12 @@ export function TriagePanel({ detail }: { detail: FeedbackDetail }) {
           <Button variant="ghost" isDisabled={!changes.length && !form.note} onPress={reset}>
             Reset
           </Button>
-          <Button variant="accent" isDisabled={!changes.length} loading={triage.isPending} onPress={() => void save()}>
+          <Button
+            variant="accent"
+            isDisabled={!changes.length}
+            loading={triage.isPending}
+            onPress={() => void save()}
+          >
             Save changes
           </Button>
         </div>
@@ -148,9 +165,19 @@ export function TriagePanel({ detail }: { detail: FeedbackDetail }) {
             ) : null}
           </p>
         ) : null}
-        <Select label="Status" items={STATUSES} value={form.status} onChange={(k) => k && set({ status: k as FeedbackStatus })} />
+        <Select
+          label="Status"
+          items={STATUSES}
+          value={form.status}
+          onChange={(k) => k && set({ status: k as FeedbackStatus })}
+        />
         <div className={styles.pair}>
-          <Select label="Priority" items={PRIORITIES} value={form.priority} onChange={(k) => k && set({ priority: k as FeedbackPriority })} />
+          <Select
+            label="Priority"
+            items={PRIORITIES}
+            value={form.priority}
+            onChange={(k) => k && set({ priority: k as FeedbackPriority })}
+          />
           <Select
             label="Complexity"
             items={COMPLEXITY_ITEMS}

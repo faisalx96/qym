@@ -204,7 +204,7 @@ export function FeedbackAgentTab() {
   const q = useAgentAdmin();
   if (q.isError) return <ErrorState error={q.error} title="Couldn’t load the feedback assistant" onRetry={() => void q.refetch()} />;
   if (!q.data) return <Skeleton kind="rows" rows={3} rowHeight={80} label="Loading the feedback assistant" />;
-  const key = `${q.data.updated_at}-${q.data.configured}`;
+  const key = String(q.data.configured);
   return (
     <div className={feedbackStyles.stackCol}>
       <ConnectionCard key={key} data={q.data} />

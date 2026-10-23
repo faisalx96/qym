@@ -371,7 +371,7 @@ function listColumns(): Column<Req>[] {
     },
     { id: 'about', header: 'About', width: 130, priority: 2, cell: (r) => <AboutCell r={r} /> },
     { id: 'priority', header: 'Priority', width: 84, priority: 2, cell: (r) => <PriorityBadge value={r.priority} /> },
-    { id: 'size', header: 'Size', width: 64, priority: 2, cell: (r) => <ComplexityTag value={r.complexity} /> },
+    { id: 'complexity', header: 'Complexity', width: 118, priority: 2, cell: (r) => <ComplexityTag value={r.complexity} /> },
     { id: 'status', header: 'Status', type: 'status', width: 96, priority: 1, cell: (r) => <StatusBadge status={r.status} /> },
     { id: 'by', header: 'Submitted', width: 130, priority: 2, cell: (r) => <SubmitterCell r={r} /> },
   ];
@@ -408,7 +408,7 @@ function FilterRow({ compact }: { compact?: boolean }) {
         />
         <MultiSelect label="Priority" triggerVariant="bar" items={PRIORITIES} value={none} onChange={noop} />
         <MultiSelect
-          label="Size"
+          label="Complexity"
           triggerVariant="bar"
           items={COMPLEXITIES.map((c) => ({ key: c.key, label: c.key }))}
           value={none}
@@ -504,7 +504,7 @@ function ListPage({ state }: { state?: 'default' | 'unconfigured' }) {
     <div className={styles.col} data-testid="feedback-list-page">
       <PageHeader
         title="Feedback"
-        description="Everything people asked for, with the assistant's proposed priority and size. Admins triage."
+        description="Everything people asked for, with the assistant's proposed priority and complexity. Admins triage."
         meta={[`${REQS.length} requests`, '2 new', '1 duplicate pair']}
         actions={<NewButton />}
       />
@@ -537,7 +537,7 @@ function HowItWorks() {
         <li>
           <span className={styles.stepNo}>3</span>
           <span>
-            You confirm a description, a priority and a size. Nothing is submitted before you do.
+            You confirm a description, a priority and a complexity. Nothing is submitted before you do.
           </span>
         </li>
       </ol>
@@ -1101,10 +1101,10 @@ export function ProposalCard({
             reasoning="A weekly management review depends on it and three leads lose two hours every week. Not critical: a workaround exists."
           />
           <Reasoned
-            label="Size"
+            label="Complexity"
             agent="M · about a week"
             value="M"
-            control={<Select label="Size" items={COMPLEXITIES} value="M" onChange={noop} />}
+            control={<Select label="Complexity" items={COMPLEXITIES} value="M" onChange={noop} />}
             reasoning="The compare view already holds the data. It needs a print layout and a server-side render, and a rule for restricted datasets."
           />
         </div>
@@ -1154,10 +1154,10 @@ function RequestMain() {
   return (
     <div className={styles.stackCol}>
       <StatStrip
-        aria-label="Priority and size"
+        aria-label="Priority and complexity"
         items={[
           { label: 'Priority', value: 'Medium', sub: 'Confirmed by Omar Khalid. The assistant proposed Medium.' },
-          { label: 'Size', value: 'M', sub: 'About a week. The assistant proposed M.' },
+          { label: 'Complexity', value: 'M', sub: 'About a week. The assistant proposed M.' },
         ]}
       />
       <Card as="section" aria-label="Request details" data-testid="request-card">
@@ -1254,7 +1254,7 @@ function TriageCard({ pending = true, declineError }: { pending?: boolean; decli
         <Select label="Status" items={STATUSES} value={declineError ? 'declined' : 'new'} onChange={noop} />
         <div className={styles.pair}>
           <Select label="Priority" items={PRIORITIES} value={pending ? 'high' : 'medium'} onChange={noop} />
-          <Select label="Size" items={COMPLEXITIES} value="M" onChange={noop} />
+          <Select label="Complexity" items={COMPLEXITIES} value="M" onChange={noop} />
         </div>
         <Select
           label="Duplicate of"

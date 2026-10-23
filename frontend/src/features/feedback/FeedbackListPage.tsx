@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Callout } from '@/features/experiments/launch/components/Callout';
 import {
@@ -29,7 +29,15 @@ import {
   type Key,
 } from '@/ui';
 import { DraftsStrip } from './DraftsStrip';
-import { activeFilterCount, apiParams, isFiltered, metaLine, PAGE_SIZE, sortToState, viewFromParams } from './listModel';
+import {
+  activeFilterCount,
+  apiParams,
+  isFiltered,
+  metaLine,
+  PAGE_SIZE,
+  sortToState,
+  viewFromParams,
+} from './listModel';
 import { RequestsTable } from './RequestsTable';
 import { FeedbackGlyph } from './FeedbackGlyph';
 import styles from './feedback.module.css';
@@ -47,6 +55,26 @@ const ABOUT = [
   { key: 'platform', label: 'qym itself' },
   { key: 'product', label: 'A product' },
 ];
+
+const FRAME_KEY = () => `qym:feedback-list-frame:${typeof window === 'undefined' ? 0 : window.innerWidth}`;
+function readFrame(): { rows: number; height: number } {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(FRAME_KEY()) ?? 'null') as {
+      rows?: number;
+      height?: number;
+    } | null;
+    return { rows: Math.max(1, Number(v?.rows) || 8), height: Number(v?.height) || 0 };
+  } catch {
+    return { rows: 8, height: 0 };
+  }
+}
+function writeFrame(rows: number, height: number) {
+  try {
+    sessionStorage.setItem(FRAME_KEY(), JSON.stringify({ rows, height: Math.round(height * 10) / 10 }));
+  } catch {
+    /* storage can be unavailable */
+  }
+}
 
 export function NewFeedbackButton({ disabled, size = 'md' }: { disabled?: boolean; size?: 'md' | 'sm' }) {
   const navigate = useNavigate();
@@ -84,18 +112,40 @@ export function FeedbackListPage() {
   const [drawer, setDrawer] = useState(false);
   const configured = status.data?.configured ?? list.data?.configured ?? true;
   const data = list.data;
-  // The loading frame draws as many rows as the last page had (QE-125); adjusted during render, no effect.
-  const [lastCount, setLastCount] = useState(8);
-  if (data && data.items.length > 0 && data.items.length !== lastCount) setLastCount(data.items.length);
+  // QE-125: the loading frame is the loaded frame. It draws as many rows as the last page had and keeps the height the
+  // table had last time at this width (both remembered for the tab); a first visit draws eight rows.
+  const frame = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [remembered] = useState(readFrame);
+  const rowsLoaded = data
+    ? data.items.length + Object.values(data.children).reduce((n, k) => n + k.length, 0)
+    : 0;
+  useEffect(() => {
+    if (data && frame.current && rowsLoaded > 0)
+      writeFrame(rowsLoaded, frame.current.getBoundingClientRect().height);
+  }, [data, rowsLoaded]);
   const filtered = isFiltered(view);
-  const set = (patch: Record<string, string | string[] | boolean | null>) => replaceUrlQuery({ page: null, ...patch });
+  const set = (patch: Record<string, string | string[] | boolean | null>) =>
+    replaceUrlQuery({ page: null, ...patch });
   const multi = (key: 'status' | 'about' | 'project' | 'priority' | 'complexity') => (next: Set<Key>) =>
     set({ [key]: [...next].join(',') || null });
 
   const facetNodes = (
     <>
-      <MultiSelect label="Status" triggerVariant="bar" items={STATUSES} value={new Set(view.status)} onChange={multi('status')} />
-      <MultiSelect label="About" triggerVariant="bar" items={ABOUT} value={new Set(view.about)} onChange={multi('about')} />
+      <MultiSelect
+        label="Status"
+        triggerVariant="bar"
+        items={STATUSES}
+        value={new Set(view.status)}
+        onChange={multi('status')}
+      />
+      <MultiSelect
+        label="About"
+        triggerVariant="bar"
+        items={ABOUT}
+        value={new Set(view.about)}
+        onChange={multi('about')}
+      />
       <MultiSelect
         label="Project"
         triggerVariant="bar"
@@ -103,7 +153,13 @@ export function FeedbackListPage() {
         value={new Set(view.project)}
         onChange={multi('project')}
       />
-      <MultiSelect label="Priority" triggerVariant="bar" items={PRIORITIES} value={new Set(view.priority)} onChange={multi('priority')} />
+      <MultiSelect
+        label="Priority"
+        triggerVariant="bar"
+        items={PRIORITIES}
+        value={new Set(view.priority)}
+        onChange={multi('priority')}
+      />
       <MultiSelect
         label="Complexity"
         triggerVariant="bar"
@@ -162,6 +218,19 @@ export function FeedbackListPage() {
     />
   ) : null;
 
+  // QE-150: "/" focuses the search, as on the runs list.
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (el && (el.isContentEditable || /^(input|textarea|select)$/i.test(el.tagName))) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, []);
+
   const empty = data && data.counts.all === 0 && !filtered && !list.isFetching;
   return (
     <div className={`${constrained} ${styles.page}`} data-testid="feedback-list-page">
@@ -179,7 +248,11 @@ export function FeedbackListPage() {
         <DraftsStrip drafts={data.drafts} />
       ) : null}
       {list.isError && data ? (
-        <StaleBanner since={new Date(list.dataUpdatedAt)} filtersApplied onRetry={() => void list.refetch()} />
+        <StaleBanner
+          since={new Date(list.dataUpdatedAt)}
+          filtersApplied
+          onRetry={() => void list.refetch()}
+        />
       ) : null}
       {empty ? (
         <Card as="section" aria-label="No feedback">
@@ -191,52 +264,60 @@ export function FeedbackListPage() {
           />
         </Card>
       ) : (
-        <RequestsTable
-          data={data}
-          loading={list.isPending}
-          error={list.error}
-          onRetry={() => void list.refetch()}
-          sort={sortToState(view.sort)}
-          onSortChange={(s) => set({ sort: s ? `${s.key}:${s.direction}` : null })}
-          filtered={filtered}
-          lastCount={lastCount}
-          toolbar={
-            <DataTable.Toolbar
-              search={
-                <SearchField
-                  label="Search requests"
-                  placeholder="Search requests"
-                  width="100%"
-                  value={view.q}
-                  onChange={(q) => set({ q: q || null })}
-                  onClear={() => set({ q: null })}
-                />
-              }
-              rows={filterRow}
-              count={`${data?.matching ?? 0} ${data?.matching === 1 ? 'request' : 'requests'}`}
-              trailing={exportMenu}
-              columnsMenu={false}
-              densityMenu={false}
-            />
-          }
-          footer={
-            <DataTable.Footer
-              testId="feedback-footer"
-              ariaLabel="Feedback status"
-              pagination={
-                data && data.total > PAGE_SIZE
-                  ? {
-                      total: data.total,
-                      page: view.page,
-                      pageSize: PAGE_SIZE,
-                      noun: 'requests',
-                      onPageChange: (page) => replaceUrlQuery({ page: page > 1 ? page : null }),
-                    }
-                  : undefined
-              }
-            />
-          }
-        />
+        <div
+          ref={frame}
+          className={styles.tableFrame}
+          style={!data && remembered.height ? { minBlockSize: remembered.height } : undefined}
+          data-testid="feedback-table-frame"
+        >
+          <RequestsTable
+            data={data}
+            loading={list.isPending}
+            error={list.error}
+            onRetry={() => void list.refetch()}
+            sort={sortToState(view.sort)}
+            onSortChange={(s) => set({ sort: s ? `${s.key}:${s.direction}` : null })}
+            filtered={filtered}
+            lastCount={remembered.rows}
+            toolbar={
+              <DataTable.Toolbar
+                search={
+                  <SearchField
+                    ref={searchRef}
+                    label="Search requests"
+                    placeholder="Search requests"
+                    width="100%"
+                    value={view.q}
+                    onChange={(q) => set({ q: q || null })}
+                    onClear={() => set({ q: null })}
+                  />
+                }
+                rows={filterRow}
+                count={`${data?.matching ?? 0} ${data?.matching === 1 ? 'request' : 'requests'}`}
+                trailing={exportMenu}
+                columnsMenu={false}
+                densityMenu={false}
+              />
+            }
+            footer={
+              <DataTable.Footer
+                testId="feedback-footer"
+                ariaLabel="Feedback status"
+                pagination={
+                  data && data.total > PAGE_SIZE
+                    ? {
+                        total: data.total,
+                        page: view.page,
+                        pageSize: PAGE_SIZE,
+                        noun: 'requests',
+                        onPageChange: (page) => replaceUrlQuery({ page: page > 1 ? page : null }),
+                      }
+                    : undefined
+                }
+              />
+            }
+          />
+        </div>
       )}
     </div>
   );
@@ -244,7 +325,13 @@ export function FeedbackListPage() {
 
 function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (f: ExportFormat) => void }) {
   const trigger = (
-    <Button variant="neutral" size="sm" icon={<Icon name="download" size={12} />} isDisabled={disabled} data-testid="export-menu">
+    <Button
+      variant="neutral"
+      size="sm"
+      icon={<Icon name="download" size={12} />}
+      isDisabled={disabled}
+      data-testid="export-menu"
+    >
       Export
     </Button>
   );

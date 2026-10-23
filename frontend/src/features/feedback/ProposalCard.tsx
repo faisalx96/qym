@@ -18,7 +18,10 @@ import {
 import { RelatedList } from './RelatedList';
 import styles from './feedback.module.css';
 
-const PRIORITIES = (Object.keys(PRIORITY_LABEL) as FeedbackPriority[]).map((k) => ({ key: k, label: PRIORITY_LABEL[k] }));
+const PRIORITIES = (Object.keys(PRIORITY_LABEL) as FeedbackPriority[]).map((k) => ({
+  key: k,
+  label: PRIORITY_LABEL[k],
+}));
 export const COMPLEXITY_ITEMS = (['S', 'M', 'L', 'XL'] as FeedbackComplexity[]).map((k) => ({
   key: k,
   label: `${k} · ${COMPLEXITY_HELP[k]}`,
@@ -70,8 +73,18 @@ export function ProposalCard(p: ProposalCardProps) {
   );
   if (proposal.superseded)
     return (
-      <Card as="section" tone="info" aria-labelledby="proposal-title" className={styles.proposalCard} data-testid="proposal" data-superseded="" header={heading}>
-        <p className={styles.footNote}>You replied after this proposal. The assistant will propose again when it has what it needs.</p>
+      <Card
+        as="section"
+        tone="info"
+        aria-labelledby="proposal-title"
+        className={styles.proposalCard}
+        data-testid="proposal"
+        data-superseded=""
+        header={heading}
+      >
+        <p className={styles.footNote}>
+          You replied after this proposal. The assistant will propose again when it has what it needs.
+        </p>
       </Card>
     );
   return (
@@ -79,11 +92,14 @@ export function ProposalCard(p: ProposalCardProps) {
       as="section"
       tone="info"
       aria-labelledby="proposal-title"
-      className={styles.proposalCard} data-testid="proposal"
+      className={styles.proposalCard}
+      data-testid="proposal"
       header={heading}
       footer={
         <div className={styles.proposalFoot}>
-          <span className={styles.footNote}>Change anything that is wrong. Nothing is submitted until you press the button.</span>
+          <span className={styles.footNote}>
+            Change anything that is wrong. Nothing is submitted until you press the button.
+          </span>
           <span className={styles.footActions}>
             <Button variant="neutral" onPress={p.onKeepTalking}>
               Keep talking
@@ -121,8 +137,8 @@ export function ProposalCard(p: ProposalCardProps) {
         ) : null}
         {duplicate ? (
           <Callout tone="warning" title={`This looks like a duplicate of ${duplicate.request_id}`} live>
-            {duplicate.request_id} “{duplicate.title}” asks for the same thing and is {duplicate.status}. You can still submit
-            yours: it is saved as a possible duplicate and an administrator links the two.
+            {duplicate.request_id} “{duplicate.title}” asks for the same thing and is {duplicate.status}. You
+            can still submit yours: it is saved as a possible duplicate and an administrator links the two.
           </Callout>
         ) : null}
         <TextField
@@ -159,7 +175,11 @@ export function ProposalCard(p: ProposalCardProps) {
               items={PRIORITIES}
               value={form.priority}
               onChange={(k) => k && setForm({ ...form, priority: k as FeedbackPriority })}
-              help={changedFrom(form, proposal, 'priority') ? `You changed it from ${changedFrom(form, proposal, 'priority')}.` : undefined}
+              help={
+                changedFrom(form, proposal, 'priority')
+                  ? `You changed it from ${changedFrom(form, proposal, 'priority')}.`
+                  : undefined
+              }
             />
             <span className={styles.reasoning}>
               <Eyebrow>Assistant proposed {PRIORITY_LABEL[proposal.priority.level]}</Eyebrow>
@@ -172,7 +192,11 @@ export function ProposalCard(p: ProposalCardProps) {
               items={COMPLEXITY_ITEMS}
               value={form.complexity}
               onChange={(k) => k && setForm({ ...form, complexity: k as FeedbackComplexity })}
-              help={changedFrom(form, proposal, 'complexity') ? `You changed it from ${changedFrom(form, proposal, 'complexity')}.` : undefined}
+              help={
+                changedFrom(form, proposal, 'complexity')
+                  ? `You changed it from ${changedFrom(form, proposal, 'complexity')}.`
+                  : undefined
+              }
             />
             <span className={styles.reasoning}>
               <Eyebrow>
@@ -185,7 +209,13 @@ export function ProposalCard(p: ProposalCardProps) {
         {proposal.related.length ? (
           <RelatedList
             title="Related requests the assistant found"
-            items={proposal.related.map((r) => ({ kind: r.kind, ref: r.request_id, title: r.title, status: r.status, note: r.note }))}
+            items={proposal.related.map((r) => ({
+              kind: r.kind,
+              ref: r.request_id,
+              title: r.title,
+              status: r.status,
+              note: r.note,
+            }))}
           />
         ) : null}
       </div>

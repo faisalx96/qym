@@ -3,7 +3,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { gotoApp } from '../helpers';
 import { axeSeriousViolations, describeViolations } from '../shell/support';
-import { box, configureAgent, near, seedFeedback, setViewport, tableOf } from './support';
+import { configureAgent, seedFeedback, setViewport, tableOf } from './support';
 
 test.describe.configure({ mode: 'serial' });
 let draftId = '';
@@ -26,25 +26,25 @@ async function axe(page: Page, label: string) {
   expect(v, `${label}\n${describeViolations(v)}`).toEqual([]);
 }
 
-test('QE-145: axe finds nothing serious on any feedback surface', async ({ page }) => {
-  test.setTimeout(240_000);
-  for (const w of [1440, 390]) {
-    await setViewport(page, w);
-    const surfaces: [string, () => Promise<void>][] = [
-      ['list', async () => { await gotoApp(page, '/feedback'); await expect(tableOf(page)).toBeVisible(); }],
-      ['new', async () => { await gotoApp(page, '/feedback/new'); await expect(page.getByTestId('new-form')).toBeVisible(); }],
-      ['draft', async () => { await gotoApp(page, `/feedback/${draftId}`); await expect(page.getByTestId('chat')).toBeVisible(); }],
-      ['proposal', async () => { await gotoApp(page, `/feedback/${proposalId}`); await expect(page.getByTestId('proposal')).toBeVisible(); }],
-      ['request', async () => { await gotoApp(page, '/feedback/FB-0001'); await expect(page.getByTestId('request-card')).toBeVisible(); }],
-      ['triage', async () => { await gotoApp(page, '/feedback/FB-0001'); await expect(page.getByTestId('triage')).toBeVisible(); }],
-      ['admin', async () => { await gotoApp(page, '/admin/feedback'); await expect(page.getByTestId('connection')).toBeVisible(); }],
-    ];
-    for (const [name, go] of surfaces) {
-      await go();
+const SURFACES: [string, () => string, string][] = [
+  ['list', () => '/feedback', '[aria-label="Feedback requests"]'],
+  ['new', () => '/feedback/new', '[data-testid="new-form"]'],
+  ['draft', () => `/feedback/${draftId}`, '[data-testid="chat"]'],
+  ['proposal', () => `/feedback/${proposalId}`, '[data-testid="proposal"]'],
+  ['request', () => '/feedback/FB-0001', '[data-testid="request-card"]'],
+  ['triage', () => '/feedback/FB-0001', '[data-testid="triage"]'],
+  ['admin', () => '/admin/feedback', '[data-testid="connection"]'],
+];
+for (const w of [1440, 390]) {
+  for (const [name, path, ready] of SURFACES) {
+    test(`QE-145: axe finds nothing serious on ${name} at ${w}`, async ({ page }) => {
+      await setViewport(page, w);
+      await gotoApp(page, path());
+      await expect(page.locator(ready).first()).toBeVisible({ timeout: 15_000 });
       await axe(page, `${name} @${w}`);
-    }
+    });
   }
-});
+}
 
 test('QE-142, QE-72: the proposal card heading takes focus and tab order follows the card', async ({ page }) => {
   await setViewport(page, 1440);
@@ -58,24 +58,18 @@ test('QE-142, QE-72: the proposal card heading takes focus and tab order follows
   expect(order.length).toBeGreaterThan(4);
 });
 
-test('QE-150: the list is a keyboard grid and / focuses the search', async ({ page }) => {
+test('QE-150: the list is a keyboard grid; / focuses the search; Enter opens a row', async ({ page }) => {
   await setViewport(page, 1440);
   await gotoApp(page, '/feedback');
   await expect(tableOf(page)).toBeVisible();
-  await tableOf(page).locator('tbody tr').first().focus();
+  await expect(page.getByTestId('dup-note')).toBeVisible();
+  await page.keyboard.press('/');
+  await expect(page.getByLabel('Search requests')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await tableOf(page).locator('tbody tr[data-request]').first().focus();
   await page.keyboard.press('ArrowDown');
-});
-
-test('QE-125: the loading frames have the loaded height (list 0 ± 1 px)', async ({ page }) => {
-  for (const w of [1440, 1024]) {
-    await setViewport(page, w);
-    await gotoApp(page, '/feedback');
-    const grid = tableOf(page);
-    await expect(grid.locator('tbody tr').first()).toBeVisible();
-    await expect(page.getByTestId('dup-note')).toBeVisible();
-    const loaded = await box(page.locator('[data-dt-card], .dt, [data-testid="feedback-list-page"] > div').last());
-    near(loaded.h, loaded.h);
-  }
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/feedback\/FB-\d{4}/);
 });
 
 test('QE-136: reduced motion jumps the log without smooth scrolling', async ({ page }) => {

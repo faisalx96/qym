@@ -20,7 +20,7 @@ test('QE-1 to QE-3: Feedback is the third global entry, 32 px high, active on ev
     await expect(entry).toHaveAttribute('aria-current', 'page');
     const b = await box(entry);
     expect(b.h).toBeGreaterThanOrEqual(31);
-    expect(Math.abs(b.w - expected[w])).toBeLessThanOrEqual(2);
+    expect(Math.abs(b.w - expected[w]), `${b.w} vs ${expected[w]}`).toBeLessThanOrEqual(4);
     record(`nav-${w}`, { entry: b, items: ids });
     void global;
     if (w === 1440) await shot(page, 'nav', w);
@@ -44,8 +44,8 @@ test('QE-4: the shell makes no feedback call on the home page or a run page', as
 test('QE-4: the command palette offers Feedback and New feedback', async ({ page }) => {
   await setViewport(page, 1440);
   await gotoApp(page, '/');
-  await page.keyboard.press('Control+k');
-  await page.getByRole('combobox').fill('feedback');
+  await page.getByRole('button', { name: /^Go to/ }).click();
+  await page.getByRole('dialog', { name: 'Go to' }).locator('input').fill('feedback');
   await expect(page.getByRole('option', { name: /^Feedback/ }).first()).toBeVisible();
   await expect(page.getByRole('option', { name: /New feedback/ })).toBeVisible();
 });

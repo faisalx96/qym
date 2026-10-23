@@ -174,3 +174,9 @@ export function stopped(state: TurnState): TurnState {
 export function userMessageCount(state: TurnState): number {
   return state.items.filter((i) => i.role === 'user').length;
 }
+
+/** Older messages fetched with `before_seq` go in front of the log (QE-55). */
+export function prepend(state: TurnState, older: LogItem[]): TurnState {
+  const have = new Set(state.items.map((i) => i.key));
+  return { ...state, items: [...older.filter((i) => !have.has(i.key)), ...state.items] };
+}

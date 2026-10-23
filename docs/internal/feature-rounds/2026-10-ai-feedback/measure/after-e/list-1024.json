@@ -1,0 +1,27 @@
+{
+ "header": {
+  "w": 777,
+  "h": 69.2
+ },
+ "strip": {
+  "w": 747,
+  "h": 64
+ },
+ "table": {
+  "w": 775,
+  "h": 463.4
+ },
+ "rows": [
+  52,
+  52,
+  52,
+  52,
+  65.4,
+  52,
+  52,
+  52
+ ],
+ "horizontalOverflow": 0,
+ "complexityHeader": 118,
+ "headerH": 69.2
+}

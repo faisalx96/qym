@@ -3,6 +3,7 @@ import { useBlocker, useNavigate } from 'react-router-dom';
 import { Callout } from '@/features/experiments/launch/components/Callout';
 import {
   feedbackKeys,
+  loadOlderMessages,
   stopTurn,
   useConfirmFeedback,
   useDeleteDraft,
@@ -30,11 +31,13 @@ import {
   connectionLost,
   initialState,
   itemsFromMessages,
+  prepend,
   stopped,
   turnStarted,
   userMessageCount,
   userRefused,
   userSent,
+  type LogItem,
   type TurnState,
 } from './turnState';
 import styles from './feedback.module.css';
@@ -45,6 +48,7 @@ type Action =
   | { type: 'sent'; text: string; key: string }
   | { type: 'refused'; key: string }
   | { type: 'start' }
+  | { type: 'older'; items: LogItem[] }
   | { type: 'lost' }
   | { type: 'stop' }
   | { type: 'error'; message: string; code: string; retryable: boolean };
@@ -61,12 +65,18 @@ function reduce(state: TurnState, a: Action): TurnState {
       return userRefused(state, a.key);
     case 'start':
       return turnStarted(state);
+    case 'older':
+      return prepend(state, a.items);
     case 'lost':
       return connectionLost(state);
     case 'stop':
       return stopped(state);
     case 'error':
-      return applyEvent(state, { event: 'error', data: { code: a.code, message: a.message, retryable: a.retryable } }, clock);
+      return applyEvent(
+        state,
+        { event: 'error', data: { code: a.code, message: a.message, retryable: a.retryable } },
+        clock,
+      );
     default:
       return state;
   }
@@ -121,10 +131,27 @@ export function DraftPage({ refId }: { refId: string }) {
         </Card>
       </div>
     );
-  return <DraftConversation refId={refId} detail={detail.data} messages={messages.data.messages} />;
+  return (
+    <DraftConversation
+      refId={refId}
+      detail={detail.data}
+      messages={messages.data.messages}
+      hasMore={messages.data.has_more}
+    />
+  );
 }
 
-function DraftConversation({ refId, detail, messages }: { refId: string; detail: FeedbackDetail; messages: FeedbackMessage[] }) {
+function DraftConversation({
+  refId,
+  detail,
+  messages,
+  hasMore,
+}: {
+  refId: string;
+  detail: FeedbackDetail;
+  messages: FeedbackMessage[];
+  hasMore: boolean;
+}) {
   const navigate = useNavigate();
   const toast = useToast();
   const qc = useQueryClient();
@@ -134,17 +161,14 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
   const confirm = useConfirmFeedback(refId);
   const req = detail.request;
   const info = detail.draft!;
-  const [state, dispatch] = useReducer(
-    reduce,
-    undefined,
-    () => {
-      const base = initialState(itemsFromMessages(messages, clock), detail.checklist, detail.proposal);
-      return needsAnswer(messages) ? turnStarted(base) : base;
-    },
-  );
+  const [state, dispatch] = useReducer(reduce, undefined, () => {
+    const base = initialState(itemsFromMessages(messages, clock), detail.checklist, detail.proposal);
+    return needsAnswer(messages) ? turnStarted(base) : base;
+  });
   const [text, setText] = useState(() => readComposer(refId));
   const [note, setNote] = useState('');
   const [welcome, setWelcome] = useState(true);
+  const [more, setMore] = useState(hasMore);
   const [dirty, setDirty] = useState(false);
   const [discard, setDiscard] = useState(false);
   const [stale, setStale] = useState('');
@@ -169,10 +193,17 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
   // The server finished (or is finishing) a turn this page did not start: show what it stored.
   const reloadFromServer = useCallback(async () => {
     const [d, m] = await Promise.all([
-      qc.fetchQuery({ queryKey: feedbackKeys.detail(refId), queryFn: () => api.get<FeedbackDetail>(`/v1/feedback/${encodeURIComponent(refId)}`), staleTime: 0 }),
+      qc.fetchQuery({
+        queryKey: feedbackKeys.detail(refId),
+        queryFn: () => api.get<FeedbackDetail>(`/v1/feedback/${encodeURIComponent(refId)}`),
+        staleTime: 0,
+      }),
       api.get<{ messages: FeedbackMessage[] }>(`/v1/feedback/${encodeURIComponent(refId)}/messages?limit=50`),
     ]);
-    dispatch({ type: 'init', state: initialState(itemsFromMessages(m.messages, clock), d.checklist, d.proposal) });
+    dispatch({
+      type: 'init',
+      state: initialState(itemsFromMessages(m.messages, clock), d.checklist, d.proposal),
+    });
     return d.request.phase;
   }, [refId, qc]);
 
@@ -222,10 +253,20 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
             return;
           }
           if (e.status === 503) {
-            dispatch({ type: 'error', code: 'feedback_not_configured', message: 'the assistant is not set up', retryable: false });
+            dispatch({
+              type: 'error',
+              code: 'feedback_not_configured',
+              message: 'the assistant is not set up',
+              retryable: false,
+            });
             return;
           }
-          dispatch({ type: 'error', code: e.code ?? 'error', message: e.detail || 'not reachable', retryable: true });
+          dispatch({
+            type: 'error',
+            code: e.code ?? 'error',
+            message: e.detail || 'not reachable',
+            retryable: true,
+          });
           return;
         }
         dispatch({ type: 'lost' });
@@ -286,6 +327,14 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
     }
   }, [note, text]);
 
+  const loadEarlier = async () => {
+    const first = state.items.find((i) => i.seq !== undefined)?.seq;
+    if (first === undefined) return;
+    const older = await loadOlderMessages(refId, first);
+    dispatch({ type: 'older', items: itemsFromMessages(older.messages, clock) });
+    setMore(older.has_more);
+  };
+
   const stop = () => {
     abortRef.current?.abort();
     dispatch({ type: 'stop' });
@@ -307,9 +356,12 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
         toast.show(`Submitted as ${res.request.ref}`, { tone: 'success' });
         navigate(`/feedback/${res.request.ref}`, { replace: true });
       } catch (e) {
-        if (e instanceof ApiError && e.code === 'proposal_stale') setStale('The conversation moved on. Ask the assistant to propose again.');
+        if (e instanceof ApiError && e.code === 'proposal_stale')
+          setStale('The conversation moved on. Ask the assistant to propose again.');
         else if (e instanceof ApiError && e.status === 422)
-          setFieldErrors({ [(e.body as { field?: string })?.field === 'title' ? 'title' : 'description']: e.detail });
+          setFieldErrors({
+            [(e.body as { field?: string })?.field === 'title' ? 'title' : 'description']: e.detail,
+          });
         else toast.show('Couldn’t submit. Your edits are kept.', { tone: 'error' });
       }
     });
@@ -338,8 +390,9 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
       />
       {welcome && ageDays >= 1 && messages.length > 1 ? (
         <Callout tone="info" title="Welcome back">
-          This draft is from {ageDays} {ageDays === 1 ? 'day' : 'days'} ago. The assistant remembers the conversation. It is
-          deleted in {info.days_left} {info.days_left === 1 ? 'day' : 'days'} if you do not submit it.{' '}
+          This draft is from {ageDays} {ageDays === 1 ? 'day' : 'days'} ago. The assistant remembers the
+          conversation. It is deleted in {info.days_left} {info.days_left === 1 ? 'day' : 'days'} if you do
+          not submit it.{' '}
           <Button size="sm" variant="ghost" onPress={() => setWelcome(false)}>
             Dismiss
           </Button>
@@ -347,7 +400,8 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
       ) : null}
       {count >= limit ? (
         <Callout tone="warning" title={`${count} of ${limit} messages used`}>
-          The assistant will now propose a request from what it knows. You can edit everything before you submit.
+          The assistant will now propose a request from what it knows. You can edit everything before you
+          submit.
         </Callout>
       ) : null}
       <div className={styles.split} data-chat-split>
@@ -367,6 +421,7 @@ function DraftConversation({ refId, detail, messages }: { refId: string; detail:
             onStop={stop}
             onRetry={retry}
             note={note}
+            onLoadEarlier={more ? loadEarlier : undefined}
             ref={composerRef}
             height={state.proposal ? 300 : undefined}
           />

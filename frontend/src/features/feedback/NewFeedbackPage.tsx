@@ -14,7 +14,18 @@ import { useDocumentTitle } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
 import { useSearchParamsState } from '@/lib/url-state';
 import { useSubmitLock } from '@/lib/pending';
-import { Button, Card, Icon, PageHeader, RadioGroup, SegmentedControl, Select, Text, Textarea, useToast } from '@/ui';
+import {
+  Button,
+  Card,
+  Icon,
+  PageHeader,
+  RadioGroup,
+  SegmentedControl,
+  Select,
+  Text,
+  Textarea,
+  useToast,
+} from '@/ui';
 import { NotConfigured } from './NotConfigured';
 import styles from './feedback.module.css';
 
@@ -52,10 +63,14 @@ function HowItWorks() {
         </li>
         <li>
           <span className={styles.stepNo}>3</span>
-          <span>You confirm a description, a priority and a complexity. Nothing is submitted before you do.</span>
+          <span>
+            You confirm a description, a priority and a complexity. Nothing is submitted before you do.
+          </span>
         </li>
       </ol>
-      <p className={styles.note}>Everyone signed in can read a submitted request. Administrators decide its status.</p>
+      <p className={styles.note}>
+        Everyone signed in can read a submitted request. Administrators decide its status.
+      </p>
     </Card>
   );
 }
@@ -71,7 +86,9 @@ export function NewFeedbackPage() {
   const create = useCreateFeedback();
   const lock = useSubmitLock();
   const projects = me.projects.filter((p) => p.is_active !== false);
-  const [subject, setSubject] = useState<FeedbackSubject>(get('subject') === 'product' ? 'product' : 'platform');
+  const [subject, setSubject] = useState<FeedbackSubject>(
+    get('subject') === 'product' ? 'product' : 'platform',
+  );
   const [project, setProject] = useState<string>(() => {
     const wanted = get('project');
     return projects.find((p) => p.slug === wanted)?.slug ?? '';
@@ -104,7 +121,10 @@ export function NewFeedbackPage() {
         writeDraft(null);
         navigate(`/feedback/${res.id}`, { replace: true });
       } catch (e) {
-        const msg = e instanceof ApiError && e.detail ? e.detail : 'Couldn’t start the conversation. Your text is kept.';
+        const msg =
+          e instanceof ApiError && e.detail
+            ? e.detail
+            : 'Couldn’t start the conversation. Your text is kept.';
         setError(msg);
         toast.show(msg, { tone: 'error' });
       }
@@ -136,7 +156,12 @@ export function NewFeedbackPage() {
                 >
                   Cancel
                 </Button>
-                <Button variant="accent" isDisabled={!ready} loading={create.isPending} onPress={() => void start()}>
+                <Button
+                  variant="accent"
+                  isDisabled={!ready}
+                  loading={create.isPending}
+                  onPress={() => void start()}
+                >
                   Start conversation
                 </Button>
               </span>

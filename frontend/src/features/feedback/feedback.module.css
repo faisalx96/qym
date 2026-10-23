@@ -704,3 +704,12 @@
   font-size: var(--font-base);
   color: var(--error-text);
 }
+
+.tableFrame {
+  display: flex;
+  flex-direction: column;
+}
+
+.tableFrame > * {
+  flex: 1 1 auto;
+}

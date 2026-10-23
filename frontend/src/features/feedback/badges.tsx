@@ -1,14 +1,15 @@
 import { Badge, Tag } from '@/ui';
 import type { FeedbackComplexity, FeedbackPriority, FeedbackStatus, RelatedKind } from '@/api/feedback';
 
-const STATUS_TONE: Record<FeedbackStatus, 'warning' | 'neutral' | 'info' | 'accent' | 'success' | 'danger'> = {
-  draft: 'warning',
-  new: 'neutral',
-  accepted: 'info',
-  planned: 'accent',
-  done: 'success',
-  declined: 'danger',
-};
+const STATUS_TONE: Record<FeedbackStatus, 'warning' | 'neutral' | 'info' | 'accent' | 'success' | 'danger'> =
+  {
+    draft: 'warning',
+    new: 'neutral',
+    accepted: 'info',
+    planned: 'accent',
+    done: 'success',
+    declined: 'danger',
+  };
 const PRIORITY_TONE: Record<FeedbackPriority, 'neutral' | 'info' | 'warning' | 'danger'> = {
   low: 'neutral',
   medium: 'info',

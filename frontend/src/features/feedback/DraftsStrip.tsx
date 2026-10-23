@@ -23,7 +23,10 @@ export function DraftsStrip({ drafts }: { drafts: FeedbackDraftRow[] }) {
   };
   return (
     <>
-      <Callout tone="info" title={`${drafts.length} ${drafts.length === 1 ? 'draft' : 'drafts'} only you can see`}>
+      <Callout
+        tone="info"
+        title={`${drafts.length} ${drafts.length === 1 ? 'draft' : 'drafts'} only you can see`}
+      >
         <ul className={styles.drafts} data-testid="drafts-strip">
           {drafts.map((d) => {
             const title = d.title || 'Untitled draft';
@@ -31,9 +34,9 @@ export function DraftsStrip({ drafts }: { drafts: FeedbackDraftRow[] }) {
               <li key={d.id}>
                 <span className={styles.draftTitle}>{title}</span>
                 <span className={styles.draftMeta}>
-                  {d.subject === 'platform' ? 'Platform' : (d.project?.name ?? 'A product')} · {d.message_count}{' '}
-                  {d.message_count === 1 ? 'message' : 'messages'} · {ago(d.last_activity_at)} · deleted in {d.days_left}{' '}
-                  {d.days_left === 1 ? 'day' : 'days'}
+                  {d.subject === 'platform' ? 'Platform' : (d.project?.name ?? 'A product')} ·{' '}
+                  {d.message_count} {d.message_count === 1 ? 'message' : 'messages'} ·{' '}
+                  {ago(d.last_activity_at)} · deleted in {d.days_left} {d.days_left === 1 ? 'day' : 'days'}
                 </span>
                 <span className={styles.draftActions}>
                   <Button

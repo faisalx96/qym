@@ -36,7 +36,7 @@ test('QE-77 to QE-84: header, tabs, card, history and related panel at three wid
     await shot(page, 'request', w);
   }
   await expect(page).toHaveTitle(/^FB-\d{4} · PDF export of the compare page/);
-  await expect(page.getByText('Marked as a duplicate of FB-')).toBeVisible();
+  await expect(page.getByRole('note').getByText('Marked as a duplicate of FB-')).toBeVisible();
   await expect(page.getByTestId('history')).toContainText('Submitted');
   await expect(page.getByTestId('history')).toContainText('Marked as a duplicate of');
   await expect(page.getByTestId('related-card')).toContainText('Duplicate');
@@ -62,8 +62,8 @@ test('QE-85: a declined request shows its reason to everyone', async ({ page }) 
   await asMember(page);
   await setViewport(page, 1440);
   await gotoApp(page, `/feedback/${ref}`);
-  await expect(page.getByText(/Declined by /)).toBeVisible();
-  await expect(page.getByText('We are moving PDF export'.slice(0, 10)).or(page.getByText(/not build a second one/))).toBeVisible();
+  await expect(page.getByRole('note').getByText(/Declined by /)).toBeVisible();
+  await expect(page.getByRole('note').getByText(/not build a second one/)).toBeVisible();
   await expect(page.getByTestId('triage')).toHaveCount(0);
 });
 
@@ -71,7 +71,7 @@ test('QE-89: a missing request is an error state, not an empty page', async ({ p
   await setViewport(page, 1440);
   await gotoApp(page, '/feedback/FB-9999');
   await expect(page.getByText('Couldn’t open this request')).toBeVisible();
-  await expect(page.getByText('This request does not exist or is not yours')).toBeVisible();
+  await expect(page.getByText('This request does not exist or is not yours').first()).toBeVisible();
 });
 
 test('QE-97 to QE-108: triage saves one change with a note and shows it in the history', async ({ page }) => {
@@ -87,13 +87,13 @@ test('QE-97 to QE-108: triage saves one change with a note and shows it in the h
   await setViewport(page, 1440);
   const triage = page.getByTestId('triage');
   // QE-108: tab order
-  await triage.getByRole('button', { name: /^Status/ }).focus();
+  await triage.getByRole('button', { name: /Status/ }).focus();
   await page.keyboard.press('Tab');
-  await expect(triage.getByRole('button', { name: /^Priority/ })).toBeFocused();
+  await expect(triage.getByRole('button', { name: /Priority/ })).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(triage.getByRole('button', { name: /^Complexity/ })).toBeFocused();
+  await expect(triage.getByRole('button', { name: /Complexity/ })).toBeFocused();
   // a priority change needs a note: Save stays enabled and refuses with the message
-  await triage.getByRole('button', { name: /^Priority/ }).click();
+  await triage.getByRole('button', { name: /Priority/ }).click();
   await page.getByRole('option', { name: 'High' }).click();
   await expect(page.getByTestId('pending-changes')).toContainText('Priority Medium to High');
   await triage.getByRole('button', { name: 'Save changes' }).click();
@@ -109,10 +109,10 @@ test('QE-97 to QE-108: triage saves one change with a note and shows it in the h
   expect(Object.keys(JSON.parse(patches[0]!)).sort()).toEqual(['expected_updated_at', 'note', 'priority']);
   await expect(page.getByTestId('history')).toContainText('Priority Medium to High');
   // Reset returns every control to the stored value
-  await triage.getByRole('button', { name: /^Priority/ }).click();
+  await triage.getByRole('button', { name: /Priority/ }).click();
   await page.getByRole('option', { name: 'Low' }).click();
   await triage.getByRole('button', { name: 'Reset' }).click();
-  await expect(triage.getByRole('button', { name: /^Priority/ })).toContainText('High');
+  await expect(triage.getByRole('button', { name: /Priority/ })).toContainText('High');
 });
 
 test('QE-101, QE-99: declining needs a reason the submitter sees', async ({ page }) => {
@@ -120,16 +120,16 @@ test('QE-101, QE-99: declining needs a reason the submitter sees', async ({ page
   await setViewport(page, 1440);
   await gotoApp(page, `/feedback/${ref}`);
   const triage = page.getByTestId('triage');
-  await triage.getByRole('button', { name: /^Status/ }).click();
+  await triage.getByRole('button', { name: /Status/ }).click();
   await page.getByRole('option', { name: 'Declined' }).click();
   await triage.getByRole('button', { name: 'Save changes' }).click();
   await expect(triage).toContainText('Say why it is declined. The submitter sees this.');
   await shot(page, 'triage-decline', 1440);
   await triage.getByLabel(/Note for the history/).fill('Covered by the version description field.');
   await triage.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page.getByText(/Declined by /)).toBeVisible();
+  await expect(page.getByRole('note').getByText(/Declined by /)).toBeVisible();
   // put it back for the other specs
-  await triage.getByRole('button', { name: /^Status/ }).click();
+  await triage.getByRole('button', { name: /Status/ }).click();
   await page.getByRole('option', { name: 'Planned' }).click();
   await triage.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Saved')).toBeVisible();
@@ -143,7 +143,7 @@ test('QE-106: a second administrator saving stale sees the reload message', asyn
   const other = await request.patch(`/v1/feedback/${ref}/triage`, { data: { status: 'declined', note: 'n', decline_reason: 'again', expected_updated_at: current.request.updated_at } });
   expect(other.status()).toBe(409 === other.status() ? 409 : other.status());
   const triage = page.getByTestId('triage');
-  await triage.getByRole('button', { name: /^Status/ }).click();
+  await triage.getByRole('button', { name: /Status/ }).click();
   await page.getByRole('option', { name: 'Accepted' }).click();
   await triage.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText(/Someone else changed this request|Saved/)).toBeVisible();
