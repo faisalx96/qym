@@ -42,6 +42,7 @@ sure one process runs a given job.
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` | `10` / `10` | API connection pool |
 | `QYM_HTTP_THREADPOOL_SIZE` | `0` (= `QYM_DB_POOL_SIZE` + `QYM_DB_MAX_OVERFLOW`) | Threads for sync request handlers, per web process. AnyIO's default (40) exceeded the API pool, so under load the extra threads waited `QYM_DB_POOL_TIMEOUT_SECONDS` and failed with pool timeouts; capped, extra requests queue for a thread instead. Raise the pool and this together, keeping pods x processes x pool under `max_connections` |
 | `QYM_MIGRATION_LOCK_TIMEOUT` | `10s` | `lock_timeout` for the migration session (`0` disables). See "Migrations and large tables" |
+| `QYM_FEEDBACK_MESSAGES_PER_HOUR` / `QYM_FEEDBACK_DRAFTS_PER_DAY` | `30` / `5` | Feedback assistant limits per user (0 disables); see "Feedback assistant" |
 | `QYM_PRODUCT_EVAL_MAX_RETAINED_JOBS` | `100` | Finished product evals kept in each process's memory; older ones are served from `background_jobs` |
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
@@ -57,6 +58,36 @@ sure one process runs a given job.
 | `QYM_PLATFORM_FLUSH_INTERVAL` | `1.0` | SDK cadence (s) for flushing a partly filled batch. It stretches up to 5 s while POSTs take over 1 s; full batches (200 events / 2 MB) still go at once |
 | `QYM_PLATFORM_MAX_FIELD_BYTES` | `262144` (256 KB) | Largest string (task output, input, span attribute) the SDK uploads in a run event; longer ones are cut and marked `…[truncated by qym: N bytes omitted]`, and the event payload carries `_qym_truncated`. `0` disables the cap. Local results keep full values |
 | `INSIGHTOR_TIMINGS_FILE` | unset | Opt-in JSONL file for `insightor_eval.py` timings. Unset, timings are DEBUG log lines; point it at a mounted volume if you need the file |
+
+## Feedback assistant
+
+AI-assisted feedback (Feedback in the sidebar, `/v1/feedback*`) needs one **platform-level** connection to an
+OpenAI-compatible model that supports tool calls: **Admin, Feedback agent** (base URL, model, API key, a **Test
+connection** button). It is independent of project LLM connections.
+
+- **Encryption.** The key is stored encrypted with `QYM_LLM_CONFIG_ENCRYPTION_KEY` (the same key and rotation as project
+  connections; `python -m qym_platform.tools.reencrypt_llm_keys` re-encrypts it too). Without that variable the page says
+  so and saving is refused (`400 encryption_not_configured`). The key is never returned (only its last four characters),
+  never logged and never written to a message or an audit entry. Base URLs follow the project rule: `https://`, and a
+  private address only with `QYM_ALLOW_PRIVATE_LLM_BASE_URLS=true`.
+- **Behaviour settings** (same page, stored in `feedback_agent_connection`): *Keep drafts for (days)* (1 to 365, default 30) and
+  *Most messages per request* (6 to 100, default 30).
+- **Retention.** The hourly maintenance pass deletes drafts idle longer than the setting, with their messages, and writes one
+  `feedback.drafts_purged` audit entry with the count. Submitted requests are never deleted by it.
+- **Rate limits** (per user): 30 messages per hour (`QYM_FEEDBACK_MESSAGES_PER_HOUR`) and 5 new requests per day
+  (`QYM_FEEDBACK_DRAFTS_PER_DAY`); `0` disables a limit; over it answers `429` with `Retry-After`.
+- **Streaming.** A turn answers `text/event-stream` (a `: ping` comment every 15 s). Behind a proxy, disable response buffering for
+  `/v1/feedback/*/messages` and `/turn` (`X-Accel-Buffering: no` is sent). A turn finishes and is stored even if the browser leaves.
+- **Knowledge pack.** The `platform` documentation cards are the committed file
+  `packages/platform/qym_platform/feedback_agent/knowledge_platform.json`, generated from `docs/USER_GUIDE.md` and the in-app
+  guide by `python -m qym_platform.tools.build_feedback_pack` (`--check` fails when stale; a test does the same). Rebuild it after
+  editing those documents.
+- **Audit actions** (entity `feedback_request`): `feedback.confirmed`, `.status_changed`, `.declined`, `.priority_revised`,
+  `.complexity_revised`, `.duplicate_marked`, `.duplicate_cleared`, `.draft_deleted`, `.drafts_purged`, `.export` (format, filter and row
+  count, never the rows) and `feedback.agent_connection_updated`, `_tested`, `_removed`.
+- **Export.** `GET /v1/feedback/export?format=csv|xlsx|json|jsonl` (administrators) uses `openpyxl` for `.xlsx`.
+- **Migration `0091`** adds four empty tables (instant DDL). On the `feat/ai-feedback` branch its `down_revision` is `0088`; the
+  integration merge re-points it to `0090` once the multi-dataset round has landed.
 
 ## Logging
 

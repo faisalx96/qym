@@ -256,3 +256,20 @@ def test_the_list_filters_sorts_pages_and_groups_confirmed_duplicates(env):
     assert [i["ref"] for i in env.client.get("/v1/feedback?complexity=XL,S").json()["items"]]
     assert env.client.get("/v1/feedback?page_size=1&page=2").json()["items"][0]["ref"] in ("FB-0001", "FB-0003")
     assert env.client.get("/v1/feedback?about=product").json()["items"] == []
+
+
+def test_targets_list_a_projects_items_for_members_of_that_project_only(env):
+    from qym_platform.db.models import Dataset, Project, ProjectMembership, ProjectRole
+
+    with env.db() as db:
+        db.add(Project(id="p1", name="Support agent", slug="support-agent", created_by_user_id=env.users["admin"]))
+        db.flush()
+        db.add(ProjectMembership(project_id="p1", user_id=env.users["sara"], role=ProjectRole.MEMBER))
+        db.add(Dataset(id="d1", project_id="p1", name="tickets", slug="tickets", created_by_user_id=env.users["admin"]))
+        db.commit()
+    r = env.client.get("/v1/feedback/targets?project_id=support-agent&kind=dataset")
+    assert r.status_code == 200 and r.json()["items"] == [{"id": "d1", "label": "tickets"}]
+    assert env.client.get("/v1/feedback/targets?project_id=p1&kind=run").json() == {"items": []}
+    assert env.client.get("/v1/feedback/targets?project_id=p1&kind=nope").status_code == 422
+    env.act_as("omar")
+    assert env.client.get("/v1/feedback/targets?project_id=p1&kind=dataset").status_code == 403

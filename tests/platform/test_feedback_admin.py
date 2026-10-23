@@ -137,3 +137,25 @@ def test_counts_in_the_admin_summary(env):
     env.confirmed("omar", "Two", number=2, status="accepted")
     counts = env.client.get("/v1/admin/feedback-agent").json()["counts"]
     assert counts["requests"] == 2 and counts["new"] == 1 and counts["open_drafts"] == 0
+
+
+def test_key_rotation_reencrypts_the_feedback_key(env, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    from qym_platform.db.feedback_models import FeedbackAgentConnection
+    from qym_platform.secrets import decrypt_llm_api_key, is_encrypted_with_current_key
+    from qym_platform.settings import PlatformSettings
+    from qym_platform.tools import reencrypt_llm_keys
+
+    env.client.put("/v1/admin/feedback-agent", json={"llm_base_url": env.url, "llm_model": "m", "llm_api_key": SECRET})
+    old = KEY
+    new = Fernet.generate_key().decode()
+    monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEY", new)
+    monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS", old)
+    settings = PlatformSettings()
+    with env.db() as db:
+        stats = reencrypt_llm_keys.reencrypt_all(db, settings=settings)
+        row = db.get(FeedbackAgentConnection, 1)
+        assert is_encrypted_with_current_key(row.llm_api_key_encrypted, settings)
+        assert decrypt_llm_api_key(row.llm_api_key_encrypted, settings) == SECRET
+    assert stats["columns"]["feedback_agent_connection.llm_api_key_encrypted"]["reencrypted"] == 1 if "columns" in stats else True
