@@ -149,7 +149,7 @@ Response `200`:
 | `default` | `bool` | exactly one entry has `true` when the list is not empty: the task that runs when `task` is `null` |
 
 - At most 200 entries, in presentation order (the platform shows them in this order, after its own "Worker default" option).
-- An empty list is valid ("this deployment has nothing to choose"). The platform then hides the control.
+- An empty list is valid ("this deployment has nothing to choose"). The platform then shows the control disabled, reading `No tasks listed`.
 - `503 {"detail": "could not list tasks: <reason>"}` when the registry cannot be read (same convention as
   `versioning-details/current`). The platform shows the reason and keeps launching without a task.
 - Registered **before** `GET /evals/{job_id}`. A service that registers it after answers `422` (the path parameter is a UUID),
@@ -249,7 +249,7 @@ The platform stores each environment's `GET /evals/evaluator/schema` (guide v1.1
 | Capability | Detected by | Effect in qym |
 |---|---|---|
 | several datasets per job | `properties.datasets` declared in the evaluator schema | "Combine into one run" sends `datasets` to this environment. Otherwise the launch creates one job per pair (F3) and says so. |
-| task selection | `properties.task` declared **and** `GET /evals/tasks` answers `200` with at least one task | the environment's box shows the task control, "Worker default" first. A `404`, `405` or `422` hides it; a `503` shows the reason. |
+| task selection | `properties.task` declared **and** `GET /evals/tasks` answers `200` | the environment's box shows the task control, "Worker default" first (disabled, `No tasks listed`, when the list is empty). A `404`, `405` or `422` hides it; a `503` shows the reason. |
 
 An environment with no stored evaluator schema (a service older than v1.1) supports neither. The `datasets` and `task` entries in the
 schema must therefore appear **only** in a build whose `POST /evals` really honours them.
@@ -403,7 +403,7 @@ with httpx.Client(base_url=BASE, headers=H, timeout=30) as c:
 | 5 | `result.datasets` "lists what was evaluated" | each entry is the SDK's `describe()` (`dataset`, `dataset_id`, `dataset_version_id`, resolved `version`, `alias`, `items`, `disabled_items`); `result.task` added | the platform shows what an alias resolved to and the per-dataset item counts without re-reading the datasets, with the same keys as the run upload |
 | 6 | the task label becomes the task's `name` when `task_name` is null | same, and the registry's `default` flag is added to `GET /evals/tasks` | the platform needs to show which task "Worker default" means |
 | 7 | no limits | at most 50 `datasets` entries, 200 tasks, id pattern | bounded payloads; the platform itself caps lower |
-| 8 | task support = `/evals/tasks` not 404 | schema declares `task` **and** the list answers `200` with at least one task | one signal for "the field is honoured", one for "there is something to choose" |
+| 8 | task support = `/evals/tasks` not 404 | schema declares `task` **and** the list answers `200` (an empty list shows the control disabled, `No tasks listed`) | one signal for "the field is honoured", one for "the list could be read" |
 | 9 | upload details | fixed by the SDK package (section 3.2 and `spec-c.md` section 7): the run's `dataset` is the label, the single fields stay the first entry's, `datasets` entries carry resolved `version` and `alias` | the brief said "the single fields hold the first entry"; that stays true for the ids, while the name string is the label every platform grouping keys on |
 
 ## Appendix: draft v1.4 guide sections (text to merge)
