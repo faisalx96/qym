@@ -168,3 +168,22 @@ Spec value / measured (Chromium, web fonts). Everything not listed matches to th
 - QD-61 is checked over one poll interval with row heights and group order, not over a long run.
 - No e2e for presets saved from a multi-dataset experiment (the API refusal is a platform test and the form strips the keys, `buildPresetConfig` unit test).
 - A combined job's run as a best-run base is WP-C's `union_run` rule; this package reads `datasets` from a run's `qym_config.evaluator` (a combined job's snapshot has no `run_shape`, QD-87, so the form takes the default shape `combined`).
+
+## 6. Gate (2026-10-23, after the 2026-10-22 18:45 session kill; every run through the session gate lock, `-n 2`, cost 3 unless noted)
+
+Logs: `scratchpad/wp-d/logs/` of the session.
+
+| Command | Result | Log |
+|---|---|---|
+| pytest SQLite chunks d_aa..d_af | passed | `pytest-sqlite-d_*.log`, `pytest-sqlite2-d_*.log` |
+| pytest SQLite chunks d_ag, d_ah | 410 passed / 65 skipped; 325 passed / 89 skipped | `pytest-sqlite3-d_ag.log`, `pytest-sqlite3-d_ah.log` |
+| pytest PostgreSQL d_aa..d_ah | 613/11, 537/3, 307, 711/4, 369/21, 410/9, 475, 413/1 passed/skipped; one timing failure in d_ab (`test_dataset_items_batch.py::test_a_batch_of_5000_items_uses_a_constant_number_of_statements`, 1.106 s against 1.0 s under load, untouched code, passes alone) | `pytest-pg-d_*.log`, `pytest-pg.summary` |
+| `tests/platform/test_migrations_0090.py` on PostgreSQL | 3 passed | run directly |
+| `pytest tests/sdk -q -n 2` | 500 passed, 4 skipped | `sdk.log` |
+| `pytest tests/platform/test_design_language.py` | passed | `designlang.log` |
+| `npm run check` | Vitest 1627 passed, design-language 54 passed, typecheck / ESLint / Stylelint clean | `check.log` |
+| `npm run build`, `npm run build:sdk` | built | `build.log`, `buildsdk.log` |
+| Playwright `e2e/experiments/launch` (2 workers) | 152 passed, 3 failed: `cutover-launch.spec.ts` "a saved preset fills every field" (passes alone: load), `latency-sensitive.spec.ts` "a private test set carries its badge" and "the not-sent warning reads the same sentence" (fail alone: these two tests click the single Dataset select after the starting point carried `golden`; with QD-D1 a carried dataset is a box with Remove, not a select; the tests predate the card and are rewritten in the review's fix pass) | `e2e-launch.log`, `e2e-rerun-failing.log` |
+| Playwright `e2e/experiments` without launch (2 workers) | 70 passed, 2 failed: `a11y.spec.ts` "every page" (120 s timeout waiting for a fake job to succeed under load), `queue.spec.ts` "remote queue ... orphan" (passes alone: load) | `e2e-experiments.log`, `e2e-rerun-failing.log` |
+
+The two deterministic failures and the three load failures are handed to the review stage's fix pass.
