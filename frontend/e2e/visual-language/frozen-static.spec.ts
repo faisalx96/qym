@@ -18,7 +18,14 @@ interface Frame {
   x: Record<string, [number, number]>;
 }
 
-async function startProbe(page: Page): Promise<void> {
+/**
+ * Records only the scroller under test: measuring every table of the gallery on every frame (59 tables now, more
+ * after each round) made each probe take 13 s and the gallery test outgrow its budget.
+ */
+async function startProbe(page: Page, only: Locator): Promise<void> {
+  await only.evaluate((el) => {
+    (el as HTMLElement).dataset.probe = '1';
+  });
   await page.evaluate(() => {
     const w = window as unknown as { __probe: { frames: unknown[]; on: boolean } };
     w.__probe = { frames: [], on: true };
@@ -26,7 +33,7 @@ async function startProbe(page: Page): Promise<void> {
       if (!w.__probe.on) return;
       const x: Record<string, [number, number]> = {};
       let scroll = 0;
-      document.querySelectorAll<HTMLElement>('[data-dt-scroller]').forEach((sc, si) => {
+      document.querySelectorAll<HTMLElement>('[data-dt-scroller][data-probe]').forEach((sc, si) => {
         const sr = sc.getBoundingClientRect();
         scroll = Math.max(scroll, Math.abs(sc.scrollLeft));
         sc.querySelectorAll<HTMLElement>('thead th[data-pin]').forEach((th, i) => {
@@ -49,7 +56,19 @@ async function stopProbe(page: Page): Promise<Frame[]> {
   return page.evaluate(() => {
     const w = window as unknown as { __probe: { frames: Frame[]; on: boolean } };
     w.__probe.on = false;
+    document.querySelectorAll<HTMLElement>('[data-probe]').forEach((el) => delete el.dataset.probe);
     return w.__probe.frames;
+  });
+}
+
+/** "<section heading> / <table label>" so a failing gallery table can be found. */
+async function describeTable(scroller: Locator): Promise<string> {
+  return scroller.evaluate((el) => {
+    const section = el.closest('section');
+    const heading = section?.querySelector('h2, h3')?.textContent?.trim() ?? '';
+    const table = el.querySelector('[role="grid"], [role="table"], table');
+    const label = table?.getAttribute('aria-label') ?? '';
+    return [heading, label].filter(Boolean).join(' / ');
   });
 }
 
@@ -109,7 +128,7 @@ async function pinnedScroller(page: Page): Promise<Locator | null> {
 async function probe(page: Page, scroller: Locator, label: string, vertical = false): Promise<void> {
   await scroller.scrollIntoViewIfNeeded();
   await settled(page).catch(() => undefined);
-  await startProbe(page);
+  await startProbe(page, scroller);
   await page.waitForTimeout(100);
   await wheelAround(page, scroller, vertical);
   assertStatic(await stopProbe(page), label);
@@ -127,7 +146,7 @@ test.beforeAll(async ({ request }) => {
 });
 
 test.describe('frozen names stay put on real scrolling', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(600_000);
   for (const width of [1440, 1000]) {
     test(`runs list at ${width}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
@@ -179,7 +198,31 @@ test.describe('frozen names stay put on real scrolling', () => {
     await probe(page, scroller!, 'compare', true);
   });
 
+  test('every frozen header of the /__ui gallery is narrower than its scroller', async ({ page }) => {
+    // A sticky cell stays inside its row: a frozen column wider than the scroller scrolls away with the content.
+    // (The Experiments mock, `minWidth` 1000 with a frozen flex name, had a 680 px name in a 588 px scroller.)
+    await page.setViewportSize({ width: 660, height: 900 });
+    await gotoApp(page, '/__ui');
+    await page.locator('[data-dt-scroller]').first().waitFor();
+    const wide = await page
+      .locator('[data-dt-scroller]')
+      .evaluateAll((scrollers) =>
+        scrollers.flatMap((sc, i) =>
+          [...sc.querySelectorAll<HTMLElement>('thead th[data-pin]')]
+            .filter((th) => th.getBoundingClientRect().width > sc.clientWidth * 0.75)
+            .map(
+              (th) =>
+                `table ${i}: ${th.dataset.col} ${Math.round(th.getBoundingClientRect().width)} of ${sc.clientWidth}`,
+            ),
+        ),
+      );
+    expect(wide, 'frozen header cells wider than 75% of their scroller').toEqual([]);
+  });
+
   test('every table of the /__ui gallery', async ({ page }) => {
+    // Each probed table costs about 12 s of wheel events (the renderer acknowledges each one); the gallery had 59
+    // scrollers, 23 of them frozen and overflowing, in October 2026. The budget follows the gallery, not the tables.
+    test.setTimeout(480_000);
     await page.setViewportSize({ width: 660, height: 900 });
     await gotoApp(page, '/__ui');
     await page.locator('[data-dt-scroller]').first().waitFor();
@@ -194,7 +237,7 @@ test.describe('frozen names stay put on real scrolling', () => {
       );
       if (!ok) continue;
       await sc.scrollIntoViewIfNeeded();
-      await probe(page, sc, `gallery table ${i}`);
+      await probe(page, sc, `gallery table ${i} (${await describeTable(sc)})`);
       probed++;
     }
     expect(probed, 'no pinned, overflowing gallery table to probe').toBeGreaterThan(0);
