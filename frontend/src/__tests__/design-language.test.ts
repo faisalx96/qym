@@ -348,6 +348,7 @@ describe('primitive module contracts', () => {
       'features/experiments/launch/settings/RoleTable.tsx', // role form table
       'features/runs-list/ShortcutsDialog.tsx', // key list in a dialog
       'sdk-viewer/components/RowList.tsx', // offline viewer, separate bundle
+      'sdk-viewer/components/Datasets.tsx', // offline viewer: DataTable would pull react-router and react-aria into the 450 KB bundle
     ]);
     const found = tsxFiles
       .filter((f) => /<table[\s>]/.test(read(f)) && !rel(f).startsWith('ui/DataTable/'))
