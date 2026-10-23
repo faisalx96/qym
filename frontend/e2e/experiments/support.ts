@@ -354,7 +354,9 @@ export async function waitForExperiment(
         last = await getExperiment(request, projectId, experimentId);
         return ready(last);
       },
-      { message: what, timeout: 25_000, intervals: [400] },
+      // 60 s: the job sync of the platform is slow while two workers and the browsers share a small machine
+      // (a11y `every page` waited out 25 s once under load; it takes about 1 s alone).
+      { message: what, timeout: 60_000, intervals: [400] },
     )
     .toBe(true);
   return last as unknown as ExperimentView;

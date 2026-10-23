@@ -280,7 +280,8 @@ test.describe('queue page', () => {
     expect(remoteCalls.length).toBeGreaterThan(0);
     const remote = section.getByRole('grid', { name: 'Remote jobs on staging' });
     await expect(remote.getByText('Orphan', { exact: true })).toBeVisible();
-    await expect(remote.getByRole('link', { name: 'in flight' })).toBeVisible();
+    // 25 s: the remote list is read from the fake service, which answers slowly while two workers share the machine.
+    await expect(remote.getByRole('link', { name: 'in flight' })).toBeVisible({ timeout: 25_000 });
 
     // only the orphan can be selected: the row that matches a job of ours has a disabled checkbox
     await expect(remote.getByRole('checkbox', { name: 'Select row', disabled: true })).toHaveCount(1);
