@@ -232,8 +232,9 @@ test.describe('frozen names stay put on real scrolling', () => {
     let probed = 0;
     for (let i = 0; i < n; i++) {
       const sc = scrollers.nth(i);
+      // Needs room to scroll past the 20 px the probe counts as movement (the WP-E list mock overflows by 16 px).
       const ok = await sc.evaluate(
-        (el) => el.scrollWidth > el.clientWidth + 10 && el.querySelector('thead th[data-pin]') !== null,
+        (el) => el.scrollWidth > el.clientWidth + 50 && el.querySelector('thead th[data-pin]') !== null,
       );
       if (!ok) continue;
       await sc.scrollIntoViewIfNeeded();
