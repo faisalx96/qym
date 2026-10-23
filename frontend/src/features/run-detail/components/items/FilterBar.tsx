@@ -24,6 +24,8 @@ import {
   type SortBy,
 } from '../../lib/filterRules';
 import { useRunPage } from '../../RunContext';
+import { datasetKey, datasetKeyLabel } from '../../lib/datasetFilter';
+import { isUnionRun } from '../../lib/heroModel';
 import { RuleBuilder } from './RuleBuilder';
 import styles from './FilterBar.module.css';
 
@@ -41,6 +43,8 @@ const SHOW_OPTIONS: Array<{ value: ItemShow; label: string }> = [
   { value: 'failed', label: 'Fail' },
   { value: 'errors', label: 'Errors' },
 ];
+
+const ALL_DATASETS = '__all__';
 
 export interface DisplayState {
   textMode: TextMode;
@@ -72,6 +76,17 @@ export function FilterBar({ display }: { display: DisplayState }) {
     : [...SHOW_OPTIONS, { value: view.show, label: view.show.replace(/_/g, ' ') }];
 
   const metricItems = model.metricNames.map((n) => ({ key: n, label: n }));
+  // A union run: the Dataset select lists each source dataset with its item count (QC-U22).
+  const union = isUnionRun(payload.run);
+  const datasetItems = union
+    ? [
+        { key: ALL_DATASETS, label: 'All datasets', count: null as number | null },
+        ...(payload.run.datasets ?? []).map((e) => {
+          const key = datasetKey(e.dataset, e.version);
+          return { key, label: datasetKeyLabel(key), count: e.items };
+        }),
+      ]
+    : [];
   const visibleFields = new Set<string | number>(
     model.allMetadataKeys.filter((k) => !view.hideFields.includes(k)),
   );
@@ -91,6 +106,26 @@ export function FilterBar({ display }: { display: DisplayState }) {
           onClear={() => setQuery('')}
           width="clamp(18ch, 14vw, 22ch)"
         />
+        {datasetItems.length > 1 ? (
+          <span data-testid="dataset-filter">
+            <Select
+              label="Dataset"
+              items={datasetItems}
+              value={view.dataset ?? ALL_DATASETS}
+              onChange={(k) => k && api.setView({ dataset: String(k) === ALL_DATASETS ? null : String(k) })}
+              width="max-content"
+              renderValue={(item) => item.label}
+              renderItem={(item) => (
+                <>
+                  {item.label}
+                  {item.count != null ? (
+                    <span className={styles.optionCount}>{item.count.toLocaleString('en-US')}</span>
+                  ) : null}
+                </>
+              )}
+            />
+          </span>
+        ) : null}
         {metricItems.length > 1 ? (
           <Select
             label="Analysis metric"
@@ -238,8 +273,9 @@ export function FilterBar({ display }: { display: DisplayState }) {
       </div>
       <div className={styles.chips}>
         <Text variant="sm" tone="muted" aria-live="polite" data-testid="items-count">
-          {items.length.toLocaleString('en-US')} of {payload.snapshot.rows.length.toLocaleString('en-US')}{' '}
-          items
+          {union
+            ? `${items.length.toLocaleString('en-US')} items`
+            : `${items.length.toLocaleString('en-US')} of ${payload.snapshot.rows.length.toLocaleString('en-US')} items`}
         </Text>
         {chips.length ? (
           <span className={styles.chipList}>

@@ -37,6 +37,7 @@ import {
   rowHasEditedMetric,
 } from './rowMeta';
 import type { RunModel } from './runModel';
+import { rowDatasetKey } from './datasetFilter';
 
 /* ── types ── */
 
@@ -96,6 +97,8 @@ export interface RunView {
   /** 0–1 pass threshold for `metric`; null = the metric's default. */
   threshold: number | null;
   show: ItemShow;
+  /** Union runs: the source dataset the items are narrowed to (`name@version`), the `dataset` URL param. */
+  dataset: string | null;
   filters: PageFilters;
   page: number;
   hideFields: string[];
@@ -125,6 +128,7 @@ export const emptyView = (): RunView => ({
   metric: null,
   threshold: null,
   show: 'all',
+  dataset: null,
   filters: emptyFilters(),
   page: 1,
   hideFields: [],
@@ -500,6 +504,7 @@ export function applyItemFilters(
         if (!itemId.includes(q) && !inp.includes(q) && !exp.includes(q) && !out.includes(q)) continue;
       }
     }
+    if (view.dataset !== null && rowDatasetKey(row) !== view.dataset) continue;
     const md = row.item_metadata && typeof row.item_metadata === 'object' ? row.item_metadata : {};
     if (f.complexity !== null) {
       if (f.complexity.length === 0) continue;
@@ -617,6 +622,7 @@ export function countActiveFilters(view: RunView, defs: FieldDef[]): number {
   const f = view.filters;
   let n = filterRuleCount(f.rules, new Map(defs.map((d) => [d.id, d])));
   if (view.show !== 'all') n++;
+  if (view.dataset !== null) n++;
   if (f.approval !== null) n++;
   if (f.complexity !== null) n++;
   if (f.domain !== null) n++;
@@ -790,6 +796,8 @@ export function readRunView(params: URLSearchParams, ctx: ViewCodecContext): Run
   if (params.get('view') === 'heatmap' && model.samples > 1) view.view = 'heatmap';
   const show = params.get('show');
   if (show && (ITEM_SHOW_VALUES as readonly string[]).includes(show)) view.show = show as ItemShow;
+  const dataset = params.get('dataset');
+  if (dataset && dataset.length <= 400) view.dataset = dataset;
   view.filters = decodeFiltersParam(params.get('filters'), ctx);
   view.hideFields = params.getAll('hide_field').filter((k) => model.allMetadataKeys.includes(k));
   view.hideMetricFields = params
@@ -820,6 +828,7 @@ export function writeRunView(
         ? String(Math.round(threshold * 100))
         : null,
     show: view.show !== 'all' ? view.show : null,
+    dataset: view.dataset || null,
     filters: encodeFiltersParam(view.filters, defs),
     page: !heatmap && view.page > 1 ? String(view.page) : null,
     hide_field: view.hideFields.length ? view.hideFields : null,

@@ -30,7 +30,7 @@ export const BASE_COLUMNS: ColumnDef[] = [
   { ...base('signals', 'Signals', 60), visKey: null },
   base('task', 'Task', 90, 'task'),
   base('model', 'Model', 132, 'model'),
-  base('dataset', 'Dataset', 110, 'dataset'),
+  base('dataset', 'Dataset', 120, 'dataset'),
   base('owner', 'Owner', 120, 'owner'),
   base('time', 'Date', 120, 'time'),
   base('analysis', 'Analysis', 100),

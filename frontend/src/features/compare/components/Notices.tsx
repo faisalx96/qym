@@ -1,7 +1,8 @@
 /** Read-only, different-data and alignment notices (brief 05 §3 "Page load / selection"). */
 import { useMemo } from 'react';
-import { Stack, Text } from '@/ui';
-import { useCompare } from '../CompareContext';
+import { Icon, Stack, Text } from '@/ui';
+import { letterOf, useCompare } from '../CompareContext';
+import { datasetSetsDiffer, runDatasetCount } from '../lib/datasetSets';
 import styles from './Notices.module.css';
 
 export function Notices() {
@@ -37,8 +38,19 @@ export function Notices() {
       datasets.size > 1 || (versioned.length > 1 && new Set(versioned.map((e) => e.version)).size > 1);
     return mismatch ? { entries, multipleDatasets: datasets.size > 1 } : null;
   }, [model]);
+  // Runs over different sets of dataset versions (a union run among them): one status note replaces the generic one.
+  const datasetsNote = useMemo(() => {
+    const runs = model.bases.map((base) => model.runs.find((r) => r.base === base)?.run).filter((r) => !!r);
+    if (!datasetSetsDiffer(runs)) return null;
+    const sentences = runs.map((run, i) => {
+      const n = runDatasetCount(run);
+      return `${i === 0 ? 'Run' : 'run'} ${letterOf(i)} evaluated ${n}${i === 0 ? ` dataset${n === 1 ? '' : 's'}` : ''}`;
+    });
+    const shared = model.itemIds.filter((id) => model.runs.every((r) => r.byItem.has(id))).length;
+    return { sentences, shared };
+  }, [model]);
   // Nothing to say: render nothing, so the page's flex gap does not reserve an empty slot.
-  if (!readOnlyRuns.length && !data && model.alignment.status === 'aligned') return null;
+  if (!readOnlyRuns.length && !data && !datasetsNote && model.alignment.status === 'aligned') return null;
   return (
     <Stack gap="sm">
       {readOnlyRuns.length ? (
@@ -49,7 +61,29 @@ export function Notices() {
             : `${readOnlyRuns.length} of these runs belong to archived projects, so their scores and diagnoses cannot be changed until those projects are unarchived.`}
         </div>
       ) : null}
-      {data ? (
+      {datasetsNote ? (
+        <div
+          className={styles.info}
+          role="status"
+          data-testid="compare-datasets-notice"
+          data-notice="different-datasets"
+        >
+          <Icon name="info" size={16} />
+          <div>
+            <div className={styles.infoTitle}>The runs evaluated different datasets</div>
+            <p className={styles.infoBody}>
+              {datasetsNote.sentences.length === 2
+                ? datasetsNote.sentences.join(' and ')
+                : `${datasetsNote.sentences.slice(0, -1).join(', ')} and ${datasetsNote.sentences.at(-1)}`}
+              . Items are matched by dataset and item id, so the{' '}
+              {datasetsNote.sentences.length === 2 ? 'two ' : ''}
+              runs share <b>{datasetsNote.shared}</b> {datasetsNote.shared === 1 ? 'item' : 'items'}; the
+              metric averages below are still comparable as run means.
+            </p>
+          </div>
+        </div>
+      ) : null}
+      {data && !datasetsNote ? (
         <div className={styles.note} role="note" data-notice="different-data">
           <strong>Different data.</strong> These runs used{' '}
           {data.multipleDatasets ? 'different datasets' : `different versions of ${data.entries[0]?.dataset}`}

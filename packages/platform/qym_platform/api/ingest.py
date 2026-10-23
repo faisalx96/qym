@@ -8,7 +8,7 @@ import sys
 from collections import defaultdict
 
 csv.field_size_limit(sys.maxsize)
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from qym_platform.log import get_logger
 
 
@@ -48,6 +48,7 @@ from qym_platform.db.models import (
     DatasetAlias,
     DatasetItem,
     DatasetVersion,
+    RunDataset,
     RunEvent,
     RunItem,
     RunItemScore,
@@ -115,6 +116,13 @@ from qym_platform.services.eval_run_linking import (
     strip_launch_token,
 )
 from qym_platform.services.run_versioning import normalize_versioning_details
+from qym_platform.services.run_datasets import (
+    RunDatasetEntry,
+    position_of,
+    resolve_entry_ids,
+    store_run_datasets,
+    validate_entries,
+)
 from qym_platform.services.eval_run_scores import (
     SCORABLE_RUN_STATUSES,
     sync_run_scores,
@@ -634,6 +642,8 @@ class CreateRunRequest(BaseModel):
     dataset_id: Optional[str] = None
     dataset_version_id: Optional[str] = None
     dataset_alias: Optional[str] = None
+    # Union runs: one entry per dataset version when two or more were evaluated.
+    datasets: Optional[List[RunDatasetEntry]] = None
     run_metadata: Dict[str, Any] = Field(default_factory=dict)
     run_config: Dict[str, Any] = Field(default_factory=dict)
     # Free-form versioning keys (services/run_versioning.normalize_versioning_details).
@@ -1015,6 +1025,19 @@ def create_run(
         raise HTTPException(status_code=422, detail=str(exc)) from None
     dataset_id = req.dataset_id
     dataset_version_id = req.dataset_version_id
+    entries = validate_entries(req.datasets)
+    resolved_entries: Optional[List[Dict[str, Optional[str]]]] = None
+    if entries:
+        resolved_entries = resolve_entry_ids(db, principal.project_id, entries)
+        if len(entries) >= 2:
+            # The id fields of a union run are the first entry's.
+            dataset_id = resolved_entries[0]["dataset_id"]
+            dataset_version_id = resolved_entries[0]["dataset_version_id"]
+        else:
+            dataset_id = dataset_id or resolved_entries[0]["dataset_id"]
+            dataset_version_id = (
+                dataset_version_id or resolved_entries[0]["dataset_version_id"]
+            )
     if not dataset_version_id and (dataset_id or req.dataset_alias):
         dq = db.query(Dataset).filter(
             Dataset.project_id == principal.project_id, Dataset.deleted_at.is_(None)
@@ -1045,7 +1068,7 @@ def create_run(
         created_by_user_id=principal.user.id,
         owner_user_id=principal.user.id,
         task=req.task,
-        dataset=req.dataset,
+        dataset=req.dataset[:200],
         dataset_id=dataset_id,
         dataset_version_id=dataset_version_id,
         model=req.model,
@@ -1061,6 +1084,8 @@ def create_run(
     )
     db.add(run)
     db.flush()
+    if resolved_entries is not None:
+        store_run_datasets(db, run, entries, resolved_entries)
     # Plan §11: official only when the launch token verifies; same transaction.
     link_official_run(db, run, req.run_metadata)
     _store_metric_specs(db, run, req.metric_specs)
@@ -1598,6 +1623,7 @@ def _ingest_events_sync(
                 _validate_metric_score(payload)
             elif isinstance(payload, RunStartedPayload):
                 _validate_metric_specs(payload)
+                validate_entries(payload.datasets)
         except (ValidationError, _EventRejected, HTTPException) as exc:
             _reject(line_no, evt, _rejection_reason(exc), raw)
             continue
@@ -1743,13 +1769,42 @@ def _ingest_events_sync(
             pass_score_cache[(row.item_id, row.metric_name, row.pass_number)] = row
 
     dataset_item_cache = {}
+    # Union runs: the dataset version of each position (one query per batch, none
+    # for a single-dataset run), and the raw ids the namespaced item ids carry.
+    union_version_ids: List[Optional[str]] = []
+    if int(run.dataset_count or 1) > 1:
+        union_version_ids = [
+            row[0]
+            for row in db.query(RunDataset.dataset_version_id)
+            .filter(RunDataset.run_id == run_id)
+            .order_by(RunDataset.position)
+        ]
+    union_started = [
+        entries
+        for entries in (
+            validate_entries(payload.datasets)
+            for _, _, payload in accepted
+            if isinstance(payload, RunStartedPayload)
+        )
+        if len(entries) >= 2
+    ]
+    raw_item_ids = {
+        payload.item_metadata["qym_item_id"]
+        for _, _, payload in accepted
+        if isinstance(payload, ItemStartedPayload)
+        and isinstance(payload.item_metadata.get("qym_item_id"), str)
+        and (union_version_ids or union_started)
+    }
     version_ids = {run.dataset_version_id} | {
         payload.dataset_version_id
         for _, _, payload in accepted
         if isinstance(payload, RunStartedPayload)
     }
+    version_ids.update(union_version_ids)
+    for entries in union_started:
+        version_ids.update(e.dataset_version_id for e in entries)
     version_ids.discard(None)
-    for chunk in _chunks(item_ids):
+    for chunk in _chunks(item_ids | raw_item_ids):
         if version_ids:
             for row in db.query(DatasetItem).filter(
                 DatasetItem.dataset_version_id.in_(version_ids),
@@ -2123,6 +2178,12 @@ def _ingest_events_sync(
                 run.dataset_version_id = payload.dataset_version_id
             run.model = payload.model
             run.metrics = payload.metrics
+            started_entries = validate_entries(payload.datasets)
+            if len(started_entries) >= 2 and int(run.dataset_count or 1) <= 1:
+                # A create that timed out, or a client that only streams events,
+                # still fills the table; a replay finds the rows and changes nothing.
+                stored = store_run_datasets(db, run, started_entries)
+                union_version_ids = [row.dataset_version_id for row in stored]
             _store_metric_specs(db, run, payload.metric_specs)
             for name, raw_spec in (payload.metric_specs or {}).items():
                 if name not in metric_spec_cache:
@@ -2165,7 +2226,20 @@ def _ingest_events_sync(
                 if payload.dataset_item_pk in known_dataset_item_pks
                 else None
             )
-            if dataset_item_pk is None and run.dataset_version_id:
+            dataset_position = position_of(
+                payload.item_metadata, int(run.dataset_count or 1)
+            )
+            if dataset_item_pk is None and dataset_position is not None:
+                raw_id = payload.item_metadata.get("qym_item_id")
+                version_id = (
+                    union_version_ids[dataset_position]
+                    if dataset_position < len(union_version_ids)
+                    else None
+                )
+                dataset_item = dataset_item_cache.get((version_id, raw_id))
+                if dataset_item:
+                    dataset_item_pk = dataset_item.id
+            elif dataset_item_pk is None and run.dataset_version_id:
                 dataset_item = dataset_item_cache.get(
                     (run.dataset_version_id, payload.item_id)
                 )
@@ -2176,6 +2250,7 @@ def _ingest_events_sync(
                     RunItem(
                         run_id=run_id,
                         dataset_item_pk=dataset_item_pk,
+                        dataset_position=dataset_position,
                         item_id=payload.item_id,
                         index=payload.index,
                         input=_sanitize_for_json(payload.input),
@@ -2186,6 +2261,8 @@ def _ingest_events_sync(
                 db.add(item)
             else:
                 item.dataset_item_pk = dataset_item_pk
+                if dataset_position is not None:
+                    item.dataset_position = dataset_position
                 item.index = payload.index
                 item.input = _sanitize_for_json(payload.input)
                 item.expected = _sanitize_for_json(payload.expected)
@@ -2687,6 +2764,7 @@ async def upload_run(
     dataset: str = Form(...),
     model: Optional[str] = Form(default=None),
     external_run_id: Optional[str] = Form(default=None),
+    datasets: Optional[str] = Form(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_api_key_principal),
 ) -> Dict[str, Any]:
@@ -2695,6 +2773,7 @@ async def upload_run(
     if not principal.project_id:
         raise HTTPException(status_code=403, detail="API key is not bound to a project")
     filename = (file.filename or "").lower()
+    entries = _parse_upload_datasets(datasets)
     raw = await read_upload(file)
     if not raw:
         raise HTTPException(status_code=400, detail="Empty upload")
@@ -2711,7 +2790,24 @@ async def upload_run(
         external_run_id,
         db,
         principal,
+        entries,
     )
+
+
+def _parse_upload_datasets(text: Optional[str]) -> List[RunDatasetEntry]:
+    """The optional ``datasets`` form field: a JSON array of run dataset entries."""
+    if not text or not text.strip():
+        return []
+    try:
+        parsed = json.loads(text)
+        if not isinstance(parsed, list):
+            raise ValueError("datasets must be a JSON array")
+        entries = [RunDatasetEntry.model_validate(item) for item in parsed]
+    except (ValueError, ValidationError) as exc:
+        raise HTTPException(
+            status_code=422, detail=f"invalid datasets: {_rejection_reason(exc)}"
+        ) from None
+    return validate_entries(entries)
 
 
 # Uploaded rows are flushed and detached in chunks so the identity map stays
@@ -2735,6 +2831,7 @@ def _upload_run_sync(
     external_run_id: Optional[str],
     db: Session,
     principal: Principal,
+    entries: Optional[List[RunDatasetEntry]] = None,
 ) -> Dict[str, Any]:
     # Create run as completed by default (file upload is post-hoc)
     run = Run(
@@ -2753,6 +2850,10 @@ def _upload_run_sync(
         ended_at=utc_now_naive(),
     )
     db.add(run)
+    db.flush()
+    if entries and len(entries) >= 2:
+        store_run_datasets(db, run, entries)
+        run.dataset = dataset[:200]
     db.commit()
     db.refresh(run)
 
@@ -2853,6 +2954,7 @@ def _upload_run_sync(
                         trace_id=row.get("trace_id") or None,
                         trace_url=row.get("trace_url") or None,
                         item_metadata=_sanitize_for_json(item_metadata),
+                        dataset_position=position_of(item_metadata, run.dataset_count),
                     )
                 )
 
@@ -2985,6 +3087,7 @@ def _upload_run_sync(
                         trace_id=trace_id,
                         trace_url=result.get("trace_url"),
                         item_metadata=md if isinstance(md, dict) else {},
+                        dataset_position=position_of(md, run.dataset_count),
                     )
                     db.add(item)
                     scores = result.get("scores") or {}
@@ -3029,6 +3132,7 @@ def _upload_run_sync(
                             ),
                             trace_url=None,
                             item_metadata=md if isinstance(md, dict) else {},
+                            dataset_position=position_of(md, run.dataset_count),
                         )
                     )
         db.commit()
@@ -3192,6 +3296,7 @@ def _upload_run_sync(
                         output=None if is_error else row.get("output"),
                         error=error,
                         item_metadata=parsed_meta,
+                        dataset_position=position_of(parsed_meta, run.dataset_count),
                         latency_ms=latency_ms,
                         trace_id=row.get("trace_id") or None,
                         trace_url=None,
@@ -3304,6 +3409,7 @@ def _upload_run_sync(
                     output=None if is_error else row.get("output"),
                     error=(output.split(":", 1)[-1].strip() if is_error else None),
                     item_metadata=parsed_meta,
+                    dataset_position=position_of(parsed_meta, run.dataset_count),
                     latency_ms=(float(row.get("time") or 0.0) * 1000.0),
                     trace_id=row.get("trace_id") or None,
                     trace_url=None,

@@ -9076,6 +9076,11 @@
         const runtimeText = runtimeMs != null ? formatDurationMs(runtimeMs) : '—';
         const versionText = [run.git_branch, run.git_commit].filter(Boolean).join(' • ');
 
+        function datasetEntryLine(d) {
+          const count = d && d.items != null ? ' \u00b7 ' + d.items + ' items' : '';
+          return String((d && d.dataset) || '') + (d && d.version ? ' ' + d.version : '') + count;
+        }
+
         function metaItem(label, value, options) {
           const opts = options || {};
           if (value == null || value === '') return '';
@@ -9180,6 +9185,10 @@
         const metaHtml = [
           metaItem('Task', taskName, { href: links.task, linkTitle: 'Runs of task ' + taskName }),
           metaItem('Dataset', run.dataset_name || '—', { html: (window.QymShell && run.dataset_name ? QymShell.identiconHTML(run.dataset_name, { cell: 2, gap: 1, showEmpty: false, chip: true }) : '') + escapeHtml(run.dataset_name || '—') + (window.QymShell ? QymShell.datasetVersionInline(run.dataset_version) + QymShell.datasetAliasTags(run.dataset_aliases) : ''), href: links.dataset, linkTitle: links.datasetTitle }),
+          // A run over several dataset versions: one plain line per entry (no links).
+          (parseInt(run.dataset_count, 10) > 1 && Array.isArray(run.datasets) && run.datasets.length)
+            ? metaItem('Datasets', run.datasets.map(datasetEntryLine).join('\n'), { html: run.datasets.map(function (d) { return escapeHtml(datasetEntryLine(d)); }).join('<br>') })
+            : '',
           metaItem('Model', modelName || '—', { html: renderModelLabel(modelName || '—', hasReasoningTraceStats(pass ? pass.trace_stats : run.trace_stats)), nowrap: true, href: links.model, linkTitle: 'Runs of model ' + modelName }),
           metaItem('Owner', ownerLabel === '—' ? '' : ownerLabel, { href: links.owner, linkTitle: 'Runs owned by ' + ownerLabel }),
           metaItem('Project', projectName === '—' ? '' : projectName, { href: links.project, linkTitle: 'Runs in ' + projectName }),

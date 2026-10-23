@@ -17,6 +17,7 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -1255,6 +1256,9 @@ class Run(Base):
     )
     # Repeat runs: how many passes evaluate each item (1 = classic run).
     samples: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # How many dataset versions the run evaluated (union runs, 0089): 1 for a
+    # single-dataset run, which has no ``run_datasets`` rows.
+    dataset_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     # "official" only when ingest verified an Evaluation Service launch token.
     origin: Mapped[RunOrigin] = mapped_column(
         _string_enum(RunOrigin, 10),
@@ -1319,6 +1323,36 @@ class Run(Base):
         }
 
 
+class RunDataset(Base):
+    """One dataset version a union run evaluated (runs with two or more only)."""
+
+    __tablename__ = "run_datasets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
+    # 0-based, the order of the request.
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    # The name as evaluated; kept when the dataset is deleted.
+    dataset: Mapped[str] = mapped_column(String(200), nullable=False)
+    dataset_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("datasets.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    dataset_version_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("dataset_versions.id", ondelete="SET NULL"), nullable=True
+    )
+    # The resolved version label at run time, and the alias used to resolve it.
+    version: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    alias: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    item_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    disabled_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "position", name="uq_run_datasets_run_position"),
+        Index("ix_run_datasets_version_id", "dataset_version_id"),
+    )
+
+
 class AnalyzerDocument(Base):
     """A reference document shared by every member of a project."""
 
@@ -1364,6 +1398,9 @@ class RunItem(Base):
     dataset_item_pk: Mapped[Optional[int]] = mapped_column(ForeignKey("dataset_items.id"), nullable=True, index=True)
     item_id: Mapped[str] = mapped_column(String(200))
     index: Mapped[int] = mapped_column(Integer, default=0)
+    # Union runs (0089): the run_datasets position the item came from; NULL on
+    # single-dataset runs.
+    dataset_position: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
 
     input: Mapped[Any] = mapped_column(BIG_JSON)
     expected: Mapped[Any] = mapped_column(BIG_JSON, nullable=True)

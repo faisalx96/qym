@@ -4,7 +4,17 @@
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useShellScroller, useStickyOffset } from '../../hooks/useScrollMargin';
-import { DataTable, IconButton, ScoreBar, Skeleton, Tag, type Column, type Key, type SortState } from '@/ui';
+import {
+  DataTable,
+  DatasetTag,
+  IconButton,
+  ScoreBar,
+  Skeleton,
+  Tag,
+  type Column,
+  type Key,
+  type SortState,
+} from '@/ui';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { textDirAttrs } from '@/lib/text';
 import { useItemReasons, rowReason } from '../../hooks/useItemReasons';
@@ -13,6 +23,8 @@ import { latencyLabel, metricCell, rowFailureInput, rowStatus } from '../../lib/
 import { useRunPage } from '../../RunContext';
 import type { Row } from '../../types';
 import { defaultPageSize } from '../../lib/itemsPaging';
+import { isUnionRun } from '../../lib/heroModel';
+import { datasetKeyParts, rowDatasetKey, rowRawItemId } from '../../lib/datasetFilter';
 import { ItemCard } from './ItemCard';
 import { useItemsUi } from './ItemsUi';
 import styles from './ItemsTable.module.css';
@@ -131,6 +143,7 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
   );
 
   const hasTraces = pageItems.some((it) => it.row.trace_id);
+  const union = isUnionRun(payload.run);
   const columns: Column<FilteredItem>[] = [
     {
       id: 'index',
@@ -145,6 +158,30 @@ export function ItemsTable({ items, page, onPage, onSort, sort, sectionRef }: It
       cardTitle: true,
       cell: (it) => <span title={`ID: ${it.row.item_id}`}>#{it.row.index + 1}</span>,
     },
+    ...(union
+      ? ([
+          {
+            id: 'dataset',
+            header: 'Dataset',
+            width: 224,
+            priority: 1,
+            cell: ({ row }) => {
+              const key = rowDatasetKey(row);
+              if (!key) return <span aria-hidden="true">—</span>;
+              const { name, version } = datasetKeyParts(key);
+              return <DatasetTag name={name} version={version} />;
+            },
+          },
+          {
+            id: 'item',
+            header: 'Item',
+            width: 96,
+            priority: 2,
+            mono: true,
+            cell: ({ row }) => <span title={`ID: ${row.item_id}`}>{rowRawItemId(row)}</span>,
+          },
+        ] satisfies Column<FilteredItem>[])
+      : []),
     {
       id: 'status',
       header: 'Status',

@@ -12,15 +12,15 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import and_, case, false, func, or_, select, true
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, case, false, func, or_, select, true, union
+from sqlalchemy.orm import Session, aliased
 
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.db.dashboard_models import (
     DashboardRunDimension as Dimension,
     DashboardRunSummary as Summary,
 )
-from qym_platform.db.models import Project, ProjectMembership, UserRole
+from qym_platform.db.models import Project, ProjectMembership, RunDataset, UserRole
 from qym_platform.deps import get_db
 from qym_platform.db.dashboard_models import DashboardRunVersion as RunVersion
 from qym_platform.permissions import project_for_read_by_slug
@@ -213,6 +213,17 @@ def _base_conditions(project):
     return conditions
 
 
+def _union_member_value():
+    """``name`` + U+241F + ``version``: the value a single-dataset run filters on."""
+    return case(
+        (
+            RunDataset.version.isnot(None),
+            RunDataset.dataset + "\u241f" + RunDataset.version,
+        ),
+        else_=RunDataset.dataset,
+    )
+
+
 def _filter_conditions(filters, *, skip=None, skip_versioning=None, facets=False):
     conditions = versioning_conditions(
         Dimension.run_key,
@@ -234,6 +245,18 @@ def _filter_conditions(filters, *, skip=None, skip_versioning=None, facets=False
             continue
         ordinary = [value for value in values if value != "__empty__"]
         terms = [column.in_(ordinary)] if ordinary else []
+        if name == "datasets" and ordinary:
+            # A union run matches when any of its datasets does (QC-66).
+            terms.append(
+                Dimension.run_key.in_(
+                    select(RunDataset.run_id).where(
+                        or_(
+                            _union_member_value().in_(ordinary),
+                            RunDataset.dataset.in_(ordinary),
+                        )
+                    )
+                )
+            )
         if "__empty__" in values:
             terms.append(or_(column.is_(None), func.trim(column) == ""))
         conditions.append(or_(*terms))
@@ -242,7 +265,7 @@ def _filter_conditions(filters, *, skip=None, skip_versioning=None, facets=False
     if filters.get("until") is not None:
         conditions.append(Dimension.timestamp < filters["until"])
     if filters.get("q"):
-        conditions.append(_search_condition(filters["q"]))
+        conditions.append(search_semijoin(filters["q"]))
     return conditions
 
 
@@ -280,6 +303,22 @@ def _descriptor_search_text(table=Dimension):
     ``search_text`` existed that the job has not filled yet."""
     return func.lower(
         _search_name(table, "external_run_id") + "\n" + _search_name(table, "run_name")
+    )
+
+
+def search_semijoin(text):
+    """The Runs search as a semi-join: the stored text's index serves one arm, a union run is
+    found by the name of any of its datasets (QC-66) in the other. A plain OR with the
+    dataset subquery would keep the planner from using the trigram index."""
+    searched = aliased(Dimension)
+    needle = text.lower()
+    return Dimension.run_key.in_(
+        union(
+            select(searched.run_key).where(_search_condition(text, searched)),
+            select(RunDataset.run_id).where(
+                func.lower(RunDataset.dataset).contains(needle, autoescape=True)
+            ),
+        )
     )
 
 
@@ -509,21 +548,51 @@ def _freshness(db, project):
     return copy.deepcopy(db.info[key])
 
 
+def _facet_values(db, base, filters, name, column):
+    """The sorted values of one facet among the runs matching the other filters."""
+    conditions = [*base, *_filter_conditions(filters, skip=name, facets=True)]
+    if name == "datasets":
+        # Real dataset names: a union run lists its members, never its label.
+        values = list(
+            db.scalars(
+                _query(column)
+                .where(
+                    *conditions,
+                    Dimension.run_key.notin_(select(RunDataset.run_id)),
+                )
+                .distinct()
+            )
+        ) + list(
+            db.scalars(
+                select(_union_member_value())
+                .select_from(RunDataset)
+                .join(Dimension, Dimension.run_key == RunDataset.run_id)
+                .join(Summary, Summary.run_key == Dimension.run_key)
+                .where(*conditions)
+                .distinct()
+            )
+        )
+    else:
+        values = db.scalars(_query(column).where(*conditions).distinct())
+    normalized = {
+        str(value) if value is not None and str(value).strip() else "__empty__"
+        for value in values
+    }
+    return sorted(normalized - {"__empty__"}, key=str.casefold) + (
+        ["__empty__"] if "__empty__" in normalized else []
+    )
+
+
+def dataset_facet_values(db, base, filters):
+    """The ``datasets`` facet (the PostgreSQL overview computes the others in one statement)."""
+    return _facet_values(db, base, filters, "datasets", _FILTER_COLUMNS["datasets"])
+
+
 def _facets(db, base, filters):
-    result = {}
-    for name, column in _FILTER_COLUMNS.items():
-        values = db.scalars(
-            _query(column)
-            .where(*base, *_filter_conditions(filters, skip=name, facets=True))
-            .distinct()
-        )
-        normalized = {
-            str(value) if value is not None and str(value).strip() else "__empty__"
-            for value in values
-        }
-        result[name] = sorted(normalized - {"__empty__"}, key=str.casefold) + (
-            ["__empty__"] if "__empty__" in normalized else []
-        )
+    result = {
+        name: _facet_values(db, base, filters, name, column)
+        for name, column in _FILTER_COLUMNS.items()
+    }
     result["versioning"] = _versioning_facets(db, base, filters)
     return result
 

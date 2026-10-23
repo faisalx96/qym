@@ -1,0 +1,1520 @@
+{
+  "multi-page-run@1440": {
+    "shell": [
+      1440,
+      1371.984375
+    ],
+    "content": 1193,
+    "hero": {
+      "w": 1193,
+      "h": 150.7
+    },
+    "strip": {
+      "w": 1149,
+      "h": 39.2
+    },
+    "ctx": {
+      "w": 1149,
+      "h": 33.5
+    },
+    "chips": [
+      [
+        209.2,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        248.6,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": null,
+    "nav": {
+      "w": 1193,
+      "h": 44
+    },
+    "breakdown": {
+      "w": 1191,
+      "h": 210
+    },
+    "section": {
+      "w": 1193,
+      "h": 339.5
+    },
+    "filter": {
+      "w": 149.4,
+      "h": 24
+    },
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": [
+      [
+        1191,
+        24
+      ],
+      [
+        1191,
+        34
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ]
+    ]
+  },
+  "multi-page-run-filtered@1440": {
+    "shell": [
+      1440,
+      900
+    ],
+    "content": 1193,
+    "hero": {
+      "w": 1193,
+      "h": 150.7
+    },
+    "strip": {
+      "w": 1149,
+      "h": 39.2
+    },
+    "ctx": {
+      "w": 1149,
+      "h": 33.5
+    },
+    "chips": [
+      [
+        209.2,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        248.6,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": null,
+    "nav": {
+      "w": 1193,
+      "h": 44
+    },
+    "breakdown": null,
+    "section": null,
+    "filter": {
+      "w": 184.4,
+      "h": 24
+    },
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-page-runs@1440": {
+    "shell": [
+      1440,
+      900
+    ],
+    "content": 1193,
+    "hero": null,
+    "strip": null,
+    "ctx": null,
+    "chips": [],
+    "fact": null,
+    "more": null,
+    "nav": null,
+    "breakdown": null,
+    "section": null,
+    "filter": null,
+    "runsTable": {
+      "w": 1191,
+      "h": 218
+    },
+    "countTags": [
+      [
+        92,
+        20
+      ],
+      [
+        92,
+        20
+      ]
+    ],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-page-compare@1440": {
+    "shell": [
+      1440,
+      900
+    ],
+    "content": 1193,
+    "hero": null,
+    "strip": null,
+    "ctx": null,
+    "chips": [],
+    "fact": null,
+    "more": null,
+    "nav": null,
+    "breakdown": null,
+    "section": null,
+    "filter": null,
+    "runsTable": null,
+    "countTags": [
+      [
+        92,
+        20
+      ]
+    ],
+    "cmp": [
+      [
+        589.5,
+        142.6
+      ],
+      [
+        589.5,
+        142.6
+      ]
+    ],
+    "notice": {
+      "w": 1193,
+      "h": 57
+    },
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-state-single@1440": {
+    "shell": [
+      1440,
+      900
+    ],
+    "content": 1193,
+    "hero": {
+      "w": 1193,
+      "h": 109.2
+    },
+    "strip": {
+      "w": 1149,
+      "h": 39.2
+    },
+    "ctx": null,
+    "chips": [],
+    "fact": null,
+    "more": null,
+    "nav": {
+      "w": 1193,
+      "h": 44
+    },
+    "breakdown": null,
+    "section": null,
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-state-loading@1440": {
+    "shell": [
+      1440,
+      900
+    ],
+    "content": 1193,
+    "hero": {
+      "w": 1193,
+      "h": 150.7
+    },
+    "strip": {
+      "w": 1149,
+      "h": 39.2
+    },
+    "ctx": {
+      "w": 1149,
+      "h": 33.5
+    },
+    "chips": [
+      [
+        209.2,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        248.6,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": null,
+    "nav": null,
+    "breakdown": {
+      "w": 1191,
+      "h": 210
+    },
+    "section": {
+      "w": 1193,
+      "h": 339.5
+    },
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": [
+      [
+        1191,
+        24
+      ],
+      [
+        1191,
+        34
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ]
+    ]
+  },
+  "multi-state-deleted@1440": {
+    "shell": [
+      1440,
+      900
+    ],
+    "content": 1193,
+    "hero": {
+      "w": 1193,
+      "h": 180.2
+    },
+    "strip": {
+      "w": 1149,
+      "h": 39.2
+    },
+    "ctx": {
+      "w": 1149,
+      "h": 63
+    },
+    "chips": [
+      [
+        209.2,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        302.3,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": null,
+    "nav": null,
+    "breakdown": {
+      "w": 1191,
+      "h": 210
+    },
+    "section": {
+      "w": 1193,
+      "h": 339.5
+    },
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": [
+      [
+        1191,
+        24
+      ],
+      [
+        1191,
+        34
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ]
+    ]
+  },
+  "multi-state-many@1440": {
+    "shell": [
+      1440,
+      977.6875
+    ],
+    "content": 1193,
+    "hero": {
+      "w": 1193,
+      "h": 180.2
+    },
+    "strip": {
+      "w": 1149,
+      "h": 39.2
+    },
+    "ctx": {
+      "w": 1149,
+      "h": 63
+    },
+    "chips": [
+      [
+        202.5,
+        24.5
+      ],
+      [
+        174.6,
+        24.5
+      ],
+      [
+        197.7,
+        24.5
+      ],
+      [
+        230.1,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        181.3,
+        24.5
+      ],
+      [
+        197.7,
+        24.5
+      ],
+      [
+        230.1,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        181.3,
+        24.5
+      ],
+      [
+        197.7,
+        24.5
+      ],
+      [
+        230.1,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 98,
+      "h": 20
+    },
+    "more": {
+      "w": 93,
+      "h": 24
+    },
+    "nav": null,
+    "breakdown": {
+      "w": 1191,
+      "h": 570
+    },
+    "section": {
+      "w": 1193,
+      "h": 699.5
+    },
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": [
+      [
+        1191,
+        24
+      ],
+      [
+        1191,
+        34
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ],
+      [
+        1191,
+        40
+      ]
+    ]
+  },
+  "multi-page-run@1024": {
+    "shell": [
+      1024,
+      1455.671875
+    ],
+    "content": 777,
+    "hero": {
+      "w": 777,
+      "h": 222.4
+    },
+    "strip": {
+      "w": 733,
+      "h": 81.4
+    },
+    "ctx": {
+      "w": 733,
+      "h": 63
+    },
+    "chips": [
+      [
+        209.2,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        248.6,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": null,
+    "nav": {
+      "w": 777,
+      "h": 44
+    },
+    "breakdown": {
+      "w": 775,
+      "h": 210
+    },
+    "section": {
+      "w": 777,
+      "h": 339.5
+    },
+    "filter": {
+      "w": 149.4,
+      "h": 24
+    },
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": true,
+    "rows": [
+      [
+        775,
+        24
+      ],
+      [
+        775,
+        34
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ]
+    ]
+  },
+  "multi-page-run-filtered@1024": {
+    "shell": [
+      1024,
+      900
+    ],
+    "content": 777,
+    "hero": {
+      "w": 777,
+      "h": 222.4
+    },
+    "strip": {
+      "w": 733,
+      "h": 81.4
+    },
+    "ctx": {
+      "w": 733,
+      "h": 63
+    },
+    "chips": [
+      [
+        209.2,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        248.6,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": null,
+    "nav": {
+      "w": 777,
+      "h": 44
+    },
+    "breakdown": null,
+    "section": null,
+    "filter": {
+      "w": 184.4,
+      "h": 24
+    },
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": true,
+    "rows": []
+  },
+  "multi-page-runs@1024": {
+    "shell": [
+      1024,
+      900
+    ],
+    "content": 777,
+    "hero": null,
+    "strip": null,
+    "ctx": null,
+    "chips": [],
+    "fact": null,
+    "more": null,
+    "nav": null,
+    "breakdown": null,
+    "section": null,
+    "filter": null,
+    "runsTable": {
+      "w": 775,
+      "h": 218
+    },
+    "countTags": [
+      [
+        92,
+        20
+      ],
+      [
+        92,
+        20
+      ]
+    ],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": true,
+    "rows": []
+  },
+  "multi-page-compare@1024": {
+    "shell": [
+      1024,
+      900
+    ],
+    "content": 777,
+    "hero": null,
+    "strip": null,
+    "ctx": null,
+    "chips": [],
+    "fact": null,
+    "more": null,
+    "nav": null,
+    "breakdown": null,
+    "section": null,
+    "filter": null,
+    "runsTable": null,
+    "countTags": [
+      [
+        92,
+        20
+      ]
+    ],
+    "cmp": [
+      [
+        381.5,
+        142.6
+      ],
+      [
+        381.5,
+        142.6
+      ]
+    ],
+    "notice": {
+      "w": 777,
+      "h": 73.8
+    },
+    "scrollOverflow": true,
+    "rows": []
+  },
+  "multi-state-single@1024": {
+    "shell": [
+      1024,
+      900
+    ],
+    "content": 777,
+    "hero": {
+      "w": 777,
+      "h": 151.4
+    },
+    "strip": {
+      "w": 733,
+      "h": 81.4
+    },
+    "ctx": null,
+    "chips": [],
+    "fact": null,
+    "more": null,
+    "nav": {
+      "w": 777,
+      "h": 44
+    },
+    "breakdown": null,
+    "section": null,
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": true,
+    "rows": []
+  },
+  "multi-state-loading@1024": {
+    "shell": [
+      1024,
+      900
+    ],
+    "content": 777,
+    "hero": {
+      "w": 777,
+      "h": 222.4
+    },
+    "strip": {
+      "w": 733,
+      "h": 81.4
+    },
+    "ctx": {
+      "w": 733,
+      "h": 63
+    },
+    "chips": [
+      [
+        209.2,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        248.6,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": null,
+    "nav": null,
+    "breakdown": {
+      "w": 775,
+      "h": 210
+    },
+    "section": {
+      "w": 777,
+      "h": 339.5
+    },
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": true,
+    "rows": [
+      [
+        775,
+        24
+      ],
+      [
+        775,
+        34
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ]
+    ]
+  },
+  "multi-state-deleted@1024": {
+    "shell": [
+      1024,
+      900
+    ],
+    "content": 777,
+    "hero": {
+      "w": 777,
+      "h": 222.4
+    },
+    "strip": {
+      "w": 733,
+      "h": 81.4
+    },
+    "ctx": {
+      "w": 733,
+      "h": 63
+    },
+    "chips": [
+      [
+        209.2,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        302.3,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": null,
+    "nav": null,
+    "breakdown": {
+      "w": 775,
+      "h": 210
+    },
+    "section": {
+      "w": 777,
+      "h": 339.5
+    },
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": true,
+    "rows": [
+      [
+        775,
+        24
+      ],
+      [
+        775,
+        34
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ]
+    ]
+  },
+  "multi-state-many@1024": {
+    "shell": [
+      1024,
+      1019.875
+    ],
+    "content": 777,
+    "hero": {
+      "w": 777,
+      "h": 222.4
+    },
+    "strip": {
+      "w": 733,
+      "h": 81.4
+    },
+    "ctx": {
+      "w": 733,
+      "h": 63
+    },
+    "chips": [
+      [
+        202.5,
+        24.5
+      ],
+      [
+        174.6,
+        24.5
+      ],
+      [
+        197.7,
+        24.5
+      ],
+      [
+        230.1,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        181.3,
+        24.5
+      ],
+      [
+        197.7,
+        24.5
+      ],
+      [
+        230.1,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        181.3,
+        24.5
+      ],
+      [
+        197.7,
+        24.5
+      ],
+      [
+        230.1,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 98,
+      "h": 20
+    },
+    "more": {
+      "w": 100,
+      "h": 24
+    },
+    "nav": null,
+    "breakdown": {
+      "w": 775,
+      "h": 570
+    },
+    "section": {
+      "w": 777,
+      "h": 699.5
+    },
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": true,
+    "rows": [
+      [
+        775,
+        24
+      ],
+      [
+        775,
+        34
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ],
+      [
+        775,
+        40
+      ]
+    ]
+  },
+  "multi-page-run@390": {
+    "shell": [
+      390,
+      3203.015625
+    ],
+    "content": 279,
+    "hero": {
+      "w": 279,
+      "h": 468.8
+    },
+    "strip": {
+      "w": 235,
+      "h": 185.8
+    },
+    "ctx": {
+      "w": 235,
+      "h": 185
+    },
+    "chips": [
+      [
+        169.3,
+        45
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        235,
+        45
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": {
+      "w": 93,
+      "h": 24
+    },
+    "nav": {
+      "w": 279,
+      "h": 44
+    },
+    "breakdown": {
+      "w": 277,
+      "h": 488.9
+    },
+    "section": {
+      "w": 279,
+      "h": 682.4
+    },
+    "filter": {
+      "w": 149.4,
+      "h": 24
+    },
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-page-run-filtered@390": {
+    "shell": [
+      390,
+      1151.40625
+    ],
+    "content": 279,
+    "hero": {
+      "w": 279,
+      "h": 468.8
+    },
+    "strip": {
+      "w": 235,
+      "h": 185.8
+    },
+    "ctx": {
+      "w": 235,
+      "h": 185
+    },
+    "chips": [
+      [
+        169.3,
+        45
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        235,
+        45
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": {
+      "w": 93,
+      "h": 24
+    },
+    "nav": {
+      "w": 279,
+      "h": 44
+    },
+    "breakdown": null,
+    "section": null,
+    "filter": {
+      "w": 184.4,
+      "h": 24
+    },
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-page-runs@390": {
+    "shell": [
+      390,
+      900
+    ],
+    "content": 279,
+    "hero": null,
+    "strip": null,
+    "ctx": null,
+    "chips": [],
+    "fact": null,
+    "more": null,
+    "nav": null,
+    "breakdown": null,
+    "section": null,
+    "filter": null,
+    "runsTable": {
+      "w": 277,
+      "h": 449.6
+    },
+    "countTags": [
+      [
+        92,
+        20
+      ],
+      [
+        92,
+        20
+      ]
+    ],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-page-compare@390": {
+    "shell": [
+      390,
+      900
+    ],
+    "content": 279,
+    "hero": null,
+    "strip": null,
+    "ctx": null,
+    "chips": [],
+    "fact": null,
+    "more": null,
+    "nav": null,
+    "breakdown": null,
+    "section": null,
+    "filter": null,
+    "runsTable": null,
+    "countTags": [
+      [
+        92,
+        20
+      ]
+    ],
+    "cmp": [
+      [
+        279,
+        142.6
+      ],
+      [
+        279,
+        142.6
+      ]
+    ],
+    "notice": {
+      "w": 279,
+      "h": 124.2
+    },
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-state-single@390": {
+    "shell": [
+      390,
+      900
+    ],
+    "content": 279,
+    "hero": {
+      "w": 279,
+      "h": 275.8
+    },
+    "strip": {
+      "w": 235,
+      "h": 185.8
+    },
+    "ctx": null,
+    "chips": [],
+    "fact": null,
+    "more": null,
+    "nav": {
+      "w": 279,
+      "h": 44
+    },
+    "breakdown": null,
+    "section": null,
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-state-loading@390": {
+    "shell": [
+      390,
+      1249.15625
+    ],
+    "content": 279,
+    "hero": {
+      "w": 279,
+      "h": 468.8
+    },
+    "strip": {
+      "w": 235,
+      "h": 185.8
+    },
+    "ctx": {
+      "w": 235,
+      "h": 185
+    },
+    "chips": [
+      [
+        169.3,
+        45
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        235,
+        45
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": {
+      "w": 93,
+      "h": 24
+    },
+    "nav": null,
+    "breakdown": {
+      "w": 277,
+      "h": 488.9
+    },
+    "section": {
+      "w": 279,
+      "h": 682.4
+    },
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-state-deleted@390": {
+    "shell": [
+      390,
+      1249.15625
+    ],
+    "content": 279,
+    "hero": {
+      "w": 279,
+      "h": 468.8
+    },
+    "strip": {
+      "w": 235,
+      "h": 185.8
+    },
+    "ctx": {
+      "w": 235,
+      "h": 185
+    },
+    "chips": [
+      [
+        169.3,
+        45
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        235,
+        45
+      ]
+    ],
+    "fact": {
+      "w": 92,
+      "h": 20
+    },
+    "more": {
+      "w": 93,
+      "h": 24
+    },
+    "nav": null,
+    "breakdown": {
+      "w": 277,
+      "h": 488.9
+    },
+    "section": {
+      "w": 279,
+      "h": 682.4
+    },
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": []
+  },
+  "multi-state-many@390": {
+    "shell": [
+      390,
+      2715.875
+    ],
+    "content": 279,
+    "hero": {
+      "w": 279,
+      "h": 468.8
+    },
+    "strip": {
+      "w": 235,
+      "h": 185.8
+    },
+    "ctx": {
+      "w": 235,
+      "h": 185
+    },
+    "chips": [
+      [
+        169.3,
+        45
+      ],
+      [
+        174.6,
+        24.5
+      ],
+      [
+        197.7,
+        24.5
+      ],
+      [
+        230.1,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        181.3,
+        24.5
+      ],
+      [
+        197.7,
+        24.5
+      ],
+      [
+        230.1,
+        24.5
+      ],
+      [
+        209.2,
+        24.5
+      ],
+      [
+        181.3,
+        24.5
+      ],
+      [
+        197.7,
+        24.5
+      ],
+      [
+        230.1,
+        24.5
+      ]
+    ],
+    "fact": {
+      "w": 98,
+      "h": 20
+    },
+    "more": {
+      "w": 100,
+      "h": 24
+    },
+    "nav": null,
+    "breakdown": {
+      "w": 277,
+      "h": 1955.6
+    },
+    "section": {
+      "w": 279,
+      "h": 2149.1
+    },
+    "filter": null,
+    "runsTable": null,
+    "countTags": [],
+    "cmp": [],
+    "notice": null,
+    "scrollOverflow": false,
+    "rows": []
+  }
+}

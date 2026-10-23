@@ -35,6 +35,7 @@ from qym_platform.services.dashboard_outbox import (
 )
 from qym_platform.services.ingest_completeness import runs_list_ingest_flag
 from qym_platform.services.run_lifecycle import is_run_stop_requested
+from qym_platform.services.run_datasets import entries_by_run
 from qym_platform.services.metric_semantics import declared_direction, primary_metric
 from qym_platform.services.run_means import (
     MetricTotals,
@@ -1015,8 +1016,19 @@ def _sync_dimension(db, run_id, version):
         "reasoning" if has_reasoning else "plain"
     )
     dataset_version = str(dataset.get("dataset_version") or "").strip()
+    # A union run (several dataset versions) is its own combo, keyed by its label:
+    # it never mixes into the first dataset's trend or charts (QC-77).
+    dataset_count = int(run.dataset_count or 1)
+    union_entries = (
+        [
+            {"dataset": row.dataset, "version": row.version}
+            for row in entries_by_run(db, [run.id]).get(run.id, [])
+        ]
+        if dataset_count > 1
+        else []
+    )
     dimension.dataset = run.dataset + (
-        "\u241f" + dataset_version if dataset_version else ""
+        "\u241f" + dataset_version if dataset_version and dataset_count <= 1 else ""
     )
     branch, commit = (
         str(config.get("git_branch") or "").strip(),
@@ -1075,6 +1087,8 @@ def _sync_dimension(db, run_id, version):
         "versioning": versioning,
         "versioning_details": dict(run.versioning_details or {}),
         **dataset,
+        "dataset_count": dataset_count,
+        **({"datasets": union_entries} if union_entries else {}),
     }
     # Unchanged unless a name changes, so the search index over it keeps
     # this row's descriptor-only updates HOT.

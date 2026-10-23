@@ -37,6 +37,8 @@ export interface SelectProps<T extends SelectItem> {
   placement?: 'bottom' | 'top';
   placeholder?: string;
   renderItem?: (item: T) => ReactNode;
+  /** The closed control's text when it should differ from the option's (default: the option as rendered). */
+  renderValue?: (item: T) => ReactNode;
   isDisabled?: boolean;
   isRequired?: boolean;
   help?: ReactNode;
@@ -57,6 +59,7 @@ export function Select<T extends SelectItem>({
   placement = 'bottom',
   placeholder = 'Select…',
   renderItem,
+  renderValue,
   isDisabled,
   isRequired,
   help,
@@ -109,7 +112,15 @@ export function Select<T extends SelectItem>({
         {label}
       </Label>
       <AriaButton className={styles.trigger}>
-        <SelectValue className={styles.value} />
+        {renderValue ? (
+          <SelectValue<T> className={styles.value}>
+            {({ selectedItem, isPlaceholder }) =>
+              isPlaceholder || !selectedItem ? placeholder : renderValue(selectedItem)
+            }
+          </SelectValue>
+        ) : (
+          <SelectValue className={styles.value} />
+        )}
         <Icon name="chevron-down" size={12} />
       </AriaButton>
       {help ? (

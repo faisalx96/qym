@@ -7,6 +7,9 @@ import { formatDurationMs } from '@/features/run-detail/lib/heroModel';
 import { letterOf, runSeries, useCompare } from '../CompareContext';
 import { runShortName } from '../lib/labels';
 import { MIN_COMPARE_RUNS, passRefBase } from '../lib/refs';
+import { DatasetCountTag } from '@/features/run-detail/components/DatasetChip';
+import { datasetsTitle } from '@/features/run-detail/lib/heroModel';
+import { runDatasetCount } from '../lib/datasetSets';
 import { differingContext, ownerLabel, runCounts } from '../lib/runInfo';
 import { RunTag, useRunMark } from './RunTag';
 import styles from './RunCards.module.css';
@@ -204,9 +207,15 @@ function RunCard({
                   {run.model_name ? <ModelTag name={run.model_name} series={((idx % 8) + 1) as 1} /> : null}
                 </Fact>
                 <Fact label="Owner">{owner}</Fact>
-                <Fact label="Dataset">
-                  <DatasetTag name={run.dataset_name} version={run.dataset_version} />
-                </Fact>
+                {runDatasetCount(run) > 1 ? (
+                  <Fact label="Datasets">
+                    <DatasetCountTag count={runDatasetCount(run)} title={datasetsTitle(run.datasets ?? [])} />
+                  </Fact>
+                ) : (
+                  <Fact label="Dataset">
+                    <DatasetTag name={run.dataset_name} version={run.dataset_version} />
+                  </Fact>
+                )}
                 <Fact label="Runtime">{runtime === '—' ? '' : runtime}</Fact>
                 <Fact label="Experiment">
                   {exp && expSlug ? (

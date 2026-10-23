@@ -1,5 +1,6 @@
 /** "Set on the page" chips: every filter that did not come from the rule builder, removable one by one (brief 04 J7). */
 import { formatPercent } from '@/lib/metrics';
+import { datasetKeyLabel } from './datasetFilter';
 import { latencyFilterLabel } from './latencyModel';
 import { emptyFilters, filterRuleCount, type FieldDef, type RunView } from './filterRules';
 import { ERROR_SLOTS, type ErrorSlot } from './rowErrors';
@@ -38,6 +39,12 @@ export function activeChips(view: RunView, defs: FieldDef[], metric: string | nu
       clear: (v) => ({ ...v, show: 'all', page: 1 }),
     });
   }
+  if (view.dataset !== null)
+    chips.push({
+      key: 'dataset',
+      label: `Dataset: ${datasetKeyLabel(view.dataset)}`,
+      clear: (v) => ({ ...v, dataset: null, page: 1 }),
+    });
   const rules = filterRuleCount(f.rules, new Map(defs.map((d) => [d.id, d])));
   if (rules > 0)
     chips.push({

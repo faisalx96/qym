@@ -41,9 +41,57 @@ export interface RunExperiment {
   [key: string]: unknown;
 }
 
+/** One dataset version a run evaluated (a single-dataset run returns one synthesised entry with `items: null`). */
+export interface RunDatasetEntry {
+  position: number;
+  dataset: string;
+  dataset_id?: string | null;
+  /** Set while the managed dataset exists; null for a deleted one and for a local file. */
+  dataset_slug: string | null;
+  dataset_version_id?: string | null;
+  version: string | null;
+  /** Aliases that point at the version now. */
+  aliases?: string[];
+  /** The alias used to resolve the version at run time. */
+  alias: string | null;
+  items: number | null;
+  disabled_items?: number | null;
+  deleted: boolean;
+}
+
+/** One row of `GET /api/runs/{id}/datasets`. */
+export interface DatasetBreakdownRow {
+  position: number;
+  dataset: string;
+  dataset_slug: string | null;
+  version: string | null;
+  alias: string | null;
+  items: number | null;
+  completed?: number;
+  errors?: number;
+  deleted: boolean;
+  metrics?: Record<string, { mean: number | null; count: number }>;
+}
+
+export interface DatasetBreakdown {
+  dataset_count: number;
+  breakdown: boolean;
+  datasets: DatasetBreakdownRow[];
+  unassigned?: { items: number };
+  run?: {
+    items: number;
+    completed: number;
+    errors: number;
+    metrics: Record<string, { mean: number | null; count: number }>;
+  };
+}
+
 export interface Run {
   /** Set on the header built from a runs-list row (stage 0); the summary and the rows replace it. */
   provisional?: boolean;
+  /** Dataset versions the run evaluated: 1 for a single-dataset run (absent on older platforms). */
+  dataset_count?: number;
+  datasets?: RunDatasetEntry[];
   run_id: string;
   file_path?: string;
   task_name?: string;

@@ -4,7 +4,7 @@
  * (three on a phone) with "+ N more". Nothing hides behind a chevron.
  */
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { exportHtmlUrl } from '@/api/runs';
 import { platformUrl } from '@/lib/runtime';
 import {
@@ -32,13 +32,16 @@ import {
   formatDurationMs,
   formatIsoDateTime,
   heroTiming,
+  datasetsTitle,
   headerChips,
   ingestWarning,
   isLiveStatus,
+  isUnionRun,
   runEntityLinks,
   stopReasonLine,
 } from '../lib/heroModel';
 import type { RunModel } from '../lib/runModel';
+import { DatasetChip, DatasetCountTag, datasetChipStyles } from './DatasetChip';
 import type { PassSummary, Run } from '../types';
 import { RunPager } from './RunPager';
 import styles from './RunHero.module.css';
@@ -92,11 +95,13 @@ const MORE_KEY = 'qym:run-hero-more';
 /** Band 3: the chip groups, clamped to two lines (three on compact), with an exact "+ N more". */
 function ContextBand({
   groups,
+  slug,
   runId,
   stopReason,
   provisional,
 }: {
   groups: ReturnType<typeof headerChips>;
+  slug: string;
   runId: string;
   stopReason: string;
   /** The header is the runs-list row (no config or metadata chips yet): hold the room the full chip band will take. */
@@ -139,7 +144,11 @@ function ContextBand({
     <div
       className={styles.context}
       role="group"
-      aria-label="Versioning, config and metadata"
+      aria-label={
+        groups.some((g) => g.label === 'Datasets')
+          ? 'Datasets, versioning, config and metadata'
+          : 'Versioning, config and metadata'
+      }
       data-testid="hero-context"
     >
       <div className={styles.contextRow}>
@@ -156,14 +165,18 @@ function ContextBand({
               {g.chips.map((c, i) => {
                 const chip = (
                   <span role="listitem" data-chip="" className={styles.chipItem}>
-                    <KeyValueTag label={c.label} text={c.text} title={c.title}>
-                      {c.raw !== undefined ? (
-                        // An object or array value opens its JSON in a dialog, clamped or not (QA 2026-10-21).
-                        <JsonPreview value={c.raw} title={c.key} compact>
-                          {c.text}
-                        </JsonPreview>
-                      ) : undefined}
-                    </KeyValueTag>
+                    {c.dataset ? (
+                      <DatasetChip entry={c.dataset} slug={slug} />
+                    ) : (
+                      <KeyValueTag label={c.label} text={c.text} title={c.title}>
+                        {c.raw !== undefined ? (
+                          // An object or array value opens its JSON in a dialog, clamped or not (QA 2026-10-21).
+                          <JsonPreview value={c.raw} title={c.key} compact>
+                            {c.text}
+                          </JsonPreview>
+                        ) : undefined}
+                      </KeyValueTag>
+                    )}
                   </span>
                 );
                 return i === 0 ? (
@@ -209,6 +222,7 @@ function ContextBand({
 }
 
 export function RunHero({ run, model, live, passSummary, slug, listParam, basePath }: RunHeroProps) {
+  const location = useLocation();
   const samples = model.samples;
   const viewPass = model.viewPass;
   const pass = viewPass ? passSummary : null;
@@ -387,15 +401,29 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
               <TaskTag name={run.task_name} />
             </MetaLink>
           </Fact>
-          <Fact label="Dataset">
-            <MetaLink to={links.dataset} title={links.datasetTitle}>
-              <DatasetTag
-                name={run.dataset_name}
-                version={run.dataset_version}
-                aliases={run.dataset_aliases}
-              />
-            </MetaLink>
-          </Fact>
+          {isUnionRun(run) ? (
+            <Fact label="Datasets">
+              {/* A router link, not a bare "#hash" anchor: the document's base would send the hash to the app root. */}
+              <Link
+                className={datasetChipStyles.countLink}
+                to={{ search: location.search, hash: '#run-section-datasets' }}
+                data-link="block"
+                data-testid="hero-datasets-fact"
+              >
+                <DatasetCountTag count={run.dataset_count ?? 0} title={datasetsTitle(run.datasets ?? [])} />
+              </Link>
+            </Fact>
+          ) : (
+            <Fact label="Dataset">
+              <MetaLink to={links.dataset} title={links.datasetTitle}>
+                <DatasetTag
+                  name={run.dataset_name}
+                  version={run.dataset_version}
+                  aliases={run.dataset_aliases}
+                />
+              </MetaLink>
+            </Fact>
+          )}
           <Fact label="Model">
             {modelName ? (
               <MetaLink to={links.model} title={`Runs of model ${modelName}`}>
@@ -427,6 +455,7 @@ export function RunHero({ run, model, live, passSummary, slug, listParam, basePa
         {groups.length ? (
           <ContextBand
             groups={groups}
+            slug={slug}
             runId={run.run_id}
             stopReason={viewPass ? '' : (run.status_reason_label ?? '')}
             provisional={run.provisional === true}

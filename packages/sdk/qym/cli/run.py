@@ -24,6 +24,7 @@ from ._platform_api import (
 )
 from ._legacy import load_function_from_file, load_multi_run_specs
 from ..utils.env import get_platform_url_env
+from ..utils.errors import DatasetNotFoundError
 
 run_app = typer.Typer(help="Manage evaluation runs.")
 
@@ -80,9 +81,18 @@ def _hold_local_viewer(ui_server: Any) -> None:
 def run_create(
     task_file: Optional[str] = typer.Option(None, "--task-file", help="Python file containing the task function"),
     task_function: Optional[str] = typer.Option(None, "--task-function", help="Name of the function to evaluate"),
-    dataset: Optional[str] = typer.Option(None, "--dataset", help="qym platform dataset name or local dataset path"),
-    dataset_version: Optional[str] = typer.Option(None, "--dataset-version", help="qym platform dataset version"),
-    dataset_alias: Optional[str] = typer.Option(None, "--dataset-alias", help="qym platform dataset alias"),
+    dataset: Optional[List[str]] = typer.Option(
+        None,
+        "--dataset",
+        metavar="NAME[@VERSION|@alias:ALIAS]",
+        help=(
+            "qym platform dataset name or local dataset path. Repeat to evaluate several datasets "
+            "as one run; add @v3 for a version or @alias:production for an alias "
+            "(a suffix beats --dataset-version / --dataset-alias for its dataset)."
+        ),
+    ),
+    dataset_version: Optional[str] = typer.Option(None, "--dataset-version", help="qym platform dataset version (default for --dataset values without a suffix)"),
+    dataset_alias: Optional[str] = typer.Option(None, "--dataset-alias", help="qym platform dataset alias (default for --dataset values without a suffix)"),
     dataset_file: Optional[str] = typer.Option(None, "--dataset-file", help="Path to a local CSV or JSONL dataset file"),
     dataset_csv: Optional[str] = typer.Option(None, "--dataset-csv", help="Path to a local CSV dataset file"),
     metrics: Optional[str] = typer.Option(None, "--metrics", help="Comma-separated metric names"),
@@ -125,7 +135,13 @@ def run_create(
     """Execute an LLM evaluation run."""
     from ..core.evaluator import Evaluator, _graceful_interrupt_signals
     from ..core.multi_runner import MultiModelRunner
-    from ..core.dataset import CsvDataset, JsonlDataset
+    from ..core.dataset import (
+        MAX_RUN_DATASETS,
+        CsvDataset,
+        DatasetRef,
+        JsonlDataset,
+        dataset_label,
+    )
     from ..core.checkpoint import load_checkpoint_state
     from ..utils.text import arabic_display
 
@@ -227,8 +243,26 @@ def run_create(
 
     local_dataset_file = dataset_file or dataset_csv
     if bool(dataset) == bool(local_dataset_file):
-        output_error("usage_error", "Provide exactly one of --dataset or --dataset-file/--dataset-csv.")
+        if dataset and len(dataset) > 1:
+            output_error("usage_error", "Provide either --dataset (repeatable) or --dataset-file, not both.")
+        else:
+            output_error("usage_error", "Provide exactly one of --dataset or --dataset-file/--dataset-csv.")
         raise typer.Exit(code=ExitCode.USAGE_ERROR)
+    if dataset and len(dataset) > MAX_RUN_DATASETS:
+        output_error("usage_error", f"at most {MAX_RUN_DATASETS} datasets per run")
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
+    # One --dataset without a suffix is exactly today's call (a plain string).
+    dataset_arg: Any = None
+    if dataset:
+        try:
+            parsed_refs = [DatasetRef.parse(value) for value in dataset]
+        except ValueError as exc:
+            output_error("usage_error", f"Invalid --dataset value: {exc}")
+            raise typer.Exit(code=ExitCode.USAGE_ERROR)
+        entries: List[Any] = [
+            ref if (ref.version or ref.alias) else ref.name for ref in parsed_refs
+        ]
+        dataset_arg = entries[0] if len(entries) == 1 and isinstance(entries[0], str) else entries
 
     try:
         status(f"Loading task function '{task_function}' from {task_file}")
@@ -294,7 +328,7 @@ def run_create(
             }
 
         # Build dataset
-        dataset_obj: Any = dataset
+        dataset_obj: Any = dataset_arg
         if local_dataset_file:
             md_cols: List[str] = []
             if csv_metadata_cols:
@@ -313,8 +347,11 @@ def run_create(
                     metadata_cols=md_cols,
                 )
 
-        dataset_label = getattr(dataset_obj, "name", None) or str(dataset_obj)
-        status(f"Setting up evaluation for dataset '{dataset_label}'")
+        if isinstance(dataset_obj, (list, DatasetRef)):
+            label = dataset_label(dataset_obj)
+        else:
+            label = getattr(dataset_obj, "name", None) or str(dataset_obj)
+        status(f"Setting up evaluation for dataset '{label}'")
 
         evaluator = Evaluator(
             task=fn,
@@ -391,6 +428,19 @@ def run_create(
         err_console.print("\n[yellow]Evaluation interrupted by user[/yellow]")
         raise typer.Exit(code=ExitCode.FAILURE)
     except Exception as e:
+        several = isinstance(dataset_arg, list) and len(dataset_arg) > 1
+        if several and isinstance(e, ValueError) and (
+            str(e).endswith("is listed twice") or str(e).startswith("at most")
+        ):
+            output_error("usage_error", str(e))
+            raise typer.Exit(code=ExitCode.USAGE_ERROR)
+        if several and isinstance(e, DatasetNotFoundError):
+            text = str(e)
+            if "401" in text or "403" in text:
+                output_error("auth_denied", text)
+                raise typer.Exit(code=ExitCode.AUTH_DENIED)
+            output_error("not_found", text)
+            raise typer.Exit(code=ExitCode.NOT_FOUND)
         output_error("failure", str(e))
         raise typer.Exit(code=ExitCode.FAILURE)
 
@@ -428,10 +478,26 @@ def run_tasks() -> None:
 # ── qym run list ────────────────────────────────────────────
 
 
+def _run_has_dataset(run_summary: dict, name: str) -> bool:
+    """Whether a listed run evaluated the dataset ``name`` (any entry of a union run)."""
+    wanted = name.strip().lower()
+    names = [str(run_summary.get("dataset_name") or "")] + [
+        str(entry.get("dataset") or "")
+        for entry in (run_summary.get("datasets") or [])
+        if isinstance(entry, dict)
+    ]
+    return any(candidate.lower() == wanted for candidate in names if candidate)
+
+
 @run_app.command("list")
 def run_list(
     limit: int = typer.Option(50, "--limit", help="Max runs to return"),
     task: Optional[str] = typer.Option(None, "--task", help="Filter by task name"),
+    dataset_filter: Optional[str] = typer.Option(
+        None,
+        "--dataset",
+        help="Filter by dataset name (a run over several datasets matches when any of them does)",
+    ),
     model_filter: Optional[str] = typer.Option(None, "--model", help="Filter by model name"),
     status_filter: Optional[str] = typer.Option(None, "--status", help="Filter by status"),
     user_filter: Optional[str] = typer.Option(None, "--user", help="Filter by run owner user"),
@@ -505,7 +571,11 @@ def run_list(
                     ]
                     if not any(user_filter.lower() in field.lower() for field in owner_fields):
                         continue
+                if dataset_filter and not _run_has_dataset(run_summary, dataset_filter):
+                    continue
                 row = dict(run_summary)
+                row.setdefault("dataset_count", 1)
+                row.setdefault("datasets", [])
                 row["origin"] = run_origin_of(row)
                 row.setdefault("experiment", None)
                 row.setdefault("versioning", {})

@@ -45,6 +45,7 @@ from .observers import (
     ProgressSnapshot,
 )
 from .dashboard import RunDashboard, console_supports_live
+from .dataset import DatasetLike, UnionDataset
 from ..adapters.base import TaskAdapter, auto_detect_task
 from ..metrics.registry import get_metric, get_metric_spec
 from ..metrics.judges.base import JudgeInputError
@@ -540,7 +541,7 @@ class Evaluator:
     def __init__(
         self,
         task: Any,
-        dataset: Union[str, Any],
+        dataset: Union[DatasetLike, Sequence[DatasetLike]],
         metrics: List[Union[str, Callable, Metric]],
         config: Optional[Union[Dict[str, Any], EvaluatorConfig]] = None,
         observer: Optional[EvaluationObserver] = None,
@@ -557,7 +558,10 @@ class Evaluator:
 
         Args:
             task: Callable or framework object to evaluate.
-            dataset: qym platform dataset name, local dataset path, or dataset object.
+            dataset: qym platform dataset name, local dataset path, dataset object,
+                a ``DatasetRef`` (name + version or alias), or a list of any of
+                those: a list evaluates the concatenation of its datasets as ONE
+                run (every item is tagged with its source dataset and version).
             metrics: Metric names, callables, or typed ``Metric`` definitions.
             config: Optional evaluator configuration.
             observer: Optional lifecycle observer for advanced integrations.
@@ -645,6 +649,8 @@ class Evaluator:
             )
 
         # Load and validate dataset
+        from .dataset import DatasetRef, dataset_label, resolve_datasets
+
         if isinstance(dataset, str):
             from .dataset import resolve_dataset
 
@@ -656,7 +662,24 @@ class Evaluator:
                 api_key=self.config.platform_api_key,
             )
             self.dataset_name = getattr(self.dataset, "name", dataset)
+        elif isinstance(dataset, (DatasetRef, list, tuple)):
+            # Several datasets (or a reference with its own version): one run over
+            # their concatenation. A one-entry list is the same as the string.
+            self.dataset = resolve_datasets(
+                dataset,
+                version=self.config.dataset_version,
+                alias=self.config.dataset_alias,
+                platform_url=self.config.platform_url,
+                api_key=self.config.platform_api_key,
+            )
+            self.dataset_name = getattr(self.dataset, "name", None) or dataset_label(
+                dataset
+            )
         else:
+            if not callable(getattr(dataset, "get_items", None)):
+                raise TypeError(
+                    "dataset must be a name, a DatasetRef, a dataset object or a list of them"
+                )
             self.dataset = dataset
             self.dataset_name = getattr(
                 dataset, "dataset_name", getattr(dataset, "name", "unknown")
@@ -1198,6 +1221,16 @@ class Evaluator:
             self.run_metadata["dataset_id"] = self._platform_dataset_id
         if self._platform_dataset_version_id:
             self.run_metadata["dataset_version_id"] = self._platform_dataset_version_id
+        union_entries = self._union_entries()
+        if union_entries:
+            # One line per dataset, then the run's label (a single dataset keeps
+            # today's output).
+            self.run_metadata["datasets"] = union_entries
+            for entry in union_entries:
+                label = entry["dataset"] + (
+                    f"@{entry['version']}" if entry.get("version") else ""
+                )
+                console.print(f"[dim]Dataset {label}: {entry['items']} items[/dim]")
         disabled_items = int(getattr(self.dataset, "disabled_count", 0) or 0)
         if disabled_items:
             # Disabled items are skipped by every run; record how many and
@@ -1348,6 +1381,7 @@ class Evaluator:
                         dataset_id=self._platform_dataset_id,
                         dataset_version_id=self._platform_dataset_version_id,
                         dataset_alias=getattr(self.dataset, "alias", None),
+                        datasets=self.run_metadata.get("datasets") or None,
                         timeout=getattr(self.config, "platform_timeout", 5.0),
                         versioning_details=dict(
                             self.config.versioning_details or {}
@@ -1397,6 +1431,11 @@ class Evaluator:
                                 "dataset_id": self._platform_dataset_id,
                                 "dataset_version_id": self._platform_dataset_version_id,
                                 "dataset_alias": getattr(self.dataset, "alias", None),
+                                **(
+                                    {"datasets": self.run_metadata["datasets"]}
+                                    if self.run_metadata.get("datasets")
+                                    else {}
+                                ),
                                 "model": self.model_name,
                                 "metrics": list(self.metrics.keys()),
                                 "metric_specs": self._metric_specs_payload(),
@@ -1485,6 +1524,7 @@ class Evaluator:
                     raise ValueError(
                         f"Resume dataset mismatch: {checkpoint_state.dataset_name} != {self.dataset_name}"
                     )
+                self._verify_union_resume(checkpoint_path)
                 if sorted(checkpoint_state.metrics) != sorted(metric_names):
                     raise ValueError(
                         "Resume metrics mismatch: "
@@ -1558,6 +1598,7 @@ class Evaluator:
             checkpoint_writer = CheckpointWriter(
                 checkpoint_path,
                 metrics=metric_names,
+                union=isinstance(self.dataset, UnionDataset),
                 flush_each_item=self.config.checkpoint_flush_each_item,
                 fsync=self.config.checkpoint_fsync,
             )
@@ -1652,6 +1693,7 @@ class Evaluator:
 
             def _checkpoint_run_metadata() -> Dict[str, Any]:
                 md = dict(self.run_metadata or {})
+                md.pop("datasets", None)
                 if self._platform_dataset_id:
                     md["dataset_id"] = self._platform_dataset_id
                 if self._platform_dataset_version_id:
@@ -1705,6 +1747,7 @@ class Evaluator:
                         item_id=item_id,
                         item_input=item.input,
                         item_metadata=getattr(item, "metadata", {}),
+                        **self._union_row_columns(getattr(item, "metadata", {})),
                         output=f"ERROR: {error_msg}",
                         expected_output=getattr(item, "expected_output", None),
                         time_seconds=0.0,
@@ -1745,6 +1788,7 @@ class Evaluator:
                         item_id=item_id,
                         item_input=item.input,
                         item_metadata=getattr(item, "metadata", {}),
+                        **self._union_row_columns(getattr(item, "metadata", {})),
                         output=f"ERROR: {error_msg}",
                         expected_output=getattr(item, "expected_output", None),
                         time_seconds=float(eval_result.get("time", 0.0) or 0.0),
@@ -1783,6 +1827,7 @@ class Evaluator:
                         "item_metadata",
                         getattr(item, "metadata", {}),
                     ),
+                    **self._union_row_columns(getattr(item, "metadata", {})),
                     output=eval_result.get("output"),
                     expected_output=eval_result.get("expected"),
                     time_seconds=float(eval_result.get("time", 0.0) or 0.0),
@@ -2072,6 +2117,8 @@ class Evaluator:
             result.run_metadata[
                 "dataset_version_id"
             ] = self._platform_dataset_version_id
+        if self.run_metadata.get("datasets"):
+            result.run_metadata["datasets"] = self.run_metadata["datasets"]
 
         self._notify_observer(
             "on_run_complete",
@@ -2270,6 +2317,53 @@ class Evaluator:
                 )
 
         return results
+
+    def _union_entries(self) -> List[Dict[str, Any]]:
+        """The ``datasets`` list of a union run (two or more datasets), else ``[]``."""
+        describe = getattr(self.dataset, "describe", None)
+        if not isinstance(self.dataset, UnionDataset) or describe is None:
+            return []
+        return describe()
+
+    def _union_row_columns(self, item_metadata: Any) -> Dict[str, Any]:
+        """The ``dataset`` / ``dataset_version`` cells of a checkpoint row (union only)."""
+        if not isinstance(self.dataset, UnionDataset):
+            return {}
+        md = item_metadata if isinstance(item_metadata, dict) else {}
+        return {
+            "dataset": md.get("qym_dataset") or "",
+            "dataset_version": md.get("qym_dataset_version") or "",
+        }
+
+    def _verify_union_resume(self, checkpoint_path: str) -> None:
+        """Refuse to append to a checkpoint written against other dataset versions.
+
+        An alias that moved between sessions would give new item ids and re-run
+        everything while appending to the same file (QC-23).
+        """
+        if not isinstance(self.dataset, UnionDataset):
+            return
+        entries = self.dataset.entries
+        seen: Dict[int, tuple] = {}
+        for row in iter_checkpoint_rows(checkpoint_path):
+            raw = row.get("item_metadata") or ""
+            try:
+                md = json.loads(raw) if raw else {}
+            except Exception:
+                continue
+            index = md.get("qym_dataset_index") if isinstance(md, dict) else None
+            if isinstance(index, int) and index not in seen:
+                seen[index] = (md.get("qym_dataset"), md.get("qym_dataset_version"))
+        for index, (name, was) in sorted(seen.items()):
+            if index >= len(entries):
+                continue
+            now = entries[index].version
+            if was and now and was != now:
+                raise ValueError(
+                    f"Resume dataset version mismatch: {name} was {was} in the "
+                    f"checkpoint and resolves to {now} now. Pin the version "
+                    f"({name}@{was}) to resume."
+                )
 
     def _single_dataset_input_name(self) -> Optional[str]:
         """Return the declared input name for a single-column dataset."""

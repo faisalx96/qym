@@ -22,7 +22,7 @@ export function useScope(): RunScope {
     [entries, view, replaceView],
   );
   const clearAll = useCallback(
-    () => replaceView({ ...view, q: '', show: 'all', page: 1, filters: emptyFilters() }),
+    () => replaceView({ ...view, q: '', show: 'all', dataset: null, page: 1, filters: emptyFilters() }),
     [view, replaceView],
   );
   return {

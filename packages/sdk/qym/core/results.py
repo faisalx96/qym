@@ -1,6 +1,7 @@
 """Evaluation results container and analysis."""
 
 import csv
+import hashlib
 import json
 import math
 import os
@@ -674,7 +675,7 @@ class EvaluationResult:
             if hasattr(spec, "to_dict") or isinstance(spec, dict)
         }
 
-        return {
+        payload = {
             'dataset_name': self.dataset_name,
             'run_name': self.run_name,
             'start_time': self.start_time.isoformat(),
@@ -692,6 +693,10 @@ class EvaluationResult:
             'results': self.results,
             'errors': self.errors
         }
+        if self._is_union_run():
+            # A union run lists its datasets next to the label in `dataset_name`.
+            payload['datasets'] = list(self.run_metadata['datasets'])
+        return payload
     
     def failed_items(self) -> List[str]:
         """Get list of failed item IDs."""
@@ -772,6 +777,10 @@ class EvaluationResult:
             'trace_id', 'item_id', 'input', 'item_metadata', 'output', 'expected_output', 'time',
             'task_started_at_ms',
         ]
+        union = self._is_union_run()
+        if union:
+            # Union runs: the item's source dataset right after item_id.
+            base_fields[6:6] = ['dataset', 'dataset_version']
         metric_fields: List[str] = []
         for m in self.metrics:
             metric_fields.append(f'{m}_score')
@@ -804,6 +813,7 @@ class EvaluationResult:
                 'run_config': json.dumps(self.run_config, ensure_ascii=False),
                 'trace_id': result.get('trace_id', ''),
                 'item_id': item_id,
+                **self._union_cells(item_id),
                 'input': result.get('input', ''),
                 'item_metadata': str(item_metadata),
                 'output': result.get('output', ''),
@@ -853,6 +863,7 @@ class EvaluationResult:
                 'run_config': json.dumps(self.run_config, ensure_ascii=False),
                 'trace_id': error_trace_id or '',
                 'item_id': item_id,
+                **self._union_cells(item_id),
                 'input': str(task_input),
                 'item_metadata': str(item_metadata),
                 'output': f'ERROR: {error_msg}',
@@ -931,6 +942,10 @@ class EvaluationResult:
             'trace_id', 'item_id', 'input', 'item_metadata', 'output', 'expected_output', 'time',
             'task_started_at_ms',
         ]
+        union = self._is_union_run()
+        if union:
+            # Union runs: the item's source dataset right after item_id.
+            base_fields[6:6] = ['dataset', 'dataset_version']
         metric_fields: List[str] = []
         for m in self.metrics:
             metric_fields.append(f'{m}_score')
@@ -962,6 +977,7 @@ class EvaluationResult:
                 'run_config': json.dumps(self.run_config, ensure_ascii=False),
                 'trace_id': result.get('trace_id', ''),
                 'item_id': item_id,
+                **self._union_cells(item_id),
                 'input': result.get('input', ''),
                 'item_metadata': str(item_metadata),
                 'output': result.get('output', ''),
@@ -1010,6 +1026,7 @@ class EvaluationResult:
                 'run_config': json.dumps(self.run_config, ensure_ascii=False),
                 'trace_id': error_trace_id or '',
                 'item_id': item_id,
+                **self._union_cells(item_id),
                 'input': str(task_input),
                 'item_metadata': str(item_metadata),
                 'output': f'ERROR: {error_msg}',
@@ -1045,6 +1062,22 @@ class EvaluationResult:
 
         return str(filepath)
 
+    def _is_union_run(self) -> bool:
+        """Whether the run evaluated two or more datasets (tagged items)."""
+        datasets = (self.run_metadata or {}).get("datasets") if isinstance(self.run_metadata, dict) else None
+        return isinstance(datasets, list) and len(datasets) >= 2
+
+    def _union_cells(self, item_id: str) -> Dict[str, Any]:
+        """The ``dataset`` / ``dataset_version`` cells of a union run's row."""
+        if not self._is_union_run():
+            return {}
+        md = self.metadatas.get(item_id)
+        md = md if isinstance(md, dict) else {}
+        return {
+            'dataset': md.get('qym_dataset') or '',
+            'dataset_version': md.get('qym_dataset_version') or '',
+        }
+
     def _default_save_path(self, extension: str, output_dir: str) -> str:
         """Create default save path with hierarchy: qym_results/task/model/date/filename."""
         ts = _extract_run_timestamp(self.run_name) or datetime.now()
@@ -1064,6 +1097,10 @@ class EvaluationResult:
         run_safe = _sanitize_path_component(self.run_name or "run")
         task_safe = _sanitize_path_component(task_name)
         dataset_safe = _sanitize_path_component(str(self.dataset_name))
+        if self._is_union_run() and len(dataset_safe) > 80:
+            # A union run's label can be long: cap it, ending with a hash of the whole.
+            digest = hashlib.sha1(dataset_safe.encode("utf-8")).hexdigest()[:6]
+            dataset_safe = f"{dataset_safe[:73].rstrip('-_. ')}-{digest}"
         model_safe = _sanitize_path_component(str(model_name))
 
         user_provided_run_name = bool(

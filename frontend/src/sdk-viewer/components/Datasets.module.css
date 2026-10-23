@@ -1,0 +1,59 @@
+/* The per-dataset scores of a union file, computed from its rows (no request). */
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.name {
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.version {
+  margin-inline-start: var(--space-xs);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--accent-primary);
+}
+
+.sumLabel {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.show {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.show:hover {
+  color: var(--text-primary);
+}
+
+.show:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

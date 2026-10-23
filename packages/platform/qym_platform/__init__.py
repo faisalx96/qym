@@ -5,4 +5,4 @@ This package is intentionally separate from the SDK (`qym/`).
 
 __all__ = ["__version__"]
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"

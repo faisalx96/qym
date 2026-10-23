@@ -83,3 +83,11 @@
   min-width: 260px;
   padding: var(--space-md);
 }
+
+/* The count beside a dataset in the Dataset select's list. */
+.optionCount {
+  margin-inline-start: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}

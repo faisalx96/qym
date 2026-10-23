@@ -100,7 +100,13 @@ export function useRunView(model: RunModel): RunViewApi {
   );
 
   const clearFilters = useCallback(() => {
-    write({ ...view, show: 'all', page: 1, filters: readRunView(new URLSearchParams(), decodeCtx).filters });
+    write({
+      ...view,
+      show: 'all',
+      dataset: null,
+      page: 1,
+      filters: readRunView(new URLSearchParams(), decodeCtx).filters,
+    });
   }, [decodeCtx, view, write]);
 
   const setParam = useCallback(

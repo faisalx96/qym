@@ -1,10 +1,36 @@
+# October 2026 — Platform 2.1.0 / SDK 2.1.0
+
+One evaluation can run over several datasets, and several versions of one dataset, at once. SDK 2.1.0 takes a list for `dataset=`, `qym run create` repeats `--dataset`, and the platform shows such a run (a union run) with a Datasets group in its header, a per-dataset score table and a Dataset column and filter on its items. A single dataset, written as before, behaves exactly as in 2.0.0: same item ids, same upload, same results file. Platform 2.1.0 still accepts SDK 2.0.0 runs; SDK 2.1.0 union runs reach a 2.0.0 platform as a plain run named by its label (the per-dataset view needs 2.1.0).
+
+## Before you update
+
+- **Migrations `0089` (head `0089`).** Quick DDL: the `run_datasets` table, `runs.dataset_count` (default 1) and `run_items.dataset_position` (nullable). There is no backfill: existing runs read as single-dataset runs, and no index is added to `run_items`.
+- **Union runs are not ranked.** The best-run index, best-run bases and a dataset version's trend ignore union runs (their scores cover different items than a single-dataset run's). They form their own combo in the dashboard, named by the run's label.
+
+## SDK 2.1.0
+
+- **Several datasets in one evaluation.** `Evaluator(task, dataset=[...])` takes names, `DatasetRef(name, version=None, alias=None)` and dataset objects in any mix (`Evaluator(task, "support-tickets", ...)` and a one-entry list are the same call). Items load in list order; item ids become `name@version/raw-id` (the raw id stays in `item_metadata.qym_item_id`), and every item is tagged `qym_dataset`, `qym_dataset_version`, `qym_dataset_index`, `qym_dataset_version_id`. At most 50 datasets per run; the same dataset version twice is an error.
+- **CLI.** `--dataset` is repeatable: `--dataset support-tickets@v3 --dataset billing-faq@alias:production --dataset ./local.csv`. `--dataset-version` / `--dataset-alias` stay as defaults for values without a suffix. One `--dataset` without a suffix is the same command as before.
+- **Files.** A union results file (csv, xlsx) has `dataset` and `dataset_version` columns after `item_id`; resume checks every dataset's resolved version and stops with a message that names the pinned spelling when an alias moved.
+- **Local viewer.** A union file or run shows its datasets in the header, a per-dataset score table computed from the rows, a Dataset column and a Dataset filter (`?dataset=name@version`).
+
+## What changed
+
+### Runs
+
+- **Datasets group.** The run header's fact strip reads **Datasets** with a count tag that jumps to the new **Datasets** section; the first group of the chip band lists every dataset with its version, alias and item count (a deleted dataset stays, marked, without a link).
+- **Per-dataset scores.** `GET /api/runs/{id}/datasets` (and the Datasets section) give each dataset's items, errors and mean per metric next to the run's own mean; the item-weighted mean of the rows equals the run's. Items have a Dataset column and a Dataset filter; **Show N** in the section sets it.
+- **Runs list and compare.** A union run shows `3 datasets` in the Dataset column; the Dataset filter and the search match any of its datasets. Compare shows a notice when the compared runs evaluated different sets of dataset versions, and "What differs" lists them.
+- **Upload.** `POST /v1/runs` accepts `datasets: [{dataset, dataset_id, dataset_version_id, version, alias, items, disabled_items}]` (1 to 50 entries; a repeated version is 422); `run_started` carries the same list; `POST /v1/runs:upload` takes an optional `datasets` form field. A run without the field is processed as before.
+- **Access.** A run is restricted when any of its datasets is restricted or private for the reader: scores and the per-dataset table stay visible, item contents are hidden.
+
 # October 2026 — Platform 2.0.0 / SDK 2.0.0
 
 Datasets get per-dataset access, disabled items and batch edits by metadata; experiments get a per-experiment dataset read token and a latency-sensitive queue option; the SDK ships the rebuilt local viewer and skips disabled items. Platform 2.0.0 still accepts SDK 1.9.0 and 1.8.0 runs, but only SDK 2.0.0 leaves disabled items out of a run.
 
 ## Before you update
 
-- **Migrations `0087`–`0088` (head `0088`).** Both are quick DDL. `0087` adds per-dataset access (`datasets.access_mode`, the `dataset_grants` table) and the disabled-item columns on `dataset_items` (`disabled_at`, `disabled_by_user_id`, `disabled_reason`). `0088` adds the per-experiment dataset read token and the latency-sensitive flag to `eval_experiments`, the environments' `latency_sensitive_min_role`, the token `kind` / `experiment_id` on `dataset_read_tokens`, and the admission columns (`admitted_at`, `deferrals`, `deferral_reason`, `contaminated_attempts`) on `eval_experiment_jobs`. Existing datasets stay visible to the whole project (`access_mode = project`); existing items stay active.
+- **Migrations `0087`–`0088`.** Both are quick DDL. `0087` adds per-dataset access (`datasets.access_mode`, the `dataset_grants` table) and the disabled-item columns on `dataset_items` (`disabled_at`, `disabled_by_user_id`, `disabled_reason`). `0088` adds the per-experiment dataset read token and the latency-sensitive flag to `eval_experiments`, the environments' `latency_sensitive_min_role`, the token `kind` / `experiment_id` on `dataset_read_tokens`, and the admission columns (`admitted_at`, `deferrals`, `deferral_reason`, `contaminated_attempts`) on `eval_experiment_jobs`. Existing datasets stay visible to the whole project (`access_mode = project`); existing items stay active.
 - **Evaluation Service integration guide v1.3.** Per-experiment dataset read tokens are sent as `env_overrides.QYM_DATASET_READ_TOKEN` only when the environment's settings schema declares that key, and `latency_sensitive` is sent only when set. The platform's own address is sent as `env_overrides.QYM_BASE_URL` under the same rule. Presets that set `env_overrides.QYM_DATASET_READ_TOKEN`, `env_overrides.QYM_BASE_URL` or `latency_sensitive` themselves fail validation until edited: all three are platform-owned now (`docs/evaluation-service-api-integration-v1.3.md`, `docs/internal/EVAL_OPEN_QUESTIONS.md` D-B11).
 - **Dataset item reads default to active items.** `GET …/items` returns active items unless `state=disabled` or `state=all` is passed; published versions report `disabled_count`. Clients that paged a version's items by count should pass `state=all`.
 

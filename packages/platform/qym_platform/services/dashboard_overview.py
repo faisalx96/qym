@@ -75,6 +75,7 @@ from sqlalchemy import (
     or_,
     select,
     true,
+    union,
     union_all,
 )
 from sqlalchemy import text as sql_text
@@ -480,8 +481,10 @@ def build_overview_postgres(
         _search_condition,
         _sort,
         _versioning_facets,
+        dataset_facet_values,
     )
     from qym_platform.db.dashboard_models import DashboardRunOverview as Facts
+    from qym_platform.db.models import RunDataset
 
     now = now or datetime.now(timezone.utc)
     facet_flags = {
@@ -498,9 +501,17 @@ def build_overview_postgres(
         searched = aliased(Dimension)
         terms.append(
             Dimension.run_key.in_(
-                select(searched.run_key).where(
-                    searched.project_key == project["id"] if project else false(),
-                    _search_condition(filters["q"], searched),
+                union(
+                    select(searched.run_key).where(
+                        searched.project_key == project["id"] if project else false(),
+                        _search_condition(filters["q"], searched),
+                    ),
+                    # A union run is found by the name of any of its datasets (QC-66).
+                    select(RunDataset.run_id).where(
+                        func.lower(RunDataset.dataset).contains(
+                            filters["q"].lower(), autoescape=True
+                        )
+                    ),
                 )
             )
         )
@@ -635,6 +646,10 @@ def build_overview_postgres(
     filtered = _assemble_chart(raw)
     filtered["kpis"] = _kpi_result(raw["kpis"], filtered=bool(active))
     filtered["facets"]["versioning"] = _versioning_facets(
+        db, _base_conditions(project), filters
+    )
+    # Union runs list their member datasets, never their label (QC-66).
+    filtered["facets"]["datasets"] = dataset_facet_values(
         db, _base_conditions(project), filters
     )
     return whole, filtered

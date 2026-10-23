@@ -271,6 +271,8 @@ def _eligible(query, env: EvalEnvironment):
             Run.origin == RunOrigin.OFFICIAL,
             Run.status.in_(ELIGIBLE_RUN_STATUSES),
             Run.deleted_at.is_(None),
+            # A union run is never ranked against single-dataset runs (QC-76).
+            Run.dataset_count == 1,
             # Guards a stale denormalized row (the run's version is the truth).
             Run.dataset_version_id.is_not_distinct_from(
                 EvalRunScore.dataset_version_id

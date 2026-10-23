@@ -160,10 +160,11 @@ All commands support `--json` (structured JSON to stdout, human text to stderr).
 
 ```bash
 # Inspect runs
-qym run list [--limit 50] [--task TEXT] [--model TEXT] [--status TEXT] [--origin official|local|all] [--versioning KEY=VALUE ...] --json
+qym run list [--limit 50] [--task TEXT] [--dataset NAME] [--model TEXT] [--status TEXT] [--origin official|local|all] [--versioning KEY=VALUE ...] --json
 #   each run carries origin ("official"|"local"), experiment ({id, name, job_id, latency_sensitive} or null)
 #   and versioning (the Evaluation Service's versioning_metadata, any key; {} when none)
 #   and versioning_details (free-form keys from the run's creator / experiment; {} when none)
+#   and dataset_count + datasets ([{dataset, version, aliases, items, deleted}] of a run over several datasets; [] otherwise)
 qym run get <run_id> --json   # run.versioning_details
 qym run failed <run_id> --json
 qym run compare <id1> <id2> --json
@@ -171,6 +172,10 @@ qym run compare <id1> <id2> --json
 # Execute evaluations
 qym run create --task-file FILE --task-function NAME --dataset NAME --metrics LIST \
   [--versioning-detail KEY=VALUE ...] [--versioning-details JSON]
+#   --dataset is repeatable: one run over several datasets or versions (SDK 2.1.0);
+#   NAME@v3 = version, NAME@alias:production = alias, a bare NAME takes --dataset-version /
+#   --dataset-alias, an existing path is a local file; one plain --dataset is unchanged;
+#   --dataset-file cannot be combined with several --dataset; at most 50 datasets
 #   stored on the run as versioning_details (EvaluatorConfig.versioning_details);
 #   KEY=VALUE wins over the JSON object, which wins over --config
 

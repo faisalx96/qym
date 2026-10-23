@@ -13,6 +13,7 @@ so tests can drive the scenario step by step (no timing assumptions):
   POST /live/release   let the gated rows finish; the run ends
   GET  /live/state     {"finished": bool}
   POST /file/fresh     a fresh copy of the saved results CSV -> {"path": ...}
+  POST /file/union     a saved results CSV of a REAL union run (two datasets, one run) -> {"path": ...}
   GET  /file/missing   a path that does not exist -> {"path": ...}
 
 Ports: LIVE_PORT 8818 (viewer for the live run), FILE_PORT 8819 (viewer for saved
@@ -290,6 +291,40 @@ def fresh_file() -> Dict[str, Any]:
     return {"path": dst, "port": FILE_PORT}
 
 
+def union_file() -> Dict[str, Any]:
+    """A saved results file of a real run over two local datasets (item ids namespaced, rows tagged)."""
+    from qym.core.dataset import InMemoryDataset
+
+    _ensure_file_server()
+    State.counter += 1
+    out = os.path.join(TMP, f"union-{State.counter}")
+    first = InMemoryDataset(
+        [{"id": f"i{n}", "input": f"a-question-{n}", "expected_output": f"a-question-{n}"} for n in range(5)],
+        name="alpha",
+        version="v1",
+    )
+    second = InMemoryDataset(
+        [{"id": f"i{n}", "input": f"b-question-{n}", "expected_output": "wrong"} for n in range(3)],
+        name="beta",
+        version="v2",
+    )
+
+    def echo(question: str) -> str:
+        return question
+
+    ev = Evaluator(
+        task=echo,
+        dataset=[first, second],
+        metrics=["exact_match"],
+        config={"output_dir": out, "otel_enabled": False, "run_name": "union-run", "checkpoint_enabled": False},
+    )
+    ev.run(show_tui=False, auto_save=True)
+    found = sorted(glob.glob(os.path.join(out, "**", "*.csv"), recursive=True))
+    if not found:
+        raise RuntimeError(f"no results csv under {out}")
+    return {"path": found[0], "port": FILE_PORT}
+
+
 def missing_file() -> Dict[str, Any]:
     _ensure_file_server()
     return {"path": os.path.join(TMP, "does-not-exist", "run.csv"), "port": FILE_PORT}
@@ -307,6 +342,7 @@ ROUTES = {
     ("POST", "/live/release"): release_live,
     ("GET", "/live/state"): lambda: {"finished": not (State.thread and State.thread.is_alive())},
     ("POST", "/file/fresh"): fresh_file,
+    ("POST", "/file/union"): union_file,
     ("GET", "/file/missing"): missing_file,
 }
 

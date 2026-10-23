@@ -62,7 +62,7 @@ export function ItemsSection() {
     if (idx < 0) {
       // Filtered out: the link wins, so drop the filters once.
       handled.current = itemParam;
-      api.replaceView({ ...view, q: '', show: 'all', page: 1, filters: emptyFilters() });
+      api.replaceView({ ...view, q: '', show: 'all', dataset: null, page: 1, filters: emptyFilters() });
       handled.current = null;
       return;
     }
