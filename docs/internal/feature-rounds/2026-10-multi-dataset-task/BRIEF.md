@@ -1,6 +1,6 @@
 # Feature round: multi-dataset / multi-version evaluations and task selection
 
-Status: DESIGN started 2026-10-22 from `UI-redesign` 77a8828c (platform 2.0.0 / SDK 2.0.0, migration head `0088`).
+Status: MERGED into `UI-redesign` as 9715b47a (SDK, `feat/multi-dataset-sdk`) and d34c17b1 (platform + UI, `feat/multi-dataset-launch`) on 2026-10-23; follow-up integration fixes in `fix/sdk-viewer-bundle` dcf23bc9 (viewer bundle back under 450 KB, frozen flex column cap, Task column 86 px). DESIGN started 2026-10-22 from `UI-redesign` 77a8828c (platform 2.0.0 / SDK 2.0.0, migration head `0088`).
 
 ## 1. Owner request (verbatim, 2026-10-22)
 

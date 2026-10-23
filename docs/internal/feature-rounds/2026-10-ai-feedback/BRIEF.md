@@ -1,6 +1,6 @@
 # Feature round: AI-assisted feedback
 
-Status: DESIGN started 2026-10-23 from `UI-redesign` 0d725715 (platform 2.0.0 / SDK 2.0.0, migration head `0088`;
+Status: MERGED into `UI-redesign` as 9d75a948 on 2026-10-23 (review `review-e.md`: 173 MEETS, 6 MEETS WITH FIXES, 5 DOES NOT MEET documented as limitations; migration `0091` follows `0090`; integration fixes in `fix/sdk-viewer-bundle` dcf23bc9 and `fix/integration-gate2`). DESIGN started 2026-10-23 from `UI-redesign` 0d725715 (platform 2.0.0 / SDK 2.0.0, migration head `0088`;
 the multi-dataset round in flight takes `0089` and `0090`, so this round's migration is `0091`, `down_revision` set at
 implementation time to the head of `UI-redesign` then).
 
