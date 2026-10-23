@@ -1,0 +1,10 @@
+import { open, BASE } from './lib.mjs';
+import fs from 'node:fs';
+const ids = JSON.parse(fs.readFileSync('ids.json', 'utf8'));
+const { browser, page } = await open(1440);
+await page.goto(BASE + '/feedback/' + ids.stopui); await page.waitForSelector('[data-testid=chat]');
+await page.waitForFunction(() => /Thanks, that is/.test(document.querySelector('[data-testid=chat-log]').innerText) || document.querySelector('[data-testid=chat-log]').innerText.length > 60, null, { timeout: 15000 });
+await page.getByRole('button', { name: 'Stop' }).click(); await page.waitForTimeout(700);
+console.log((await page.locator('[data-testid=chat-log]').innerText()).replace(/\n+/g, ' | ').slice(-260), '| composer enabled', !(await page.getByLabel('Your reply').isDisabled()));
+await page.reload(); await page.waitForTimeout(1200); console.log('after reload:', (await page.locator('[data-testid=chat-log]').innerText()).replace(/\n+/g, ' | ').slice(-200));
+await browser.close();
