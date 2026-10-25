@@ -192,3 +192,31 @@ test.describe('latency filter (scenario 10)', () => {
     await expect.poll(() => itemsCount(page)).toEqual([60, 60]);
   });
 });
+
+test.describe('loaded bodies survive a rows refetch', () => {
+  test('an open item keeps its per-pass outputs after the rows go stale and the page is revisited', async ({
+    page,
+  }) => {
+    // October 2026: the compact refetch replaced the hydrated pass attempts with their stripped form while the row
+    // still counted as loaded, so every pass column read "No output was recorded." until the item was reopened.
+    test.setTimeout(60_000);
+    await openRun(page, s.slug, repeat);
+    await itemButton(page, 2).click();
+    const card = page.locator('[data-testid=item-card][data-item-id="sql-002"]');
+    const cols = card.locator('section[aria-label=Output] [data-pass]');
+    await expect(cols).toHaveCount(3);
+    for (let i = 0; i < 3; i++) await expect(cols.nth(i)).toContainText('SELECT name FROM customers');
+    // past staleTime (10 s), a revisit refetches the compact rows over the cached, hydrated ones
+    await page.waitForTimeout(11_000);
+    const refetch = page.waitForRequest((r) => /view=compact&fields=/.test(r.url()));
+    await page.getByRole('link', { name: /Runs/ }).first().click();
+    await expect(page.getByRole('link', { name: /Runs/ }).first()).toBeVisible();
+    await page.goBack();
+    await refetch;
+    await expect(card).toBeVisible();
+    await expect(cols).toHaveCount(3);
+    await expect(card.getByText('No output was recorded.')).toHaveCount(0);
+    for (let i = 0; i < 3; i++) await expect(cols.nth(i)).toContainText('SELECT name FROM customers');
+    expect(params(page).get('item')).toBe('sql-002');
+  });
+});
