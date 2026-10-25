@@ -28,6 +28,7 @@ Feedback gets an assistant: anyone signed in describes a need, the assistant col
 
 ### Runs
 
+- **An open item keeps its outputs when the rows refresh.** On a repeat run, a refetch of the run's rows (the page revisited after ten seconds, a live reload, an analysis finishing) replaced the per-pass outputs with their stripped index form while the item still counted as loaded, so every pass column read "No output was recorded." until the item was reopened. The loaded bodies now carry over as long as the server's digests agree; when an output changed, the item reloads its details instead.
 - **Datasets group.** The run header's fact strip reads **Datasets** with a count tag that jumps to the new **Datasets** section; the first group of the chip band lists every dataset with its version, alias and item count (a deleted dataset stays, marked, without a link).
 - **Per-dataset scores.** `GET /api/runs/{id}/datasets` (and the Datasets section) give each dataset's items, errors and mean per metric next to the run's own mean; the item-weighted mean of the rows equals the run's. Items have a Dataset column and a Dataset filter; **Show N** in the section sets it.
 - **Runs list and compare.** A union run shows `3 datasets` in the Dataset column; the Dataset filter and the search match any of its datasets. Compare shows a notice when the compared runs evaluated different sets of dataset versions, and "What differs" lists them.

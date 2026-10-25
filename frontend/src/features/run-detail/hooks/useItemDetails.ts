@@ -7,6 +7,7 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { fetchItemDetails, runKeys } from '@/api/runs';
+import { hydrateAttempts } from '../lib/rowSignature';
 import type { Row, RunPayload } from '../types';
 
 export const MAX_DETAIL_ITEMS = 100;
@@ -97,7 +98,14 @@ class DetailsLoader {
             if (!prev) return prev;
             const rows = prev.snapshot.rows.map((row) => {
               const full = byId.get(row.item_id);
-              return full ? ({ ...row, ...full, __details_loaded: true } as Row) : row;
+              if (!full) return row;
+              // the compact attempts' digests stay under the full outputs: a refetch compares them (rowSignature.ts)
+              return {
+                ...row,
+                ...full,
+                pass_attempts: hydrateAttempts(row.pass_attempts, full.pass_attempts),
+                __details_loaded: true,
+              } as Row;
             });
             return { ...prev, snapshot: { ...prev.snapshot, rows } };
           });
