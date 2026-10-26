@@ -248,7 +248,7 @@ test('root-cause issues: validation, add, show on the card, edit, delete, and fi
 
   // Root cause tab now lists the category; pressing it filters the items
   await goSection(page, 'Root cause');
-  const cat = page.getByRole('button', { name: /^Hallucination \d+$/ });
+  const cat = page.locator('[data-part="root-cause-card"]').filter({ hasText: 'Hallucination' });
   await expect(cat).toBeVisible();
   await cat.click();
   await expect(page.getByTestId('baseline-delta-banner')).toContainText('Root cause: Hallucination');

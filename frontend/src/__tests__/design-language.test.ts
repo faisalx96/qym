@@ -341,6 +341,7 @@ describe('primitive module contracts', () => {
       // Round 8 (compare.md 3.4): legacy-parity recipes with `<table>` semantics (aligned columns, pinned metric column).
       'features/compare/components/panel/AveragesMatrix.tsx',
       'features/compare/components/panel/ErrorsTab.tsx',
+      'features/compare/components/RunCards.tsx', // the "What differs" popover table
       'features/compare/components/sweep/SweepView.tsx',
       'features/datasets/wizard/UploadWizard.tsx', // preview grid of an uploaded file
       'features/docs/DocsArticle.tsx', // docs prose tables

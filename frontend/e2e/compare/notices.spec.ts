@@ -43,7 +43,7 @@ test('a shorter run on the same dataset: only shared items are aligned and the m
   await waitLoaded(page);
   // 40-item runs plus one 10-item run on the same ids: every id is aligned, the short run simply has no row for 11..40
   await expect(page.getByText(/\d+ aligned items/)).toBeVisible();
-  await page.locator('[data-part="item-head"]').click();
+  await page.locator('[data-testid="item-row"][data-item-id="cmp-020"] [data-part="item-head"]').click();
   const detail = page.getByTestId('item-detail');
   await expect(detail).toBeVisible();
   await expect(detail.getByTestId('output-card')).toHaveCount(2); // base and cand-a only; the short run has no row for cmp-020
@@ -61,7 +61,7 @@ test('archived project: read-only notice, no score pencil and no Add issue', asy
     await expect(note).toBeVisible();
     await expect(note).toContainText('Read-only.');
     await expect(note).toContainText('archived project');
-    await page.locator('[data-part="item-head"]').click();
+    await page.locator('[data-part="item-head"]').first().click();
     await expect(page.getByTestId('output-card')).toHaveCount(3);
     await expect(page.getByRole('button', { name: /^Edit .* score of/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add issue' })).toHaveCount(0);

@@ -233,10 +233,10 @@ cause of "controls far from data".
 
 ### 3.1 Principles (all from the legacy page)
 
-1. A run is its **swatch and its name**, everywhere (cards, columns, legend, rows, cards). No letters.
+1. A run is its **swatch, a letter badge and its name**, everywhere (cards, columns, legend, rows, cards). **Owner decision H1 (amended):** the letters A to H stay; the letter badge is 16x16, mono `--font-xs`, in the run colour's text on a faint tint of it, and it never replaces the name (the name is always visible and never truncated). The Baseline tag stays; the star goes.
 2. **A control sits in the head of the section it changes** (baseline: Averages; metric and pass threshold: Overview).
 3. **A click on a number filters the list and says so**: scroll to the list head, banner, Filters count. Nothing moves
-   sideways: the Quick-filters sidebar is removed.
+   sideways. **Owner decision H2 (amended):** the Quick-filters sidebar is NOT removed: it is a facet list opened from a "Quick filters" button in the items toolbar, closed by default, never opened by a click or a search, and it sits beside the items list only (the sections above keep their full width; the item cards narrow). Below 1200 px it is a drawer. The "Changes vs baseline" strip and the Scope bar still go.
 4. **One component, one shape** for one fact (verdict = the box outline; improved/regressed = a count button).
 5. **Rows are cards with self-describing chips**; the expanded item keeps the runs in one aligned row.
 6. Fix, not copy, the legacy faults: names wrap (never an ellipsis); no sideways scroll at 390; the 4th output card is not cut off.
@@ -319,7 +319,7 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 | ID | Criterion |
 |---|---|
 | C-run-1 | `[data-part=run-grid]` columns: 1440 4-up (card 287 +-3), 1024 2-up (380 +-3), 390 1-up (277 +-2). Card height 1440 = 239 +-4 for **any** run count (8 runs: 2 rows, grid 478 +-8). |
-| C-run-2 | Card head: `RunName` (swatch 8x8 = run colour, name 13/650 wraps, 0 px clipped), `Baseline` tag on the baseline run, status badge (`--font-xs`, 20 high), remove X 24x24; X absent at 2 runs; no letter, no star. |
+| C-run-2 | Card head: `RunName` (swatch 8x8 = run colour, **letter badge 16x16 mono `--font-xs` in the run colour's text (owner decision H1)**, name 13/650 wraps, 0 px clipped), `Baseline` tag on the baseline run, status badge (`--font-xs`, 20 high), remove X 24x24; X absent at 2 runs; no star. |
 | C-run-3 | `[data-part=run-stat-strip]` 3 cells x 36 high (Items, Completed, Errors, value mono 13/650); Errors > 0 uses `--error-text`. |
 | C-run-4 | `[data-part=run-meta]` 6 rows of 20 (Task, Model, Owner, Dataset, Started, Runtime; repeat runs: Samples) = 120 +-2; long values wrap. |
 | C-run-5 | Left border 3 px in the run colour; the colour equals the swatch in every other component (computed colour of `RunName` swatch of the same run, all sections). |
@@ -358,7 +358,7 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 | C-cat-2 | `[data-part=category-card]` grid: 1440 3-up (388 x 179 at 4 runs, 302 at 8 runs), 1024 2-up (380), 390 1-up (277). |
 | C-cat-3 | Card: title 13/650 + count, header row RUN / AVERAGE / LATENCY / CHANGE (11/650 uppercase labels, hidden at 390), left border 3 px (`--score-4` easy, `--score-3` medium, `--score-1` hard; other keys `--info`). |
 | C-cat-4 | `[data-part=category-run-row]` 27 high: `RunName` (wraps), average mono 12 in score band, latency mono 11, change `Baseline` / `+18.1 pts`; **bar 8 high** (`[data-part=category-track]`) with the fill in the **run colour** and a 1 px tick at the baseline value that is 4 px taller than the bar. |
-| C-cat-5 | Click on a card filters the items to that value (URL), shows the banner/Filters badge, does not move the page; 0 sidebar. |
+| C-cat-5 | Click on a card filters the items to that value (URL), shows the banner/Filters badge and **scrolls to the list head like every number (principle 3, owner decision H2; amended: the text said "does not move the page")**; it does not open the sidebar and changes no section width. |
 
 **Steps, root cause** (L29, L32; need a traced / analysed seed)
 
@@ -383,7 +383,7 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 | C-items-2 | `[data-part=baseline-delta-banner]` (role=status): one line <= 42 high directly above the toolbar: "Showing items where **<run>** regressed on **<metric>** against the baseline **<run>**." + Clear; shown for filters that came from a count button / card / error; names in bold, not cut. |
 | C-items-3 | `[data-part=items-toolbar]` is **not sticky**; 1440: one row 24 high (search flex, min 240; Filters 117; Clear only when active; count; Display 150; CSV); 1024: <= 56; 390: <= 90; every control 24 high, centre-line spread 0. |
 | C-items-4 | Count text `[data-part=items-count]` `role=status`, mono 11 muted, "N of M items", updates before the list repaints. |
-| C-items-5 | Filters button: badge = number of rules (muted when 0); opens an **inline** panel under the toolbar `[data-part=filter-builder]` (>= 100 high empty: head "FILTERS no rules yet", Match AND/OR, + Condition, + Group); nothing painted over content; Escape closes and returns focus. The Quick-filters sidebar and the separate active-chips row are removed: the active rules are listed in the panel head and counted in the badge. |
+| C-items-5 | Filters button: badge = number of rules (muted when 0); opens an **inline** panel under the toolbar `[data-part=filter-builder]` (>= 100 high empty: head "FILTERS no rules yet", Match AND/OR, + Condition, + Group); nothing painted over content; Escape closes and returns focus. The separate active-chips row is removed: the active filters are listed in the panel head and counted in the badge. The Quick-filters sidebar stays (**owner decision H2**, criteria C-side-1..5 below). |
 | C-items-6 | "+ Condition" fields include Outcome (Different outputs, With errors, All runs correct, No run correct, Partially correct, Rarely solved, Uniquely solved), Winner ("<run name> won", "Only <run name> solved", Tie), Change vs baseline (per run and metric), Passing runs, each metadata key, Approval, Has error, Output text, Max latency: run names, not letters. |
 | C-items-7 | Display popover 300 wide (Popover, opens under the button, Escape closes, focus returns): Analysis metric `Select`, Sort `Select` (Index, Score up/down, Latency up/down), Text `SegmentedControl` Raw/Rendered, Columns (item / metric fields, shown only when present); button label "Display . <metric>". |
 | C-items-8 | CSV opens the existing CSV dialog (kept); button 24 high accent. |
@@ -443,7 +443,39 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 | C-kbd-3 | axe: 0 serious or critical violations at 1440 and 390 with 4 runs and one expanded item with its details open. Colour never alone: verdict = outline + glyph, error chip = x + text. |
 
 Criteria written: **page 7, nav 3, title/mode/cohort/notices 4, runs 6, averages 9, overview 6, categories 5, steps/root cause 2,
-errors 3, items 8, rows 7, expanded 8, sweep 8, states 3, keyboard 3 = 82.**
+errors 3, items 8, rows 7, expanded 8, sweep 8, states 3, keyboard 3 = 82**, plus 5 sidebar criteria (C-side-1..5, owner decision H2).
+
+**Quick-filters sidebar (owner decision H2; written at the implementation stage, asserted in `scope-sidebar.spec.ts`)**
+
+| ID | Criterion |
+|---|---|
+| C-side-1 | **owner decision H2.** `[data-part=items-facets-btn]` ("Quick filters", 24 high) sits in the items toolbar after Filters; `aria-expanded=false` by default; a search, a count button, a winner / distribution segment, a category or an error card never opens the sidebar. |
+| C-side-2 | **owner decision H2.** Open at 1440 (viewport >= 1200): `complementary` "Quick filters", 300 wide, beside the item list only (inside the Items section, under the toolbar). `[data-part=run-grid]`, `averages-table`, `stat-grid` and `items-toolbar` keep their exact widths; `[data-part=item-list]` narrows by 300 + 24 gap (+-12). It is sticky inside its own column and animates in (measure after it settles). |
+| C-side-3 | **owner decision H2.** Content: result count, Clear all, View N items, the Active group, text search, Show, Winner, Change vs baseline, one group per metadata key, Errors, Order by; labels use run names ("cand-a-sonnet won"). Clear all clears the filters and leaves the sidebar as the reader had it. |
+| C-side-4 | **owner decision H2.** Below 1200 px it is a drawer opened by the same button (no change to the page widths); Escape closes it and focus returns to the button. At 390 the drawer is the same component. |
+| C-side-5 | **owner decision H2.** Keyboard: the button is a tab stop between Filters and Display (Enter / Space toggle); inside, every facet is a button with `aria-pressed`; the Hide button closes it. |
+
+**Amendments made at the implementation stage (measured; each has an assertion with the same number)**
+
+| Criterion | Was | Now (measured) | Reason |
+|---|---|---|---|
+| C-run-1 card height | 239 +-4 | 242 +-4 (1440); 8 runs: grid 500 +-8 (was 478) | the letter badge (H1) makes the baseline name wrap one more line |
+| C-page-5 / C-page-6 sections | runs 311, 8 runs runs 551 | runs 312 (4 runs), 568 (8 runs); averages 8 runs 385 (was 366); overview 1024: 480 (was 468) | same cause; the winner legend wraps to two lines at 777 px with letter badges |
+| C-avg-3 / C-avg-2 (8 runs) | head <= 54, table <= 296 | head <= 62 (3 lines), table <= 320 (measured 315) | letter badge + name in a 131 px column |
+| C-ov-1 | slider and tabs 24 high | tabs 24, the slider block is 43 high (label over track); the centre lines coincide (+-1) | the Slider primitive is a labelled track |
+| C-cat-2 | card 179 high | 185 +-4 (4 runs), 313 (8 runs) | the name rows use the 1.55 line height of the mock page |
+| C-cat-5 | does not move the page | scrolls to the list head like every number | principle 3 and H2 |
+| C-row-3 chip | 68x22, tint 14 % | 78x22 (swatch 8 + letter 14 + value), tint 12 %; at 390 the swatch steps aside and the chip is 59x22 so four fit one 247 px line | H1: swatch AND letter; 14 % tint fails axe contrast for the red band |
+| C-row-3 / C-page-5 at 390 | row <= 76, items <= 1820 | row 84, items section <= 2200 | the chip line sits under the title |
+| C-exp-4 card height | 268 +-4 | 226 +-6 (4 runs, 2 metrics, one-line outputs) | measured; heights are equal across cards (0 px) |
+| C-sw-2 verdict | <= 70 | <= 80 | the evidence line wraps at 1193 |
+| C-sw-6 outcome cards | 56 | 62 +-8 | labels wrap to two lines in 9.5 rem cells |
+| C-cat-1 URL-backed | (not implemented before) | `catKeys` (`-` for none) | implemented |
+| C-state-1 | placeholders 239 | 242 (1440) / 232 (390): the measured loaded card heights | CLS < 0.05 asserted |
+| C-nav-1 | `--bar-nav-h` family | new token `--bar-link-h` 36 px | `docs/DESIGN_LANGUAGE.md` and `design-language.test.ts` amended |
+| D2 / names | name + start time | name + start time, then ` #n` when two runs also share the start minute | the seed's runs share one start time |
+| Filter labels | names | names in `FieldDef` labels, chips and the sidebar (text cannot hold the swatch); the letter badge is in every visual place | H1 |
+
 
 ### 3.6 Hierarchy and legacy parity per component (what is kept, what is fixed)
 
@@ -503,8 +535,8 @@ tools (`l1`/`r1`/`m2` produce the tables above).
 Decisions (2026-10-26):
 
 - **D1** The metric select, baseline select and pass toggle leave the sticky bar for the heads of their sections (legacy). The sticky element is a links-only 36 px nav.
-- **D2** Run identity is swatch + run name; letters go. Two selected runs with the same run name get `. <started time>` appended in every `RunName` (legacy disambiguated with model + date + #n); filter labels use names ("cand-a-sonnet won").
-- **D3** The Quick-filters sidebar, the Scope bar and the "Changes vs baseline" strip are removed; their jobs are done by the count buttons + banner + the Filters panel (all facets stay as "+ Condition" fields, C-items-6).
+- **D2** Run identity is swatch + letter badge + run name (**owner decision H1**: the letters stay). Two selected runs with the same run name get `. <started time>` appended in every `RunName` (legacy disambiguated with model + date + #n); filter labels use names ("cand-a-sonnet won").
+- **D3** The Scope bar and the "Changes vs baseline" strip are removed (**owner decision H2**: the Quick-filters sidebar stays, opened from the toolbar, beside the list only); their jobs are done by the count buttons + banner + the Filters panel (all facets stay as "+ Condition" fields, C-items-6).
 - **D4** The correct-distribution histogram becomes the legacy single 32 px stacked bar.
 - **D5** Item rows are legacy cards (54 high, pitch 60), not a table; the run key above the list replaces column headers; the left rails and the `Changes` legend go.
 - **D6** "Completed" keeps React's meaning (items that produced an output).
