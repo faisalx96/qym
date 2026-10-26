@@ -1,17 +1,19 @@
 /** Performance by category: one table per metadata key, a row per value, a column per run (brief 05 J4). */
 import { useMemo, useState } from 'react';
 import { formatLatency, formatMetricValue } from '@/lib/metrics';
-import { Chip, SegmentedControl, Text } from '@/ui';
+import { Chip, SegmentedControl, Tag, Text } from '@/ui';
 import { AUTO_CATEGORIES, categoryDelta, categoryGroups, categoryKeys } from '../../lib/breakdown';
 import { useCompare } from '../../CompareContext';
 import { columnName } from '../../lib/columnName';
 import { DeltaTag } from '../common';
+import { CompareSection } from '../CompareSection';
+import { sectionDomId } from '../sectionIds';
 import { RunTag } from '../RunTag';
 import { CategoryCards } from './CategoryCards';
 import { ScrollRegion } from '../ScrollRegion';
 import styles from './Panel.module.css';
 
-export function CategoriesTab() {
+export function CategoriesSection() {
   const { model, columns, baseline, items, ctx, metric, c } = useCompare();
   const ids = useMemo(() => items.map((i) => i.itemId), [items]);
   const idSet = useMemo(() => new Set(ids), [ids]);
@@ -52,15 +54,10 @@ export function CategoriesTab() {
     const cur = key === 'complexity' ? f.complexity : key === 'domain' ? f.domain : f.categories[key];
     return !!cur && cur.includes(value);
   };
-  if (!keys.length)
-    return (
-      <Text variant="sm" tone="muted">
-        No item metadata to break the results down by.
-      </Text>
-    );
-  return (
-    <div className={styles.stack}>
-      <div className={styles.chipRow} role="group" aria-label="Metadata keys">
+  const aside = keys.length ? (
+    <>
+      <div className={styles.chipBar} data-part="category-chip-bar" role="group" aria-label="Metadata keys">
+        <span className={styles.chipBarLabel}>Categories</span>
         {keys.map(({ key, count }) => (
           <Chip
             key={key}
@@ -72,14 +69,31 @@ export function CategoriesTab() {
           </Chip>
         ))}
       </div>
+      <CategoryViewToggle />
+    </>
+  ) : undefined;
+  return (
+    <CompareSection
+      id={sectionDomId('categories')}
+      part="section-categories"
+      title="Performance by category"
+      description="Average per metadata value and run, against the baseline tick. Press a card to filter the items."
+      aside={aside}
+    >
+      {!keys.length ? (
+        <Text variant="sm" tone="muted">
+          No item metadata to break the results down by.
+        </Text>
+      ) : (
+    <div className={styles.stack}>
       {selected.map((key, rank) => {
         const list = groups[key] ?? [];
         if (!list.length) return null;
         return (
           <section key={key} aria-label={`By ${key}`}>
-            <Text variant="md" weight={600}>
-              {key}
-            </Text>
+            <h3 className={styles.catKey}>
+              <span aria-hidden="true">◆</span> {key} <Tag kind="data">{metric}</Tag>
+            </h3>
             {c.view.catView === 'cards' ? (
               <CategoryCards
                 keyName={key}
@@ -145,6 +159,8 @@ export function CategoriesTab() {
         );
       })}
     </div>
+      )}
+    </CompareSection>
   );
 }
 

@@ -1,30 +1,67 @@
-.cell {
-  min-width: 0;
+/* Per-run averages (round 8): rows = metrics, columns = runs; 390 px: a block per metric with a line per run. */
+.scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
 }
 
-.stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-xs);
-  padding: var(--space-xs) 0;
+.table {
+  inline-size: 100%;
+  min-inline-size: calc(9rem + var(--cols) * 7.5rem);
+  border-collapse: collapse;
+  table-layout: fixed;
 }
 
-.deltaRow {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
+.table th,
+.table td {
+  border-block-end: 1px solid var(--border-subtle);
+  text-align: start;
 }
 
-.value {
-  font-family: var(--font-mono);
-  color: var(--text-primary);
+.table tbody tr:last-child > * {
+  border-block-end: 0;
+}
+
+.metricHead,
+.runHead {
+  block-size: var(--table-header-height);
+  padding: var(--space-xs) var(--space-md);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  vertical-align: middle;
+}
+
+.metricHead {
+  inline-size: 9rem;
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.runHead {
+  text-align: center;
+}
+
+.runHead > * {
+  text-align: start;
 }
 
 .metricName {
-  color: var(--text-primary);
-  font-weight: 500;
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  padding-inline: var(--space-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 400;
+  vertical-align: middle;
 }
 
 .metricName[data-active] {
@@ -32,49 +69,143 @@
   font-weight: 650;
 }
 
-.cards {
+.table td.cell {
+  padding: var(--space-sm);
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* value box (20) + change line (15) + counts (20) + 2 x 2 gaps: 76 with the cell padding */
+.cell[data-size='full'] {
+  block-size: 76px;
+}
+
+.cell[data-size='compact'] {
+  block-size: 44px;
+}
+
+.mark {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  align-items: center;
+  gap: 2px;
 }
 
-.cardStack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
+.markBlock {
+  min-inline-size: 0;
 }
 
-.cardRow {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-md);
+.valueBox {
+  display: block;
+  inline-size: fit-content;
+  block-size: 20px;
+  padding-inline: var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--text-primary);
 }
 
-.cardRow .metricName {
-  flex: none;
-  width: 5.5rem;
-  color: var(--text-muted);
+.valueBox[data-band='1'] {
+  color: var(--score-1);
+}
+
+.valueBox[data-band='2'] {
+  color: var(--score-2);
+}
+
+.valueBox[data-band='3'] {
+  color: var(--score-3);
+}
+
+.valueBox[data-band='4'] {
+  color: var(--score-4);
+}
+
+.valueBox[data-band='5'] {
+  color: var(--score-5);
+}
+
+.valueBox[data-verdict='up'] {
+  border-color: var(--success);
+}
+
+.valueBox[data-verdict='down'] {
+  border-color: var(--error);
+}
+
+.plainValue {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.plainValue[data-bad] {
+  color: var(--error-text);
+}
+
+.latDelta {
+  font-family: var(--font-mono);
   font-size: var(--font-sm);
+  color: var(--text-muted);
 }
 
-.cardCell {
+/* ── 390: a block per metric, a line per run (cell >= 44 high, no sideways scroll) ── */
+.blocks {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.block {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: var(--space-xs) var(--space-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+}
+
+.blockHead[data-active] {
+  color: var(--accent-primary);
+}
+
+.blockRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-block-size: 44px;
+  padding: var(--space-xs) var(--space-md);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.blockRow > :first-child {
+  flex: 1 1 0;
+  min-inline-size: 0;
+}
+
+.blockValues {
+  display: flex;
+  flex: none;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-xs) var(--space-sm);
-  min-width: 0;
-}
-
-/* every metric cell reserves the height of a run column so the baseline column aligns with the others */
-.stack[data-kind='metric'] {
-  min-height: 5.25rem;
-  align-self: stretch;
-  justify-content: flex-start;
-}
-
-.stack[data-kind='errors'] .value {
-  white-space: normal;
+  max-inline-size: 60%;
 }

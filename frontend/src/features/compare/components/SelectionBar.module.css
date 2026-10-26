@@ -15,3 +15,12 @@
   align-items: center;
   gap: var(--space-sm);
 }
+
+.inlineLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}

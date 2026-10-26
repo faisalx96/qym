@@ -1,29 +1,45 @@
-.stack {
-  display: flex;
-  flex-direction: column;
+/* One output card (round 8): a 3 px run-colour rail, five rows shared with the other cards of the item (subgrid). */
+.card {
+  display: grid;
+  grid-row: span 5;
+  grid-template-rows: subgrid;
   gap: var(--space-sm);
+  min-inline-size: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-inline-start: 3px solid var(--run);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  scroll-snap-align: start;
 }
 
 .head {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--space-xs);
+  min-inline-size: 0;
 }
 
-.letter {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  color: var(--text-primary);
+.nameRow {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  min-inline-size: 0;
 }
 
 .runLink {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
   color: var(--text-primary);
-  font-weight: 600;
-  max-width: 14rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: var(--font-base);
+  font-weight: 650;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .meta {
@@ -37,6 +53,99 @@
   align-items: center;
   gap: var(--space-xs);
   margin-inline-start: auto;
+}
+
+.text {
+  min-inline-size: 0;
+}
+
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.chip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.chipHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  block-size: 32px;
+  padding-inline: var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+}
+
+.chipHead[data-open] {
+  border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-surface));
+}
+
+.caret {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+  block-size: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  text-align: start;
+  cursor: pointer;
+}
+
+.caret > :last-child {
+  margin-inline-start: auto;
+}
+
+.caret:hover,
+.caret[aria-expanded='true'] {
+  color: var(--text-primary);
+}
+
+.metricName {
+  color: var(--text-primary);
+  font-size: var(--font-base);
+  font-weight: 600;
+}
+
+/* The metric the reader opened: its details under every run, at the same top (row 4 of the subgrid) */
+.details {
+  min-block-size: 0;
+}
+
+.reason {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-block-size: 56px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+}
+
+.issues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+@media (max-width: 640px) {
+  .card {
+    grid-row: auto;
+    grid-template-rows: none;
+  }
 }
 
 .muted {
@@ -73,51 +182,6 @@
   outline-offset: 2px;
 }
 
-.metrics {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.chip {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-}
-
-.chipHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.caret {
-  display: inline-flex;
-  flex: 1;
-  align-items: center;
-  gap: var(--space-xs);
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-muted);
-  text-align: start;
-  cursor: pointer;
-}
-
-.caret:hover,
-.caret[aria-expanded='true'] {
-  color: var(--text-primary);
-}
-
-.metricName {
-  color: inherit;
-  font-size: var(--font-sm);
-}
-
 .metaList {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -138,14 +202,6 @@
 
 .metaRow {
   display: contents;
-}
-
-.issues {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding-top: var(--space-xs);
-  border-top: 1px solid var(--border-subtle);
 }
 
 .issuesHead {

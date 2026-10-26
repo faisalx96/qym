@@ -1,7 +1,7 @@
-/* Run identity: swatch + letter + name. The swatch carries the run colour; text is never run-coloured. */
+/* Run identity (RunName): swatch + letter badge (the run's position, owner decision H1) + name. The name wraps, never cut. */
 .tag {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-xs);
   min-width: 0;
   max-width: 100%;
@@ -16,29 +16,46 @@
 
 .swatch {
   flex: none;
-  inline-size: 0.625rem;
-  block-size: 0.625rem;
-  border-radius: var(--radius-sm);
+  align-self: flex-start;
+  margin-block-start: 0.4em;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 2px;
 }
 
+/* 16x16 badge, mono --font-xs, text in the run colour on a faint tint of it */
 .letter {
+  display: inline-flex;
   flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 16px;
+  block-size: 16px;
+  margin-block-start: 0.1em;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--run) 16%, transparent);
+  color: var(--run);
   font-family: var(--font-mono);
+  font-size: var(--font-xs);
   font-weight: 700;
+  line-height: 1;
 }
 
 .name {
   min-width: 0;
-  max-width: 14rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   font-weight: 600;
 }
 
-.star {
-  flex: none;
+.baselineTag {
+  margin-inline-start: var(--space-xs);
+  padding: 0 var(--space-xs);
+  border-radius: var(--control-radius);
+  background: var(--bg-active);
   color: var(--text-muted);
+  font-size: var(--font-xs);
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 .name[data-id] {

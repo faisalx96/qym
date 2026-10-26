@@ -1,14 +1,14 @@
 /** Error distribution per kind and run, with change against the baseline; a card filters the items (brief 05 J5). */
 import { useMemo } from 'react';
 import { splitErrorLabel, errorBucketKey, type ErrorSlot } from '@/features/run-detail/lib/rowErrors';
-import { Card, Tag, Text } from '@/ui';
+import { Icon, Tag, Text } from '@/ui';
 import { errorDistribution } from '../../lib/breakdown';
 import { useCompare } from '../../CompareContext';
 import type { ErrorEntry } from '../../lib/breakdown';
 import type { MetricColumn } from '../../lib/baseline';
 import { columnName } from '../../lib/columnName';
 import { ErrorCardRow } from './ErrorCardRow';
-import styles from './Panel.module.css';
+import styles from './Errors.module.css';
 
 const SLOT: Record<string, ErrorSlot> = {
   'Task error': 'task',
@@ -44,22 +44,22 @@ export function ErrorsTab() {
   };
   const kinds = ['Task error', 'Metric error', 'Trace error', 'Analysis error'];
   return (
-    <div className={styles.stack}>
+    <div className={styles.groups}>
       {kinds.map((kind) => {
         const list = entries.filter((e) => e.kind === kind);
         if (!list.length) return null;
         return (
-          <section key={kind} aria-label={`${kind}s`}>
-            <Text variant="md" weight={600}>
-              {kind}s <Tag kind="count">{list.reduce((s, e) => s + e.count, 0)}</Tag>
-            </Text>
-            <ul className={styles.errorCards}>
+          <section key={kind} aria-label={`${kind}s`} data-part="error-group">
+            <h3 className={styles.h3}>
+              <Icon name="warning" size={12} /> {kind}s <Tag kind="count">{list.reduce((s, e) => s + e.count, 0)}</Tag>
+            </h3>
+            <ul className={styles.grid}>
               {list.map((e) => {
                 const slot = SLOT[kind] ?? 'trace';
                 const cur = f.errors[slot];
                 const on = !!cur && errorBucketKey(cur.kind, cur.label) === errorBucketKey(e.kind, e.label);
                 return (
-                  <li key={`${kind}|${e.label}`} className={styles.errorItem}>
+                  <li key={`${kind}|${e.label}`} className={styles.item}>
                     <ErrorCard
                       entry={e}
                       active={on}
@@ -78,9 +78,6 @@ export function ErrorsTab() {
   );
 }
 
-/** Above this many runs, runs with no error of this kind fold into one line. */
-const FOLD_FROM = 6;
-
 function ErrorCard({
   entry,
   active,
@@ -96,42 +93,44 @@ function ErrorCard({
 }) {
   const { model } = useCompare();
   const parts = splitErrorLabel(entry.label);
-  const fold = columns.length > FOLD_FROM;
-  const shown = columns
-    .map((col, i) => ({ col, i, count: entry.counts[i] ?? 0 }))
-    .filter((x) => !fold || x.i === baseIdx || x.count > 0);
-  const hidden = columns.length - shown.length;
   return (
-    <Card
-      tone={entry.kind === 'Task error' ? 'danger' : 'warning'}
-      compact
-      onPress={onPress}
-      isSelected={active}
+    <div
+      className={styles.card}
+      role="button"
+      tabIndex={0}
+      aria-pressed={active}
+      data-kind={entry.kind === 'Task error' ? 'task' : 'metric'}
+      data-part="error-card"
       data-testid="error-card"
+      onClick={onPress}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onPress();
+        }
+      }}
     >
-      <div className={styles.errorHead}>
-        <span className={styles.errorTitle}>{parts.title}</span>
-        <Tag kind="count">{entry.count}</Tag>
-      </div>
-      {parts.detail ? <span className={styles.errorDetail}>{parts.detail}</span> : null}
-      <ul className={styles.errorRuns}>
-        {shown.map(({ col, i, count }) => (
-          <ErrorCardRow
-            key={col.key}
-            index={col.runIdxs[0] ?? 0}
-            name={columnName(model, col)}
-            title={col.title}
-            count={count}
-            max={Math.max(...entry.counts, 0)}
-            delta={i === baseIdx ? null : count - (entry.counts[baseIdx] ?? 0)}
-          />
-        ))}
-      </ul>
-      {hidden > 0 ? (
-        <span className={styles.errorDetail}>
-          {hidden} run{hidden === 1 ? '' : 's'} with none
+      <div className={styles.top}>
+        <b>{parts.title}</b>
+        <span className={styles.count}>
+          {entry.count} <i>{entry.count === 1 ? 'error' : 'errors'}</i>
         </span>
-      ) : null}
-    </Card>
+      </div>
+      {parts.detail ? <p className={styles.detail}>{parts.detail}</p> : null}
+      <table className={styles.table} aria-label="Errors per run">
+        <tbody>
+          {columns.map((col, i) => (
+            <ErrorCardRow
+              key={col.key}
+              index={col.runIdxs[0] ?? 0}
+              name={columnName(model, col)}
+              title={col.title}
+              count={entry.counts[i] ?? 0}
+              delta={i === baseIdx ? null : (entry.counts[i] ?? 0) - (entry.counts[baseIdx] ?? 0)}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

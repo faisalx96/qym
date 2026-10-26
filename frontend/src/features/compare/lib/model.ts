@@ -16,7 +16,7 @@ import {
 } from '@/lib/metrics';
 import type { Row, Run, RunPayload } from '@/features/run-detail/types';
 import { scopeRowToPass } from '@/features/run-detail/lib/passScope';
-import { computeRunLabels, modelShortName, type RunLabel } from './labels';
+import { computeRunLabels, disambiguateRunNames, modelShortName, runShortName, type RunLabel } from './labels';
 import { SKIPPED_METADATA } from './skipMetadata';
 import { expandRefs, makePassRef, passRefBase, passRefNumber } from './refs';
 
@@ -170,6 +170,19 @@ export function buildCompareModel(payload: ComparePayload, requested: string[]):
       position,
       snapshot,
     };
+  });
+
+  // D2: two runs that share a name show their start time as well, everywhere the name is shown.
+  const shown = disambiguateRunNames(
+    runs.map((r) => ({
+      base: r.base,
+      name: runShortName({ label: r.label, run: r.run }).replace(/ · pass \d+$/, ''),
+      started: String(r.run.started_at || r.run.created_at || ''),
+    })),
+  );
+  runs.forEach((r, i) => {
+    const base = runShortName({ label: r.label, run: r.run }).replace(/ · pass \d+$/, '');
+    if (shown[i] !== base) r.run = { ...r.run, run_name: shown[i] } as PassRun;
   });
 
   const metrics = mergeMetricNames(metricLists);

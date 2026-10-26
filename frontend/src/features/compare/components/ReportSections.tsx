@@ -4,25 +4,24 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import { metricDirectionLabel, passThresholdLabel } from '@/lib/metrics';
 import { alignToElement } from '@/lib/scrollToElement';
 import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
-import { ReportSection, scrollCue, useScrollCue } from '@/ui';
+import { scrollCue, useScrollCue } from '@/ui';
 import { useCompare } from '../CompareContext';
-import { useScope } from '../hooks/useScope';
 import { hasAnyRootCause } from '../lib/breakdown';
-import { CategoriesTab, CategoryViewToggle } from './panel/CategoriesTab';
+import { CategoriesSection } from './panel/CategoriesTab';
 import { ErrorsTab } from './panel/ErrorsTab';
 import { MetricsTab } from './panel/MetricsTab';
 import { OverviewControls, OverviewTab } from './panel/OverviewTab';
 import { RootCauseTab } from './panel/RootCauseTab';
 import { StepsTab } from './panel/StepsTab';
-import { ItemsSection } from './items/ItemsSection';
+import { ItemsHeadAside, ItemsSection } from './items/ItemsSection';
+import { CompareSection } from './CompareSection';
 import { RunCards } from './RunCards';
-import { PassToggle } from './SelectionBar';
+import { BaselineSelect, PassToggle } from './SelectionBar';
 import styles from './ReportSections.module.css';
 
-export type SectionKey =
-  'runs' | 'averages' | 'overview' | 'categories' | 'steps' | 'errors' | 'root-cause' | 'items';
+import { sectionDomId, type SectionKey } from './sectionIds';
 
-export const sectionDomId = (key: SectionKey) => `compare-${key}`;
+export { sectionDomId, type SectionKey };
 
 /** Old `?panel=` values and `#hash` anchors → the section they now open. */
 const ALIASES: Record<string, SectionKey> = {
@@ -141,91 +140,80 @@ export function useSectionAnchor(): void {
 
 export function CompareReport() {
   const { metric, ctx, model } = useCompare();
-  const scope = useScope();
   const sections = useSectionList();
   const has = (k: SectionKey) => sections.some((s) => s.key === k);
-  const note = scope.active
-    ? `over ${scope.shown.toLocaleString('en-US')} of ${scope.total.toLocaleString('en-US')} items`
-    : undefined;
   useSectionAnchor();
   const passes = ctx.direction && !ctx.isBoolean && model.types[metric] !== 'numeric';
   const overviewDescription = `Pass rates, winners and how many runs got each item right for ${metric}. ${metricDirectionLabel(ctx.direction)}${passes ? `; a run passes when its score is ${passThresholdLabel(ctx.threshold, ctx.direction)}` : ''}.`;
   return (
     <>
-      <ReportSection
+      <CompareSection
         id={sectionDomId('runs')}
+        part="section-runs"
         title="Runs"
-        description="Configuration, status and what differs between the compared runs."
+        description="Configuration and status of the compared runs. Remove a run with the cross; at least two stay."
       >
         <RunCards />
-      </ReportSection>
-      <ReportSection
+      </CompareSection>
+      <CompareSection
         id={sectionDomId('averages')}
+        part="section-averages"
         title="Per-run averages"
-        description="Average per run with the paired change from the baseline and its 95% noise band; press a count to filter the items."
-        scopeNote={note}
-        aside={<PassToggle />}
+        description="Each run against the baseline: the change, its 95% noise band, and how many items improved or regressed. Press a count to filter the items."
+        aside={
+          <>
+            <BaselineSelect />
+            <PassToggle />
+          </>
+        }
       >
         <MetricsTab />
-      </ReportSection>
-      <ReportSection
+      </CompareSection>
+      <CompareSection
         id={sectionDomId('overview')}
+        part="section-overview"
         title="Comparison overview"
         description={overviewDescription}
-        scopeNote={note}
         aside={<OverviewControls />}
       >
         <OverviewTab />
-      </ReportSection>
-      <ReportSection
-        id={sectionDomId('categories')}
-        title="Performance by category"
-        description="Average per metadata value and run, against the baseline tick; press a card to filter the items."
-        scopeNote={note}
-        aside={<CategoryViewToggle />}
-        lazy
-        minHeight={200}
-      >
-        <CategoriesTab />
-      </ReportSection>
-      <ReportSection
+      </CompareSection>
+      <CategoriesSection />
+      <CompareSection
         id={sectionDomId('steps')}
+        part="section-steps"
         title="Step latency"
         description="Mean latency per traced step and run."
         hidden={!has('steps')}
-        lazy
-        minHeight={200}
       >
         <StepsTab />
-      </ReportSection>
-      <ReportSection
+      </CompareSection>
+      <CompareSection
         id={sectionDomId('errors')}
+        part="section-errors"
         title="Error distribution"
-        description="Errors by kind and message for each run; press a card to filter the items."
-        scopeNote={note}
-        lazy
-        minHeight={120}
+        description="Errors by kind and message for each run. Press a card to filter the items."
       >
         <ErrorsTab />
-      </ReportSection>
-      <ReportSection
+      </CompareSection>
+      <CompareSection
         id={sectionDomId('root-cause')}
+        part="section-root-cause"
         title="Root cause analysis"
         description="Why items failed, from the analyzer, per run."
-        scopeNote={note}
         hidden={!has('root-cause')}
-        lazy
-        minHeight={160}
       >
         <RootCauseTab />
-      </ReportSection>
-      <ReportSection
+      </CompareSection>
+      <CompareSection
         id={sectionDomId('items')}
+        part="section-items"
         title="Item-by-item comparison"
-        description="One score per run for each aligned item. Filters apply to every section above."
+        description="Filter and inspect aligned inputs, outputs, scores and review metadata."
+        aside={<ItemsHeadAside />}
       >
         <ItemsSection />
-      </ReportSection>
+      </CompareSection>
     </>
   );
 }

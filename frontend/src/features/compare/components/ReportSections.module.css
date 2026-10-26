@@ -4,6 +4,8 @@
   align-items: center;
   gap: var(--space-xs);
   min-width: 0;
+  block-size: calc(var(--bar-link-h) - 1px);
+  flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -13,8 +15,10 @@
   align-items: center;
   gap: var(--space-xs);
   flex: none;
-  padding: var(--space-xs) var(--space-sm);
+  block-size: 28px;
+  padding: 0 var(--space-sm);
   border-radius: var(--control-radius);
+  white-space: nowrap;
   font-size: var(--font-base);
   color: var(--text-secondary);
   text-decoration: none;

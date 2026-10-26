@@ -1,0 +1,126 @@
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(17.5rem, 100%), 1fr));
+  gap: var(--space-md);
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  min-width: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  block-size: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-inline-start: 3px solid var(--error);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  cursor: pointer;
+}
+
+.card[data-kind='metric'] {
+  border-inline-start-color: var(--metric-error);
+}
+
+.card:hover {
+  background: var(--bg-hover);
+}
+
+.card[aria-pressed='true'] {
+  background: var(--bg-active);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  color: var(--text-primary);
+}
+
+.count {
+  color: var(--error-text);
+  font-family: var(--font-mono);
+  font-weight: 650;
+}
+
+.count i {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-style: normal;
+  font-weight: 400;
+}
+
+.detail {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.table td {
+  padding-block: 2px;
+  vertical-align: baseline;
+}
+
+.num,
+.change {
+  font-family: var(--font-mono);
+  text-align: end;
+  white-space: nowrap;
+}
+
+.num {
+  inline-size: 2.5rem;
+  color: var(--text-primary);
+}
+
+.change {
+  inline-size: 5rem;
+  padding-inline-start: var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.change[data-tone='up'] {
+  color: var(--error-text);
+}
+
+.change[data-tone='down'] {
+  color: var(--success);
+}

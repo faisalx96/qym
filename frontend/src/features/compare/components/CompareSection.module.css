@@ -1,0 +1,46 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-inline-size: 0;
+  padding-block-start: var(--space-md);
+  /* a jump lands with the section top 12 px under the 36 px sticky nav */
+  scroll-margin-block-start: calc(var(--bar-link-h) + var(--space-md) - var(--space-xs));
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.headText {
+  flex: 1 1 24rem;
+  min-inline-size: 0;
+}
+
+.title,
+.desc {
+  margin: 0;
+}
+
+.desc {
+  margin-block-start: var(--space-xs);
+}
+
+.aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  min-inline-size: 0;
+}
+
+.body {
+  /* containing block for visually hidden text; container-query host for the cards inside */
+  position: relative;
+  container-type: inline-size;
+  min-inline-size: 0;
+}

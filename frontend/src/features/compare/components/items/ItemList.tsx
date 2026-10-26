@@ -1,30 +1,24 @@
-/** The aligned item matrix (DataTable): `#`, input, one score column per run, expansion, pager and the ?item= deep link. */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Badge, DataTable, ScoreBar, type Column, type Key } from '@/ui';
+/** The aligned item list (round 8): a card per item with one score chip per run; a row opens into the side-by-side detail. */
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { Icon, Pagination } from '@/ui';
+import { metricBand } from '@/lib/metrics';
 import type { Row } from '@/features/run-detail/types';
 import { letterOf, runColor, useCompare } from '../../CompareContext';
-import { metricCellFor, pillState, uniqueBestRun } from '../../lib/rowCells';
-import { columnName } from '../../lib/columnName';
-import { deltaKind, type MetricColumn } from '../../lib/baseline';
+import { metricCellFor, pillState } from '../../lib/rowCells';
+import { deltaKind } from '../../lib/baseline';
 import type { FilteredItem } from '../../lib/filters';
-import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
-import { RunTag, useRunMark } from '../RunTag';
+import { useRunMark } from '../RunTag';
 import { ItemDetail } from './ItemDetail';
 import { useItemsUi } from './ItemsUi';
 import styles from './ItemList.module.css';
 
 export const PAGE_SIZE = 20;
-const HEAT_FROM = 5;
-/** Beyond this many runs the header shows swatch and letter only. */
-const NAMES_UNTIL = 6;
 
-const WORD = { pass: 'Pass', fail: 'Fail', error: 'Error', none: 'No score' } as const;
-const GLYPH = { pass: '✓', fail: '✗', error: '⚠', none: '—' } as const;
+const WORD = { pass: 'Pass', fail: 'Fail', error: 'Task error', none: 'No score' } as const;
 
-/** One run's score for one item: bar (percentage/numeric), Pass/Fail/Error chip (boolean), a compact pill when dense. */
-function RunCell({ item, runIdx, numericMax }: { item: FilteredItem; runIdx: number; numericMax: number }) {
+/** One run's score for one item: swatch, letter and the value in the score band (a task error is its own red shape). */
+function ScoreChip({ item, runIdx }: { item: FilteredItem; runIdx: number }) {
   const { model, ctx, baseline } = useCompare();
-  const dense = model.runs.length > HEAT_FROM;
   const run = model.runs[runIdx]!;
   const row: Row | null = item.rows[runIdx] ?? null;
   const p = pillState(run, row, ctx);
@@ -32,72 +26,37 @@ function RunCell({ item, runIdx, numericMax }: { item: FilteredItem; runIdx: num
   const s = item.scores[runIdx] ?? null;
   const isBase = baseline.runIdxs.includes(runIdx);
   const move = !isBase && s !== null && baseScore !== null ? deltaKind(s - baseScore, ctx.direction) : 'same';
-  const view =
-    !ctx.isBoolean && row && p.score !== null && p.state !== 'error'
-      ? metricCellFor(model, run, row, ctx.metric)
-      : null;
-  const states = model.runs.map((r, i) => pillState(r, item.rows[i] ?? null, ctx).state);
-  const best = uniqueBestRun(item.scores, states, ctx.direction) === runIdx;
+  const view = row && p.score !== null && p.state !== 'error' ? metricCellFor(model, run, row, ctx.metric) : null;
   const mark = useRunMark(runIdx);
-  const word = WORD[p.state];
+  const band = view ? metricBand(view.value, view.type, view.direction) : null;
   const moveWord =
     move === 'improved' ? ', better than baseline' : move === 'regressed' ? ', worse than baseline' : '';
-  const spoken = `${letterOf(runIdx)} ${view ? `${view.text} ` : ''}${word}${moveWord}`;
-  const cue =
-    move === 'improved' ? (
-      <span aria-hidden className={styles.up}>
-        {'▲'}
-      </span>
-    ) : move === 'regressed' ? (
-      <span aria-hidden className={styles.down}>
-        {'▼'}
-      </span>
-    ) : null;
-  let body;
-  if (dense || p.state === 'none') {
-    body = (
-      <span className={styles.pill} data-state={p.state} aria-hidden>
-        {GLYPH[p.state]}
-        {dense && view ? ` ${view.text}` : null}
-      </span>
-    );
-  } else if (ctx.isBoolean || p.state === 'error') {
-    body = (
-      <Badge tone={p.state === 'pass' ? 'success' : p.state === 'fail' ? 'danger' : 'warning'} aria-hidden>
-        {GLYPH[p.state]} {word}
-      </Badge>
-    );
-  } else {
-    const numeric = model.types[ctx.metric] === 'numeric';
-    body = (
-      <ScoreBar
-        value={view?.value ?? null}
-        type={view?.type}
-        direction={view?.direction}
-        max={numeric ? numericMax : undefined}
-        text={view?.text}
-      />
-    );
-  }
+  const spoken = `${letterOf(runIdx)} ${view ? `${view.text} ` : ''}${WORD[p.state]}${moveWord}`;
   return (
     <span
-      className={styles.cell}
+      className={styles.chip}
+      style={{ '--run': runColor(runIdx) } as CSSProperties}
+      data-part="item-score-chip"
       data-state={p.state}
-      data-best={best || undefined}
+      data-band={band ?? undefined}
       title={`${run.label}: ${spoken.slice(2)}`}
       {...mark}
     >
-      {model.runs.length >= HEAT_FROM ? (
-        <span className={styles.swatch} style={{ background: runColor(runIdx) }} aria-hidden />
-      ) : null}
-      <span aria-hidden={dense ? undefined : true}>{body}</span>
-      {cue}
-      {best ? (
-        <span className={styles.best} role="img" aria-label="best">
-          {'★'}
-        </span>
-      ) : null}
-      <span className={styles.srOnly}>{spoken}</span>
+      <span className={styles.swatch} aria-hidden />
+      <span className={styles.letter} aria-hidden>
+        {letterOf(runIdx)}
+      </span>
+      {p.state === 'error' ? (
+        <>
+          <Icon name="close" size={12} />
+          <span className={styles.srOnly}>task error</span>
+        </>
+      ) : (
+        <>
+          <span aria-hidden>{view ? view.text : '—'}</span>
+          <span className={styles.srOnly}>{spoken}</span>
+        </>
+      )}
     </span>
   );
 }
@@ -105,18 +64,6 @@ function RunCell({ item, runIdx, numericMax }: { item: FilteredItem; runIdx: num
 export function ItemList() {
   const { model, items, c, baseline, ctx } = useCompare();
   const ui = useItemsUi();
-  const shell = useShellScroller();
-  // The header sticks under whatever compare chrome is currently stuck above the list.
-  const measureStickyTop = useCallback(() => {
-    if (!shell) return 0;
-    const top = shell.getBoundingClientRect().top;
-    let max = 0;
-    document.querySelectorAll<HTMLElement>('[data-compare-sticky], [data-compare-toolbar]').forEach((el) => {
-      if (getComputedStyle(el).position === 'sticky')
-        max = Math.max(max, el.getBoundingClientRect().bottom - top);
-    });
-    return max;
-  }, [shell]);
   const page = c.view.page;
   const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const clamped = Math.min(page, pageCount);
@@ -126,34 +73,6 @@ export function ItemList() {
     () => new Map(slice.map((it, n) => [it.itemId, (clamped - 1) * PAGE_SIZE + n + 1])),
     [slice, clamped],
   );
-  const dense = model.runs.length > HEAT_FROM;
-  const columnOf = (i: number): MetricColumn => ({
-    key: model.runs[i]!.ref,
-    base: model.runs[i]!.base,
-    runIdxs: [i],
-    pass: model.runs[i]!.pass,
-    label: model.runs[i]!.label,
-    title: model.runs[i]!.title,
-  });
-  // The detail row spans the whole (scrollable) table; its content stays as wide as the visible list.
-  const hasItems = items.length > 0;
-  const listRef = useRef<HTMLDivElement>(null);
-  const [listWidth, setListWidth] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    const el = listRef.current;
-    if (!el) return undefined;
-    const measure = () => setListWidth(el.clientWidth);
-    measure();
-    if (typeof ResizeObserver === 'undefined') return undefined;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [hasItems]);
-  const numericMax = useMemo(() => {
-    let m = 0;
-    for (const it of items) for (const s of it.scores) if (s !== null && s > m) m = s;
-    return m || 1;
-  }, [items]);
   // A shared ?item= link lands on its page, then scrolls to the row once.
   const target = c.view.item;
   const scrolled = useRef<string | null>(null);
@@ -171,14 +90,15 @@ export function ItemList() {
     ui.toggleExpanded(target, true);
     // Land once; the second pass only corrects a layout shift (details loading) and
     // never fights a reader who has scrolled since.
+    const scroller = document.getElementById('shell-content');
     let landedAt: number | null = null;
     const land = () => {
       document.getElementById(`item-${target}`)?.scrollIntoView({ block: 'start' });
-      landedAt = window.scrollY;
+      landedAt = scroller?.scrollTop ?? window.scrollY;
     };
     requestAnimationFrame(land);
     window.setTimeout(() => {
-      if (landedAt === null || Math.abs(window.scrollY - landedAt) < 2) land();
+      if (landedAt === null || Math.abs((scroller?.scrollTop ?? window.scrollY) - landedAt) < 2) land();
     }, 400);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, items, clamped]);
@@ -191,125 +111,76 @@ export function ItemList() {
 
   if (!items.length) return null;
 
-  const columns: Column<FilteredItem>[] = [
-    {
-      id: 'index',
-      header: '#',
-      priority: 2,
-      type: 'number',
-      align: 'start',
-      mono: true,
-      width: 56,
-      resizable: false,
-      cell: (it) => {
-        const index = numberOf.get(it.itemId) ?? positionOf.get(it.itemId) ?? 0;
-        const position = positionOf.get(it.itemId) ?? index;
-        return (
-          <>
-            <span className={styles.srOnly}>
-              Item {index}
-              {position !== index ? ` (row ${position})` : ''}:{' '}
-            </span>
-            <span aria-hidden>{index}</span>
-          </>
-        );
-      },
-    },
-    {
-      id: 'input',
-      header: 'Input',
-      cardTitle: true,
-      priority: 1,
-      flex: true,
-      minWidth: 220,
-      maxWidth: 576,
-      wrap: 2,
-      resizable: false,
-      cell: (it) => it.rows.find((r) => r)?.input_preview || it.itemId,
-    },
-    ...model.runs.map((run, i): Column<FilteredItem> => ({
-      id: letterOf(i),
-      header: (
-        <RunTag
-          index={i}
-          compact
-          name={columnName(model, columnOf(i))}
-          showName={model.runs.length <= NAMES_UNTIL}
-          baseline={baseline.runIdxs.includes(i)}
-          title={`${run.label}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}`}
-        />
-      ),
-      label: `${letterOf(i)}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}`,
-      priority: 2,
-      hint: dense ? `${run.label}${baseline.runIdxs.includes(i) ? ' (baseline)' : ''}` : undefined,
-      ...(dense ? { width: 96 } : { minWidth: 148, maxWidth: 220, flex: true }),
-      resizable: false,
-      cell: (it) => <RunCell item={it} runIdx={i} numericMax={numericMax} />,
-    })),
-  ];
-
-  const stateOf = (it: FilteredItem) => {
-    let warn = false;
-    const baseScore = it.scores[baseline.runIdxs[0] ?? 0] ?? null;
-    for (let i = 0; i < model.runs.length; i++) {
-      const p = pillState(model.runs[i]!, it.rows[i] ?? null, ctx);
-      if (p.state === 'error') return 'error' as const;
-      const s = it.scores[i] ?? null;
-      if (
-        !baseline.runIdxs.includes(i) &&
-        s !== null &&
-        baseScore !== null &&
-        deltaKind(s - baseScore, ctx.direction) === 'regressed'
-      )
-        warn = true;
-    }
-    return warn ? ('warn' as const) : undefined;
-  };
+  const hasError = (it: FilteredItem) =>
+    model.runs.some((run, i) => pillState(run, it.rows[i] ?? null, ctx).state === 'error');
+  void baseline;
 
   return (
-    <div
-      ref={listRef}
-      className={styles.list}
-      style={listWidth ? ({ '--list-w': `${listWidth}px` } as React.CSSProperties) : undefined}
-      data-testid="item-list"
-      data-dense={dense || undefined}
-    >
-      <DataTable<FilteredItem>
-        aria-label="Items across the compared runs"
-        columns={columns}
-        rows={slice}
-        rowKey={(it) => it.itemId}
-        density="regular"
-        densityLocked
-        columnMenu={false}
-        stickyParent={shell}
-        stickyTop={measureStickyTop}
-        zebra={false}
-        rowState={stateOf}
-        rowProps={(it) => ({ id: `item-${it.itemId}`, 'data-testid': 'item-row', 'data-item-id': it.itemId })}
-        renderExpanded={(it) => (
-          <div className={styles.detailHold}>
-            <ItemDetail itemId={it.itemId} />
-          </div>
-        )}
-        expandOnRowClick
-        expandLabel={(it, open) => `${open ? 'Collapse' : 'Expand'} item ${numberOf.get(it.itemId) ?? ''}`}
-        expanded={ui.expanded as Set<Key>}
-        onExpandedChange={(next) => {
-          for (const id of next) if (!ui.expanded.has(String(id))) onToggle(String(id));
-          for (const id of ui.expanded) if (!next.has(id)) onToggle(id);
-        }}
-      >
-        <DataTable.Footer
-          pagination={{
-            total: items.length,
-            page: clamped,
-            pageSize: PAGE_SIZE,
-            noun: 'items',
-            onPageChange: (p) => c.setView({ page: p }, { keepPage: true }),
-          }}
+    <div className={styles.list} data-testid="item-list" data-part="item-list">
+      <ul className={styles.rows} aria-label="Items across the compared runs">
+        {slice.map((it) => {
+          const index = numberOf.get(it.itemId) ?? positionOf.get(it.itemId) ?? 0;
+          const open = ui.expanded.has(it.itemId);
+          return (
+            <li
+              key={it.itemId}
+              id={`item-${it.itemId}`}
+              className={styles.item}
+              data-testid="item-row"
+              data-part="item-row"
+              data-item-id={it.itemId}
+              data-open={open ? '' : undefined}
+              data-error={hasError(it) ? '' : undefined}
+            >
+              <div
+                className={styles.head}
+                role="button"
+                tabIndex={0}
+                aria-expanded={open}
+                aria-label={`${open ? 'Collapse' : 'Expand'} item ${index}`}
+                data-part="item-head"
+                onClick={() => onToggle(it.itemId)}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onToggle(it.itemId);
+                  }
+                }}
+              >
+                <span className={styles.chev} data-part="item-chevron" aria-hidden>
+                  <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
+                </span>
+                <span className={styles.no} data-part="item-index" aria-hidden>
+                  #{index}
+                </span>
+                <span className={styles.title} data-part="item-title" aria-hidden>
+                  {it.rows.find((r) => r)?.input_preview || it.itemId}
+                </span>
+                <span className={styles.chips} data-part="item-score-chips">
+                  {model.runs.map((run, i) => (
+                    <ScoreChip key={run.ref} item={it} runIdx={i} />
+                  ))}
+                </span>
+              </div>
+              {open ? (
+                <div className={styles.detailHold}>
+                  <ItemDetail itemId={it.itemId} />
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      <div className={styles.pager} data-part="pagination">
+        <Pagination
+          total={items.length}
+          page={clamped}
+          pageSize={PAGE_SIZE}
+          noun="items"
+          onPageChange={(p) => c.setView({ page: p }, { keepPage: true })}
         />
-      </DataTable>
+      </div>
     </div>
   );
 }

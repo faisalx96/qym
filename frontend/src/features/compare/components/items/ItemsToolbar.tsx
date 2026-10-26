@@ -1,13 +1,11 @@
 /** Search, Filters (badge), Display, CSV and the active-filter chips (with Clear). */
 import { useEffect, useState } from 'react';
-import { Button, Chip, Icon, Popover, SearchField, SegmentedControl, Select, Switch, Tag, Text } from '@/ui';
+import { Button, Icon, Popover, SearchField, SegmentedControl, Select, Switch, Tag, Text } from '@/ui';
 import { setTextMode, type TextMode } from '@/lib/text';
 import { useCompare } from '../../CompareContext';
-import { activeChips, clearedView } from '../../lib/activeChips';
+import { clearedView } from '../../lib/activeChips';
 import { activeFilterCount, SORT_VALUES, type SortBy } from '../../lib/filters';
 import { useItemsUi } from './ItemsUi';
-import { AnalyzeLinks } from '../panel/RootCauseTab';
-import { FilterBuilder } from './FilterBuilder';
 import { CsvDialog } from './CsvDialog';
 import styles from './ItemsToolbar.module.css';
 
@@ -20,11 +18,22 @@ const SORT_LABEL: Record<SortBy, string> = {
   change_desc: 'Biggest change vs baseline',
 };
 
-export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
+export function ItemsToolbar({
+  metaKeys,
+  panelOpen,
+  onPanelOpen,
+  facetsOpen,
+  onFacetsOpen,
+}: {
+  metaKeys: string[];
+  panelOpen: boolean;
+  onPanelOpen: (open: boolean) => void;
+  facetsOpen: boolean;
+  onFacetsOpen: (open: boolean) => void;
+}) {
   const { textMode, setTextMode: onTextMode, hiddenFields: hidden, setFieldHidden: onHidden } = useItemsUi();
-  const { model, items, defs, c, columns, searchPending } = useCompare();
+  const { model, items, defs, c, metric, searchPending } = useCompare();
   const [q, setQ] = useState(c.view.q);
-  const [panel, setPanel] = useState(() => c.view.filters.rules.children.length > 0);
   const [csv, setCsv] = useState(false);
   // The URL changed from outside (Clear, back/forward): follow it.
   const [seen, setSeen] = useState(c.view.q);
@@ -39,38 +48,82 @@ export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
   const count = activeFilterCount(c.view, defs);
-  const label = (key: string) => columns.find((col) => col.key === key)?.label ?? key;
-  const chips = activeChips(c.view, model, label);
+  const clearCount = count + (c.view.q ? 1 : 0);
   return (
-    <div className={styles.toolbar}>
-      <div className={styles.row}>
+    <div className={styles.toolbar} data-part="items-toolbar" data-testid="items-toolbar">
+      <div className={styles.query}>
         <SearchField
           label="Search items"
           hideLabel
-          placeholder="Search id, input, outputs…"
+          placeholder="Search inputs / outputs / expected…"
           value={q}
           onChange={setQ}
           onClear={() => setQ('')}
-          width="min(22rem, 100%)"
+          width="100%"
+          className={styles.search}
         />
         <Button
           size="sm"
           variant="neutral"
           icon={<Icon name="list" size={14} />}
-          aria-expanded={panel}
-          onPress={() => setPanel((p) => !p)}
+          iconEnd={<Icon name="chevron-down" size={14} />}
+          aria-expanded={panelOpen}
+          data-part="items-filters-btn"
+          onPress={() => onPanelOpen(!panelOpen)}
         >
-          Filters {count ? <Tag kind="count">{count}</Tag> : null}
+          Filters <Tag kind="count">{count}</Tag>
         </Button>
+        <Button
+          size="sm"
+          variant="neutral"
+          icon={<Icon name="sidebar" size={14} />}
+          aria-expanded={facetsOpen}
+          data-part="items-facets-btn"
+          onPress={() => onFacetsOpen(!facetsOpen)}
+        >
+          Quick filters
+        </Button>
+        {clearCount ? (
+          <Button
+            size="sm"
+            variant="danger"
+            icon={<Icon name="close" size={12} />}
+            data-part="items-clear-btn"
+            onPress={() => c.setView(clearedView())}
+          >
+            Clear <Tag kind="count">{clearCount}</Tag>
+          </Button>
+        ) : null}
+      </div>
+      <div className={styles.actions}>
+        <Text variant="sm" tone="muted" className={styles.count} role="status" data-part="items-count">
+          {items.length} of {model.itemIds.length} items{searchPending ? ' · searching…' : ''}
+        </Text>
         <Popover
           label="Display options"
           trigger={
-            <Button size="sm" variant="neutral" icon={<Icon name="settings" size={14} />}>
-              Display
+            <Button
+              size="sm"
+              variant="neutral"
+              icon={<Icon name="menu" size={14} />}
+              iconEnd={<Icon name="chevron-down" size={14} />}
+              data-part="items-display-btn"
+            >
+              Display · {metric}
             </Button>
           }
         >
-          <div className={styles.display}>
+          <div className={styles.display} data-part="display-popover">
+            {model.metrics.length > 1 ? (
+              <Select
+                label="Analysis metric"
+                value={metric}
+                onChange={(k) =>
+                  k && c.setView({ metric: String(k), filters: { ...c.view.filters, baseline: null } })
+                }
+                items={model.metrics.map((m) => ({ key: m, label: m }))}
+              />
+            ) : null}
             <Select
               label="Sort"
               value={c.view.sort}
@@ -107,52 +160,15 @@ export function ItemsToolbar({ metaKeys }: { metaKeys: string[] }) {
         </Popover>
         <Button
           size="sm"
-          variant="neutral"
-          icon={<Icon name="external" size={14} />}
+          variant="accent"
+          icon={<Icon name="download" size={14} />}
+          data-part="items-csv-btn"
           onPress={() => setCsv(true)}
           isDisabled={!items.length}
         >
           CSV
         </Button>
-        <Popover
-          label="Analyze runs"
-          trigger={
-            <Button size="sm" variant="neutral" icon={<Icon name="search" size={14} />}>
-              Analyze
-            </Button>
-          }
-        >
-          <AnalyzeLinks />
-        </Popover>
-        <Text variant="sm" tone="muted" className={styles.count} role="status">
-          {items.length} of {model.itemIds.length} items{searchPending ? ' · searching…' : ''}
-        </Text>
-        <Text variant="sm" tone="muted" className={styles.legend}>
-          <span className={styles.railWarn} aria-hidden /> a run regressed vs baseline
-          <span className={styles.railError} aria-hidden /> error
-        </Text>
-        {count || c.view.q ? (
-          <Button size="sm" variant="ghost" onPress={() => c.setView(clearedView())}>
-            Clear {count + (c.view.q ? 1 : 0)}
-          </Button>
-        ) : null}
       </div>
-      {chips.length ? (
-        <div className={styles.chips} role="group" aria-label="Filters set on the page">
-          {chips.map((chip) => (
-            <Chip
-              key={chip.key}
-              isSelected
-              onChange={() => c.setView(chip.clear(c.view))}
-              removeLabel={`Remove filter: ${chip.label}`}
-              onRemove={() => c.setView(chip.clear(c.view))}
-            >
-              {chip.label.length > 60 ? `${chip.label.slice(0, 60)}…` : chip.label}
-            </Chip>
-          ))}
-        </div>
-      ) : null}
-      {panel ? <FilterBuilder /> : null}
       {csv ? <CsvDialog open onOpenChange={setCsv} /> : null}
     </div>
   );

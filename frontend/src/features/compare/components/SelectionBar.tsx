@@ -82,25 +82,36 @@ export function PassToggle() {
   );
 }
 
-export function MetricSelect() {
+/** The analysis metric: segmented tabs up to four metrics, a select beyond (round 8, C-ov-1). */
+export function MetricTabs() {
   const { model, metric, c } = useCompare();
   if (model.metrics.length < 2) return null;
+  const set = (k: string) => c.setView({ metric: k, filters: { ...c.view.filters, baseline: null } });
+  if (model.metrics.length > 4)
+    return (
+      <Select
+        label="Metric"
+        hideLabel
+        value={metric}
+        onChange={(k) => k && set(String(k))}
+        items={model.metrics.map((m) => ({ key: m, label: m }))}
+        searchable="auto"
+        width={170}
+      />
+    );
   return (
-    <Select
-      label="Metric"
-      hideLabel
+    <SegmentedControl<string>
+      label="Overview metric"
       value={metric}
-      onChange={(k) => k && c.setView({ metric: String(k), filters: { ...c.view.filters, baseline: null } })}
-      items={model.metrics.map((m) => ({ key: m, label: m }))}
-      searchable="auto"
-      width={170}
+      onChange={set}
+      options={model.metrics.map((m) => ({ value: m, label: m }))}
     />
   );
 }
 
 const RESET_KEY = '__reset-baseline__';
 
-/** Which column every change is measured against (a star on a run card sets it too); also resets thresholds. */
+/** Which column every change is measured against; also resets thresholds. Lives in the Averages head (C-avg-1). */
 export function BaselineSelect() {
   const { columns, baseline, model, c } = useCompare();
   if (columns.length < 2) return null;
@@ -114,18 +125,21 @@ export function BaselineSelect() {
     ...(dirty ? [{ key: RESET_KEY, label: 'Reset baseline and thresholds' }] : []),
   ];
   return (
-    <Select
-      label="Baseline"
-      hideLabel
-      value={baseline.key}
-      onChange={(k) => {
-        if (k === null) return;
-        if (k === RESET_KEY) c.setView({ baseline: null, thresholds: {} });
-        else c.setView({ baseline: String(k) });
-      }}
-      items={items}
-      searchable="auto"
-      width={200}
-    />
+    <span className={styles.inlineLabel} data-part="baseline-control">
+      <span aria-hidden="true">Baseline</span>
+      <Select
+        label="Baseline"
+        hideLabel
+        value={baseline.key}
+        onChange={(k) => {
+          if (k === null) return;
+          if (k === RESET_KEY) c.setView({ baseline: null, thresholds: {} });
+          else c.setView({ baseline: String(k) });
+        }}
+        items={items}
+        searchable="auto"
+        width="14rem"
+      />
+    </span>
   );
 }

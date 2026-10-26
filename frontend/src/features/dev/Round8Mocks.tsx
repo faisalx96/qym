@@ -640,7 +640,7 @@ function ScoreChip({ i, v }: { i: number; v: number | 'error' }) {
   return v === 'error' ? (
     <span className={styles.scoreChip} style={colorOf(i)} data-error="" title={`${RUNS[i]!.name}: task error`} data-part="item-score-chip">
       <span className={styles.swatch} aria-hidden="true" />
-      <Icon name="close" size={10} />
+      <Icon name="close" size={12} />
       <span className={styles.srOnly}>task error</span>
     </span>
   ) : (
