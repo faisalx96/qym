@@ -39,7 +39,7 @@ test('C-cat-2/3/4: 3-up cards with a value rail, a header row, run rows with a r
   const cards = part(page, 'category-card');
   await expect(cards).toHaveCount(3);
   within((await box(cards.first())).w, 388, 3, 'card width');
-  within((await box(cards.first())).h, 185, 4, 'card height (4 runs)');
+  within((await box(cards.first())).h, 179, 4, 'card height (4 runs)');
   const tops = await cards.evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().y))).size);
   expect(tops).toBe(1);
   // rails: easy score-4, medium score-3, hard score-1
@@ -63,7 +63,7 @@ test('C-cat-2/3/4: 3-up cards with a value rail, a header row, run rows with a r
   // rows
   const rows = easy.locator('[data-part="category-run-row"]');
   await expect(rows).toHaveCount(4);
-  within((await box(rows.first())).h, 27, 2, 'run row');
+  within((await box(rows.first())).h, 27, 1.5, 'run row');
   const track = rows.nth(1).locator('[data-part="category-track"]');
   within((await box(track)).h, 8, 1, 'bar');
   const fill = await track.locator('span').first().evaluate((e) => getComputedStyle(e).backgroundColor);

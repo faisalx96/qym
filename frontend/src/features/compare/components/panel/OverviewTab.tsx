@@ -26,7 +26,8 @@ export function OverviewControls() {
         minValue={5}
         maxValue={100}
         step={5}
-        width="8rem"
+        width="16rem"
+        className={styles.passSlider}
         defaultValue={Math.round(ctx.threshold * 100)}
         onChangeEnd={(v) => c.setThreshold(metric, v / 100)}
       />

@@ -577,7 +577,7 @@ export function SweepView() {
                 })}
                 <div className={styles.outcome}>
                   <b>{summary.counts.avgAttemptsDelta.toFixed(2)}</b>
-                  <span>Avg {'Δ'} attempts / item</span>
+                  <span title="Average change in attempts per item">Avg {'Δ'} attempts</span>
                 </div>
               </div>
             </section>

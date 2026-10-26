@@ -21,8 +21,9 @@ test('C-ov-1: the pass slider and the metric tabs sit in the head on one centre 
   await expect(tabs).toBeVisible();
   within((await box(tabs)).h, 24, 1, 'tabs height');
   const centre = async (l: Locator) => (await box(l)).y + (await box(l)).h / 2;
-  // the slider block is a label over a track (43 high, amended: not 24); its centre line is the tabs' centre line
+  // the slider is inline in the head: label, value and track on one 24 px line, centred with the tabs
   const block = slider.locator('xpath=ancestor::*[contains(@class,"lider")][1]');
+  within((await box(block)).h, 24, 1, 'slider block height');
   within(await centre(tabs), await centre(block), 1, 'one centre line');
   // metric tabs: correct -> URL and the stat values change
   const stat = () => part(page, 'stat-grid').innerText();

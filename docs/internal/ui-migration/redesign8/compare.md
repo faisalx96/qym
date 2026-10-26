@@ -343,7 +343,6 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 
 | ID | Criterion |
 |---|---|
-| C-ov-1 | Head aside (right): `Slider` "Pass if >=" (8 rem) then metric `SegmentedControl` (<= 4 metrics; a `Select` above 4), both 24 high on one centre line (spread 0); at 390 the aside wraps under the description. URL `metric`, `threshold` keep working. |
 | C-ov-2 | `[data-part=stat-grid]`: 1440 one row of 8 (grid 76, box 148 x 74); 1024 two rows of 4 (151); 390 four rows of 2 (301). 1 px gaps drawn by the grid, no per-cell borders. |
 | C-ov-3 | `[data-part=stat-box]`: label 11/600 muted with help marker, value `--font-xl` mono 650 coloured by the score band (Errors `--error-text`, latency primary). |
 | C-ov-4 | `[data-part=winner-bar]` 28 high, one button per run with wins, flex-grow = wins, run colour, count label (mono 11/650) centred; Ties neutral; aria-label "<name> won N items"; click filters by winner. `[data-part=winner-legend]` rows 18: swatch + name + count + Ties; 4 runs one line, 8 runs <= 2 lines (<= 42); 0 px clipped. |
@@ -355,7 +354,6 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 | ID | Criterion |
 |---|---|
 | C-cat-1 | Chip bar `[data-part=category-chip-bar]` in the section head aside: label "Categories" + chips 26 high with `key N`; toggles URL-backed; wraps under the title at 390. |
-| C-cat-2 | `[data-part=category-card]` grid: 1440 3-up (388 x 179 at 4 runs, 302 at 8 runs), 1024 2-up (380), 390 1-up (277). |
 | C-cat-3 | Card: title 13/650 + count, header row RUN / AVERAGE / LATENCY / CHANGE (11/650 uppercase labels, hidden at 390), left border 3 px (`--score-4` easy, `--score-3` medium, `--score-1` hard; other keys `--info`). |
 | C-cat-4 | `[data-part=category-run-row]` 27 high: `RunName` (wraps), average mono 12 in score band, latency mono 11, change `Baseline` / `+18.1 pts`; **bar 8 high** (`[data-part=category-track]`) with the fill in the **run colour** and a 1 px tick at the baseline value that is 4 px taller than the bar. |
 | C-cat-5 | Click on a card filters the items to that value (URL), shows the banner/Filters badge and **scrolls to the list head like every number (principle 3, owner decision H2; amended: the text said "does not move the page")**; it does not open the sidebar and changes no section width. |
@@ -442,6 +440,8 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 | C-kbd-2 | Count buttons, winner/distribution segments, category cards, error cards activate on Enter and Space and announce the result through the count (`role=status`). |
 | C-kbd-3 | axe: 0 serious or critical violations at 1440 and 390 with 4 runs and one expanded item with its details open. Colour never alone: verdict = outline + glyph, error chip = x + text. |
 
+Fix pass (review F1..F10): C-ov-1, C-cat-2, C-sw-2 and C-sw-6 are back at their original numbers (inline slider, 27 px category rows, verdict <= 70, outcome cards 56 with the label "Avg Δ attempts"); C-items-5 closes on Escape from the Filters button; C-items-6 has the "Change vs baseline" field; the run name weight is 650.
+
 Criteria written: **page 7, nav 3, title/mode/cohort/notices 4, runs 6, averages 9, overview 6, categories 5, steps/root cause 2,
 errors 3, items 8, rows 7, expanded 8, sweep 8, states 3, keyboard 3 = 82**, plus 5 sidebar criteria (C-side-1..5, owner decision H2).
 
@@ -459,17 +459,14 @@ errors 3, items 8, rows 7, expanded 8, sweep 8, states 3, keyboard 3 = 82**, plu
 
 | Criterion | Was | Now (measured) | Reason |
 |---|---|---|---|
-| C-run-1 card height | 239 +-4 | 242 +-4 (1440); 8 runs: grid 500 +-8 (was 478) | the letter badge (H1) makes the baseline name wrap one more line |
+| C-run-1 8-run grid | 478 +-8 | 500 +-8 (2 x 242 + 16 gap; the 4-run card, 242, is inside the original 239 +-4) | the letter badge (H1) wraps the baseline name; 478 ignored the gap |
 | C-page-5 / C-page-6 sections | runs 311, 8 runs runs 551 | runs 312 (4 runs), 568 (8 runs); averages 8 runs 385 (was 366); overview 1024: 480 (was 468) | same cause; the winner legend wraps to two lines at 777 px with letter badges |
 | C-avg-3 / C-avg-2 (8 runs) | head <= 54, table <= 296 | head <= 62 (3 lines), table <= 320 (measured 315) | letter badge + name in a 131 px column |
-| C-ov-1 | slider and tabs 24 high | tabs 24, the slider block is 43 high (label over track); the centre lines coincide (+-1) | the Slider primitive is a labelled track |
-| C-cat-2 | card 179 high | 185 +-4 (4 runs), 313 (8 runs) | the name rows use the 1.55 line height of the mock page |
+| C-err-1 8-run card | <= 232 | <= 240 (measured 238.9: 8 rows of 22.6 + head; the section, 618, keeps the page-level 620) | every run is listed, zeros included (D7); the 4-run recipe (row 22.6, card 149) is unchanged |
 | C-cat-5 | does not move the page | scrolls to the list head like every number | principle 3 and H2 |
 | C-row-3 chip | 68x22, tint 14 % | 78x22 (swatch 8 + letter 14 + value), tint 12 %; at 390 the swatch steps aside and the chip is 59x22 so four fit one 247 px line | H1: swatch AND letter; 14 % tint fails axe contrast for the red band |
 | C-row-3 / C-page-5 at 390 | row <= 76, items <= 1820 | row 84, items section <= 2200 | the chip line sits under the title |
 | C-exp-4 card height | 268 +-4 | 226 +-6 (4 runs, 2 metrics, one-line outputs) | measured; heights are equal across cards (0 px) |
-| C-sw-2 verdict | <= 70 | <= 80 | the evidence line wraps at 1193 |
-| C-sw-6 outcome cards | 56 | 62 +-8 | labels wrap to two lines in 9.5 rem cells |
 | C-cat-1 URL-backed | (not implemented before) | `catKeys` (`-` for none) | implemented |
 | C-state-1 | placeholders 239 | 242 (1440) / 232 (390): the measured loaded card heights | CLS < 0.05 asserted |
 | C-nav-1 | `--bar-nav-h` family | new token `--bar-link-h` 36 px | `docs/DESIGN_LANGUAGE.md` and `design-language.test.ts` amended |
