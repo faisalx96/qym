@@ -318,7 +318,7 @@ export function SweepView() {
                   : 'Within noise'}
             </Badge>
             <div>
-              <Text variant="md" weight={650}>
+              <Text variant="md" weight={650} data-part="sweep-verdict-title">
                 {basis.label} {signed(basis.stat.delta)} {'—'}{' '}
                 {basis.stat.verdict === 'within_noise'
                   ? 'not distinguishable from run luck'

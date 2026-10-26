@@ -12,7 +12,7 @@ export function CompareSkeleton({ runs }: { runs: number }) {
       <CompareSection id={sectionDomId('runs')} part="section-runs" title="Runs" description="Configuration and status of the compared runs. Remove a run with the cross; at least two stay.">
         <div className={runStyles.cards} data-part="run-grid">
           {Array.from({ length: Math.max(2, runs) }, (_, i) => (
-            <Skeleton key={i} kind="chart" height={239} label="Loading run" />
+            <Skeleton key={i} kind="chart" height="var(--r8-run-h, 242.3px)" label="Loading run" />
           ))}
         </div>
       </CompareSection>
@@ -20,7 +20,7 @@ export function CompareSkeleton({ runs }: { runs: number }) {
         <Skeleton kind="chart" height="var(--r8-avg-h, 283px)" label="Loading averages" />
       </CompareSection>
       <CompareSection id={sectionDomId('overview')} part="section-overview" title="Comparison overview" description="Pass rates, winners and how many runs got each item right.">
-        <Skeleton kind="chart" height={393} label="Loading overview" />
+        <Skeleton kind="chart" height="var(--r8-ov-h, 321.7px)" label="Loading overview" />
       </CompareSection>
       <CompareSection id={sectionDomId('items')} part="section-items" title="Item-by-item comparison" description="Filter and inspect aligned inputs, outputs, scores and review metadata.">
         <Skeleton kind="rows" rows={20} rowHeight={54} label="Loading items" className={styles.rows} />

@@ -10,6 +10,8 @@
   border-block-end: 1px solid var(--border-subtle);
 }
 
+/* The run and averages placeholders are the measured loaded heights of the four-run page (a run name that wraps moves them by a line). */
+
 /* 20 rows of 54 with a 6 px gap: the loaded list's pitch of 60 */
 .rows {
   gap: 6px;
@@ -17,6 +19,8 @@
 
 @media (max-width: 640px) {
   .frame {
-    --r8-avg-h: 600px;
+    --r8-avg-h: 1035.2px;
+    --r8-ov-h: 650px;
+    --r8-run-h: 232px;
   }
 }

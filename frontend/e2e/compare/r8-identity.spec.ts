@@ -6,7 +6,7 @@ import { createApiKey, ensureProject, seedCompareRun } from './seed';
 import { box, openCompare, part, seedR8, within, type R8Seed } from './r8';
 
 let s: R8Seed;
-let dup: string[] = [];
+const dup: string[] = [];
 test.beforeAll(async () => {
   test.setTimeout(240_000);
   s = await seedR8('r8-ident');

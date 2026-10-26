@@ -121,6 +121,8 @@
 
 /* One row of equal columns: 4 runs of 284 fit at 1440, more scroll sideways with snap; the cards share their rows. */
 .scroller {
+  /* contains the visually hidden (absolute) text of every card, which must scroll with its column */
+  position: relative;
   overflow-x: auto;
   scroll-snap-type: x proximity;
   padding-block-end: var(--space-xs);

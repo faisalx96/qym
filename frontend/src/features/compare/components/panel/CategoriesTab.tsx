@@ -1,5 +1,6 @@
 /** Performance by category: one table per metadata key, a row per value, a column per run (brief 05 J4). */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useSearchParamsState } from '@/lib/url-state';
 import { formatLatency, formatMetricValue } from '@/lib/metrics';
 import { Chip, SegmentedControl, Tag, Text } from '@/ui';
 import { AUTO_CATEGORIES, categoryDelta, categoryGroups, categoryKeys } from '../../lib/breakdown';
@@ -22,7 +23,10 @@ export function CategoriesSection() {
   const f = c.view.filters;
   // First three keys until the user picks (compare.html auto-selects 3).
   const chosen = useMemo(() => keys.slice(0, AUTO_CATEGORIES).map((k) => k.key), [keys]);
-  const [picked, setPicked] = useState<string[] | null>(null);
+  // The chosen keys live in the URL (`catKeys`, one value `-` for none), so a link restores the breakdowns shown.
+  const { params, replaceUrlQuery } = useSearchParamsState();
+  const picked = params.has('catKeys') ? params.getAll('catKeys').filter((k) => k !== '-') : null;
+  const setPicked = (next: string[]) => replaceUrlQuery({ catKeys: next.length ? next : ['-'] });
   const selected = useMemo(() => {
     const filtered = Object.keys(f.categories);
     if (f.complexity) filtered.push('complexity');

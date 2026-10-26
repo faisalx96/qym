@@ -5,6 +5,7 @@ import { metricBand } from '@/lib/metrics';
 import type { Row } from '@/features/run-detail/types';
 import { letterOf, runColor, useCompare } from '../../CompareContext';
 import { metricCellFor, pillState } from '../../lib/rowCells';
+import { runShortName } from '../../lib/labels';
 import { deltaKind } from '../../lib/baseline';
 import type { FilteredItem } from '../../lib/filters';
 import { useRunMark } from '../RunTag';
@@ -39,7 +40,7 @@ function ScoreChip({ item, runIdx }: { item: FilteredItem; runIdx: number }) {
       data-part="item-score-chip"
       data-state={p.state}
       data-band={band ?? undefined}
-      title={`${run.label}: ${spoken.slice(2)}`}
+      title={`${runShortName(run)}: ${spoken.slice(2)}`}
       {...mark}
     >
       <span className={styles.swatch} aria-hidden />
