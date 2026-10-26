@@ -17,13 +17,15 @@ class MetricSpec:
     """Immutable semantics used to validate, aggregate, and display a metric.
 
     ``direction`` says whether a higher (``"maximize"``) or lower
-    (``"minimize"``) score is better. Leave it ``None`` when neither is true:
-    the platform then shows the metric neutrally, with no good/bad colors,
+    (``"minimize"``) score is better. A metric that declares none is
+    classified as ``"maximize"`` (the default since 2.1.0, as before
+    schema 2). Pass ``direction=None`` explicitly when neither is true: the
+    platform then shows the metric neutrally, with no good/bad colors,
     pass/fail verdicts, winners or improved/regressed labels.
     """
 
     score_type: ScoreType
-    direction: Optional[Direction] = None
+    direction: Optional[Direction] = "maximize"
     pass_threshold: Optional[float] = None
     sample_reducer: Reducer = "mean"
     run_reducer: Reducer = "mean"
@@ -94,9 +96,10 @@ class MetricSpec:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            # 2: ``direction`` is None unless declared. Schema 1 SDKs sent
-            # "maximize" by default, so the platform reads a schema 1
-            # "maximize" on a legacy metric as undeclared.
+            # 2: ``direction`` is sent as declared; the default is "maximize"
+            # and an explicit None means neutral. Schema 1 SDKs always sent
+            # "maximize", so the platform reads a schema 1 "maximize" on a
+            # legacy metric as undeclared; schema 2 sends what the spec holds.
             "schema_version": 2,
             "score_type": self.score_type,
             "direction": self.direction,
@@ -123,7 +126,7 @@ class Metric:
         name: Optional[str] = None,
         spec: Optional[MetricSpec] = None,
         score_type: Optional[ScoreType] = None,
-        direction: Optional[Direction] = None,
+        direction: Optional[Direction] = "maximize",
         pass_threshold: Optional[float] = None,
         sample_reducer: Reducer = "mean",
         run_reducer: Reducer = "mean",
