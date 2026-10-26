@@ -171,7 +171,7 @@ None is DOES NOT MEET; F5, F6, F8, F9 are looser than needed.
 | L60-L62 states | yes: skeleton at the loaded height, empty, error | `review-state-*.png` |
 | Quick-filters sidebar (H2) | closed by default; opened it narrows only the list | `review-sidebar-open-1440.png` |
 
-Compared with legacy at 390 the React page has no sideways scroll (legacy main 401 > 334); legacy page height at 1440 is 4419, React 4112 (shell scroll height).
+Compared with legacy at 390 the React page has no sideways scroll (legacy main 401 > 334); legacy page content height at 1440 is 4419, React 3841 to the bottom of the Items section (categories at default show both keys).
 
 ## 7. Gate run by the review
 
