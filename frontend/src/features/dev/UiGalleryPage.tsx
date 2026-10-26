@@ -5,6 +5,7 @@ import { Round3Mocks } from './Round3Mocks';
 import { Round4Mocks } from './Round4Mocks';
 import { Round5Mocks } from './Round5Mocks';
 import { Round7Mocks } from './Round7Mocks';
+import { Round8Mocks } from './Round8Mocks';
 import { DatasetAccessMocks } from './DatasetAccessMocks';
 import { QaDatasetsMocks } from './QaDatasetsMocks';
 import { MultiSdkMocks } from './MultiSdkMocks';
@@ -924,6 +925,7 @@ export default function UiGalleryPage() {
       <Round4Mocks Section={Section} Case={Case} />
       <Round5Mocks Section={Section} Case={Case} />
       <Round7Mocks Section={Section} Case={Case} />
+      <Round8Mocks Section={Section} Case={Case} />
       <DatasetAccessMocks Section={Section} Case={Case} />
       <QaDatasetsMocks Section={Section} Case={Case} />
       <MultiSdkMocks Section={Section} Case={Case} />

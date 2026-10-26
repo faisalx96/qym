@@ -1,0 +1,182 @@
+{
+ "sticky-bar": {
+  "n": 1,
+  "w": 777,
+  "h": 44,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px 4px",
+  "radius": "0px",
+  "gap": "14px",
+  "display": "flex",
+  "text": "Runs | Averages | Overview | Categories | Errors | Items | 40 | View | 40 of"
+ },
+ "section-runs": {
+  "n": 1,
+  "w": 777,
+  "h": 576,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Runs |  | Configuration, status and what differs between the com"
+ },
+ "section-averages": {
+  "n": 1,
+  "w": 777,
+  "h": 469.5,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Per-run averages |  | Average per run with the paired change fro"
+ },
+ "section-overview": {
+  "n": 1,
+  "w": 777,
+  "h": 440.9,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Comparison overview |  | Pass rates, winners and how many runs g"
+ },
+ "section-categories": {
+  "n": 1,
+  "w": 777,
+  "h": 327.5,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Performance by category |  | Average per metadata value and run,"
+ },
+ "section-errors": {
+  "n": 1,
+  "w": 777,
+  "h": 247.5,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Error distribution |  | Errors by kind and message for each run;"
+ },
+ "section-items": {
+  "n": 1,
+  "w": 777,
+  "h": 1478.9,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "flow-root",
+  "text": "Item-by-item comparison |  | One score per run for each aligned "
+ },
+ "run-card": {
+  "n": 4,
+  "w": 384.5,
+  "h": 247.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "list-item",
+  "text": "A | baseline-gpt-mini | ★ | COMPLETED | Items | 40 | Completed | 38 | Errors"
+ },
+ "run-cards": {
+  "n": 1,
+  "w": 777,
+  "h": 503.5,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "8px",
+  "display": "flex",
+  "text": "A | baseline-gpt-mini | ★ | COMPLETED | Items | 40 | Completed | 38 | Errors"
+ },
+ "averages-table": {
+  "n": 1,
+  "w": 777,
+  "h": 342,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "8px",
+  "gap": "normal",
+  "display": "flex",
+  "text": "METRIC | \t | A | BASELINE-GPT-MINI | ★ | \t | B | CAND-A-SONNET | \t | C | CAND-B-"
+ },
+ "average-row": {
+  "n": 4,
+  "w": 775,
+  "h": 101,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "table-row",
+  "text": "correct | \t | 20.0% | baseline | \t | 37.5% | ▲ | +17.5 pts | (improved) | ±16."
+ },
+ "average-cell": {
+  "n": 16,
+  "w": 145.8,
+  "h": 84,
+  "font": "12px/16.2px 400 sans",
+  "pad": "4px 0px",
+  "radius": "0px",
+  "gap": "4px",
+  "display": "flex",
+  "text": "20.0% | baseline"
+ },
+ "category-card": null,
+ "category-run": null,
+ "error-card": null,
+ "error-run": null,
+ "items-toolbar": {
+  "n": 1,
+  "w": 777,
+  "h": 51.4,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px 0px 4px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "block",
+  "text": "Search items | Filters | Display | CSV | Analyze | 40 of 40 items | a ru"
+ },
+ "item-list": {
+  "n": 1,
+  "w": 777,
+  "h": 1128,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "block",
+  "text": "EXPAND | \t | # | \t | INPUT | \t | A | BASELINE-GPT-MINI | ★ | \t | B | CAND-A-SONNET"
+ },
+ "item-row": {
+  "n": 20,
+  "w": 900,
+  "h": 52,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "normal",
+  "display": "table-row",
+  "text": "\t | Item 1: | 1 | \t | Question 1: what does clause 0 of the commerce"
+ },
+ "run-tag": {
+  "n": 19,
+  "w": 308.5,
+  "h": 16.8,
+  "font": "12px/16.8px 400 sans",
+  "pad": "0px",
+  "radius": "0px",
+  "gap": "4px",
+  "display": "flex",
+  "text": "A | baseline-gpt-mini | ★"
+ }
+}
