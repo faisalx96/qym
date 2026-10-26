@@ -8,6 +8,7 @@ import type { DeltaKind, MetricColumn } from '../../lib/baseline';
 import { columnName } from '../../lib/columnName';
 import { buildColumnRows, type ColumnRow } from '../../lib/panelData';
 import { CountButtons, DeltaLine2 } from '../common';
+import { scrollToSection } from '../sectionIds';
 import { RunTag, useRunMark } from '../RunTag';
 import styles from './AveragesMatrix.module.css';
 
@@ -46,6 +47,7 @@ export function AveragesMatrix() {
         baseline: same ? null : { metric, columnKey: colKey, baselineKey: baseline.key, kind },
       },
     });
+    if (!same) scrollToSection('items');
   };
   const rows: MatrixRow[] = [
     ...model.metrics.map((m): MatrixRow => ({ id: `m:${m}`, kind: 'metric', label: m, metric: m })),

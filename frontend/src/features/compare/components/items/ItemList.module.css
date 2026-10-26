@@ -81,7 +81,8 @@
 
 .chips {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
+  max-inline-size: 100%;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-xs);
@@ -171,4 +172,32 @@
 
 .detailHold {
   min-inline-size: 0;
+}
+
+/* 390: four chips with a swatch AND a letter measure 292 px in a 247 px row; the letter badge keeps the run colour, the swatch steps aside */
+@media (max-width: 640px) {
+  .chip {
+    min-inline-size: 0;
+    padding-inline: 3px;
+    gap: 3px;
+  }
+
+  .title {
+    flex-basis: 6rem;
+  }
+
+  .head {
+    padding-block: var(--space-sm);
+  }
+
+  .chip .swatch {
+    display: none;
+  }
+
+  .chips {
+    justify-content: flex-start;
+    flex-basis: 100%;
+    gap: 2px;
+    margin-inline-start: 0;
+  }
 }

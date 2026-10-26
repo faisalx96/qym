@@ -338,7 +338,9 @@ describe('primitive module contracts', () => {
       'features/compare/components/panel/MetricsTab.tsx',
       'features/compare/components/panel/RootCauseTab.tsx',
       'features/compare/components/panel/StepsTab.tsx',
-      'features/compare/components/RunCards.tsx',
+      // Round 8 (compare.md 3.4): legacy-parity recipes with `<table>` semantics (aligned columns, pinned metric column).
+      'features/compare/components/panel/AveragesMatrix.tsx',
+      'features/compare/components/panel/ErrorsTab.tsx',
       'features/compare/components/sweep/SweepView.tsx',
       'features/datasets/wizard/UploadWizard.tsx', // preview grid of an uploaded file
       'features/docs/DocsArticle.tsx', // docs prose tables
@@ -365,13 +367,20 @@ describe('primitive module contracts', () => {
   });
 
   it('features compose primitives instead of restyling them', () => {
+    const ROUND8_XS = new Set([
+      'features/compare/components/RunTag.module.css',
+      'features/compare/components/RunCards.module.css',
+      'features/compare/components/items/ItemList.module.css',
+    ]);
     const featureCss = cssFiles.filter((f) => rel(f).startsWith('features/'));
     const problems: string[] = [];
     for (const file of featureCss) {
       const text = read(file);
       if (/height:\s*var\(--control-height\)/.test(text))
         problems.push(`${rel(file)}: control height belongs to a primitive`);
-      if (/--font-xs/.test(text)) problems.push(`${rel(file)}: --font-xs is badge chrome (use Badge/Tag)`);
+      // Round 8 (owner decision H1): the 16x16 run letter badge is 10 px mono (compare.md C-run-2).
+      if (/--font-xs/.test(text) && !ROUND8_XS.has(rel(file)))
+        problems.push(`${rel(file)}: --font-xs is badge chrome (use Badge/Tag)`);
       if (/--docs-(?:font|body)/.test(text) && !rel(file).startsWith('features/docs/'))
         problems.push(`${rel(file)}: --docs-* tokens are the docs prose exception (DESIGN_LANGUAGE §5)`);
       if (
@@ -448,6 +457,12 @@ describe('visual language (redesign round 2)', () => {
       'features/experiments/launch/entry/entry.module.css',
       // Edge-to-edge tabs + wide data table inside an overflow:hidden card; Card's body padding would inset the table.
       'features/runs-list/ChartsPage.module.css',
+      // Round 8 (compare.md 3.4): the compare page's legacy-parity cards carry a 3 px run / value rail and are one
+      // button each; Card's rails and padding do not reproduce the measured recipes.
+      'features/compare/components/RunCards.module.css',
+      'features/compare/components/items/OutputCard.module.css',
+      'features/compare/components/panel/CategoryCards.module.css',
+      'features/compare/components/panel/Errors.module.css',
     ]);
     const found = cssFiles
       .filter((f) => /^\.card(?![\w-])/m.test(read(f)))
@@ -467,10 +482,10 @@ describe('visual language (redesign round 2)', () => {
     const tokens = read(join(SRC, 'styles/tokens.css'));
     expect(tokens).toMatch(/--bar-nav-h:\s*44px/);
     expect(tokens).toMatch(/--bar-action-h:\s*56px/);
-    const nav = [
-      'features/run-detail/components/SectionNav.module.css',
-      'features/compare/components/CompareBar.module.css',
-    ];
+    // Round 8 (owner decision H5): the compare page's links-only jump nav is --bar-link-h (36 px).
+    expect(tokens).toMatch(/--bar-link-h:\s*36px/);
+    expect(read(join(SRC, 'features/compare/components/CompareBar.module.css'))).toContain('var(--bar-link-h)');
+    const nav = ['features/run-detail/components/SectionNav.module.css'];
     const action = [
       'features/experiments/launch/entry/entry.module.css',
       'features/analyzer/blocks/blocks.module.css',

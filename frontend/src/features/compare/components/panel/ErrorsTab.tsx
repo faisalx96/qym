@@ -7,6 +7,7 @@ import { useCompare } from '../../CompareContext';
 import type { ErrorEntry } from '../../lib/breakdown';
 import type { MetricColumn } from '../../lib/baseline';
 import { columnName } from '../../lib/columnName';
+import { scrollToSection } from '../sectionIds';
 import { ErrorCardRow } from './ErrorCardRow';
 import styles from './Errors.module.css';
 
@@ -41,6 +42,7 @@ export function ErrorsTab() {
         ? { metric: label.split(':')[0] }
         : {};
     c.setView({ ...patch, filters: { ...f, errors } });
+    if (!same) scrollToSection('items');
   };
   const kinds = ['Task error', 'Metric error', 'Trace error', 'Analysis error'];
   return (

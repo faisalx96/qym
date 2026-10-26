@@ -9,7 +9,7 @@ import { QuickFilters } from '../QuickFilters';
 import { RunTag } from '../RunTag';
 import { columnName } from '../../lib/columnName';
 import { AnalyzeLinks } from '../panel/RootCauseTab';
-import { scrollToSection } from '../ReportSections';
+import { scrollToSection } from '../sectionIds';
 import { FilterBuilder } from './FilterBuilder';
 import { ItemList } from './ItemList';
 import { ItemsBanner } from './ItemsBanner';
@@ -30,7 +30,6 @@ function RunKey() {
             name={columnName(model, col)}
             title={col.title}
             baseline={col.key === baseline.key}
-            compact
           />
         </li>
       ))}
@@ -67,7 +66,14 @@ export function ItemsSection() {
         facetsOpen={facets}
         onFacetsOpen={setFacets}
       />
-      {panel ? <FilterBuilder /> : null}
+      {panel ? (
+        <FilterBuilder
+          onClose={() => {
+            setPanel(false);
+            document.querySelector<HTMLElement>('[data-part=items-filters-btn]')?.focus();
+          }}
+        />
+      ) : null}
       <ReportLayout
         wide={wide}
         sidebarOpen={facets}

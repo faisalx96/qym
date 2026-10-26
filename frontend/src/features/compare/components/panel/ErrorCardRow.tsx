@@ -21,7 +21,7 @@ export function ErrorCardRow({
   return (
     <tr className={styles.run} data-testid="error-run" data-part="error-run" {...mark}>
       <td>
-        <RunTag index={index} name={name} title={title} compact bare />
+        <RunTag index={index} name={name} title={title} bare />
       </td>
       <td className={styles.num}>{count}</td>
       <td className={styles.change} data-tone={tone}>

@@ -1,3 +1,4 @@
+/* Sweep (round 8): the legacy structure and colour logic in the compare page's recipe. */
 .sweep {
   display: flex;
   flex-direction: column;
@@ -5,23 +6,60 @@
   min-width: 0;
 }
 
-/* Section titles are the shared 18px H2 (SectionHeader), which owns the 48px lead-in and hairline like the compare
-   tabs; the flex gap is taken back so the rhythm is the same. */
-.sweep > section {
-  margin-top: calc(-1 * var(--space-md));
-}
-
 .head {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-md);
 }
 
-.verdict {
+.block {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.h3 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* answer first: badge, one line, its evidence; a 3 px edge in the verdict colour */
+.verdict {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
   gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.verdict::after {
+  position: absolute;
+  inset: auto 0 0;
+  block-size: 3px;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--border-strong);
+  content: '';
+}
+
+.verdict[data-verdict='regressed']::after {
+  background: var(--error);
+}
+
+.verdict[data-verdict='improved']::after {
+  background: var(--success);
+}
+
+.verdictSub {
+  margin: var(--space-xs) 0 0;
 }
 
 .filters {
@@ -29,19 +67,49 @@
   align-items: flex-end;
   flex-wrap: wrap;
   gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
 }
 
+/* five cells in one frame; the 3 px bottom edge says whether the change is beyond noise */
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: var(--space-sm);
-  margin-top: var(--space-xs);
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
 }
 
-.stat > div {
+.stat {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+  padding: var(--space-md);
+  border-inline-end: 1px solid var(--border-subtle);
+}
+
+.stat:last-child {
+  border-inline-end: 0;
+}
+
+.stat::after {
+  position: absolute;
+  inset: auto 0 0;
+  block-size: 3px;
+  background: var(--border-strong);
+  content: '';
+}
+
+.stat[data-edge='bad']::after {
+  background: var(--warning);
+}
+
+.stat[data-edge='good']::after {
+  background: var(--success);
 }
 
 .statLabel {
@@ -54,19 +122,40 @@
 }
 
 .statValue {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: var(--font-lg);
+  font-size: var(--font-base);
 }
 
 .statValue strong {
   color: var(--text-primary);
+  font-size: var(--font-xl);
+  font-weight: 650;
 }
 
 .statDelta {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+}
+
+.pill {
+  padding: 0 var(--space-xs);
+  border-radius: var(--control-radius);
+  background: var(--bg-active);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+}
+
+.pill[data-tone='up'] {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.pill[data-tone='down'] {
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--error-text);
 }
 
 .noise {
@@ -77,37 +166,64 @@
 
 .scroll {
   overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
 }
 
 .table {
-  width: 100%;
+  inline-size: 100%;
   border-collapse: collapse;
 }
 
 .table th {
-  padding: var(--space-xs) var(--space-sm);
+  block-size: var(--table-header-height);
+  padding: 0 var(--space-md);
+  background: var(--bg-elevated);
   color: var(--text-muted);
   font-size: var(--font-sm);
-  font-weight: 600;
+  font-weight: 650;
+  letter-spacing: 0.05em;
   text-align: start;
+  text-transform: uppercase;
   white-space: nowrap;
-  border-bottom: 1px solid var(--border-default);
+  border-block-end: 1px solid var(--border-subtle);
 }
 
 .table td,
 .table tbody th {
-  padding: var(--space-sm);
-  border-bottom: 1px solid var(--border-subtle);
+  block-size: 31px;
+  padding: 0 var(--space-md);
+  border-block-end: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   vertical-align: middle;
 }
 
 .table tbody th {
+  background: transparent;
   color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .table tr[data-active] > * {
   background: var(--bg-elevated);
+}
+
+.itemRow {
+  cursor: pointer;
+}
+
+.itemRow > td,
+.itemRow > th {
+  block-size: 34px;
+}
+
+.itemRow:hover > * {
+  background: var(--bg-hover);
 }
 
 .link {
@@ -136,42 +252,135 @@
 
 .outcomes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: var(--space-sm);
-  margin-top: var(--space-xs);
 }
 
-.outcome > div {
+.outcome {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-xs);
-  color: var(--text-secondary);
+  align-items: center;
+  gap: var(--space-sm);
+  min-block-size: 56px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: inherit;
+  text-align: start;
 }
 
-.outcomeValue {
+button.outcome {
+  cursor: pointer;
+}
+
+button.outcome:hover {
+  background: var(--bg-hover);
+}
+
+button.outcome[aria-pressed='true'] {
+  background: var(--bg-active);
+}
+
+button.outcome:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.outcome b {
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: var(--font-lg);
+  font-size: var(--font-xl);
 }
 
-.outcomeLabel {
+.outcome[data-tone='good'] b {
+  color: var(--success);
+}
+
+.outcome[data-tone='bad'] b {
+  color: var(--error-text);
+}
+
+.outcome span {
   color: var(--text-muted);
   font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.metaBadge {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-end: var(--space-xs);
+  padding: 0 var(--space-sm);
+  border-radius: var(--control-radius);
+  background: var(--bg-active);
+  color: var(--info);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 20px;
+}
+
+.metaBadge[data-k='easy'] {
+  color: var(--success);
+}
+
+.metaBadge[data-k='medium'] {
+  color: var(--warning);
+}
+
+.metaBadge[data-k='hard'] {
+  color: var(--error-text);
+}
+
+.passCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
 }
 
 .track {
   display: inline-flex;
-  gap: var(--space-xs);
+  gap: 2px;
 }
 
 .dot {
-  color: var(--error);
-  font-family: var(--font-mono);
+  inline-size: 13px;
+  block-size: 13px;
+  border: 1px solid var(--error);
+  border-radius: var(--radius-pill);
 }
 
 .dot[data-pass] {
+  border-color: var(--success);
+  background: var(--success);
+}
+
+.move {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 36px;
+  block-size: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 650;
+}
+
+.move[data-tone='up'] {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
   color: var(--success);
+}
+
+.move[data-tone='down'] {
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--error-text);
 }
 
 .srOnly {
@@ -182,22 +391,17 @@
   clip-path: inset(50%);
 }
 
-/* Quick-filter sidebar body for the sweep filters. */
-.quick {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  min-width: 0;
-}
+@media (max-width: 640px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
-.quickHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+  .stat:nth-child(2n) {
+    border-inline-end: 0;
+  }
 
-.quickActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
+  .head {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

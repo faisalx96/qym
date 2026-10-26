@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { metricDirectionLabel, passThresholdLabel } from '@/lib/metrics';
-import { alignToElement } from '@/lib/scrollToElement';
 import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
 import { scrollCue, useScrollCue } from '@/ui';
 import { useCompare } from '../CompareContext';
@@ -19,9 +18,9 @@ import { RunCards } from './RunCards';
 import { BaselineSelect, PassToggle } from './SelectionBar';
 import styles from './ReportSections.module.css';
 
-import { sectionDomId, type SectionKey } from './sectionIds';
+import { scrollToSection, sectionDomId, type SectionKey } from './sectionIds';
 
-export { sectionDomId, type SectionKey };
+export { scrollToSection, sectionDomId, type SectionKey };
 
 /** Old `?panel=` values and `#hash` anchors → the section they now open. */
 const ALIASES: Record<string, SectionKey> = {
@@ -36,10 +35,6 @@ const ALIASES: Record<string, SectionKey> = {
   items: 'items',
 };
 
-export function scrollToSection(key: SectionKey): void {
-  const el = document.getElementById(sectionDomId(key));
-  if (el) alignToElement(el);
-}
 
 /** The sections this comparison offers, in page order. */
 export function useSectionList(): Array<{ key: SectionKey; label: string; count?: number }> {

@@ -1,0 +1,22 @@
+.frame {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0;
+}
+
+.nav {
+  block-size: var(--bar-link-h);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+/* 20 rows of 54 with a 6 px gap: the loaded list's pitch of 60 */
+.rows {
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .frame {
+    --r8-avg-h: 600px;
+  }
+}

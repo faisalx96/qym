@@ -1,6 +1,6 @@
 /** The cohort banner with inline-editable labels, and the metric / baseline / pass controls. */
 import { useState } from 'react';
-import { IconButton, Select, SegmentedControl, Tag, Text, TextField } from '@/ui';
+import { IconButton, Select, SegmentedControl, Tag, TextField } from '@/ui';
 import { useCompare, letterOf } from '../CompareContext';
 import { columnName } from '../lib/columnName';
 import styles from './SelectionBar.module.css';
@@ -18,8 +18,10 @@ function CohortSide({ side }: { side: 'left' | 'right' }) {
       c.setCohortLabels(side === 'left' ? { leftLabel: value.trim() } : { rightLabel: value.trim() });
   };
   return (
-    <span className={styles.side}>
-      <Tag kind="role">{tag}</Tag>
+    <div className={styles.side} data-part="cohort-side">
+      <Tag kind="role">
+        {tag} / {side}
+      </Tag>
       {editing ? (
         <TextField
           label={`Label for cohort ${tag}`}
@@ -35,16 +37,14 @@ function CohortSide({ side }: { side: 'left' | 'right' }) {
         />
       ) : (
         <>
-          <Text variant="md" weight={600} tone="primary">
-            {label}
-          </Text>
+          <b className={styles.sideName}>{label}</b>
           <IconButton label={`Rename cohort ${tag}`} icon="edit" onPress={() => setEditing(true)} />
         </>
       )}
-      <Text variant="sm" tone="muted">
-        {count} execution{count === 1 ? '' : 's'}
-      </Text>
-    </span>
+      <span className={styles.sideCount}>
+        {count} run{count === 1 ? '' : 's'}
+      </span>
+    </div>
   );
 }
 
@@ -52,16 +52,12 @@ export function CohortBanner() {
   const { cohorts } = useCompare();
   if (!cohorts) return null;
   return (
-    <div className={styles.cohort} role="group" aria-label="Compare sides">
-      <Text variant="sm" tone="muted" weight={650}>
-        Compare sides
-      </Text>
-      <CohortSide side="left" />
-      <Text variant="sm" tone="muted">
-        vs
-      </Text>
-      <CohortSide side="right" />
-      <Tag kind="count">k = {cohorts.k} executions each</Tag>
+    <div className={styles.cohort} role="group" aria-label="Compare sides" data-part="cohort-banner">
+      <span className={styles.cohortLabel}>Compare sides</span>
+      <div className={styles.sidesRow}>
+        <CohortSide side="left" />
+        <CohortSide side="right" />
+      </div>
     </div>
   );
 }

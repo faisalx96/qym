@@ -7,7 +7,7 @@ import { useCompare } from '../../CompareContext';
 import { columnName } from '../../lib/columnName';
 import { DeltaTag } from '../common';
 import { CompareSection } from '../CompareSection';
-import { sectionDomId } from '../sectionIds';
+import { scrollToSection, sectionDomId } from '../sectionIds';
 import { RunTag } from '../RunTag';
 import { CategoryCards } from './CategoryCards';
 import { ScrollRegion } from '../ScrollRegion';
@@ -40,6 +40,7 @@ export function CategoriesSection() {
     const cur =
       key === 'complexity' ? f.complexity : key === 'domain' ? f.domain : (f.categories[key] ?? null);
     const next = cur && cur.length === 1 && cur[0] === value ? null : [value];
+    if (next) scrollToSection('items');
     if (key === 'complexity') c.setView({ filters: { ...f, complexity: next } });
     else if (key === 'domain')
       c.setView({ filters: { ...f, domain: next, domainMode: 'include', domainOnly: [] } });

@@ -3,6 +3,7 @@ import { formatLatency, formatMetricValue, metricBand } from '@/lib/metrics';
 import type { CSSProperties } from 'react';
 import { HelpMarker, Slider } from '@/ui';
 import { MetricTabs } from '../SelectionBar';
+import { scrollToSection } from '../sectionIds';
 import { runSeries, useCompare } from '../../CompareContext';
 import { runShortName } from '../../lib/labels';
 import { RunTag, useRunMark } from '../RunTag';
@@ -111,15 +112,16 @@ export function OverviewTab() {
           { key: 'err', label: 'Errors', value: String(errors), bad: errors > 0 },
         ];
   const active = c.view.winner;
-  const setWinner = (value: string) => c.setView({ winner: active === value ? 'any' : value });
+  const setWinner = (value: string) => {
+    c.setView({ winner: active === value ? 'any' : value });
+    if (active !== value) scrollToSection('items');
+  };
   const passRate = c.view.filters.passRate;
-  const setDist = (k: number) =>
-    c.setView({
-      filters: {
-        ...c.view.filters,
-        passRate: passRate && passRate[0] === 'eq' && passRate[1] === k ? null : ['eq', k],
-      },
-    });
+  const setDist = (k: number) => {
+    const same = !!passRate && passRate[0] === 'eq' && passRate[1] === k;
+    c.setView({ filters: { ...c.view.filters, passRate: same ? null : ['eq', k] } });
+    if (!same) scrollToSection('items');
+  };
   return (
     <div className={styles.stack}>
       <div className={styles.statGrid} data-part="stat-grid" role="group" aria-label="Comparison statistics">

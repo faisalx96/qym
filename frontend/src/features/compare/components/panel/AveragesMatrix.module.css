@@ -1,5 +1,6 @@
 /* Per-run averages (round 8): rows = metrics, columns = runs; 390 px: a block per metric with a line per run. */
 .scroll {
+  position: relative;
   overflow-x: auto;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);

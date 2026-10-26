@@ -296,7 +296,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   labels runs of cells), key/value groups a `KeyValueGrid`.
 
 - **Sticky bars** (`--bar-nav-h` 44px, `--bar-action-h` 56px): two heights across the app. The navigation bar of a
-  report (run-detail `SectionNav`, the compare bar) is `--bar-nav-h`; an action bar (the experiment home launch bar,
+  report (run-detail `SectionNav`) is `--bar-nav-h`; the compare page's links-only jump nav is the one exception,
+  `--bar-link-h` 36px (round 8, owner decision H5: it carries links only, no selects or buttons); an action bar (the experiment home launch bar,
   the analysis action rail, the run items toolbar) is `--bar-action-h`. Pages set `min-height` from the token, never a
   number. Enforced by `design-language.test.ts`.
 
@@ -784,3 +785,11 @@ Open `/__ui` on the Vite dev server (`npm run dev`) to see the primitives in
 every state. If your change legitimately adds a decorative glyph size, add it
 to `FROZEN_HARDCODED_SIZES` in `design-language.test.ts` **in the same commit**,
 with the selector named in the diff so the reviewer can see what was exempted.
+
+### Round 8 amendment: the compare page's legacy-parity recipes
+
+The compare page (`features/compare`) reproduces the legacy page component by component (`docs/internal/ui-migration/redesign8/compare.md`).
+Where a measured legacy recipe is not a shared primitive, the page keeps a local one and the design-language test
+allow-lists it with this reason: raw `<table>` for the Averages and Error cards (aligned columns, pinned metric column),
+page-local card classes for the run card, category card, error card and output card (3 px run / value rail, one button
+each), and `--font-xs` for the 16x16 run letter badge (owner decision H1: swatch + letter badge + name identify a run).

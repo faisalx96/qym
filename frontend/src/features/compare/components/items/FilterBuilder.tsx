@@ -1,5 +1,6 @@
 /** Composable rule builder (AND / OR groups) over aligned items; fields are evaluated across every compared run. */
-import { Button, IconButton, MultiSelect, SegmentedControl, Select, Text, TextField } from '@/ui';
+import { Button, IconButton, MultiSelect, ScopeChips, SegmentedControl, Select, Text, TextField } from '@/ui';
+import { useScope } from '../../hooks/useScope';
 import { useCompare } from '../../CompareContext';
 import {
   conditionHasValue,
@@ -259,19 +260,47 @@ function Group({
   );
 }
 
-export function FilterBuilder() {
+export function FilterBuilder({ onClose }: { onClose?: () => void }) {
   const { defs, c } = useCompare();
+  const scope = useScope();
   const map = new Map(defs.map((d) => [d.id, d]));
   const rules = c.view.filters.rules;
   const count = filterRuleCountRaw(rules, (x) => conditionHasValue(x) && map.has(x.field));
   const onChange = (path: number[], fn: (n: FilterNode) => FilterNode | null) =>
     c.setView({ filters: { ...c.view.filters, rules: replaceAt(rules, path, fn) } });
   return (
-    <section className={styles.builder} aria-label="Filter rules" data-testid="filter-builder">
-      <Text variant="sm" tone="muted">
-        {count ? `${count} rule${count === 1 ? '' : 's'} applied` : 'No rules yet'} {'·'} a rule matches an
-        item when any compared run matches it.
-      </Text>
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape closes the inline panel
+    <section
+      className={styles.builder}
+      aria-label="Filter rules"
+      data-testid="filter-builder"
+      data-part="filter-builder"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && onClose) {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <div className={styles.head}>
+        <b className={styles.headTitle}>Filters</b>
+        <Text variant="sm" tone="muted">
+          {count ? `${count} rule${count === 1 ? '' : 's'} applied` : 'no rules yet'} {'·'} a rule matches an
+          item when any compared run matches it.
+        </Text>
+        {scope.chips.length ? (
+          <div className={styles.chips} role="group" aria-label="Filters set on the page">
+            <ScopeChips
+              chips={scope.chips.map((chip) => ({
+                key: chip.key,
+                label: chip.label,
+                onClear: () => scope.clearChip(chip),
+              }))}
+              maxChips={20}
+            />
+          </div>
+        ) : null}
+      </div>
       <Group node={rules} path={[]} defs={map} onChange={onChange} />
     </section>
   );
