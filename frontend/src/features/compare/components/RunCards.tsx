@@ -1,5 +1,4 @@
 /** Run cards (round 8, legacy parity): one box per run, the same four-up card at any run count: identity, health, configuration. */
-import { useRef } from 'react';
 import { Button, Icon, Popover, RunStatusBadge, Tag, Text } from '@/ui';
 import type { RunPayload } from '@/features/run-detail/types';
 import { formatDurationMs } from '@/features/run-detail/lib/heroModel';
@@ -12,6 +11,19 @@ import { runDatasetCount } from '../lib/datasetSets';
 import { differingContext, ownerLabel, runCounts } from '../lib/runInfo';
 import { RunTag, useRunMark } from './RunTag';
 import styles from './RunCards.module.css';
+
+/** The card whose remove button takes the focus after a removal; kept in sessionStorage because the body remounts while the new set loads. */
+const FOCUS_NEXT = 'compareFocusNext';
+
+function takeFocusNext(base: string): boolean {
+  try {
+    if (sessionStorage.getItem(FOCUS_NEXT) !== base) return false;
+    sessionStorage.removeItem(FOCUS_NEXT);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function RunCards() {
   const { model, c, baseline, cohorts } = useCompare();
@@ -38,13 +50,17 @@ export function RunCards() {
     ['RUNNING', 'PENDING', 'STOPPING'].includes(String(x.payload.run.status).toUpperCase()),
   ).length;
   const removable = !cohorts && model.bases.length > MIN_COMPARE_RUNS;
-  const removeRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
-  // After a removal the focus moves to the next card's remove button (C-run-6).
+  // After a removal the focus moves to the next card's remove button (C-run-6); the body remounts while the
+  // new set loads, so the button takes the focus when it registers.
   const remove = (base: string, at: number) => {
     const next = cards[at + 1] ?? cards[at - 1];
+    try {
+      if (next) sessionStorage.setItem(FOCUS_NEXT, next.base);
+      else sessionStorage.removeItem(FOCUS_NEXT);
+    } catch {
+      /* storage blocked: focus stays where the browser puts it */
+    }
     c.removeRun(base);
-    if (next)
-      requestAnimationFrame(() => requestAnimationFrame(() => removeRefs.current.get(next.base)?.focus()));
   };
   return (
     <div className={styles.wrap} data-testid="run-details">
@@ -64,8 +80,9 @@ export function RunCards() {
             removable={removable}
             onRemove={() => remove(card.base, at)}
             registerRemove={(el) => {
-              if (el) removeRefs.current.set(card.base, el);
-              else removeRefs.current.delete(card.base);
+              if (el && takeFocusNext(card.base)) {
+                el.focus();
+              }
             }}
           />
         ))}

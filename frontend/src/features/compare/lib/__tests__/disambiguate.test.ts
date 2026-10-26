@@ -41,6 +41,20 @@ describe('disambiguateRunNames (round 8, D2)', () => {
     expect(names).toEqual(['repeat', 'repeat']);
   });
 
+  it('numbers runs that share both the name and the start minute', () => {
+    const names = disambiguateRunNames(
+      [
+        { base: 'a', name: 'same', started: '2026-10-01T15:00:00Z' },
+        { base: 'b', name: 'same', started: '2026-10-01T15:00:20Z' },
+        { base: 'c', name: 'same', started: '2026-10-01T15:00:40Z' },
+      ],
+      NOW,
+    );
+    expect(new Set(names).size).toBe(3);
+    expect(names[0]).toMatch(/#1$/);
+    expect(names[2]).toMatch(/#3$/);
+  });
+
   it('falls back to the bare name without a start time', () => {
     const names = disambiguateRunNames(
       [
@@ -49,6 +63,6 @@ describe('disambiguateRunNames (round 8, D2)', () => {
       ],
       NOW,
     );
-    expect(names).toEqual(['same', 'same']);
+    expect(names).toEqual(['same #1', 'same #2']);
   });
 });
