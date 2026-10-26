@@ -31,7 +31,7 @@ test('without a direction Compare is neutral and says why', async ({ page }) => 
     page.getByText('Winners, passes and Max@K need a declared direction on this metric.'),
   ).toBeVisible();
   await page
-    .getByRole('button', { name: /^(Expand|Collapse) item 2$/ })
+    .locator('[data-part="item-head"]')
     .first()
     .click();
   await expect(page.getByText(/✓ PASS|✗ FAIL/)).toHaveCount(0);

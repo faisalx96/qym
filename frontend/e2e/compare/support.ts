@@ -68,9 +68,9 @@ export async function goSection(page: Page, name: string): Promise<void> {
 export const itemDetail = (page: Page, id: string) =>
   page.locator(`[data-testid="item-detail"][data-item-id="${id}"]`);
 
-/** The sticky bar's baseline select trigger. */
+/** The baseline select trigger (round 8: in the Per-run averages head, not in the sticky bar). */
 export const baselineSelect = (page: Page) =>
-  page.locator('[data-compare-sticky]').getByRole('button', { name: /Baseline/ });
+  page.locator('[data-part="baseline-control"]').getByRole('button', { name: /Baseline/ });
 
 /** Open the baseline select and pick the option whose text matches. */
 export async function pickBaseline(page: Page, option: RegExp): Promise<void> {
@@ -78,8 +78,22 @@ export async function pickBaseline(page: Page, option: RegExp): Promise<void> {
   await page.getByRole('option', { name: option }).click();
 }
 
-/** The "Per-run averages" matrix (a DataTable grid). */
-export const averagesGrid = (page: Page) => page.getByRole('grid', { name: 'Per-run averages' });
+/** The "Per-run averages" matrix (a table; at 390 px a group of per-metric blocks). */
+export const averagesGrid = (page: Page) => page.getByRole('table', { name: 'Per-run averages' });
+
+/** The head of one item row: the one tab stop that expands and collapses it (round 8). */
+export const itemHead = (page: Page, id: string) =>
+  page.locator(`[data-testid="item-row"][data-item-id="${id}"] [data-part="item-head"]`);
+
+/** Open the inline Filters panel (it lists the active filters in its head). */
+export async function openFilters(page: Page): Promise<void> {
+  const btn = page.locator('[data-part="items-filters-btn"]');
+  if ((await btn.getAttribute('aria-expanded')) !== 'true') await btn.click();
+  await expect(page.getByTestId('filter-builder')).toBeVisible();
+}
+
+/** The active filters as chips, in the open Filters panel head. */
+export const activeFilters = (page: Page) => page.getByRole('group', { name: 'Filters set on the page' });
 
 /** One matrix cell: metric row id (`m:quality`, `latency`, `errors`) and column key (run id). */
 export const averageCell = (page: Page, row: string, column: string) =>

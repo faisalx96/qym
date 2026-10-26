@@ -98,7 +98,7 @@
   block-size: 22px;
   padding-inline: 6px;
   border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--score, var(--border-strong)) 14%, var(--bg-elevated));
+  background: color-mix(in srgb, var(--score, var(--border-strong)) 12%, var(--bg-elevated));
   color: var(--score, var(--text-secondary));
   font-family: var(--font-mono);
   font-size: var(--font-base);
@@ -108,6 +108,7 @@
 
 .chip[data-band='1'] {
   --score: var(--score-1);
+  color: var(--error-text);
 }
 
 .chip[data-band='2'] {

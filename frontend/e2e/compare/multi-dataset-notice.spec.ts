@@ -43,9 +43,10 @@ test('QC-U40: What differs lists the datasets', async ({ page }) => {
     .getByText(/\d+ settings?/)
     .first()
     .click();
-  await expect(page.getByTestId('run-details')).toContainText('datasets');
-  await expect(page.getByTestId('run-details')).toContainText('3 datasets');
-  await expect(page.getByTestId('run-details')).toContainText('support-tickets v1');
+  const diff = page.getByRole('dialog', { name: 'What differs between the runs' });
+  await expect(diff).toContainText('datasets');
+  await expect(diff).toContainText('3 datasets');
+  await expect(diff).toContainText('support-tickets v1');
 });
 
 test('QC-U39: two runs over the same dataset set show no notice', async ({ page }) => {

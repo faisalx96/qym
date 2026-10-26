@@ -72,6 +72,7 @@
 }
 
 .chipHead {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -102,8 +103,20 @@
   cursor: pointer;
 }
 
-.caret > :last-child {
+/* the whole row opens the details: the button stretches over the value, the pencil stays above it */
+.caret::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+}
+
+.metricValue {
   margin-inline-start: auto;
+}
+
+.chipHead > :not(.caret):not(.metricValue) {
+  position: relative;
+  z-index: 1;
 }
 
 .caret:hover,

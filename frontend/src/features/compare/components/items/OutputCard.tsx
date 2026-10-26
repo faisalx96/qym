@@ -120,6 +120,8 @@ function MetricChips({
               >
                 <Icon name={open === metric ? 'chevron-down' : 'chevron-right'} size={12} />
                 <span className={styles.metricName}>{metric}</span>
+              </button>
+              <span className={styles.metricValue}>
                 <ScoreValue
                   value={cell.value}
                   type={cell.type}
@@ -127,7 +129,7 @@ function MetricChips({
                   error={cell.error}
                   text={cell.text}
                 />
-              </button>
+              </span>
               {cell.edited ? (
                 <Tag
                   kind="accent"

@@ -58,7 +58,7 @@ function RunRow({
       </span>
       <span className={styles.track} data-part="category-track" aria-hidden>
         <span className={styles.fill} style={{ inlineSize: pct(score) }} />
-        {!isBase && marker !== null ? <span className={styles.tick} style={{ insetInlineStart: pct(marker) }} /> : null}
+        {!isBase && marker !== null ? <span className={styles.tick} data-part="category-tick" style={{ insetInlineStart: pct(marker) }} /> : null}
       </span>
     </li>
   );

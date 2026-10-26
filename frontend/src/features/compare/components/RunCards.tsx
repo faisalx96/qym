@@ -1,6 +1,6 @@
 /** Run cards (round 8, legacy parity): one box per run, the same four-up card at any run count: identity, health, configuration. */
 import { useRef } from 'react';
-import { Icon, RunStatusBadge, Text } from '@/ui';
+import { Button, Icon, Popover, RunStatusBadge, Tag, Text } from '@/ui';
 import type { RunPayload } from '@/features/run-detail/types';
 import { formatDurationMs } from '@/features/run-detail/lib/heroModel';
 import { datasetsTitle } from '@/features/run-detail/lib/heroModel';
@@ -9,7 +9,7 @@ import { runSeries, useCompare } from '../CompareContext';
 import { runShortName } from '../lib/labels';
 import { MIN_COMPARE_RUNS, passRefBase } from '../lib/refs';
 import { runDatasetCount } from '../lib/datasetSets';
-import { ownerLabel, runCounts } from '../lib/runInfo';
+import { differingContext, ownerLabel, runCounts } from '../lib/runInfo';
 import { RunTag, useRunMark } from './RunTag';
 import styles from './RunCards.module.css';
 
@@ -187,5 +187,61 @@ function Stat({ label, value, danger }: { label: string; value: number; danger?:
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>
+  );
+}
+
+/** "What differs between the runs": the settings (git, config, versioning, datasets) that are not the same on every run. In the Runs head, so the cards keep their height. */
+export function RunsDiff() {
+  const { model, c } = useCompare();
+  const payloads = new Map((c.query.data?.runs ?? []).map((p) => [p.run.file_path || p.run.run_id, p]));
+  const cards = model.bases
+    .map((base) => {
+      const idx = model.runs.findIndex((r) => r.base === base);
+      const payload = payloads.get(base);
+      const run = model.runs[idx];
+      return payload && run
+        ? { base, idx, payload, name: runShortName({ label: run.label, run: run.run }), title: run.title }
+        : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x);
+  const diff = differingContext(cards.map((x) => x.payload.run));
+  if (!diff.length) return null;
+  return (
+    <Popover
+      label="What differs between the runs"
+      placement="bottom end"
+      trigger={
+        <Button size="sm" variant="neutral" data-part="runs-diff-btn">
+          What differs between the runs <Tag kind="count">{diff.length} setting{diff.length === 1 ? '' : 's'}</Tag>
+        </Button>
+      }
+    >
+      <div className={styles.diff}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th scope="col">Setting</th>
+              {cards.map(({ base, idx, name, title }) => (
+                <th scope="col" key={base}>
+                  <RunTag index={idx} name={name} title={title} compact />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {diff.map((d) => (
+              <tr key={`${d.group}:${d.key}`}>
+                <th scope="row">
+                  <span className={styles.group}>{d.group}</span> {d.key}
+                </th>
+                {d.values.map((v, i) => (
+                  <td key={i}>{v || '—'}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Popover>
   );
 }

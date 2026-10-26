@@ -90,15 +90,14 @@ export function ItemList() {
     ui.toggleExpanded(target, true);
     // Land once; the second pass only corrects a layout shift (details loading) and
     // never fights a reader who has scrolled since.
-    const scroller = document.getElementById('shell-content');
     let landedAt: number | null = null;
     const land = () => {
       document.getElementById(`item-${target}`)?.scrollIntoView({ block: 'start' });
-      landedAt = scroller?.scrollTop ?? window.scrollY;
+      landedAt = window.scrollY;
     };
     requestAnimationFrame(land);
     window.setTimeout(() => {
-      if (landedAt === null || Math.abs((scroller?.scrollTop ?? window.scrollY) - landedAt) < 2) land();
+      if (landedAt === null || Math.abs(window.scrollY - landedAt) < 2) land();
     }, 400);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, items, clamped]);
@@ -137,7 +136,6 @@ export function ItemList() {
                 role="button"
                 tabIndex={0}
                 aria-expanded={open}
-                aria-label={`${open ? 'Collapse' : 'Expand'} item ${index}`}
                 data-part="item-head"
                 onClick={() => onToggle(it.itemId)}
                 onKeyDown={(e) => {
@@ -151,10 +149,10 @@ export function ItemList() {
                 <span className={styles.chev} data-part="item-chevron" aria-hidden>
                   <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
                 </span>
-                <span className={styles.no} data-part="item-index" aria-hidden>
+                <span className={styles.no} data-part="item-index">
                   #{index}
                 </span>
-                <span className={styles.title} data-part="item-title" aria-hidden>
+                <span className={styles.title} data-part="item-title">
                   {it.rows.find((r) => r)?.input_preview || it.itemId}
                 </span>
                 <span className={styles.chips} data-part="item-score-chips">

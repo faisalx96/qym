@@ -18,9 +18,8 @@ test.beforeAll(async () => {
 });
 
 const cards = (page: Page) => page.getByTestId('run-card');
-const deltaLine = (page: Page) => page.locator('[aria-label="Change against the baseline"]');
 
-test('four runs: summary, delta line against the baseline and the Metrics table', async ({ page }) => {
+test('four runs: summary, the change against the baseline in the averages and the Metrics table', async ({ page }) => {
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c]));
   await waitLoaded(page);
@@ -31,40 +30,41 @@ test('four runs: summary, delta line against the baseline and the Metrics table'
   await expect(cards(page)).toHaveCount(4);
   await expect(page.locator('[data-testid="run-card"][data-baseline]')).toHaveAttribute('data-run', base);
   await expect(baselineSelect(page)).toContainText('A');
-  // one delta entry per candidate (not the baseline), with sign, verdict word and noise band
-  await expect(deltaLine(page).locator('li[data-column]')).toHaveCount(3);
-  await expect(deltaLine(page)).toContainText('+15.3 pts');
-  await expect(deltaLine(page)).toContainText('(improved)');
-  await expect(deltaLine(page)).toContainText('−10.8 pts');
-  await expect(deltaLine(page)).toContainText('(regressed)');
-  await expect(deltaLine(page)).toContainText('±8.8');
+  // one change line per candidate cell (not the baseline), with sign, verdict word and noise band
+  const { a: runA, b: runB } = seed.runs;
+  await expect(averageCell(page, 'm:quality', runA)).toContainText('+15.3 pts');
+  await expect(averageCell(page, 'm:quality', runA)).toContainText('(improved)');
+  await expect(averageCell(page, 'm:quality', runB)).toContainText('−10.8 pts');
+  await expect(averageCell(page, 'm:quality', runB)).toContainText('(regressed)');
+  await expect(averageCell(page, 'm:quality', runA)).toContainText('±8.8');
   // per-run averages matrix: a row per metric, a column per run
   const grid = averagesGrid(page);
-  await expect(grid.getByRole('columnheader', { name: /^A / })).toContainText('★');
-  for (const h of ['Metric', 'A', 'B', 'C', 'D'])
-    await expect(grid.getByRole('columnheader', { name: new RegExp(`^${h}`) })).toBeVisible();
+  const heads = page.locator('[data-part="averages-colhead"]');
+  await expect(heads).toHaveCount(4);
+  await expect(heads.first().locator('[data-part="baseline-tag"]')).toHaveText('Baseline');
+  await expect(heads.locator('[data-part="run-letter"]')).toHaveText(['A', 'B', 'C', 'D']);
+  await expect(grid.getByRole('columnheader', { name: 'Metric' })).toBeVisible();
   for (const row of ['m:correct', 'm:quality', 'latency', 'errors'])
     await expect(page.locator(`[data-testid="average-row"][data-row="${row}"]`)).toBeVisible();
-  await expect(averageCell(page, 'm:quality', base)).toContainText('baseline');
+  await expect(averageCell(page, 'm:quality', base)).not.toContainText('pts');
   await expect(averageCell(page, 'errors', base)).toContainText('2 task · 1 scorer');
-  await expect(averageCell(page, 'm:quality', a)).toContainText('+15.3 pts');
 });
 
 test('changing the baseline updates ?baseline= and re-signs the deltas', async ({ page }) => {
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c]));
   await waitLoaded(page);
-  await expect(deltaLine(page)).toContainText('+15.3 pts');
+  await expect(averageCell(page, 'm:quality', seed.runs.a)).toContainText('+15.3 pts');
   await pickBaseline(page, /^B /);
   await expect.poll(() => urlParams(page).get('baseline')).toBe(a);
   await expect(baselineSelect(page)).toContainText('B');
   await expect(page.locator('[data-testid="run-card"][data-baseline]')).toHaveAttribute('data-run', a);
   // A is now a candidate and is 15.3 pts worse than B
-  await expect(deltaLine(page)).toContainText('−15.3 pts');
-  await expect(deltaLine(page)).not.toContainText('+15.3 pts');
+  await expect(averageCell(page, 'm:quality', base)).toContainText('−15.3 pts');
+  await expect(averageCell(page, 'm:quality', base)).not.toContainText('+15.3 pts');
   await pickBaseline(page, /Reset baseline/);
   await expect.poll(() => urlParams(page).get('baseline')).toBeNull();
-  await expect(deltaLine(page)).toContainText('+15.3 pts');
+  await expect(averageCell(page, 'm:quality', a)).toContainText('+15.3 pts');
 });
 
 test('removing a run updates the URL; the remove control disappears at two runs', async ({ page }) => {
@@ -81,7 +81,7 @@ test('removing a run updates the URL; the remove control disappears at two runs'
   await expect.poll(() => urlParams(page).getAll('runs')).toEqual([base, c]);
   await expect(cards(page)).toHaveCount(2);
   await expect(remove).toHaveCount(0);
-  await expect(deltaLine(page).locator('li[data-column]')).toHaveCount(1);
+  await expect(page.locator('[data-part="averages-colhead"]')).toHaveCount(2);
 });
 
 test('two runs of two different models open as a cohort comparison (legacy auto-cohort)', async ({

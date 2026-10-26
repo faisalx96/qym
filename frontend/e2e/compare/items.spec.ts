@@ -42,7 +42,7 @@ test('expanding an item lazily loads bodies (POST /items/details) and shows a ca
   expect(details).toHaveLength(0); // the compact snapshot carries no bodies
   const req = page.waitForRequest((r) => r.method() === 'POST' && /\/items\/details/.test(r.url()));
   await row(page, 'cmp-001')
-    .getByRole('button', { name: /^(Expand|Collapse) item 1$/ })
+    .locator('[data-part="item-head"]')
     .click();
   await req;
   const detail = itemDetail(page, 'cmp-001');
@@ -51,20 +51,20 @@ test('expanding an item lazily loads bodies (POST /items/details) and shows a ca
   for (const r of [base, a, b, c]) await expect(card(page, r)).toBeVisible();
   await expect(detail).toContainText('Question 1: what does clause 0 of the commerce policy require?');
   await expect(detail).toContainText('Clause 0 requires written approval.'); // expected output
-  await expect(card(page, a)).toContainText('PASS');
-  await expect(card(page, base)).toContainText('FAIL');
+  await expect(card(page, a)).toContainText(/pass/i);
+  await expect(card(page, base)).toContainText(/fail/i);
   await expect(card(page, base)).toContainText('Not sure about clause 0.');
   await expect(card(page, base).getByRole('link')).toHaveAttribute('href', /\/runs\/.+\?item=cmp-001/);
   // collapse again
   await row(page, 'cmp-001')
-    .getByRole('button', { name: /^(Expand|Collapse) item 1$/ })
+    .locator('[data-part="item-head"]')
     .click();
   await expect(detail).toHaveCount(0);
 
   // copy button puts the output on the clipboard
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await row(page, 'cmp-001')
-    .getByRole('button', { name: /^(Expand|Collapse) item 1$/ })
+    .locator('[data-part="item-head"]')
     .click();
   await card(page, a)
     .getByRole('button', { name: /^Copy output of/ })
@@ -79,7 +79,7 @@ test('a task error shows ERROR and the message on the output card', async ({ pag
   await page.goto(compareUrl([base, a, seed.runs.c]));
   await waitLoaded(page);
   await row(page, 'cmp-005')
-    .getByRole('button', { name: /^(Expand|Collapse) item 5$/ })
+    .locator('[data-part="item-head"]')
     .click();
   await expect(card(page, base)).toContainText('ERROR');
   await expect(card(page, base)).toContainText('TimeoutError');
@@ -90,7 +90,7 @@ test('Trace opens the drawer for a traced item and Escape closes it', async ({ p
   await page.goto(compareUrl([traced, base]));
   await waitLoaded(page);
   await row(page, 'cmp-010')
-    .getByRole('button', { name: /^(Expand|Collapse) item 10$/ })
+    .locator('[data-part="item-head"]')
     .click();
   await expect(card(page, traced)).toBeVisible();
   await expect(card(page, base)).toBeVisible();
@@ -118,7 +118,7 @@ test('edit a score: pencil, Enter saves via POST /api/runs/update_metric and the
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
   await row(page, 'cmp-002')
-    .getByRole('button', { name: /^(Expand|Collapse) item 2$/ })
+    .locator('[data-part="item-head"]')
     .click();
   const chip = card(page, base).locator('[data-metric="quality"]');
   const before = (await chip.innerText()).replace(/\s+/g, ' ');
@@ -153,7 +153,7 @@ test('a 422 on save keeps the editor open with the message; Escape cancels', asy
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
   await row(page, 'cmp-003')
-    .getByRole('button', { name: /^(Expand|Collapse) item 3$/ })
+    .locator('[data-part="item-head"]')
     .click();
   const chip = card(page, base).locator('[data-metric="quality"]');
   await chip.getByRole('button', { name: /^Edit quality score of/ }).click();
@@ -176,7 +176,7 @@ test('a locked (submitted) run shows no edit pencil and no Add issue', async ({ 
   await page.goto(compareUrl([base, locked!]));
   await waitLoaded(page);
   await row(page, 'cmp-002')
-    .getByRole('button', { name: /^(Expand|Collapse) item 2$/ })
+    .locator('[data-part="item-head"]')
     .click();
   await expect(card(page, locked!)).toBeVisible();
   await expect(card(page, locked!).getByRole('button', { name: /^Edit .* score of/ })).toHaveCount(0);
@@ -195,7 +195,7 @@ test('root-cause issues: validation, add, show on the card, edit, delete, and fi
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
   await row(page, 'cmp-004')
-    .getByRole('button', { name: /^(Expand|Collapse) item 4$/ })
+    .locator('[data-part="item-head"]')
     .click();
   const c = card(page, base);
   await expect(c).toContainText('No root-cause issues assigned.');
@@ -229,19 +229,31 @@ test('root-cause issues: validation, add, show on the card, edit, delete, and fi
   await expect(c).toContainText('Invented a clause number');
   await expect(c).not.toContainText('No root-cause issues assigned.');
 
+  // an analysis now exists: the Items head offers Auto-analyze for every compared run
+  await page.getByRole('button', { name: 'Auto-analyze' }).click();
+  const popover = page.getByRole('dialog', { name: 'Auto-analyze runs' });
+  await expect(popover.getByRole('link')).toHaveCount(2);
+  // one run per line inside its own surface
+  const outer = (await popover.boundingBox())!;
+  const tops = new Set<number>();
+  for (let i = 0; i < 2; i++) {
+    const bb = (await popover.getByRole('link').nth(i).boundingBox())!;
+    tops.add(Math.round(bb.y));
+    expect(bb.x).toBeGreaterThanOrEqual(outer.x);
+    expect(bb.x + bb.width).toBeLessThanOrEqual(outer.x + outer.width);
+  }
+  expect(tops.size).toBe(2);
+  expect(await popover.getByRole('list').evaluate((e) => getComputedStyle(e).listStyleType)).toBe('none');
+  await page.keyboard.press('Escape');
+
   // Root cause tab now lists the category; pressing it filters the items
   await goSection(page, 'Root cause');
   const cat = page.getByRole('button', { name: /^Hallucination \d+$/ });
   await expect(cat).toBeVisible();
   await cat.click();
-  await expect(page.getByRole('group', { name: 'Filters set on the page' })).toContainText(
-    'Root cause: Hallucination',
-  );
+  await expect(page.getByTestId('baseline-delta-banner')).toContainText('Root cause: Hallucination');
   await expect(page.getByRole('status').filter({ hasText: /of 40 items/ })).toContainText('1 of 40');
-  await page
-    .getByRole('group', { name: 'Filters set on the page' })
-    .getByRole('button', { name: /^Remove filter:/ })
-    .click();
+  await page.getByTestId('baseline-delta-banner').getByRole('button', { name: 'Clear' }).click();
   await expect(page.getByRole('status').filter({ hasText: /of 40 items/ })).toContainText('40 of 40');
 
   // edit then delete
@@ -265,7 +277,7 @@ test('collapsing an item while its bodies are still loading removes the detail',
   });
   await page.goto(compareUrl([base, a]));
   await waitLoaded(page);
-  const btn = row(page, 'cmp-006').getByRole('button', { name: /^(Expand|Collapse) item 6$/ });
+  const btn = row(page, 'cmp-006').locator('[data-part="item-head"]');
   await btn.click();
   await expect(itemDetail(page, 'cmp-006')).toBeVisible();
   await btn.click(); // collapse while "Loading item details…" is shown

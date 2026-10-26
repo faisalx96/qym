@@ -130,7 +130,7 @@ test('C065 collapsed rows show the score, not only Pass/Fail; C063 keeps the ite
   const id = (await first.getAttribute('data-item-id'))!;
   expect(id).not.toBe('fix-001'); // the sort moved a different item to the top
   await expect(
-    first.getByRole('button', { name: new RegExp(`^(Expand|Collapse) item ${Number(id.slice(-3))}$`) }),
+    first.locator('[data-part="item-head"]').filter({ hasText: new RegExp(`^#${Number(id.slice(-3))}(?!\\d)`) }),
   ).toBeVisible();
 });
 
@@ -139,7 +139,7 @@ test('C020 run cards show status, counts and dataset version; the chip flags an 
 }) => {
   await page.goto(compareUrl([fix.a, fix.b, fix.c]));
   await waitLoaded(page);
-  await expect(page.getByRole('list', { name: 'Runs in this comparison' })).toContainText('RUNNING');
+  await expect(page.getByRole('list', { name: 'Runs in this comparison' })).toContainText(/running/i);
   // up to four runs the cards are always visible (no toggle)
   await expect(page.getByRole('button', { name: 'Run details' })).toHaveCount(0);
   const cards = page.getByTestId('run-card');
@@ -149,7 +149,7 @@ test('C020 run cards show status, counts and dataset version; the chip flags an 
   await expect(b).toContainText('Items');
   await expect(b).toContainText('6');
   await expect(b).toContainText('cmp-fix-v1');
-  await expect(page.getByText('What differs between the runs')).toBeVisible();
+  await expect(page.getByRole('button', { name: /What differs between the runs/ })).toBeVisible();
   await page.getByRole('button', { name: /What differs between the runs/ }).click();
   await expect(page.getByRole('row', { name: /temperature/ })).toContainText('0.9');
 });
@@ -193,7 +193,7 @@ test('C078 Add issue targets the metric the page is on, with a metric picker', a
   await page.goto(compareUrl([fix.a, fix.c], { metric: 'quality' }));
   await waitLoaded(page);
   await row(page, 'fix-003')
-    .getByRole('button', { name: /^(Expand|Collapse) item 3$/ })
+    .locator('[data-part="item-head"]')
     .click();
   await itemDetail(page, 'fix-003').getByRole('button', { name: 'Add issue' }).first().click();
   const dialog = page.getByTestId('issue-dialog');
@@ -207,13 +207,13 @@ test('C069 a long expected output collapses; C073 a 0 ms item shows its latency;
   await page.goto(compareUrl([fix.a, fix.c]));
   await waitLoaded(page);
   await row(page, 'fix-001')
-    .getByRole('button', { name: /^(Expand|Collapse) item 1$/ })
+    .locator('[data-part="item-head"]')
     .click();
   const expected = itemDetail(page, 'fix-001').locator('[data-kind="expected"]');
   await expect(expected.getByRole('button', { name: 'Show more' })).toBeVisible();
   expect((await expected.boundingBox())!.height).toBeLessThan(500);
   await row(page, 'fix-002')
-    .getByRole('button', { name: /^(Expand|Collapse) item 2$/ })
+    .locator('[data-part="item-head"]')
     .click();
   await expect(itemDetail(page, 'fix-002').getByTestId('output-card').first()).toContainText('0ms');
 });
@@ -247,10 +247,10 @@ test('C103 the Sweep view has no baseline reset', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Reset baseline' })).toHaveCount(0);
 });
 
-test('C056 the Item-by-Item toolbar offers Analyze for every compared run', async ({ page }) => {
+test('C056 Auto-analyze shows in the Items head only when an analysis exists', async ({ page }) => {
   await page.goto(compareUrl([fix.a, fix.c]));
   await waitLoaded(page);
-  await page.getByRole('button', { name: 'Analyze', exact: true }).click();
-  const links = page.getByRole('list', { name: 'Analyze a run' });
-  await expect(links.getByRole('link')).toHaveCount(2);
+  // round 8: no Analyze button in the toolbar; the head carries Auto-analyze only for runs with analyses
+  await expect(page.getByRole('button', { name: 'Analyze', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Auto-analyze' })).toHaveCount(0);
 });

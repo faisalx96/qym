@@ -49,7 +49,8 @@
 }
 
 .block .label {
-  color: var(--info);
+  /* --info itself is 3.9:1 on the elevated surface: mix toward the primary text for 4.5:1 */
+  color: color-mix(in srgb, var(--info) 55%, var(--text-primary));
   font-size: var(--font-sm);
   font-weight: 650;
   letter-spacing: 0.05em;

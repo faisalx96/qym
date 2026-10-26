@@ -14,7 +14,7 @@ import { RootCauseTab } from './panel/RootCauseTab';
 import { StepsTab } from './panel/StepsTab';
 import { ItemsHeadAside, ItemsSection } from './items/ItemsSection';
 import { CompareSection } from './CompareSection';
-import { RunCards } from './RunCards';
+import { RunCards, RunsDiff } from './RunCards';
 import { BaselineSelect, PassToggle } from './SelectionBar';
 import styles from './ReportSections.module.css';
 
@@ -147,6 +147,7 @@ export function CompareReport() {
         part="section-runs"
         title="Runs"
         description="Configuration and status of the compared runs. Remove a run with the cross; at least two stay."
+        aside={<RunsDiff />}
       >
         <RunCards />
       </CompareSection>
