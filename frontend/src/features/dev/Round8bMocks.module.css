@@ -1,0 +1,55 @@
+/*
+ * Round 8b: section separation recipes A and B (docs/internal/ui-migration/redesign8/sections.md).
+ * The composed full-page mocks are the real pages with the same rules injected
+ * (docs/internal/ui-migration/redesign8/sections/measure/recipe-{a,b}.css); this file is the boundary specimen.
+ */
+.stage {
+  inline-size: min(100%, 1193px);
+  padding: var(--space-md);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+}
+
+.filler {
+  min-block-size: 96px;
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+/* Recipe A: framed section */
+.a {
+  margin-block-start: var(--space-lg);
+  padding: var(--space-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.a .filler {
+  background: var(--bg-elevated);
+  border-color: transparent;
+}
+
+/* Recipe B: rhythm and rule */
+.b {
+  margin-block-start: calc(var(--space-xl) * 1.5);
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border-strong);
+}
+
+.bHead {
+  padding-inline-start: var(--space-md);
+  border-inline-start: 3px solid var(--border-strong);
+  margin-block-end: var(--space-md);
+}
+
+/* The primitive's own lead-in and hairline are replaced by the recipe (spec section 3). */
+.a [data-level='xl'],
+.b [data-level='xl'] {
+  margin-block-start: 0;
+  padding-block-start: 0;
+  border-block-start: 0;
+}

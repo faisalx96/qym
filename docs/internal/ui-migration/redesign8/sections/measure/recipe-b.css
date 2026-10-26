@@ -1,0 +1,16 @@
+/* Recipe B "rhythm and rule": no panel; 48px lead-in, 14px under a 1px --border-strong full-column rule, 3px start rail on the title band. */
+:root { --sec-lead: calc(var(--space-xl) * 1.5); } /* 48 */
+section:is([data-report-section], :where(#run-items)):not([data-first]) {
+  margin-block-start: var(--sec-lead) !important;
+  padding-block-start: var(--space-md) !important;
+  border-block-start: 1px solid var(--border-strong);
+}
+section:is([id^='compare-']):not([data-first]) { margin-block-start: calc(var(--sec-lead) - var(--space-md)) !important; } /* the compare page still has its 14px flex gap in this mock */
+section:is([data-report-section], :where(#run-items))[data-first] { padding-block-start: 0 !important; }
+section:is([data-report-section], :where(#run-items)) > :first-child {
+  margin-block-start: 0 !important; padding-block-start: 0 !important; border-block-start: 0 !important;
+  padding-inline-start: var(--space-md);
+  border-inline-start: 3px solid var(--border-strong);
+}
+section:is([data-report-section], :where(#run-items)) > :first-child [id$='-title'] { font-size: var(--font-xl); font-weight: 650; }
+section:is([data-report-section], :where(#run-items)) [data-level='xl'] { margin-block-start: 0 !important; padding-block-start: 0 !important; border-block-start: 0 !important; }
