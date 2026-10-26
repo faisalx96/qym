@@ -120,3 +120,14 @@ Counts: 87 rows above (82 + the five sidebar criteria as one row). Met as writte
 
 - `Round8Mocks.tsx` passed an icon `size={10}` that the Icon type does not allow (fixed to 12).
 - The mock's 8-run numbers (runs 551, averages 366) were measured without letters; see the amendments table.
+
+## Gate (final run, through the session gate wrapper)
+
+| Command | Result |
+|---|---|
+| `npm run check` (tsc, eslint, stylelint, Vitest, design test) | exit 0; Vitest 207 files, 1688 tests passed |
+| `npm run build`, `npm run build:sdk` | exit 0 each |
+| `pytest tests/platform/test_design_language.py` | 1 passed |
+| `npx playwright test e2e/compare` | 218 passed |
+| `e2e/visual-language/sticky-bars`, `datasets/ux-compare-missing`, `run-detail/multi-dataset-review`, `runs-list/selection-compare` | 41 passed |
+| `tests/platform` SQLite / PostgreSQL | not run: the backend is untouched |
