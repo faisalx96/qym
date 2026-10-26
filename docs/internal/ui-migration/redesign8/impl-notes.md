@@ -148,3 +148,5 @@ Counts: 87 rows above (82 + the five sidebar criteria as one row). Met as writte
 | F3, F4, F11 | not changed (acceptable per the review) | |
 
 After-shots re-taken only for the changed components: `after-overview-1440/390`, `after-categories-1440/390`, `after-runs-1440`, `after-page-sweep-1440`.
+
+Fix-pass gate (through the wrapper; the e2e ran at admitted cost 2 with one worker because the desktop never freed 6 GB): `npm run check` exit 0 (Vitest 207 files, 1688 tests), `npm run build` exit 0 (`NODE_OPTIONS=--max-old-space-size=3072`), design pytest 1 passed, `npx playwright test e2e/compare` 220 passed. A side effect of the inline slider (the head wrapped at 1024) and of the 27 px rows (categories one key 278) was fixed by a 13 rem slider and a 16 px gap under the key heading.
