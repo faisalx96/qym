@@ -1,106 +1,175 @@
 .cards {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fill, minmax(min(21rem, 100%), 1fr));
+  gap: var(--space-md);
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-@media (min-width: 1700px) {
-  .cards {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1279px) {
-  .cards {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .item {
   min-width: 0;
 }
 
-.head {
+.card {
   display: flex;
-  align-items: baseline;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-sm);
+  flex-direction: column;
+  gap: var(--space-xs);
+  block-size: 100%;
+  min-inline-size: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--card-edge);
+  border-inline-start: 3px solid var(--rail);
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  cursor: pointer;
+}
+
+.card:hover {
+  background: var(--bg-hover);
+}
+
+.card[aria-pressed='true'] {
+  background: var(--bg-active);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 .title {
   color: var(--text-primary);
   font-size: var(--font-md);
   font-weight: 650;
-  text-transform: capitalize;
 }
 
-.count {
+.title i {
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: var(--font-sm);
+  font-style: normal;
+  font-weight: 400;
 }
 
-.runs {
+.cols,
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.5rem 3rem 5.5rem;
+  align-items: center;
+  gap: 0 var(--space-sm);
+}
+
+.cols {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cols span:not(:first-child) {
+  text-align: end;
+}
+
+.rows {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.run {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  min-width: 0;
+.row {
+  row-gap: 2px;
+  min-inline-size: 0;
 }
 
-.line {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 3rem 3.5rem 9.5rem;
-  align-items: center;
-  gap: var(--space-sm);
+.num,
+.muted,
+.change {
+  font-family: var(--font-mono);
+  text-align: end;
 }
 
-.value {
+.num {
   color: var(--text-primary);
-  font-family: var(--font-mono);
-  text-align: end;
+  font-size: var(--font-base);
 }
 
-.latency {
+.num[data-band='1'] {
+  color: var(--score-1);
+}
+
+.num[data-band='2'] {
+  color: var(--score-2);
+}
+
+.num[data-band='3'] {
+  color: var(--score-3);
+}
+
+.num[data-band='4'] {
+  color: var(--score-4);
+}
+
+.num[data-band='5'] {
+  color: var(--score-5);
+}
+
+.muted,
+.change {
   color: var(--text-muted);
-  font-family: var(--font-mono);
   font-size: var(--font-sm);
-  text-align: end;
 }
 
-.delta {
-  justify-self: end;
+.change[data-tone='up'] {
+  color: var(--success);
 }
 
-/* the bar fills the card width: the track takes the whole line and the (empty) value text no room */
-.bar {
-  display: block;
-  --track-w: 100%;
+.change[data-tone='down'] {
+  color: var(--error-text);
 }
 
-.bar > span {
-  display: flex;
-  width: 100%;
-  gap: 0;
+.track {
+  position: relative;
+  grid-column: 1 / -1;
+  block-size: 8px;
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: var(--control-radius);
+  background: var(--run);
+}
+
+.tick {
+  position: absolute;
+  inset-block: -2px;
+  inline-size: 1px;
+  background: var(--text-primary);
 }
 
 @media (max-width: 640px) {
-  .line {
-    grid-template-columns: minmax(0, 1fr) 3rem auto;
-  }
-
-  .latency {
+  .cols {
     display: none;
   }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) 3rem 5rem;
+  }
+
+  .row > .muted {
+    display: none;
+  }
+}
+
+/* the run name keeps the compact line height here: 27 px rows (C-cat-4) */
+.row > [data-part='run-name'] {
+  line-height: 1.4;
 }

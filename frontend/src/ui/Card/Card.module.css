@@ -5,9 +5,9 @@
   box-sizing: border-box;
   min-width: 0;
   padding: 0;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--card-edge);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   color: inherit;
   font: inherit;
   text-align: start;
@@ -27,11 +27,11 @@
 }
 
 .card[data-wash='danger'] {
-  background: color-mix(in srgb, var(--error) var(--tint-faint), var(--bg-surface));
+  background: color-mix(in srgb, var(--error) var(--tint-faint), var(--card-bg));
 }
 
 .card[data-wash='live'] {
-  background: color-mix(in srgb, var(--accent-secondary) var(--tint-faint), var(--bg-surface));
+  background: color-mix(in srgb, var(--accent-secondary) var(--tint-faint), var(--card-bg));
 }
 
 .header,
@@ -96,7 +96,7 @@
 
 .card[data-selected] {
   border-color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--bg-surface));
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--card-bg));
 }
 
 .card[data-selected][data-rail='left'] {
@@ -109,7 +109,7 @@
 
 .card[data-selected][data-interactive]:hover {
   border-color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), var(--bg-surface));
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-strong), var(--card-bg));
 }
 
 .card[data-interactive]:focus-visible {

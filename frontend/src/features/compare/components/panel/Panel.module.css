@@ -377,3 +377,28 @@
 .fixed th:first-child {
   width: 12rem;
 }
+
+.chipBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.chipBarLabel {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.catKey {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0 0 var(--space-md);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 600;
+}

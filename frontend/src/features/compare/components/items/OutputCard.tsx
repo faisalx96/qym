@@ -13,7 +13,6 @@ import {
   ScoreValue,
   Tag,
   TextBlock,
-  Card,
 } from '@/ui';
 import type { Row, RootCauseIssue } from '@/features/run-detail/types';
 import { bodyText } from '@/features/run-detail/lib/itemText';
@@ -23,14 +22,14 @@ import {
   rootCauseIssues,
 } from '@/features/run-detail/lib/rowMeta';
 import { buildLangfuseTraceUrl } from '@/features/run-detail/lib/traceTree';
-import { runSeries, useCompare } from '../../CompareContext';
+import { runColor, useCompare } from '../../CompareContext';
 import { useRowPatch } from '../../hooks/useRowPatch';
 import { metricCellFor, pillState, runReadOnly, runScoresLocked } from '../../lib/rowCells';
 import { runShortName } from '../../lib/labels';
 import type { CompareRun } from '../../lib/model';
 import { CompareScoreEditor } from '../rd/CompareScoreEditor';
 import { IssueDialog } from '../rd/IssueDialog';
-import { RunTag } from '../RunTag';
+import { RunTag, useRunMark } from '../RunTag';
 import { useItemsUi } from './ItemsUi';
 import styles from './OutputCard.module.css';
 
@@ -102,7 +101,7 @@ function MetricChips({
     String(row.status) !== 'not_received';
   void c;
   return (
-    <div className={styles.metrics} role="list" aria-label="Metrics">
+    <div className={styles.metrics} role="list" aria-label="Metrics" data-part="metric-rows">
       {model.metrics.map((metric) => {
         const idx = run.metricIndex[metric];
         if (idx === undefined) return null;
@@ -111,7 +110,7 @@ function MetricChips({
         const isEditing = editing === metric;
         return (
           <div key={metric} role="listitem" className={styles.chip} data-metric={metric}>
-            <div className={styles.chipHead}>
+            <div className={styles.chipHead} data-open={open === metric ? '' : undefined}>
               <button
                 type="button"
                 className={styles.caret}
@@ -122,13 +121,15 @@ function MetricChips({
                 <Icon name={open === metric ? 'chevron-down' : 'chevron-right'} size={12} />
                 <span className={styles.metricName}>{metric}</span>
               </button>
-              <ScoreValue
-                value={cell.value}
-                type={cell.type}
-                direction={cell.direction}
-                error={cell.error}
-                text={cell.text}
-              />
+              <span className={styles.metricValue}>
+                <ScoreValue
+                  value={cell.value}
+                  type={cell.type}
+                  direction={cell.direction}
+                  error={cell.error}
+                  text={cell.text}
+                />
+              </span>
               {cell.edited ? (
                 <Tag
                   kind="accent"
@@ -287,16 +288,23 @@ export function OutputCard({
       row.trace_id,
     );
   const slug = run.run.project?.slug;
+  const mark = useRunMark(runIndex);
+  const meta = (openMetric ? (row.metric_meta?.[openMetric] ?? {}) : {}) as Record<string, unknown>;
+  const metaEntries = Object.entries(meta).filter(
+    ([k, v]) => !isInternalMetaKey(k) && !ui.hiddenFields.has(k) && v !== null && v !== undefined && v !== '',
+  );
   return (
-    <Card
-      as="article"
+    <article
+      className={styles.card}
+      style={{ '--run': runColor(runIndex) } as React.CSSProperties}
       data-testid="output-card"
+      data-part="output-card"
       data-run={run.ref}
       data-state={pill.state}
-      {...(pill.state === 'error' ? { tone: 'danger' as const } : { series: runSeries(runIndex) })}
+      {...mark}
     >
-      <div className={styles.stack}>
-        <header className={styles.head}>
+      <header className={styles.head} data-part="output-card-head">
+        <span className={styles.nameRow}>
           <RunTag index={runIndex} showName={false} bare />
           {slug ? (
             <Link
@@ -311,20 +319,22 @@ export function OutputCard({
               {runShortName(run)}
             </span>
           )}
+        </span>
+        <span className={styles.facts}>
+          <Tag tone={pill.state === 'pass' ? 'success' : pill.state === 'none' ? undefined : 'danger'}>
+            {pill.state === 'pass'
+              ? '✓ Pass'
+              : pill.state === 'fail'
+                ? '✗ Fail'
+                : pill.state === 'error'
+                  ? '⚠ Error'
+                  : '—'}
+          </Tag>
           {best ? (
             <Tag kind="data" tone="success" title="Highest score on this item">
               ★ Best
             </Tag>
           ) : null}
-          <Tag tone={pill.state === 'pass' ? 'success' : pill.state === 'none' ? undefined : 'danger'}>
-            {pill.state === 'pass'
-              ? '✓ PASS'
-              : pill.state === 'fail'
-                ? '✗ FAIL'
-                : pill.state === 'error'
-                  ? '⚠ ERROR'
-                  : '—'}
-          </Tag>
           {row.latency_ms != null ? (
             <span className={styles.meta}>
               {row.latency_ms === 0 ? '0ms' : formatLatency(row.latency_ms)}
@@ -355,7 +365,9 @@ export function OutputCard({
             ) : null}
             <CopyButton text={output} label={`Copy output of ${run.label}`} />
           </span>
-        </header>
+        </span>
+      </header>
+      <div className={styles.text} data-part="output-text">
         {row.output_received === false ? (
           <p className={styles.note} role="note">
             Output not received: this item’s outcome event never reached the platform.
@@ -369,9 +381,24 @@ export function OutputCard({
         ) : (
           <Collapsible text={output} />
         )}
-        <MetricChips run={run} row={row} itemId={itemId} open={openMetric} onOpen={onOpenMetric} />
-        <Issues run={run} row={row} />
       </div>
-    </Card>
+      <MetricChips run={run} row={row} itemId={itemId} open={openMetric} onOpen={onOpenMetric} />
+      <div className={styles.details} data-part="metric-details" data-open={openMetric ? '' : undefined}>
+        {openMetric ? (
+          <section
+            className={styles.reason}
+            data-testid="metric-panel-cell"
+            aria-label={`${openMetric} details of ${runShortName(run)}`}
+          >
+            {metaEntries.length ? (
+              <MetaList meta={meta} hidden={ui.hiddenFields} />
+            ) : (
+              <em className={styles.muted}>No details available.</em>
+            )}
+          </section>
+        ) : null}
+      </div>
+      <Issues run={run} row={row} />
+    </article>
   );
 }

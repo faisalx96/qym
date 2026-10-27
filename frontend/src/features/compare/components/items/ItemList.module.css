@@ -1,88 +1,204 @@
 .list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
   min-width: 0;
 }
 
-/* a deep-linked row lands below the sticky selection + delta header, not under it */
-.list tr[data-item-id] {
-  scroll-margin-top: 7rem;
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.list tr[data-item-id]:focus-visible {
+.item {
+  border: 1px solid var(--card-edge);
+  border-radius: 8px;
+  background: var(--card-bg);
+  scroll-margin-block-start: calc(var(--bar-link-h) + var(--space-md));
+}
+
+.item[data-error] {
+  border-color: var(--error);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  min-block-size: 52px;
+  padding: 0 var(--space-md);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.head:hover {
+  background: var(--bg-hover);
+}
+
+.head:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: -2px;
 }
 
-.cell {
+.chev {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 26px;
+  block-size: 26px;
+  color: var(--text-muted);
+}
+
+.no {
+  flex: none;
+  min-inline-size: 2.5ch;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+
+.title {
+  display: -webkit-box;
+  flex: 1 1 14rem;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  font-weight: 600;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.chips {
+  display: flex;
+  flex: 0 1 auto;
+  max-inline-size: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+/* swatch + letter + value: self-describing without a column header (owner decision H1) */
+.chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
+  min-inline-size: 68px;
+  block-size: 22px;
+  padding-inline: 6px;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--score, var(--border-strong)) 12%, var(--bg-elevated));
+  color: var(--score, var(--text-secondary));
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chip[data-band='1'] {
+  --score: var(--score-1);
+  color: var(--error-text);
+}
+
+.chip[data-band='2'] {
+  --score: var(--score-2);
+}
+
+.chip[data-band='3'] {
+  --score: var(--score-3);
+}
+
+.chip[data-band='4'] {
+  --score: var(--score-4);
+}
+
+.chip[data-band='5'] {
+  --score: var(--score-5);
+}
+
+.chip[data-state='error'] {
+  justify-content: flex-start;
+  border: 1px solid var(--error);
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--error-text);
 }
 
 .swatch {
   flex: none;
-  inline-size: 0.375rem;
-  block-size: 0.375rem;
-  border-radius: var(--radius-sm);
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 2px;
+  background: var(--run);
 }
 
-.cell[data-best] {
-  font-weight: 650;
-}
-
-.best {
-  color: var(--accent-primary);
-  font-size: var(--font-sm);
-}
-
-.pill {
+.letter {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  min-width: 1.75rem;
-  padding: 0 var(--space-xs);
-  border-inline-start: 2px solid var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--font-sm);
-  white-space: nowrap;
+  inline-size: 14px;
+  block-size: 14px;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--run) 16%, transparent);
+  color: var(--run);
+  font-size: var(--font-xs);
+  font-weight: 700;
+  line-height: 1;
 }
 
-.pill[data-state='pass'] {
-  border-inline-start-color: var(--success);
-  color: var(--success);
-}
-
-.pill[data-state='fail'] {
-  border-inline-start-color: var(--error);
-  color: var(--error);
-}
-
-.pill[data-state='error'] {
-  border-inline-start-color: var(--warning);
-  color: var(--warning);
-}
-
-.up {
-  color: var(--success);
-}
-
-.down {
-  color: var(--error);
+.pager {
+  display: flex;
+  justify-content: center;
 }
 
 .srOnly {
   position: absolute;
-  width: 1px;
-  height: 1px;
+  inline-size: 1px;
+  block-size: 1px;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
 }
 
-/* the expanded item keeps the visible width and stays put while the score columns scroll sideways */
 .detailHold {
-  position: sticky;
-  inset-inline-start: 0;
-  inline-size: var(--list-w, 100%);
-  max-inline-size: 100%;
-  box-sizing: border-box;
+  min-inline-size: 0;
+}
+
+/* 390: four chips with a swatch AND a letter measure 292 px in a 247 px row; the letter badge keeps the run colour, the swatch steps aside */
+@media (max-width: 640px) {
+  .chip {
+    min-inline-size: 0;
+    padding-inline: 3px;
+    gap: 3px;
+  }
+
+  .title {
+    flex-basis: 6rem;
+  }
+
+  .head {
+    padding-block: var(--space-sm);
+  }
+
+  .chip .swatch {
+    display: none;
+  }
+
+  .chips {
+    justify-content: flex-start;
+    flex-basis: 100%;
+    gap: 2px;
+    margin-inline-start: 0;
+  }
 }

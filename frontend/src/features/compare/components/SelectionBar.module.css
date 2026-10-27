@@ -1,17 +1,58 @@
 .cohort {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-md);
+  flex-direction: column;
+  gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  width: 100%;
+  background: var(--card-bg);
+}
+
+.cohortLabel {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sidesRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-sm);
 }
 
 .side {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-sm);
+  min-inline-size: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+
+.sideName {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.sideCount {
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+}
+
+.inlineLabel {
+  display: inline-flex;
+  max-inline-size: 100%; /* the control shrinks inside a phone panel instead of leaving it (round 8b fix pass) */
+  min-inline-size: 0;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
 }

@@ -1,17 +1,19 @@
 /** Performance by category: one table per metadata key, a row per value, a column per run (brief 05 J4). */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useSearchParamsState } from '@/lib/url-state';
 import { formatLatency, formatMetricValue } from '@/lib/metrics';
-import { Chip, SegmentedControl, Text } from '@/ui';
+import { Chip, ReportSection, SegmentedControl, Tag, Text } from '@/ui';
 import { AUTO_CATEGORIES, categoryDelta, categoryGroups, categoryKeys } from '../../lib/breakdown';
 import { useCompare } from '../../CompareContext';
 import { columnName } from '../../lib/columnName';
 import { DeltaTag } from '../common';
+import { scrollToSection, sectionDomId } from '../sectionIds';
 import { RunTag } from '../RunTag';
 import { CategoryCards } from './CategoryCards';
 import { ScrollRegion } from '../ScrollRegion';
 import styles from './Panel.module.css';
 
-export function CategoriesTab() {
+export function CategoriesSection() {
   const { model, columns, baseline, items, ctx, metric, c } = useCompare();
   const ids = useMemo(() => items.map((i) => i.itemId), [items]);
   const idSet = useMemo(() => new Set(ids), [ids]);
@@ -20,7 +22,10 @@ export function CategoriesTab() {
   const f = c.view.filters;
   // First three keys until the user picks (compare.html auto-selects 3).
   const chosen = useMemo(() => keys.slice(0, AUTO_CATEGORIES).map((k) => k.key), [keys]);
-  const [picked, setPicked] = useState<string[] | null>(null);
+  // The chosen keys live in the URL (`catKeys`, one value `-` for none), so a link restores the breakdowns shown.
+  const { params, replaceUrlQuery } = useSearchParamsState();
+  const picked = params.has('catKeys') ? params.getAll('catKeys').filter((k) => k !== '-') : null;
+  const setPicked = (next: string[]) => replaceUrlQuery({ catKeys: next.length ? next : ['-'] });
   const selected = useMemo(() => {
     const filtered = Object.keys(f.categories);
     if (f.complexity) filtered.push('complexity');
@@ -38,6 +43,7 @@ export function CategoriesTab() {
     const cur =
       key === 'complexity' ? f.complexity : key === 'domain' ? f.domain : (f.categories[key] ?? null);
     const next = cur && cur.length === 1 && cur[0] === value ? null : [value];
+    if (next) scrollToSection('items');
     if (key === 'complexity') c.setView({ filters: { ...f, complexity: next } });
     else if (key === 'domain')
       c.setView({ filters: { ...f, domain: next, domainMode: 'include', domainOnly: [] } });
@@ -52,15 +58,10 @@ export function CategoriesTab() {
     const cur = key === 'complexity' ? f.complexity : key === 'domain' ? f.domain : f.categories[key];
     return !!cur && cur.includes(value);
   };
-  if (!keys.length)
-    return (
-      <Text variant="sm" tone="muted">
-        No item metadata to break the results down by.
-      </Text>
-    );
-  return (
-    <div className={styles.stack}>
-      <div className={styles.chipRow} role="group" aria-label="Metadata keys">
+  const aside = keys.length ? (
+    <>
+      <div className={styles.chipBar} data-part="category-chip-bar" role="group" aria-label="Metadata keys">
+        <span className={styles.chipBarLabel}>Categories</span>
         {keys.map(({ key, count }) => (
           <Chip
             key={key}
@@ -72,14 +73,31 @@ export function CategoriesTab() {
           </Chip>
         ))}
       </div>
+      <CategoryViewToggle />
+    </>
+  ) : undefined;
+  return (
+    <ReportSection
+      id={sectionDomId('categories')}
+      part="section-categories"
+      title="Performance by category"
+      description="Average per metadata value and run, against the baseline tick. Press a card to filter the items."
+      aside={aside}
+    >
+      {!keys.length ? (
+        <Text variant="sm" tone="muted">
+          No item metadata to break the results down by.
+        </Text>
+      ) : (
+    <div className={styles.stack}>
       {selected.map((key, rank) => {
         const list = groups[key] ?? [];
         if (!list.length) return null;
         return (
           <section key={key} aria-label={`By ${key}`}>
-            <Text variant="md" weight={600}>
-              {key}
-            </Text>
+            <h3 className={styles.catKey}>
+              <span aria-hidden="true">◆</span> {key} <Tag kind="data">{metric}</Tag>
+            </h3>
             {c.view.catView === 'cards' ? (
               <CategoryCards
                 keyName={key}
@@ -145,6 +163,8 @@ export function CategoriesTab() {
         );
       })}
     </div>
+      )}
+    </ReportSection>
   );
 }
 

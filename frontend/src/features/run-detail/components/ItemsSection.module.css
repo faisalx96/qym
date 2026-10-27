@@ -1,15 +1,9 @@
-/* Items section frame. */
+/* Items section content (the ReportSection panel owns the frame and the head). */
 .section {
   position: relative; /* contains the absolutely positioned .srOnly live regions */
-  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  min-width: 0;
-  scroll-margin-top: calc(var(--run-nav-h, 0px) - var(--space-xl) * 1.5 + var(--space-sm));
-}
-
-.head {
   min-width: 0;
 }
 
@@ -48,7 +42,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  background: var(--bg-void);
+  background: var(--panel-bg, var(--bg-void));
 }
 
 @media (min-width: 761px) and (min-height: 640px) {
@@ -67,18 +61,5 @@
   .sticky {
     height: var(--bar-action-h);
     padding-bottom: 0;
-  }
-}
-
-/* Narrow: the Items header stacks (description gets the full line, actions wrap) and the table scrolls sideways. */
-@container (max-width: 640px) {
-  .head > div {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-sm);
-  }
-
-  .head > div > div:last-child {
-    flex-wrap: wrap;
   }
 }

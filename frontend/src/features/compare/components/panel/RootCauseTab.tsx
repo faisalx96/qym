@@ -1,11 +1,13 @@
 /** Root-cause categories over the filtered items, per run (brief 05 J5); solutions sit under each category (the Sankey's right-hand side). */
 import { useMemo } from 'react';
-import { Select, Tag, Text } from '@/ui';
+import { Select, Text } from '@/ui';
 import { platformUrl } from '@/lib/runtime';
 import { hasAnyRootCause, rootCauseSummary } from '../../lib/breakdown';
 import { letterOf, useCompare } from '../../CompareContext';
+import { columnName } from '../../lib/columnName';
 import { RunDot } from '../common';
-import { ScrollRegion } from '../ScrollRegion';
+import { RunTag } from '../RunTag';
+import cardStyles from './Errors.module.css';
 import styles from './Panel.module.css';
 
 /** Links to each run's auto-analysis workspace. */
@@ -72,65 +74,64 @@ export function RootCauseTab() {
           No root causes for this metric.
         </Text>
       ) : (
-        <ScrollRegion className={styles.scroll} label="Root cause table">
-          <table className={styles.table}>
-            <caption className={styles.caption}>
-              Issues per root-cause category; pressing a category filters the items.
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Category</th>
-                {columns.map((col) => (
-                  <th scope="col" key={col.key} title={col.title}>
-                    <RunDot index={col.runIdxs[0] ?? 0} /> {letterOf(col.runIdxs[0] ?? 0)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {cats.map((cat) => (
-                <tr
-                  key={cat.category}
-                  data-active={(f.rootCause?.includes(cat.category) ?? false) || undefined}
+        <ul className={cardStyles.grid} aria-label="Root causes" data-part="root-cause-cards">
+          {cats.map((cat) => {
+            const on = !!f.rootCause?.includes(cat.category);
+            return (
+              <li key={cat.category} className={cardStyles.item}>
+                <div
+                  className={cardStyles.card}
+                  data-kind="metric"
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={on}
+                  data-part="root-cause-card"
+                  onClick={() => toggle(cat.category)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggle(cat.category);
+                    }
+                  }}
                 >
-                  <th scope="row">
-                    <button
-                      type="button"
-                      className={styles.rowButton}
-                      aria-pressed={!!f.rootCause?.includes(cat.category)}
-                      onClick={() => toggle(cat.category)}
-                    >
-                      {cat.category} <span className={styles.count}>{cat.count}</span>
-                    </button>
-                    {cat.subcauses.length ? (
-                      <span className={styles.subList}>
-                        {cat.subcauses.map(([name, n]) => (
-                          <Tag key={name} kind="data" title={name}>
-                            {name} {n}
-                          </Tag>
-                        ))}
-                      </span>
-                    ) : null}
-                    {cat.solutions.length ? (
-                      <span className={styles.subList} aria-label={`Solutions for ${cat.category}`}>
-                        {cat.solutions.map(([name, n]) => (
-                          <Tag key={name} kind="data" tone="info" title={`Solution: ${name}`}>
-                            {'→'} {name} {n}
-                          </Tag>
-                        ))}
-                      </span>
-                    ) : null}
-                  </th>
-                  {columns.map((col, i) => (
-                    <td key={col.key}>
-                      <span className={styles.value}>{cat.counts[i] ?? 0}</span>
-                    </td>
+                  <div className={cardStyles.top}>
+                    <b>{cat.category}</b>
+                    <span className={cardStyles.count}>
+                      {cat.count} <i>{cat.count === 1 ? 'issue' : 'issues'}</i>
+                    </span>
+                  </div>
+                  {cat.subcauses.map(([name, n]) => (
+                    <p key={name} className={cardStyles.detail}>
+                      {name} · {n}
+                    </p>
                   ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollRegion>
+                  {cat.solutions.length ? (
+                    <p className={cardStyles.detail} aria-label={`Solutions for ${cat.category}`}>
+                      {cat.solutions.map(([name, n]) => `→ ${name} ${n}`).join(' · ')}
+                    </p>
+                  ) : null}
+                  <table className={cardStyles.table} aria-label="Issues per run">
+                    <tbody>
+                      {columns.map((col, i) => (
+                        <tr key={col.key} className={cardStyles.run} data-part="root-cause-run">
+                          <td>
+                            <RunTag
+                              index={col.runIdxs[0] ?? 0}
+                              name={columnName(model, col)}
+                              title={col.title}
+                              bare
+                            />
+                          </td>
+                          <td className={cardStyles.num}>{cat.counts[i] ?? 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
       <AnalyzeLinks />
     </div>

@@ -1,0 +1,19 @@
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-block-size: 42px;
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--card-edge);
+  border-inline-start: 3px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+}
+
+.banner b {
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}

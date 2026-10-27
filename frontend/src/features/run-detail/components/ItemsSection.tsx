@@ -1,7 +1,7 @@
 /** The Items section: header, filter bar, filter banner, virtualized table or heatmap, deep link to ?item=. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTextMode, type TextMode } from '@/lib/text';
-import { Button, HelpMarker, Icon, LinkButton, SectionHeader } from '@/ui';
+import { Button, HelpMarker, Icon, LinkButton, ReportSection } from '@/ui';
 import { useItemDetails } from '../hooks/useItemDetails';
 import { REASON_ORDER } from '../lib/itemReasons';
 import { emptyFilters, type SortBy } from '../lib/filterRules';
@@ -20,7 +20,7 @@ void PAGE_SIZES;
 export function ItemsSection() {
   const { runId, model, api, items, payload, basePath, readOnly } = useRunPage();
   const { view } = api;
-  const sectionRef = useRef<HTMLElement>(null);
+  const sectionRef = useRef<HTMLDivElement>(null);
   const details = useItemDetails(runId);
   const [textMode, setTextMode] = useState<TextMode>(() => getTextMode());
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -120,68 +120,66 @@ export function ItemsSection() {
 
   return (
     <ItemsUi.Provider value={ui}>
-      <section id="run-items" ref={sectionRef} className={styles.section} aria-labelledby="run-items-title">
-        <div className={styles.head}>
-          <SectionHeader
-            id="run-items-title"
-            level="xl"
-            title="Items"
-            description="Every input, outcome and metric. Filters apply to the table and to every section above."
-            aside={
-              <span className={styles.aside}>
-                {readOnly ? null : (
-                  <LinkButton
-                    size="sm"
-                    variant="neutral"
-                    to={`${basePath}/analyzer`}
-                    icon={<Icon name="sparkles" size={12} />}
-                  >
-                    Auto-analyze
-                  </LinkButton>
-                )}
-                <CsvExport />
-              </span>
-            }
-          />
-        </div>
-        <div className={styles.sticky} data-run-filters="">
-          <FilterBar display={{ textMode, onTextMode: setTextMode }} />
-        </div>
-        {showBanner && metric ? (
-          <div className={styles.banner} role="status" data-testid="filter-banner">
-            Filtered to {items.length.toLocaleString('en-US')} items that {bannerKinds[view.show]} {metric}
-            <HelpMarker label="How the reason is chosen">
-              The reason shown for a failing item comes from the first source that exists:{' '}
-              {REASON_ORDER.map((r) => r.source).join(' → ')}.
-            </HelpMarker>
-            <Button size="sm" variant="ghost" onPress={() => api.setView({ show: 'all' })}>
-              Clear filter
-            </Button>
+      <ReportSection
+        id="run-items"
+        title="Items"
+        description="Every input, outcome and metric. Filters apply to the table and to every section above."
+        aside={
+          <span className={styles.aside}>
+            {readOnly ? null : (
+              <LinkButton
+                size="sm"
+                variant="neutral"
+                to={`${basePath}/analyzer`}
+                icon={<Icon name="sparkles" size={12} />}
+              >
+                Auto-analyze
+              </LinkButton>
+            )}
+            <CsvExport />
+          </span>
+        }
+      >
+        <div ref={sectionRef} className={styles.section}>
+          <div className={styles.sticky} data-run-filters="">
+            <FilterBar display={{ textMode, onTextMode: setTextMode }} />
           </div>
-        ) : null}
-        {view.view === 'heatmap' && model.samples > 1 ? (
-          <Heatmap
-            items={items}
-            onOpen={(itemId, pass) => {
-              // The cell's own pass opens: that item as that pass produced it.
-              api.replaceView({ ...view, view: 'cards', page: 1 }, { item: itemId, pass: String(pass) });
-              setExpanded((prev) => new Set(prev).add(itemId));
-            }}
-          />
-        ) : (
-          <ItemsTable
-            items={items}
-            page={view.page}
-            onPage={(page) => api.setView({ page })}
-            sort={view.sort}
-            onSort={(sort: SortBy) => api.setView({ sort })}
-            sectionRef={sectionRef}
-          />
-        )}
-        <span className={styles.srOnly} aria-live="polite">
-          {payload.snapshot.rows.length ? '' : 'This run has no items yet.'}
-        </span>
-      </section>
+          {showBanner && metric ? (
+            <div className={styles.banner} role="status" data-testid="filter-banner">
+              Filtered to {items.length.toLocaleString('en-US')} items that {bannerKinds[view.show]} {metric}
+              <HelpMarker label="How the reason is chosen">
+                The reason shown for a failing item comes from the first source that exists:{' '}
+                {REASON_ORDER.map((r) => r.source).join(' → ')}.
+              </HelpMarker>
+              <Button size="sm" variant="ghost" onPress={() => api.setView({ show: 'all' })}>
+                Clear filter
+              </Button>
+            </div>
+          ) : null}
+          {view.view === 'heatmap' && model.samples > 1 ? (
+            <Heatmap
+              items={items}
+              onOpen={(itemId, pass) => {
+                // The cell's own pass opens: that item as that pass produced it.
+                api.replaceView({ ...view, view: 'cards', page: 1 }, { item: itemId, pass: String(pass) });
+                setExpanded((prev) => new Set(prev).add(itemId));
+              }}
+            />
+          ) : (
+            <ItemsTable
+              items={items}
+              page={view.page}
+              onPage={(page) => api.setView({ page })}
+              sort={view.sort}
+              onSort={(sort: SortBy) => api.setView({ sort })}
+              sectionRef={sectionRef}
+            />
+          )}
+          <span className={styles.srOnly} aria-live="polite">
+            {payload.snapshot.rows.length ? '' : 'This run has no items yet.'}
+          </span>
+        </div>
+      </ReportSection>
     </ItemsUi.Provider>
   );
 }

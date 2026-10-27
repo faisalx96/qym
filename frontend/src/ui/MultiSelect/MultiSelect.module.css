@@ -57,7 +57,7 @@
 
 .popover {
   width: var(--dropdown-width);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   border: 1px solid var(--border-default);
   border-radius: var(--dropdown-radius);
   box-shadow: var(--shadow-popover);
@@ -101,7 +101,7 @@
   gap: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .action {
@@ -210,7 +210,7 @@
 }
 
 .inlinePanel {
-  background: var(--bg-surface);
+  background: var(--card-bg);
   border: 1px solid var(--border-subtle);
   border-radius: var(--dropdown-radius);
   overflow: hidden;

@@ -1,12 +1,13 @@
 import { useRef, type ReactNode } from 'react';
 import { useInView } from '@/lib/useInView';
-import { SectionHeader } from '../SectionHeader';
 import { Text } from '../Text';
 import styles from './ReportSection.module.css';
 
 export interface ReportSectionProps {
   /** Anchor id; the title gets `${id}-title`. */
   id: string;
+  /** `data-part` of the section (compare: `section-runs`, ...); defaults to `section`. */
+  part?: string;
   title: ReactNode;
   description?: ReactNode;
   aside?: ReactNode;
@@ -24,9 +25,10 @@ export interface ReportSectionProps {
   children?: ReactNode;
 }
 
-/** One full-width report section: run section header (xl) over a container-query body (DESIGN_LANGUAGE §3). */
+/** One full-width report section: a framed panel (DESIGN_LANGUAGE §3 "Report section"): head inside, container-query body of inset cards. */
 export function ReportSection({
   id,
+  part = 'section',
   title,
   description,
   aside,
@@ -49,26 +51,31 @@ export function ReportSection({
       className={[styles.section, className].filter(Boolean).join(' ')}
       aria-labelledby={titleId}
       data-report-section={id}
+      data-part={part}
       data-mounted={inView ? '' : undefined}
     >
-      <SectionHeader
-        level="xl"
-        id={titleId}
-        title={title}
-        description={description}
-        aside={
-          scopeNote || aside ? (
-            <>
-              {scopeNote ? (
-                <Text variant="sm" tone="muted" data-testid="scope-note">
-                  {scopeNote}
-                </Text>
-              ) : null}
-              {aside}
-            </>
-          ) : undefined
-        }
-      />
+      <div className={styles.head} data-part="section-head">
+        <div className={styles.headText}>
+          <Text variant="xl" as="h2" id={titleId} className={styles.title}>
+            {title}
+          </Text>
+          {description ? (
+            <Text variant="sm" tone="muted" as="p" className={styles.desc}>
+              {description}
+            </Text>
+          ) : null}
+        </div>
+        {scopeNote || aside ? (
+          <div className={styles.aside}>
+            {scopeNote ? (
+              <Text variant="sm" tone="muted" data-testid="scope-note">
+                {scopeNote}
+              </Text>
+            ) : null}
+            {aside}
+          </div>
+        ) : null}
+      </div>
       <div
         className={styles.body}
         style={inView ? undefined : { minHeight }}

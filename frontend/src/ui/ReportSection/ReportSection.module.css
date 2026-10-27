@@ -1,19 +1,60 @@
-/* Run section header recipe + report body: container-query host so cards respond to the column width. */
+/* Framed section (round 8b, owner decision H6): every top-level report section is a panel. The primitive owns every
+   distance: 20px between panels, the first one has no lead-in, the head sits inside the panel with no rule. */
 .section {
   display: flow-root;
   min-width: 0;
-  /* The header owns the 48px lead-in; a jump lands with its hairline just under the sticky nav. */
-  scroll-margin-top: calc(var(--report-nav-h, 0px) - var(--space-xl) * 1.5 + var(--space-sm));
+  box-sizing: border-box;
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  --panel-bg: var(--bg-surface); /* the panel's own fill, for a sticky bar that must cover it inside the inset body */
+  /* a jump lands with the panel edge just under the sticky nav (run: --report-nav-h; compare: --bar-link-h) */
+  scroll-margin-top: calc(var(--report-nav-h, var(--bar-link-h, 0px)) + var(--space-md) - var(--space-xs));
 }
 
-/* The first section sits right under the nav: no 48px lead-in and no second hairline. */
-.section:first-child > div:first-child {
-  margin-top: var(--space-md);
-  padding-top: 0;
-  border-top: 0;
+.section ~ .section {
+  margin-block-start: var(--space-lg);
 }
 
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+  margin-block-end: var(--space-md);
+}
+
+.headText {
+  flex: 1 1 24rem;
+  min-inline-size: 0;
+}
+
+.title,
+.desc {
+  margin: 0;
+}
+
+.desc {
+  margin-block-start: var(--space-xs);
+}
+
+.aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+/* Inset cards (C-sec-A4): inside a panel body a card is --bg-elevated with no visible outline. One mechanism for
+   both pages: the grouping surfaces paint var(--card-bg) and var(--card-edge), and the body redefines both. */
 .body {
+  --card-bg: var(--bg-elevated);
+  --card-edge: transparent;
+
   /* The containing block for visually hidden (absolute) text, which must never widen the page. */
   position: relative;
   container-type: inline-size;

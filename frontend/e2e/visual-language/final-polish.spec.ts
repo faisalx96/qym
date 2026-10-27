@@ -82,12 +82,14 @@ test.describe('1440', () => {
       });
     // --bg-surface is #1a1a28 in the dark theme this suite runs in
     const surface = 'rgb(26, 26, 40)';
-    const check = async (name: string, loc: ReturnType<Page['locator']>) => {
+    // round 8b (owner decision H6): inside a report section panel a card is inset: --bg-elevated (#222232), same frame
+    const inset = 'rgb(34, 34, 50)';
+    const check = async (name: string, loc: ReturnType<Page['locator']>, want = surface) => {
       await expect(loc, name).toBeVisible();
       const f = await frame(loc);
       expect(f.radius, `${name} radius`).toBe(f.want);
       expect(f.border, `${name} outline`).toBe('1px');
-      expect(f.bg, `${name} surface (want ${surface})`).toBe(surface);
+      expect(f.bg, `${name} surface (want ${want})`).toBe(want);
     };
     await gotoApp(page, `/projects/${areas.slug}/experiments/new?env=${areas.envId}`);
     await check(
@@ -100,6 +102,7 @@ test.describe('1440', () => {
     await check(
       'latency tile',
       page.getByRole('region', { name: /LLM|Tool|Agent|Retriev|Chain|Other|Embedding|Guardrail/ }).first(),
+      inset,
     );
     await gotoApp(page, `/projects/${tour.slug}/charts`);
     await check('chart card', page.locator('[data-testid^="chart-card-"]').first());
@@ -143,7 +146,8 @@ test.describe('1440', () => {
     const sizes = await sweep
       .locator('h2')
       .evaluateAll((els) => els.map((e) => getComputedStyle(e).fontSize));
-    expect(sizes.length).toBeGreaterThanOrEqual(3);
+    // round 8 reduced the sweep to one titled section (the verdict) plus tables; the framed report sections are measured by r8b-sections
+    expect(sizes.length).toBeGreaterThanOrEqual(1);
     expect(new Set(sizes)).toEqual(new Set(['18px']));
     const lead = async (sections: ReturnType<Page['locator']>) =>
       sections.evaluateAll((els) =>
@@ -152,11 +156,11 @@ test.describe('1440', () => {
           return Math.round(h2 - els[i]!.getBoundingClientRect().bottom);
         }),
       );
-    const sweepLead = await lead(sweep.locator('> section'));
     await gotoApp(page, compareUrl(tour.compareIds));
     await expect(page.getByTestId('item-list')).toBeVisible({ timeout: 20_000 });
     const compareLead = await lead(page.locator('[data-report-section]'));
-    for (let i = 0; i < 2; i += 1) expect(Math.abs(sweepLead[i]! - compareLead[i]!)).toBeLessThanOrEqual(3);
+    // the compare sections are panels now (round 8b): 20 px between panels, 1 px border and 14 px padding above the title = 35; the sweep view has no section with a head of its own any more
+    for (const gap of compareLead) expect(Math.abs(gap - 35)).toBeLessThanOrEqual(1);
   });
 });
 

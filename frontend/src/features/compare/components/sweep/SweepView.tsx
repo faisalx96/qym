@@ -4,23 +4,16 @@ import { metricDirectionLabel } from '@/lib/metrics';
 import {
   Badge,
   Button,
-  Card,
   Checkbox,
   Dialog,
   EmptyState,
   HelpMarker,
-  IconButton,
   MultiSelect,
-  QuickFilterGroup,
-  ReportLayout,
-  ScopeBar,
   SearchField,
-  SectionHeader,
   Select,
   Tag,
   Text,
 } from '@/ui';
-import { useMediaQuery } from '@/features/shell';
 import { useSearchParamsState } from '@/lib/url-state';
 import { getMetadataCategoryValues } from '@/features/run-detail/lib/rowMeta';
 import { useCompare } from '../../CompareContext';
@@ -43,10 +36,7 @@ import {
 } from '../../lib/cohort';
 import type { NoiseStat } from '../../lib/noise';
 import { ItemDetail } from '../items/ItemDetail';
-import { sweepScopeChips } from '../../lib/scope';
 import { ScrollRegion } from '../ScrollRegion';
-import { useSidebarHidden } from '@/lib/useSidebarHidden';
-import { WIDE_QUERY } from '../CompareBody';
 import styles from './SweepView.module.css';
 
 const pct = (v: number | null | undefined, d = 1) =>
@@ -98,6 +88,7 @@ function StatCard({
   delta,
   noise,
   help,
+  good,
 }: {
   label: React.ReactNode;
   from: number | null;
@@ -105,19 +96,16 @@ function StatCard({
   delta: number | null;
   noise: NoiseStat | null;
   help?: string;
+  /** Direction-aware sign of the change: > 0 better, < 0 worse. */
+  good?: number;
 }) {
-  const verdict = noise?.verdict ?? (delta === null ? 'within_noise' : 'within_noise');
-  const tone = verdict === 'improved' ? 'success' : verdict === 'regressed' ? 'danger' : undefined;
+  const verdict = noise?.verdict ?? 'within_noise';
+  const edge = verdict === 'improved' ? 'good' : verdict === 'regressed' ? 'bad' : 'flat';
   const word = verdict === 'improved' ? 'improved' : verdict === 'regressed' ? 'regressed' : 'within noise';
+  const pill = verdict === 'improved' ? 'up' : verdict === 'regressed' ? 'down' : 'flat';
+  void good;
   return (
-    <Card
-      compact
-      rail="bottom"
-      tone={tone ?? 'neutral'}
-      className={styles.stat}
-      data-verdict={verdict}
-      data-testid="sweep-stat"
-    >
+    <div className={styles.stat} data-verdict={verdict} data-edge={edge} data-testid="sweep-stat">
       <div className={styles.statLabel}>
         {label}
         {help ? (
@@ -129,10 +117,10 @@ function StatCard({
       </div>
       {delta !== null ? (
         <div className={styles.statDelta}>
-          <Tag kind="data" tone={tone}>
+          <span className={styles.pill} data-tone={pill}>
             {verdict === 'improved' ? '▲' : verdict === 'regressed' ? '▼' : '≈'} {signed(delta)}
             <span className={styles.srOnly}> ({word})</span>
-          </Tag>
+          </span>
           {noise ? (
             <span className={styles.noise} title={`95% noise band, p=${noise.pValue.toFixed(3)}`}>
               noise {'±'}
@@ -143,22 +131,22 @@ function StatCard({
           )}
         </div>
       ) : null}
-    </Card>
+    </div>
   );
 }
 
 function PassTrack({ passes }: { passes: boolean[] }) {
+  const ok = passes.filter(Boolean).length;
   return (
-    <span
-      className={styles.track}
-      role="img"
-      aria-label={`${passes.filter(Boolean).length} of ${passes.length} pass`}
-    >
-      {passes.map((p, i) => (
-        <span key={i} className={styles.dot} data-pass={p || undefined} aria-hidden>
-          {p ? '✓' : '✗'}
-        </span>
-      ))}
+    <span className={styles.passCell} data-part="sweep-pass-cell">
+      <span className={styles.track} role="img" aria-label={`${ok} of ${passes.length} pass`}>
+        {passes.map((p, i) => (
+          <span key={i} className={styles.dot} data-pass={p || undefined} aria-hidden />
+        ))}
+      </span>
+      <b aria-hidden>
+        {ok}/{passes.length}
+      </b>
     </span>
   );
 }
@@ -167,9 +155,6 @@ export function SweepView() {
   const { model, cohorts, ctx, items: filteredCompareItems, c } = useCompare();
   const [f, reverse, setF] = useSweepFilters();
   const [open, setOpen] = useState<string | null>(null);
-  const wide = useMediaQuery(WIDE_QUERY);
-  const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
-  const [drawer, setDrawer] = useState(false);
   const [sort, setSort] = useState<{
     key: 'default' | 'issue' | 'left' | 'right' | 'move';
     dir: 'asc' | 'desc';
@@ -288,109 +273,7 @@ export function SweepView() {
     };
   });
   const sweepOpenItem = open ? displayed.find((i) => i.itemId === open) : null;
-  const chips = sweepScopeChips(effective, left, right);
-  const scoped = chips.length > 0;
-  const viewItems = () => {
-    setDrawer(false);
-    document.getElementById('sweep-items')?.scrollIntoView({ block: 'start' });
-  };
-  const sidebar = (
-    <div className={styles.quick} data-testid="quick-filters">
-      <div className={styles.quickHead}>
-        <Text variant="md" weight={650} tone="primary">
-          Quick filters
-        </Text>
-        {wide ? (
-          <IconButton label="Hide quick filters" icon="close" onPress={() => setSidebarHidden(true)} />
-        ) : null}
-      </div>
-      <Text variant="sm" tone="muted" role="status">
-        {shown.length.toLocaleString('en-US')} of {displayed.length.toLocaleString('en-US')} items
-      </Text>
-      <div className={styles.quickActions}>
-        <Button size="sm" variant="ghost" onPress={() => setF({ ...DEFAULT_SWEEP_FILTERS })}>
-          Clear all
-        </Button>
-        <Button size="sm" variant="neutral" onPress={viewItems}>
-          View {shown.length.toLocaleString('en-US')} items
-        </Button>
-      </div>
-      <SearchField
-        label="Search sweep items"
-        hideLabel
-        placeholder="Item id, domain, complexity"
-        value={f.q}
-        onChange={(q) => setF({ q })}
-        onClear={() => setF({ q: '' })}
-      />
-      <QuickFilterGroup
-        label="Move"
-        mode="single"
-        options={[
-          { id: 'improved', label: 'Improved', tone: 'success' },
-          { id: 'regressed', label: 'Regressed', tone: 'danger' },
-          { id: 'unchanged', label: 'Unchanged' },
-        ]}
-        selected={f.move === 'all' ? [] : [f.move]}
-        onToggle={(id) => setF({ move: f.move === id ? 'all' : (id as SweepMove) })}
-      />
-      <QuickFilterGroup
-        label="Outcome"
-        mode="single"
-        options={[
-          { id: 'left_sweeps_right', label: `${left} sweeps ${right}` },
-          { id: 'right_sweeps_left', label: `${right} sweeps ${left}` },
-          { id: 'both_pass', label: 'Both pass', tone: 'success' },
-          { id: 'both_fail', label: 'Both fail', tone: 'danger' },
-          { id: 'mixed', label: 'Mixed' },
-        ]}
-        selected={f.outcome === 'all' ? [] : [f.outcome]}
-        onToggle={(id) => setF({ outcome: f.outcome === id ? 'all' : (id as SweepOutcome) })}
-      />
-      {key !== 'all' ? (
-        <QuickFilterGroup
-          label={key}
-          mode="multi"
-          options={values.map((v) => ({ id: v, label: v }))}
-          selected={f.values ?? []}
-          onToggle={(id) => {
-            const cur = f.values ?? [];
-            const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
-            setF({ values: next.length && next.length < values.length ? next : null, only: [] });
-          }}
-          onOnly={(id) => only(id)}
-        />
-      ) : null}
-      <Checkbox
-        isSelected={f.only.length > 0}
-        isDisabled={key === 'all' || !sweepKeySupportsOnly(displayed, key) || !f.values?.length}
-        onChange={(on) => setF({ only: on && f.values ? f.values : [] })}
-      >
-        Exclusive only
-      </Checkbox>
-    </div>
-  );
   return (
-    <ReportLayout
-      wide={wide}
-      sidebarOpen={scoped && !sidebarHidden}
-      drawerOpen={drawer && scoped}
-      onDrawerOpenChange={setDrawer}
-      sidebar={scoped ? sidebar : undefined}
-    >
-      {scoped ? (
-        <ScopeBar
-          shown={shown.length}
-          total={displayed.length}
-          chips={chips.map((chip) => ({ key: chip.key, label: chip.label, onClear: () => setF(chip.patch) }))}
-          onClearAll={() => setF({ ...DEFAULT_SWEEP_FILTERS })}
-          onJumpToItems={viewItems}
-          sidebarOpen={wide ? !sidebarHidden : drawer}
-          narrow={!wide}
-          hideChips={wide && !sidebarHidden}
-          onToggleSidebar={() => (wide ? setSidebarHidden(!sidebarHidden) : setDrawer(true))}
-        />
-      ) : null}
       <div className={styles.sweep} data-testid="sweep-view">
         <header className={styles.head}>
           <div>
@@ -398,7 +281,7 @@ export function SweepView() {
               Sweep
             </Text>
             <Text variant="sm" tone="muted">
-              {left} vs {right} across {k} runs per cohort {'·'} {ctx.metric} {'·'} {shown.length}/
+              {left} vs {right} across {k} runs per cohort {'·'} metric: {ctx.metric} {'·'} {shown.length}/
               {displayed.length} items shown
             </Text>
           </div>
@@ -413,57 +296,49 @@ export function SweepView() {
         </header>
 
         {basis ? (
-          <Card
-            compact
-            tone={
-              basis.stat.verdict === 'improved'
-                ? 'success'
-                : basis.stat.verdict === 'regressed'
-                  ? 'danger'
-                  : 'neutral'
-            }
+          <div
+            className={styles.verdict}
             data-verdict={basis.stat.verdict}
+            data-part="sweep-verdict"
             role="status"
           >
-            <div className={styles.verdict}>
-              <Badge
-                tone={
-                  basis.stat.verdict === 'improved'
-                    ? 'success'
-                    : basis.stat.verdict === 'regressed'
-                      ? 'danger'
-                      : 'neutral'
-                }
-              >
-                {basis.stat.verdict === 'improved'
-                  ? 'IMPROVED'
+            <Badge
+              tone={
+                basis.stat.verdict === 'improved'
+                  ? 'success'
                   : basis.stat.verdict === 'regressed'
-                    ? 'REGRESSED'
-                    : 'WITHIN NOISE'}
-              </Badge>
-              <div>
-                <Text variant="md" weight={600}>
-                  {basis.label} {signed(basis.stat.delta)} {'—'}{' '}
-                  {basis.stat.verdict === 'within_noise'
-                    ? 'not distinguishable from run luck'
-                    : 'beyond noise'}
-                </Text>
-                <Text variant="sm" tone="muted">
-                  {ctx.metric}
-                  {direction === 'minimize' ? ' · lower is better' : ''} {'·'} noise {'±'}
-                  {(basis.stat.halfWidth * 100).toFixed(1)}% at 95% {'·'}{' '}
-                  {basis.stat.pValue < 0.001 ? 'p < 0.001' : `p = ${basis.stat.pValue.toFixed(3)}`} {'·'}{' '}
-                  {basis.stat.items} paired items {'·'} {metricRole} {'—'} other metrics below are context
-                </Text>
-              </div>
+                    ? 'danger'
+                    : 'neutral'
+              }
+            >
+              {basis.stat.verdict === 'improved'
+                ? 'Improved'
+                : basis.stat.verdict === 'regressed'
+                  ? 'Regressed'
+                  : 'Within noise'}
+            </Badge>
+            <div>
+              <Text variant="md" weight={650} data-part="sweep-verdict-title">
+                {basis.label} {signed(basis.stat.delta)} {'—'}{' '}
+                {basis.stat.verdict === 'within_noise'
+                  ? 'not distinguishable from run luck'
+                  : 'beyond noise'}
+              </Text>
+              <Text variant="sm" tone="muted" as="p" className={styles.verdictSub}>
+                {ctx.metric}
+                {direction === 'minimize' ? ' · lower is better' : ''} {'·'} noise {'±'}
+                {(basis.stat.halfWidth * 100).toFixed(1)}% at 95% {'·'}{' '}
+                {basis.stat.pValue < 0.001 ? 'p < 0.001' : `p = ${basis.stat.pValue.toFixed(3)}`} {'·'}{' '}
+                {basis.stat.items} paired items {'·'} {metricRole} {'—'} other metrics below are context
+              </Text>
             </div>
-          </Card>
+          </div>
         ) : null}
         <Text variant="sm" tone="muted">
           {metricDirectionLabel(direction)}
         </Text>
 
-        <div className={styles.filters} role="group" aria-label="Sweep filters">
+        <div className={styles.filters} role="group" aria-label="Sweep filters" data-part="sweep-filters">
           <Select
             label="Move"
             value={f.move}
@@ -537,9 +412,9 @@ export function SweepView() {
           />
         ) : (
           <>
-            <section aria-label="Cohort metrics">
-              <SectionHeader title="Cohort metrics" />
-              <div className={styles.stats}>
+            <section aria-label="Cohort metrics" className={styles.block}>
+              <h3 className={styles.h3}>Cohort metrics</h3>
+              <div className={styles.stats} data-part="sweep-stat-cards">
                 <StatCard
                   label={estimated ? `Pass@${estimated}` : `Pass@${k}`}
                   from={summary.left.passAtK}
@@ -588,8 +463,8 @@ export function SweepView() {
             </section>
 
             {brows.length ? (
-              <section aria-label={`Cohort metrics by ${bk}`}>
-                <SectionHeader title={`Cohort metrics by ${bk}`} />
+              <section aria-label={`Cohort metrics by ${bk}`} className={styles.block}>
+                <h3 className={styles.h3}>{`Cohort metrics by ${bk}`}</h3>
                 <ScrollRegion className={styles.scroll} label={`${bk} breakdown`}>
                   <table className={styles.table}>
                     <thead>
@@ -654,9 +529,9 @@ export function SweepView() {
               </section>
             ) : null}
 
-            <section aria-label="Outcome summary">
-              <SectionHeader title="Outcome summary" />
-              <div className={styles.outcomes}>
+            <section aria-label="Outcome summary" className={styles.block}>
+              <h3 className={styles.h3}>Outcome summary</h3>
+              <div className={styles.outcomes} data-part="sweep-outcome-cards">
                 {[
                   ['Total items', shown.length, null, undefined],
                   ['Improved', summary.counts.improved, 'improved', 'move'],
@@ -667,34 +542,47 @@ export function SweepView() {
                 ].map(([label, n, value, kind]) => {
                   const active =
                     kind === 'move' ? f.move === value : kind === 'outcome' ? f.outcome === value : false;
-                  return (
-                    <Card
+                  const tone =
+                    value === 'improved' || value === 'right_sweeps_left'
+                      ? 'good'
+                      : value === 'regressed' || value === 'left_sweeps_right'
+                        ? 'bad'
+                        : undefined;
+                  const body = (
+                    <>
+                      <b>{String(n)}</b>
+                      <span>{String(label)}</span>
+                    </>
+                  );
+                  return kind ? (
+                    <button
                       key={String(label)}
-                      compact
+                      type="button"
                       className={styles.outcome}
-                      isSelected={kind ? active : undefined}
-                      onPress={
-                        kind
-                          ? () =>
-                              kind === 'move'
-                                ? setF({ move: active ? 'all' : (value as SweepMove) })
-                                : setF({ outcome: active ? 'all' : (value as SweepOutcome) })
-                          : undefined
+                      data-tone={tone}
+                      aria-pressed={active}
+                      onClick={() =>
+                        kind === 'move'
+                          ? setF({ move: active ? 'all' : (value as SweepMove) })
+                          : setF({ outcome: active ? 'all' : (value as SweepOutcome) })
                       }
                     >
-                      <span className={styles.outcomeValue}>{String(n)}</span>
-                      <span className={styles.outcomeLabel}>{String(label)}</span>
-                    </Card>
+                      {body}
+                    </button>
+                  ) : (
+                    <div key={String(label)} className={styles.outcome}>
+                      {body}
+                    </div>
                   );
                 })}
-                <Card compact className={styles.outcome}>
-                  <span className={styles.outcomeValue}>{summary.counts.avgAttemptsDelta.toFixed(2)}</span>
-                  <span className={styles.outcomeLabel}>Avg {'Δ'} attempts / item</span>
-                </Card>
+                <div className={styles.outcome}>
+                  <b>{summary.counts.avgAttemptsDelta.toFixed(2)}</b>
+                  <span title="Average change in attempts per item">Avg {'Δ'} attempts</span>
+                </div>
               </div>
             </section>
 
-            <section aria-label="Items" id="sweep-items">
+            <section aria-label="Items" id="sweep-items" data-part="sweep-item-table">
               <ScrollRegion className={styles.scroll} label="Sweep items">
                 <table className={styles.table}>
                   <thead>
@@ -732,7 +620,13 @@ export function SweepView() {
                   </thead>
                   <tbody>
                     {shown.map((item) => (
-                      <tr key={item.itemId} className={styles.itemRow} data-outcome={sweepOutcomeOf(item)}>
+                      <tr
+                        key={item.itemId}
+                        className={styles.itemRow}
+                        data-part="sweep-item-row"
+                        data-outcome={sweepOutcomeOf(item)}
+                        onClick={() => setOpen(item.itemId)}
+                      >
                         <th scope="row">
                           <button
                             type="button"
@@ -748,9 +642,9 @@ export function SweepView() {
                             .flatMap((m) => getMetadataCategoryValues(item.metadata, m))
                             .slice(0, 4)
                             .map((v) => (
-                              <Tag key={v} kind="data">
-                                {v}
-                              </Tag>
+                              <span key={v} className={styles.metaBadge} data-k={v.toLowerCase()}>
+                                {'◆'} {v}
+                              </span>
                             ))}
                         </td>
                         <td>
@@ -760,12 +654,12 @@ export function SweepView() {
                           <PassTrack passes={item.rightPasses} />
                         </td>
                         <td>
-                          <Tag
-                            kind="data"
-                            tone={item.move > 0 ? 'success' : item.move < 0 ? 'danger' : undefined}
+                          <span
+                            className={styles.move}
+                            data-tone={item.move > 0 ? 'up' : item.move < 0 ? 'down' : 'flat'}
                           >
-                            {item.move > 0 ? `+${item.move}` : item.move}
-                          </Tag>
+                            {item.move > 0 ? `+${item.move}` : item.move < 0 ? `−${Math.abs(item.move)}` : '0'}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -780,7 +674,7 @@ export function SweepView() {
             open
             onOpenChange={(o) => !o && setOpen(null)}
             size="data"
-            title={`Item ${open}`}
+            title={`Item comparison · ${open}`}
             description={
               sweepOpenItem
                 ? `${left}: ${sweepOpenItem.leftPassCount}/${sweepOpenItem.leftPasses.length} pass · ${right}: ${sweepOpenItem.rightPassCount}/${sweepOpenItem.rightPasses.length} pass`
@@ -791,6 +685,5 @@ export function SweepView() {
           </Dialog>
         ) : null}
       </div>
-    </ReportLayout>
   );
 }

@@ -222,7 +222,9 @@ test.describe('frozen names stay put on real scrolling', () => {
   test('every table of the /__ui gallery', async ({ page }) => {
     // Each probed table costs about 12 s of wheel events (the renderer acknowledges each one); the gallery had 59
     // scrollers, 23 of them frozen and overflowing, in October 2026. The budget follows the gallery, not the tables.
-    test.setTimeout(480_000);
+    // Round 8b fix pass: measured at 7.8 to 9.3 min of wall time on both the round-8 tip and the section-panel tip (one
+    // wheel probe per frozen overflowing table, 12 s each), so 480 s was a coin toss on either; the budget is 900 s.
+    test.setTimeout(900_000);
     await page.setViewportSize({ width: 660, height: 900 });
     await gotoApp(page, '/__ui');
     await page.locator('[data-dt-scroller]').first().waitFor();

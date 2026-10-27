@@ -1,0 +1,23 @@
+/** Legacy: repeat run (Run average / Each pass), cohort banner + Sweep panel. */
+import { launch, newPage, legacyUrl, LEG, ids, sleep, shots, legacyFull } from './lib8.mts';
+import path from 'node:path';
+const b = await launch();
+let p = await newPage(b, 1440);
+await p.goto(legacyUrl(['base', 'repeat3'])); await sleep(4000);
+const shot = async (sel: string, name: string) => { const el = p.locator(sel).first(); await el.scrollIntoViewIfNeeded(); await el.screenshot({ path: path.join(shots, name) }); };
+await shot('.metrics-comparison', 'legacy-averages-repeat.png');
+console.log(await p.locator('.metrics-table-controls').innerText());
+await shot('.compare-summary', 'legacy-run-cards-repeat.png');
+const cohort = `${LEG}/compare?cohortA=${ids.legacy.base}&cohortA=${ids.legacy.a}&cohortB=${ids.legacy.b}&cohortB=${ids.legacy.c}`;
+p = await newPage(b, 1440); await p.goto(cohort); await sleep(4500);
+console.log(await p.locator('#compare-cohort-banner').innerText().catch(() => 'no banner'));
+await shot('#compare-mode-tabs', 'legacy-mode-tabs.png');
+await shot('#compare-cohort-banner', 'legacy-cohort-banner.png');
+const tabs = p.locator('#compare-mode-tabs button'); console.log('tabs', await tabs.allInnerTexts());
+await tabs.nth(1).click(); await sleep(2500);
+console.log('sweep h', await p.evaluate(() => document.querySelector('main.compare-container')!.scrollHeight));
+await legacyFull(p, 'legacy-sweep-page-1440.png');
+await p.setViewportSize({ width: 1440, height: 900 });
+for (const [sel, n] of [['.sweep-verdict', 'sweep-verdict'], ['.sweep-filter-bar', 'sweep-filters'], ['.sweep-stat-grid', 'sweep-stat-cards'], ['.sweep-metadata-shell', 'sweep-metadata-table'], ['.sweep-outcome-grid', 'sweep-outcome-cards'], ['.sweep-item-row', 'sweep-item-row']]) await shot(sel, `legacy-${n}.png`);
+console.log(await p.evaluate(() => ['.sweep-verdict', '.sweep-filter-bar', '.sweep-stat-card', '.sweep-metadata-row', '.sweep-outcome-card', '.sweep-item-row'].map((s) => { const r = document.querySelector(s)!.getBoundingClientRect(); return s + ' ' + Math.round(r.width) + 'x' + Math.round(r.height); })));
+await b.close();

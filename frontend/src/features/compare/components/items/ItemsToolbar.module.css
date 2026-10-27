@@ -1,33 +1,45 @@
+/* One 24 px row at 1440 (search, Filters, Quick filters, Clear | count, Display, CSV); wraps to two rows below. */
 .toolbar {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+  min-block-size: 24px;
 }
 
-.row {
+.query {
   display: flex;
+  flex: 1 1 24rem;
   align-items: center;
+  gap: var(--space-sm);
+  min-inline-size: 0;
+}
+
+.search {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+}
+
+.actions {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-sm);
 }
 
 .count {
-  margin-inline-start: auto;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
+  font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 .display {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  min-width: 16rem;
-  max-height: 24rem;
+  inline-size: 300px;
+  max-inline-size: 100%;
+  max-block-size: 24rem;
   overflow-y: auto;
   padding: var(--space-md);
 }
@@ -39,27 +51,4 @@
   margin: 0;
   padding: 0;
   border: 0;
-}
-
-.legend {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.railWarn,
-.railError {
-  display: inline-block;
-  inline-size: 3px;
-  block-size: 0.875rem;
-  margin-inline-start: var(--space-sm);
-  border-radius: var(--radius-sm);
-}
-
-.railWarn {
-  background: var(--warning);
-}
-
-.railError {
-  background: var(--error);
 }

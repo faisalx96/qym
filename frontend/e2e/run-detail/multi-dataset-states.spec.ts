@@ -82,5 +82,5 @@ test('QC-U44: twelve datasets give a twelve-row table and a clamped group', asyn
   await section.scrollIntoViewIfNeeded();
   await expect(section.getByTestId('show-items-link')).toHaveCount(12);
   const box = await section.boundingBox();
-  expect(Math.abs(box!.height - 699.5)).toBeLessThanOrEqual(6);
+  expect(Math.abs(box!.height - 657.9)).toBeLessThanOrEqual(6);
 });

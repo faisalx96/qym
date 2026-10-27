@@ -27,7 +27,71 @@
 .counts {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-xs);
+  block-size: 20px;
+}
+
+.counts button {
+  min-inline-size: 24px;
+  block-size: 20px;
+  padding: 0 var(--space-xs);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.counts button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.counts button[data-kind='up']:hover {
+  color: var(--success);
+}
+
+.counts button[data-kind='down']:hover {
+  color: var(--error-text);
+}
+
+.counts button[aria-pressed='true'] {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.counts button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+/* change line: 15 high, never wraps; coloured only beyond the noise band */
+.delta[data-part='averages-delta'] {
+  display: block;
+  block-size: 15px;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  line-height: 15px;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.delta[data-verdict='improved'] {
+  color: var(--success);
+}
+
+.delta[data-verdict='regressed'] {
+  color: var(--error-text);
+}
+
+.delta i {
+  margin-inline-start: var(--space-xs);
+  font-style: normal;
+  color: var(--text-muted);
 }
 
 .srOnly {

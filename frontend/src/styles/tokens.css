@@ -99,6 +99,8 @@
   /* Sticky bars, two heights across the app: the section/navigation bar of a report (run detail, compare) and the
      action bar (launch bar, analysis action rail, items toolbar). */
   --bar-nav-h: 44px;
+  /* The links-only jump nav of the compare page (round 8, owner decision H5). */
+  --bar-link-h: 36px;
   --bar-action-h: 56px;
   /* Auto-analysis action rail and reserved results slot (nothing may resize them on state change). */
   --action-primary-width: 168px;
@@ -301,6 +303,8 @@
   --field-measure: 76ch; /* reading measure of prose bodies */
   --card-padding: var(--space-md) var(--space-lg);
   --card-padding-compact: var(--space-sm) var(--space-md);
+  --card-bg: var(--bg-surface); /* a card's fill; ReportSection bodies make it --bg-elevated (inset cards) */
+  --card-edge: var(--border-subtle); /* a card's outline; ReportSection bodies make it transparent (inset cards, owner decision H6) */
   --shadow-card-hover: 0 2px 12px rgba(0, 0, 0, 0.28);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

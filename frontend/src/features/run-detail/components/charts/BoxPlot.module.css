@@ -40,7 +40,7 @@
 }
 
 .iqr {
-  fill: color-mix(in srgb, var(--tone, var(--chart-1)) var(--tint-strong), var(--bg-surface));
+  fill: color-mix(in srgb, var(--tone, var(--chart-1)) var(--tint-strong), var(--card-bg));
   stroke: var(--tone, var(--chart-1));
   stroke-width: 1.5;
 }
@@ -57,7 +57,7 @@
 }
 
 .meanMark {
-  fill: var(--bg-surface);
+  fill: var(--card-bg);
   stroke: var(--tone, var(--chart-1));
   stroke-width: 1.5;
 }
@@ -197,7 +197,7 @@
   inline-size: max(3px, calc(var(--b) - var(--a)));
   border: 1.5px solid var(--tone, var(--chart-1));
   border-radius: 3px;
-  background: color-mix(in srgb, var(--tone, var(--chart-1)) var(--tint-strong), var(--bg-surface));
+  background: color-mix(in srgb, var(--tone, var(--chart-1)) var(--tint-strong), var(--card-bg));
 }
 
 .tMedian {
@@ -215,7 +215,7 @@
   inline-size: 8px;
   block-size: 8px;
   border: 1.5px solid var(--tone, var(--chart-1));
-  background: var(--bg-surface);
+  background: var(--card-bg);
   transform: rotate(45deg);
 }
 
