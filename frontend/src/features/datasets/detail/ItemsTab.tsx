@@ -20,7 +20,6 @@ import { useDelayedPending } from '@/lib/pending';
 import { textDirAttrs } from '@/lib/text';
 import { copyText } from '@/lib/copy';
 import {
-  Badge,
   Button,
   Chip,
   ConfirmDialog,
@@ -36,6 +35,7 @@ import {
   useToast,
   type Column,
   type RowAction,
+  StatusMark,
 } from '@/ui';
 import { formatLatency, formatJson } from '../lib/itemValue';
 import { menuLabel } from '../lib/batchCopy';
@@ -339,7 +339,9 @@ export function ItemsTab({
             cell: (item: DatasetItem) => (
               <span className={styles.idCell}>
                 <span dir="ltr">{item.item_id}</span>
-                {item.state === 'disabled' ? <Badge tone="neutral">Disabled</Badge> : null}
+                {item.state === 'disabled' ? (
+                  <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+                ) : null}
               </span>
             ),
           } satisfies Column<DatasetItem>,

@@ -1,6 +1,6 @@
 /** The aligned item matrix (DataTable): `#`, input, one score column per run, expansion, pager and the ?item= deep link. */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Badge, DataTable, ScoreBar, type Column, type Key } from '@/ui';
+import { DataTable, ScoreBar, type Column, type Key, StatusMark } from '@/ui';
 import type { Row } from '@/features/run-detail/types';
 import { letterOf, runColor, useCompare } from '../../CompareContext';
 import { metricCellFor, pillState, uniqueBestRun } from '../../lib/rowCells';
@@ -63,9 +63,12 @@ function RunCell({ item, runIdx, numericMax }: { item: FilteredItem; runIdx: num
     );
   } else if (ctx.isBoolean || p.state === 'error') {
     body = (
-      <Badge tone={p.state === 'pass' ? 'success' : p.state === 'fail' ? 'danger' : 'warning'} aria-hidden>
-        {GLYPH[p.state]} {word}
-      </Badge>
+      <StatusMark
+        tone={p.state === 'pass' ? 'success' : p.state === 'fail' ? 'danger' : 'warning'}
+        shape={p.state === 'pass' ? 'check' : p.state === 'fail' ? 'cross' : 'ring'}
+        label={word}
+        aria-hidden
+      />
     );
   } else {
     const numeric = model.types[ctx.metric] === 'numeric';

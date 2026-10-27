@@ -84,6 +84,20 @@ export interface DbTableStats {
   dead_rows: number;
 }
 
+export type DbStats =
+  | { error: string }
+  | {
+      database?: { size_bytes?: number; [k: string]: unknown };
+      tables?: DbTableStats[];
+      run_events_by_type?: { type: string; rows: number; payload_bytes: number }[];
+    };
+
+/** GET /api/admin/maintenance/db-stats: collected at most once a minute (they scan run_events, so they are slow). */
+export interface DbStatsResponse {
+  db_stats: DbStats;
+  db_stats_age_seconds: number;
+}
+
 export interface MaintenanceOverview {
   settings: {
     role: string;
@@ -102,14 +116,9 @@ export interface MaintenanceOverview {
     workers_service?: { alive: boolean; processes: { alive: boolean }[] } | null;
   };
   pool?: string | null;
-  db_stats:
-    | { error: string }
-    | {
-        database?: { size_bytes?: number; [k: string]: unknown };
-        tables?: DbTableStats[];
-        run_events_by_type?: { type: string; rows: number; payload_bytes: number }[];
-      };
-  db_stats_age_seconds: number;
+  /** Null when the overview is read with `stats=false` (the UI reads them from `useDbStats`). */
+  db_stats: DbStats | null;
+  db_stats_age_seconds: number | null;
   job_kinds: Record<string, { irreversible: boolean; description: string }>;
   jobs: MaintenanceJob[];
 }
@@ -121,6 +130,7 @@ export const adminKeys = {
   recent: (page: number, size: number) => ['admin', 'runs', 'recent', page, size] as const,
   recentAll: ['admin', 'runs', 'recent'] as const,
   maintenance: ['admin', 'maintenance'] as const,
+  dbStats: ['admin', 'maintenance', 'db-stats'] as const,
 };
 
 export const ACTIVE_JOB_STATUSES: JobStatus[] = ['queued', 'running', 'cancel_requested'];
@@ -254,11 +264,12 @@ export function useForceStop() {
 
 // ── Maintenance ──────────────────────────────────────────────────────────
 
+/** Settings, workers and jobs, without the slow database statistics (those are `useDbStats`), so the tab paints at once. */
 export function useMaintenance(enabled = true) {
   const interval = usePollingInterval(JOB_POLL_MS);
   return useQuery({
     queryKey: adminKeys.maintenance,
-    queryFn: () => api.get<MaintenanceOverview>('/api/admin/maintenance'),
+    queryFn: () => api.get<MaintenanceOverview>('/api/admin/maintenance?stats=false'),
     enabled,
     refetchInterval: (q) => {
       const jobs = q.state.data?.jobs ?? [];
@@ -269,11 +280,21 @@ export function useMaintenance(enabled = true) {
   });
 }
 
+/** Table sizes and run events by type. The server caches them for a minute; a cold read can take seconds. */
+export function useDbStats(enabled = true) {
+  return useQuery({
+    queryKey: adminKeys.dbStats,
+    queryFn: () => api.get<DbStatsResponse>('/api/admin/maintenance/db-stats'),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 export function useRefreshMaintenance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.get<MaintenanceOverview>('/api/admin/maintenance?refresh=1'),
-    onSuccess: (data) => qc.setQueryData(adminKeys.maintenance, data),
+    mutationFn: () => api.get<DbStatsResponse>('/api/admin/maintenance/db-stats?refresh=1'),
+    onSuccess: (data) => qc.setQueryData(adminKeys.dbStats, data),
   });
 }
 

@@ -1,0 +1,16 @@
+/* Section recipe (DESIGN_LANGUAGE §3 "Section"): one hairline between sibling sections, the same space on both sides. */
+.section {
+  min-width: 0;
+}
+
+/* Any section after another one (Section, ReportSection and the run Items section all carry data-section). The line
+   sits in the middle of the gap, so it belongs to neither block, and the first section of an area has none. */
+[data-section] + .section {
+  margin-block-start: var(--section-gap);
+  padding-block-start: var(--section-gap);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+.body {
+  min-width: 0;
+}

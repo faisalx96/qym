@@ -1,9 +1,9 @@
 /** One 56px queue row. Checkbox, select button and decision actions are siblings (no nested interactive). */
 import type { CorrectionRow } from '@/api/reviews';
-import { Badge, Checkbox, IconButton, Tag, Tooltip } from '@/ui';
+import { Checkbox, IconButton, Tag, Tooltip } from '@/ui';
 import { textDirAttrs } from '@/lib/text';
 import { correctionPriority } from './lib/filters';
-import { STATUS_TONE } from './DetailPane';
+import { ReviewStatusMark } from './DetailPane';
 import styles from './ReviewRow.module.css';
 
 export interface ReviewRowProps {
@@ -67,9 +67,7 @@ export function ReviewRow({
         <span className={styles.top}>
           <span className={styles.id}>#{row.id}</span>
           <span className={styles.item}>{row.item_id}</span>
-          <Badge tone={STATUS_TONE[row.status]} glyph={row.status === 'approved' ? '✓' : undefined}>
-            {row.status}
-          </Badge>
+          <ReviewStatusMark status={row.status} />
           {priority ? (
             <Tag tone={priority.level === 'high' ? 'danger' : 'warning'}>
               {priority.level === 'high' ? 'High' : 'Medium'}

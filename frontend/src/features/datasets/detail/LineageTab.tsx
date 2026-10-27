@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import { useDatasetLineage, type DatasetVersion, type LineageChange } from '@/api/datasets';
 import { useDelayedPending } from '@/lib/pending';
-import { EmptyState, ErrorState, LinkButton, SectionHeader, Skeleton, Tag, Text, Card } from '@/ui';
+import { EmptyState, ErrorState, LinkButton, Section, Skeleton, Tag, Text, Card } from '@/ui';
 import { UserPill } from '../components/UserPill';
 import { VersionBadge, AliasTags } from '../components/VersionSwitcher';
 import { formatDate, pluralize } from '../lib/itemValue';
@@ -94,30 +94,29 @@ export function LineageTab({ slug, datasetRef }: { slug: string; datasetRef: str
 
   return (
     <div className={styles.wrap} data-dataset-lineage>
-      <SectionHeader
+      <Section
         title="Version history"
         description="How each version descends from its parent, and what changed along the way. Open a version from its name."
-      />
-      <ul className={styles.tree}>{roots.map((v) => renderNode(v, 0))}</ul>
-      <SectionHeader
-        title="Change log"
-        description="Every change to this dataset’s versions, oldest first."
-      />
-      {changes.length ? (
-        <ol className={styles.log}>
-          {changes.map((c) => (
-            <li key={c.id} className={styles.logRow}>
-              <span className={styles.logTime}>{formatDate(c.created_at)}</span>
-              <span className={styles.logText}>{describeChange(c, byId)}</span>
-              <UserPill user={c.actor} />
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <Text variant="sm" tone="muted">
-          No changes recorded.
-        </Text>
-      )}
+      >
+        <ul className={styles.tree}>{roots.map((v) => renderNode(v, 0))}</ul>
+      </Section>
+      <Section title="Change log" description="Every change to this dataset’s versions, oldest first.">
+        {changes.length ? (
+          <ol className={styles.log}>
+            {changes.map((c) => (
+              <li key={c.id} className={styles.logRow}>
+                <span className={styles.logTime}>{formatDate(c.created_at)}</span>
+                <span className={styles.logText}>{describeChange(c, byId)}</span>
+                <UserPill user={c.actor} />
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <Text variant="sm" tone="muted">
+            No changes recorded.
+          </Text>
+        )}
+      </Section>
     </div>
   );
 }

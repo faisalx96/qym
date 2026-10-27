@@ -42,7 +42,8 @@ test.describe('settings tabs', () => {
     await expect(
       page.locator('[data-settings-page]').getByText(p.slug, { exact: true }).first(),
     ).toBeVisible();
-    await expect(page.locator('[data-settings-page]').getByText('active', { exact: true })).toBeVisible();
+    // an active project shows no status mark; only Archived shows
+    await expect(page.locator('[data-settings-page] [data-status="archived"]')).toHaveCount(0);
     await expect(page).toHaveTitle(new RegExp(`${p.name} · Settings`));
   });
 
@@ -156,7 +157,7 @@ test.describe('API keys (§8.7 scenario 9)', () => {
 
     const row = card.getByRole('row').filter({ hasText: 'CI pipeline' });
     await expect(row).toBeVisible();
-    await expect(row.getByText('active')).toBeVisible();
+    await expect(row.locator('[data-status="revoked"]')).toHaveCount(0);
     await expect(row.getByText(`${token.slice(0, 6)}`)).toBeVisible();
     await expect(card.getByRole('textbox', { name: 'Key name' })).toHaveValue('');
 
@@ -311,7 +312,7 @@ test.describe('danger zone and archived state', () => {
 
     await gotoApp(page, `/projects/${p.slug}/settings`);
     await expect(page.locator('[data-archived-banner]')).toBeVisible();
-    await expect(page.locator('[data-settings-page]').getByText('archived', { exact: true })).toBeVisible();
+    await expect(page.locator('[data-settings-page] [data-status="archived"]')).toBeVisible();
     // archived: no rename form, no add-member bar, no key creation
     await expect(page.getByRole('textbox', { name: 'Project name' })).toHaveCount(0);
     await tab(page, /^Members/).click();

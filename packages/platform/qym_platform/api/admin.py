@@ -65,15 +65,8 @@ def _worker_state(request: Request, settings: PlatformSettings, db: Session | No
     }
 
 
-@router.get("/maintenance")
-def maintenance_overview(
-    request: Request,
-    refresh: bool = False,
-    db: Session = Depends(get_db),
-    principal: Principal = Depends(require_ui_principal),
-) -> Dict[str, Any]:
-    _require_admin(principal)
-    settings = PlatformSettings()
+def _db_stats(db: Session, refresh: bool) -> Dict[str, Any]:
+    """Cached database statistics (one collect per minute per process; they scan run_events, so they are slow)."""
     now = time.time()
     if refresh or _STATS_CACHE["value"] is None or now - _STATS_CACHE["at"] > _STATS_TTL_SECONDS:
         from qym_platform.tools.perf.db_stats import collect
@@ -84,6 +77,21 @@ def maintenance_overview(
             logger.warning("Admin database stats unavailable", exc_info=True)
             _STATS_CACHE["value"] = {"error": str(exc).splitlines()[0]}
         _STATS_CACHE["at"] = now
+    return {"db_stats": _STATS_CACHE["value"], "db_stats_age_seconds": round(now - _STATS_CACHE["at"], 1)}
+
+
+@router.get("/maintenance")
+def maintenance_overview(
+    request: Request,
+    refresh: bool = False,
+    stats: bool = True,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Settings, workers, job kinds and jobs. ``stats=false`` leaves out the slow database statistics
+    (``db_stats`` and ``db_stats_age_seconds`` are then null): the UI reads them from ``/maintenance/db-stats``."""
+    _require_admin(principal)
+    settings = PlatformSettings()
     pool = db.get_bind().pool
     return {
         "settings": {
@@ -97,11 +105,21 @@ def maintenance_overview(
         },
         "workers": _worker_state(request, settings, db),
         "pool": pool.status() if hasattr(pool, "status") else None,
-        "db_stats": _STATS_CACHE["value"],
-        "db_stats_age_seconds": round(now - _STATS_CACHE["at"], 1),
+        **(_db_stats(db, refresh) if stats else {"db_stats": None, "db_stats_age_seconds": None}),
         "job_kinds": maintenance.registry(),
         "jobs": [j.as_dict() for j in maintenance.list_jobs(db)],
     }
+
+
+@router.get("/maintenance/db-stats")
+def maintenance_db_stats(
+    refresh: bool = False,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Database statistics only (table sizes, run events by type), cached for a minute; ``refresh`` collects them now."""
+    _require_admin(principal)
+    return _db_stats(db, refresh)
 
 
 @router.get("/maintenance/jobs/{job_id}")

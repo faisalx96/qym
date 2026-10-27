@@ -23,7 +23,6 @@ import { useCrumbLabel } from '@/lib/crumb-label';
 import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
-  Badge,
   Button,
   ConfirmDialog,
   DropdownMenu,
@@ -40,6 +39,7 @@ import {
   Text,
   Tooltip,
   useToast,
+  Flag,
 } from '@/ui';
 import { AddItemDialog, CreateDraftDialog, NameVersionDialog, PublishDialog } from '../components/dialogs';
 import { UserPill } from '../components/UserPill';
@@ -365,17 +365,21 @@ function DetailBody({
             {canWrite ? (
               <IconButton label="Rename dataset" icon="edit" onPress={() => setDialog('rename')} />
             ) : null}
-            {dataset.private_test_set ? <Badge tone="warning">Private test set</Badge> : null}
+            {dataset.private_test_set ? (
+              <Flag tone="warning" icon="eye-off">
+                Private test set
+              </Flag>
+            ) : null}
             {dataset.access_mode === 'restricted' ? (
-              <Badge tone="neutral" glyph={<Icon name="lock" size={12} />} data-testid="restricted-badge">
+              <Flag icon="lock" data-testid="restricted-badge">
                 Restricted
-              </Badge>
+              </Flag>
             ) : null}
             {!archived && dataset.permissions.access_level === 'view' ? (
               <>
-                <Badge tone="neutral" glyph={<Icon name="eye" size={12} />} data-testid="view-only-badge">
+                <Flag icon="eye" data-testid="view-only-badge">
                   View only
-                </Badge>
+                </Flag>
                 <HelpMarker label="About view only access">
                   You can open this dataset but not change it. Ask a project manager for modify access.
                 </HelpMarker>

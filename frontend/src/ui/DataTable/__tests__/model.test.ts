@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  fitColumnWidths,
   buildDisplayRows,
   groupBands,
   middleTruncate,
@@ -153,5 +154,57 @@ describe('suspendedPins', () => {
   it('never suspends the only frozen column and ignores unmeasured scrollers', () => {
     expect(suspendedPins(['run'], w, 100, 0.5)).toEqual([]);
     expect(suspendedPins(['run', 'status'], w, 0, 0.5)).toEqual([]);
+  });
+});
+
+describe('fitColumnWidths (content fit)', () => {
+  it('adds the spare width in proportion to each content width and fills the scroller exactly', () => {
+    const out = fitColumnWidths(
+      [
+        { id: 'run', w: 300 },
+        { id: 'owner', w: 100 },
+        { id: 'status', w: 100 },
+      ],
+      1000,
+    );
+    expect(out).toEqual({ run: 600, owner: 200, status: 200 });
+  });
+
+  it('gives the rounding rest to the widest column', () => {
+    const out = fitColumnWidths(
+      [
+        { id: 'a', w: 100 },
+        { id: 'b', w: 100 },
+        { id: 'c', w: 101 },
+      ],
+      500,
+    )!;
+    expect(Object.values(out).reduce((n, w) => n + w, 0)).toBe(500);
+    expect(out.c).toBeGreaterThanOrEqual(out.a!);
+  });
+
+  it('lets flexible columns give width back, down to their minimum, when the content is a little too wide', () => {
+    const out = fitColumnWidths(
+      [
+        { id: 'name', w: 260, min: 160 },
+        { id: 'size', w: 90 },
+        { id: 'rows', w: 90 },
+      ],
+      400,
+    );
+    expect(out).toEqual({ name: 220, size: 90, rows: 90 });
+  });
+
+  it('returns null when even the minimums do not fit (the declared widths apply)', () => {
+    expect(
+      fitColumnWidths(
+        [
+          { id: 'name', w: 260, min: 200 },
+          { id: 'size', w: 250 },
+        ],
+        400,
+      ),
+    ).toBeNull();
+    expect(fitColumnWidths([], 400)).toBeNull();
   });
 });

@@ -6,7 +6,8 @@
   flex-direction: column;
   gap: var(--space-sm);
   min-width: 0;
-  scroll-margin-top: calc(var(--run-nav-h, 0px) - var(--space-xl) * 1.5 + var(--space-sm));
+  /* a jump lands with the hairline (the top border, ui/Section) just under the sticky nav */
+  scroll-margin-top: calc(var(--run-nav-h, 0px) + var(--space-sm));
 }
 
 .head {

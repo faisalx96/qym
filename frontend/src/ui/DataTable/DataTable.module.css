@@ -397,6 +397,13 @@
   white-space: nowrap;
 }
 
+/* Content fit: for one measuring pass every cell and header label takes its max-content width (DataTable.tsx). */
+.table[data-measure] .cell,
+.table[data-measure] [data-th-label]:not([data-hidden]) {
+  width: max-content;
+  max-width: none;
+}
+
 .cell[data-wrap] {
   display: -webkit-box;
   -webkit-box-orient: vertical;

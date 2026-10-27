@@ -19,7 +19,7 @@ export interface KeyValueItem {
 
 export interface KeyValueGridProps {
   items: KeyValueItem[];
-  columns?: 1 | 2 | 3;
+  columns?: 1 | 2 | 3 | 4;
   dense?: boolean;
   /** 'plain' (default) or 'tiles': each pair on a --bg-elevated tile at card rhythm (the run "Execution context"). */
   variant?: 'plain' | 'tiles';

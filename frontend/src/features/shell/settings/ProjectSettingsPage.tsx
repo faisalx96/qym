@@ -4,7 +4,7 @@ import { useDocumentTitle } from '../hooks';
 import { constrained } from '../layout';
 import { plural } from '../plural';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Badge, Identicon, PageHeader, TabPanel, Tabs, Tag, Text } from '@/ui';
+import { Identicon, PageHeader, StatusMark, TabPanel, Tabs, Tag, Text } from '@/ui';
 import { GeneralTab } from './GeneralTab';
 import { MembersTab } from './MembersTab';
 import { ApiKeysTab } from './ApiKeysTab';
@@ -63,15 +63,18 @@ export function ProjectSettingsPage() {
             {isAdmin ? 'admin' : project.role || 'member'}
           </Tag>,
           plural(project.member_count, 'member'),
-          readOnly ? (
-            <Badge key="status" tone="warning">
-              archived
-            </Badge>
-          ) : (
-            <Badge key="status" tone="success">
-              active
-            </Badge>
-          ),
+          // on/off state: only the exception shows
+          ...(readOnly
+            ? [
+                <StatusMark
+                  key="status"
+                  tone="warning"
+                  shape="pause"
+                  label="Archived"
+                  data-status="archived"
+                />,
+              ]
+            : []),
         ]}
       />
       {readOnly ? (

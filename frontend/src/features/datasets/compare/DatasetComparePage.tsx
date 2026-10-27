@@ -22,7 +22,6 @@ import { fullWidth } from '@/features/shell/layout';
 import {
   Button,
   EmptyState,
-  Badge,
   ErrorState,
   Icon,
   IconButton,
@@ -36,6 +35,7 @@ import {
   Tag,
   Text,
   useToast,
+  StatusMark,
 } from '@/ui';
 import { FieldDiff } from '../components/FieldDiff';
 import { UserPill } from '../components/UserPill';
@@ -402,7 +402,12 @@ const FIELD_LABELS: Record<string, string> = {
 /** An item whose state differs between the two versions: Active → Disabled (spec A2-46). */
 function StateDiff({ before, after }: { before?: 'active' | 'disabled'; after?: 'active' | 'disabled' }) {
   const name = (v?: string) => (v === 'disabled' ? 'Disabled' : 'Active');
-  const badge = (v?: string) => <Badge tone={v === 'disabled' ? 'neutral' : 'success'}>{name(v)}</Badge>;
+  const badge = (v?: string) =>
+    v === 'disabled' ? (
+      <StatusMark tone="warning" shape="pause" label={name(v)} data-status="disabled" />
+    ) : (
+      <StatusMark tone="success" shape="full" label={name(v)} />
+    );
   return (
     <div
       className={styles.stateDiff}

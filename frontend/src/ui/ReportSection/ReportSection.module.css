@@ -1,27 +1,27 @@
-/* Run section header recipe + report body: container-query host so cards respond to the column width. */
+/* Report section: a ui/Section whose body is a container-query host so cards respond to the column width. */
 .section {
   display: flow-root;
-  min-width: 0;
-  /* The header owns the 48px lead-in; a jump lands with its hairline just under the sticky nav. */
-  scroll-margin-top: calc(var(--report-nav-h, 0px) - var(--space-xl) * 1.5 + var(--space-sm));
+  /* A jump lands with the section's hairline (its top border) just under the sticky nav. */
+  scroll-margin-top: calc(var(--report-nav-h, 0px) + var(--space-sm));
 }
 
-/* The first section sits right under the nav: no 48px lead-in and no second hairline. */
-.section:first-child > div:first-child {
+/* The first section sits right under the nav (it has no hairline). */
+.section:first-child {
   margin-top: var(--space-md);
-  padding-top: 0;
-  border-top: 0;
 }
 
 .body {
   /* The containing block for visually hidden (absolute) text, which must never widen the page. */
   position: relative;
   container-type: inline-size;
+}
+
+.lazyBody {
   min-width: 0;
 }
 
 /* M4: a lazily mounted body fades up once (opacity + 6px rise); no end state is held, so it never traps a stacking context. */
-.body[data-arrive] {
+.lazyBody[data-arrive] {
   animation: section-arrive var(--arrive-fade) var(--ease-out) backwards;
 }
 

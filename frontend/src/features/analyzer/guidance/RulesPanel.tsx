@@ -13,7 +13,6 @@ import {
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import {
-  Badge,
   Button,
   Checkbox,
   ConfirmDialog,
@@ -26,6 +25,8 @@ import {
   Skeleton,
   Text,
   useToast,
+  Flag,
+  StatusMark,
 } from '@/ui';
 import { formatDateParts } from '@/lib/format';
 import { useDraftRules } from '../useDraftRules';
@@ -81,14 +82,9 @@ export function RulesPanel({ scope, canManage }: { scope: AnalysisScope; canMana
 }
 
 function stateBadge(v: RuleVersion, productionId: string | null) {
-  if (v.id === productionId || v.is_active)
-    return (
-      <Badge tone="success" dot>
-        Live
-      </Badge>
-    );
-  if (v.status === 'draft') return <Badge tone="warning">Draft</Badge>;
-  return <Badge tone="neutral">Published</Badge>;
+  if (v.id === productionId || v.is_active) return <StatusMark tone="success" shape="full" label="Live" />;
+  if (v.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
+  return <StatusMark tone="neutral" shape="full" label="Published" />;
 }
 
 function RulesView({
@@ -353,7 +349,7 @@ function RulesView({
           generator.job ? (
             <div className={s.genCard} role="status" aria-label="Rule generation progress">
               <div className={s.genHead}>
-                <Badge
+                <StatusMark
                   tone={
                     generator.job.status === 'completed'
                       ? 'success'
@@ -361,14 +357,21 @@ function RulesView({
                         ? 'danger'
                         : 'info'
                   }
-                  dot
-                >
-                  {generator.job.status === 'running' ||
-                  generator.job.status === 'queued' ||
-                  generator.job.status === 'cancelling'
-                    ? String(generator.job.progress.phase)
-                    : generator.job.status}
-                </Badge>
+                  shape={
+                    generator.job.status === 'completed'
+                      ? 'full'
+                      : generator.job.status === 'failed'
+                        ? 'cross'
+                        : 'orbit'
+                  }
+                  label={
+                    generator.job.status === 'running' ||
+                    generator.job.status === 'queued' ||
+                    generator.job.status === 'cancelling'
+                      ? String(generator.job.progress.phase)
+                      : generator.job.status
+                  }
+                />
                 <Text variant="base" tone="secondary">
                   Rule generation progress
                 </Text>
@@ -533,14 +536,10 @@ function VersionWorkspace({
         title={`Rules in v${version.version}`}
         aside={
           <div className={s.sourceRow}>
-            <Badge tone={editable ? 'warning' : 'neutral'}>
+            <Flag tone={editable ? 'warning' : 'neutral'} icon={editable ? 'edit' : 'lock'}>
               {editable ? 'Editable draft' : version.status === 'draft' ? 'Draft (read-only)' : 'Read-only'}
-            </Badge>
-            {isProduction ? (
-              <Badge tone="success" dot>
-                Live
-              </Badge>
-            ) : null}
+            </Flag>
+            {isProduction ? <StatusMark tone="success" shape="full" label="Live" /> : null}
             {editable ? (
               <Button
                 variant="accent"

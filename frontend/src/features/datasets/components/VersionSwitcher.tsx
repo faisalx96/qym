@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button as AriaButton, ListBox, ListBoxItem } from 'react-aria-components';
 import type { DatasetVersion } from '@/api/datasets';
-import { Badge, Icon, Popover, SearchField, Tag } from '@/ui';
+import { Icon, Popover, SearchField, Tag, StatusMark } from '@/ui';
 import { versionItemsText } from '../lib/itemState';
 import { pluralize, relativeTime } from '../lib/itemValue';
 import { isProduction } from '../lib/versions';
@@ -101,9 +101,9 @@ export function VersionSwitcher({ versions, active, hrefFor }: VersionSwitcherPr
 }
 
 export function VersionBadge({ version }: { version: DatasetVersion }) {
-  if (isProduction(version)) return <Badge tone="success">Production</Badge>;
-  if (version.status === 'draft') return <Badge tone="warning">Draft</Badge>;
-  return <Badge tone="info">Published</Badge>;
+  if (isProduction(version)) return <StatusMark tone="success" shape="full" label="Production" />;
+  if (version.status === 'draft') return <StatusMark tone="warning" shape="dot" label="Draft" />;
+  return <StatusMark tone="neutral" shape="full" label="Published" />;
 }
 
 export function AliasTags({ version }: { version: DatasetVersion }) {

@@ -283,7 +283,7 @@ test.describe('archived project (§8.7 scenario 7)', () => {
     ).toBeVisible();
     await expect(page.locator('[data-topbar]').getByText('Read-only')).toHaveCount(0);
     await expect(
-      page.locator('[data-project-switcher]').getByText('archived', { exact: true }),
+      page.locator('[data-project-switcher]').getByText('Archived', { exact: true }),
     ).toBeVisible();
     await expect(page.locator('[data-nav="analysis"]')).toHaveCount(0);
     await expect(page.locator('[data-nav="reviews"]')).toHaveCount(0);
@@ -300,7 +300,7 @@ test.describe('archived project (§8.7 scenario 7)', () => {
     // the archived project is reachable from the switcher (with its tag) while on it
     await page.locator('[data-project-switcher]').click();
     await expect(
-      page.locator(`[data-switch-to="${p.slug}"]`).getByText('archived', { exact: true }),
+      page.locator(`[data-switch-to="${p.slug}"]`).getByText('Archived', { exact: true }),
     ).toBeVisible();
   });
 

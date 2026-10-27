@@ -1,6 +1,6 @@
 import { useRef, type ReactNode } from 'react';
 import { useInView } from '@/lib/useInView';
-import { SectionHeader } from '../SectionHeader';
+import { Section } from '../Section';
 import { Text } from '../Text';
 import styles from './ReportSection.module.css';
 
@@ -24,7 +24,7 @@ export interface ReportSectionProps {
   children?: ReactNode;
 }
 
-/** One full-width report section: run section header (xl) over a container-query body (DESIGN_LANGUAGE §3). */
+/** One full-width report section: a ui/Section (xl header, divider rhythm) over a container-query body (DESIGN_LANGUAGE §3). */
 export function ReportSection({
   id,
   title,
@@ -41,41 +41,36 @@ export function ReportSection({
   const ref = useRef<HTMLElement>(null);
   const inView = useInView(ref, { rootMargin, disabled: !lazy || hidden });
   if (hidden) return null;
-  const titleId = `${id}-title`;
   return (
-    <section
-      id={id}
+    <Section
       ref={ref}
+      id={id}
       className={[styles.section, className].filter(Boolean).join(' ')}
-      aria-labelledby={titleId}
+      bodyClassName={styles.body}
+      title={title}
+      description={description}
+      actions={
+        scopeNote || aside ? (
+          <>
+            {scopeNote ? (
+              <Text variant="sm" tone="muted" data-testid="scope-note">
+                {scopeNote}
+              </Text>
+            ) : null}
+            {aside}
+          </>
+        ) : undefined
+      }
       data-report-section={id}
       data-mounted={inView ? '' : undefined}
     >
-      <SectionHeader
-        level="xl"
-        id={titleId}
-        title={title}
-        description={description}
-        aside={
-          scopeNote || aside ? (
-            <>
-              {scopeNote ? (
-                <Text variant="sm" tone="muted" data-testid="scope-note">
-                  {scopeNote}
-                </Text>
-              ) : null}
-              {aside}
-            </>
-          ) : undefined
-        }
-      />
       <div
-        className={styles.body}
+        className={styles.lazyBody}
         style={inView ? undefined : { minHeight }}
         data-arrive={lazy && inView ? '' : undefined}
       >
         {inView ? children : null}
       </div>
-    </section>
+    </Section>
   );
 }

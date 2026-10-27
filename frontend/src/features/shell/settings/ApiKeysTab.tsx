@@ -13,7 +13,6 @@ import type { ApiKey, DatasetReadToken } from '@/api/types';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending, useSubmitLock } from '@/lib/pending';
 import {
-  Badge,
   Button,
   ConfirmDialog,
   DataTable,
@@ -21,6 +20,7 @@ import {
   RelativeTime,
   Skeleton,
   Stack,
+  StatusMark,
   Tag,
   Text,
   TextField,
@@ -34,6 +34,11 @@ import { useProjectContext } from '../ProjectContext';
 import { EXPERIMENT_DELETED } from './copy';
 import { SecretRevealDialog } from '../dialogs';
 import styles from './settings.module.css';
+
+/** On/off state of a key or token: only the exception shows, after the name (no Status column). */
+function RevokedMark({ at }: { at: string | null | undefined }) {
+  return at ? <StatusMark tone="warning" shape="pause" label="Revoked" data-status="revoked" /> : null;
+}
 
 export function ApiKeysTab() {
   const { project, readOnly, isAdmin, canManage } = useProjectContext();
@@ -73,7 +78,12 @@ function KeysCard({
       pin: 'start',
       hideable: false,
       priority: 1,
-      cell: (k) => k.name || 'Unnamed key',
+      cell: (k) => (
+        <span className={styles.tokenName}>
+          {k.name || 'Unnamed key'}
+          <RevokedMark at={k.revoked_at} />
+        </span>
+      ),
     },
     { id: 'prefix', header: 'Prefix', type: 'id', width: 140, priority: 3, cell: (k) => `${k.prefix}…` },
     {
@@ -90,15 +100,6 @@ function KeysCard({
       width: 130,
       priority: 2,
       cell: (k) => <RelativeTime iso={k.created_at} />,
-    },
-    {
-      id: 'status',
-      header: 'Status',
-      type: 'status',
-      width: 100,
-      priority: 1,
-      cell: (k) =>
-        k.revoked_at ? <Badge tone="neutral">revoked</Badge> : <Badge tone="success">active</Badge>,
     },
   ];
   return (
@@ -242,6 +243,7 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
               <span className={styles.tokenName}>
                 {t.name || 'Unnamed token'}
                 <Tag data-testid="token-kind-chip">experiment</Tag>
+                <RevokedMark at={t.revoked_at} />
               </span>
             }
             secondary={
@@ -259,7 +261,10 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
             }
           />
         ) : (
-          t.name || 'Unnamed token'
+          <span className={styles.tokenName}>
+            {t.name || 'Unnamed token'}
+            <RevokedMark at={t.revoked_at} />
+          </span>
         ),
     },
     {
@@ -284,15 +289,6 @@ function ReadTokensCard({ projectId, readOnly }: { projectId: string; readOnly: 
       width: 130,
       priority: 2,
       cell: (t) => <RelativeTime iso={t.created_at} />,
-    },
-    {
-      id: 'status',
-      header: 'Status',
-      type: 'status',
-      width: 100,
-      priority: 1,
-      cell: (t) =>
-        t.revoked_at ? <Badge tone="neutral">revoked</Badge> : <Badge tone="success">active</Badge>,
     },
   ];
   return (

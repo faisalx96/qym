@@ -18,7 +18,6 @@ import { useDelayedPending } from '@/lib/pending';
 import { useAuth, useDocumentTitle } from '@/features/shell';
 import { constrained, fullWidth } from '@/features/shell/layout';
 import {
-  Badge,
   Button,
   DataTable,
   EmptyState,
@@ -35,6 +34,8 @@ import {
   useToast,
   type RunStatus,
   type Column,
+  Flag,
+  StatusMark,
 } from '@/ui';
 import styles from './TrashPage.module.css';
 
@@ -189,7 +190,9 @@ export function TrashPage() {
       cell: (r) => (
         <span className={styles.stack}>
           <span>{r.project_name}</span>
-          {r.project_archived ? <Tag tone="warning">Project archived</Tag> : null}
+          {r.project_archived ? (
+            <StatusMark tone="warning" shape="pause" label="Project archived" data-status="archived" />
+          ) : null}
         </span>
       ),
     },
@@ -202,7 +205,13 @@ export function TrashPage() {
         const p = purgeInfo(r);
         return (
           <span className={styles.stack} data-soon={p.soon ? '' : undefined}>
-            {p.tone ? <Badge tone={p.tone}>{p.text}</Badge> : <span>{p.text}</span>}
+            {p.tone ? (
+              <Flag tone={p.tone} icon="clock">
+                {p.text}
+              </Flag>
+            ) : (
+              <span>{p.text}</span>
+            )}
             {p.sub ? <span className={styles.sub}>{p.sub}</span> : null}
           </span>
         );

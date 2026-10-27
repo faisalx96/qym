@@ -4,7 +4,7 @@
  * skeleton reuses the Overview's own grid classes, so its columns and rows are those of the real cards.
  */
 import { metricTypeFromSpec } from '@/lib/metrics';
-import { SectionHeader, Skeleton } from '@/ui';
+import { SectionHeader, Skeleton, sectionClassName } from '@/ui';
 import { useRunPage } from '../RunContext';
 import panels from './panels/Panels.module.css';
 import items from './ItemsSection.module.css';
@@ -57,7 +57,12 @@ export function ItemsSkeleton() {
   const { payload } = useRunPage();
   const total = payload.snapshot.rows_total ?? 0;
   return (
-    <section id="run-items" className={items.section} aria-labelledby="run-items-title">
+    <section
+      id="run-items"
+      className={`${sectionClassName} ${items.section}`}
+      aria-labelledby="run-items-title"
+      data-section=""
+    >
       <div className={items.head}>
         <SectionHeader
           id="run-items-title"

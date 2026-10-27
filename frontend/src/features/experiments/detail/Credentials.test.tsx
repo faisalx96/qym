@@ -5,7 +5,16 @@ import { Credentials, revokedLabel, tokenFacts } from './Credentials';
 import { TOKEN_UNAVAILABLE_REASON } from './copy';
 
 const job = (over: Partial<ExperimentJob>): ExperimentJob =>
-  ({ id: 'j', superseded: false, status: 'RUNNING', error: null, environment_id: 'e', environment_name: 'staging', dataset_token: 'sent', ...over }) as ExperimentJob;
+  ({
+    id: 'j',
+    superseded: false,
+    status: 'RUNNING',
+    error: null,
+    environment_id: 'e',
+    environment_name: 'staging',
+    dataset_token: 'sent',
+    ...over,
+  }) as ExperimentJob;
 
 const detail = (over: Partial<ExperimentDetail> = {}): ExperimentDetail =>
   ({
@@ -23,7 +32,7 @@ describe('Credentials', () => {
     const section = screen.getByRole('region', { name: 'Credentials' });
     expect(within(section).getByText('API key')).toBeTruthy();
     expect(within(section).getByText('Dataset read token')).toBeTruthy();
-    expect(within(section).getAllByText('active')).toHaveLength(2);
+    expect(within(section).getAllByText('Active')).toHaveLength(2);
     expect(screen.queryByTestId('token-notice')).toBeNull();
   });
   it('shows not issued for an experiment launched before the feature', () => {
@@ -38,7 +47,7 @@ describe('Credentials', () => {
         })}
       />,
     );
-    expect(screen.getByTestId('cred-dataset-token').textContent).toBe('not issued');
+    expect(screen.getByTestId('cred-dataset-token').textContent).toBe('Not issued');
     expect(screen.queryByTestId('token-notice')).toBeNull();
   });
   it('says when the token was not sent, once, naming the environments', () => {
@@ -53,19 +62,21 @@ describe('Credentials', () => {
         })}
       />,
     );
-    expect(screen.getByTestId('cred-dataset-token').textContent).toBe('not sent');
+    expect(screen.getByTestId('cred-dataset-token').textContent).toBe('Not sent');
     expect(screen.getAllByTestId('token-notice')).toHaveLength(1);
     expect(screen.getByTestId('token-notice').textContent).toBe(
       'Dataset read token not sent to staging, production: the environments’ schemas do not declare QYM_DATASET_READ_TOKEN. Their jobs read datasets with the Evaluation Service’s own token.',
     );
   });
   it('uses the singular for one environment', () => {
-    render(<Credentials detail={detail({ jobs: [job({ dataset_token: 'not_declared' }), job({ id: 'k' })] })} />);
+    render(
+      <Credentials detail={detail({ jobs: [job({ dataset_token: 'not_declared' }), job({ id: 'k' })] })} />,
+    );
     expect(screen.getByTestId('token-notice').textContent).toBe(
       'Dataset read token not sent to staging: the environment’s schema does not declare QYM_DATASET_READ_TOKEN. Its jobs read datasets with the Evaluation Service’s own token.',
     );
     // Only some jobs lack it: the badge stays active.
-    expect(screen.getByTestId('cred-dataset-token').textContent).toBe('active');
+    expect(screen.getByTestId('cred-dataset-token').textContent).toBe('Active');
   });
   it('warns when the token was revoked while jobs still need it, and the warning wins', () => {
     const at = new Date();
@@ -84,7 +95,7 @@ describe('Credentials', () => {
     expect(screen.getByTestId('token-notice').textContent).toBe(
       'Dataset read token revoked 12:41. Retry the blocked jobs to issue a new one.',
     );
-    expect(screen.getByTestId('cred-dataset-token').textContent).toBe('revoked 12:41');
+    expect(screen.getByTestId('cred-dataset-token').textContent).toBe('Revoked 12:41');
   });
   it('does not warn about a revoked token of a settled experiment', () => {
     const facts = tokenFacts(

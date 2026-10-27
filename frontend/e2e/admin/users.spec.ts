@@ -50,7 +50,8 @@ test.describe('disable / enable', () => {
     const toast = page.getByText('Disabled Disable Me');
     await expect(toast).toBeVisible();
     await page.getByRole('button', { name: 'Undo' }).click();
-    await expect(row).toContainText('Active');
+    // on/off state: an active user shows no mark (only Disabled shows, after the name)
+    await expect(row.locator('[data-status="disabled"]')).toHaveCount(0);
     await expect(page.getByText(/Enabled Disable Me again/)).toBeVisible();
     // server agrees
     const list = await (await request.get('/v1/admin/users')).json();
@@ -65,7 +66,7 @@ test.describe('disable / enable', () => {
     const row = page.getByRole('grid', { name: 'Users' }).getByRole('row').filter({ hasText: u.email });
     await expect(row).toContainText('Disabled');
     await row.getByRole('button', { name: /^Enable / }).click();
-    await expect(row).toContainText('Active');
+    await expect(row.locator('[data-status="disabled"]')).toHaveCount(0);
   });
 
   test('own row: Disable is disabled and tagged "you"', async ({ page }) => {

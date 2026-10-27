@@ -87,7 +87,7 @@ test('irreversible job needs the typed name; the button stays disabled until it 
   const submit = form.getByRole('button', { name: 'Queue irreversible job' });
   const field = form.getByLabel(/^Type .*to confirm/);
   await expect(field).toBeVisible();
-  await expect(form.locator('[data-kind-help]')).toContainText('irreversible');
+  await expect(form.locator('[data-kind-help]')).toContainText('Irreversible');
   await expect(submit).toBeDisabled();
   await field.fill('drop_legacy');
   await expect(submit).toBeDisabled();
@@ -141,5 +141,5 @@ test('workers service liveness shows in the header (mocked separate workers)', a
     await route.fulfill({ response: res, json: body });
   });
   await gotoApp(page, '/admin/maintenance');
-  await expect(page.locator('[data-workers-service]')).toContainText('NOT RESPONDING (0/2 processes)');
+  await expect(page.locator('[data-workers-service]')).toContainText('not responding (0/2 processes)');
 });

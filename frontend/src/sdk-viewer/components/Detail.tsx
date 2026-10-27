@@ -5,7 +5,7 @@ import { formatLatency } from '../lib/stats';
 import { metricCell } from '../lib/metric-cell';
 import { wordDiff } from '../lib/diff';
 import { copyText, STATUS_LABEL } from './format';
-import { Badge } from '@/ui/Badge';
+import { Flag } from '@/ui/Flag';
 import { StatusBadge } from './StatusBadge';
 import s from './Detail.module.css';
 
@@ -231,7 +231,11 @@ export const Detail = forwardRef<HTMLElement, DetailProps>(function Detail(
                   <span className={s.score} data-kind={cell.kind}>
                     {cell.text || '—'}
                   </span>
-                  {edited ? <Badge tone="info">Edited</Badge> : null}
+                  {edited ? (
+                    <Flag tone="info" icon="edit">
+                      Edited
+                    </Flag>
+                  ) : null}
                 </div>
                 {edited && original ? <p className={s.meta}>Original: {original}</p> : null}
                 {meta.map(([key, value]) => (

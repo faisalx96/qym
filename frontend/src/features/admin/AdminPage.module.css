@@ -1,4 +1,8 @@
-/* Admin page chrome: visually hidden live status line. */
+/* Admin page chrome: totals strip, visually hidden live status line. */
+.totals {
+  margin-bottom: var(--space-lg);
+}
+
 .srOnly {
   position: absolute;
   width: 1px;

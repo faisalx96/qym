@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useDatasetItem, type Dataset, type DatasetItem, type DatasetVersion } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import {
-  Badge,
   Button,
   ConfirmDialog,
   ErrorState,
@@ -12,6 +11,7 @@ import {
   Skeleton,
   Text,
   useToast,
+  StatusMark,
 } from '@/ui';
 import { DisableItemDialog } from '../components/dialogs';
 import { FieldEditor } from '../components/FieldEditor';
@@ -99,7 +99,9 @@ export function ItemPane({
           <span className={styles.pos}>
             {position.index + 1} / {position.total.toLocaleString()}
           </span>
-          {disabled ? <Badge tone="neutral">Disabled</Badge> : null}
+          {disabled ? (
+            <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+          ) : null}
         </div>
         <div className={styles.headActions}>
           <IconButton label="Previous item" icon="chevron-up" onPress={() => onNavigate(-1)} />

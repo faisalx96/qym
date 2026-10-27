@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { EmptyState, ErrorState, Icon, LinkButton, Skeleton, Text, type IconName } from '@/ui';
+import { Card, EmptyState, ErrorState, Icon, Skeleton, Text, type IconName } from '@/ui';
 import { useDelayedPending } from '@/lib/pending';
 import { SECTIONS, docsPath, type DocsHeading } from './content';
 import { DocsArticle, scrollToHeading } from './DocsArticle';
@@ -151,30 +151,18 @@ export function DocsPage() {
                 footer={
                   <nav aria-label="Previous and next page" className={styles.pager}>
                     {prev ? (
-                      <LinkButton
-                        to={docsPath(prev)}
-                        variant="neutral"
-                        size="md"
-                        className={styles.prev}
-                        data-link="block"
-                      >
+                      <Card to={docsPath(prev)} compact className={styles.prev}>
                         <span className={styles.pagerLabel}>Previous</span>
-                        <span>{prev.title}</span>
-                      </LinkButton>
+                        <span className={styles.pagerTitle}>{prev.title}</span>
+                      </Card>
                     ) : (
                       <span />
                     )}
                     {next ? (
-                      <LinkButton
-                        to={docsPath(next)}
-                        variant="neutral"
-                        size="md"
-                        className={styles.next}
-                        data-link="block"
-                      >
+                      <Card to={docsPath(next)} compact className={styles.next}>
                         <span className={styles.pagerLabel}>Next</span>
-                        <span>{next.title}</span>
-                      </LinkButton>
+                        <span className={styles.pagerTitle}>{next.title}</span>
+                      </Card>
                     ) : null}
                   </nav>
                 }

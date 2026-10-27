@@ -1,18 +1,15 @@
-import { Badge, type BadgeTone } from '@/ui/Badge';
+import { StatusMark, type StatusShape, type StatusTone } from '@/ui/StatusMark';
 import type { RowStatus } from '../types';
 import { STATUS_LABEL } from './format';
 
-const TONE: Record<RowStatus, BadgeTone> = {
-  completed: 'success',
-  in_progress: 'info',
-  pending: 'neutral',
-  error: 'danger',
+const FIGURE: Record<RowStatus, [StatusTone, StatusShape]> = {
+  completed: ['success', 'full'],
+  in_progress: ['info', 'orbit'],
+  pending: ['neutral', 'ring'],
+  error: ['danger', 'cross'],
 };
 
 export function StatusBadge({ status }: { status: RowStatus }) {
-  return (
-    <Badge tone={TONE[status]} dot={status === 'in_progress'}>
-      {STATUS_LABEL[status]}
-    </Badge>
-  );
+  const [tone, shape] = FIGURE[status];
+  return <StatusMark tone={tone} shape={shape} label={STATUS_LABEL[status]} data-status={status} />;
 }

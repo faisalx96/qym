@@ -138,7 +138,8 @@ test.describe('state control and toolbar (A2-1 to A2-12)', () => {
     const activeRow = rowOf(page, 'faq-001');
     near((await size(disabledRow)).h, (await size(activeRow)).h, 0.5);
     near((await size(disabledRow)).h, 52, 0.5);
-    const badge = disabledRow.getByText('Disabled', { exact: true });
+    const badge = disabledRow.locator('[data-status="disabled"]');
+    await expect(badge).toHaveText('Disabled');
     expect((await size(badge)).h).toBe(20);
     const colors = await Promise.all(
       [disabledRow, activeRow].map((row) =>

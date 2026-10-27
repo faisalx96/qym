@@ -5,7 +5,7 @@ import type { Project } from '@/api/types';
 import { canCreateProject } from '@/api/me';
 import { projectPath } from '@/app/routes';
 import { KEYS, writeLocal } from '@/lib/storage';
-import { Badge, Icon, Identicon, type IconName } from '@/ui';
+import { Icon, Identicon, StatusMark, type IconName } from '@/ui';
 import { useAuth } from '../AuthContext';
 import { CreateProjectDialog } from '../dialogs';
 import { GLOBAL_NAV, PLATFORM_NAV, projectNav } from './nav';
@@ -78,7 +78,13 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
       run: go(i.to),
     }));
     const actions: Entry[] = [
-      { id: 'action:new-feedback', group: 'Actions', label: 'New feedback', icon: 'feedback', run: go('/feedback/new') },
+      {
+        id: 'action:new-feedback',
+        group: 'Actions',
+        label: 'New feedback',
+        icon: 'feedback',
+        run: go('/feedback/new'),
+      },
     ];
     if (canCreateProject(me))
       actions.push({
@@ -208,7 +214,14 @@ export function CommandPalette({ open, onOpenChange, project }: CommandPalettePr
                             <Icon name={e.icon ?? 'chevron-right'} size={14} />
                           )}
                           <span className={styles.optionLabel}>{e.label}</span>
-                          {e.archived ? <Badge tone="warning">archived</Badge> : null}
+                          {e.archived ? (
+                            <StatusMark
+                              tone="warning"
+                              shape="pause"
+                              label="Archived"
+                              data-status="archived"
+                            />
+                          ) : null}
                           {e.hint ? <span className={styles.hint}>{e.hint}</span> : null}
                         </li>
                       ))}

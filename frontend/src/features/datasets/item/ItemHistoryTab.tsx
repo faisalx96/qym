@@ -10,7 +10,7 @@ import {
 } from '@/api/datasets';
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
-import { Badge, Button, ConfirmDialog, EmptyState, ErrorState, Skeleton, Tag, Text, useToast } from '@/ui';
+import { Button, ConfirmDialog, EmptyState, ErrorState, Skeleton, Tag, Text, useToast } from '@/ui';
 import { FieldDiff } from '../components/FieldDiff';
 import { UserPill } from '../components/UserPill';
 import { VersionBadge } from '../components/VersionSwitcher';
@@ -85,7 +85,7 @@ export function ItemHistoryTab({
                     data-testid={stateChange ? `rev-${r.change_type}` : undefined}
                   >
                     <div className={styles.revHead}>
-                      <Badge
+                      <Tag
                         tone={
                           r.change_type === 'created' || r.change_type === 'enabled'
                             ? 'success'
@@ -95,7 +95,7 @@ export function ItemHistoryTab({
                         }
                       >
                         {r.change_type}
-                      </Badge>
+                      </Tag>
                       <Tag kind="count">#{r.revision_number}</Tag>
                       <UserPill
                         user={

@@ -60,7 +60,7 @@ Runs error indicators use the original ⚠ glyph: `--error` for task failures an
 | Card title / sub-header | `--font-md` | 13px / 600 | primary | Also form inputs. |
 | Body / table cell / code | `--font-base` | 12px / 400 | secondary | |
 | Meta / caption / label / **table header** | `--font-sm` | 11px / 400 (labels 600–650) | muted | Uppercase labels get `letter-spacing: 0.05em`. |
-| Badge / pill | `--font-xs` | 10px / 650 | semantic | Badges only — nothing else may be 10px. |
+| Badge / pill | `--font-xs` | 10px / 650 | semantic | Tag chrome (and the retired Badge) only — nothing else may be 10px. |
 
 **One heading scale across pages** (enforced by `e2e/visual-language/heading-scale.spec.ts`): the page title is
 `--font-title` 22/650 (even the visually hidden `h1` of Runs and Charts), a section heading is `--font-xl` 18/650
@@ -69,10 +69,9 @@ Runs error indicators use the original ⚠ glyph: `--error` for task failures an
 and a small label is `--font-md` 13/600 uppercase and tracked. No page writes its own heading size.
 
 Major analytical sections use a sentence-case section title (`--font-xl`) followed
-by a concise muted `--font-sm` description. Do not introduce a major section
-with an uppercase metadata-style label. The run detail page is the exception:
-its top-level sections are page sections reached from the sticky section nav
-and use the run section header recipe below (`--font-xl` title).
+by a concise muted `--font-base` description, through the `Section` recipe below. Do not introduce a major section
+with an uppercase metadata-style label. The run detail page's top-level sections are the same `Section`, reached from
+the sticky section nav (`ReportSection` composes it).
 
 **Floor: no readable text below 11px.** 10px is reserved for badge/pill chrome.
 Off-scale values (9px, 10.5px, 11.5px, 12.5px, 13.5px, 14px, 16px, 17px, 20px…)
@@ -328,11 +327,16 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   viewport, so browser find-in-page cannot see them and the scrollbar thumb grows as they mount. Sidebar and ScopeBar fade with
   `--transition-fast` and not at all under `prefers-reduced-motion`.
 
-- **Run section header**: every top-level run-page section opens with a
-  `--font-xl` / 650 primary title, one muted `--font-base` description line,
-  the section controls on the right, a `--border-subtle` hairline above and
-  about 48px from the previous section. The header owns the spacing; sections add
-  no top or bottom margin of their own.
+- **Section and section divider** (`Section`, `SectionHeader`; owner round, October 2026: "a reusable component for
+  sections and section dividers"): every titled block of a page (admin tabs, profile, dataset lineage, compare sweep,
+  each run report section) is a `Section`: a `SectionHeader` (`--font-xl` / 650 primary title, a 2px gap, one muted
+  `--font-base` description line, the controls on the end side and centred on the title block, `--space-md` above the
+  body) over its body. Sections that follow each other are divided by one `--border-subtle` hairline with
+  `--section-gap` (32px) on both sides of it, so the line belongs to neither block; the first section of a page area
+  (right under the tabs, the page header or the run section nav) has no line, so nothing doubles the tab underline.
+  `SectionHeader` draws no divider and no lead-in of its own (inside a card it is just the header). Parents stack
+  sections with no gap of their own; the run Items section, which renders its own markup, takes `sectionClassName`
+  and `data-section` to join the rhythm. A jump to a run section lands with its hairline 8px under the sticky nav.
 
 - **Field row, structured value, split pane** (`FieldRow`, `StructuredValue`, `SplitPane`): `FieldRow` puts a label, its
   body (reading measure `--field-measure`, 76ch) and actions on one logical row whose `dir` follows the content, so an
@@ -350,20 +354,28 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 ### 3.3 Labels, statistics and identity
 
-- **Status mark** (`StatusMark`, `RunStatusBadge`, round 8): the lifecycle status of a run, a pass or a queued
-  pass. No pill, outline or fill: a decorative 3 x 3 pixel figure (11px, the identicon grammar of the project
-  marks) in the status tone, then the word in sentence case, `--font-base` / 600, `--tone-text`, at least
-  `--badge-height` tall. The figure's shape is the non-colour cue: `full` completed, `check` approved, `cross`
-  failed or rejected, `pause` stopped, `orbit` running or stopping (the ring with its first pixel lit; static: an
-  infinite animation would keep the page from settling), `ring` pending, queued or not run, `hourglass` submitted, `dot` draft. Tones as the
-  Status row of "Colour as information". Passive: no hover.
+- **Status mark** (`StatusMark`, `RunStatusBadge`): the one status component. Every lifecycle or state of a
+  run, pass, job, experiment, review, request, version, credential, environment or save is a `StatusMark`. No pill,
+  outline or fill: a decorative 3 x 3 pixel figure (11px, the identicon grammar of the project marks) in the status
+  tone, then the word with its first letter upper-cased (the rest as the caller gives it, so OK stays OK), `--font-base` / 600, `--tone-text`, at least `--badge-height` tall. The
+  figure's shape is the non-colour cue: `full` completed or succeeded, `check` approved or ready, `cross` failed or
+  rejected, `pause` stopped, cancelled, archived, disabled or revoked, `orbit` running, submitting, cancelling or
+  checking (the ring with its first pixel lit; static: an infinite animation would keep the page from settling),
+  `ring` pending, queued, not run or unknown, `hourglass` waiting on someone (submitted, paused, blocked, not sent), `dot` draft
+  or unsaved. Tones as the Status row of "Colour as information". Passive: no hover. Each domain keeps its own
+  status → tone and figure map next to its component (`RunStatusBadge`, `JobStatusBadge`, `ReviewStatusMark`, …).
 
-- **Badge** (`Badge`): outcome labels other than a lifecycle status, 20px minimum
-  (`--badge-height`), fully rounded, tinted 1px outline, sans `--font-xs` / 650.
-  Tones: success (approved/improved), info, danger (rejected/regressed), warning (draft), neutral
-  (submitted/within-noise). Built on `--tone`/`--tone-text` and `--tint-soft`; plus `accent` and `meta`.
-  `glyph` adds a decorative non-colour cue. A Badge is passive: an actionable count is a `Chip`. Never use a
-  badge to decorate a key/value summary.
+- **On/off state** (archived project, disabled user or item, revoked key or token): only the exception shows, as a
+  `StatusMark` (`warning`, `pause`) after the item's name. The normal state shows nothing, and a table has no Status
+  column for an on/off state. A single item's settings page shows the exception the same way, in its header.
+
+- **Flag** (`Flag`): a fact attached to an item that is not a lifecycle (Private test set, Restricted, View only,
+  Duplicate, Needs examples, Irreversible, a purge due date). An optional 12px glyph and the word in the tone
+  colour, `--font-base`, 600 (neutral: `--text-muted`, 500). No pill, outline or fill. Passive.
+
+- **Badge** (`Badge`): retired. No status, flag or label in feature code uses the pill; the design-language test
+  blocks a new `<Badge>` outside `features/dev` mock pages. Counts and categories (priority, kind, diff counts,
+  change types) are a `Tag`.
 
 - **Tag** (`Tag`): roles, provenance, versions, passive metadata and compact
   counts; 20px minimum, borderless, `--control-radius`, tinted or elevated
@@ -446,6 +458,13 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   own cells: nothing is painted over scrolling content or over a row that is not in the columns** (no overlay element,
   no shade outside the pinned cell), so a row without a pinned cell (the passes strip, an expanded item) has no shade and
   a glyph is never covered (round 7, owner rule).
+  **Column widths fit the content** (`fit="content"`, the default for tables whose rows are not windowed): while the
+  columns fit the scroller, each column is as wide as its widest cell or header (one measuring pass when the rows or
+  the column set change, `FIT_MAX_WIDTH` 480px at most before sharing) and the spare width is shared in proportion to
+  those widths, the way an auto table layout spreads it, so no single flex column takes all of it; a flex column may give
+  width back down to its minimum so the others still fit; a cell that fills its column (score, delta) counts its
+  declared width; a width the user dragged always wins; when even that does not fit, the declared widths apply and the
+  table scrolls. `fit="declared"` keeps the declared widths.
   **Fold column** (`Column.foldLabel`, the runs Actions column, round 8): a pinned-end actions column is not a frozen
   block. While the scroller has columns past its end edge, each row shows one 20px handle (`chevron-left`, named
   "Actions for <row>") at the inline end; the rest of the cell is see-through, draws no line and lets clicks pass.
@@ -619,7 +638,7 @@ cross, trace clock, analysis sparkle), series keep their letter or name.
 | Encoding | Meaning | Tokens | Applied through | Rule |
 |---|---|---|---|---|
 | Band | quality of a value | `--score-1..5` | `ScoreValue` (text, pill), `ScoreBar`, `RateBar`, histogram buckets, `Card band`, stat values | direction-aware (`lib/metrics.ts`); a metric with no direction or a raw number stays neutral; an errored value shows Error in `--error` / `--metric-error`, never a band |
-| Status | lifecycle of a run, job, review | `--success` completed/approved, `--accent-secondary` running, `--error` failed/rejected, `--warning` stopped/draft, neutral submitted/pending | `StatusMark` (`RunStatusBadge`), `Badge` for other outcomes | the pixel figure's shape is the non-colour cue; running is the orbit figure |
+| Status | lifecycle of a run, job, review | `--success` completed/approved, `--accent-secondary` running, `--error` failed/rejected, `--warning` stopped/draft/archived/disabled, neutral submitted/pending | `StatusMark` (`RunStatusBadge`) | the pixel figure's shape is the non-colour cue; running is the orbit figure |
 | Delta | change vs a baseline | good `--score-5`, bad `--score-1`, flat `--text-muted` | `DeltaCell`, `StatStrip trend` | colour only beyond the noise band; sign and arrow always; lower-is-better inverts |
 | Severity / kind | what failed | task `--error`, metric `--metric-error`, trace `--warning`, analysis `--info` | 3px rail, glyph, title colour | rail and glyph, never a filled card |
 | Series | which run, model, category group | `--chart-1..8` | marker dot and letter, `Card series`, chart marks, `Chip series`, `Tag kind=model` | never good or bad; always paired with letter or name; A is the baseline; series 1 is sky blue (teal is reserved for selection, links and the primary action), never relied on alone |
@@ -664,7 +683,9 @@ is not allowed.
 ## 4. Page anatomy
 
 Every page presents, in order: **page title -> description -> meta line ->
-tabs (if any) -> content**, via `PageHeader`. Constrained pages (settings,
+tabs (if any) -> content**, via `PageHeader`. A page with tabs may show one compact (`compact-header`) `StatStrip` of
+page-wide totals between the hero and the tabs; it is the same on every tab, so switching tabs never moves the tabs
+(admin; tab-specific numbers belong in that tab's content). Constrained pages (settings,
 admin, projects, overview, models) use the `constrained` container, capped at
 `--page-max-w` (1233px, the width the report pages fill at 1440), from
 `@/features/shell/layout`; a text-first page (profile) asks for `narrow`

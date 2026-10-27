@@ -28,7 +28,9 @@ test('an experiment token lists with its kind, links to the experiment and revok
     environment_ids: [env.id],
     spec: experimentSpec(connectionId),
   });
-  const admin = await request.post(`/v1/projects/${project.id}/dataset-read-tokens`, { data: { name: 'Eval service' } });
+  const admin = await request.post(`/v1/projects/${project.id}/dataset-read-tokens`, {
+    data: { name: 'Eval service' },
+  });
   expect(admin.ok()).toBeTruthy();
 
   await gotoApp(page, `/projects/${project.slug}/settings?tab=apikeys`);
@@ -54,5 +56,5 @@ test('an experiment token lists with its kind, links to the experiment and revok
   );
   await dialog.getByRole('button', { name: 'Revoke token' }).click();
   await expect(page.getByText('Token revoked').first()).toBeVisible();
-  await expect(experimentRow).toContainText('revoked');
+  await expect(experimentRow).toContainText('Revoked');
 });

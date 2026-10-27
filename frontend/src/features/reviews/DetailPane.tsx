@@ -3,7 +3,19 @@ import { Link } from 'react-router-dom';
 import { useCorrection, type CorrectionRow } from '@/api/reviews';
 import { runPath } from '@/app/routes';
 import { textDirAttrs } from '@/lib/text';
-import { Badge, Button, ErrorState, JsonTree, Kbd, Skeleton, Tag, Text, TextBlock } from '@/ui';
+import {
+  Button,
+  ErrorState,
+  JsonTree,
+  Kbd,
+  Skeleton,
+  Tag,
+  Text,
+  TextBlock,
+  StatusMark,
+  type StatusShape,
+  type StatusTone,
+} from '@/ui';
 import { formatDate } from '../datasets/lib/itemValue';
 import { IssueEditForm, IssueList } from './IssueList';
 import { correctionPriority } from './lib/filters';
@@ -27,7 +39,17 @@ export interface DetailPaneProps {
   onCancelEdit: () => void;
 }
 
-export const STATUS_TONE = { pending: 'neutral', approved: 'success', rejected: 'danger' } as const;
+const REVIEW_FIGURES: Record<string, [StatusTone, StatusShape]> = {
+  pending: ['neutral', 'hourglass'],
+  approved: ['success', 'check'],
+  rejected: ['danger', 'cross'],
+};
+
+/** A correction's review status as a `StatusMark`. */
+export function ReviewStatusMark({ status }: { status: string }) {
+  const [tone, shape] = REVIEW_FIGURES[status] ?? ['neutral', 'ring'];
+  return <StatusMark tone={tone} shape={shape} label={status} data-status={status} />;
+}
 
 export function DetailPane(p: DetailPaneProps) {
   const { row } = p;
@@ -43,9 +65,7 @@ export function DetailPane(p: DetailPaneProps) {
           <Text as="h2" variant="lg" mono>
             #{row.id} · {row.item_id}
           </Text>
-          <Badge tone={STATUS_TONE[row.status]} glyph={row.status === 'approved' ? '✓' : undefined}>
-            {row.status}
-          </Badge>
+          <ReviewStatusMark status={row.status} />
           {priority ? (
             <span title={priority.reasons.join(' · ')}>
               <Tag tone={priority.level === 'high' ? 'danger' : 'warning'}>{priority.label}</Tag>
@@ -283,7 +303,7 @@ function FullDetail({ id }: { id: number }) {
                 <span className={styles.histWhen}>{formatDate(h.created_at)}</span>
                 <span>#{h.revision_number}</span>
                 <span>{h.actor_user?.display_name || h.actor_user?.email || h.actor_source}</span>
-                {h.review ? <Badge tone={STATUS_TONE[h.review.status]}>{h.review.status}</Badge> : null}
+                {h.review ? <ReviewStatusMark status={h.review.status} /> : null}
                 {h.review?.review_comment ? <span>“{h.review.review_comment}”</span> : null}
               </li>
             ))}

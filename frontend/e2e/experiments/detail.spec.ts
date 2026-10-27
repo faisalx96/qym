@@ -197,7 +197,7 @@ test.describe('experiment detail', () => {
     });
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
     const cell = page.locator(`[data-exp-cell="${x.jobs[0]!.id}"]`);
-    await expect(cell).toContainText('queued');
+    await expect(cell).toContainText('Queued');
     await cell.getByRole('button', { name: /^Cancel/ }).click();
     const dialog = page.getByRole('alertdialog');
     await expect(dialog.getByRole('heading', { name: /Cancel job #0 on staging\?/ })).toBeVisible();
@@ -206,7 +206,7 @@ test.describe('experiment detail', () => {
     await cell.getByRole('button', { name: /^Cancel/ }).click();
     await dialog.getByRole('button', { name: 'Cancel job' }).click();
     await expectToast(page, '1 cancelled');
-    await expect(cell).toContainText('cancelled');
+    await expect(cell).toContainText('Cancelled');
     await expect(cell.getByRole('button', { name: /^Retry/ })).toBeVisible();
   });
 
@@ -229,7 +229,7 @@ test.describe('experiment detail', () => {
     const posts = recordPosts(page, '/retry');
     await gotoApp(page, expPath(project.slug, `/${x.id}`));
     const cell = page.locator(`[data-exp-cell="${failed.jobs[0]!.id}"]`);
-    await expect(cell).toContainText('failed');
+    await expect(cell).toContainText('Failed');
     await expect(cell).toContainText('worker crashed');
     await expect(page.getByRole('button', { name: 'Retry failed (1)' })).toBeEnabled();
     // job history shows no earlier-attempts toggle before a retry

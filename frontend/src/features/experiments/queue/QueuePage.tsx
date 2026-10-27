@@ -6,6 +6,7 @@
  */
 import { LATENCY_FILTER_LABEL, queueLatencyNote } from '../copy';
 import { LatencyTag } from '../components/LatencyTag';
+import { JobStatusBadge } from '../components/StatusBadges';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Key } from 'react-aria-components';
@@ -30,7 +31,6 @@ import { runPath } from '@/app/routes';
 import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
-  Badge,
   Button,
   Checkbox,
   EmptyState,
@@ -46,9 +46,10 @@ import {
   TwoLine,
   UserCell,
   useToast,
-  type BadgeTone,
   type Column,
   Card,
+  Flag,
+  StatusMark,
 } from '@/ui';
 import { DataTable } from '@/ui';
 import { ExperimentsTabs } from '../ExperimentsTabs';
@@ -70,15 +71,6 @@ import {
   titleCase,
 } from './lib';
 import styles from './QueuePage.module.css';
-
-const STATUS_TONE: Record<string, BadgeTone> = {
-  QUEUED: 'neutral',
-  SUBMITTING: 'info',
-  SUBMITTED: 'info',
-  RUNNING: 'success',
-  BLOCKED: 'warning',
-  CANCELLING: 'warning',
-};
 
 type DialogState = Pick<
   CancelSplitDialogProps,
@@ -266,7 +258,9 @@ export function QueuePage() {
           <span className={styles.envCell}>
             {j.environment_name}
             {env && env.health_status && env.health_status !== 'ok' ? (
-              <Badge tone="warning">{env.health_status}</Badge>
+              <Flag tone="warning" icon="warning">
+                {env.health_status}
+              </Flag>
             ) : null}
           </span>
         );
@@ -285,11 +279,7 @@ export function QueuePage() {
       type: 'status',
       width: 130,
       priority: 1,
-      cell: (j) => (
-        <Badge tone={STATUS_TONE[j.status] ?? 'neutral'} dot>
-          {j.status}
-        </Badge>
-      ),
+      cell: (j) => <JobStatusBadge status={j.status} />,
     },
     {
       id: 'creator',
@@ -387,11 +377,7 @@ export function QueuePage() {
   );
 
   const filtered = Boolean(
-    filters.environment ||
-      filters.statuses?.length ||
-      filters.mine ||
-      filters.latency ||
-      filters.experiment,
+    filters.environment || filters.statuses?.length || filters.mine || filters.latency || filters.experiment,
   );
   const environments = query.data?.environments ?? [];
 
@@ -577,10 +563,16 @@ function EnvCard({ env }: { env: QueueEnvironment }) {
           <Text variant="lg" as="span">
             {env.name}
           </Text>
-          {!env.is_active ? <Tag>Disabled</Tag> : null}
-          <Badge tone={healthy ? 'success' : env.health_status === 'unknown' ? 'neutral' : 'warning'} dot>
-            {healthy ? 'Healthy' : (env.health_status ?? 'Unknown')}
-          </Badge>
+          {!env.is_active ? (
+            <StatusMark tone="warning" shape="pause" label="Disabled" data-status="disabled" />
+          ) : null}
+          {healthy ? (
+            <StatusMark tone="success" shape="full" label="Healthy" />
+          ) : env.health_status === 'unknown' || !env.health_status ? (
+            <StatusMark tone="neutral" shape="ring" label="Unknown" />
+          ) : (
+            <StatusMark tone="warning" shape="cross" label={env.health_status} />
+          )}
         </div>
         <div className={styles.counts}>
           <Stat label="In flight" value={env.inflight} />

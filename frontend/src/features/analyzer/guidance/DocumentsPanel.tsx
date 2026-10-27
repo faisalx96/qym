@@ -11,7 +11,6 @@ import {
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import {
-  Badge,
   Button,
   ConfirmDialog,
   EmptyState,
@@ -22,6 +21,7 @@ import {
   Switch,
   Text,
   useToast,
+  Tag,
 } from '@/ui';
 import s from './guidance.module.css';
 
@@ -125,7 +125,7 @@ export function DocumentsPanel({
         description="Documents the analyzer can use as context, and the rule writer as a source."
         aside={
           documents.length ? (
-            <Badge tone="info">{`${enabled.length} of ${documents.length} enabled`}</Badge>
+            <Tag kind="count">{`${enabled.length} of ${documents.length} enabled`}</Tag>
           ) : null
         }
       />

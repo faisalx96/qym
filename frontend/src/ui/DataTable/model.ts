@@ -16,6 +16,12 @@ export const MONO_TYPES: ReadonlySet<CellType> = new Set(['id', 'number', 'score
 export const DEFAULT_MIN_WIDTH = 44;
 export const FLEX_MIN_WIDTH = 120;
 export const SELECT_COL_WIDTH = 40;
+/** Content fit: cell padding plus room for the header's sort glyph, added to a measured content width. */
+export const FIT_PAD = 28;
+/** Content fit: no column asks for more than this before the spare width is shared (long text ellipsises). */
+export const FIT_MAX_WIDTH = 480;
+/** Content fit: cells that fill their column (bars, deltas) have no content width, so their declared width counts. */
+export const DECLARED_WIDTH_TYPES: ReadonlySet<CellType> = new Set(['score', 'delta', 'actions']);
 
 export function sortKeyOf<R>(col: Column<R>): string | undefined {
   if (typeof col.sort === 'string') return col.sort;
@@ -327,4 +333,39 @@ export function headerMinWidth<R>(col: Column<R>, sortable: boolean): number {
   const label = typeof headerOf(col) === 'string' || typeof headerOf(col) === 'number' ? text.length : 0;
   if (!label) return DEFAULT_MIN_WIDTH;
   return Math.ceil(label * 8.6) + 16 + (sortable ? 16 : 0);
+}
+
+/**
+ * Content fit: each column gets its wanted (content) width plus a share of the spare width in proportion to it, the
+ * way an auto table layout spreads it. When the wanted widths are a little too wide, the flexible columns (`min` set)
+ * give width back down to their `min`, in proportion to what each can give. Widths are whole pixels and add up to
+ * `available` exactly (the rounding rest goes to the widest column). Null when even that does not fit: the table then
+ * keeps its declared widths.
+ */
+export function fitColumnWidths(
+  want: { id: string; w: number; min?: number }[],
+  available: number,
+): Record<string, number> | null {
+  const sum = want.reduce((n, x) => n + x.w, 0);
+  if (!want.length || sum <= 0) return null;
+  let cols = want;
+  if (sum > available) {
+    const deficit = sum - available;
+    const give = want.reduce((n, x) => n + (x.min !== undefined ? Math.max(0, x.w - x.min) : 0), 0);
+    if (give < deficit) return null;
+    cols = want.map((x) =>
+      x.min !== undefined && x.w > x.min ? { ...x, w: x.w - (deficit * (x.w - x.min)) / give } : x,
+    );
+  }
+  const total = cols.reduce((n, x) => n + x.w, 0);
+  const spare = Math.max(0, available - total);
+  const out: Record<string, number> = {};
+  let used = 0;
+  for (const x of cols) {
+    out[x.id] = Math.floor(x.w + (spare * x.w) / total);
+    used += out[x.id]!;
+  }
+  const widest = cols.reduce((a, b) => (b.w > a.w ? b : a));
+  out[widest.id]! += Math.round(available - used);
+  return out;
 }

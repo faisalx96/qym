@@ -75,6 +75,8 @@
   --space-md: 14px;
   --space-lg: 20px;
   --space-xl: 32px;
+  /* Space on each side of the hairline between two sections (ui/Section). */
+  --section-gap: var(--space-xl);
 
   /* Canonical interactive component geometry.
      One aligned density is used across forms and analysis toolbars. */

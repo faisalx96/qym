@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useEnqueueJob, type MaintenanceOverview } from '@/api/admin';
 import { ApiError } from '@/lib/http';
 import { useSubmitLock } from '@/lib/pending';
-import { Badge, Button, Select, Text, TextField, Textarea, useToast } from '@/ui';
+import { Button, Flag, Select, Text, TextField, useToast } from '@/ui';
 import styles from './maintenance.module.css';
 
 export interface EnqueueJobFormProps {
@@ -13,7 +13,8 @@ export interface EnqueueJobFormProps {
 /**
  * Queue a maintenance job: kind (sorted; irreversible kinds badged), JSON params
  * (validated client-side), typed confirmation only for irreversible kinds
- * (must equal the kind name; the server enforces it too).
+ * (must equal the kind name; the server enforces it too). One row of 24px controls on one bottom line; the kind's
+ * description and any error sit on the line under it, so an error never moves the controls.
  */
 export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
   const items = useMemo(
@@ -30,6 +31,7 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
   const enqueue = useEnqueueJob();
   const lock = useSubmitLock();
   const toast = useToast();
+  const helpId = useId();
   const meta = kinds[kind];
   const irreversible = Boolean(meta?.irreversible);
   const paramsError = useMemo(() => {
@@ -86,14 +88,16 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
           width={280}
           name="kind"
         />
-        <Textarea
+        <TextField
           label="Params (JSON)"
           value={params}
           onChange={setParams}
-          rows={2}
           mono
-          errorMessage={paramsError ?? undefined}
+          isInvalid={Boolean(paramsError)}
+          aria-describedby={helpId}
           className={styles.params}
+          autoComplete="off"
+          spellCheck="false"
           name="params"
         />
         {irreversible ? (
@@ -112,18 +116,29 @@ export function EnqueueJobForm({ kinds, onQueued }: EnqueueJobFormProps) {
         <Button
           type="submit"
           variant={irreversible ? 'danger' : 'primary'}
-          size="md"
           isDisabled={!canSubmit}
           loading={enqueue.isPending}
         >
           {irreversible ? 'Queue irreversible job' : 'Queue job'}
         </Button>
       </div>
-      <div className={styles.jobHelp} data-kind-help>
-        {irreversible ? <Badge tone="danger">irreversible</Badge> : null}
-        <Text variant="sm" tone="muted">
-          {meta?.description ?? 'Pick a job.'}
-        </Text>
+      <div className={styles.jobHelp} id={helpId} data-kind-help>
+        {paramsError ? (
+          <Text variant="sm" tone="danger" role="alert">
+            {paramsError}
+          </Text>
+        ) : (
+          <>
+            {irreversible ? (
+              <Flag tone="danger" icon="warning">
+                Irreversible
+              </Flag>
+            ) : null}
+            <Text variant="sm" tone="muted">
+              {meta?.description ?? 'Pick a job.'}
+            </Text>
+          </>
+        )}
       </div>
       {error ? (
         <Text variant="sm" tone="danger" role="alert" data-enqueue-error>

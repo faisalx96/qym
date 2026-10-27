@@ -178,39 +178,48 @@
   border-top: 1px solid var(--border-subtle);
 }
 
-.pager a {
-  display: flex;
+/* Previous / next are link cards (ui/Card): a small label over the page title, never clipped to a control height. */
+.prev,
+.next {
   flex: 0 1 48%;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  height: auto;
   min-width: 0;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  padding: var(--space-sm) var(--space-md);
+}
+
+.prev > div,
+.next > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.next {
+  margin-inline-start: auto;
+  text-align: end;
 }
 
 @media (max-width: 480px) {
   .pager {
     flex-direction: column;
   }
-  .pager a {
+  .prev,
+  .next {
     flex: 1 1 auto;
   }
-}
-
-.pager .next {
-  align-items: flex-end;
-  margin-inline-start: auto;
-  text-align: end;
 }
 
 .pagerLabel {
   color: var(--docs-label);
   font-size: var(--font-sm);
+  font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.pagerTitle {
+  color: var(--accent-primary);
+  font-size: var(--font-md);
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1100px) {

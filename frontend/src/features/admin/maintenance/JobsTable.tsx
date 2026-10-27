@@ -1,26 +1,34 @@
 import { useMemo, useState } from 'react';
 import { useJobAction, ACTIVE_JOB_STATUSES, type JobStatus, type MaintenanceJob } from '@/api/admin';
 import { ApiError } from '@/lib/http';
-import { Badge, DataTable, Drawer, KeyValueGrid, Text, useToast, type BadgeTone, type Column } from '@/ui';
+import {
+  DataTable,
+  Drawer,
+  KeyValueGrid,
+  StatusMark,
+  Text,
+  useToast,
+  type Column,
+  type StatusShape,
+  type StatusTone,
+} from '@/ui';
 import { formatDateTime } from '../format';
 import styles from './maintenance.module.css';
 
-const TONE: Record<JobStatus, BadgeTone> = {
-  queued: 'neutral',
-  running: 'info',
-  paused: 'warning',
-  cancel_requested: 'warning',
-  cancelled: 'warning',
-  succeeded: 'success',
-  failed: 'danger',
+/** status → tone and figure. Paused waits for Start (hourglass), so it reads apart from Cancelled (pause). */
+const FIGURE: Record<JobStatus, [StatusTone, StatusShape]> = {
+  queued: ['neutral', 'ring'],
+  running: ['info', 'orbit'],
+  paused: ['warning', 'hourglass'],
+  cancel_requested: ['warning', 'orbit'],
+  cancelled: ['warning', 'pause'],
+  succeeded: ['success', 'full'],
+  failed: ['danger', 'cross'],
 };
 
 export function JobStatusBadge({ status }: { status: JobStatus }) {
-  return (
-    <Badge tone={TONE[status] ?? 'neutral'} dot={status === 'running'}>
-      {status.replace(/_/g, ' ')}
-    </Badge>
-  );
+  const [tone, shape] = FIGURE[status] ?? ['neutral', 'ring'];
+  return <StatusMark tone={tone} shape={shape} label={status.replace(/_/g, ' ')} data-status={status} />;
 }
 
 export interface JobsTableProps {

@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { projectPath } from '@/app/routes';
 import { useReviewHistoryQuery } from '@/api/runs';
-import { Badge, LinkButton, Tag, Card } from '@/ui';
+import { JobStatusBadge } from '@/features/experiments/components/StatusBadges';
+import { LinkButton, Tag, Card } from '@/ui';
 import { formatIsoDateTime, READ_ONLY_COPY, SCORE_LOCK_COPY } from '../lib/heroModel';
 import type { ReviewHistoryEvent, Run } from '../types';
 import styles from './RunPanels.module.css';
@@ -80,20 +81,6 @@ const BASE_LABELS: Record<string, string> = {
   best_run: 'Best run',
   blank: 'Blank',
   clone: 'Clone',
-};
-const JOB_TONES: Record<string, 'success' | 'info' | 'danger' | 'warning' | 'neutral'> = {
-  SUCCEEDED: 'success',
-  COMPLETED: 'success',
-  RUNNING: 'info',
-  SUBMITTED: 'info',
-  SUBMITTING: 'info',
-  QUEUED: 'neutral',
-  FAILED: 'danger',
-  TIMED_OUT: 'danger',
-  CANCELLED: 'warning',
-  CANCELLING: 'warning',
-  BLOCKED: 'warning',
-  PARTIAL: 'warning',
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -192,14 +179,7 @@ export function ExperimentPanel({ run, slug }: { run: Run; slug: string }) {
         : '—',
     ],
     ['Remote job id', String(p.remote_job_id ?? '—')],
-    [
-      'Job status',
-      jobStatus ? (
-        <Badge tone={JOB_TONES[jobStatus] ?? 'neutral'}>{jobStatus.replace(/_/g, ' ')}</Badge>
-      ) : (
-        '—'
-      ),
-    ],
+    ['Job status', jobStatus ? <JobStatusBadge status={jobStatus} /> : '—'],
     ['Schema hash', p.schema_hash ? String(p.schema_hash).slice(0, 12) : '—'],
     ['Versioning', tags(versions, 'version'), true],
     ['Swept params', tags(sweep, 'data'), true],

@@ -17,7 +17,6 @@ import {
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import {
-  Badge,
   Button,
   Card,
   DataTable,
@@ -32,6 +31,7 @@ import {
   Text,
   useToast,
   type Column,
+  Flag,
 } from '@/ui';
 import { Note } from '../components/Note';
 import { UserPill } from '../components/UserPill';
@@ -366,12 +366,9 @@ function AccessBody({
             description={sentence}
             aside={
               editable ? null : (
-                <Badge
-                  tone={shownRestricted ? 'neutral' : 'success'}
-                  glyph={shownRestricted ? <Icon name="lock" size={12} /> : undefined}
-                >
+                <Flag icon={shownRestricted ? 'lock' : undefined}>
                   {shownRestricted ? 'Restricted' : 'Project-wide'}
-                </Badge>
+                </Flag>
               )
             }
           />
@@ -488,13 +485,24 @@ function AccessBody({
             aria-live="polite"
             data-tone={failed ? 'error' : undefined}
           >
-            {save.isPending ? 'Saving' : failed ? 'Couldn’t save access' : dirty ? 'Unsaved changes' : 'No changes'}
+            {save.isPending
+              ? 'Saving'
+              : failed
+                ? 'Couldn’t save access'
+                : dirty
+                  ? 'Unsaved changes'
+                  : 'No changes'}
           </span>
           <div className={styles.saveActions}>
             <Button variant="neutral" isDisabled={!dirty || save.isPending} onPress={discard}>
               Discard
             </Button>
-            <Button variant="primary" isDisabled={!dirty} loading={save.isPending} onPress={() => void onSave()}>
+            <Button
+              variant="primary"
+              isDisabled={!dirty}
+              loading={save.isPending}
+              onPress={() => void onSave()}
+            >
               Save access
             </Button>
           </div>

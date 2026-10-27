@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { RECENT_PAGE_SIZE, useLiveRuns, useRecentRuns, type AdminRunSummary } from '@/api/admin';
 import { useDelayedPending } from '@/lib/pending';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Badge, ErrorState, SectionHeader, Skeleton, Stack, useToast } from '@/ui';
+import { ErrorState, Section, Skeleton, useToast } from '@/ui';
 import { ForceStopDialog } from './ForceStopDialog';
 import { RunTable } from './RunTables';
 
@@ -22,18 +22,12 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
   const showRecentSkeleton = useDelayedPending(recent.isPending);
 
   return (
-    <Stack gap="xl">
-      <section aria-labelledby="live-runs-title">
-        <SectionHeader
-          id="live-runs-title"
-          title="Live runs"
-          description={live.data ? `${live.data.total_count} running across all projects` : undefined}
-          aside={
-            <Badge tone="info" dot>
-              polling every 10 s
-            </Badge>
-          }
-        />
+    <>
+      <Section
+        id="live-runs"
+        title="Live runs"
+        description={live.data ? `${live.data.total_count} running across all projects` : undefined}
+      >
         {live.isError ? (
           <ErrorState
             error={live.error}
@@ -56,13 +50,12 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
             footerSummary={`${live.data.runs.length} live`}
           />
         )}
-      </section>
-      <section aria-labelledby="recent-runs-title">
-        <SectionHeader
-          id="recent-runs-title"
-          title="Most recent eval runs"
-          description={`${recent.data?.total_count ?? 0} total finished runs`}
-        />
+      </Section>
+      <Section
+        id="recent-runs"
+        title="Most recent eval runs"
+        description={`${recent.data?.total_count ?? 0} total finished runs`}
+      >
         {recent.isError ? (
           <ErrorState
             error={recent.error}
@@ -93,7 +86,7 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
             />
           </>
         )}
-      </section>
+      </Section>
       <ForceStopDialog
         run={target}
         open={target !== null}
@@ -108,6 +101,6 @@ export function RunsTab({ announce }: { announce: (text: string) => void }) {
           announce(`Could not force stop run: ${message}`);
         }}
       />
-    </Stack>
+    </>
   );
 }

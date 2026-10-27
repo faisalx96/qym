@@ -10,7 +10,20 @@ import {
 } from '@/api/feedback';
 import feedbackStyles from '@/features/feedback/feedback.module.css';
 import { ApiError } from '@/lib/http';
-import { Badge, Button, Card, ConfirmDialog, ErrorState, Icon, NumberField, Skeleton, Text, TextField, useToast } from '@/ui';
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  ErrorState,
+  Icon,
+  NumberField,
+  Skeleton,
+  StatStrip,
+  StatusMark,
+  Text,
+  TextField,
+  useToast,
+} from '@/ui';
 
 function ConnectionCard({ data }: { data: AgentAdmin }) {
   const toast = useToast();
@@ -39,7 +52,11 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
       header={
         <div className={feedbackStyles.railHead}>
           <Text variant="md">Connection</Text>
-          {data.configured ? <Badge tone="success">Configured</Badge> : <Badge tone="warning">Not configured</Badge>}
+          {data.configured ? (
+            <StatusMark tone="success" shape="full" label="Configured" />
+          ) : (
+            <StatusMark tone="warning" shape="ring" label="Not configured" />
+          )}
         </div>
       }
       footer={
@@ -89,7 +106,8 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
       <div className={feedbackStyles.triageBody}>
         {blocked ? (
           <Callout tone="error" title="Saving is blocked: the platform has no encryption key" live>
-            Set QYM_LLM_CONFIG_ENCRYPTION_KEY on the server and restart it. The API key is never stored in clear text.
+            Set QYM_LLM_CONFIG_ENCRYPTION_KEY on the server and restart it. The API key is never stored in
+            clear text.
           </Callout>
         ) : null}
         <div className={feedbackStyles.connGrid}>
@@ -102,14 +120,24 @@ function ConnectionCard({ data }: { data: AgentAdmin }) {
             placeholder="https://api.openai.com/v1"
             help="Any OpenAI-compatible endpoint. An https:// URL is required."
           />
-          <TextField label="Model" mono isRequired value={model} onChange={setModel} placeholder="gpt-4.1" help="Must support tool calls." />
+          <TextField
+            label="Model"
+            mono
+            isRequired
+            value={model}
+            onChange={setModel}
+            placeholder="gpt-4.1"
+            help="Must support tool calls."
+          />
           <TextField
             label="API key"
             type="password"
             mono
             value={key}
             onChange={setKey}
-            placeholder={data.connection.llm_api_key_set ? `Keep current (${data.connection.llm_api_key_hint})` : 'sk-…'}
+            placeholder={
+              data.connection.llm_api_key_set ? `Keep current (${data.connection.llm_api_key_hint})` : 'sk-…'
+            }
             autoComplete="new-password"
           />
         </div>
@@ -168,7 +196,9 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
                 await save.mutateAsync({ draft_retention_days: days, max_user_messages: max });
                 toast.show('Behaviour saved', { tone: 'success' });
               } catch (e) {
-                toast.show(e instanceof ApiError && e.detail ? e.detail : 'Couldn’t save.', { tone: 'error' });
+                toast.show(e instanceof ApiError && e.detail ? e.detail : 'Couldn’t save.', {
+                  tone: 'error',
+                });
               }
             }}
           >
@@ -202,11 +232,32 @@ function BehaviourCard({ data }: { data: AgentAdmin }) {
 /** Admin, Feedback agent (QE-109 to QE-122): the platform-level connection and the two numbers. */
 export function FeedbackAgentTab() {
   const q = useAgentAdmin();
-  if (q.isError) return <ErrorState error={q.error} title="Couldn’t load the feedback assistant" onRetry={() => void q.refetch()} />;
+  if (q.isError)
+    return (
+      <ErrorState
+        error={q.error}
+        title="Couldn’t load the feedback assistant"
+        onRetry={() => void q.refetch()}
+      />
+    );
   if (!q.data) return <Skeleton kind="rows" rows={3} rowHeight={80} label="Loading the feedback assistant" />;
   const key = String(q.data.configured);
+  const d = q.data;
   return (
     <div className={feedbackStyles.stackCol}>
+      <StatStrip
+        variant="compact-header"
+        aria-label="Feedback totals"
+        items={[
+          { label: 'Requests', value: d.counts.requests, sub: `${d.counts.new} new` },
+          {
+            label: 'Open drafts',
+            value: d.counts.open_drafts,
+            sub: `deleted after ${d.behaviour.draft_retention_days} days`,
+          },
+          { label: 'Assistant calls, 7 days', value: d.counts.assistant_calls_7d },
+        ]}
+      />
       <ConnectionCard key={key} data={q.data} />
       <BehaviourCard key={`b-${key}`} data={q.data} />
     </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUpdateUser, type AdminUser } from '@/api/admin';
 import { ApiError } from '@/lib/http';
-import { Badge, ConfirmDialog, DataTable, SearchField, Tag, Text, useToast, type Column } from '@/ui';
+import { ConfirmDialog, DataTable, SearchField, StatusMark, Tag, Text, useToast, type Column } from '@/ui';
 import styles from './users.module.css';
 
 export interface UsersTableProps {
@@ -83,6 +83,16 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
                 you
               </Tag>
             ) : null}
+            {/* on/off state: only the exception shows, after the name (no Status column) */}
+            {u.is_active ? null : (
+              <StatusMark
+                tone="warning"
+                shape="pause"
+                label="Disabled"
+                data-status="disabled"
+                className={styles.offMark}
+              />
+            )}
           </span>
         ),
       },
@@ -105,15 +115,6 @@ export function UsersTable({ users, meId, onEdit, highlightId }: UsersTableProps
             {u.role === 'ADMIN' ? 'admin' : 'member'}
           </Tag>
         ),
-      },
-      {
-        id: 'status',
-        header: 'Status',
-        type: 'status',
-        width: 110,
-        priority: 1,
-        cell: (u) =>
-          u.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="neutral">Disabled</Badge>,
       },
     ],
     [meId, highlightId],

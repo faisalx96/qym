@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Callout } from '@/features/experiments/launch/components/Callout';
 import type { ChecklistItem, FeedbackComplexity, FeedbackPriority, Proposal } from '@/api/feedback';
-import { Badge, Button, Card, Eyebrow, Select, Text, TextField, Textarea } from '@/ui';
+import { Button, Card, Eyebrow, Select, StatusMark, Text, TextField, Textarea } from '@/ui';
 import { gapLabels } from './checklist';
 import {
   canSubmit,
@@ -68,7 +68,11 @@ export function ProposalCard(p: ProposalCardProps) {
       <Text variant="md" as="h2" id="proposal-title" tabIndex={-1}>
         Proposed request
       </Text>
-      <Badge tone="warning">{proposal.superseded ? 'Superseded' : 'Not submitted yet'}</Badge>
+      {proposal.superseded ? (
+        <StatusMark tone="neutral" shape="pause" label="Superseded" />
+      ) : (
+        <StatusMark tone="warning" shape="dot" label="Not submitted yet" />
+      )}
     </div>
   );
   if (proposal.superseded)

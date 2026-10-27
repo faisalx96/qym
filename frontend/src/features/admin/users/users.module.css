@@ -87,6 +87,18 @@
   margin-inline-start: var(--space-xs);
 }
 
+.offMark {
+  margin-inline-start: var(--space-sm);
+  vertical-align: middle;
+}
+
 [data-highlight] {
   color: var(--accent-primary);
+}
+
+/* Users section body: the create form, then the table. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
 }

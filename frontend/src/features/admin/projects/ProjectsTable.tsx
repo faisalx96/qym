@@ -5,7 +5,7 @@ import { adminKeys } from '@/api/admin';
 import type { Project } from '@/api/types';
 import { projectPath } from '@/app/routes';
 import { ArchiveProjectDialog, UnarchiveProjectDialog } from '@/features/shell/dialogs';
-import { Badge, DataTable, Identicon, SearchField, Text, type Column } from '@/ui';
+import { DataTable, Identicon, SearchField, StatusMark, Text, type Column } from '@/ui';
 import styles from './projects.module.css';
 
 export interface ProjectsTableProps {
@@ -42,19 +42,14 @@ export function ProjectsTable({ projects }: ProjectsTableProps) {
           <span className={styles.nameCell}>
             <Identicon seed={p.slug} cell={5} gap={2} chip />
             <Link to={projectPath(p.slug)}>{p.name}</Link>
+            {/* on/off state: only the exception shows, after the name (no Status column) */}
+            {p.is_active ? null : (
+              <StatusMark tone="warning" shape="pause" label="Archived" data-status="archived" />
+            )}
           </span>
         ),
       },
       { id: 'slug', header: 'Slug', type: 'id', width: 160, priority: 2, cell: (p) => p.slug },
-      {
-        id: 'status',
-        header: 'Status',
-        type: 'status',
-        width: 110,
-        priority: 1,
-        cell: (p) =>
-          p.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="warning">Archived</Badge>,
-      },
       {
         id: 'members',
         header: 'Members',

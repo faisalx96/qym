@@ -1,7 +1,7 @@
 /** The Items section: header, filter bar, filter banner, virtualized table or heatmap, deep link to ?item=. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTextMode, type TextMode } from '@/lib/text';
-import { Button, HelpMarker, Icon, LinkButton, SectionHeader } from '@/ui';
+import { Button, HelpMarker, Icon, LinkButton, SectionHeader, sectionClassName } from '@/ui';
 import { useItemDetails } from '../hooks/useItemDetails';
 import { REASON_ORDER } from '../lib/itemReasons';
 import { emptyFilters, type SortBy } from '../lib/filterRules';
@@ -120,7 +120,13 @@ export function ItemsSection() {
 
   return (
     <ItemsUi.Provider value={ui}>
-      <section id="run-items" ref={sectionRef} className={styles.section} aria-labelledby="run-items-title">
+      <section
+        id="run-items"
+        ref={sectionRef}
+        className={`${sectionClassName} ${styles.section}`}
+        aria-labelledby="run-items-title"
+        data-section=""
+      >
         <div className={styles.head}>
           <SectionHeader
             id="run-items-title"

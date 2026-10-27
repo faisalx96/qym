@@ -47,10 +47,15 @@ async function seed(request: Parameters<typeof seedProject>[0], latency = true) 
 const credentials = (page: Page) => page.getByRole('region', { name: 'Credentials' });
 
 test.describe('credentials', () => {
-  test('the token reaches only the service that declares it and never the page', async ({ page, request }) => {
+  test('the token reaches only the service that declares it and never the page', async ({
+    page,
+    request,
+  }) => {
     const { project, exp } = await seed(request);
     const sent = (await fakeJobsOf(request, exp, FAKE_A)).map((j) => j.env_overrides?.QYM_DATASET_READ_TOKEN);
-    const unsent = (await fakeJobsOf(request, exp, FAKE_B)).map((j) => j.env_overrides?.QYM_DATASET_READ_TOKEN);
+    const unsent = (await fakeJobsOf(request, exp, FAKE_B)).map(
+      (j) => j.env_overrides?.QYM_DATASET_READ_TOKEN,
+    );
     expect(sent).toHaveLength(2);
     for (const t of sent) expect(String(t)).toMatch(/^qym_dr_/);
     expect(unsent.every((t) => t === undefined)).toBe(true);
@@ -62,8 +67,8 @@ test.describe('credentials', () => {
     await expect(section).toBeVisible();
     await expect(section.getByText('API key')).toBeVisible();
     await expect(section.getByText('Dataset read token')).toBeVisible();
-    await expect(page.getByTestId('cred-api-key')).toHaveText('active');
-    await expect(page.getByTestId('cred-dataset-token')).toHaveText('active');
+    await expect(page.getByTestId('cred-api-key')).toHaveText('Active');
+    await expect(page.getByTestId('cred-dataset-token')).toHaveText('Active');
     // One environment does not declare the key: one notice, naming it.
     await expect(page.getByTestId('token-notice')).toHaveCount(1);
     await expect(page.getByTestId('token-notice')).toContainText('Dataset read token not sent to plain:');
@@ -80,10 +85,12 @@ test.describe('credentials', () => {
     const list = await request.get(`/v1/projects/${project.id}/dataset-read-tokens`);
     const tokens = (await list.json()).tokens as { id: string; kind: string }[];
     const mine = tokens.find((t) => t.kind === 'experiment')!;
-    expect((await request.delete(`/v1/projects/${project.id}/dataset-read-tokens/${mine.id}`)).ok()).toBeTruthy();
+    expect(
+      (await request.delete(`/v1/projects/${project.id}/dataset-read-tokens/${mine.id}`)).ok(),
+    ).toBeTruthy();
     await gotoApp(page, expPath(project.slug, `/${exp.id}`));
-    await expect(page.getByTestId('cred-dataset-token')).toContainText(/^revoked /);
-    await expect(page.getByTestId('cred-api-key')).toHaveText('active');
+    await expect(page.getByTestId('cred-dataset-token')).toContainText(/^Revoked /);
+    await expect(page.getByTestId('cred-api-key')).toHaveText('Active');
     await expect(page.getByTestId('latency-tag').first()).toHaveText('Latency-sensitive');
   });
 
@@ -115,7 +122,9 @@ test.describe('notice heights', () => {
       await gotoApp(page, expPath(project.slug, `/${exp.id}`));
       const notice = page.getByTestId('token-notice');
       // Environments are named in table order, which follows the environment ids.
-      await expect(notice).toHaveText(/^Dataset read token not sent to (staging, production|production, staging):/);
+      await expect(notice).toHaveText(
+        /^Dataset read token not sent to (staging, production|production, staging):/,
+      );
       heights[width] = Math.round((await notice.locator('xpath=..').boundingBox())!.height * 10) / 10;
     }
     console.log('B4-34 heights', JSON.stringify(heights));

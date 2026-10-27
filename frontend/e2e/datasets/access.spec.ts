@@ -12,6 +12,7 @@ import { createProject, gotoApp, uniqueSlug } from '../helpers';
 import {
   DATASET_GET,
   asViewer,
+  expectNoPill,
   near,
   rewrite,
   seedProject,
@@ -53,8 +54,8 @@ test.describe('catalog card (A1-1 to A1-4)', () => {
       await expect(badges.locator('> *')).toHaveText(['Private test set', 'Restricted']);
       const restrictedBadge = card(secret.slug).getByTestId('restricted-badge');
       const rb = await size(restrictedBadge);
-      near(rb.w, 98.7);
       expect(rb.h).toBe(20);
+      await expectNoPill(restrictedBadge);
       await expect(card(plain.slug).getByTestId('da-card-badges')).toHaveCount(0);
 
       // A1-2: the name is never cut.
@@ -86,8 +87,8 @@ test.describe('catalog card (A1-1 to A1-4)', () => {
     const viewOnly = page.locator(`[data-dataset-card="${d.slug}"]`).getByText('View only');
     await expect(viewOnly).toBeVisible();
     const vb = await size(viewOnly);
-    near(vb.w, 91.5, 1); // F5: the same size as the page header badge
-    expect(vb.h).toBe(20);
+    expect(vb.h).toBe(20); // F5: the same Flag as the page header
+    await expectNoPill(viewOnly);
   });
 });
 
@@ -103,8 +104,8 @@ test.describe('a viewer (A1-25 to A1-31)', () => {
       const badge = page.getByTestId('view-only-badge');
       await expect(badge).toBeVisible();
       const b = await size(badge);
-      near(b.w, 91.5, 1);
       expect(b.h).toBe(20);
+      await expectNoPill(badge);
       await expect(page.getByRole('button', { name: 'About view only access' })).toBeVisible();
       for (const gone of [
         'add-item',

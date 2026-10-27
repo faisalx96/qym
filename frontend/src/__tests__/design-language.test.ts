@@ -371,6 +371,18 @@ describe('primitive module contracts', () => {
     ).toEqual([]);
   });
 
+  it('shows status with StatusMark and flags with Flag, never a Badge pill', () => {
+    // features/dev holds dated mock pages.
+    const found = tsxFiles
+      .filter((f) => /<Badge[\s>]/.test(read(f)))
+      .map(rel)
+      .filter((f) => !f.startsWith('ui/Badge/') && !f.startsWith('features/dev/'));
+    expect(
+      found,
+      'Status is a StatusMark, a fact on an item is a Flag, a category is a Tag (docs/DESIGN_LANGUAGE.md §3.3)',
+    ).toEqual([]);
+  });
+
   it('features compose primitives instead of restyling them', () => {
     const featureCss = cssFiles.filter((f) => rel(f).startsWith('features/'));
     const problems: string[] = [];
@@ -501,7 +513,8 @@ describe('visual language (redesign round 2)', () => {
     expect(base).not.toMatch(/a:hover:not\(/);
     expect(read(join(SRC, 'ui/Card/Card.tsx'))).toContain('data-link="block"');
     expect(read(join(SRC, 'features/experiments/launch/entry/StartCard.tsx'))).toContain('data-link="block"');
-    expect(read(join(SRC, 'features/docs/DocsPage.tsx'))).toContain('data-link="block"');
+    // the docs pager links are link cards: ui/Card carries the opt-out
+    expect(read(join(SRC, 'features/docs/DocsPage.tsx'))).toMatch(/<Card to=\{docsPath\((prev|next)\)\}/);
     expect(read(join(SRC, 'features/run-detail/components/RunHero.tsx'))).toContain('data-link="block"');
     // no stylesheet adds a hover underline for an anchor without the opt-out (the docs prose rule carries it)
     const loose = cssFiles.filter((f) =>

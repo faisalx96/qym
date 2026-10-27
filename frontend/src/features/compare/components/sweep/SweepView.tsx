@@ -2,7 +2,6 @@
 import { useMemo, useState } from 'react';
 import { metricDirectionLabel } from '@/lib/metrics';
 import {
-  Badge,
   Button,
   Card,
   Checkbox,
@@ -15,10 +14,11 @@ import {
   ReportLayout,
   ScopeBar,
   SearchField,
-  SectionHeader,
+  Section,
   Select,
   Tag,
   Text,
+  StatusMark,
 } from '@/ui';
 import { useMediaQuery } from '@/features/shell';
 import { useSearchParamsState } from '@/lib/url-state';
@@ -426,21 +426,13 @@ export function SweepView() {
             role="status"
           >
             <div className={styles.verdict}>
-              <Badge
-                tone={
-                  basis.stat.verdict === 'improved'
-                    ? 'success'
-                    : basis.stat.verdict === 'regressed'
-                      ? 'danger'
-                      : 'neutral'
-                }
-              >
-                {basis.stat.verdict === 'improved'
-                  ? 'IMPROVED'
-                  : basis.stat.verdict === 'regressed'
-                    ? 'REGRESSED'
-                    : 'WITHIN NOISE'}
-              </Badge>
+              {basis.stat.verdict === 'improved' ? (
+                <StatusMark tone="success" shape="full" label="Improved" />
+              ) : basis.stat.verdict === 'regressed' ? (
+                <StatusMark tone="danger" shape="cross" label="Regressed" />
+              ) : (
+                <StatusMark tone="neutral" shape="ring" label="Within noise" />
+              )}
               <div>
                 <Text variant="md" weight={600}>
                   {basis.label} {signed(basis.stat.delta)} {'—'}{' '}
@@ -537,8 +529,7 @@ export function SweepView() {
           />
         ) : (
           <>
-            <section aria-label="Cohort metrics">
-              <SectionHeader title="Cohort metrics" />
+            <Section aria-label="Cohort metrics" title="Cohort metrics">
               <div className={styles.stats}>
                 <StatCard
                   label={estimated ? `Pass@${estimated}` : `Pass@${k}`}
@@ -585,11 +576,10 @@ export function SweepView() {
                   help="Share of items on which every execution passes."
                 />
               </div>
-            </section>
+            </Section>
 
             {brows.length ? (
-              <section aria-label={`Cohort metrics by ${bk}`}>
-                <SectionHeader title={`Cohort metrics by ${bk}`} />
+              <Section aria-label={`Cohort metrics by ${bk}`} title={`Cohort metrics by ${bk}`}>
                 <ScrollRegion className={styles.scroll} label={`${bk} breakdown`}>
                   <table className={styles.table}>
                     <thead>
@@ -651,11 +641,10 @@ export function SweepView() {
                     </tbody>
                   </table>
                 </ScrollRegion>
-              </section>
+              </Section>
             ) : null}
 
-            <section aria-label="Outcome summary">
-              <SectionHeader title="Outcome summary" />
+            <Section aria-label="Outcome summary" title="Outcome summary">
               <div className={styles.outcomes}>
                 {[
                   ['Total items', shown.length, null, undefined],
@@ -692,7 +681,7 @@ export function SweepView() {
                   <span className={styles.outcomeLabel}>Avg {'Δ'} attempts / item</span>
                 </Card>
               </div>
-            </section>
+            </Section>
 
             <section aria-label="Items" id="sweep-items">
               <ScrollRegion className={styles.scroll} label="Sweep items">

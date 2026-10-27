@@ -182,6 +182,42 @@ def _client(engine, monkeypatch, *, user_id="admin", **overrides):
     return TestClient(app, headers={"X-User-Email": email, "Origin": settings.base_url})
 
 
+def test_admin_overview_without_stats_and_db_stats_endpoint(sqlite_engine, monkeypatch):
+    """The tab reads jobs and settings without the slow statistics, and the statistics on their own."""
+    from qym_platform.api import admin as admin_api
+
+    calls = []
+
+    def fake_collect(engine, **kwargs):
+        calls.append(kwargs)
+        return {"database": {"size_bytes": 42}, "tables": [], "run_events_by_type": []}
+
+    monkeypatch.setattr("qym_platform.tools.perf.db_stats.collect", fake_collect)
+    monkeypatch.setitem(admin_api._STATS_CACHE, "value", None)
+    monkeypatch.setitem(admin_api._STATS_CACHE, "at", 0.0)
+    with _client(sqlite_engine, monkeypatch, user_id="member") as client:
+        assert client.get("/api/admin/maintenance/db-stats").status_code == 403
+    with _client(sqlite_engine, monkeypatch) as client:
+        fast = client.get("/api/admin/maintenance", params={"stats": "false"})
+        assert fast.status_code == 200
+        body = fast.json()
+        assert body["db_stats"] is None and body["db_stats_age_seconds"] is None
+        assert "jobs" in body and "job_kinds" in body
+        assert calls == []  # the overview without stats never collects them
+
+        stats = client.get("/api/admin/maintenance/db-stats")
+        assert stats.status_code == 200
+        assert stats.json()["db_stats"]["database"]["size_bytes"] == 42
+        assert len(calls) == 1
+        client.get("/api/admin/maintenance/db-stats")
+        assert len(calls) == 1  # cached for a minute
+        client.get("/api/admin/maintenance/db-stats", params={"refresh": "true"})
+        assert len(calls) == 2
+
+        full = client.get("/api/admin/maintenance").json()  # the default still carries them
+        assert full["db_stats"]["database"]["size_bytes"] == 42
+
+
 def test_admin_api_requires_admin_and_confirms_irreversible(sqlite_engine, monkeypatch):
     @maintenance.register("test_danger", irreversible=True)
     def _danger(ctx):

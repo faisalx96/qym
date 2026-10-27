@@ -1,4 +1,4 @@
-import { Badge, EmptyState, Skeleton, Tag, Text } from '@/ui';
+import { EmptyState, Skeleton, Tag, Text, Flag } from '@/ui';
 import type { AnalysisResultPayload } from '@/api/analysis';
 import { rootCauseIssues } from '../model/rootCause';
 import type { RunWorkspace } from '../workspace/useRunWorkspace';
@@ -26,15 +26,17 @@ function ResultCard({ r, fields, ws }: { r: AnalysisResultPayload; fields: strin
           {r.item_id} · <span className={s.mono}>{r.metric_name}</span>
         </Text>
         {r.error ? (
-          <Badge tone="danger">{r.error_code || 'Error'}</Badge>
+          <Flag tone="danger" icon="warning">
+            {r.error_code || 'Error'}
+          </Flag>
         ) : (
-          <Badge tone={issues.length ? 'info' : 'warning'}>
+          <Flag tone={issues.length ? 'info' : 'warning'}>
             {issues.length && confidence != null
               ? `${Math.round(confidence * 100)}% confidence`
               : issues.length
                 ? 'Diagnosed'
                 : 'No diagnosis'}
-          </Badge>
+          </Flag>
         )}
         {r.retry_count ? (
           <Text variant="sm" tone="muted" as="span">

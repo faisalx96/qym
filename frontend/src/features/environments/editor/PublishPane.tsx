@@ -1,5 +1,5 @@
 /** "Review and publish": release notes, status, validation and Cancel / Publish vN. */
-import { KeyValueGrid, Badge, Button, Text, Textarea } from '@/ui';
+import { KeyValueGrid, Button, Text, Textarea, StatusMark } from '@/ui';
 import { plural } from '@/features/experiments/lib/format';
 import { Callout } from '@/features/experiments/launch/components/Callout';
 import { ProblemList } from '@/features/experiments/launch/components/ProblemList';
@@ -56,11 +56,11 @@ export function PublishPane({
           Review and publish
         </Text>
         {review.items.length ? (
-          <Badge tone="danger">{plural(review.items.length, 'problem')}</Badge>
+          <StatusMark tone="danger" shape="cross" label={plural(review.items.length, 'problem')} />
         ) : !blocker ? (
-          <Badge tone="success">Ready</Badge>
+          <StatusMark tone="success" shape="check" label="Ready" />
         ) : (
-          <Badge tone="neutral">Draft</Badge>
+          <StatusMark tone="warning" shape="dot" label="Draft" />
         )}
       </div>
       <KeyValueGrid

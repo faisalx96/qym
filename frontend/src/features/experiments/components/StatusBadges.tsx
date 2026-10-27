@@ -1,44 +1,38 @@
-/** Status badges for experiments and their jobs (tones follow the vanilla pages). */
-import { Badge, type BadgeTone } from '@/ui';
+/** Lifecycle status of experiments and their jobs as a `StatusMark` (tones follow the vanilla pages). */
+import { StatusMark, type StatusShape, type StatusTone } from '@/ui';
 
-const EXPERIMENT_TONES: Record<string, BadgeTone> = {
-  QUEUED: 'neutral',
-  RUNNING: 'info',
-  COMPLETED: 'success',
-  PARTIAL: 'warning',
-  FAILED: 'danger',
-  CANCELLED: 'warning',
+const EXPERIMENT_FIGURES: Record<string, [StatusTone, StatusShape]> = {
+  QUEUED: ['neutral', 'ring'],
+  RUNNING: ['info', 'orbit'],
+  COMPLETED: ['success', 'full'],
+  PARTIAL: ['warning', 'full'],
+  FAILED: ['danger', 'cross'],
+  CANCELLED: ['warning', 'pause'],
 };
 
-const JOB_TONES: Record<string, BadgeTone> = {
-  QUEUED: 'neutral',
-  SUBMITTING: 'info',
-  SUBMITTED: 'info',
-  RUNNING: 'info',
-  SUCCEEDED: 'success',
-  FAILED: 'danger',
-  TIMED_OUT: 'danger',
-  BLOCKED: 'warning',
-  CANCELLING: 'warning',
-  CANCELLED: 'warning',
+const JOB_FIGURES: Record<string, [StatusTone, StatusShape]> = {
+  QUEUED: ['neutral', 'ring'],
+  SUBMITTING: ['info', 'orbit'],
+  SUBMITTED: ['info', 'orbit'],
+  RUNNING: ['info', 'orbit'],
+  SUCCEEDED: ['success', 'full'],
+  COMPLETED: ['success', 'full'],
+  PARTIAL: ['warning', 'full'],
+  FAILED: ['danger', 'cross'],
+  TIMED_OUT: ['danger', 'cross'],
+  BLOCKED: ['warning', 'hourglass'],
+  CANCELLING: ['warning', 'orbit'],
+  CANCELLED: ['warning', 'pause'],
 };
 
 const label = (status: string) => status.toLowerCase().replace(/_/g, ' ');
 
 export function ExperimentStatusBadge({ status }: { status: string }) {
-  const tone = EXPERIMENT_TONES[status] ?? 'neutral';
-  return (
-    <Badge tone={tone} dot={tone === 'info'} data-status={status}>
-      {label(status)}
-    </Badge>
-  );
+  const [tone, shape] = EXPERIMENT_FIGURES[status] ?? ['neutral', 'ring'];
+  return <StatusMark tone={tone} shape={shape} label={label(status)} data-status={status} />;
 }
 
 export function JobStatusBadge({ status }: { status: string }) {
-  const tone = JOB_TONES[status] ?? 'neutral';
-  return (
-    <Badge tone={tone} dot={tone === 'info'} data-status={status}>
-      {label(status)}
-    </Badge>
-  );
+  const [tone, shape] = JOB_FIGURES[status] ?? ['neutral', 'ring'];
+  return <StatusMark tone={tone} shape={shape} label={label(status)} data-status={status} />;
 }

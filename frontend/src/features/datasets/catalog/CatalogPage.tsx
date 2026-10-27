@@ -10,7 +10,6 @@ import { useSearchParamsState } from '@/lib/url-state';
 import { useDocumentTitle, useProjectContext, useTopbarStats } from '@/features/shell';
 import { fullWidth } from '@/features/shell/layout';
 import {
-  Badge,
   Button,
   DropdownMenu,
   EmptyState,
@@ -24,6 +23,7 @@ import {
   Skeleton,
   Text,
   Card,
+  Flag,
 } from '@/ui';
 import { NewDatasetDialog } from '../components/dialogs';
 import { UserPill } from '../components/UserPill';
@@ -235,16 +235,18 @@ function DatasetCard({ dataset: d, slug }: { dataset: Dataset; slug: string }) {
             </div>
             {d.private_test_set || d.access_mode === 'restricted' ? (
               <div className={styles.badges} data-testid="da-card-badges">
-                {d.private_test_set ? <Badge tone="warning">Private test set</Badge> : null}
+                {d.private_test_set ? (
+                  <Flag tone="warning" icon="eye-off">
+                    Private test set
+                  </Flag>
+                ) : null}
                 {d.access_mode === 'restricted' ? (
-                  <Badge tone="neutral" glyph={<Icon name="lock" size={12} />} data-testid="restricted-badge">
+                  <Flag icon="lock" data-testid="restricted-badge">
                     Restricted
-                  </Badge>
+                  </Flag>
                 ) : null}
                 {d.access_mode === 'restricted' && d.permissions.access_level === 'view' ? (
-                  <Badge tone="neutral" glyph={<Icon name="eye" size={12} />}>
-                    View only
-                  </Badge>
+                  <Flag icon="eye">View only</Flag>
                 ) : null}
               </div>
             ) : null}

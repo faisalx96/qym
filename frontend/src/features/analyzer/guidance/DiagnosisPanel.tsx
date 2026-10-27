@@ -13,7 +13,6 @@ import {
 import { ApiError } from '@/lib/http';
 import { useDelayedPending } from '@/lib/pending';
 import {
-  Badge,
   Button,
   ConfirmDialog,
   EmptyState,
@@ -30,6 +29,10 @@ import {
   Textarea,
   TextField,
   useToast,
+  Flag,
+  StatusMark,
+  type StatusShape,
+  type StatusTone,
 } from '@/ui';
 import {
   approvalSignature,
@@ -53,7 +56,7 @@ interface Draft {
   value: CatalogDraft;
 }
 
-type SaveBadge = { tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral'; label: string };
+type SaveBadge = { tone: StatusTone; shape: StatusShape; label: string };
 
 const clone = (draft: CatalogDraft): CatalogDraft => ({
   ...draft,
@@ -217,16 +220,16 @@ function DiagnosisEditor({
   }
 
   const badge: SaveBadge = save.isPending
-    ? { tone: 'info', label: 'Saving…' }
+    ? { tone: 'info', shape: 'orbit', label: 'Saving…' }
     : conflict
-      ? { tone: 'danger', label: 'Conflict' }
+      ? { tone: 'danger', shape: 'cross', label: 'Conflict' }
       : failure
-        ? { tone: 'danger', label: 'Save failed' }
+        ? { tone: 'danger', shape: 'cross', label: 'Save failed' }
         : showProblems && hasProblems
-          ? { tone: 'warning', label: 'Taxonomy required' }
+          ? { tone: 'warning', shape: 'dot', label: 'Taxonomy required' }
           : dirty
-            ? { tone: 'warning', label: 'Unsaved changes' }
-            : { tone: 'success', label: 'Saved' };
+            ? { tone: 'warning', shape: 'dot', label: 'Unsaved changes' }
+            : { tone: 'success', shape: 'full', label: 'Saved' };
 
   function addCategory() {
     const name = newName.trim();
@@ -296,9 +299,13 @@ function DiagnosisEditor({
         description={`${categories.length} ${categories.length === 1 ? 'category' : 'categories'} · ${totalExamples} approved ${totalExamples === 1 ? 'example' : 'examples'}`}
         aside={
           <div className={d.saveCluster}>
-            <Badge tone={badge.tone} dot role="status" data-testid="catalog-save-state">
-              {badge.label}
-            </Badge>
+            <StatusMark
+              tone={badge.tone}
+              shape={badge.shape}
+              label={badge.label}
+              role="status"
+              data-testid="catalog-save-state"
+            />
             <Button
               variant="accent"
               size="sm"
@@ -426,8 +433,8 @@ function DiagnosisEditor({
             label: (
               <span className={d.catLabel}>
                 <span>{c.name}</span>
-                {c.exampleCount === 0 ? <Badge tone="warning">Needs examples</Badge> : null}
-                {incomplete.has(c.name) ? <Badge tone="danger">Incomplete</Badge> : null}
+                {c.exampleCount === 0 ? <Flag tone="warning">Needs examples</Flag> : null}
+                {incomplete.has(c.name) ? <Flag tone="danger">Incomplete</Flag> : null}
               </span>
             ),
             count: c.exampleCount,

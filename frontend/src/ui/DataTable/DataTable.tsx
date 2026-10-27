@@ -48,6 +48,11 @@ import {
   sortKeyOf,
   sortRows,
   suspendedPins,
+  fitColumnWidths,
+  DECLARED_WIDTH_TYPES,
+  DEFAULT_MIN_WIDTH,
+  FIT_MAX_WIDTH,
+  FIT_PAD,
   FLEX_MIN_WIDTH,
 } from './model';
 import { FoldCell } from './FoldCell';
@@ -183,6 +188,13 @@ export interface DataTableProps<R> {
   groupBy?: GroupByConfig<R>;
 
   responsive?: 'scroll' | 'cards';
+  /**
+   * Column widths. `content` (default): while the columns fit the scroller, each column is as wide as its content and
+   * the spare width is shared in proportion to it, so no single column takes all of it; when they do not fit (or the
+   * rows are windowed) the declared widths apply. `declared`: always the declared widths, the flex column takes the
+   * spare width. A width the user set by dragging always wins.
+   */
+  fit?: 'content' | 'declared';
 
   /**
    * Window the rows (spacer rows above and below). `true` or an object turns it on; by default it is on
@@ -412,6 +424,7 @@ function DataTableInner<R>({
   cardChildColumns,
   groupBy,
   responsive = 'cards',
+  fit = 'content',
   virtualize,
   scrollToKey,
   onScrolledToKey,
@@ -590,6 +603,10 @@ function DataTableInner<R>({
   const cardMode =
     useMedia('(max-width: 639px)') && responsive !== 'scroll' && visible.some((c) => c.priority);
 
+  /* content fit (the `fit` prop): natural width per column, measured below; widths are derived in render */
+  const fitOn = fit === 'content' && !virtual && !cardMode && !loading;
+  const [natural, setNatural] = useState<Record<string, number> | null>(null);
+
   /* pin offsets from measured header widths */
   const [measured, setMeasured] = useState<Record<string, number>>({});
   const [scrollerWidth, setScrollerWidth] = useState(0);
@@ -627,7 +644,45 @@ function DataTableInner<R>({
     const ro = new ResizeObserver(measure);
     ro.observe(table);
     return () => ro.disconnect();
-  }, [colSig, model.widths, model.density]);
+    // `natural`: a content fit changes the column widths but not the table's, so the observer would not see it
+  }, [colSig, model.widths, model.density, natural]);
+
+  // Content widths in one pass: the cells go to max-content under `data-measure`, every width is read in one layout,
+  // the attribute is removed. Runs when the rows, the column set or the density change (not on scroll, not on
+  // resize: the widths scale from the stored content widths), and once more when the web fonts have loaded.
+  const [fontsTick, setFontsTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void document.fonts?.ready.then(() => live && setFontsTick((t) => t + 1));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const shown = scrollerWidth > 0;
+  useLayoutEffect(() => {
+    const table = tableRef.current;
+    if (!fitOn || !shown || !table) {
+      setNatural((p) => (p === null ? p : null));
+      return;
+    }
+    table.setAttribute('data-measure', '');
+    const next: Record<string, number> = {};
+    table
+      .querySelectorAll<HTMLElement>(
+        'tbody td[data-col] > [data-cell], thead th[data-col] [data-th-label]:not([data-hidden])',
+      )
+      .forEach((el) => {
+        const id = el.closest<HTMLElement>('[data-col]')?.dataset.col;
+        if (id) next[id] = Math.max(next[id] ?? 0, Math.ceil(el.scrollWidth));
+      });
+    table.removeAttribute('data-measure');
+    setNatural((prev) => {
+      const keys = Object.keys(next);
+      if (prev && keys.length === Object.keys(prev).length && keys.every((k) => prev[k] === next[k]))
+        return prev;
+      return next;
+    });
+  }, [fitOn, shown, colSig, rows, model.density, fontsTick]);
   // Freeze cap: trailing frozen columns that would take more than `maxPinShare` of the scroller scroll instead.
   // Computed from the measured widths in the same render as the pin change (no second pass).
   const suspended = useMemo(() => {
@@ -1223,7 +1278,31 @@ function DataTableInner<R>({
     const extra = Math.max(0, tableW - pinnedW - others);
     return { pinnedW, share: others > 0 ? extra / others : 0 };
   })();
+  /* content fit: the content width of every column the user has not sized, plus a proportional share of the spare
+     width; the frame columns (select, expand, actions) and dragged widths stay as they are */
+  const fitWidths = (() => {
+    if (!natural || !(scrollerWidth > 0) || (minWidth ?? 0) > scrollerWidth) return null;
+    let fixed = 0;
+    const want: { id: string; w: number; min?: number }[] = [];
+    for (const c of renderCols) {
+      const user = model.widths[c.id];
+      if (pseudoOf(c)) fixed += fixedWidth(c) ?? floorWidth(c);
+      else if (user !== undefined) fixed += Math.max(user, headMin(c));
+      else {
+        const content =
+          c.type && DECLARED_WIDTH_TYPES.has(c.type)
+            ? (c.width ?? FLEX_MIN_WIDTH)
+            : (natural[c.id] ?? 0) + FIT_PAD;
+        const floor = Math.max(c.minWidth ?? 0, headMin(c), DEFAULT_MIN_WIDTH);
+        const w = Math.max(floor, Math.min(content, c.maxWidth ?? FIT_MAX_WIDTH));
+        // a flex column may give width back (down to its floor) so the rest still fit their content
+        want.push(c.flex ? { id: c.id, w, min: floor } : { id: c.id, w });
+      }
+    }
+    return fitColumnWidths(want, scrollerWidth - fixed);
+  })();
   const widthStyle = (c: Column<R>) => {
+    if (fitWidths) return fitWidths[c.id] ?? fixedWidth(c);
     if (!capped) return fixedWidth(c);
     if (c.id === frozenFlex!.id) return capped.pinnedW;
     const w = floorWidth(c);
@@ -1684,7 +1763,8 @@ function DataTableInner<R>({
       data-sticky={stickyHeader && !embedded && !headParent ? '' : undefined}
       data-shift={stickyHeader && !embedded && headParent ? '' : undefined}
       data-tall={tall ? '' : undefined}
-      style={{ minWidth: Math.max(minWidth ?? 0, minTotal) || undefined }}
+      data-fit={fitWidths ? '' : undefined}
+      style={{ minWidth: fitWidths ? undefined : Math.max(minWidth ?? 0, minTotal) || undefined }}
     >
       <colgroup>
         {renderCols.map((c) => (

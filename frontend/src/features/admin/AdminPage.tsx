@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useAdminUsers, useAllProjects, useMaintenance } from '@/api/admin';
-import { useAgentAdmin } from '@/api/feedback';
 import { ADMIN_TABS, type AdminTab } from '@/app/routes';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
@@ -22,7 +21,6 @@ export function AdminPage() {
   const users = useAdminUsers();
   const projects = useAllProjects();
   const maint = useMaintenance(selected === 'maintenance');
-  const agent = useAgentAdmin(selected === 'feedback');
   const [status, setStatus] = useState('');
   useEffect(() => {
     if (!status) return;
@@ -37,12 +35,17 @@ export function AdminPage() {
   ).length;
   return (
     <div className={constrained} data-admin-page>
-      <PageHeader title="Admin" description="Platform-wide runs, projects, users, maintenance and the feedback assistant." />
+      <PageHeader
+        title="Admin"
+        description="Platform-wide runs, projects, users, maintenance and the feedback assistant."
+      />
       <p className={styles.srOnly} role="status" aria-live="polite" data-status-line>
         {status}
       </p>
-      {selected === 'runs' ? (
+      {/* The same compact totals on every tab, so the tabs never move when you switch between them. */}
+      <div className={styles.totals}>
         <StatStrip
+          variant="compact-header"
           aria-label="Platform totals"
           items={[
             {
@@ -65,21 +68,7 @@ export function AdminPage() {
             },
           ]}
         />
-      ) : null}
-      {selected === 'feedback' ? (
-        <StatStrip
-          aria-label="Feedback totals"
-          items={[
-            { label: 'Requests', value: agent.data?.counts.requests ?? '—', sub: agent.data ? `${agent.data.counts.new} new` : undefined },
-            {
-              label: 'Open drafts',
-              value: agent.data?.counts.open_drafts ?? '—',
-              sub: agent.data ? `deleted after ${agent.data.behaviour.draft_retention_days} days` : undefined,
-            },
-            { label: 'Assistant calls, 7 days', value: agent.data?.counts.assistant_calls_7d ?? '—' },
-          ]}
-        />
-      ) : null}
+      </div>
       <Tabs
         label="Admin sections"
         items={[

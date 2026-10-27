@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import type { AdminRunSummary } from '@/api/admin';
 import { runPath } from '@/app/routes';
 import {
-  Badge,
   DataTable,
   RunName,
   RunStatusBadge,
@@ -78,14 +77,9 @@ export function RunTable({
         type: 'status',
         width: 130,
         priority: 1,
-        cell: (r) =>
-          variant === 'live' ? (
-            <Badge tone="info" dot>
-              {r.status || 'RUNNING'}
-            </Badge>
-          ) : (
-            <RunStatusBadge status={r.status as RunStatus} />
-          ),
+        cell: (r) => (
+          <RunStatusBadge status={(variant === 'live' ? r.status || 'RUNNING' : r.status) as RunStatus} />
+        ),
       },
       {
         id: 'progress',
