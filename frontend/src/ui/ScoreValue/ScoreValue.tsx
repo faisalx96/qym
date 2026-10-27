@@ -14,8 +14,11 @@ export interface ScoreValueProps {
   raw?: boolean;
   /** Override the displayed text (e.g. True/False for booleans, formatted numerics). */
   text?: string;
-  /** 'text' (default, inline) or 'pill' (tinted fill of the band: cards, stat strips, compare averages). */
-  variant?: 'text' | 'pill';
+  /**
+   * 'text' (default, inline, with the band's 2px start bar), 'pill' (tinted fill of the band: cards, stat strips,
+   * compare averages) or 'plain' (the band-coloured number alone: table cells).
+   */
+  variant?: 'text' | 'pill' | 'plain';
   className?: string;
 }
 
@@ -56,7 +59,7 @@ export function ScoreValue({
       className={[styles.score, className].filter(Boolean).join(' ')}
       data-band={band ?? undefined}
       data-error={error ?? undefined}
-      data-variant={variant === 'pill' ? 'pill' : undefined}
+      data-variant={variant === 'text' ? undefined : variant}
       title={band ? `Band ${band} of 5` : undefined}
     >
       {error ? (

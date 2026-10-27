@@ -59,33 +59,50 @@ export function Toolbar({
   const hideable = columns.filter((c) => c.hideable !== false && !c.id.startsWith('__'));
   const showColumns = columnsMenu ?? hideable.length >= 5;
   const showDensity = densityMenu ?? !model.densityLocked;
+  const cluster = selecting ? (
+    <div
+      className={styles.selectionCluster}
+      role={bulkOwnSummary ? undefined : 'region'}
+      aria-label={bulkOwnSummary ? undefined : 'Selection actions'}
+      data-selection-bar=""
+    >
+      {bulkOwnSummary ? null : (
+        <span className={styles.selCount} role="status">
+          {selectedCount} selected
+        </span>
+      )}
+      {bulkActions}
+      {bulkOwnSummary ? null : (
+        <Button variant="ghost" onPress={clearSelection}>
+          Clear selection
+        </Button>
+      )}
+    </div>
+  ) : null;
+  const main = (
+    <div className={styles.toolbarMain}>
+      {search}
+      {filters}
+      {chips ? <div className={styles.chips}>{chips}</div> : null}
+    </div>
+  );
   return (
     <div className={styles.toolbar} data-dt-toolbar="">
-      {selecting ? (
-        <div
-          className={styles.selectionCluster}
-          role={bulkOwnSummary ? undefined : 'region'}
-          aria-label={bulkOwnSummary ? undefined : 'Selection actions'}
-          data-selection-bar=""
-        >
-          {bulkOwnSummary ? null : (
-            <span className={styles.selCount} role="status">
-              {selectedCount} selected
-            </span>
-          )}
-          {bulkActions}
-          {bulkOwnSummary ? null : (
-            <Button variant="ghost" onPress={clearSelection}>
-              Clear selection
-            </Button>
-          )}
+      {rows ? (
+        // Facet rows under the main line: the end controls centre on the whole block, not on its first line.
+        <div className={styles.toolbarStart}>
+          <div className={styles.toolbarLine}>
+            {cluster}
+            {main}
+          </div>
+          <div className={styles.toolbarRows}>{rows}</div>
         </div>
-      ) : null}
-      <div className={styles.toolbarMain}>
-        {search}
-        {filters}
-        {chips ? <div className={styles.chips}>{chips}</div> : null}
-      </div>
+      ) : (
+        <>
+          {cluster}
+          {main}
+        </>
+      )}
       <div className={styles.toolbarEnd}>
         {count ? <span className={styles.count}>{count}</span> : null}
         {trailing}
@@ -109,7 +126,6 @@ export function Toolbar({
           />
         ) : null}
       </div>
-      {rows ? <div className={styles.toolbarRows}>{rows}</div> : null}
     </div>
   );
 }

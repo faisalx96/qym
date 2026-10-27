@@ -2,9 +2,11 @@
  * Redesign round 7, Q1 (docs/internal/ui-migration/redesign7/qa.md): the actions line over the reliability metrics.
  * The boundary of the frozen columns is drawn by the frozen cells themselves; nothing is painted over scrolling
  * content or over the passes strip. Criteria Q1-1 to Q1-8 on a 10-pass group, 1440 / 1024 / 390.
+ * Round 8: the Actions column folds while columns remain past the end edge (one small handle per row, the rest of the
+ * cell see-through, no line); scrolled to the end it is the usual pinned column with its line.
  */
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
-import { contrastOf, coveredText, edgeReport, LINE_END, LINE_START } from '../edges';
+import { ANY_LINE, contrastOf, coveredText, edgeReport, expectedShade, NO_LINE } from '../edges';
 import { seedProjectWithRuns, seedR7, waitForProjection, type SeededR7 } from './seed';
 import { openRuns, table } from './support';
 
@@ -43,27 +45,31 @@ for (const width of [1440, 1024] as const) {
       expect(overflow, 'the table scrolls sideways at this width').toBeGreaterThan(100);
 
       let stripPx = 0;
-      const check = async (state: string, strips: number): Promise<void> => {
+      const check = async (state: string, strips: number, atEnd = false): Promise<void> => {
         const rep = await edgeReport(page, T);
         // Q1-1: no edge element, no fade pseudo-element
         expect(rep.overlays, `${state}: overlay elements`).toBe(0);
         // Q1-2: nothing stacked over any glyph that is not the glyph's own cell
         expect(await coveredText(page, T), `${state}: covered text`).toEqual([]);
-        // Q1-4: every pinned-edge cell draws the one --border-strong line on its inner side
+        // round 9: no pinned-edge cell draws a line; the edge shades only while content is under it, and the
+        // folded Actions column never shades
         const bodyRows = await table(page)
           .locator('tbody > tr:not([data-detail-row]):not([data-spacer])')
           .count();
         for (const side of ['start', 'end'] as const) {
           const cells = rep.cells.filter((c) => c.edge === side);
-          const want = side === 'start' ? LINE_START : LINE_END;
+          // the folded end column is see-through (no shadow at all) until the table is scrolled to the end
+          const want = side === 'end' && !atEnd ? 'none' : NO_LINE;
           expect(cells.filter((c) => c.tag === 'td').length, `${state}: ${side} body cells`).toBe(bodyRows);
           expect(
             cells.filter((c) => c.tag === 'th').length,
             `${state}: ${side} header cells`,
           ).toBeGreaterThanOrEqual(1);
           for (const c of cells) {
-            if (c.rail) expect(c.shadow, `${state}: ${side} rail row`).toContain(want);
+            if (c.rail) expect(c.shadow, `${state}: ${side} rail row`).not.toMatch(ANY_LINE);
             else expect(c.shadow, `${state}: ${side} ${c.tag}`).toBe(want);
+            expect(c.shade, `${state}: ${side} ${c.tag} shade`).toBe(expectedShade(c, rep.scrolled));
+            if (side === 'end') expect(c.shade, `${state}: the Actions column never shades`).toBe(0);
           }
           // Q1-5: from the first header row's top to the last body row's bottom, interrupted only by the strip
           expect(
@@ -105,7 +111,7 @@ for (const width of [1440, 1024] as const) {
 
       const shadowAt = (): Promise<string> =>
         page
-          .locator(`${T} tbody td[data-pin-edge="end"]`)
+          .locator(`${T} tbody td[data-pin-edge="start"]`)
           .first()
           .evaluate((e) => getComputedStyle(e).boxShadow);
       // (installed once the group is open: the chevron and the strip animate their own entrance)
@@ -128,8 +134,11 @@ for (const width of [1440, 1024] as const) {
         await scroller(page).evaluate((el, x) => el.scrollTo({ left: x }), left);
         await expect(scroller(page)).toHaveAttribute('data-scrolled-x', '');
         await page.waitForTimeout(200);
-        await check(state, 1);
-        expect(await shadowAt(), `${state}: the shadow does not depend on the scroll position`).toBe(atRest); // Q1-7
+        await check(state, 1, left > 1000);
+        expect(
+          await shadowAt(),
+          `${state}: the start cell's own shadow does not depend on the scroll position`,
+        ).toBe(atRest); // Q1-7
       }
       expect(transitions, 'Q1-7: no transition while scrolling').toEqual([]);
     });
@@ -169,9 +178,23 @@ test.describe('Q1 under dir=rtl', () => {
         .locator(`${T} tbody td[data-pin-edge="${side}"]`)
         .first()
         .evaluate((e) => getComputedStyle(e).boxShadow);
-    // start is the right-hand side under rtl: its line faces left; the end column's line faces right
-    expect(await edge('start')).toBe(LINE_END);
-    expect(await edge('end')).toBe(LINE_START);
+    // round 9: no line on either side; start is the right-hand side under rtl, so once scrolled its shade faces left
+    expect(await edge('start')).toBe(NO_LINE);
+    expect(await edge('end')).toBe('none');
+    await page
+      .locator(`${T} [data-dt-scroller]`)
+      .first()
+      .evaluate((el) => el.scrollTo({ left: -300 }));
+    await page.waitForTimeout(200);
+    const start = (await edgeReport(page, T)).cells.find((c) => c.edge === 'start' && c.tag === 'td')!;
+    expect(start.shade).toBe(1);
+    expect(start.shadeFaces).toBe('left');
+    await page
+      .locator(`${T} [data-dt-scroller]`)
+      .first()
+      .evaluate((el) => el.scrollTo({ left: -100000 }));
+    await page.waitForTimeout(200);
+    expect(await edge('end')).toBe(NO_LINE);
     expect((await edgeReport(page, T)).overlays).toBe(0);
     expect(await coveredText(page, T)).toEqual([]);
   });

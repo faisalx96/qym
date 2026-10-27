@@ -98,6 +98,12 @@ export function capture(
 export const listRequests = (cap: ReturnType<typeof capture>) => cap.all().filter((c) => !c.body.ids?.length);
 
 /** The filter bar is always on screen (desktop); this only asserts it, kept so specs read the same. */
+/** The status-bar sentence names every active filter ("8 of 43 runs — task: rag-qa, status: Completed"). */
+export const filterSummary = (page: Page): Locator => page.getByTestId('status-bar');
+
+/** The bar's red `× Clear n` (absent while no filter is active). */
+export const clearButton = (page: Page): Locator => page.getByTestId('filters-clear');
+
 export async function openFilters(page: Page): Promise<void> {
   await expect(page.getByTestId('filter-bar')).toBeVisible();
 }
@@ -176,18 +182,28 @@ export function failOnNativeDialogs(page: Page): { seen: () => string[] } {
   return { seen: () => seen };
 }
 
+/**
+ * Opens a row's folded actions (round 8): while the table still has columns past its end edge the Actions cell is
+ * one small handle, which this presses. A no-op when the actions already show (scrolled to the end, no overflow,
+ * card mode) or the row has nothing to act on.
+ */
+export async function revealActions(row: Locator): Promise<void> {
+  const handle = row.locator('td[data-col="actions"] button[data-fold-handle]');
+  if (!(await handle.count()) || !(await handle.isVisible())) return;
+  if ((await handle.getAttribute('aria-expanded')) !== 'true') await handle.click();
+  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+}
+
 /** Opens the overflow menu of pass row `n` (its own row of the runs table; Open pass is in it). */
 export async function openPassMenu(panel: Locator, page: Page, n: number): Promise<void> {
-  await panel
-    .locator(`tr[data-pass-row="${n}"]`)
-    .getByRole('button', { name: new RegExp(`^More actions for pass ${n}`) })
-    .click();
+  const row = panel.locator(`tr[data-pass-row="${n}"]`);
+  await revealActions(row);
+  await row.getByRole('button', { name: new RegExp(`^More actions for pass ${n}`) }).click();
   await expect(page.getByRole('menu')).toBeVisible();
 }
 /** Pass rows carry a Delete pass icon button (redesign 4: no menu step). */
 export async function deletePassFromMenu(panel: Locator, _page: Page, n: number): Promise<void> {
-  await panel
-    .locator(`tr[data-pass-row="${n}"]`)
-    .getByRole('button', { name: `Delete pass ${n}` })
-    .click();
+  const row = panel.locator(`tr[data-pass-row="${n}"]`);
+  await revealActions(row);
+  await row.getByRole('button', { name: `Delete pass ${n}` }).click();
 }

@@ -30,12 +30,15 @@ export function RunsToolbar({
       role="toolbar"
       aria-label={`${mode === 'runs' ? 'Runs' : 'Charts'} toolbar`}
     >
-      <div className={styles.barMain}>
-        {parts.search}
-        {parts.filters}
+      {/* the facet row stacks under the main line; the end controls centre on both (as the runs table toolbar) */}
+      <div className={styles.barStart}>
+        <div className={styles.barMain}>
+          {parts.search}
+          {parts.filters}
+        </div>
+        <div className={styles.barRows}>{parts.rows}</div>
       </div>
       {end ? <div className={styles.barEnd}>{end}</div> : null}
-      <div className={styles.barRows}>{parts.rows}</div>
     </div>
   );
 }

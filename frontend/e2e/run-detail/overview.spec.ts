@@ -28,7 +28,7 @@ test.describe('open a run (J1, scenario 1)', () => {
     await openRun(page, s.slug, classic);
     const hero = page.getByRole('region', { name: 'Run summary' });
     await expect(hero.getByRole('heading', { level: 1 })).toHaveText(classic);
-    await expect(hero).toContainText('COMPLETED');
+    await expect(hero).toContainText(/completed/i);
     await expect(page).toHaveTitle(new RegExp(classic));
     await expect(hero.getByRole('navigation', { name: 'Previous and next run' })).toBeVisible();
     // items count + stat strip

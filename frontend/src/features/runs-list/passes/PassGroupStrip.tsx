@@ -1,6 +1,6 @@
 /**
  * The group-metrics strip: ONE full-width row under the passes of an open run (redesign 4, decision D1).
- * Title, Metric select, the pass-threshold chip, the five group statistics and one help marker.
+ * Title, Metric select, the pass-threshold slider, the five group statistics right after it and one help marker.
  */
 import { useState } from 'react';
 import type { RunRow } from '@/api/dashboardTypes';
@@ -70,16 +70,8 @@ export function PassGroupStrip({
       {dir && activeMetric ? (
         <PassThreshold
           value={activeThreshold}
-          defaultValue={defaultThreshold}
           direction={dir}
           onChange={(v) => setThresholds((t) => ({ ...t, [activeMetric]: v }))}
-          onReset={() =>
-            setThresholds((t) => {
-              const next = { ...t };
-              delete next[activeMetric];
-              return next;
-            })
-          }
         />
       ) : (
         <Text variant="sm" tone="muted" as="span">

@@ -2,7 +2,15 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { APP } from '../helpers';
 import { addMember, createUser } from '../shell/support';
-import { dataRows, failOnNativeDialogs, freshProject, openRuns, rowOf, statusText } from './support';
+import {
+  dataRows,
+  failOnNativeDialogs,
+  freshProject,
+  openRuns,
+  revealActions,
+  rowOf,
+  statusText,
+} from './support';
 
 const NAME = 'text2sql-gpt-4o-000'; // COMPLETED
 const kpis = async (request: APIRequestContext, slug: string) =>
@@ -13,6 +21,7 @@ const kpis = async (request: APIRequestContext, slug: string) =>
   ).kpis;
 
 async function openMore(page: Page, name: string, how: 'mouse' | 'keyboard' = 'mouse') {
+  await revealActions(rowOf(page, name));
   const trigger = rowOf(page, name).getByRole('button', { name: `More actions for ${name}` });
   if (how === 'mouse') await trigger.click();
   else {
@@ -24,7 +33,9 @@ async function openMore(page: Page, name: string, how: 'mouse' | 'keyboard' = 'm
   return menu;
 }
 
+/** Submit for review is its own paper-plane tile (round 9: the old qym row actions; no check icon). */
 async function submitRow(page: Page, name: string) {
+  await revealActions(rowOf(page, name));
   await rowOf(page, name)
     .getByRole('button', { name: `Submit ${name} for review` })
     .click();
@@ -45,7 +56,7 @@ test.describe('runs list: row actions (J5)', () => {
     await post;
     await expect(page.getByRole('status').filter({ hasText: 'Submitted for review' })).toBeVisible();
     await expect.poll(async () => statusText(rowOf(page, NAME)), { timeout: 5000 }).toMatch(/submitted/i);
-    // a SUBMITTED row has no Submit icon any more
+    // a SUBMITTED row has no Submit tile any more
     await expect(rowOf(page, NAME).getByRole('button', { name: /^Submit / })).toHaveCount(0);
   });
 
@@ -162,6 +173,7 @@ test.describe('runs list: row actions (J5)', () => {
     const dialogs = failOnNativeDialogs(page);
     await openRuns(page, s.project.slug);
     const before = await dataRows(page).count();
+    await revealActions(rowOf(page, NAME));
     await rowOf(page, NAME)
       .getByRole('button', { name: `Delete ${NAME}` })
       .click();
@@ -184,6 +196,7 @@ test.describe('runs list: row actions (J5)', () => {
     const s = await freshProject(request, 2);
     await openRuns(page, s.project.slug);
     const live = rowOf(page, 'live');
+    await revealActions(live);
     await expect(live.getByRole('button', { name: /^Delete / })).toHaveCount(1);
     await expect(live.getByRole('button', { name: /^Submit / })).toHaveCount(0);
   });

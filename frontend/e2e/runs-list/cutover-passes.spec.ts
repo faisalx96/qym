@@ -5,7 +5,7 @@
  */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { BOOL, LOWER, SCORE, seedRun } from './seed';
-import { clickBox, freshProject, openRuns, rowOf, deletePassFromMenu } from './support';
+import { clickBox, deletePassFromMenu, freshProject, openRuns, revealActions, rowOf } from './support';
 
 const NAME = 'summarize-repeat-done';
 
@@ -126,6 +126,7 @@ test('the delete dialogs say a run can be restored and a pass cannot', async ({ 
   await passDialog.getByRole('button', { name: 'Cancel' }).click();
   const other = (await rowOf(page, 'text2sql-gpt-4o-000').count()) ? 'text2sql-gpt-4o-000' : null;
   expect(other).toBeTruthy();
+  await revealActions(rowOf(page, other!));
   await rowOf(page, other!)
     .getByRole('button', { name: `Delete ${other}` })
     .click();

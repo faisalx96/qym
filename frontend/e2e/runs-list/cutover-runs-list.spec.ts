@@ -12,6 +12,7 @@ import {
   freshProject,
   openFacet,
   openRuns,
+  revealActions,
   rowOf,
   sharedProject,
   table,
@@ -113,6 +114,7 @@ test('a failed submit says why and leaves the row as it was', async ({ page, req
     }),
   );
   await openRuns(page, s.project.slug);
+  await revealActions(rowOf(page, NAME));
   await rowOf(page, NAME)
     .getByRole('button', { name: `Submit ${NAME} for review` })
     .click();
@@ -120,6 +122,7 @@ test('a failed submit says why and leaves the row as it was', async ({ page, req
   await dlg.getByRole('button', { name: 'Submit', exact: true }).click();
   await expect(dlg).toContainText('Only a completed, failed or rejected run can be submitted');
   await dlg.getByRole('button', { name: 'Cancel' }).click();
+  await revealActions(rowOf(page, NAME));
   await expect(rowOf(page, NAME).getByRole('button', { name: `Submit ${NAME} for review` })).toBeVisible();
 });
 
@@ -139,6 +142,7 @@ test('a delete dialog starts on Cancel, Enter cancels without deleting, Tab stay
       deletes.push(r.url());
   });
   await openRuns(page, s.project.slug);
+  await revealActions(rowOf(page, NAME));
   const trigger = rowOf(page, NAME).getByRole('button', { name: `Delete ${NAME}` });
   await trigger.focus();
   await page.keyboard.press('Enter');

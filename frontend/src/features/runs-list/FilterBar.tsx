@@ -1,22 +1,15 @@
 /**
  * The always-visible runs filter bar (redesign 2): Time and Origin inline next to the search, one trigger per facet
- * with its value written on it, `More filters` for the overflow and versioning keys, a chip line under the bar and a
- * single `Clear n`. Below 600 px the bar is the search plus one `Filters n` button opening the full list in a drawer.
- * URL state is unchanged (`viewToParams` / `parseView`).
+ * with its value written on it, `More filters` for the overflow and versioning keys and one `Clear n` after them
+ * (no chip line: each trigger already names its value). Below 600 px the bar is the search plus one `Filters n`
+ * button opening the full list in a drawer. URL state is unchanged (`viewToParams` / `parseView`).
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import type { Key } from 'react-aria-components';
 import type { Facets } from '@/api/dashboardTypes';
-import { Button, Chip, Drawer, Icon, MultiSelect, Popover, SearchField } from '@/ui';
-import { activeChips } from './chips';
+import { Button, Drawer, Icon, MultiSelect, Popover, SearchField } from '@/ui';
 import { FACET_SINGULAR, inlineFacets } from './filterBarModel';
-import {
-  buildFacetDefs,
-  CustomRangeDialog,
-  FiltersPanel,
-  TimeOriginControls,
-  type FacetDef,
-} from './FiltersPopover';
+import { buildFacetDefs, FiltersPanel, TimeOriginControls, type FacetDef } from './FiltersPopover';
 import { countActiveFilters, DEFAULT_VIEW, NONE, type RunsView } from './urlState';
 import { useDebouncedSearch, type ViewPatch } from './useRunsView';
 import styles from './FilterBar.module.css';
@@ -63,11 +56,16 @@ function FacetTrigger({ def, onChange }: { def: FacetDef; onChange: (patch: View
       label={FACET_SINGULAR[def.id] ?? def.label}
       items={items}
       value={value}
-      searchable={items.length > 8}
+      emptyMeansAll
+      noneKey={NONE}
       summary={(sel) =>
-        sel.size === 1 ? (items.find((i) => sel.has(i.key))?.label ?? '1') : String(sel.size)
+        sel.has(NONE)
+          ? 'None'
+          : sel.size === 1
+            ? (items.find((i) => sel.has(i.key))?.label ?? '1')
+            : String(sel.size)
       }
-      onChange={(next) => onChange(def.set([...next].map(String).filter((v) => v !== NONE)))}
+      onChange={(next) => onChange(def.set([...next].map(String)))}
     />
   );
 }
@@ -89,16 +87,27 @@ function FacetRow({
 }) {
   const defs = useMemo(() => buildFacetDefs(view, facets, owners), [view, facets, owners]);
   const [rowRef, width] = useWidth<HTMLDivElement>();
-  const inlineIds = useMemo(
-    () =>
-      new Set(
-        inlineFacets(
-          width,
-          defs.map((d) => d.id),
-        ),
+  const inlineIds = useMemo(() => {
+    const text = (id: string) => {
+      const d = defs.find((x) => x.id === id);
+      const label = FACET_SINGULAR[id] ?? d?.label ?? id;
+      if (!d?.selected.length) return label;
+      const value = d.selected.includes(NONE)
+        ? 'None'
+        : d.selected.length === 1
+          ? (d.options.find((o) => o.value === d.selected[0])?.label ?? '1')
+          : String(d.selected.length);
+      return `${label} · ${value}`;
+    };
+    return new Set(
+      inlineFacets(
+        width,
+        defs.map((d) => d.id),
+        text,
+        count > 0,
       ),
-    [width, defs],
-  );
+    );
+  }, [width, defs, count]);
   const inline = defs.filter((d) => inlineIds.has(d.id));
   const more = defs.filter((d) => !inlineIds.has(d.id));
   const moreActive = more.reduce((n, d) => n + d.selected.length, 0);
@@ -135,12 +144,25 @@ function FacetRow({
           </div>
         </Popover>
       ) : null}
-      {count > 0 ? (
-        <Button variant="ghost" onPress={onClear} className={styles.clear}>
-          Clear {count}
-        </Button>
-      ) : null}
+      <ClearButton count={count} onClear={onClear} />
     </div>
+  );
+}
+
+/** `× Clear n`: resets every filter and the search; red, so it reads as the one undo for the whole bar. */
+function ClearButton({ count, onClear }: { count: number; onClear: () => void }) {
+  if (count <= 0) return null;
+  return (
+    <Button
+      variant="danger"
+      icon={<Icon name="close" size={12} />}
+      onPress={onClear}
+      className={styles.clear}
+      aria-label={`Clear ${count} filter${count === 1 ? '' : 's'}`}
+      data-testid="filters-clear"
+    >
+      Clear <span className={styles.clearCount}>{count}</span>
+    </Button>
   );
 }
 
@@ -153,40 +175,10 @@ function MoreFacet({ def, onChange }: { def: FacetDef; onChange: (patch: ViewPat
       label={def.label}
       items={items}
       value={value}
-      searchable={items.length > 8}
-      onChange={(next) => onChange(def.set([...next].map(String).filter((v) => v !== NONE)))}
+      emptyMeansAll
+      noneKey={NONE}
+      onChange={(next) => onChange(def.set([...next].map(String)))}
     />
-  );
-}
-
-function ChipLine({
-  view,
-  owners,
-  onChange,
-  clear,
-}: {
-  view: RunsView;
-  owners: Record<string, string>;
-  onChange: (patch: ViewPatch) => void;
-  clear?: ReactNode;
-}) {
-  const chips = activeChips(view, (id) => owners[id] ?? id);
-  if (!chips.length) return null;
-  return (
-    <div className={styles.chips} role="group" aria-label="Active filters">
-      {chips.map((c) => (
-        <Chip
-          key={c.id}
-          isSelected
-          tone={c.tone}
-          onRemove={() => onChange(c.remove)}
-          removeLabel={`Remove ${c.label}`}
-        >
-          {c.label}
-        </Chip>
-      ))}
-      {clear}
-    </div>
   );
 }
 
@@ -195,15 +187,16 @@ function PhoneFilters({
   facets,
   owners,
   onChange,
+  onClear,
 }: {
   view: RunsView;
   facets: Facets | undefined;
   owners: Record<string, string>;
   onChange: (patch: ViewPatch) => void;
+  onClear: () => void;
 }) {
   const count = countActiveFilters(view) - (view.q ? 1 : 0);
   const [open, setOpen] = useState(false);
-  const [rangeOpen, setRangeOpen] = useState(false);
   return (
     <>
       <Button
@@ -221,44 +214,19 @@ function PhoneFilters({
           facets={facets}
           owners={owners}
           onChange={onChange}
-          onCustomRange={() => {
-            setOpen(false);
-            setRangeOpen(true);
-          }}
           onDone={() => setOpen(false)}
         />
       </Drawer>
-      <CustomRangeDialog
-        open={rangeOpen}
-        onOpenChange={setRangeOpen}
-        from={view.from}
-        to={view.to}
-        onApply={(from, to) => onChange({ range: 'custom', from, to })}
-      />
+      <ClearButton count={countActiveFilters(view)} onClear={onClear} />
     </>
   );
 }
 
 function TimeOriginInline({ view, onChange }: { view: RunsView; onChange: (patch: ViewPatch) => void }) {
-  const [rangeOpen, setRangeOpen] = useState(false);
   return (
-    <>
-      <div className={styles.inline}>
-        <TimeOriginControls
-          view={view}
-          onChange={onChange}
-          onCustomRange={() => setRangeOpen(true)}
-          labels={false}
-        />
-      </div>
-      <CustomRangeDialog
-        open={rangeOpen}
-        onOpenChange={setRangeOpen}
-        from={view.from}
-        to={view.to}
-        onApply={(from, to) => onChange({ range: 'custom', from, to })}
-      />
-    </>
+    <div className={styles.inline}>
+      <TimeOriginControls view={view} onChange={onChange} labels={false} />
+    </div>
   );
 }
 
@@ -272,7 +240,7 @@ export interface FilterBarArgs {
   showSearch?: boolean;
 }
 
-/** The filter bar as DataTable.Toolbar slots: `search` and `filters` share row 1, `rows` are facets and chips. */
+/** The filter bar as DataTable.Toolbar slots: `search` and `filters` share row 1, `rows` is the facet row. */
 export function useFilterBarParts({
   view,
   facets,
@@ -300,35 +268,19 @@ export function useFilterBarParts({
       />
     ) : null,
     filters: phone ? (
-      <PhoneFilters view={view} facets={facets} owners={owners} onChange={onChange} />
+      <PhoneFilters view={view} facets={facets} owners={owners} onChange={onChange} onClear={clear} />
     ) : (
       <TimeOriginInline view={view} onChange={onChange} />
     ),
-    rows: (
-      <>
-        {phone ? null : (
-          <FacetRow
-            view={view}
-            facets={facets}
-            owners={owners}
-            onChange={onChange}
-            onClear={clear}
-            count={count}
-          />
-        )}
-        <ChipLine
-          view={view}
-          owners={owners}
-          onChange={onChange}
-          clear={
-            phone && count > 0 ? (
-              <Button variant="ghost" onPress={clear}>
-                Clear {count}
-              </Button>
-            ) : undefined
-          }
-        />
-      </>
+    rows: phone ? null : (
+      <FacetRow
+        view={view}
+        facets={facets}
+        owners={owners}
+        onChange={onChange}
+        onClear={clear}
+        count={count}
+      />
     ),
   };
 }

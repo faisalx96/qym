@@ -175,8 +175,8 @@ Enforced by `npm run test:design` (vitest), ESLint (TSX rules) and Stylelint.
     `transition` or `animation` on `left`, `right`, `top`, `bottom`, `inset-*`,
     `transform`, `box-shadow`, `width`, `inline-size` or `all` (a frozen cell or sticky
     header follows the scroll position directly; a transition would trail it). Nothing in the
-    table fades while scrolling: the frozen boundary is a static line drawn by the frozen cells
-    (see "Data table"), so no `opacity` transition exists either. Scroll handlers write refs,
+    table fades while scrolling: the frozen boundary's shade switches on and off with the scroll
+    flags, with no transition (see "Data table"), so no `opacity` transition exists either. Scroll handlers write refs,
     data attributes and styles only: no React state and no layout read (`getBoundingClientRect`)
     per scroll event.
 
@@ -200,7 +200,9 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   `Textarea`, `Button`, `LinkButton`, `SegmentedControl`): one aligned density,
   `--control-height` (24px) and `--control-radius`, `--font-sm`, sans. There are
   no compact or roomy variants. Buttons come in neutral, accent (primary) and
-  danger tones; a danger action states what will be deleted. Brand colour
+  danger tones; a danger action states what will be deleted. A neutral button is quiet at rest
+  (`--bg-elevated`, no border or ring, round 9) and brighter on hover (`--bg-active`), never the
+  reverse: a resting fill brighter than its hover reads as already pressed (round 8). Brand colour
   belongs to an integration action only (e.g. Langfuse), never to generic
   controls. The 42px authentication fields (`TextField`),
   textareas, sliders and composite controls are separate recipes and do not
@@ -210,7 +212,9 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 - **Multiselect** (`MultiSelect`): content in fixed order: search, actions
   (Select all and None/Clear), then `--dropdown-option-height` option rows.
   Each option may expose an explicit "Only" action; never hide it behind
-  double-click.
+  double-click. As a filter (`emptyMeansAll`, the runs facets) no filter shows every box ticked: unticking a
+  value narrows to the rest, ticking them all again is no filter, and None (or unticking the last one) matches
+  nothing (`noneKey`). No hint line explains it; filter lists always have the search.
 
 - **Tabs and switchers** (`Tabs`, `SegmentedControl`): section navigation is
   underline-only tabs (`role="tablist"`/`tab`, `aria-selected`, roving focus and
@@ -258,7 +262,9 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   surface. Hover and keyboard focus change only the glyph colour (Qym green);
   no tile, tint, ring or glow on pointer hover. Keyboard focus keeps the thin
   focus outline. Semantic actions keep their meaning (approve/submit green,
-  reject/delete red). Help markers and passive icons are not icon actions.
+  reject/delete red). The one exception is `tile` (table row actions only): the
+  tone's `--tint-soft` 20px square at rest and `--tint-strong` on hover, focus and press,
+  the glyph in the tone (accent, or `--error` for danger). Help markers and passive icons are not icon actions.
   Every copy action is `CopyButton` with the shared overlapping-rectangles
   glyph from `Icon`.
 
@@ -344,13 +350,20 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 ### 3.3 Labels, statistics and identity
 
-- **Badge** (`Badge`, `RunStatusBadge`): status and outcome labels, 20px minimum
+- **Status mark** (`StatusMark`, `RunStatusBadge`, round 8): the lifecycle status of a run, a pass or a queued
+  pass. No pill, outline or fill: a decorative 3 x 3 pixel figure (11px, the identicon grammar of the project
+  marks) in the status tone, then the word in sentence case, `--font-base` / 600, `--tone-text`, at least
+  `--badge-height` tall. The figure's shape is the non-colour cue: `full` completed, `check` approved, `cross`
+  failed or rejected, `pause` stopped, `orbit` running or stopping (the ring with its first pixel lit; static: an
+  infinite animation would keep the page from settling), `ring` pending, queued or not run, `hourglass` submitted, `dot` draft. Tones as the
+  Status row of "Colour as information". Passive: no hover.
+
+- **Badge** (`Badge`): outcome labels other than a lifecycle status, 20px minimum
   (`--badge-height`), fully rounded, tinted 1px outline, sans `--font-xs` / 650.
-  Tones: success (completed/approved/improved), info (running), danger
-  (failed/rejected/regressed), warning (draft/stopped), neutral
+  Tones: success (approved/improved), info, danger (rejected/regressed), warning (draft), neutral
   (submitted/within-noise). Built on `--tone`/`--tone-text` and `--tint-soft`; plus `accent` and `meta`.
-  `glyph` adds a decorative non-colour cue (Approved gets a check: same tone as Completed). A Badge is passive:
-  an actionable count is a `Chip`.
+  `glyph` adds a decorative non-colour cue. A Badge is passive: an actionable count is a `Chip`. Never use a
+  badge to decorate a key/value summary.
 
 - **Tag** (`Tag`): roles, provenance, versions, passive metadata and compact
   counts; 20px minimum, borderless, `--control-radius`, tinted or elevated
@@ -395,7 +408,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   "best" or a histogram bucket, and the error count sits beside the mean. Raw
   numeric metrics stay neutral and confidence intervals stay muted. `variant="pill"`
   shows the band as a `--tint-soft` fill (cards, stat strips, compare averages); the
-  number and the `Band n of 5` title stay the non-colour cue.
+  number and the `Band n of 5` title stay the non-colour cue. `variant="plain"` is the band-coloured number alone,
+  for table cells: the runs table shows a score as that number, centred under its header, with no bar (rounds 8, 9).
 
 - **Run name and entities**: a run is written by `RunName` (sans, a link when it has a target, mono only when the label is a
   bare id) and the task, dataset and model by `TaskTag`, `DatasetTag` and `ModelTag`, on every surface (runs list,
@@ -419,14 +433,30 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   Row height comes from the density tokens `--row-compact` 32 / `--row-regular` 40 / `--row-comfortable` 52 (two-line
   and wrapped cells raise the minimum to comfortable); zebra alternates `--bg-base` and `--bg-surface` by logical row;
   hover `--bg-hover`; selected `--bg-selected` plus a 2px accent bar; `rowState` draws a 3px rail (error, warn, live,
-  new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are right-aligned; a column
+  new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are right-aligned (`align: 'center'`
+  centres a column, header and values; the runs and charts tables centre every number column, round 9); a column
   whose primary content is a score bar aligns its header to the bar's left edge. Column groups render a
-  `--table-group-height` band above the header. Sort glyph, header menu and resize divider show on hover/focus only;
-  pinned columns (start/end) are opaque, and the boundary is a 1px `--border-strong` line on the inner edge of the
-  pinned cells themselves (the last start cell and the first end cell of the header, the group band and every body row; the
-  sides swap under `dir="rtl"`). **A table's boundary is drawn by its own cells: nothing is painted over scrolling
-  content or over a row that is not in the columns** (no gradient, no shadow, no overlay element), so a row without a
-  pinned cell (the passes strip, an expanded item) has no line and a glyph is never covered (round 7, owner rule). Wide
+  `--table-group-height` band above the header unless the table passes `groupBand={false}` (the runs table: one
+  header line, the groups still label the Columns menu). Sort glyph, header menu and resize divider show on hover/focus only;
+  pinned columns (start/end) are opaque. The boundary has **no line** (round 9): while content is scrolled under a
+  frozen edge, the pinned cells on that edge (the last start cell and the first end cell of the header, the group band
+  and every body row) darken toward it with an 8px `--pin-shade` gradient inside their own box, in the cell padding.
+  The start edge shades once the scroller leaves its start, the end edge while columns remain past the end; at rest, at
+  the end, or with no overflow there is nothing. The sides swap under `dir="rtl"`. **A table's boundary is drawn by its
+  own cells: nothing is painted over scrolling content or over a row that is not in the columns** (no overlay element,
+  no shade outside the pinned cell), so a row without a pinned cell (the passes strip, an expanded item) has no shade and
+  a glyph is never covered (round 7, owner rule).
+  **Fold column** (`Column.foldLabel`, the runs Actions column, round 8): a pinned-end actions column is not a frozen
+  block. While the scroller has columns past its end edge, each row shows one 20px handle (`chevron-left`, named
+  "Actions for <row>") at the inline end; the rest of the cell is see-through, draws no line and lets clicks pass.
+  The handle opens that row's cell in place (the usual opaque cell, focus on its first action; Escape, the handle
+  or a press outside folds it). Scrolled to the end, or with no overflow, the column renders as usual, with its
+  title (`Actions`, end-aligned; the title is hidden while folded). A fold
+  column never shows a boundary line or shade, in any state. A row with nothing to act on has no handle. **Row
+  actions** are the old qym tiles (round 9): `IconButton tile`, 20px (`--badge-height`, 12px glyph), 4px apart, in this order: the review menu
+  (`file` glyph, accent tile: Approve, Reject, Unapprove, Unreject, Transfer ownership), Submit for review (`send`
+  glyph, accent tile; never a check, which reads as a status) and Delete (`trash`, danger tile) at the edge. Pass
+  rows carry the menu (Open pass) and Delete the same way. Wide
   tables expose only the persistent mirrored horizontal scrollbar rail (never both native and mirror), which is the
   overflow cue. Below 640px tables that declare
   column `priority` become stacked cards. Chrome parts (`DataTable.Toolbar`, `DataTable.Footer`, selection bar, Columns
@@ -450,15 +480,20 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   `qym:data-table:v2:<storageKey>:<userId>`; an unscoped layout is adopted once. Handles and freeze toggles hide under 640px.
 
 - **Filter bar** (`features/runs-list/FilterBar`, `MultiSelect triggerVariant="bar"`, toolbar `rows` slot): row 1 is search,
-  Time, Origin and the table controls; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, accent tint
-  when active), `More filters` for versioning keys and facets that do not fit (priority Status, Model, Task, Dataset,
-  User, Version) and one `Clear n`; row 3 the chips (status chips take the status tone). A list applies on each click, no
-  Done button. Under 600px the bar is search plus `Filters n`, opening every facet in a drawer.
+  Time and Origin; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, accent tint when active),
+  `More filters` for versioning keys and facets that do not fit (priority Status, Model, Task, Dataset, User, Version)
+  and, right after them, one `× Clear n` in the danger tone. There is no chip line (round 8: each trigger already names
+  its value, and the status-bar sentence lists every filter). The table controls (Select, Columns, Density) centre on
+  both rows. Facet lists are `emptyMeansAll` (every box ticked = no filter) and always searchable. `Range` (no
+  ellipsis) expands From – To date fields, Apply and Cancel in place after the Time control, never a dialog; they stay
+  open while a custom range is applied. A list applies on each click, no Done button. Under 600px the bar is search
+  plus `Filters n` (and `× Clear n`), opening every facet in a drawer.
 
 - **Passes panel** (`features/runs-list/passes`): one surface and a 2px accent rail, sticky at the scroller start
-  (`--dt-scroller-width`); header line (title, metric Select, threshold chip with popover, one help marker), a compact
-  `StatStrip` (`bar`, `barBand`) of Pass@k, Pass^k, Avg@k, Consistency, Reliability, and an embedded `DataTable` that mirrors
-  the parent's visible metric columns; issues are one glyph plus count per pass (`!` danger, `~` warning, retry info).
+  (`--dt-scroller-width`); one line, left to right: title, metric Select, the threshold as one inline `Slider`
+  (`layout="inline"`: "Pass if ≥", a 220px track, the value once; it refetches on release; no chip, popover, number
+  field or presets), the five statistics right after it (Pass@k, Pass^k, Avg@k, Consistency, Reliability) and one help
+  marker; issues are one glyph plus count per pass (`!` danger, `~` warning, retry info).
 
 ### 3.5 Charts and distributions
 
@@ -584,7 +619,7 @@ cross, trace clock, analysis sparkle), series keep their letter or name.
 | Encoding | Meaning | Tokens | Applied through | Rule |
 |---|---|---|---|---|
 | Band | quality of a value | `--score-1..5` | `ScoreValue` (text, pill), `ScoreBar`, `RateBar`, histogram buckets, `Card band`, stat values | direction-aware (`lib/metrics.ts`); a metric with no direction or a raw number stays neutral; an errored value shows Error in `--error` / `--metric-error`, never a band |
-| Status | lifecycle of a run, job, review | `--success` completed/approved, `--accent-secondary` running, `--error` failed/rejected, `--warning` stopped/draft, neutral submitted/pending | `Badge`, `RunStatusBadge` | running has the pulsing dot; approved adds the check glyph |
+| Status | lifecycle of a run, job, review | `--success` completed/approved, `--accent-secondary` running, `--error` failed/rejected, `--warning` stopped/draft, neutral submitted/pending | `StatusMark` (`RunStatusBadge`), `Badge` for other outcomes | the pixel figure's shape is the non-colour cue; running is the orbit figure |
 | Delta | change vs a baseline | good `--score-5`, bad `--score-1`, flat `--text-muted` | `DeltaCell`, `StatStrip trend` | colour only beyond the noise band; sign and arrow always; lower-is-better inverts |
 | Severity / kind | what failed | task `--error`, metric `--metric-error`, trace `--warning`, analysis `--info` | 3px rail, glyph, title colour | rail and glyph, never a filled card |
 | Series | which run, model, category group | `--chart-1..8` | marker dot and letter, `Card series`, chart marks, `Chip series`, `Tag kind=model` | never good or bad; always paired with letter or name; A is the baseline; series 1 is sky blue (teal is reserved for selection, links and the primary action), never relied on alone |
@@ -603,7 +638,7 @@ and `data-series` (1 to 8) to `--tone` and `--tone-text` (the AA-safe text varia
 `background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent); color: var(--tone-text);`. The tint steps are
 `--tint-faint` 6% (row or card wash for danger and live only), `--tint-soft` 12% (Badge, Tag, Chip selected, pill, icon
 tile), `--tint-strong` 20% (hover or pressed on a tinted fill, selected pill). No raw `rgba()` outside `tokens.css`
-(scrims and scrollbars are tokens). At most one tint fill per row-height region; never zebra-tint; a card inside a card
+(scrims and scrollbars are tokens). At most one tint fill per row-height region (row action tiles excepted: each action is its own tile); never zebra-tint; a card inside a card
 is not allowed.
 
 - **Series 1 to 8** (`--chart-1..8`, defined once in `tokens.css`): sky, pink, orange, amber, indigo, lime, cyan, slate
@@ -621,7 +656,7 @@ is not allowed.
   `--motion-stagger` per mark capped at 10; M3 a changed value morphs with the same transition and never replays the
   entrance; M4 a lazy `ReportSection` body fades up once (`--arrive-fade`, 6px); M5 a live value flashes a
   `--tint-soft` info tint (`data-changed`, `live`); M6 and M7 are unchanged. Never: a hover transform, glow, gradient, or
-  an infinite animation other than the skeleton shimmer and the running-status dot. `base.css` zeroes every duration and
+  an infinite animation other than the skeleton shimmer. `base.css` zeroes every duration and
   delay under `prefers-reduced-motion`.
 
 ---
@@ -718,10 +753,19 @@ rules for any future surface, not for the pages that taught them.
 
 - **Nothing is painted over content.** An affordance (a frozen-edge shadow, a scroll fade, a gradient cue) that lies on
   top of text reduces its contrast and, when it is as tall as a scroll host, crosses rows it does not belong to (a summary
-  strip, an open detail, a toolbar). A boundary is drawn by the element that owns it: a pinned cell draws its own 1 px
-  line, so the line exists exactly where pinned cells exist and stops at any row that is not laid out in the columns. An
-  overflow cue lives outside the content (the rail), never on it. Criterion: 0 px of any glyph under an element with a
-  gradient or an opacity below 1; a boundary's extent equals its owner's box.
+  strip, an open detail, a toolbar). A boundary is drawn by the element that owns it: a pinned cell draws its own edge
+  shade inside its box (round 9: no line), so the shade exists exactly where pinned cells exist and stops at any row that
+  is not laid out in the columns. An overflow cue lives outside the content (the rail), never on it. Criterion: 0 px of
+  any glyph under an element with a gradient or an opacity below 1 (the edge shade lies in the cell padding); a
+  boundary's extent equals its owner's box.
+- **A hover that turns text green adds no underline** (round 8). The colour step is the hover cue (run names, pass
+  and chart row links, compare rows). Running-text links, which are green at rest, keep the hover underline (base.css).
+
+- **Nothing decorative where a glyph or a word will do** (round 8). Status is a `StatusMark`, not a pill; a filter's
+  value is written on its trigger, not repeated as a chip line; a score in a table is its number, not a bar; a project
+  mark sits flush on its surface (the `Identicon` chip has no fill of its own); a three-dot menu glyph is drawn with
+  4-unit dots so it is legible at 14px.
+
 - **A name is never truncated.** Keys, identifiers, labels and column names wrap; they are never cut with an ellipsis,
   never clamped to a character count, never squeezed to a 0 px box, and a `title` tooltip does not count as visible.
   Long names break at their words (a soft break after `_`, `-` and `.` and before a camelCase capital), with

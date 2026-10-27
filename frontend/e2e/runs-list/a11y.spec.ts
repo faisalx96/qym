@@ -10,6 +10,7 @@ import {
   freshProject,
   openFacet,
   openRuns,
+  revealActions,
   rowOf,
 } from './support';
 
@@ -77,12 +78,14 @@ test.describe('axe on the runs-list surfaces', () => {
 
   test('Runs: row More menu and a confirm dialog open', async ({ page, request }) => {
     await openRuns(page, await ensureProject(request));
+    await revealActions(rowOf(page, 'text2sql-gpt-4o-000'));
     await rowOf(page, 'text2sql-gpt-4o-000')
       .getByRole('button', { name: /^More actions for / })
       .click();
     await expect(page.getByRole('menu')).toBeVisible();
     await expectClean(page, 'more menu');
     await page.keyboard.press('Escape');
+    await revealActions(rowOf(page, 'text2sql-gpt-4o-000'));
     await rowOf(page, 'text2sql-gpt-4o-000')
       .getByRole('button', { name: /^Delete / })
       .click();

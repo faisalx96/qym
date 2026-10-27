@@ -20,6 +20,7 @@ export * from './Card';
 export * from './Chart';
 export * from './motion';
 export * from './RunStatusBadge';
+export * from './StatusMark';
 export * from './Tag';
 export * from './EntityTag';
 export * from './Chip';

@@ -18,6 +18,8 @@ export type IconName =
   | 'collapse'
   | 'external'
   | 'trash'
+  | 'send'
+  | 'file'
   | 'warning'
   | 'retry'
   | 'search'
@@ -82,12 +84,14 @@ const PATHS: Record<IconName, string> = {
   collapse: 'M10 4v6H4M14 20v-6h6M10 10L4 4M14 14l6 6',
   external: 'M14 4h6v6M20 4l-9 9M19 14v6H5V6h6',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+  send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
+  file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8',
   warning: 'M12 3L2 21h20L12 3zM12 10v5M12 18v.5',
   retry: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5',
   search: 'M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zM20 20l-4-4',
   plus: 'M12 5v14M5 12h14',
   minus: 'M5 12h14',
-  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  more: 'M5 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM19 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2z',
   edit: 'M4 20h4l10-10-4-4L4 16v4zM13 7l4 4',
   info: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 11v5M12 8v.5',
   menu: 'M4 7h16M4 12h16M4 17h16',
@@ -140,7 +144,7 @@ const PATHS: Record<IconName, string> = {
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName;
-  size?: 12 | 14 | 16 | 20;
+  size?: 12 | 14 | 16 | 18 | 20;
   /** Decorative by default; pass a title for standalone meaning. */
   title?: string;
 }

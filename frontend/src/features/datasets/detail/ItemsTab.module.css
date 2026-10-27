@@ -18,6 +18,7 @@
 
 .indexLink:hover {
   color: var(--accent-primary);
+  text-decoration: none; /* the colour step is the hover cue: no underline */
 }
 
 .indexLink:focus-visible {

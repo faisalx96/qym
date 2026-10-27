@@ -172,6 +172,10 @@
   text-align: end;
 }
 
+.th[data-align='center'] {
+  text-align: center;
+}
+
 .th[data-sorted] {
   color: var(--accent-primary);
 }
@@ -226,6 +230,10 @@
 
 .th[data-align='end'] .thInner {
   justify-content: flex-end;
+}
+
+.th[data-align='center'] .thInner {
+  justify-content: center;
 }
 
 .th[data-align='end'] .sortButton {
@@ -427,6 +435,10 @@
   text-align: end;
 }
 
+.td[data-align='center'] {
+  text-align: center;
+}
+
 .td[data-mono] {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -442,28 +454,52 @@
   z-index: 2;
 }
 
-/* The boundary of the frozen columns is drawn by the frozen cells themselves (round 7, Q1/D3): one 1px
-   `--border-strong` line on the inner edge of the last start cell and the first end cell, header and body alike.
-   Nothing is painted over scrolling content, and a row that has no pinned cell (a detail row: the passes strip,
-   an expanded item) has no line. The line is static: it never changes with the scroll position, so no cell repaints
-   when scrolling starts. `box-shadow` has no logical sides, so the right-to-left case is spelled out. The line lives in
-   `--pin-line` so a row rail (state, selection, open group, focus ring) can keep it: those rules add it to their own
-   shadow instead of replacing it. */
-.th[data-pin-edge='start'],
-.td[data-pin-edge='start'],
-.bandCell[data-pin-edge='start'],
-.th[data-pin-edge='end']:dir(rtl),
-.td[data-pin-edge='end']:dir(rtl),
-.bandCell[data-pin-edge='end']:dir(rtl) {
-  --pin-line: inset -1px 0 0 var(--border-strong);
+/* The boundary of the frozen columns (round 9): no line. While content is scrolled under a frozen edge, the frozen
+   cells darken softly toward that edge: an 8px (`--space-sm`, inside the cell padding) `--pin-shade` gradient on the
+   cell's own ::after. It stays inside the frozen cell, so nothing is painted over the scrolling content and no glyph
+   is under it (owner rule, round 7). The start edge shades when the scroller has left its start (`data-scrolled-x`),
+   the end edge while columns remain past the end (`data-scrolled-end`). Both flags are written only when they change,
+   never per scroll event, and the shade has no transition (perf round 6, A12). A table that does not scroll
+   sideways, or is scrolled fully to that side, shows nothing. A fold column (the runs Actions column) never shades.
+   `--pin-line` stays as an empty shadow so a row rail (state, selection, open group, focus ring) can keep adding it. */
+:is(.th, .td, .bandCell)[data-pin-edge] {
+  --pin-line: 0 0 0 transparent;
 }
-.th[data-pin-edge='end'],
-.td[data-pin-edge='end'],
-.bandCell[data-pin-edge='end'],
-.th[data-pin-edge='start']:dir(rtl),
-.td[data-pin-edge='start']:dir(rtl),
-.bandCell[data-pin-edge='start']:dir(rtl) {
-  --pin-line: inset 1px 0 0 var(--border-strong);
+.th[data-pin-edge]::after,
+.td[data-pin-edge]::after,
+.bandCell[data-pin-edge]::after {
+  content: '';
+  position: absolute;
+  inset-block: 0 -1px;
+  inline-size: var(--space-sm);
+  pointer-events: none;
+  opacity: 0;
+}
+.th[data-pin-edge='start']::after,
+.td[data-pin-edge='start']::after,
+.bandCell[data-pin-edge='start']::after {
+  inset-inline-end: 0;
+  background: linear-gradient(to right, transparent, var(--pin-shade));
+}
+.th[data-pin-edge='end']::after,
+.td[data-pin-edge='end']::after,
+.bandCell[data-pin-edge='end']::after {
+  inset-inline-start: 0;
+  background: linear-gradient(to left, transparent, var(--pin-shade));
+}
+.th[data-pin-edge='start']:dir(rtl)::after,
+.td[data-pin-edge='start']:dir(rtl)::after,
+.bandCell[data-pin-edge='start']:dir(rtl)::after {
+  background: linear-gradient(to left, transparent, var(--pin-shade));
+}
+.th[data-pin-edge='end']:dir(rtl)::after,
+.td[data-pin-edge='end']:dir(rtl)::after,
+.bandCell[data-pin-edge='end']:dir(rtl)::after {
+  background: linear-gradient(to right, transparent, var(--pin-shade));
+}
+.scroller[data-scrolled-x] [data-pin-edge='start']::after,
+.scroller[data-scrolled-end] [data-pin-edge='end']:not([data-fold])::after {
+  opacity: 1;
 }
 .th[data-pin-edge],
 .td[data-pin-edge],
@@ -475,6 +511,72 @@
   box-shadow:
     var(--pin-line),
     inset 0 -1px 0 var(--border-default);
+}
+
+/* Fold column (`Column.foldLabel`, the runs Actions column). While the scroller has columns past its end edge
+   (`data-scroll-end` on the body host) the pinned end cell is one small handle: the rest of the cell is see-through,
+   draws no freeze line and lets clicks pass, so it covers nothing but the handle. The handle opens the cell for its
+   row (the usual opaque cell). Scrolled to the end, or with no overflow, the column renders as usual. */
+.fold {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.foldBody {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.foldHandle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.foldHandle:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.foldHandle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.bodyHost[data-scroll-end] .foldHandle {
+  display: inline-flex;
+  pointer-events: auto;
+}
+
+.bodyHost[data-scroll-end] .fold:not([data-open]) .foldBody {
+  display: none;
+}
+
+.bodyHost[data-scroll-end] .th[data-fold] .thInner {
+  visibility: hidden;
+}
+
+.bodyHost[data-scroll-end] .th[data-fold],
+.bodyHost[data-scroll-end] .td[data-fold]:not(:has(.fold[data-open])) {
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .tr {
@@ -650,6 +752,9 @@
 .groupRow td[data-align='end'] {
   text-align: end;
 }
+.groupRow td[data-align='center'] {
+  text-align: center;
+}
 .groupRow td[data-mono] {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -797,6 +902,23 @@
 
 .toolbarMain {
   flex: 1 1 auto;
+}
+
+/* With facet rows: the main line and the rows stack on the start side, the end controls centre on the stack. */
+.toolbarStart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toolbarLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  min-width: 0;
 }
 
 .toolbarEnd {
@@ -1144,7 +1266,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  flex: 1 0 100%;
   min-width: 0;
 }
 .toolbarRows:empty {

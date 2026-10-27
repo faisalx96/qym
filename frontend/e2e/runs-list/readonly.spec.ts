@@ -1,7 +1,7 @@
 /** Archived (read-only) project: no write actions in rows or in the selection bar. */
 import { test, expect } from '@playwright/test';
 import { archiveProject } from '../helpers';
-import { clickBox, dataRows, freshProject, openRuns, rowOf, openPassMenu } from './support';
+import { clickBox, dataRows, freshProject, openPassMenu, openRuns, revealActions, rowOf } from './support';
 
 test.describe('archived project (read-only)', () => {
   test('rows hide submit / delete / review actions; the selection bar hides Submit and Delete', async ({
@@ -11,6 +11,7 @@ test.describe('archived project (read-only)', () => {
     const s = await freshProject(request, 12);
     // control: the live project shows the actions
     await openRuns(page, s.project.slug);
+    await revealActions(rowOf(page, 'text2sql-gpt-4o-000'));
     await expect(rowOf(page, 'text2sql-gpt-4o-000').getByRole('button', { name: /^Delete / })).toBeVisible();
     await archiveProject(request, s.project.id);
     await page.reload();

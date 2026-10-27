@@ -16,7 +16,8 @@
   white-space: nowrap;
   cursor: pointer;
   color: var(--text-primary);
-  background: var(--bg-active);
+  /* quiet at rest (no border), brighter on hover and press: a resting fill brighter than its hover read as already active */
+  background: var(--bg-elevated);
   transition:
     background var(--transition-fast),
     color var(--transition-fast);
@@ -41,11 +42,11 @@
 
 .button[data-hovered],
 a.button:hover:not([data-disabled]) {
-  background: var(--bg-hover);
+  background: var(--bg-active);
 }
 .button[data-pressed],
 a.button:active:not([data-disabled]) {
-  background: var(--bg-elevated);
+  background: var(--bg-hover);
 }
 
 .button[data-variant='accent'] {

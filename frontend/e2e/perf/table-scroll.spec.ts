@@ -99,7 +99,7 @@ test.describe('runs table: frozen columns', () => {
     await cdp.detach();
   });
 
-  test('the pinned boundary is a static line: no overlay element, no transition, unchanged by scrolling', async ({
+  test('the pinned boundary draws no line and no overlay; its shade switches on without a transition', async ({
     page,
     request,
   }) => {
@@ -121,14 +121,17 @@ test.describe('runs table: frozen columns', () => {
       document.addEventListener('transitionstart', (e) => w.__tr.push((e.target as Element).tagName), true);
     });
     const shadows = async () => cell.evaluate((e) => getComputedStyle(e).boxShadow);
+    const shade = async () => cell.evaluate((e) => getComputedStyle(e, '::after').opacity);
     const before = await shadows();
-    // Q1-4: one 1px --border-strong line on the inner (right) side of the start boundary cell
-    expect(before).toBe('rgb(82, 82, 108) -1px 0px 0px 0px inset');
+    // round 9: no line on the start boundary cell, and no shade while nothing is scrolled under it
+    expect(before).toBe('rgba(0, 0, 0, 0) 0px 0px 0px 0px');
+    expect(await shade()).toBe('0');
     const scroller = runs.locator('[data-dt-scroller]');
     for (const left of [120, 600, 100000]) {
       await scroller.evaluate((el, x) => el.scrollTo({ left: x }), left);
       await page.waitForTimeout(250);
-      expect(await shadows()).toBe(before); // Q1-7: the same at scrollLeft 0, 600 and the end
+      expect(await shadows()).toBe(before); // Q1-7: the cell itself is the same at scrollLeft 0, 600 and the end
+      expect(await shade()).toBe('1'); // content is under the start edge: it shades
     }
     await expect(scroller).toHaveAttribute('data-scrolled-x', '');
     expect(await page.evaluate(() => (window as unknown as { __tr: string[] }).__tr)).toEqual([]);

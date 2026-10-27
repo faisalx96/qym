@@ -1,4 +1,4 @@
-/* Filter bar: facet triggers row and chip line under the search / time / origin row. */
+/* Filter bar: the facet triggers row under the search / time / origin row, ending in `× Clear n`. */
 .facetRow {
   display: flex;
   flex-wrap: wrap;
@@ -16,15 +16,11 @@
   flex: none;
 }
 .clear {
-  margin-inline-start: auto;
+  flex: none;
 }
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
-  width: 100%;
-  animation: chipsIn var(--transition-fast);
+.clearCount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 .morePanel {
   display: flex;
@@ -40,19 +36,4 @@
   width: auto;
   max-width: none;
   max-height: none;
-}
-
-@keyframes chipsIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chips {
-    animation: none;
-  }
 }

@@ -6,7 +6,7 @@
  * Criteria D3-1 to D3-7 at 1440 and 1024 (390 is cards).
  */
 import { test, expect, type Page } from '@playwright/test';
-import { coveredText, edgeReport, LINE_END, LINE_START } from '../edges';
+import { ANY_LINE, coveredText, edgeReport, expectedShade, NO_LINE } from '../edges';
 import { itemButton, openRun, seedClassic, seedProject, showItems, type Seeded } from './support';
 
 const TABLE = '#run-items [data-testid=data-table]';
@@ -44,11 +44,11 @@ for (const width of [1440, 1024] as const) {
           await page.locator('#run-items [data-edge]').count(),
           `${state}: [data-edge] in #run-items`,
         ).toBe(0);
-        // D3-1 / Q1-4: the pinned cells draw the line, in --border-strong, 1px, on the inner side
+        // round 9: the pinned cells draw no line; an edge shades only while content is scrolled under it
         for (const c of rep.cells) {
-          const want = c.edge === 'start' ? LINE_START : LINE_END;
-          if (c.rail) expect(c.shadow, `${state}: ${c.edge} rail row`).toContain(want);
-          else expect(c.shadow, `${state}: ${c.edge} ${c.tag}`).toBe(want);
+          if (c.rail) expect(c.shadow, `${state}: ${c.edge} rail row`).not.toMatch(ANY_LINE);
+          else expect(c.shadow, `${state}: ${c.edge} ${c.tag}`).toBe(NO_LINE);
+          expect(c.shade, `${state}: ${c.edge} ${c.tag} shade`).toBe(expectedShade(c, rep.scrolled));
           // D3-2: no pinned-edge element is taller than a row (the old cue was as tall as the 500-row body)
           expect(c.bottom - c.top, `${state}: pinned-edge cell height`).toBeLessThanOrEqual(80);
         }

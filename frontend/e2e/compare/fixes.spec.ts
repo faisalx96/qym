@@ -139,7 +139,7 @@ test('C020 run cards show status, counts and dataset version; the chip flags an 
 }) => {
   await page.goto(compareUrl([fix.a, fix.b, fix.c]));
   await waitLoaded(page);
-  await expect(page.getByRole('list', { name: 'Runs in this comparison' })).toContainText('RUNNING');
+  await expect(page.getByRole('list', { name: 'Runs in this comparison' })).toContainText(/running/i);
   // up to four runs the cards are always visible (no toggle)
   await expect(page.getByRole('button', { name: 'Run details' })).toHaveCount(0);
   const cards = page.getByTestId('run-card');

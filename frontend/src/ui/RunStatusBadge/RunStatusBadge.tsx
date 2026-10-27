@@ -1,4 +1,5 @@
-import { Badge, type BadgeTone } from '../Badge';
+import type { BadgeTone } from '../Badge';
+import { StatusMark, type StatusShape, type StatusTone } from '../StatusMark';
 
 export type RunStatus =
   | 'PENDING'
@@ -13,7 +14,7 @@ export type RunStatus =
   | 'DRAFT'
   | string;
 
-const TONES: Record<string, BadgeTone> = {
+const TONES: Record<string, StatusTone> = {
   COMPLETED: 'success',
   APPROVED: 'success',
   IMPROVED: 'success',
@@ -28,20 +29,39 @@ const TONES: Record<string, BadgeTone> = {
   SUBMITTED: 'neutral',
 };
 
+const SHAPES: Record<string, StatusShape> = {
+  COMPLETED: 'full',
+  IMPROVED: 'full',
+  APPROVED: 'check',
+  RUNNING: 'orbit',
+  STOPPING: 'orbit',
+  FAILED: 'cross',
+  REJECTED: 'cross',
+  REGRESSED: 'cross',
+  STOPPED: 'pause',
+  DRAFT: 'dot',
+  PENDING: 'ring',
+  SUBMITTED: 'hourglass',
+};
+
 export function runStatusTone(status: RunStatus): BadgeTone {
   return TONES[String(status).toUpperCase()] ?? 'neutral';
 }
 
+export function runStatusShape(status: RunStatus): StatusShape {
+  return SHAPES[String(status).toUpperCase()] ?? 'ring';
+}
+
+/** A run's lifecycle status as a `StatusMark` (pixel figure + word). */
 export function RunStatusBadge({ status, label }: { status: RunStatus; label?: string }) {
-  const tone = runStatusTone(status);
+  const key = String(status).toUpperCase();
   return (
-    <Badge
-      tone={tone}
-      dot={tone === 'info'}
-      glyph={String(status).toUpperCase() === 'APPROVED' ? '✓' : undefined}
-      data-status={String(status).toUpperCase()}
-    >
-      {label ?? String(status).toLowerCase()}
-    </Badge>
+    <StatusMark
+      tone={TONES[key] ?? 'neutral'}
+      shape={runStatusShape(status)}
+      // run statuses arrive upper case (COMPLETED): the word is lower case, StatusMark capitalises its first letter
+      label={(label ?? key).toLowerCase()}
+      data-status={key}
+    />
   );
 }

@@ -31,6 +31,8 @@ import {
   Mono,
   OwnerCell,
   RowActions,
+  hasRowActions,
+  rowActionModel,
   RunNameCell,
   Signals,
   StatusCell,
@@ -260,6 +262,16 @@ function useWideDefault(): boolean {
 
 const runName = (r: RunRow) => r.external_run_id || r.run_name || r.run_id.slice(0, 8);
 
+/** Name of a row's fold handle; '' when the row has nothing to act on. */
+function actionsLabel(tr: TableRow, perm: RowPermissions): string {
+  if (tr.kind === 'run') {
+    return hasRowActions(rowActionModel(tr.row, perm)) ? `Actions for ${runName(tr.row)}` : '';
+  }
+  if (tr.kind === 'pass') return `Actions for pass ${tr.pass.pass_number} of ${runName(tr.run)}`;
+  if (tr.kind === 'error') return `Actions for the passes of ${runName(tr.run)}`;
+  return '';
+}
+
 export function RunsTable(p: RunsTableProps) {
   const wide = useWideDefault();
   const { slug: ctxSlug, listContext, metricTypes: prefetchMetricTypes } = useRunsCtx();
@@ -343,10 +355,11 @@ export function RunsTable(p: RunsTableProps) {
               ? 'end'
               : undefined,
         lockOrder: def.id === 'actions',
+        // not a frozen block: one small handle per row while columns remain past the end, the column itself at the end
+        foldLabel: def.id === 'actions' ? (tr: TableRow) => actionsLabel(tr, p.perm) : undefined,
         hideable: def.visKey !== null && def.id !== 'run',
         defaultHidden: p.defaultHidden?.has(def.id),
         resizable: def.id !== 'actions',
-        hideLabel: def.id === 'actions',
         priority: priorityOf(def, rank),
         cell: (tr: TableRow) => cellFor(def, tr, p, h),
       } satisfies Column<TableRow>;
@@ -411,7 +424,8 @@ export function RunsTable(p: RunsTableProps) {
         storageScope={p.storageScope}
         reorderable
         onHiddenChange={p.onHiddenChange}
-        density="compact"
+        density="regular"
+        groupBand={false}
         columns={columns}
         rows={runRows}
         rowKey={(r) => r.key}

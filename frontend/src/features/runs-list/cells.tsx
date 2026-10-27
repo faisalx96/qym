@@ -4,13 +4,12 @@ import { Link } from 'react-router-dom';
 import { Button as AriaButton } from 'react-aria-components';
 import type { RunRow } from '@/api/dashboardTypes';
 import {
-  Badge,
   DropdownMenu,
   HelpMarker,
   Icon,
   IconButton,
   RunStatusBadge,
-  ScoreBar,
+  ScoreValue,
   DatasetTag,
   ModelTag,
   RunName,
@@ -331,7 +330,8 @@ export function MetricCell({
           : undefined
       }
     >
-      <ScoreBar
+      <ScoreValue
+        variant="plain"
         value={v}
         type={type}
         direction={dir}
@@ -450,6 +450,39 @@ export interface RowPermissions {
   meId: string;
 }
 
+interface RowActionModel {
+  canDelete: boolean;
+  /** Submit for review: COMPLETED, FAILED or REJECTED runs, for the owner or a manager. */
+  submitLabel: string | null;
+  items: { id: string; label: string; tone?: 'danger'; separatorBefore?: boolean }[];
+}
+
+/** What a viewer may do to a run row: the review menu, Submit and Delete, as tiles (the old qym row actions). */
+export function rowActionModel(row: RunRow, perm: RowPermissions): RowActionModel {
+  if (perm.readOnly) return { canDelete: false, submitLabel: null, items: [] };
+  const isOwner = row.owner?.id === perm.meId;
+  const canSubmit = (isOwner || perm.canManage) && ['COMPLETED', 'FAILED', 'REJECTED'].includes(row.status);
+  const canDelete = perm.isAdmin || perm.canManage || isOwner;
+  const name = row.external_run_id || row.run_name;
+  const submitLabel = canSubmit
+    ? `Submit ${name} for review${!isOwner && row.owner ? ` on behalf of ${row.owner.display_name || row.owner.email}` : ''}`
+    : null;
+  const items: RowActionModel['items'] = [];
+  if (perm.canManage) {
+    if (row.status === 'SUBMITTED')
+      items.push({ id: 'approve', label: 'Approve' }, { id: 'reject', label: 'Reject', tone: 'danger' });
+    if (row.status === 'APPROVED') items.push({ id: 'unapprove', label: 'Unapprove' });
+    if (row.status === 'REJECTED') items.push({ id: 'unreject', label: 'Unreject' });
+    items.push({ id: 'transfer', label: 'Transfer ownership…', separatorBefore: items.length > 0 });
+  }
+  return { canDelete, submitLabel, items };
+}
+
+/** True when the row has at least one action (the Actions fold column shows its handle only then). */
+export function hasRowActions(m: RowActionModel): boolean {
+  return m.canDelete || m.submitLabel !== null || m.items.length > 0;
+}
+
 export function RowActions({
   row,
   perm,
@@ -460,45 +493,29 @@ export function RowActions({
   onAction: (id: string, row: RunRow) => void;
 }) {
   if (perm.readOnly) return <span className={styles.empty}>—</span>;
-  const isOwner = row.owner?.id === perm.meId;
-  const items = [];
-  if (perm.canManage) {
-    if (row.status === 'SUBMITTED')
-      items.push(
-        { id: 'approve', label: 'Approve' },
-        { id: 'reject', label: 'Reject', tone: 'danger' as const },
-      );
-    if (row.status === 'APPROVED') items.push({ id: 'unapprove', label: 'Unapprove' });
-    if (row.status === 'REJECTED') items.push({ id: 'unreject', label: 'Unreject' });
-    items.push({ id: 'transfer', label: 'Transfer ownership…', separatorBefore: items.length > 0 });
-  }
-  const canSubmit = (isOwner || perm.canManage) && ['COMPLETED', 'FAILED', 'REJECTED'].includes(row.status);
-  const canDelete = perm.isAdmin || perm.canManage || isOwner;
+  const { canDelete, submitLabel, items } = rowActionModel(row, perm);
   const name = row.external_run_id || row.run_name;
+  // Order of the old qym row: review menu (document), Submit (paper plane), Delete (trash) at the edge.
   return (
     <span className={styles.actions}>
-      {canSubmit ? (
-        <IconButton
-          label={`Submit ${name} for review${!isOwner && row.owner ? ` on behalf of ${row.owner.display_name || row.owner.email}` : ''}`}
-          icon="check"
-          tone="approve"
-          onPress={() => onAction('submit', row)}
+      {items.length ? (
+        <DropdownMenu
+          label={`More actions for ${name}`}
+          trigger={<IconButton label={`More actions for ${name}`} icon="file" tile />}
+          items={items}
+          onAction={(id) => onAction(id, row)}
         />
+      ) : null}
+      {submitLabel ? (
+        <IconButton label={submitLabel} icon="send" tile onPress={() => onAction('submit', row)} />
       ) : null}
       {canDelete ? (
         <IconButton
           label={`Delete ${name}`}
           icon="trash"
           tone="danger"
+          tile
           onPress={() => onAction('delete', row)}
-        />
-      ) : null}
-      {items.length ? (
-        <DropdownMenu
-          label={`More actions for ${name}`}
-          trigger={<IconButton label={`More actions for ${name}`} icon="more" />}
-          items={items}
-          onAction={(id) => onAction(id, row)}
         />
       ) : null}
     </span>
@@ -514,5 +531,12 @@ export function DurationCell({ ms }: { ms: number | null | undefined }) {
 }
 
 export function OriginBadge({ origin }: { origin: string }) {
-  return origin === 'official' ? <Badge tone="info">official</Badge> : <Badge tone="neutral">local</Badge>;
+  // a category, not a status: a Tag (official in the info tone)
+  return origin === 'official' ? (
+    <Tag kind="origin" tone="info">
+      official
+    </Tag>
+  ) : (
+    <Tag kind="origin">local</Tag>
+  );
 }

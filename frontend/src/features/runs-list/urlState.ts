@@ -270,7 +270,9 @@ export function filterSummary(
   if (has(view.owners)) parts.push(`user: ${summarize(view.owners, labels.owner)}`);
   else if (view.owners.includes(NONE)) parts.push('user: none');
   for (const [key, values] of activeVersioningFilters(view))
-    parts.push(`${versioningKeyWords(key)}: ${summarize(values)}`);
+    parts.push(
+      `${versioningKeyWords(key)}: ${summarize(values, (v) => (isEmptyFilterValue(v) ? 'empty' : v))}`,
+    );
   if (view.origin === 'official') parts.push('official runs');
   if (view.origin === 'local') parts.push('local runs');
   if (view.q) parts.push(`search: "${view.q}"`);

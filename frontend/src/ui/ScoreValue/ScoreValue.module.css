@@ -15,6 +15,12 @@
   border-color: var(--tone);
 }
 
+/* Plain: the number alone in its band colour (table cells); the number and the title are the non-colour cue. */
+.score[data-variant='plain'] {
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
 /* Pill: the band as a tinted fill (12%), no bar; the number and the title stay the non-colour cue. */
 .score[data-variant='pill'] {
   min-block-size: 20px;

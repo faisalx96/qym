@@ -302,6 +302,7 @@
   --card-padding: var(--space-md) var(--space-lg);
   --card-padding-compact: var(--space-sm) var(--space-md);
   --shadow-card-hover: 0 2px 12px rgba(0, 0, 0, 0.28);
+  --pin-shade: rgba(0, 0, 0, 0.4); /* inner edge of a frozen column while content is under it (DataTable) */
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --motion-fill: 360ms; /* bars/rings/fills growing in or updating */

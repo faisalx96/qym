@@ -22,7 +22,7 @@ export function sortKeyOf<R>(col: Column<R>): string | undefined {
   return col.sort?.key;
 }
 
-export function alignOf<R>(col: Column<R>): 'start' | 'end' {
+export function alignOf<R>(col: Column<R>): 'start' | 'center' | 'end' {
   if (col.align) return col.align;
   return col.type && NUMERIC_TYPES.has(col.type) ? 'end' : 'start';
 }

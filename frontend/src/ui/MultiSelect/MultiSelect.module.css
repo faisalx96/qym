@@ -251,9 +251,3 @@
     transition: none;
   }
 }
-
-.hint {
-  padding: 0 var(--space-sm) var(--space-xs);
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-}

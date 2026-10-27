@@ -97,7 +97,10 @@ describe('PassGroupStrip', () => {
     expect(within(strip).getByText('10 · 300 items')).toBeInTheDocument();
     const labels = Array.from(strip.querySelectorAll('dl[aria-busy] dt')).map((d) => d.textContent);
     expect(labels).toEqual(['Pass@10', 'Pass^10', 'Avg@10', 'Consistency', 'Reliability']);
-    expect(within(strip).getAllByRole('status')).toHaveLength(5);
+    // the five skeleton values (the threshold slider's <output> is a status too, outside the statistics)
+    const stats = strip.querySelector<HTMLElement>('dl[aria-busy]')!;
+    expect(within(stats).getAllByRole('status')).toHaveLength(5);
+    expect(within(strip).getByRole('slider', { name: /^Pass if ≥/ })).toBeInTheDocument();
     expect(strip.querySelectorAll('dd')).toHaveLength(5 + 5); // five skeleton values + the five help definitions
   });
 
@@ -122,7 +125,7 @@ describe('PassGroupStrip', () => {
     });
     const strip = screen.getByRole('group', { name: 'Group metrics' });
     await waitFor(() => expect(strip).not.toHaveAttribute('aria-busy'));
-    expect(within(strip).queryAllByRole('status')).toHaveLength(0);
+    expect(within(strip.querySelector<HTMLElement>('dl')!).queryAllByRole('status')).toHaveLength(0);
     expect(within(strip).getByText('90.0%')).toBeInTheDocument(); // Pass@10
     expect(within(strip).getByText('55.0%')).toBeInTheDocument(); // Reliability
   });

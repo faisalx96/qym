@@ -87,10 +87,9 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     await page.getByRole('option', { name: other }).click();
     await expect.poll(() => reqs.length).toBeGreaterThan(base);
     expect(reqs.at(-1)!.searchParams.get('metric')).toBe(other);
-    // slider: keyboard step triggers a request with a new threshold
+    // slider (inline in the strip, no popover): keyboard step triggers a request with a new threshold
     const n = reqs.length;
-    await panel.getByTestId('pass-threshold-chip').click();
-    const thumb = page.getByRole('slider', { name: 'Pass threshold' });
+    const thumb = panel.getByRole('slider', { name: /^Pass if [≥≤]/ });
     const t0 = Number(await thumb.inputValue());
     await thumb.focus();
     await page.keyboard.press('ArrowRight');
@@ -187,7 +186,8 @@ test.describe('runs list: repeat-run passes (J6)', () => {
     await expect(panel.getByRole('columnheader', { name: 'Date' })).toBeVisible();
     await expect(rows.first().locator('time')).toBeVisible();
     await expect(panel.locator('[aria-label="Group metrics"]').first()).toContainText('Avg@3');
-    await expect(panel.getByText(/^Pass if [≥≤] \d+%$/)).toBeVisible();
+    // the threshold is one inline slider: label, track, the value once
+    await expect(panel.getByTestId('pass-threshold')).toHaveText(/^Pass if [≥≤]\s*\d+%$/);
     const analyze = rows.nth(1).getByRole('link', { name: /^Analyze pass 2/ });
     await expect(analyze).toHaveAttribute('href', /\/analyzer\?.*pass=2/);
     // the pass row opens that pass of the run

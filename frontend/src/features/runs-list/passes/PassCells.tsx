@@ -1,7 +1,7 @@
 /** Cells of a child row (a pass, the waiting passes, a loading or error placeholder) in the runs table's columns. */
 import { Link } from 'react-router-dom';
 import type { RunPass, RunRow } from '@/api/dashboardTypes';
-import { Badge, Button, DropdownMenu, IconButton, RunStatusBadge, ScoreBar, Tooltip } from '@/ui';
+import { Button, DropdownMenu, IconButton, RunStatusBadge, ScoreValue, StatusMark, Tooltip } from '@/ui';
 import { formatDateParts, formatNumericValue } from '@/lib/format';
 import { formatPercent, metricDirection } from '@/lib/metrics';
 import { AnalyzeAction } from '../AnalyzeAction';
@@ -68,7 +68,13 @@ export function QueuedNameCell({ queued }: { queued: QueuedView }) {
 }
 
 export function QueuedStatus({ queued }: { queued: QueuedView }) {
-  return <Badge tone={queued.notRun ? 'warning' : 'neutral'}>{queued.notRun ? 'NOT RUN' : 'QUEUED'}</Badge>;
+  return (
+    <StatusMark
+      tone={queued.notRun ? 'warning' : 'neutral'}
+      shape="ring"
+      label={queued.notRun ? 'Not run' : 'Queued'}
+    />
+  );
 }
 
 export function PassStatus({ status }: { status: string }) {
@@ -125,12 +131,12 @@ export function PassMetricCell({ run, pass, metric }: { run: RunRow; pass: RunPa
     );
   return (
     <span className={styles.metric}>
-      <ScoreBar
+      <ScoreValue
+        variant="plain"
         value={v}
         type={type}
         direction={metricDirection(run.metric_specs?.[metric])}
         text={formatPercent(v, smartDigits(v, undefined))}
-        error={null}
       />
       {marker}
     </span>
@@ -153,17 +159,23 @@ export function PassActions({
   const n = pass.pass_number;
   return (
     <span className={styles.actions}>
-      {canDelete ? (
-        <Tooltip content={`Delete pass ${n}`}>
-          <IconButton label={`Delete pass ${n}`} icon="trash" tone="danger" onPress={() => onDelete(n)} />
-        </Tooltip>
-      ) : null}
       <DropdownMenu
         label={`More actions for pass ${n} of ${runName(run)}`}
-        trigger={<IconButton label={`More actions for pass ${n} of ${runName(run)}`} icon="more" />}
+        trigger={<IconButton label={`More actions for pass ${n} of ${runName(run)}`} icon="file" tile />}
         items={[{ id: 'open', label: `Open pass ${n}` }]}
         onAction={() => onOpen(n)}
       />
+      {canDelete ? (
+        <Tooltip content={`Delete pass ${n}`}>
+          <IconButton
+            label={`Delete pass ${n}`}
+            icon="trash"
+            tone="danger"
+            tile
+            onPress={() => onDelete(n)}
+          />
+        </Tooltip>
+      ) : null}
     </span>
   );
 }

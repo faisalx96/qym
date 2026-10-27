@@ -44,6 +44,29 @@
   color: var(--error-hover);
 }
 
+/* Row action tile (`tile`): a 20px square like the fold handle and badges, the tone's soft tint at rest, its strong
+   tint on hover; the glyph (12px) keeps the tone. */
+.iconAction[data-tile] {
+  --tile-tone: var(--accent-primary);
+  width: var(--badge-height);
+  height: var(--badge-height);
+  background: color-mix(in srgb, var(--tile-tone) var(--tint-soft), transparent);
+  color: var(--tile-tone);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+.iconAction[data-tile][data-tone='danger'],
+.iconAction[data-tile][data-tone='reject'] {
+  --tile-tone: var(--error);
+}
+.iconAction[data-tile][data-hovered],
+.iconAction[data-tile][data-pressed],
+.iconAction[data-tile][data-focus-visible] {
+  background: color-mix(in srgb, var(--tile-tone) var(--tint-strong), transparent);
+  color: var(--tile-tone);
+}
+
 .iconAction[data-disabled] {
   opacity: 0.45;
   cursor: not-allowed;

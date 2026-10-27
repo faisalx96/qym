@@ -14,5 +14,6 @@
   justify-content: center;
   flex: none;
   border-radius: var(--control-radius);
-  background: var(--bg-elevated);
+  /* No fill of its own: the mark sits flush on whatever surface holds it (card, row, popover). */
+  background: transparent;
 }

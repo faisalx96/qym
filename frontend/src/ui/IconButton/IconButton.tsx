@@ -13,12 +13,15 @@ export interface IconButtonProps extends Omit<
   tone?: 'default' | 'danger' | 'approve' | 'reject';
   /** Shows the "copied" green glyph state. */
   active?: boolean;
+  /** Row action tile: a 20px square (`--badge-height`, 12px glyph), the tone's soft tint at rest and a stronger tint on
+   * hover (the runs Actions column). */
+  tile?: boolean;
   className?: string;
 }
 
 /** .qym-icon-action: 24px glyph-only action; hover changes only the glyph colour. */
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { label, icon, tone = 'default', active, className, ...rest },
+  { label, icon, tone = 'default', active, tile, className, ...rest },
   ref,
 ) {
   return (
@@ -28,9 +31,10 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       className={[styles.iconAction, className].filter(Boolean).join(' ')}
       data-tone={tone}
       data-active={active ? '' : undefined}
+      data-tile={tile ? '' : undefined}
       {...rest}
     >
-      {typeof icon === 'string' ? <Icon name={icon as IconName} size={14} /> : icon}
+      {typeof icon === 'string' ? <Icon name={icon as IconName} size={tile ? 12 : 14} /> : icon}
     </AriaButton>
   );
 });

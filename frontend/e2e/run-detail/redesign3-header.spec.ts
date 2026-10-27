@@ -68,7 +68,7 @@ for (const width of [1440, 390]) {
       await openRun(page, s.slug, classic);
       const h = hero(page);
       await expect(h.getByRole('heading', { level: 1 })).toBeVisible();
-      await expect(h.getByText('COMPLETED')).toBeVisible();
+      await expect(h.getByText(/^completed$/i)).toBeVisible();
       await expect(h.getByRole('link', { name: 'Export HTML' })).toBeVisible();
       await expect(h.getByRole('navigation', { name: 'Previous and next run' })).toBeVisible();
       await expect(h.getByRole('button', { name: 'Copy run id' })).toBeVisible();

@@ -6,7 +6,16 @@
  * tests/platform/test_run_versioning_filter.py.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { openFacet, openFilters, openRuns, sharedProject, capture, listRequests, urlParams } from './support';
+import {
+  filterSummary,
+  openFacet,
+  openFilters,
+  openRuns,
+  sharedProject,
+  capture,
+  listRequests,
+  urlParams,
+} from './support';
 
 async function mockFacets(page: Page) {
   await page.route(/\/api\/dashboard\/(runs|overview)$/, async (route) => {
@@ -22,7 +31,7 @@ async function mockFacets(page: Page) {
   });
 }
 
-test('one facet per versioning key; choosing a value filters, chips and narrows the other key', async ({
+test('one facet per versioning key; choosing a value filters, is summarised and narrows the other key', async ({
   page,
   request,
 }) => {
@@ -41,8 +50,7 @@ test('one facet per versioning key; choosing a value filters, chips and narrows 
   await expect
     .poll(() => listRequests(cap).at(-1)?.body.filters.versioning)
     .toEqual({ agent_version: ['v1'] });
-  const chips = page.getByRole('group', { name: 'Active filters', exact: true });
-  await expect(chips).toContainText('Agent version: v1');
+  await expect(filterSummary(page)).toContainText('Agent version: v1');
   await expect(page.getByTestId('filters-trigger')).toContainText('More filters · 1');
   expect(urlParams(page).getAll('v.agent_version')).toEqual(['v1']);
   // The other key's values narrow to what the selection leaves.
@@ -50,10 +58,14 @@ test('one facet per versioning key; choosing a value filters, chips and narrows 
   await expect(panel.getByRole('checkbox', { name: '381' })).toBeVisible();
   await expect(panel.getByRole('checkbox', { name: '400' })).toHaveCount(0);
 
-  await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Remove Agent version: v1' }).click();
+  // Select all in the Agent version list = no filter on that key
+  await openFacet(page, 'Agent version');
+  await panel
+    .getByRole('group', { name: 'Agent version options' })
+    .getByRole('button', { name: 'Select all' })
+    .click();
   await expect.poll(() => urlParams(page).has('v.agent_version')).toBe(false);
-  await expect(chips).toHaveCount(0);
+  await expect(filterSummary(page)).not.toContainText('Agent version');
   await expect(page.getByTestId('filters-trigger')).not.toContainText('More filters ·');
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
@@ -71,9 +83,7 @@ test('the missing-key option reads "Empty / Missing" and survives a reload', asy
     .toEqual({ agent_version: ['__empty__'] });
   await expect(panel.getByRole('button', { name: /^Agent version\b/ })).toContainText('Empty / Missing');
   await page.reload();
-  await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText(
-    'Agent version: empty',
-  );
+  await expect(filterSummary(page)).toContainText('Agent version: empty');
   await expect
     .poll(() => listRequests(cap).at(-1)?.body.filters.versioning)
     .toEqual({ agent_version: ['__empty__'] });

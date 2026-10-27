@@ -57,11 +57,7 @@ export function ProjectSwitcher({ current, compact, className }: ProjectSwitcher
           data-project-switcher
           data-compact={compact ? '' : undefined}
         >
-          {current ? (
-            <Identicon seed={current.slug} cell={5} gap={2} chip />
-          ) : (
-            <Icon name="folder" size={14} />
-          )}
+          {current ? <Identicon seed={current.slug} cell={3} gap={1} /> : <Icon name="folder" size={14} />}
           <span className={styles.triggerName}>{current ? current.name : 'Projects'}</span>
           {current && !current.is_active ? <Badge tone="warning">archived</Badge> : null}
           <Icon name="chevron-down" size={12} />

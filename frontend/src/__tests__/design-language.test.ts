@@ -294,6 +294,13 @@ describe('primitive module contracts', () => {
     }
   });
 
+  it('IconButton tile (row actions) is the soft tint at rest and the strong tint on hover', () => {
+    const css = ui('IconButton');
+    const rest = css.split('.iconAction[data-tile] {')[1]?.split('}')[0] ?? '';
+    expect(rest).toContain('color-mix(in srgb, var(--tile-tone) var(--tint-soft), transparent)');
+    expect(css).toMatch(/\.iconAction\[data-tile\]\[data-hovered\],[^{]*\{[^}]*var\(--tint-strong\)/);
+  });
+
   it('DataTable keeps the .qdt-table header/cell recipe', () => {
     const css = ui('DataTable');
     const th = css.match(/\.thead th \{([^}]*)\}/)?.[1] ?? '';
@@ -554,35 +561,36 @@ describe('visual language (redesign round 2)', () => {
     expect(problems).toEqual([]);
   });
 
-  it("draws a table's boundary with its own cells and paints nothing over scrolling content (round 7, Q1/D3)", () => {
+  it("marks a table's frozen boundary with a soft shade from its own cells, only while content is under it (round 9)", () => {
     const css = read(join(SRC, 'ui/DataTable/DataTable.module.css'));
-    // no overlay element, no scroll-cue fades, no gradient, no opacity transition on the table's chrome
+    // no overlay element, no scroll-cue fade on the body host, no will-change layers
     expect(css, 'a .edge overlay rule').not.toMatch(/\.edge\b/);
     expect(css, 'a [data-edge] rule').not.toContain('data-edge');
-    // (the row tint layer and the skeleton shimmer are the only gradients; neither is a horizontal edge fade)
-    expect(css, 'a horizontal edge fade').not.toMatch(/linear-gradient\(\s*to (?:left|right)/);
     expect(css, 'a pseudo-element fade on the body host').not.toMatch(/\.bodyHost[^{]*::(?:before|after)/);
     expect(css, 'will-change: opacity layers').not.toMatch(/will-change:\s*opacity/);
-    // the pinned boundary: 1px --border-strong, inside the pinned cell's own box, on both sides and in RTL,
-    // for the header, the group band and the body cells (row rails add the same line to their shadow)
+    // no line: the edge cells keep only an empty --pin-line (row rails still add it to their own shadow)
+    expect(css).not.toMatch(/--pin-line:\s*inset/);
+    expect(css).toMatch(/:is\(\.th, \.td, \.bandCell\)\[data-pin-edge\] \{\s*--pin-line: 0 0 0 transparent;/);
+    // the shade: an 8px --pin-shade gradient on the edge cell's own ::after, inside the cell (nothing over the
+    // scrolling content), darkest at the edge, on both sides and in RTL
     for (const side of ['start', 'end'] as const) {
-      const line = side === 'start' ? 'inset -1px 0 0' : 'inset 1px 0 0';
-      for (const cell of ['.th', '.td', '.bandCell']) {
-        const block = css.match(
-          new RegExp(
-            `${cell.replace('.', '\\.')}\\[data-pin-edge='${side}'\\](?::dir\\(rtl\\))?,[^{]*\\{([^}]*)\\}`,
-          ),
-        );
-        expect(block?.[1], `${cell}[data-pin-edge='${side}']`).toMatch(
-          /--pin-line:\s*inset -?1px 0 0 var\(--border-strong\)/,
-        );
-        expect(css, `${cell} ${side} ${line}`).toContain(`--pin-line: ${line} var(--border-strong)`);
-      }
+      const block = css.match(
+        new RegExp(`\\.th\\[data-pin-edge='${side}'\\]::after,[^{]*\\{([^}]*)\\}`),
+      )?.[1];
+      expect(block, `${side} shade`).toContain(`inset-inline-${side === 'start' ? 'end' : 'start'}: 0;`);
+      expect(block, `${side} shade stays inside the cell`).not.toContain('100%');
+      expect(block, `${side} shade`).toMatch(
+        /linear-gradient\(to (?:left|right), transparent, var\(--pin-shade\)\)/,
+      );
     }
     expect(css).toMatch(
-      /\.th\[data-pin-edge\],\s*\.td\[data-pin-edge\],\s*\.bandCell\[data-pin-edge\]\s*\{\s*box-shadow: var\(--pin-line\)/,
+      /\[data-pin-edge\]::after,[^{]*\{[^}]*inline-size: var\(--space-sm\);[^}]*opacity: 0;/,
     );
-    expect(css).toContain(':dir(rtl)');
+    expect(css).toMatch(/\.th\[data-pin-edge='start'\]:dir\(rtl\)::after/);
+    // shown only from the scroll flags (written on change, never per scroll event); a fold column never shades
+    expect(css).toMatch(
+      /\.scroller\[data-scrolled-x\] \[data-pin-edge='start'\]::after,\s*\.scroller\[data-scrolled-end\] \[data-pin-edge='end'\]:not\(\[data-fold\]\)::after\s*\{\s*opacity: 1;/,
+    );
     // the markup keeps the overlay out too
     expect(read(join(SRC, 'ui/DataTable/DataTable.tsx'))).not.toContain('styles.edge');
   });

@@ -531,7 +531,7 @@ export default function UiGalleryPage() {
             <Badge tone="neutral">submitted</Badge>
           </Stack>
         </Case>
-        <Case label="RunStatusBadge">
+        <Case label="RunStatusBadge (StatusMark: pixel figure + word)">
           <Stack direction="row" gap="sm" wrap>
             {[
               'PENDING',

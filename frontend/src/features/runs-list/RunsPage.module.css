@@ -114,10 +114,21 @@
   gap: var(--space-sm);
 }
 
+.barStart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .barRows {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  flex: 1 0 100%;
   min-width: 0;
+}
+
+.barRows:empty {
+  display: none;
 }

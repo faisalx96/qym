@@ -10,7 +10,7 @@ export interface ColumnDef {
   /** Server/URL sort key (`metric-<name>`, `trace-<key>`, `time`, …). */
   sortKey?: string;
   width: number;
-  align?: 'start' | 'end';
+  align?: 'start' | 'center' | 'end';
   /** Key stored in the visible-columns set (null = always shown). */
   visKey: string | null;
 }
@@ -29,7 +29,7 @@ export const BASE_COLUMNS: ColumnDef[] = [
   base('status', 'Status', 144, 'status'),
   { ...base('signals', 'Signals', 60), visKey: null },
   // 86 (was 90): the Dataset column grew to 120 for the union count tag (QC-U33) and Date, the default sort, must stay
-  // fully on screen before the frozen Actions column at 1280, where Owner is hidden (Date overhung by 4 px).
+  // fully on screen before the Actions column at 1280, where Owner is hidden (Date overhung by 4 px).
   base('task', 'Task', 86, 'task'),
   base('model', 'Model', 132, 'model'),
   base('dataset', 'Dataset', 120, 'dataset'),
@@ -47,7 +47,7 @@ export const SYSTEM_COLUMNS: ColumnDef[] = [
     group: 'system',
     sortKey: 'latency',
     width: 110,
-    align: 'end',
+    align: 'center',
     visKey: 'latency',
   },
   {
@@ -56,14 +56,14 @@ export const SYSTEM_COLUMNS: ColumnDef[] = [
     group: 'system',
     sortKey: 'median-latency',
     width: 120,
-    align: 'end',
+    align: 'center',
     visKey: 'median-latency',
   },
 ];
 export const DURATION_COLUMN: ColumnDef = {
   ...base('duration', 'Duration', 96, 'duration'),
   group: 'system',
-  align: 'end',
+  align: 'center',
 };
 
 export const TRACE_COLUMNS: ColumnDef[] = [
@@ -73,7 +73,7 @@ export const TRACE_COLUMNS: ColumnDef[] = [
     group: 'trace',
     sortKey: 'trace-avg_tokens',
     width: 110,
-    align: 'end',
+    align: 'center',
     visKey: 'avg_tokens',
   },
   {
@@ -82,7 +82,7 @@ export const TRACE_COLUMNS: ColumnDef[] = [
     group: 'trace',
     sortKey: 'trace-avg_llm_calls',
     width: 106,
-    align: 'end',
+    align: 'center',
     visKey: 'avg_llm_calls',
   },
   {
@@ -91,7 +91,7 @@ export const TRACE_COLUMNS: ColumnDef[] = [
     group: 'trace',
     sortKey: 'trace-avg_tool_calls',
     width: 106,
-    align: 'end',
+    align: 'center',
     visKey: 'avg_tool_calls',
   },
   {
@@ -100,7 +100,7 @@ export const TRACE_COLUMNS: ColumnDef[] = [
     group: 'trace',
     sortKey: 'trace-tool_success_rate',
     width: 116,
-    align: 'end',
+    align: 'center',
     visKey: 'tool_success_rate',
   },
 ];
@@ -112,7 +112,7 @@ export const GROUP_DISPLAY_COLUMNS: ColumnDef[] = [
     label: 'Pass@K',
     group: 'group',
     width: 100,
-    align: 'end',
+    align: 'center',
     visKey: 'group_pass_at_k',
   },
   {
@@ -120,7 +120,7 @@ export const GROUP_DISPLAY_COLUMNS: ColumnDef[] = [
     label: 'Consistency',
     group: 'group',
     width: 100,
-    align: 'end',
+    align: 'center',
     visKey: 'group_consistency',
   },
   {
@@ -128,7 +128,7 @@ export const GROUP_DISPLAY_COLUMNS: ColumnDef[] = [
     label: 'Reliability',
     group: 'group',
     width: 100,
-    align: 'end',
+    align: 'center',
     visKey: 'group_reliability',
   },
 ];
@@ -137,7 +137,9 @@ export const ACTIONS_COLUMN: ColumnDef = {
   id: 'actions',
   label: 'Actions',
   group: 'run',
-  width: 104,
+  // three 20px tiles (review menu, Submit, Delete) with 4px gaps and the cell padding, and room for its title
+  width: 96,
+  align: 'end',
   visKey: null,
 };
 
@@ -147,7 +149,9 @@ export function metricColumn(name: string): ColumnDef {
     label: name.replace(/_/g, ' '),
     group: 'metrics',
     sortKey: `metric-${name}`,
-    width: 150,
+    // a score is a number (no bar): centred under its header like every scalar column of the runs table
+    width: 120,
+    align: 'center',
     visKey: name,
   };
 }

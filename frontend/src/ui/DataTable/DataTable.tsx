@@ -50,6 +50,7 @@ import {
   suspendedPins,
   FLEX_MIN_WIDTH,
 } from './model';
+import { FoldCell } from './FoldCell';
 import { Footer, SelectionBar, Toolbar } from './parts';
 import { ScoreBar } from './cells';
 import { RelativeTime, DurationCell, NumberCell } from './cells';
@@ -105,6 +106,11 @@ export interface DataTableProps<R> {
   minWidth?: number;
   /** Header kebab menu (sort, pin, hide, autosize). Default on, off for embedded. */
   columnMenu?: boolean;
+  /**
+   * Draw the column `group` band above the header (default true). Off: the groups still label and order the
+   * Columns menu, but the header is one line.
+   */
+  groupBand?: boolean;
 
   /** true = skeleton rows; 'quiet' = empty body while a delayed skeleton has not appeared yet. */
   loading?: boolean | 'quiet';
@@ -272,12 +278,15 @@ const DataCell = memo(function DataCell<R>({
   header,
 }: DataCellProps<R>) {
   const ctx: CellCtx = { index, density, card: false };
-  const content = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
+  const cellContent = col.cell ? col.cell(row, ctx) : defaultCell(col, row);
+  const fold = pin === 'end' && col.foldLabel ? col.foldLabel(row) : null;
+  const content = fold !== null ? <FoldCell label={fold}>{cellContent}</FoldCell> : cellContent;
   const sec = col.secondary?.(row);
   return (
     <td
       className={styles.td}
       data-col={col.id}
+      data-fold={fold !== null ? '' : undefined}
       data-pin={pin ?? undefined}
       data-pin-edge={edge}
       style={{
@@ -363,6 +372,7 @@ function DataTableInner<R>({
   scrollCues = true,
   minWidth,
   columnMenu,
+  groupBand = true,
   loading,
   refreshing,
   error,
@@ -575,7 +585,7 @@ function DataTableInner<R>({
     [visible, multi, hasExpander, hasActions],
   );
   const pseudoOf = (c: Column<R>) => (c as unknown as PseudoColumn).pseudo;
-  const hasBands = visible.some((c) => c.group);
+  const hasBands = groupBand && visible.some((c) => c.group);
   const tall = visible.some((c) => c.secondary || c.wrap);
   const cardMode =
     useMedia('(max-width: 639px)') && responsive !== 'scroll' && visible.some((c) => c.priority);
@@ -1310,6 +1320,7 @@ function DataTableInner<R>({
         data-col={col.id}
         data-align={align}
         data-pin={pin ?? undefined}
+        data-fold={pin === 'end' && col.foldLabel ? '' : undefined}
         data-pin-edge={col.id === lastStart ? 'start' : col.id === firstEnd ? 'end' : undefined}
         data-sorted={active ? sort!.direction : undefined}
         data-sortable={canSort ? '' : undefined}

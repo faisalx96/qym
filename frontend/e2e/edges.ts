@@ -1,8 +1,8 @@
 /// <reference lib="dom" />
 /**
- * Round 7 (Q1, D3): measuring the boundary of the frozen columns in the browser. The probes run inside the page and read
- * only what a reader can see: the elements stacked at a point, the computed shadow of the pinned cells, the boxes of the
- * rows. `table` is a selector for the `[data-testid=data-table]` card (or a wrapper that contains one).
+ * Round 7 (Q1, D3), round 9: measuring the boundary of the frozen columns in the browser. The probes run inside the page
+ * and read only what a reader can see: the elements stacked at a point, the computed shadow and edge shade of the pinned
+ * cells, the boxes of the rows. `table` is a selector for the `[data-testid=data-table]` card (or a wrapper that contains one).
  */
 import type { Page } from '@playwright/test';
 
@@ -10,6 +10,12 @@ export interface PinnedCell {
   tag: string;
   edge: 'start' | 'end';
   shadow: string;
+  /** Round 9: opacity of the cell's ::after edge shade (1 while content is scrolled under that edge, else 0). */
+  shade: number;
+  /** The physical side the shade faces (from its gradient: `to right` faces right), or null without a gradient. */
+  shadeFaces: 'left' | 'right' | null;
+  /** A fold column cell (`data-fold`): it never shades. */
+  fold: boolean;
   inDetail: boolean;
   rail: boolean;
   top: number;
@@ -32,10 +38,19 @@ export interface EdgeReport {
   detailRows: Array<{ height: number; strip: boolean }>;
   railHeight: number | null;
   scrollOverflow: boolean;
+  /** The scroller's flags: scrolled away from its start, and columns left past its end. */
+  scrolled: { start: boolean; end: boolean };
 }
 
 export async function edgeReport(page: Page, table: string): Promise<EdgeReport> {
-  return page.evaluate((sel) => {
+  return page.evaluate(async (sel) => {
+    // the edge shade fades in and out: read it once every running CSS transition has ended
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a instanceof CSSTransition)
+        .map((a) => a.finished.catch(() => undefined)),
+    );
     const root = document.querySelector(sel)!;
     const card = root.matches('[data-testid=data-table]')
       ? root
@@ -53,12 +68,18 @@ export async function edgeReport(page: Page, table: string): Promise<EdgeReport>
       const r = c.getBoundingClientRect();
       if (r.height === 0) continue;
       const shadow = getComputedStyle(c).boxShadow;
+      const after = getComputedStyle(c, '::after');
+      const dir = /linear-gradient\(to (left|right)/.exec(after.backgroundImage)?.[1];
       cells.push({
         tag: c.tagName.toLowerCase(),
         edge: c.getAttribute('data-pin-edge') as 'start' | 'end',
         shadow,
+        shade: after.content === 'none' ? 0 : Number(after.opacity),
+        shadeFaces: dir === 'right' ? 'right' : dir === 'left' ? 'left' : null,
+        fold: c.hasAttribute('data-fold'),
         inDetail: Boolean(c.closest('tr[data-detail-row]')),
-        rail: shadow.includes('rgb(') && shadow.split('inset').length > 2,
+        // a row rail (state, selection, open group, focus ring) is an opaque inset shadow; the empty pin line is rgba 0
+        rail: /rgb\(/.test(shadow),
         top: r.top,
         bottom: r.bottom,
         left: r.left,
@@ -100,6 +121,10 @@ export async function edgeReport(page: Page, table: string): Promise<EdgeReport>
       ),
       railHeight: rail ? rail.height : null,
       scrollOverflow: scroller ? scroller.scrollWidth > scroller.clientWidth + 1 : false,
+      scrolled: {
+        start: Boolean(scroller?.hasAttribute('data-scrolled-x')),
+        end: Boolean(scroller?.hasAttribute('data-scrolled-end')),
+      },
     };
   }, table);
 }
@@ -118,7 +143,14 @@ export interface Covered {
  * and probed at its left end, middle and right end: the element stacked on top must be the text's own cell.
  */
 export async function coveredText(page: Page, table: string): Promise<Covered[]> {
-  return page.evaluate((sel) => {
+  return page.evaluate(async (sel) => {
+    // the edge shade fades in and out: read it once every running CSS transition has ended
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a instanceof CSSTransition)
+        .map((a) => a.finished.catch(() => undefined)),
+    );
     const root = document.querySelector(sel)!;
     const card = root.matches('[data-testid=data-table]')
       ? root
@@ -222,6 +254,16 @@ export async function contrastOf(page: Page, selector: string, textMatch?: strin
   );
 }
 
-/** The computed shadow `--border-strong` draws on the cell's inner side (start: the right side in LTR). */
-export const LINE_START = 'rgb(82, 82, 108) -1px 0px 0px 0px inset';
-export const LINE_END = 'rgb(82, 82, 108) 1px 0px 0px 0px inset';
+/** Round 9: the frozen boundary draws no line. The computed shadow of an edge cell without a row rail. */
+export const NO_LINE = 'rgba(0, 0, 0, 0) 0px 0px 0px 0px';
+/** The round 7 `--border-strong` line, on either inner side: it must not come back. */
+export const ANY_LINE = /rgb\(82, 82, 108\) -?1px 0px 0px 0px inset/;
+
+/**
+ * Round 9: the edge shade of a pinned cell is on (1) only while content is scrolled under that edge, and a fold
+ * column (the runs Actions column) never shades. Without a shade gradient the cell is not a pinned edge.
+ */
+export function expectedShade(c: PinnedCell, scrolled: EdgeReport['scrolled']): number {
+  if (c.fold) return 0;
+  return scrolled[c.edge] ? 1 : 0;
+}

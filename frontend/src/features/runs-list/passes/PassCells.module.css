@@ -30,7 +30,7 @@
 
 .passLink:hover {
   color: var(--accent-primary);
-  text-decoration: underline;
+  text-decoration: none; /* the colour step is the hover cue: no underline */
 }
 
 .passLink:focus-visible {
@@ -70,7 +70,7 @@
 .actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-xs);
 }
 
 @media (max-width: 639px) {

@@ -1,10 +1,11 @@
-/** Redesign 2, W1: the always-visible filter bar (facet triggers, More filters, chips, Clear n, phone drawer). */
+/** Redesign 2, W1 (round 8): the always-visible filter bar (facet triggers, More filters, red Clear n, phone drawer; no chip line). */
 import { test, expect, type Page } from '@playwright/test';
 import {
   axeSeriousViolations,
-  clickBox,
+  clearButton,
   dataRows,
   describeViolations,
+  filterSummary,
   openRuns,
   sharedProject,
   urlParams,
@@ -29,7 +30,7 @@ for (const width of [1440, 1280]) {
       for (const name of ['Task', 'Dataset', 'Model', 'Version', 'Status', 'User'])
         await expect(facet(page, name)).toBeVisible();
       await expect(bar(page)).toHaveAttribute('role', 'toolbar');
-      await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toHaveCount(0);
+      await expect(clearButton(page)).toHaveCount(0);
     });
 
     test('one facet costs two actions: open the trigger, press Only; the value is written on the trigger', async ({
@@ -47,13 +48,15 @@ for (const width of [1440, 1280]) {
       await page.keyboard.press('Escape');
       await expect(facet(page, 'Model')).toContainText('gpt-4o');
       await expect(facet(page, 'Model')).toHaveAttribute('aria-label', 'Model filter, 1 selected');
-      await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText('model:');
+      await expect(filterSummary(page)).toContainText('model:');
       // a second facet composes with it
       await facet(page, 'Status').click();
-      await clickBox(page.getByTestId('filters-panel').getByRole('checkbox', { name: 'Completed' }));
+      await page.getByTestId('filters-panel').getByRole('button', { name: 'Only Completed' }).click();
       await expect.poll(() => urlParams(page).getAll('status')).toEqual(['COMPLETED']);
       await page.keyboard.press('Escape');
       await expect(bar(page).getByRole('button', { name: /^Clear 2/ })).toBeVisible();
+      // the trigger names its value: no chip line under the bar
+      await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toHaveCount(0);
       await expect(page.getByTestId('status-bar')).toContainText('status: Completed');
       await expect
         .poll(async () =>
@@ -66,16 +69,25 @@ for (const width of [1440, 1280]) {
         .toBe('COMPLETED');
     });
 
-    test('the selected status chip takes the status tone', async ({ page, request }) => {
+    test('Clear n sits right after the facet triggers in the danger tone and clears every filter', async ({
+      page,
+      request,
+    }) => {
       const s = await sharedProject(request, 12);
       await openRuns(page, s.project.slug, 'status=COMPLETED');
-      const chip = page
-        .getByRole('group', { name: 'Active filters', exact: true })
-        .getByRole('button', { name: 'status: Completed', exact: true });
-      await expect(chip).toHaveAttribute('data-tone', 'success');
+      const clear = clearButton(page);
+      await expect(clear).toHaveAttribute('data-variant', 'danger');
+      await expect(clear).toHaveText(/Clear\s*1/);
+      const gap = await clear.evaluate((el) => {
+        const prev = el.previousElementSibling as HTMLElement;
+        return Math.round(el.getBoundingClientRect().left - prev.getBoundingClientRect().right);
+      });
+      expect(gap).toBeLessThanOrEqual(12);
+      await clear.click();
+      await expect.poll(() => urlParams(page).has('status')).toBe(false);
     });
 
-    test('the bar is at most 104px tall including chips and the table keeps 8 rows', async ({
+    test('the bar keeps two lines with filters active and the table keeps 8 rows', async ({
       page,
       request,
     }) => {
@@ -84,7 +96,7 @@ for (const width of [1440, 1280]) {
       const h = await page
         .locator('[data-dt-toolbar]')
         .evaluate((el) => Math.round(el.getBoundingClientRect().height));
-      expect(h).toBeLessThanOrEqual(width === 1440 ? 120 : 130);
+      expect(h).toBeLessThanOrEqual(width === 1440 ? 84 : 94);
       await expect(dataRows(page).first()).toBeVisible();
     });
 
@@ -141,9 +153,8 @@ test.describe('filter bar at 390', () => {
     await drawer.getByRole('button', { name: 'Done' }).click();
     await expect(drawer).toHaveCount(0);
     await expect(trigger).toContainText('Filters · 1');
-    await expect(page.getByRole('group', { name: 'Active filters', exact: true })).toContainText(
-      'status: Completed',
-    );
+    await expect(filterSummary(page)).toContainText('status: Completed');
+    await expect(clearButton(page)).toBeVisible();
     const overflow = await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth);
     expect(overflow).toBe(true);
     const v = await axeSeriousViolations(page);

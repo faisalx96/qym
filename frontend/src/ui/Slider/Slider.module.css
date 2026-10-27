@@ -61,3 +61,27 @@
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
+
+/* Inline: label, track, value on one control-height line (a toolbar threshold); the value keeps a fixed width. */
+.slider[data-layout='inline'] {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.slider[data-layout='inline'] .head {
+  display: contents;
+}
+
+.slider[data-layout='inline'] .track {
+  order: 2;
+  flex: 1 1 auto;
+  min-width: 80px;
+}
+
+.slider[data-layout='inline'] .output {
+  order: 3;
+  min-width: 4ch;
+  text-align: end;
+}

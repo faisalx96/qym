@@ -179,7 +179,7 @@ function ShellFrame() {
           <IconButton
             ref={toggleRef}
             label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            icon="sidebar"
+            icon={<Icon name="sidebar" size={18} />}
             aria-expanded={!sidebarCollapsed}
             aria-controls="qym-sidebar"
             onPress={() => (narrow ? setOverlayOpen((o) => !o) : toggleCollapsed())}
