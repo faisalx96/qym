@@ -257,12 +257,12 @@ cards (bottom 522) and the whole Averages table (bottom 897)**. Current page: ro
 | | 1440 (column 1193) | 1024 (777) | 390 (279) |
 |---|---|---|---|
 | Run cards | 4-up, 287x239 | 2-up, 380x226 | 1-up, 277x244 |
-| Averages | metrics = rows, runs = columns, 261 per column (4 runs); 8 runs 130 and no scroll | 4 runs fit (157 per column); 8 runs scroll with the metric column pinned | one block per metric, one line per run (cell 44 high), no sideways scroll |
+| Averages | metrics = rows, runs = columns, 261 per column (4 runs); 8 runs 130 and no scroll | 4 runs fit (157 per column); 8 runs scroll with the metric column pinned | one block per metric, one line per run (cell 44 high), no sideways scroll **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): 4 runs: 254 per column (1024: 150) (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | Stat boxes | one row of 8 (76) | 2 rows of 4 (151) | 4 rows of 2 (301) |
 | Categories | 3-up cards 388x179 | 2-up 380x179 | 1-up, name on its own line |
-| Errors | cards 287 wide, 4-up | 2-up | 1-up |
+| Errors | cards 287 wide, 4-up | 2-up | 1-up **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): cards 280 wide (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | Items | one 24 px toolbar row; row 54, pitch 60; chips on the right | toolbar 2 rows (<= 56); chips on the right | toolbar <= 90; row <= 76 with chips under the title |
-| Expanded grid | 4 columns of 284, no scroll; 5+ scroll with snap | 2.6 columns visible, scroll | 1 column stacked, no scroll |
+| Expanded grid | 4 columns of 284, no scroll; 5+ scroll with snap | 2.6 columns visible, scroll | 1 column stacked, no scroll **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): 4 columns of 277 (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 
 ### 3.4 Primitives and tokens
 
@@ -293,8 +293,8 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 | C-page-2 | Exactly 1 sticky element outside table pins (`[data-part=section-nav]`); its height 36 (current sticky block 44 and 72 at 390). |
 | C-page-3 | No horizontal document scroll at 1440, 1024, 390 (`scrollWidth <= clientWidth`), except inside `[data-part=averages-table]` (8 runs at 1024) and `[data-part=output-grid]` (5+ runs). |
 | C-page-4 | 0 elements with `text-overflow: ellipsis` among `[data-part=run-name]`, `averages-colhead`, `category-run-row`, `output-toggle`; `scrollWidth <= clientWidth` for each. |
-| C-page-5 | Section heights, 4 runs, 1440: runs 311, averages 355, overview 393, categories 285 (one key), errors 440, items 1375 (+-6). 1024: runs 539, averages 376, overview 468. 390: averages <= 1200, items <= 1820. |
-| C-page-6 | 8 runs at 1440: runs 551 (2 rows), averages 366 with `scrollWidth <= clientWidth`, overview 393, categories 409, errors 620, items 1375; every component keeps its 4-run recipe (no compact variant, no "Run details" button). |
+| C-page-5 | Section heights, 4 runs, 1440: runs 311, averages 355, overview 393, categories 285 (one key), errors 440, items 1375 (+-6). 1024: runs 539, averages 376, overview 468. 390: averages <= 1200, items <= 1820. **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): 1440: runs 328, averages 371, overview 409, categories 301 (one key), errors 490, items 1391; 1024: runs 552, averages 392, overview 496; 390: items <= 2600 (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
+| C-page-6 | 8 runs at 1440: runs 551 (2 rows), averages 366 with `scrollWidth <= clientWidth`, overview 393, categories 409, errors 620, items 1375; every component keeps its 4-run recipe (no compact variant, no "Run details" button). **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): 8 runs at 1440: runs 584, averages 418, overview 409, errors 708, items 1391 (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | C-page-7 | Section order: Runs, Averages, Overview, Categories, [Steps], Errors, [Root cause], Items; one description line per section head (no duplicate subtitles). |
 
 **Nav** `[data-part=section-nav]`
@@ -318,7 +318,7 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 
 | ID | Criterion |
 |---|---|
-| C-run-1 | `[data-part=run-grid]` columns: 1440 4-up (card 287 +-3), 1024 2-up (380 +-3), 390 1-up (277 +-2). Card height 1440 = 239 +-4 for **any** run count (8 runs: 2 rows, grid 478 +-8). |
+| C-run-1 | `[data-part=run-grid]` columns: 1440 4-up (card 287 +-3), 1024 2-up (380 +-3), 390 1-up (277 +-2). Card height 1440 = 239 +-4 for **any** run count (8 runs: 2 rows, grid 478 +-8). **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): card 280 +-3 / 365 +-3 / 247 +-2; height 239 and the 8-run grid 500 unchanged (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | C-run-2 | Card head: `RunName` (swatch 8x8 = run colour, **letter badge 16x16 mono `--font-xs` in the run colour's text (owner decision H1)**, name 13/650 wraps, 0 px clipped), `Baseline` tag on the baseline run, status badge (`--font-xs`, 20 high), remove X 24x24; X absent at 2 runs; no star. |
 | C-run-3 | `[data-part=run-stat-strip]` 3 cells x 36 high (Items, Completed, Errors, value mono 13/650); Errors > 0 uses `--error-text`. |
 | C-run-4 | `[data-part=run-meta]` 6 rows of 20 (Task, Model, Owner, Dataset, Started, Runtime; repeat runs: Samples) = 120 +-2; long values wrap. |
@@ -330,8 +330,8 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 | ID | Criterion |
 |---|---|
 | C-avg-1 | Section head: title + one description line; aside = Baseline select (`Select`, label "Baseline", 14 rem x 24) and, with a repeat run selected, `SegmentedControl` "Run average | Each pass"; the sticky bar has neither. |
-| C-avg-2 | `[data-part=averages-table]`: rows = metrics, columns = runs. 1440, 4 runs: metric column 144, run columns 261 +-2, `scrollWidth <= clientWidth`; 8 runs: column 130 +-2 (minimum 120), no scroll, table <= 296. 1024: 4 runs no scroll (157), 8 runs scroll (min 1104) with the metric column pinned. |
-| C-avg-3 | `[data-part=averages-colhead]`: `RunName` + Baseline tag; wraps to <= 2 lines (4 runs: 34 high, 8 runs <= 54); sentence case, no `text-transform`. |
+| C-avg-2 | `[data-part=averages-table]`: rows = metrics, columns = runs. 1440, 4 runs: metric column 144, run columns 261 +-2, `scrollWidth <= clientWidth`; 8 runs: column 130 +-2 (minimum 120), no scroll, table <= 296. 1024: 4 runs no scroll (157), 8 runs scroll (min 1104) with the metric column pinned. **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): run columns 254 +-2 (metric column stays 144), 8 runs 127, 1024: 150 (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
+| C-avg-3 | `[data-part=averages-colhead]`: `RunName` + Baseline tag; wraps to <= 2 lines (4 runs: 34 high, 8 runs <= 54); sentence case, no `text-transform`. **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): 8 runs: head <= 80 (measured 76.7), table <= 340 (measured 332) (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | C-avg-4 | Row heights: `[data-part=averages-cell]` 76 +-2 (correct, quality) at 4 and 8 runs (the delta line never wraps), latency row 51 +-2, errors row 44 +-2 (wraps to <= 60 at 8 runs); table 4 runs 283 +-6 (current 342; legacy 211 with 3 rows). |
 | C-avg-5 | `[data-part=averages-value]` 20 high, mono 12/600, text colour = score band; outline 1 px `--success` / `--error` **only** when the change is beyond the 95 % noise band (the exact t band, kept), otherwise a transparent 1 px (no geometry change). The baseline cell has the value only. |
 | C-avg-6 | `[data-part=averages-delta]` 15 high, mono 11: glyph (`▲` `▼` `≈`) + signed `pts` + `±` band; colour success/error-text beyond noise, muted within. No glyph strip / dot-plot. |
@@ -343,11 +343,11 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 
 | ID | Criterion |
 |---|---|
-| C-ov-2 | `[data-part=stat-grid]`: 1440 one row of 8 (grid 76, box 148 x 74); 1024 two rows of 4 (151); 390 four rows of 2 (301). 1 px gaps drawn by the grid, no per-cell borders. |
+| C-ov-2 | `[data-part=stat-grid]`: 1440 one row of 8 (grid 76, box 148 x 74); 1024 two rows of 4 (151); 390 four rows of 2 (301). 1 px gaps drawn by the grid, no per-cell borders. **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): 1440 box 144 x 74 (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | C-ov-3 | `[data-part=stat-box]`: label 11/600 muted with help marker, value `--font-xl` mono 650 coloured by the score band (Errors `--error-text`, latency primary). |
 | C-ov-4 | `[data-part=winner-bar]` 28 high, one button per run with wins, flex-grow = wins, run colour, count label (mono 11/650) centred; Ties neutral; aria-label "<name> won N items"; click filters by winner. `[data-part=winner-legend]` rows 18: swatch + name + count + Ties; 4 runs one line, 8 runs <= 2 lines (<= 42); 0 px clipped. |
 | C-ov-5 | `[data-part=distribution-bar]` 32 high, one segment per k (runs correct) in score-ramp colour by k/N, width proportional to items, label "k" + count; click filters by pass count; replaces the histogram (current ~95 high). |
-| C-ov-6 | Overview section height 4 runs 1440 <= 400 (mock 393; current 423). |
+| C-ov-6 | Overview section height 4 runs 1440 <= 400 (mock 393; current 423). **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): <= 410 (measured 406) (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 
 **Categories** (L26-L28)
 
@@ -369,7 +369,7 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 
 | ID | Criterion |
 |---|---|
-| C-err-1 | Groups "Task errors N" and "Metric errors N" (`--font-sm` 650 uppercase + icon + count tag). Cards `[data-part=error-card]` 287 wide at 1440 (4 runs: 149 high; 8 runs <= 232), left border 3 px `--error` (task) / `--metric-error`. |
+| C-err-1 | Groups "Task errors N" and "Metric errors N" (`--font-sm` 650 uppercase + icon + count tag). Cards `[data-part=error-card]` 287 wide at 1440 (4 runs: 149 high; 8 runs <= 232), left border 3 px `--error` (task) / `--metric-error`. **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): card 280 wide, 167 high (4 runs), 8 runs <= 280 (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | C-err-2 | Per-run table: **every run listed, zeros included** (`[data-part=error-run]` count = runs); columns `RunName`, count (mono), delta vs baseline (`Baseline`, `+n` in `--error-text`, `-n` in `--success`, `=`). |
 | C-err-3 | The card is a button (role, Enter/Space): click filters the items to that message, no layout change. |
 
@@ -390,9 +390,9 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 
 | ID | Criterion |
 |---|---|
-| C-row-1 | `[data-part=item-row]`: border 1 `--border-subtle`, radius 8, 54 high with a one-line title, pitch 60 (6 gap), 20 per page; list `[data-part=item-list]` 1194 +-4. |
+| C-row-1 | `[data-part=item-row]`: border 1 `--border-subtle`, radius 8, 54 high with a one-line title, pitch 60 (6 gap), 20 per page; list `[data-part=item-list]` 1194 +-4. **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): list 1163 +-4 (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | C-row-2 | Row content: chevron 26x26 (`aria-expanded`), `#n` mono 13/600 muted, title 13/600 (clamped to 2 lines; row <= 72), chips right. |
-| C-row-3 | `[data-part=item-score-chip]` 68x22, mono 12/600, **swatch 8 inside**, text colour = score band, tint = band 14 %; 4 to 8 chips on **one** line at 1440 and 1024 (`chipsInOneRow`); at 390 chips under the title, row <= 76 with 4 runs. Value shown = the selected metric. |
+| C-row-3 | `[data-part=item-score-chip]` 68x22, mono 12/600, **swatch 8 inside**, text colour = score band, tint = band 14 %; 4 to 8 chips on **one** line at 1440 and 1024 (`chipsInOneRow`); at 390 chips under the title, row <= 76 with 4 runs. Value shown = the selected metric. **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): at 390 the chips take at most two lines and the row is <= 112 high; 1440 and 1024 unchanged (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | C-row-4 | Task error: the chip is a red outlined chip with an `x` and the text "task error" for screen readers (`title` = run + reason); the row border is 1 px `--error`. 0 left rails. |
 | C-row-5 | `[data-part=run-key]` above the list: `RunName` for every run (+ Baseline tag), 18.6 high at 4 runs, <= 2 lines at 8; not sticky. |
 | C-row-6 | Row head is one tab stop (role=button, Enter/Space toggles), hover = `--bg-hover`; several rows can be open. |
@@ -404,7 +404,7 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 |---|---|
 | C-exp-1 | `[data-part=item-detail]`: stacked full-width blocks: INPUT (3 px `--info` bar, label 11/650 uppercase, copy 24x24), EXPECTED OUTPUT (3 px `--success` bar, success 14 % tint), tags row, OUTPUT head, grid. |
 | C-exp-2 | `[data-part=output-toggles]`: one 24-high toggle per run (`RunName`, `aria-pressed`, outline in the run colour), at least one stays on; right side "All" and "Only differing". |
-| C-exp-3 | `[data-part=output-grid]`: one row, columns `minmax(17.5rem, 1fr)`: 1440 4 runs = 4 columns of 284 (`scrollWidth <= clientWidth`); 5+ scroll with snap; 1024 scroll; 390 one stacked column, no scroll. |
+| C-exp-3 | `[data-part=output-grid]`: one row, columns `minmax(17.5rem, 1fr)`: 1440 4 runs = 4 columns of 284 (`scrollWidth <= clientWidth`); 5+ scroll with snap; 1024 scroll; 390 one stacked column, no scroll. **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): 4 columns of 277, grid `minmax(17rem, 1fr)` (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | C-exp-4 | Alignment: across the cards of one item, the top of the text, of the metric rows and of `[data-part=metric-details]` differ by 0 px (CSS subgrid); card height 268 +-4 at 4 runs with 2 metrics; heights equal across cards. |
 | C-exp-5 | `[data-part=output-card]`: 3 px left border in the run colour (never red/green), border 1 `--border-subtle`; head = `RunName` (wraps, never cut) then a second line: Pass/Fail tag, Best tag (unique best only), latency mono, Trace 24, copy 24. Header height identical in all cards. |
 | C-exp-6 | Metric rows 32 high (caret, name, value mono 600 in band, pencil). Click on one metric row sets `aria-expanded` on that metric in **every** card and shows `[data-part=metric-details]` (Reason block or "No details available.") under all cards at the same top; click again closes all. |
@@ -428,7 +428,7 @@ Element = `data-part` (the implementer adds the attribute to the real component;
 
 | ID | Criterion |
 |---|---|
-| C-state-1 | Loading: the same frame as the loaded page: run-card placeholders = number of runs in the URL, 239 high; averages placeholder 283; overview 393; items 20 rows x 60. Container height placeholder = loaded +-1 for Runs and Averages (4 runs, 1440 and 390); 0 layout shift when data arrives (CLS 0). |
+| C-state-1 | Loading: the same frame as the loaded page: run-card placeholders = number of runs in the URL, 239 high; averages placeholder 283; overview 393; items 20 rows x 60. Container height placeholder = loaded +-1 for Runs and Averages (4 runs, 1440 and 390); 0 layout shift when data arrives (CLS 0). **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): 390 placeholders: run 254, averages 1068.4 (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | C-state-2 | Empty (< 2 runs): `EmptyState` "No runs to compare", one sentence, "Back to runs" button; fits 390 without scroll. |
 | C-state-3 | Error (runs missing or hidden): `ErrorState` naming the count, listing up to 5 missing ids then "+ N more", "HTTP 404", Back button; 0 sideways scroll at 390. |
 
@@ -468,7 +468,7 @@ errors 3, items 8, rows 7, expanded 8, sweep 8, states 3, keyboard 3 = 82**, plu
 | C-row-3 / C-page-5 at 390 | row <= 76, items <= 1820 | row 84, items section <= 2200 | the chip line sits under the title |
 | C-exp-4 card height | 268 +-4 | 226 +-6 (4 runs, 2 metrics, one-line outputs) | measured; heights are equal across cards (0 px) |
 | C-cat-1 URL-backed | (not implemented before) | `catKeys` (`-` for none) | implemented |
-| C-state-1 | placeholders 239 | 242 (1440) / 232 (390): the measured loaded card heights | CLS < 0.05 asserted |
+| C-state-1 | placeholders 239 | 242 (1440) / 232 (390): the measured loaded card heights | CLS < 0.05 asserted **Superseded by round 8b (owner decision H6, framed section panel: 30 px narrower, +16 px per section): 390 placeholders: run 254, averages 1068.4 (old numbers above stay as the round-8 record; `sections-impl-notes.md`).** |
 | C-nav-1 | `--bar-nav-h` family | new token `--bar-link-h` 36 px | `docs/DESIGN_LANGUAGE.md` and `design-language.test.ts` amended |
 | D2 / names | name + start time | name + start time, then ` #n` when two runs also share the start minute | the seed's runs share one start time |
 | Filter labels | names | names in `FieldDef` labels, chips and the sidebar (text cannot hold the swatch); the letter badge is in every visual place | H1 |
@@ -577,3 +577,21 @@ table bottom 899.83 <= 900). The amended criteria, with the old and new numbers 
 `sections-impl-notes.md` ("Round-8 criteria amended by the panel"): C-page-5, C-page-6, C-avg-2/3, C-cat-2, C-err-1, C-exp-3,
 C-ov-2, C-ov-6, C-run-1, C-row-1/2, C-row-3 (390), C-state-1 (390). `CompareSection` is retired; every section of this page renders
 through `ReportSection` and keeps its `data-part=section-<key>`, `section-head`, id and scroll margin.
+
+
+### Round 8b amendments table (old -> new; the criterion lines above carry a "Superseded" marker)
+
+| Criterion | Round 8 | After the panel | Spec asserting it |
+|---|---|---|---|
+| C-page-5 (1440) | 311 / 355 / 393 / 285 / 440 / 1375 | 328 / 371 / 409 / 301 / 490 / 1391 | `r8-page` |
+| C-page-5 (1024) | 539 / 376 / 480 | 552 / 392 / 496 | `r8-page` |
+| C-page-6 | 568 / 385 / 393 / 620 / 1375 | 584 / 418 / 409 / 708 / 1391 | `r8-page` |
+| C-run-1 | 287 / 380 / 277 | 280 / 365 / 247 | `r8-runs` |
+| C-avg-2 | 261, 131 (8 runs), 157 (1024); metric 144 | 254, 127, 150; metric 144 | `r8-averages` |
+| C-avg-3 (8 runs) | head <= 62, table <= 320 | head <= 80, table <= 340 | `r8-averages` |
+| C-cat-2 | 388 / 380 / 277 | 378 / 366 / 247 | `r8-categories-errors` |
+| C-err-1 | 287 wide, 149 high, 8 runs <= 240 | 280, 167, <= 280 | `r8-categories-errors` |
+| C-exp-3 | 4 x 284 (17.5rem) | 4 x 277 (17rem) | `r8-expanded` |
+| C-ov-2 / C-ov-6 | box 148 / <= 400 | 144 / <= 410 | `r8-overview` |
+| C-row-1 / C-row-3 (390) | 1194; one line, row <= 88 | 1163; two lines, row <= 112 | `r8-items` |
+| C-state-1 (390) | 232 / 1035.2 | 254.4 / 1068.4 | `r8-states` |

@@ -80,7 +80,7 @@ test('C-page-5: section heights, 4 runs at 1440', async ({ page }) => {
   within(h.runs!, 328, 6, 'runs');
   within(h.averages!, 371, 6, 'averages');
   within(h.overview!, 409, 6, 'overview');
-  within(h.errors!, 490, 6, 'errors'); // 440 + 16 panel + 18 wrapped error message (owner decision H6)
+  within(h.errors!, 490, 6, 'errors'); // 440 + 16 panel + 34 wrapped error messages (owner decision H6)
   within(h.items!, 1391, 6, 'items');
   // one metadata key: the section is the head plus one row of cards
   await part(page, 'category-chip-bar').getByRole('button', { name: /^domain/ }).click();

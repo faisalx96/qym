@@ -48,6 +48,8 @@
 
 .inlineLabel {
   display: inline-flex;
+  max-inline-size: 100%; /* the control shrinks inside a phone panel instead of leaving it (round 8b fix pass) */
+  min-inline-size: 0;
   align-items: center;
   gap: var(--space-sm);
   color: var(--text-muted);

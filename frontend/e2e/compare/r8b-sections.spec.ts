@@ -8,6 +8,7 @@ import {
   fillAndEdge,
   nestedCards,
   noSideways,
+  outsideContentBox,
   readSections,
   tokenColor,
 } from '../shared/sections';
@@ -90,4 +91,11 @@ test('C-sec-A5: at 1024 and 390 the cards reflow inside the panel padding', asyn
     }
     await noSideways(page);
   }
+});
+
+test('C-sec-5 (fix pass): at 390 nothing inside a panel leaves its content box', async ({ page }) => {
+  await openCompare(page, s.four, 390);
+  expect(await outsideContentBox(page)).toEqual([]);
+  await openCompare(page, s.eight, 390);
+  expect(await outsideContentBox(page)).toEqual([]);
 });

@@ -8,6 +8,7 @@ import {
   fillAndEdge,
   nestedCards,
   noSideways,
+  outsideContentBox,
   readSections,
   tokenColor,
 } from '../shared/sections';
@@ -56,6 +57,11 @@ for (const width of [1440, 1024, 390]) {
       assertRhythm(sections);
       // Items renders through the same primitive (C-sec-1)
       expect(sections.at(-1)!.part).toBe('section');
+    });
+
+    test('C-sec-5 (fix pass): nothing inside a panel leaves its content box', async ({ page }) => {
+      test.skip(width !== 390, 'the review measured the phone; wider pages are asserted by the width tests');
+      expect(await outsideContentBox(page)).toEqual([]);
     });
 
     test('C-sec-5/6, A4: inset cards, no nested card, no sideways scroll', async ({ page }) => {

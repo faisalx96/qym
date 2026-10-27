@@ -37,7 +37,7 @@ test('C-avg-1: with a repeat run the head carries Run average | Each pass and it
   await expect(part(page, 'averages-colhead')).toHaveCount(2);
 });
 
-test('C-avg-2/3: 1440 with 4 runs: metric column 140, run columns 254, heads 34 high, sentence case', async ({ page }) => {
+test('C-avg-2/3: 1440 with 4 runs: metric column 144, run columns 254, heads 34 high, sentence case', async ({ page }) => {
   await openCompare(page, s.four, 1440);
   const heads = part(page, 'averages-colhead');
   await expect(heads).toHaveCount(4);
@@ -46,7 +46,7 @@ test('C-avg-2/3: 1440 with 4 runs: metric column 140, run columns 254, heads 34 
     within((await box(heads.nth(i))).h, 34, 2, `head ${i}`);
   }
   const metricHead = averagesGrid(page).getByRole('columnheader', { name: 'Metric' });
-  within((await box(metricHead)).w, 144, 5, 'metric column');
+  within((await box(metricHead)).w, 144, 2, 'metric column'); // unchanged by the section panel (the run columns take the 30 px)
   expect(await heads.first().evaluate((e) => getComputedStyle(e).textTransform)).toBe('none');
   const [sw, cw] = await part(page, 'averages-table').evaluate((e) => [e.scrollWidth, e.clientWidth]);
   expect(sw).toBeLessThanOrEqual(cw);

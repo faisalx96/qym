@@ -277,6 +277,11 @@
   height: 14px;
 }
 
+/* the last tick label ends at the track's end instead of centring on it (it left the section panel by 6px) */
+.axisRow span:last-child {
+  transform: translateX(-100%);
+}
+
 .axisRow {
   margin-inline-start: auto;
   width: 40%;

@@ -54,12 +54,12 @@ Tests: `frontend/e2e/compare/r8b-sections.spec.ts` (1440, 1024, 390) and `fronte
 |---|---|---|---|
 | C-sec-1 one primitive | met | `ReportSection`; `CompareSection` deleted; run Items through it | both specs: `assertOnePrimitive` (compare 6 ids, run 7 ids incl. `run-items`, all `SECTION`, h2 title, head first child) |
 | C-sec-2 title 18/650, description muted | met with one deviation | head markup in `ReportSection.tsx` | `assertHeads`: 18 / 650, `P` description, no ellipsis, at most 2 lines at >= 1024. Deviation: the description stays `--font-sm` (the round-8 compare recipe) instead of `--font-base`; see below |
-| C-sec-3 same numbers at all widths | met | `.section ~ .section { margin-block-start: var(--space-lg) }` | `assertRhythm` at 1440 / 1024 / 390: first section margin 0, edge gap 20 +-1, body end to next title 49 +-3 |
+| C-sec-3 same numbers at all widths | met | `.section ~ .section { margin-block-start: var(--space-lg) }` | `assertRhythm` at 1440 / 1024 / 390: first section margin 0, edge gap 20 +-1, body end to next title 50 +-1 |
 | C-sec-4 C-page-1, C-nav-2, scroll-spy | met | scroll margin `var(--report-nav-h, var(--bar-link-h)) + 10px` | `r8-page` C-page-1 / C-nav-2 unchanged; r8b first-screen test; run deep link under the nav |
 | C-sec-5 no sideways scroll, no nested card | met (after fixes above) | source changes listed above | `noSideways` x3 widths on both pages; `nestedCards` returns [] |
 | C-sec-6 hue budget | met | tokens only (`--bg-surface`, `--border-subtle`, `--bg-elevated`) | `assertPanels` compares the computed colours with the token values |
 | C-sec-A1 panel | met | `ReportSection.module.css .section` | `assertPanels`: fill, 1px x4, colour, radius 8, padding 14 x4, width = column |
-| C-sec-A2 20 px between, 50 to title | met (edge 20, body end to title 49) | as C-sec-3 | `assertRhythm` |
+| C-sec-A2 20 px between, 50 to title | met (edge 20, body end to title 50 = 14 + 1 + 20 + 1 + 14) | as C-sec-3 | `assertRhythm` |
 | C-sec-A3 head inside, no rule | met | head is the first child, `margin-block-end: var(--space-md)` | `assertHeads`: head border 0, head to body 14 +-1, no `[data-part=section-rule]` |
 | C-sec-A4 inset cards | met | `--card-bg` / `--card-edge` redefined by the body | `fillAndEdge`: run card, averages table (blocks at 390), item row, run Latency card are `rgb(34,34,50)` with transparent outline; `nestedCards` |
 | C-sec-A5 four cards in one row | met | panel padding 14 | compare spec first-screen test (1 row, bottom 510.75) and the reflow test at 1024 / 390 (cards inside the 14 px padding) |
@@ -81,11 +81,11 @@ The panel is 14 + 1 px on each side: content width 30 px narrower, and each sect
 
 | Criterion | Old | New | Test changed |
 |---|---|---|---|
-| C-page-5 (1440, 4 runs) | runs 311, averages 355, overview 393, errors 440, items 1375, categories (one key) 285 | 328, 371, 409, 490 (+18: the 280 px error card wraps its message), 1391, 301 | `r8-page` |
+| C-page-5 (1440, 4 runs) | runs 311, averages 355, overview 393, errors 440, items 1375, categories (one key) 285 | 328, 371, 409, 490 (440 + 16 panel + 34: the 280 px error cards wrap their messages), 1391, 301 | `r8-page` |
 | C-page-5 (1024) | runs 539, averages 376, overview 480 | 552, 392, 496 | `r8-page` |
 | C-page-5 (390) | items <= 2200 | <= 2600 (measured 2571: chips wrap to two lines) | `r8-page` |
 | C-page-6 (8 runs, 1440) | runs 568, averages 385, overview 393, errors 620, items 1375 | 584, 418, 409, 708, 1391 | `r8-page` |
-| C-avg-2/3 | run column 261, metric column 144; 8 runs 131; 1024 157 | 254, 140; 127; 150 | `r8-averages` |
+| C-avg-2/3 | run column 261, metric column 144; 8 runs 131; 1024 157 | 254, 144 (unchanged; an earlier draft of this table said 140); 127; 150 | `r8-averages` |
 | C-avg-3 (8 runs) | head <= 62, table <= 320 | head <= 80 (measured 76.7), table <= 340 (332) | `r8-averages` |
 | C-cat-2 | card 388 at 1440, 380 at 1024, 277 at 390 | 378, 366, 247 | `r8-categories-errors` |
 | C-err-1 | card 287 wide, 149 high; 8 runs <= 240 | 280, 167; <= 280 (276) | `r8-categories-errors` |
@@ -129,3 +129,37 @@ the Card recipe. `sections.md`: recipe B, C-sec-B1..B5 and the recommendation ar
 | `tests/platform` SQLite / PostgreSQL | not run: the backend is untouched |
 
 Two earlier gate attempts were killed by `systemd-oomd` (scopes `qym-r8b-g-vl-*`, `qym-f-run-*`, `qym-f-misc-*`) with the desktop under pressure; they were re-run at cost 4 in chunks and the counts above are from the completed runs.
+
+## Fix pass (review `review-sections.md`: MEETS WITH FIXES)
+
+| # | Finding | Change | Test |
+|---|---|---|---|
+| 1 | Compare Averages head at 390: Baseline select ended at x=367, panel content box ends at 340 (the review read 355 as the panel's right edge; content box = edge - 15) | `SelectionBar.module.css .inlineLabel`: `max-inline-size: 100%; min-inline-size: 0` so the 14 rem select shrinks inside the head instead of widening it | `compare/r8b-sections` "C-sec-5 (fix pass)": every descendant of every panel inside its content box at 390 (4 and 8 runs); failed with the select, its label, trigger and chevron before |
+| 2 | Run Overview chart cards 260 px in a 249 px box; Latency axis tick label 6 px outside (also at 1440) | `Panels.module.css .chartGrid`: `minmax(min(260px, 100%), 1fr)`; `Latency.module.css .axisRow span:last-child`: `translateX(-100%)` (the last tick label ends at the track end) | `run-detail/r8b-sections` "C-sec-5 (fix pass)" at 390; failed with the four chart cards (header and body) and the `4s` label before |
+| 3 | No e2e saw content leaving the padding | `e2e/shared/sections.ts outsideContentBox` (skips clipped or scrolled content, 1 px visually hidden hosts, opacity 0, `clip`); one test per page at 390 | both r8b specs; verified red before 1 and 2, green after |
+| 4 | C-avg-2 metric column asserted 144 +-5 | measured 144 (the panel does not change it; the notes' "140" was wrong): asserted 144 +-2, notes corrected | `r8-averages` C-avg-2/3 |
+| 5 | C-page-5 errors comment "440 + 16 + 18" vs 490 | measured 490 +-0.5: 440 + 16 (panel) + 34 (the 280 px error cards wrap their messages); comment and notes say 34 | `r8-page` C-page-5 |
+| 6 | `compare.md` kept the round-8 numbers | every changed criterion line carries "Superseded by round 8b" with the new number; a "Round 8b amendments table" lists old and new with the asserting spec | doc |
+| 7 | DESIGN_LANGUAGE "48px" | "50px ... (14 padding + 1 border + 20 gap + 1 border + 14 padding)"; the e2e now asserts 50 +-1 (was 49 +-3) | `assertRhythm` |
+| 8 | `frozen-static.spec.ts:222` | not a panel cost; budget 480 s to 900 s with a comment (below) | the spec itself |
+
+### Frozen-static timing (finding 8)
+
+Whole-test wall time, `--workers 1`, same machine, other agents running (it was never idle):
+
+| Tree | Runs |
+|---|---|
+| parent `3dd214c3` (throwaway worktree) | 7.8 min pass (budget raised), 7.6 min pass, 8.0 min timeout at the old 480 s budget |
+| round tip | 9.2 min pass (budget 900 s); three further runs ended without a result (one `systemd-oomd` kill, two that ended silently while 2 to 3 other agents' suites held the memory) |
+
+The tip looked 15 to 20 % slower on wall time, which would be a panel cost, so I measured the page directly instead of the whole test:
+`/__ui` at 660 px, the same wheel probes on 8 frozen overflowing tables (CDP `Performance.getMetrics`, 2 runs per tree):
+
+| | DOM nodes | layouts | style recalcs | LayoutDuration | RecalcStyleDuration | TaskDuration | wall |
+|---|---|---|---|---|---|---|---|
+| round tip | 39709 | 1117 / 1142 | 1140 / 1164 | 445 / 484 ms | 698 / 744 ms | 8.0 / 8.7 s | 16.9 / 17.3 s |
+| parent | 39701 | 1091 / 1131 | 1118 / 1156 | 443 / 453 ms | 692 / 708 ms | 7.9 / 8.1 s | 16.8 / 17.3 s |
+
+Same DOM (+8 nodes), the same counts and durations inside the run-to-run spread (at most 3 %): the panel and the card tokens do not slow this
+page. The spec simply runs at 97 to 115 % of its old 480 s budget on either tree (one wheel probe of about 12 s per table, 23 tables), so it
+passed or timed out with the machine's load. The budget is now 900 s (comment in the spec).

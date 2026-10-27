@@ -331,7 +331,7 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   every distance: pages set no gap between sections, sections add no margin of their own. Reason (section 6 amendment
   rule): measured on both pages, the old 1.33:1 hairline was as faint as the card borders in the bodies and the compare
   page had 28px and no mark between sections; one framed section replaces two recipes (measured: 20px between panels,
-  48px from the last pixel of a body to the next title, first screen of the compare page unchanged within its ceilings).
+  50px from the last pixel of a body to the next title (14 padding + 1 border + 20 gap + 1 border + 14 padding), first screen of the compare page unchanged within its ceilings).
 
 - **Field row, structured value, split pane** (`FieldRow`, `StructuredValue`, `SplitPane`): `FieldRow` puts a label, its
   body (reading measure `--field-measure`, 76ch) and actions on one logical row whose `dir` follows the content, so an
