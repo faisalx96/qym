@@ -287,3 +287,45 @@ test('C-row-7: the pager says 1-20 of 40 items, 24 px controls, 20 per page', as
   await expect(pager).toContainText(/21[-–]40 of 40 items/);
   await expect(part(page, 'item-row')).toHaveCount(20);
 });
+
+test('C-items-5 (fix F1): Escape closes the Filters panel while the focus is still on the Filters button', async ({ page }) => {
+  await openCompare(page, s.four, 1440);
+  const btn = part(page, 'items-filters-btn');
+  await btn.click(); // the focus stays on the button after a click
+  await expect(part(page, 'filter-builder')).toBeVisible();
+  await expect(btn).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(part(page, 'filter-builder')).toHaveCount(0);
+  await expect(btn).toBeFocused();
+  await btn.focus();
+  await page.keyboard.press('Enter');
+  await expect(part(page, 'filter-builder')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(part(page, 'filter-builder')).toHaveCount(0);
+});
+
+test('C-items-6 (fix F2): "+ Condition" offers Change vs baseline per run and metric, and it filters like the count buttons', async ({
+  page,
+}) => {
+  await openCompare(page, s.four, 1440);
+  await part(page, 'items-filters-btn').click();
+  const panel = part(page, 'filter-builder');
+  await panel.getByRole('button', { name: '+ Condition' }).click();
+  await panel.getByTestId('filter-condition').first().getByRole('button', { name: /field|Choose/i }).click();
+  await page.getByRole('option', { name: 'Comparison · Change vs baseline' }).click();
+  const rule = panel.getByTestId('filter-change-rule');
+  await expect(rule).toBeVisible();
+  await expect(panel.getByTestId('filter-condition')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Filters/ })).toContainText('1');
+  // first candidate run, the page metric, improved: the count the averages show
+  await expect(part(page, 'items-count')).toHaveText(/^\d+ of 40 items$/);
+  await expect(part(page, 'items-count')).not.toHaveText('40 of 40 items');
+  await expect(part(page, 'baseline-delta-banner')).toContainText('improved');
+  // change the run and the verdict from the rule row
+  await rule.getByRole('button', { name: /Change$/ }).click();
+  await page.getByRole('option', { name: 'regressed' }).click();
+  await expect(part(page, 'baseline-delta-banner')).toContainText('regressed');
+  await rule.getByRole('button', { name: 'Delete change rule' }).click();
+  await expectShown(page, 40);
+  await expect(rule).toHaveCount(0);
+});

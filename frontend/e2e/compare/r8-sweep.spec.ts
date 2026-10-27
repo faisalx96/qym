@@ -37,7 +37,7 @@ test('C-sw-2: the verdict is a badge, a title and an evidence line over a 3 px e
   await open(page, 1440);
   const v = part(page, 'sweep-verdict');
   await expect(v.getByText(/Improved|Regressed|Within noise/)).toBeVisible();
-  expect((await box(v)).h).toBeLessThanOrEqual(80); // amended from 70: the evidence line wraps at 1193
+  expect((await box(v)).h).toBeLessThanOrEqual(70);
   const title = await v.locator('[data-part="sweep-verdict-title"]').evaluate((e) => ({ s: getComputedStyle(e).fontSize, w: getComputedStyle(e).fontWeight }));
   expect(title.s).toBe('13px');
   expect(Number(title.w)).toBe(650);
@@ -101,7 +101,7 @@ test('C-sw-5/6: the metadata table has 31 px rows; seven outcome cards of 56 wit
   await expect(table.locator('thead th').first()).toBeVisible();
   const cards = part(page, 'sweep-outcome-cards').locator('> *');
   await expect(cards).toHaveCount(7);
-  for (const c of await cards.all()) within((await box(c)).h, 62, 8, 'outcome card (amended from 56: labels wrap to two lines)');
+  for (const c of await cards.all()) within((await box(c)).h, 56, 2, 'outcome card');
   const improved = part(page, 'sweep-outcome-cards').getByRole('button', { name: /Improved$/ });
   const value = await improved.locator('b').evaluate((e) => ({ f: getComputedStyle(e).fontFamily, c: getComputedStyle(e).color }));
   expect(value.f).toMatch(/mono/i);

@@ -2,6 +2,7 @@
 import { Button, IconButton, MultiSelect, ScopeChips, SegmentedControl, Select, Text, TextField } from '@/ui';
 import { useScope } from '../../hooks/useScope';
 import { useCompare } from '../../CompareContext';
+import { columnName } from '../../lib/columnName';
 import {
   conditionHasValue,
   emptyGroup,
@@ -51,16 +52,21 @@ function replaceAt(
   };
 }
 
+/** Pseudo field key: "Change vs baseline" is the page's baseline filter (per run and metric), edited in its own row. */
+const CHANGE_FIELD = '__change_vs_baseline';
+
 function Condition({
   node,
   path,
   defs,
   onChange,
+  onPickChange,
 }: {
   node: FilterCondition;
   path: number[];
   defs: Map<string, FieldDef>;
   onChange: (path: number[], fn: (n: FilterNode) => FilterNode | null) => void;
+  onPickChange: (path: number[]) => void;
 }) {
   const field = defs.get(node.field) ?? null;
   const list = Array.from(defs.values());
@@ -78,8 +84,15 @@ function Condition({
         value={field?.id ?? null}
         placeholder="Choose field…"
         searchable="auto"
-        onChange={(k) => k && onChange(path, () => defaultCondition(defs.get(String(k)) ?? null))}
-        items={list.map((d) => ({ key: d.id, label: `${d.group} · ${d.label}` }))}
+        onChange={(k) => {
+          if (!k) return;
+          if (String(k) === CHANGE_FIELD) onPickChange(path);
+          else onChange(path, () => defaultCondition(defs.get(String(k)) ?? null));
+        }}
+        items={[
+          ...list.map((d) => ({ key: d.id, label: `${d.group} · ${d.label}` })),
+          { key: CHANGE_FIELD, label: 'Comparison · Change vs baseline' },
+        ]}
         width={200}
       />
       {field ? (
@@ -188,11 +201,13 @@ function Group({
   path,
   defs,
   onChange,
+  onPickChange,
 }: {
   node: FilterGroup;
   path: number[];
   defs: Map<string, FieldDef>;
   onChange: (path: number[], fn: (n: FilterNode) => FilterNode | null) => void;
+  onPickChange: (path: number[]) => void;
 }) {
   return (
     <div
@@ -225,9 +240,9 @@ function Group({
       </div>
       {node.children.map((child, i) =>
         isFilterGroup(child) ? (
-          <Group key={i} node={child} path={[...path, i]} defs={defs} onChange={onChange} />
+          <Group key={i} node={child} path={[...path, i]} defs={defs} onChange={onChange} onPickChange={onPickChange} />
         ) : (
-          <Condition key={i} node={child} path={[...path, i]} defs={defs} onChange={onChange} />
+          <Condition key={i} node={child} path={[...path, i]} defs={defs} onChange={onChange} onPickChange={onPickChange} />
         ),
       )}
       <div className={styles.add}>
@@ -260,8 +275,72 @@ function Group({
   );
 }
 
+/** The "Change vs baseline" rule: which run, on which metric, improved / regressed / unchanged against the baseline. */
+function ChangeRow() {
+  const { c, model, columns, baseline } = useCompare();
+  const f = c.view.filters.baseline;
+  if (!f) return null;
+  const candidates = columns.filter((col) => col.key !== baseline.key);
+  const set = (patch: Partial<NonNullable<typeof f>>) =>
+    c.setView({ filters: { ...c.view.filters, baseline: { ...f, baselineKey: baseline.key, ...patch } } });
+  return (
+    <div className={styles.cond} data-testid="filter-change-rule" role="group" aria-label="Change vs baseline">
+      <Text variant="sm" tone="muted">
+        Change vs baseline
+      </Text>
+      <Select
+        label="Run"
+        hideLabel
+        value={f.columnKey}
+        onChange={(k) => k && set({ columnKey: String(k) })}
+        items={candidates.map((col) => ({ key: col.key, label: columnName(model, col) }))}
+        width={200}
+      />
+      <Select
+        label="Metric"
+        hideLabel
+        value={f.metric}
+        onChange={(k) => k && set({ metric: String(k) })}
+        items={model.metrics.map((m) => ({ key: m, label: m }))}
+        width={140}
+      />
+      <Select
+        label="Change"
+        hideLabel
+        value={f.kind}
+        onChange={(k) => k && set({ kind: String(k) as typeof f.kind })}
+        items={[
+          { key: 'improved', label: 'improved' },
+          { key: 'regressed', label: 'regressed' },
+          { key: 'same', label: 'unchanged' },
+        ]}
+        width={140}
+      />
+      <IconButton
+        label="Delete change rule"
+        icon="trash"
+        tone="danger"
+        onPress={() => c.setView({ filters: { ...c.view.filters, baseline: null } })}
+      />
+    </div>
+  );
+}
+
 export function FilterBuilder({ onClose }: { onClose?: () => void }) {
-  const { defs, c } = useCompare();
+  const { defs, c, columns, baseline, metric } = useCompare();
+  // The placeholder condition becomes the page's baseline filter in one update (two updates would overwrite each other).
+  const pickChange = (path: number[]) => {
+    const first = columns.find((col) => col.key !== baseline.key);
+    c.setView({
+      filters: {
+        ...c.view.filters,
+        rules: replaceAt(c.view.filters.rules, path, () => null),
+        baseline:
+          c.view.filters.baseline ??
+          (first ? { metric, columnKey: first.key, baselineKey: baseline.key, kind: 'improved' } : null),
+      },
+    });
+  };
   const scope = useScope();
   const map = new Map(defs.map((d) => [d.id, d]));
   const rules = c.view.filters.rules;
@@ -301,7 +380,8 @@ export function FilterBuilder({ onClose }: { onClose?: () => void }) {
           </div>
         ) : null}
       </div>
-      <Group node={rules} path={[]} defs={map} onChange={onChange} />
+      <ChangeRow />
+      <Group node={rules} path={[]} defs={map} onChange={onChange} onPickChange={pickChange} />
     </section>
   );
 }

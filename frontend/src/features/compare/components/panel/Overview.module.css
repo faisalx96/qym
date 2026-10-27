@@ -213,3 +213,23 @@
   color: var(--text-muted);
   font-size: var(--font-sm);
 }
+
+/* The pass threshold sits inline in the head (legacy L21): label and value, then the track, one 24 px line. */
+.passSlider.passSlider {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+  min-block-size: 24px;
+}
+
+.passSlider.passSlider > :first-child {
+  flex: none;
+  gap: var(--space-sm);
+  justify-content: flex-start;
+}
+
+.passSlider.passSlider > :last-child {
+  flex: 1 1 6rem;
+  min-inline-size: 6rem;
+}

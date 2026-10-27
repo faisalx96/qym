@@ -69,7 +69,7 @@ test('C-run-1: 4-up at 1440, 2-up at 1024, 1-up at 390; the same card at any run
     within((await box(cards.first())).w, cardW, tol, `card width at ${w}`);
   }
   await openCompare(page, s.four, 1440);
-  within((await box(part(page, 'run-card').first())).h, 242, 4, 'card height (amended: letter badge wraps the baseline name)');
+  within((await box(part(page, 'run-card').first())).h, 239, 4, 'card height');
   await openCompare(page, s.eight, 1440);
   const hs = await part(page, 'run-card').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
   expect(Math.max(...hs) - Math.min(...hs)).toBeLessThanOrEqual(4);
@@ -80,6 +80,7 @@ test('C-run-2/3/4: card head, stat strip and the six meta rows', async ({ page }
   await openCompare(page, s.four, 1440);
   const card = part(page, 'run-card').first();
   await expect(card.locator('[data-part="run-name"]')).toBeVisible();
+  expect(Number(await card.locator('[data-part="run-name"]').evaluate((e) => getComputedStyle(e.lastElementChild!).fontWeight))).toBe(650);
   await expect(card.locator('[data-part="baseline-tag"]')).toHaveCount(1);
   await expect(part(page, 'run-card').nth(1).locator('[data-part="baseline-tag"]')).toHaveCount(0);
   within((await box(card.locator('[data-part="run-status"] > *'))).h, 20, 2, 'status badge');

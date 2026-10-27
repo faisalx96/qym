@@ -56,7 +56,7 @@
 .row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 3.5rem 3rem 5.5rem;
-  align-items: baseline;
+  align-items: center;
   gap: 0 var(--space-sm);
 }
 
@@ -167,4 +167,9 @@
   .row > .muted {
     display: none;
   }
+}
+
+/* the run name keeps the compact line height here: 27 px rows (C-cat-4) */
+.row > [data-part='run-name'] {
+  line-height: 1.4;
 }

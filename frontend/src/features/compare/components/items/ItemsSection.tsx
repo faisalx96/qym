@@ -1,5 +1,5 @@
 /** The item-by-item section: baseline-delta banner, one-row toolbar, inline filter panel, run key, the card list. */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, EmptyState, Icon, Popover, ReportLayout } from '@/ui';
 import { useMediaQuery } from '@/features/shell';
 import { HIDDEN_METADATA_KEYS } from '@/features/run-detail/lib/rowMeta';
@@ -48,6 +48,18 @@ export function ItemsSection() {
   // The facet list is opened from the toolbar and never on its own (owner decision H2).
   const [facets, setFacets] = useState(false);
   const [panel, setPanel] = useState(() => c.view.filters.rules.children.length > 0);
+  // Escape closes the inline Filters panel wherever the focus is (on the button after a click, inside the panel, on the page);
+  // a popover or listbox that handles Escape first has already stopped the event.
+  useEffect(() => {
+    if (!panel) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      setPanel(false);
+      document.querySelector<HTMLElement>('[data-part=items-filters-btn]')?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [panel]);
   if (model.alignment.status !== 'aligned')
     return (
       <EmptyState

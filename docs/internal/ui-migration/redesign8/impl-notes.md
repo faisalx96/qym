@@ -30,7 +30,7 @@ Tests are Playwright specs under `frontend/e2e/compare/` (`r8-*.spec.ts` are new
 | C-title-2 | met | mode tabs in the title row (cohort only) | cohort.spec: View switch |
 | C-cohort-1 | met | `CohortBanner` in `SelectionBar.tsx` | r8-runs: C-cohort-1 |
 | C-notice-1 | met (unchanged) | `Notices.tsx` sits between header and nav | notices.spec, multi-dataset-notice.spec |
-| C-run-1 | amended (242 / grid 500) | `RunCards.tsx` auto-fill 17.5 rem | r8-runs: C-run-1 x2 |
+| C-run-1 | met; 8-run grid amended (500) | `RunCards.tsx` auto-fill 17.5 rem | r8-runs: C-run-1 x2 |
 | C-run-2 | met with H1 (letter badge) | `RunTag.tsx` = `RunName`; no star | r8-runs: C-run-2/3/4; r8-identity |
 | C-run-3 | met | stat strip 3 x 36 | r8-runs: C-run-2/3/4 |
 | C-run-4 | met | six meta rows (+ Samples for a repeat run) | r8-runs: C-run-2/3/4, repeat run |
@@ -45,14 +45,14 @@ Tests are Playwright specs under `frontend/e2e/compare/` (`r8-*.spec.ts` are new
 | C-avg-7 | met | `CountButtons`; `scrollToSection('items')`; `ItemsBanner` | r8-averages: C-avg-7 x2 |
 | C-avg-8 | met | latency percent line, errors `N task · M scorer` / none | r8-averages: C-avg-4/5/6/8 |
 | C-avg-9 | met | 390 blocks | r8-averages: C-avg-9 |
-| C-ov-1 | amended (slider block 43) | `OverviewControls`, `MetricTabs` | r8-overview: C-ov-1 |
+| C-ov-1 | met (fix pass: inline slider, 24) | `OverviewControls`, `MetricTabs` | r8-overview: C-ov-1 |
 | C-ov-2 | met | `Overview.module.css` stat grid with container queries | r8-overview: C-ov-2/3 |
 | C-ov-3 | met | band-coloured mono values, Errors red | r8-overview: C-ov-2/3 |
 | C-ov-4 | met | winner bar flex-grow = wins, legend with RunName | r8-overview: C-ov-4 x2 |
 | C-ov-5 | met | one 32 px stacked distribution bar | r8-overview: C-ov-5 |
 | C-ov-6 | met (392) |  | r8-overview: C-ov-6 |
 | C-cat-1 | met (URL `catKeys` added) | `CategoriesSection` chip bar in the head | r8-categories-errors: C-cat-1 |
-| C-cat-2 | amended (185) | `CategoryCards.tsx` 3-up | r8-categories-errors: C-cat-2/3/4 |
+| C-cat-2 | met (fix pass: card 179, row 27) | `CategoryCards.tsx` 3-up | r8-categories-errors: C-cat-2/3/4 |
 | C-cat-3 | met | value rails, header row hidden at 390 | r8-categories-errors: C-cat-2/3/4, C-cat-3 |
 | C-cat-4 | met | run-colour bar, 1 px tick 4 px taller | r8-categories-errors: C-cat-2/3/4 |
 | C-cat-5 | amended (scrolls like every number) | card is a button | r8-categories-errors: C-cat-5 |
@@ -85,11 +85,11 @@ Tests are Playwright specs under `frontend/e2e/compare/` (`r8-*.spec.ts` are new
 | C-exp-7 | met | Trace drawer and issue dialog unchanged | r8-expanded: C-exp-7; items.spec |
 | C-exp-8 | met | `SweepView` modal renders `ItemDetail` | r8-sweep: C-sw-7/C-exp-8 |
 | C-sw-1 | met | `SweepView.tsx`; sidebar and scope bar removed from the Sweep | r8-sweep: C-sw-1 |
-| C-sw-2 | amended (<= 80) | `.verdict` with a 3 px edge | r8-sweep: C-sw-2 |
+| C-sw-2 | met (<= 70, measured 67) | `.verdict` with a 3 px edge | r8-sweep: C-sw-2 |
 | C-sw-3 | met | one row of five fields | r8-sweep: C-sw-3 |
 | C-sw-4 | met | one frame, five cells, edge by verdict | r8-sweep: C-sw-4 |
 | C-sw-5 | met | 31 px rows | r8-sweep: C-sw-5/6 |
-| C-sw-6 | amended (62) | seven coloured cards | r8-sweep: C-sw-5/6; cohort.spec outcome cards |
+| C-sw-6 | met (56, label "Avg Δ attempts") | seven coloured cards | r8-sweep: C-sw-5/6; cohort.spec outcome cards |
 | C-sw-7 | met | dots + k/n, move pill, row opens the modal | r8-sweep: C-sw-7 |
 | C-sw-8 | met | 2 per row at 390 | r8-sweep: C-sw-8 |
 | C-state-1 | met (measured placeholders) | `CompareSkeleton.tsx` | r8-states: C-state-1 x3 |
@@ -131,3 +131,22 @@ Counts: 87 rows above (82 + the five sidebar criteria as one row). Met as writte
 | `npx playwright test e2e/compare` | 218 passed |
 | `e2e/visual-language/sticky-bars`, `datasets/ux-compare-missing`, `run-detail/multi-dataset-review`, `runs-list/selection-compare` | 41 passed |
 | `tests/platform` SQLite / PostgreSQL | not run: the backend is untouched |
+
+## Fix pass (review `review-compare.md`: 81 meet, 6 meet with fixes)
+
+| Finding | Change | Test |
+|---|---|---|
+| F1 C-items-5 Escape from the Filters button | `ItemsSection.tsx`: a document `keydown` listener (while the panel is open, `defaultPrevented` events skipped) closes the panel and focuses the Filters button | `r8-items`: "(fix F1)" click then Escape, Enter then Escape |
+| F2 C-items-6 Change vs baseline field | `FilterBuilder.tsx`: "Comparison · Change vs baseline" in the field list turns the placeholder into the page's baseline filter (one update) and shows a rule row with run, metric and improved / regressed / unchanged selects and a delete button | `r8-items`: "(fix F2)" |
+| F5 C-ov-1 slider block 43 | fixed (under an hour): `OverviewTab.tsx` passes a local class that lays the Slider out inline (label, value, track on one 24 px line); the shared primitive is untouched | `r8-overview`: block height 24, centre lines +-1 |
+| F6 C-cat-2 card 185 | fixed: category rows use `align-items: center` and the compact line height; card 179, row 27 | `r8-categories-errors`: card 179 +-4, row 27 +-1.5 |
+| F7 C-err-1 8-run card 238.9 | amended with number and reason (rows of every run, zeros included; section 618 keeps 620) | `r8-categories-errors`: <= 240; `r8-page` C-page-6 errors 620 |
+| F8 C-sw-2 | amendment reverted: verdict <= 70 (measured 67) | `r8-sweep` |
+| F9 C-sw-6 | label shortened to "Avg Δ attempts" (full text in the title); cards 56 +-2 | `r8-sweep` |
+| F10 C-run-1 | only the 8-run grid stays amended (500); 4-run card asserted at 239 +-4 | `r8-runs` |
+| Run name weight | `.name` is 650 in `RunTag.module.css` | `r8-runs`: computed weight 650 |
+| F3, F4, F11 | not changed (acceptable per the review) | |
+
+After-shots re-taken only for the changed components: `after-overview-1440/390`, `after-categories-1440/390`, `after-runs-1440`, `after-page-sweep-1440`.
+
+Fix-pass gate (through the wrapper; the e2e ran at admitted cost 2 with one worker because the desktop never freed 6 GB): `npm run check` exit 0 (Vitest 207 files, 1688 tests), `npm run build` exit 0 (`NODE_OPTIONS=--max-old-space-size=3072`), design pytest 1 passed, `npx playwright test e2e/compare` 220 passed. A side effect of the inline slider (the head wrapped at 1024) and of the 27 px rows (categories one key 278) was fixed by a 13 rem slider and a 16 px gap under the key heading.
