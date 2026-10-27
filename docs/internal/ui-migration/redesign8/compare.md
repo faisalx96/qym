@@ -568,3 +568,12 @@ How to run the gallery: seed a SQLite DB (`python frontend/scripts/dev_db.py sql
 Not covered (and why): Step latency (L29) and Root cause (L32, and the issues editor L50 in its populated state) have no data in the seed (no
 spans, no analyses): they are specified from source and legacy CSS and need a traced / analysed seed in the implementation tests.
 The legacy HTML export modal (L53) was inspected in source only.
+
+## Round 8b amendments (owner decision H6: framed sections)
+
+The section panel (14 px padding and a 1 px border on every side, 20 px between panels) changes the numbers of this
+document that depend on the content width or on a section's height. C-page-1 is unamended (cards bottom 510.75 <= 530, Averages
+table bottom 899.83 <= 900). The amended criteria, with the old and new numbers and the asserting spec, are listed in
+`sections-impl-notes.md` ("Round-8 criteria amended by the panel"): C-page-5, C-page-6, C-avg-2/3, C-cat-2, C-err-1, C-exp-3,
+C-ov-2, C-ov-6, C-run-1, C-row-1/2, C-row-3 (390), C-state-1 (390). `CompareSection` is retired; every section of this page renders
+through `ReportSection` and keeps its `data-part=section-<key>`, `section-head`, id and scroll margin.

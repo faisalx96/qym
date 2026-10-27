@@ -1,5 +1,7 @@
 # Round 8b design: section separation on the compare and run-detail pages
 
+**Decision (owner decision H6, 2026-10-27, final): recipe A "framed section" on both pages. Recipe B is dropped; its measurements stay in 2.4 and section 4 as the record.**
+
 Branch `ui/redesign8-sections` (from the round-8 tip 0a709a6f). Owner, 2026-10-26: "enhance segments separation from UI viewpoint"
 on the compare page and the run details. Dark theme, Chromium, production build on 8984, seeds `seed-compare.ts` (4 runs, plus 4 extra
 runs) and the run-detail `seedAll` repeat run (Overview, Repeat, Latency, Deep, Categories, Errors, Items; Reviews, Datasets and
@@ -51,7 +53,7 @@ separation while the type grew. Legacy run is today's recipe; the owner's commen
 | Compare, 1440 / 1024 / 390 | 50 (52 before Overview) | 20 | panel edge 1px `--border-subtle` (1.33:1), fill `--bg-surface` (1.06:1) | 42 to 163 | see 4 |
 | Run, 1440 / 1024 / 390 | 50 | 20 | same | 44 to 142 | n/a |
 
-### 2.4 Recipe B "rhythm and rule" (injected on the real pages)
+### 2.4 Recipe B "rhythm and rule" (record only, dropped by owner decision H6)
 
 | Page | gap | edge gap | boundary mark | head | C-page-1 |
 |---|---|---|---|---|---|
@@ -62,7 +64,7 @@ Jump check (C-nav-2, 1440, click "Overview" in the nav): current section top 10 
 (title 26). The existing tolerance (12 +/- 4) holds with `scroll-margin` unchanged: the rule or panel edge is the anchor, so the
 reader sees the boundary, then the title. The scroll-spy is untouched (the same elements are observed).
 
-## 3. The two recipes
+## 3. The recipe (A, owner decision H6)
 
 One primitive: `ReportSection` (+ `SectionHeader level="xl"`). `CompareSection` is deleted and the compare page renders `ReportSection`
 (it keeps `data-part=section-<key>` through a `part` prop, the `aside` slot and one description). The run page's Items section
@@ -70,7 +72,7 @@ One primitive: `ReportSection` (+ `SectionHeader level="xl"`). `CompareSection` 
 that does not carry `data-report-section` today. Page flex gaps are 0; the primitive owns every distance. The first section has no
 lead-in and no rule or panel top margin (as today).
 
-### Recipe A: framed section
+### Recipe A: framed section (chosen, owner decision H6)
 
 - `section[data-part=section]`: `background: var(--bg-surface)`, `border: 1px solid var(--border-subtle)`, `border-radius: var(--radius-md)`,
   `padding: var(--space-md)` (14), `margin-block-start: var(--space-lg)` (20) except the first.
@@ -80,15 +82,6 @@ lead-in and no rule or panel top margin (as today).
   panel: a card whose parent is a section panel is a `tone="inset"` card, surface to elevated, 1.10:1 on the panel. Panel horizontal
   padding must stay 14: at 20 the four 17.5rem run cards no longer fit one row at 1440 (measured: cards bottom 801).
 - Dark/light: tokens only.
-
-### Recipe B: rhythm and rule
-
-- `section[data-part=section]` (not the first): `margin-block-start: calc(var(--space-xl) * 1.5)` (48), `border-block-start: 1px solid
-  var(--border-strong)` (`data-part=section-rule` is that border: the section's own top edge, full column width), `padding-block-start: var(--space-md)` (14).
-- `data-part=section-head`: `padding-inline-start: var(--space-md)`, `border-inline-start: 3px solid var(--border-strong)` (an accent-free start rail
-  that spans title and description; no hue), title stays `--font-xl` / 650, description `--font-base` muted, controls on the right.
-- Bodies and cards are untouched (no card-in-card issue: there is no panel).
-- Rail uses `border-inline-start`, so it mirrors under `dir=rtl`.
 
 ## 4. C-page-1 cost (compare, 1440x900, 4 runs)
 
@@ -105,25 +98,17 @@ The other widths are unconstrained by C-page-1 (C-page-5/6 page heights: B adds 
 
 ## 5. Acceptance criteria
 
-Common (both recipes):
+Common:
 
 - **C-sec-1** One primitive: every top-level section of both pages (`section[data-report-section]`, including run Items) renders through `ReportSection`;
   `CompareSection` no longer exists; the section's `data-part` is `section` (compare also keeps `section-<key>`), its head `section-head`.
-- **C-sec-2** The title is `--font-xl` (18) / 650 on both pages, the description `--font-base` muted, one line at >= 1024 and wrapping (never an ellipsis) at 390.
+- **C-sec-2** The title is `--font-xl` (18) / 650 on both pages, the description `--font-sm` muted (amended in implementation, owner decision H6: `--font-base` was measured at Averages table bottom 905.05 > 900 at 1440x900; the compare page already used `--font-sm`), at most two lines at >= 1024 (one at 1440) and wrapping (never an ellipsis) at 390.
 - **C-sec-3** Same numbers at 1440, 1024 and 390: the measured gap and edge gap below are identical on both pages (tolerance 1 px), and the first section has no lead-in.
 - **C-sec-4** C-page-1 holds unamended (cards bottom <= 530, table bottom <= 900 at 1440x900); C-nav-2 (section top lands 12 +/- 4 under the nav) and the scroll-spy still pass.
 - **C-sec-5** No horizontal scroll at 390, no nested card (no bordered, same-fill surface inside another).
 - **C-sec-6** The hue budget is unchanged: rule, rail and panel use only neutral tokens.
 
-Recipe B (the orchestrator deletes one set):
-
-- **C-sec-B1** `section-rule` (the section's `border-top`): 1px, `--border-strong`, spanning the full content column (width equals the section width), on every section except the first; contrast >= 2.4:1 against `--bg-base`.
-- **C-sec-B2** Edge gap (previous section bottom to this section's top) = 48 +/- 1 on both pages; gap (previous last painted pixel to title top) = 63 (<= 65 where a body ends in 2 px of padding).
-- **C-sec-B3** `section-head` has a 3px `--border-strong` start border; its height at 1440 is 42 to 45 (compare) / 44 to 66 (run) with a one-line description.
-- **C-sec-B4** No section has a background or an outer border besides the rule (computed `background-color` transparent, `border-width` 0 on the other three sides).
-- **C-sec-B5** The gap between a boundary's title and the previous section's last pixel is at least 2.2x the gap between cards inside one body (14 px) and the rule is >= 1.7x as contrasty as the current hairline (2.42 vs 1.33).
-
-Recipe A:
+Recipe A (owner decision H6):
 
 - **C-sec-A1** Every section is a panel: `background --bg-surface`, 1px `--border-subtle`, `border-radius --radius-md` (8), padding 14 on all four sides; panel width equals the content column.
 - **C-sec-A2** Edge gap between panels = 20 +/- 1 on both pages; gap (previous last painted pixel to next title top) = 50 +/- 2.
@@ -135,27 +120,20 @@ Recipe A:
 ## 6. Design-language amendment (section 3.2, replaces the "Run section header" rule; applies to both pages)
 
 > **Report section** (`ReportSection`, used by the run page and the compare page; `CompareSection` is retired). Every top-level
-> section opens with a `section-head`: a `--font-xl` / 650 primary title, one muted `--font-base` description line and the section
-> controls on the right. [B] A section starts with a full-column 1px `--border-strong` rule 48px under the previous section, the
-> head sits 14px under the rule and carries a 3px `--border-strong` start rail; sections have no panel. [A] A section is a panel
+> section opens with a `section-head`: a `--font-xl` / 650 primary title, one muted `--font-sm` description line and the section
+> controls on the right. A section is a panel
 > (`--bg-surface`, 1px `--border-subtle`, `--radius-md`, 14px padding) 20px under the previous one with the head inside it; a card
 > inside a section panel is an inset card (`--bg-elevated`, no border). The first section has no lead-in or rule. The primitive
 > owns the spacing: pages set no gap between sections and sections add no margin of their own. Reason (section 6 amendment rule):
 > measured on both pages, the current 1.33:1 hairline is as faint as the card borders in the bodies, and the compare page had 28px
 > and no mark; the same rule on both pages replaces two recipes.
 
-## 7. Recommendation: recipe B
+## 7. Decision
 
-B separates by the one thing a scanner reads first, a rule that is 1.8x as contrasty as today's hairline (2.42:1 against 1.33:1) and
-runs the whole column, plus a 63 px gap that is 2.25x the 28 px compare has today; it costs +21 px on C-page-1 (table bottom 898, inside the
-900 ceiling) and touches only the section primitive: no card, table or chart changes. A's panel edge is the same 1.33:1 line the
-owner called weak and its 1.06:1 fill is nearly invisible, its gap (50) is smaller than today's run page (69), it needs 14 px padding
-or the four run cards wrap (cards bottom 801), it ends at exactly 900 (zero slack), and it needs an inset-card variant touching
-every card family (run cards, averages, stat boxes, category cards, error cards, item rows). B's one cost: the run page's lead-in
-shrinks 69 to 63 px; the rule and rail, not the gap, carry the separation there. Choose A only if the owner prefers boxed sections.
+The design recommended recipe B; the owner chose recipe A on both pages (**owner decision H6**, 2026-10-27, final). Recipe B and its criteria (C-sec-B1..B5) are deleted from this document; the measurements of 2.4 and section 4 remain as the record. A's costs, as the design measured them: the panel edge is the same 1.33:1 line, the gap (50) is smaller than the run page's old 69, panel padding must stay 14 (at 20 the four run cards wrap, cards bottom 801), the first screen ends at exactly 900, and every card family needs the inset variant (done by the `--bg-surface` / `--card-edge` redefinition in the section body, see `sections-impl-notes.md`).
 
 ## 8. E2E list for the implementation
 
-`r8-page`: C-page-1 (unamended), C-nav-2, scroll-spy; new `r8b-sections.spec.ts` (compare, run Repeat seed): C-sec-1..6 and C-sec-B1..5 (or A1..6) at 1440, 1024
-and 390; `run-detail/cutover-layout.spec.ts` (the hairline assertion becomes the rule assertion); `visual-language` gallery spec for `/__ui#round8b`;
+`r8-page`: C-page-1 (unamended), C-nav-2, scroll-spy; new `r8b-sections.spec.ts` (compare, run Repeat seed): C-sec-1..6 and C-sec-A1..6 at 1440, 1024
+and 390; `run-detail/cutover-layout.spec.ts` (the hairline assertion becomes the panel assertion); `visual-language` gallery spec for `/__ui#round8b`;
 `pytest tests/platform/test_design_language.py`; after-shots `after-sections-{compare,run}-{1440,390}.png`.

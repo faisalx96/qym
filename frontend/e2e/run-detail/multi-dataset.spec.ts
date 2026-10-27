@@ -132,7 +132,7 @@ test.describe('union run page', () => {
           .or(page.getByRole('grid', { name: 'Scores per dataset' }))
           .first();
         const box = await table.boundingBox();
-        expect(box!.width).toBe(width === 1440 ? 1161 : 753);
+        expect(box!.width).toBe(width === 1440 ? 1161 : 745);
         expect(box!.height).toBe(210);
         const scroll = await table.evaluate((e) => {
           const host = e.closest('[data-datatable],div') as HTMLElement;

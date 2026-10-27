@@ -111,7 +111,7 @@
 }
 
 .valueBox[data-band='1'] {
-  color: var(--score-1);
+  color: var(--error-text);
 }
 
 .valueBox[data-band='2'] {

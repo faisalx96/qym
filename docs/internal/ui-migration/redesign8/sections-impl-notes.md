@@ -1,0 +1,115 @@
+# Round 8b implementation notes: framed sections (recipe A, owner decision H6)
+
+Branch `ui/redesign8-sections`, spec `sections.md` (recipe B and its criteria deleted; owner decision H6, 2026-10-27, final).
+Measurements: Chromium, dark theme, the seeds of `frontend/scripts/seed-compare.ts`-style `seedR8` (4 and 8 runs) and the
+run-detail Repeat seed. After-shots in `sections/shots/` (script `sections/measure/sec-after.mts`):
+`after-sections-{compare,run}-{1440,390}.png`, `after-sections-boundary-{compare,run}-1440.png` (the same crops as the
+mocks: compare Averages to Overview, run Repeat to Latency) and `after-sections-first-screen-1440.png`.
+
+## What changed
+
+- `ReportSection` (`frontend/src/ui/ReportSection/`) is the one primitive. It renders `section[data-report-section]`
+  with `data-part` = `section` (or the `part` prop: compare keeps `section-<key>`), the head
+  `div[data-part=section-head]` as the first child (h2 `--font-xl` / 650 + one muted description + the aside) and a
+  container-query body. The panel is `--bg-surface`, 1px `--border-subtle`, `--radius-md`, 14 px padding;
+  `.section ~ .section` is the only margin (`--space-lg`, 20 px); the first section has none.
+- `CompareSection` (tsx + css) is deleted. `CompareBody` / `CompareSkeleton` wrap the sections in `div[data-part=report]`
+  (a plain block, so the page's 14 px flex gap stays between title, notices, nav and the first panel and is not between panels).
+  The run page's Items section and its loading frame (`ItemsSection.tsx`, `StageSkeletons.tsx`) render through
+  `ReportSection id="run-items"`; its `.head`, container query and own `scroll-margin` are gone.
+- Inset cards, one mechanism: the grouping surfaces paint `var(--card-bg)` and `var(--card-edge)` (new tokens in
+  `tokens.css`, defaults `--bg-surface` / `--border-subtle`, so every other page is unchanged). The body of a
+  `ReportSection` redefines them as `--bg-elevated` / `transparent`. The `design-language.test.ts` rule that no component
+  redefines a `--bg-*` token is why the indirection exists. Files that now read `--card-bg` / `--card-edge`: `Card`,
+  `StatStrip`, `DataTable`, `Select`, `MultiSelect`, `TextField`, `RadioGroup`, `ReportLayout` and the compare and run-detail
+  recipes (run cards, averages, stat boxes, category / error cards, item rows, filter builder, banner, heatmap, rule builder, skeleton blocks).
+  Tints that must not lighten with the panel (the expected block and the open chip head, contrast) use `--panel-bg` (the
+  panel's own fill, defined on the section); the sticky filter bar of the Items section paints `--panel-bg` too.
+  The tables keep their header band and row hairlines (`--border-subtle`); the 3 px rails stay; error item rows keep their red border.
+- Source changes the 30 px of horizontal space forced (all measured at 390 or 1024): `Latency.module.css` step rows give the
+  name and interval columns `minmax(0, ...)` under a 320 px container (they widened the page by 38 px); `SegmentedControl`
+  options give up half their padding under a 300 px container (the four-option Repeat control was 234 px in a 207 px card);
+  `PassTable` compact columns 84/110/62 to 76/102/56 (Errors column outside the card by 13 px); `DatasetsSection` metric
+  columns 104 to 88 (the table scrolled 16 px at 1024); `ItemDetail` output columns `minmax(17.5rem)` to `minmax(17rem)`
+  (four columns did not fit the 1133 px detail at 1440 and scrolled).
+
+## First screen (C-sec-A5, A6, C-sec-4), 1440x900, 4 runs
+
+| | measured | ceiling |
+|---|---|---|
+| run cards in one row | 1 row of 4 | 1 row |
+| run cards bottom | 510.75 | 530 |
+| Averages table bottom | 899.83 | 900 (0.17 px slack) |
+| nav bottom / Runs panel top | 183.58 / 197.58 | n/a (14 px page gap) |
+| Averages title top | 560.75 | n/a |
+
+The design measured 511 / 900. C-page-1 is unamended. The Averages head is untouched (no pixels were taken from rows or type).
+
+## Criterion -> change -> test
+
+Tests: `frontend/e2e/compare/r8b-sections.spec.ts` (1440, 1024, 390) and `frontend/e2e/run-detail/r8b-sections.spec.ts`
+(Repeat seed, 1440, 1024, 390); both use `frontend/e2e/shared/sections.ts`.
+
+| Criterion | Result | Change | Test |
+|---|---|---|---|
+| C-sec-1 one primitive | met | `ReportSection`; `CompareSection` deleted; run Items through it | both specs: `assertOnePrimitive` (compare 6 ids, run 7 ids incl. `run-items`, all `SECTION`, h2 title, head first child) |
+| C-sec-2 title 18/650, description muted | met with one deviation | head markup in `ReportSection.tsx` | `assertHeads`: 18 / 650, `P` description, no ellipsis, at most 2 lines at >= 1024. Deviation: the description stays `--font-sm` (the round-8 compare recipe) instead of `--font-base`; see below |
+| C-sec-3 same numbers at all widths | met | `.section ~ .section { margin-block-start: var(--space-lg) }` | `assertRhythm` at 1440 / 1024 / 390: first section margin 0, edge gap 20 +-1, body end to next title 49 +-3 |
+| C-sec-4 C-page-1, C-nav-2, scroll-spy | met | scroll margin `var(--report-nav-h, var(--bar-link-h)) + 10px` | `r8-page` C-page-1 / C-nav-2 unchanged; r8b first-screen test; run deep link under the nav |
+| C-sec-5 no sideways scroll, no nested card | met (after fixes above) | source changes listed above | `noSideways` x3 widths on both pages; `nestedCards` returns [] |
+| C-sec-6 hue budget | met | tokens only (`--bg-surface`, `--border-subtle`, `--bg-elevated`) | `assertPanels` compares the computed colours with the token values |
+| C-sec-A1 panel | met | `ReportSection.module.css .section` | `assertPanels`: fill, 1px x4, colour, radius 8, padding 14 x4, width = column |
+| C-sec-A2 20 px between, 50 to title | met (edge 20, body end to title 49) | as C-sec-3 | `assertRhythm` |
+| C-sec-A3 head inside, no rule | met | head is the first child, `margin-block-end: var(--space-md)` | `assertHeads`: head border 0, head to body 14 +-1, no `[data-part=section-rule]` |
+| C-sec-A4 inset cards | met | `--card-bg` / `--card-edge` redefined by the body | `fillAndEdge`: run card, averages table (blocks at 390), item row, run Latency card are `rgb(34,34,50)` with transparent outline; `nestedCards` |
+| C-sec-A5 four cards in one row | met | panel padding 14 | compare spec first-screen test (1 row, bottom 510.75) and the reflow test at 1024 / 390 (cards inside the 14 px padding) |
+| C-sec-A6 table bottom <= 900 | met (899.83) | none needed | compare spec first-screen test |
+
+### Deviation: the description size (C-sec-2)
+
+`sections.md` C-sec-2 asks for `--font-base` descriptions. The implemented head keeps `--font-sm` (11 px), the size round 8
+measured on the compare page (head 42 px at 1440): the run page's heads lose one pixel of text size (12 to 11) and gain the
+single recipe. A6 has 0.17 px of slack; measured with `--font-base` descriptions (12 px) the Averages table bottom is 905.05 at
+1440x900 (5 px over the ceiling, three heads above it grow by a line box each), so the 11 px description stays. Amendment of
+C-sec-2, owner decision H6 consequence (A6 outranks the type size); `DESIGN_LANGUAGE.md` "Report section" states the muted
+description without a size, as the e2e asserts.
+
+## Round-8 criteria amended by the panel (reason on every row: owner decision H6, the panel takes 30 px of width and 16 px of height)
+
+The panel is 14 + 1 px on each side: content width 30 px narrower, and each section grew by 16 px (30 px of frame minus the
+14 px top padding the compare section had). Old numbers are those of `impl-notes.md`.
+
+| Criterion | Old | New | Test changed |
+|---|---|---|---|
+| C-page-5 (1440, 4 runs) | runs 311, averages 355, overview 393, errors 440, items 1375, categories (one key) 285 | 328, 371, 409, 490 (+18: the 280 px error card wraps its message), 1391, 301 | `r8-page` |
+| C-page-5 (1024) | runs 539, averages 376, overview 480 | 552, 392, 496 | `r8-page` |
+| C-page-5 (390) | items <= 2200 | <= 2600 (measured 2571: chips wrap to two lines) | `r8-page` |
+| C-page-6 (8 runs, 1440) | runs 568, averages 385, overview 393, errors 620, items 1375 | 584, 418, 409, 708, 1391 | `r8-page` |
+| C-avg-2/3 | run column 261, metric column 144; 8 runs 131; 1024 157 | 254, 140; 127; 150 | `r8-averages` |
+| C-avg-3 (8 runs) | head <= 62, table <= 320 | head <= 80 (measured 76.7), table <= 340 (332) | `r8-averages` |
+| C-cat-2 | card 388 at 1440, 380 at 1024, 277 at 390 | 378, 366, 247 | `r8-categories-errors` |
+| C-err-1 | card 287 wide, 149 high; 8 runs <= 240 | 280, 167; <= 280 (276) | `r8-categories-errors` |
+| C-exp-3 | four 284 px columns without scroll | four 277 px columns; grid minimum 17.5 rem to 17 rem | `r8-expanded` |
+| C-ov-2 | stat box 148 wide | 144 | `r8-overview` |
+| C-ov-6 | overview <= 400 | <= 410 (measured 406) | `r8-overview` |
+| C-run-1 | card 287 / 380 / 277 | 280 / 365 / 247 | `r8-runs` |
+| C-row-1/2 | item list 1194 wide | 1163 | `r8-items` |
+| C-row-3 (390) | four chips on one line, row <= 88 | at most two lines, row <= 112 | `r8-items` |
+| C-state-1 (390) | run placeholder 232, averages placeholder 1035.2 | 254.4, 1068.4 (the loading frame keeps the loaded height) | `CompareSkeleton.module.css`, `r8-states` |
+
+Not criteria of round 8 but asserted by existing specs, updated (never deleted): `redesign` (axe at 390: the pointer is
+moved off the list, an error row under it dims its siblings to `--dim-opacity`), `multi-dataset` (section heights 297.9 /
+297.9 / 635.6, table 1161 / 753), `multi-dataset-states` (657.9), `redesign3-box-plots` (svg >= 215 at 390),
+`redesign3-categories` (bar track > 140), `redesign3-charts` (card >= 248), `redesign3-item-details` (the `Metrics` region
+is matched exactly because the by-pass scroller is named "Metrics by pass (scrollable)" at 390; the matrix may scroll 26 px
+inside its own scroller, the page never does), `redesign3-repeat` (tile centring <= 7 at 390), `redesign5-metric-panel`
+(R3-14 at 390 <= 1680, measured 1660), `redesign7-edges` (a gap under 8 px is the virtualizer's end spacer, not a missing
+line), `redesign7-keys` (80-character keys take 5 / 4 lines at 390; key before value uses `<=` on equal left edges).
+Three run-detail specs opened a compare item by `Expand item N`, a name round 8 had removed (a round-8 leftover, not caused
+by the panel): `cutover-pass-revision`, `cutover-reasons`, `cutover-xss` now click `item-row` / `item-head`.
+
+## Design language
+
+`docs/DESIGN_LANGUAGE.md`: "Run section header" is replaced by "Report section" (owner decision H6, with the measured
+reason); the Card entry and the Calm-surface entry name the inset card. `design-language.test.ts` expects `--card-bg` in
+the Card recipe. `sections.md`: recipe B, C-sec-B1..B5 and the recommendation are deleted (its measurements stay in 2.4 and 4).
