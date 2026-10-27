@@ -282,7 +282,7 @@ test.describe('P1-9 across widths', () => {
             w: c.getBoundingClientRect().width,
             over: c.scrollWidth - (c as HTMLElement).clientWidth,
           }))
-          .filter((c) => c.over > 0 || c.w < 250),
+          .filter((c) => c.over > 0 || c.w < (innerWidth <= 400 ? 248 : 250)), // 390: the card is the 249 px content box of the section panel (round 8b fix pass; it was 260 and left the panel)
       );
       expect(over).toEqual([]);
       // the overview section never grows past its column (the shell's own top bar is outside this change)

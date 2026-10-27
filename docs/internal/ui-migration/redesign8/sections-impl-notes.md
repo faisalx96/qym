@@ -163,3 +163,14 @@ The tip looked 15 to 20 % slower on wall time, which would be a panel cost, so I
 Same DOM (+8 nodes), the same counts and durations inside the run-to-run spread (at most 3 %): the panel and the card tokens do not slow this
 page. The spec simply runs at 97 to 115 % of its old 480 s budget on either tree (one wheel probe of about 12 s per table, 23 tables), so it
 passed or timed out with the machine's load. The budget is now 900 s (comment in the spec).
+
+### Fix pass gate (through the wrapper)
+
+| Command | Result |
+|---|---|
+| `npm run check` | exit 0; Vitest 207 files, 1688 tests; design test 54 |
+| `npm run build` | exit 0 (`NODE_OPTIONS=--max-old-space-size=3072`) |
+| `pytest tests/platform/test_design_language.py` | 1 passed |
+| `e2e/compare` | 228 passed after one flaky failure (`r8-expanded` C-exp-1, the expanded detail still animating; passes 4 of 4 reruns) |
+| `e2e/run-detail` (three chunks, cost 4) | 462 passed, 11 skipped; 2 failures caused by fix 2 (`redesign3-charts` P1-9 and `redesign3-box-plots` P7-6 at 390: the chart cards are now the 249 px content box, not 260 overflowing it) were re-asserted (card >= 248, svg >= 205) and pass |
+| `e2e/visual-language` | 82 passed, 2 skipped (`frozen-static.spec.ts:222` passes under the 900 s budget) |
