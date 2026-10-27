@@ -568,8 +568,13 @@
   display: none;
 }
 
-.bodyHost[data-scroll-end] .th[data-fold] .thInner {
+/* folded: the title is clipped out of sight but keeps the column's accessible name; the header menu is hidden */
+.bodyHost[data-scroll-end] .th[data-fold] .thInner > * {
   visibility: hidden;
+}
+.bodyHost[data-scroll-end] .th[data-fold] .thLabel {
+  visibility: visible;
+  clip-path: inset(50%);
 }
 
 .bodyHost[data-scroll-end] .th[data-fold],
