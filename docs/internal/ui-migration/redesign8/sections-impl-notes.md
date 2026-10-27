@@ -113,3 +113,19 @@ by the panel): `cutover-pass-revision`, `cutover-reasons`, `cutover-xss` now cli
 `docs/DESIGN_LANGUAGE.md`: "Run section header" is replaced by "Report section" (owner decision H6, with the measured
 reason); the Card entry and the Calm-surface entry name the inset card. `design-language.test.ts` expects `--card-bg` in
 the Card recipe. `sections.md`: recipe B, C-sec-B1..B5 and the recommendation are deleted (its measurements stay in 2.4 and 4).
+
+## Gate (final, through the session gate wrapper)
+
+| Command | Result |
+|---|---|
+| `npm run check` (tsc, eslint, stylelint, Vitest, design test) | exit 0; Vitest 207 files, 1688 tests; design-language test 54 |
+| `npm run build`, `npm run build:sdk` (`NODE_OPTIONS=--max-old-space-size=3072`) | exit 0 each |
+| `pytest tests/platform/test_design_language.py` | 1 passed |
+| `npx playwright test e2e/compare` | 228 passed (includes the 8 new `r8b-sections` tests) |
+| `npx playwright test e2e/run-detail` (three chunks, cost 4) | 462 passed, 9 skipped, 1 flaky failure: `redesign2-items.spec.ts:101` (JSON Raw view) fails 1 run in 4 here and 1 in 8 on the round-8 tip `3dd214c3`, so it is not caused by the panel (7 new `r8b-sections` tests pass) |
+| `e2e/datasets/ux-compare-missing`, `e2e/runs-list/selection-compare`, `e2e/visual-language/{final-polish,contrast,sticky-bars}` | 28 passed |
+| `npx playwright test e2e/visual-language` (whole folder) | 81 passed, 2 skipped, 1 failed: `frozen-static.spec.ts:222` ("every table of the /__ui gallery") times out at its 480 s budget; it fails identically on `3dd214c3` (measured 8.0 min), so it predates this round |
+| `e2e:sdk` | not run: `src/sdk-viewer` renders neither `ReportSection` nor `Card` (`build:sdk` passes) |
+| `tests/platform` SQLite / PostgreSQL | not run: the backend is untouched |
+
+Two earlier gate attempts were killed by `systemd-oomd` (scopes `qym-r8b-g-vl-*`, `qym-f-run-*`, `qym-f-misc-*`) with the desktop under pressure; they were re-run at cost 4 in chunks and the counts above are from the completed runs.
