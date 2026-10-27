@@ -26,10 +26,10 @@
   block-size: 100%;
   min-inline-size: 0;
   padding: var(--space-md);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--card-edge);
   border-inline-start: 3px solid var(--run);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .top {

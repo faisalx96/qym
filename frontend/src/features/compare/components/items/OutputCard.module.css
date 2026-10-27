@@ -80,12 +80,12 @@
   padding-inline: var(--space-sm);
   border: 1px solid transparent;
   border-radius: var(--control-radius);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .chipHead[data-open] {
   border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
-  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-surface));
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--panel-bg, var(--card-bg)));
 }
 
 .caret {
@@ -141,9 +141,9 @@
   gap: var(--space-xs);
   min-block-size: 56px;
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--card-edge);
   border-radius: var(--control-radius);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   color: var(--text-secondary);
   font-size: var(--font-base);
 }

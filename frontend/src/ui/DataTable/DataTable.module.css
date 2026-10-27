@@ -65,9 +65,9 @@
   overflow-y: hidden;
   height: 12px;
   border-top: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   scrollbar-width: thin;
-  scrollbar-color: var(--text-dim) var(--bg-surface); /* decorative scroll thumb */
+  scrollbar-color: var(--text-dim) var(--card-bg); /* decorative scroll thumb */
 }
 
 .rail::-webkit-scrollbar {
@@ -198,7 +198,7 @@
 .thead th.bandCell {
   height: var(--table-group-height);
   padding: 0 var(--space-sm);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   color: var(--text-muted);
   text-transform: none;
   letter-spacing: 0;
@@ -484,7 +484,7 @@
 }
 
 .tr[data-zebra] {
-  --row-base: var(--bg-surface);
+  --row-base: var(--card-bg);
 }
 
 .tr[data-clickable] {
@@ -519,7 +519,7 @@
 }
 
 .tr[aria-expanded='true'] {
-  --row-base: var(--bg-surface);
+  --row-base: var(--card-bg);
 }
 
 /* Row state rail on the first cell. */
@@ -680,7 +680,7 @@
 }
 
 .tfoot td {
-  background: var(--bg-surface);
+  background: var(--card-bg);
   font-weight: 650;
   height: var(--row-compact);
   padding: 0 var(--space-sm);
@@ -764,7 +764,7 @@
   flex-wrap: wrap;
   gap: var(--space-sm) var(--space-md);
   padding: var(--space-xs) var(--space-sm);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .toolbar {
@@ -899,7 +899,7 @@
   height: var(--control-height);
   border: 1px solid var(--border-default);
   border-radius: var(--control-radius);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   color: var(--text-primary);
   font: inherit;
   font-size: var(--font-base);
@@ -990,7 +990,7 @@
   color: var(--text-muted);
 }
 .cardDetail {
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -303,6 +303,8 @@
   --field-measure: 76ch; /* reading measure of prose bodies */
   --card-padding: var(--space-md) var(--space-lg);
   --card-padding-compact: var(--space-sm) var(--space-md);
+  --card-bg: var(--bg-surface); /* a card's fill; ReportSection bodies make it --bg-elevated (inset cards) */
+  --card-edge: var(--border-subtle); /* a card's outline; ReportSection bodies make it transparent (inset cards, owner decision H6) */
   --shadow-card-hover: 0 2px 12px rgba(0, 0, 0, 0.28);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

@@ -5,7 +5,7 @@
   grid-auto-columns: minmax(0, 1fr);
   gap: 1px;
   background: var(--border-subtle);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--card-edge);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
@@ -17,7 +17,7 @@
   gap: var(--space-sm);
   min-height: var(--stat-strip-min-height);
   padding: var(--space-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   transition:
     background-color var(--transition-fast),
     box-shadow var(--transition-fast);
@@ -65,7 +65,7 @@
 }
 
 .item[data-selected] {
-  background: color-mix(in srgb, var(--tone, var(--accent-primary)) var(--tint-soft), var(--bg-surface));
+  background: color-mix(in srgb, var(--tone, var(--accent-primary)) var(--tint-soft), var(--card-bg));
   box-shadow: inset 0 -2px 0 var(--tone, var(--accent-primary));
 }
 
@@ -228,7 +228,7 @@
   flex: 1 1 14rem;
   flex-direction: column;
   min-width: 0;
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .groupLabel {
@@ -246,7 +246,7 @@
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   gap: 1px;
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .groupCells > .item {

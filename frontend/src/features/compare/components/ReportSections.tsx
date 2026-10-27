@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { metricDirectionLabel, passThresholdLabel } from '@/lib/metrics';
 import { useShellScroller } from '@/features/run-detail/hooks/useScrollMargin';
-import { scrollCue, useScrollCue } from '@/ui';
+import { ReportSection, scrollCue, useScrollCue } from '@/ui';
 import { useCompare } from '../CompareContext';
 import { hasAnyRootCause } from '../lib/breakdown';
 import { CategoriesSection } from './panel/CategoriesTab';
@@ -13,7 +13,6 @@ import { OverviewControls, OverviewTab } from './panel/OverviewTab';
 import { RootCauseTab } from './panel/RootCauseTab';
 import { StepsTab } from './panel/StepsTab';
 import { ItemsHeadAside, ItemsSection } from './items/ItemsSection';
-import { CompareSection } from './CompareSection';
 import { RunCards, RunsDiff } from './RunCards';
 import { BaselineSelect, PassToggle } from './SelectionBar';
 import styles from './ReportSections.module.css';
@@ -34,7 +33,6 @@ const ALIASES: Record<string, SectionKey> = {
   'root-cause': 'root-cause',
   items: 'items',
 };
-
 
 /** The sections this comparison offers, in page order. */
 export function useSectionList(): Array<{ key: SectionKey; label: string; count?: number }> {
@@ -141,8 +139,8 @@ export function CompareReport() {
   const passes = ctx.direction && !ctx.isBoolean && model.types[metric] !== 'numeric';
   const overviewDescription = `Pass rates, winners and how many runs got each item right for ${metric}. ${metricDirectionLabel(ctx.direction)}${passes ? `; a run passes when its score is ${passThresholdLabel(ctx.threshold, ctx.direction)}` : ''}.`;
   return (
-    <>
-      <CompareSection
+    <div data-part="report">
+      <ReportSection
         id={sectionDomId('runs')}
         part="section-runs"
         title="Runs"
@@ -150,8 +148,8 @@ export function CompareReport() {
         aside={<RunsDiff />}
       >
         <RunCards />
-      </CompareSection>
-      <CompareSection
+      </ReportSection>
+      <ReportSection
         id={sectionDomId('averages')}
         part="section-averages"
         title="Per-run averages"
@@ -164,8 +162,8 @@ export function CompareReport() {
         }
       >
         <MetricsTab />
-      </CompareSection>
-      <CompareSection
+      </ReportSection>
+      <ReportSection
         id={sectionDomId('overview')}
         part="section-overview"
         title="Comparison overview"
@@ -173,9 +171,9 @@ export function CompareReport() {
         aside={<OverviewControls />}
       >
         <OverviewTab />
-      </CompareSection>
+      </ReportSection>
       <CategoriesSection />
-      <CompareSection
+      <ReportSection
         id={sectionDomId('steps')}
         part="section-steps"
         title="Step latency"
@@ -183,16 +181,16 @@ export function CompareReport() {
         hidden={!has('steps')}
       >
         <StepsTab />
-      </CompareSection>
-      <CompareSection
+      </ReportSection>
+      <ReportSection
         id={sectionDomId('errors')}
         part="section-errors"
         title="Error distribution"
         description="Errors by kind and message for each run. Press a card to filter the items."
       >
         <ErrorsTab />
-      </CompareSection>
-      <CompareSection
+      </ReportSection>
+      <ReportSection
         id={sectionDomId('root-cause')}
         part="section-root-cause"
         title="Root cause analysis"
@@ -200,8 +198,8 @@ export function CompareReport() {
         hidden={!has('root-cause')}
       >
         <RootCauseTab />
-      </CompareSection>
-      <CompareSection
+      </ReportSection>
+      <ReportSection
         id={sectionDomId('items')}
         part="section-items"
         title="Item-by-item comparison"
@@ -209,7 +207,7 @@ export function CompareReport() {
         aside={<ItemsHeadAside />}
       >
         <ItemsSection />
-      </CompareSection>
-    </>
+      </ReportSection>
+    </div>
   );
 }

@@ -10,7 +10,7 @@
   grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 1px;
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--card-edge);
   border-radius: var(--radius-md);
   background: var(--border-subtle);
 }
@@ -33,7 +33,7 @@
   gap: var(--space-xs);
   min-block-size: 74px;
   padding: var(--space-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .statLabel {
@@ -81,9 +81,9 @@
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-md);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--card-edge);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .h3 {
@@ -138,7 +138,7 @@
 
 .distSeg {
   --score: var(--score-3);
-  background: color-mix(in srgb, var(--score) 70%, var(--bg-surface));
+  background: color-mix(in srgb, var(--score) 70%, var(--card-bg));
   color: var(--bg-void);
 }
 

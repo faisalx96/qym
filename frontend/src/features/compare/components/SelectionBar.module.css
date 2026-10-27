@@ -5,7 +5,7 @@
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .cohortLabel {

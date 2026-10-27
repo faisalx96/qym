@@ -52,12 +52,12 @@
   margin-block-start: 2px;
   border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-pill);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .option[data-selected] .dot {
   border-color: var(--accent-primary);
-  box-shadow: inset 0 0 0 3px var(--bg-surface);
+  box-shadow: inset 0 0 0 3px var(--card-bg);
   background: var(--accent-primary);
 }
 

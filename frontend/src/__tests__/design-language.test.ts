@@ -262,7 +262,7 @@ describe('primitive module contracts', () => {
     ScoreValue: ['[data-band]', 'var(--tone-text)', "[data-variant='pill']", 'var(--metric-error)'],
     Card: [
       'var(--rail-width)',
-      'background: var(--bg-surface)',
+      'background: var(--card-bg)', // round 8b (owner decision H6): --card-bg is --bg-surface, and --bg-elevated inside a section panel
       'var(--border-subtle)',
       '[data-interactive]:hover',
       '[data-selected]',

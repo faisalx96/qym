@@ -4,7 +4,7 @@
  * skeleton reuses the Overview's own grid classes, so its columns and rows are those of the real cards.
  */
 import { metricTypeFromSpec } from '@/lib/metrics';
-import { SectionHeader, Skeleton } from '@/ui';
+import { ReportSection, Skeleton } from '@/ui';
 import { useRunPage } from '../RunContext';
 import panels from './panels/Panels.module.css';
 import items from './ItemsSection.module.css';
@@ -57,17 +57,15 @@ export function ItemsSkeleton() {
   const { payload } = useRunPage();
   const total = payload.snapshot.rows_total ?? 0;
   return (
-    <section id="run-items" className={items.section} aria-labelledby="run-items-title">
-      <div className={items.head}>
-        <SectionHeader
-          id="run-items-title"
-          level="xl"
-          title="Items"
-          description="Every input, outcome and metric. Filters apply to the table and to every section above."
-        />
+    <ReportSection
+      id="run-items"
+      title="Items"
+      description="Every input, outcome and metric. Filters apply to the table and to every section above."
+    >
+      <div className={items.section}>
+        <Skeleton kind="chart" height={56} label="Loading filters" />
+        <Skeleton kind="chart" height={Math.max(1, Math.min(total, 12)) * 52 + 40} label="Loading items" />
       </div>
-      <Skeleton kind="chart" height={56} label="Loading filters" />
-      <Skeleton kind="chart" height={Math.max(1, Math.min(total, 12)) * 52 + 40} label="Loading items" />
-    </section>
+    </ReportSection>
   );
 }

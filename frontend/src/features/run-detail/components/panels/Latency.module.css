@@ -203,6 +203,14 @@
   gap: var(--space-sm);
 }
 
+/* Phone: the section panel leaves 249px; the name and the interval columns give way instead of widening the page. */
+@container (max-width: 320px) {
+  .stepsHead,
+  .stepRow {
+    grid-template-columns: minmax(0, 1.2fr) 48px 64px minmax(0, 1.4fr);
+  }
+}
+
 .stepsHead {
   padding: var(--space-xs) 0;
   font-size: var(--font-sm);

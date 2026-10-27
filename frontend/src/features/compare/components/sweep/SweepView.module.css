@@ -38,7 +38,7 @@
   padding: var(--space-md);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .verdict::after {
@@ -70,7 +70,7 @@
   padding: var(--space-md);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 /* five cells in one frame; the 3 px bottom edge says whether the change is beyond noise */
@@ -80,7 +80,7 @@
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .stat {
@@ -168,7 +168,7 @@
   overflow-x: auto;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .table {
@@ -264,7 +264,7 @@
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   color: inherit;
   text-align: start;
 }

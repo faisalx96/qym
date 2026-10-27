@@ -83,7 +83,7 @@ export function PassTable({
     type: 'text',
     align: 'end',
     mono: true,
-    width: compact ? 110 : undefined,
+    width: compact ? 102 : undefined,
     minWidth: compact ? 80 : 128,
     cell: (p) => {
       const v = p.metric_means?.[m];
@@ -119,7 +119,7 @@ export function PassTable({
       label: 'Pass',
       pin: 'start',
       lockOrder: true,
-      width: compact ? 84 : undefined,
+      width: compact ? 76 : undefined,
       minWidth: compact ? 72 : 104,
       cell: (p) => (
         <Link
@@ -162,7 +162,7 @@ export function PassTable({
       id: 'errors',
       header: 'Errors',
       label: 'Errors',
-      width: compact ? 62 : undefined,
+      width: compact ? 56 : undefined,
       minWidth: compact ? 44 : 56,
       align: 'end',
       mono: true,

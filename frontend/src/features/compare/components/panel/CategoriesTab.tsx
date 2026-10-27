@@ -2,12 +2,11 @@
 import { useMemo } from 'react';
 import { useSearchParamsState } from '@/lib/url-state';
 import { formatLatency, formatMetricValue } from '@/lib/metrics';
-import { Chip, SegmentedControl, Tag, Text } from '@/ui';
+import { Chip, ReportSection, SegmentedControl, Tag, Text } from '@/ui';
 import { AUTO_CATEGORIES, categoryDelta, categoryGroups, categoryKeys } from '../../lib/breakdown';
 import { useCompare } from '../../CompareContext';
 import { columnName } from '../../lib/columnName';
 import { DeltaTag } from '../common';
-import { CompareSection } from '../CompareSection';
 import { scrollToSection, sectionDomId } from '../sectionIds';
 import { RunTag } from '../RunTag';
 import { CategoryCards } from './CategoryCards';
@@ -78,7 +77,7 @@ export function CategoriesSection() {
     </>
   ) : undefined;
   return (
-    <CompareSection
+    <ReportSection
       id={sectionDomId('categories')}
       part="section-categories"
       title="Performance by category"
@@ -165,7 +164,7 @@ export function CategoriesSection() {
       })}
     </div>
       )}
-    </CompareSection>
+    </ReportSection>
   );
 }
 
