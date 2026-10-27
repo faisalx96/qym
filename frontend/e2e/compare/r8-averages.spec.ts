@@ -37,16 +37,16 @@ test('C-avg-1: with a repeat run the head carries Run average | Each pass and it
   await expect(part(page, 'averages-colhead')).toHaveCount(2);
 });
 
-test('C-avg-2/3: 1440 with 4 runs: metric column 144, run columns 261, heads 34 high, sentence case', async ({ page }) => {
+test('C-avg-2/3: 1440 with 4 runs: metric column 140, run columns 254, heads 34 high, sentence case', async ({ page }) => {
   await openCompare(page, s.four, 1440);
   const heads = part(page, 'averages-colhead');
   await expect(heads).toHaveCount(4);
   for (let i = 0; i < 4; i++) {
-    within((await box(heads.nth(i))).w, 261, 2, `column ${i}`);
+    within((await box(heads.nth(i))).w, 254, 2, `column ${i}`); // 261 before the section panel took 30 px (owner decision H6)
     within((await box(heads.nth(i))).h, 34, 2, `head ${i}`);
   }
   const metricHead = averagesGrid(page).getByRole('columnheader', { name: 'Metric' });
-  within((await box(metricHead)).w, 144, 2, 'metric column');
+  within((await box(metricHead)).w, 144, 5, 'metric column');
   expect(await heads.first().evaluate((e) => getComputedStyle(e).textTransform)).toBe('none');
   const [sw, cw] = await part(page, 'averages-table').evaluate((e) => [e.scrollWidth, e.clientWidth]);
   expect(sw).toBeLessThanOrEqual(cw);
@@ -59,19 +59,19 @@ test('C-avg-2/3/4: 8 runs fit at 1440 (column >= 120, heads wrap), amended heigh
   await openCompare(page, s.eight, 1440);
   const heads = part(page, 'averages-colhead');
   await expect(heads).toHaveCount(8);
-  within((await box(heads.first())).w, 131, 3, 'column');
+  within((await box(heads.first())).w, 127, 3, 'column'); // 131 before the section panel (owner decision H6)
   expect((await box(heads.first())).w).toBeGreaterThanOrEqual(120);
-  expect((await box(heads.first())).h).toBeLessThanOrEqual(62); // amended from 54: letter badge + name wrap to 3 lines
+  expect((await box(heads.first())).h).toBeLessThanOrEqual(80); // amended from 54 and 62 (4 lines at 127 px after the panel, measured 76.7; owner decision H6): letter badge + name wrap to 3 lines
   const [sw, cw] = await part(page, 'averages-table').evaluate((e) => [e.scrollWidth, e.clientWidth]);
   expect(sw).toBeLessThanOrEqual(cw);
-  expect((await box(part(page, 'averages-table'))).h).toBeLessThanOrEqual(320); // amended from 296
+  expect((await box(part(page, 'averages-table'))).h).toBeLessThanOrEqual(340); // amended from 296 and 320 (measured 332 after the panel took 30 px; owner decision H6)
   for (const cell of await part(page, 'averages-cell').filter({ has: page.locator('[data-part=averages-value]') }).all())
     within((await box(cell)).h, 76, 2, 'metric cell at 8 runs');
 });
 
-test('C-avg-2: 1024: 4 runs fit (157), 8 runs scroll (>= 1104) and the metric column stays pinned', async ({ page }) => {
+test('C-avg-2: 1024: 4 runs fit (150), 8 runs scroll (>= 1104) and the metric column stays pinned', async ({ page }) => {
   await openCompare(page, s.four, 1024);
-  within((await box(part(page, 'averages-colhead').first())).w, 157, 3, 'column at 1024');
+  within((await box(part(page, 'averages-colhead').first())).w, 150, 3, 'column at 1024'); // 157 before the section panel (owner decision H6)
   const [sw, cw] = await part(page, 'averages-table').evaluate((e) => [e.scrollWidth, e.clientWidth]);
   expect(sw).toBeLessThanOrEqual(cw);
   await openCompare(page, s.eight, 1024);

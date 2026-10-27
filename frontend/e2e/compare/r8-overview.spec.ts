@@ -48,7 +48,7 @@ test('C-ov-1: the pass slider and the metric tabs sit in the head on one centre 
 
 test('C-ov-2/3: the stat grid is 8 / 4 / 2 columns with 1 px gaps drawn by the grid', async ({ page }) => {
   for (const [w, h, perRow, boxW] of [
-    [1440, 76, 8, 148],
+    [1440, 76, 8, 144], // box 148 before the section panel (owner decision H6)
     [1024, 151, 4, null],
     [390, 301, 2, null],
   ] as const) {
@@ -143,9 +143,9 @@ test('C-ov-5: the distribution bar is one 32 px stacked bar, a segment per count
   await expect(part(page, 'section-overview').getByRole('button', { name: /items with \d of 4 runs correct; filter$/ })).toHaveCount(await segs.count());
 });
 
-test('C-ov-6: the overview section is at most 400 high at 1440 with 4 runs', async ({ page }) => {
+test('C-ov-6: the overview section is at most 410 high at 1440 with 4 runs', async ({ page }) => {
   await openCompare(page, s.four, 1440);
-  expect((await box(part(page, 'section-overview'))).h).toBeLessThanOrEqual(400);
+  expect((await box(part(page, 'section-overview'))).h).toBeLessThanOrEqual(410); // amended from 400: +14 for the section panel (owner decision H6), measured 406
 });
 
 test('C-kbd-2: winner and distribution segments activate on Enter and Space', async ({ page }) => {

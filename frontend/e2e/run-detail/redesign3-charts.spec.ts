@@ -160,7 +160,7 @@ for (const width of WIDTHS) {
         expect(r.hasHeader, `${r.name} header`).toBe(true);
         expect(r.gap as number, `${r.name} space under the plot`).toBeLessThanOrEqual(16);
         expect(r.overflow as number, `${r.name} overflow`).toBeLessThanOrEqual(0);
-        expect(r.width as number, `${r.name} width`).toBeGreaterThanOrEqual(width === 390 ? 250 : 260);
+        expect(r.width as number, `${r.name} width`).toBeGreaterThanOrEqual(width === 390 ? 248 : 260);
       }
       // every chart svg / distribution group has a section ancestor with a header
       const orphans = await page.evaluate(

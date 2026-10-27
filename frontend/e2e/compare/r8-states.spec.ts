@@ -34,7 +34,7 @@ for (const width of [1440, 390]) {
     const frame = page.getByTestId('compare-skeleton');
     await expect(frame).toBeVisible();
     await expect(part(page, 'run-grid').locator('[role="status"]')).toHaveCount(4);
-    within((await box(part(page, 'run-grid').locator('[role="status"]').first())).h, width === 1440 ? 242 : 232, 4, 'run placeholder');
+    within((await box(part(page, 'run-grid').locator('[role="status"]').first())).h, width === 1440 ? 242 : 254, 4, 'run placeholder');
     const loading = {
       runs: (await box(part(page, 'section-runs'))).h,
       averages: (await box(part(page, 'section-averages'))).h,

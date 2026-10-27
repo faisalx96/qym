@@ -40,7 +40,8 @@ const size = async (page: Page, selector: string, nth = 0) => {
 
 // Measured on the product 2026-10-22 (impl-notes-c.md); the spec's mock numbers are in the comments.
 const BAND = { 1440: 41.5, 1024: 71, 390: 193 } as const; // QC-U4 (spec 33.5 / 63 / 185: the real band adds the closed Collapse's 8 px)
-const SECTION = { 1440: 339.5, 1024: 339.5, 390: 685.4 } as const; // QC-U12 (spec 339.5 / 351.5 / 682.4)
+// QC-U12 (spec 339.5 / 351.5 / 682.4); round 8b (owner decision H6): the 69 px lead-in of the old head went, the 30 px panel came
+const SECTION = { 1440: 297.9, 1024: 297.9, 390: 635.6 } as const;
 
 test.describe('union run page', () => {
   for (const width of WIDTHS) {
@@ -123,7 +124,7 @@ test.describe('union run page', () => {
       await expect(section.getByTestId('dataset-breakdown')).not.toContainText('Loading');
       await expect(page.locator('[data-testid=show-items-link]').first()).toBeVisible();
       const sectionBox = await size(page, '#run-section-datasets');
-      expect(Math.abs(sectionBox.h - SECTION[width])).toBeLessThanOrEqual(width === 390 ? 12 : 6);
+      expect(Math.abs(sectionBox.h - SECTION[width]), `section height ${sectionBox.h}`).toBeLessThanOrEqual(width === 390 ? 12 : 6);
       if (width !== 390) {
         // QC-U13: the table is the column minus its frame and never scrolls sideways
         const table = await page
@@ -131,7 +132,7 @@ test.describe('union run page', () => {
           .or(page.getByRole('grid', { name: 'Scores per dataset' }))
           .first();
         const box = await table.boundingBox();
-        expect(box!.width).toBe(width === 1440 ? 1191 : 775);
+        expect(box!.width).toBe(width === 1440 ? 1161 : 753);
         expect(box!.height).toBe(210);
         const scroll = await table.evaluate((e) => {
           const host = e.closest('[data-datatable],div') as HTMLElement;

@@ -60,9 +60,9 @@ test('C-cohort-1: two sides, 2 columns from 1024, 1 column at 390, at most 95 hi
 
 test('C-run-1: 4-up at 1440, 2-up at 1024, 1-up at 390; the same card at any run count', async ({ page }) => {
   for (const [w, cardW, tol] of [
-    [1440, 287, 3],
-    [1024, 380, 3],
-    [390, 277, 2],
+    [1440, 280, 3], // 287 / 380 / 277 before the section panel took 30 px (owner decision H6)
+    [1024, 365, 3],
+    [390, 247, 2],
   ] as const) {
     await openCompare(page, s.four, w);
     const cards = part(page, 'run-card');

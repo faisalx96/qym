@@ -167,7 +167,7 @@ test('C-row-1/2: cards of 54 with a pitch of 60, 20 per page, a 26 px chevron, t
   const css = await rows.first().evaluate((e) => ({ r: getComputedStyle(e).borderRadius, b: getComputedStyle(e).borderTopWidth }));
   expect(css.r).toBe('8px');
   expect(css.b).toBe('1px');
-  within((await box(part(page, 'item-list'))).w, 1194, 4, 'list width');
+  within((await box(part(page, 'item-list'))).w, 1163, 4, 'list width');
   const chev = await box(rows.first().locator('[data-part="item-chevron"]'));
   within(chev.w, 26, 1, 'chevron');
   within(chev.h, 26, 1, 'chevron');
@@ -202,13 +202,14 @@ test('C-row-3: one chip per run on one line at 1440, swatch inside, band colour,
   await expect(chip.locator('[data-part="run-letter"], span').nth(1)).toHaveText('A');
 });
 
-test('C-row-3 (390): four chips sit under the title, one line, the row stays at most 88 high', async ({ page }) => {
+test('C-row-3 (390): four chips sit under the title in at most two lines, the row stays at most 112 high', async ({ page }) => {
   await openCompare(page, s.four, 390);
   const row = part(page, 'item-row').first();
   const chips = row.locator('[data-part="item-score-chip"]');
   const ys = await chips.evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().y))).size);
-  expect(ys).toBe(1);
-  expect((await box(row)).h).toBeLessThanOrEqual(88); // amended from 76: chips carry a letter
+  // amended: one line (88 high) before the section panel took 30 px of the 247 px chip line (owner decision H6)
+  expect(ys).toBeLessThanOrEqual(2);
+  expect((await box(row)).h).toBeLessThanOrEqual(112);
   const title = await box(row.locator('[data-part="item-title"]'));
   expect((await box(chips.first())).y).toBeGreaterThanOrEqual(title.y + title.h - 2);
   await noSidewaysScroll(page);

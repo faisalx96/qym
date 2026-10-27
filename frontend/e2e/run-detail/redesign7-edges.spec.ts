@@ -56,7 +56,8 @@ for (const width of [1440, 1024] as const) {
         // D3-2: the only gap in the line is the open item's detail row
         const detail = rep.detailRows.filter((d) => !d.strip);
         for (const side of ['start', 'end'] as const) {
-          const gaps = rep.gaps[side];
+          // round 8b: below 8 px is the virtualizer's end spacer (5.1 px at 1024 once the section panel adds its bottom padding), not a row without the line
+          const gaps = rep.gaps[side].filter((g) => g > 8);
           if (open) {
             expect(gaps.length, `${state}: ${side} gaps ${JSON.stringify(gaps)}`).toBe(detail.length);
             expect(

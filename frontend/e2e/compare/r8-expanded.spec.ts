@@ -68,7 +68,7 @@ test('C-exp-3: 4 columns of 284 at 1440 without scroll; 5+ scroll with snap; 102
   let detail = await open(page, s.four, 1440);
   let grid = detail.locator('[data-part="output-grid"]');
   const cards = detail.getByTestId('output-card');
-  for (let i = 0; i < 4; i++) within((await box(cards.nth(i))).w, 284, 4, `card ${i}`);
+  for (let i = 0; i < 4; i++) within((await box(cards.nth(i))).w, 277, 4, `card ${i}`); // 284 before the section panel (owner decision H6; the grid minimum is 17rem)
   const xs = await cards.evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().y))).size);
   expect(xs).toBe(1);
   let [sw, cw] = await grid.evaluate((e) => [e.scrollWidth, e.clientWidth]);

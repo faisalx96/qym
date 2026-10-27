@@ -76,39 +76,40 @@ for (const [n, width] of [
 test('C-page-5: section heights, 4 runs at 1440', async ({ page }) => {
   await openCompare(page, s.four, 1440);
   const h = await heights(page);
-  within(h.runs!, 311, 6, 'runs');
-  within(h.averages!, 355, 6, 'averages');
-  within(h.overview!, 393, 6, 'overview');
-  within(h.errors!, 440, 6, 'errors');
-  within(h.items!, 1375, 6, 'items');
+  // every section grew by the panel (owner decision H6): 30 px of padding and border minus the 14 px lead-in it replaced
+  within(h.runs!, 328, 6, 'runs');
+  within(h.averages!, 371, 6, 'averages');
+  within(h.overview!, 409, 6, 'overview');
+  within(h.errors!, 490, 6, 'errors'); // 440 + 16 panel + 18 wrapped error message (owner decision H6)
+  within(h.items!, 1391, 6, 'items');
   // one metadata key: the section is the head plus one row of cards
   await part(page, 'category-chip-bar').getByRole('button', { name: /^domain/ }).click();
-  within((await box(part(page, 'section-categories'))).h, 285, 6, 'categories with one key');
+  within((await box(part(page, 'section-categories'))).h, 301, 6, 'categories with one key');
 });
 
 test('C-page-5 (1024): runs, averages 4 runs; overview amended to the measured 480', async ({ page }) => {
   await openCompare(page, s.four, 1024);
   const h = await heights(page);
-  within(h.runs!, 539, 6, 'runs');
-  within(h.averages!, 376, 6, 'averages');
-  within(h.overview!, 480, 6, 'overview (amended: the legend names carry letters, 2 lines)');
+  within(h.runs!, 552, 6, 'runs');
+  within(h.averages!, 392, 6, 'averages');
+  within(h.overview!, 496, 6, 'overview (amended: the legend names carry letters, 2 lines)');
 });
 
 test('C-page-5 (390): averages and items stay within their ceilings', async ({ page }) => {
   await openCompare(page, s.four, 390);
   const h = await heights(page);
   expect(h.averages!).toBeLessThanOrEqual(1200);
-  expect(h.items!).toBeLessThanOrEqual(2200); // amended from 1820: chips with letters wrap under the title
+  expect(h.items!).toBeLessThanOrEqual(2600); // amended from 1820 (chips with letters wrap under the title) and from 2200 (the panel padding wraps the chips to two lines at 390, measured 2571; owner decision H6)
 });
 
 test('C-page-6: eight runs keep the 4-run recipe (two rows of cards, no Run-details button)', async ({ page }) => {
   await openCompare(page, s.eight, 1440);
   const h = await heights(page);
-  within(h.runs!, 568, 8, 'runs (amended: the letter badge wraps one more name)');
-  within(h.averages!, 385, 8, 'averages (amended: column heads wrap to 3 lines with letters)');
-  within(h.overview!, 393, 6, 'overview');
-  within(h.errors!, 620, 8, 'errors');
-  within(h.items!, 1375, 8, 'items');
+  within(h.runs!, 584, 8, 'runs (amended: the letter badge wraps one more name; +16 for the panel, owner decision H6)');
+  within(h.averages!, 418, 8, 'averages (amended: column heads wrap to 3 lines with letters)');
+  within(h.overview!, 409, 6, 'overview');
+  within(h.errors!, 708, 8, 'errors'); // 620 + 16 panel + 72 wrapped messages (owner decision H6)
+  within(h.items!, 1391, 8, 'items');
   await expect(page.getByRole('button', { name: /Run details/ })).toHaveCount(0);
   const tops = await part(page, 'run-card').evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().y))).size);
   expect(tops).toBe(2);

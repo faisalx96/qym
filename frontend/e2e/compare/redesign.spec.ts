@@ -328,6 +328,8 @@ test.describe('accessibility and phone', () => {
       .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
     expect(new Set(tops).size).toBe(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    // the pointer rests where the click left it; after the section panel moved the lists it sits over an error row, whose siblings dim (--dim-opacity)
+    await page.mouse.move(0, 0);
     expect(await axe(page)).toEqual([]);
   });
 });

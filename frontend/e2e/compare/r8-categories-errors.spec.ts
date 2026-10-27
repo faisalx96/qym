@@ -38,7 +38,7 @@ test('C-cat-2/3/4: 3-up cards with a value rail, a header row, run rows with a r
   await openCompare(page, s.four, 1440, { catKeys: 'complexity' });
   const cards = part(page, 'category-card');
   await expect(cards).toHaveCount(3);
-  within((await box(cards.first())).w, 388, 3, 'card width');
+  within((await box(cards.first())).w, 378, 3, 'card width'); // 388 before the section panel took 30 px (owner decision H6)
   within((await box(cards.first())).h, 179, 4, 'card height (4 runs)');
   const tops = await cards.evaluateAll((els) => new Set(els.map((e) => Math.round(e.getBoundingClientRect().y))).size);
   expect(tops).toBe(1);
@@ -76,8 +76,8 @@ test('C-cat-2/3/4: 3-up cards with a value rail, a header row, run rows with a r
   await expect(rows.first()).toContainText('Baseline');
   await expect(rows.nth(1)).toContainText('pts');
   for (const [w, cols, cw] of [
-    [1024, 2, 380],
-    [390, 1, 277],
+    [1024, 2, 366], // 380 / 277 before the section panel took 30 px (owner decision H6)
+    [390, 1, 247],
   ] as const) {
     await openCompare(page, s.four, w, { catKeys: 'complexity' });
     const ys = await part(page, 'category-card').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
@@ -118,7 +118,7 @@ test('C-cat-5: a card filters, shows the banner and the Filters badge, scrolls t
   await expectShown(page, n);
 });
 
-test('C-err-1/2: groups with a count, cards 287 wide with a rail, every run listed (zeros included) with its change', async ({
+test('C-err-1/2: groups with a count, cards 280 wide with a rail, every run listed (zeros included) with its change', async ({
   page,
 }) => {
   await openCompare(page, s.four, 1440);
@@ -129,8 +129,8 @@ test('C-err-1/2: groups with a count, cards 287 wide with a rail, every run list
   await expect(groups.first().locator('svg').first()).toBeVisible();
   const cards = part(page, 'error-card');
   const timeout = cards.filter({ hasText: /TimeoutError/ });
-  within((await box(timeout)).w, 287, 3, 'error card width');
-  within((await box(timeout)).h, 149, 3, 'error card height with 4 runs');
+  within((await box(timeout)).w, 280, 3, 'error card width'); // 287 before the section panel (owner decision H6)
+  within((await box(timeout)).h, 167, 3, 'error card height with 4 runs'); // 149 before the narrower card (panel padding, owner decision H6) wrapped the message
   const token = (n: string) => page.evaluate((v) => {
     const el = document.createElement('i');
     el.style.color = `var(${v})`;
@@ -152,11 +152,11 @@ test('C-err-1/2: groups with a count, cards 287 wide with a rail, every run list
   expect(count).toMatch(/mono/i);
 });
 
-test('C-err-1: 8 runs list every run too and the card stays at most 240 high', async ({ page }) => {
+test('C-err-1: 8 runs list every run too and the card stays at most 280 high', async ({ page }) => {
   await openCompare(page, s.eight, 1440);
   const timeout = part(page, 'error-card').filter({ hasText: /TimeoutError/ });
   await expect(timeout.locator('[data-part="error-run"]')).toHaveCount(8);
-  expect((await box(timeout)).h).toBeLessThanOrEqual(240);
+  expect((await box(timeout)).h).toBeLessThanOrEqual(280); // amended from 240: the narrower card (panel padding, owner decision H6) wraps the message
 });
 
 test('C-err-3: the card is a button; click, Enter and Space filter the items with no layout change', async ({ page }) => {
