@@ -63,6 +63,8 @@ export interface Experiment {
   spec: Record<string, unknown>;
   versioning_details: Record<string, unknown>;
   priority: EvalPriority;
+  /** Jobs per own priority (the experiment's `priority` is only the default of the runs launched with it). */
+  priorities?: Record<EvalPriority, number>;
   /** Asks the Evaluation Service for a quiet gateway; immutable after launch. */
   latency_sensitive: boolean;
   preemption_acknowledged_at: string | null;
@@ -131,6 +133,8 @@ export interface ExperimentJob {
   environment_id: string;
   environment_name: string | null;
   combo_index: number;
+  /** This job's own priority (LOW, NORMAL, HIGH); null on a job older than per-run priority. */
+  priority?: EvalPriority | null;
   /** Position of the job's dataset pair when the platform ran the datasets one by one; 0 otherwise. */
   dataset_index?: number;
   /** The one pair a fanned-out job ran. */

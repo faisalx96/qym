@@ -39,8 +39,9 @@ const lines = (page: Page) => page.locator('[data-env-version]');
 const boxOf = (page: Page, name: string) => page.getByRole('listitem').filter({ hasText: name });
 const lineOf = (page: Page, name: string) => boxOf(page, name).locator('[data-env-version]');
 const loaded = (page: Page) => page.locator('[data-env-version][data-status="ok"]');
+// Refresh moved to the box's head row beside Details (round 9, point 1: the box is two rows plus the versions line).
 const refreshOf = (page: Page, name: string) =>
-  lineOf(page, name).getByRole('button', { name: `Refresh versions of ${name}` });
+  boxOf(page, name).getByRole('button', { name: `Refresh versions of ${name}` });
 const round = (n: number) => Math.round(n * 10) / 10;
 /** Sizes are measured in the web fonts: the mono tags are taller in the fallback font. */
 async function box(l: Locator) {
@@ -101,18 +102,22 @@ test.describe('versions inside the environment box on step 1', () => {
       const liBox = await box(boxOf(page, 'Alpha'));
       const b = await box(lineOf(page, 'Alpha'));
       console.log('QA4-2 box', width, round(liBox.width), round(liBox.height), 'line', round(b.width), round(b.height));
-      expect(round(liBox.width - b.width)).toBeCloseTo({ 1440: 18, 1024: 18, 390: 18 }[width], 0);
+      // 14 px padding each side + the 1 px border and the 3 px rail of a selected box
+      expect(round(liBox.width - b.width)).toBeCloseTo(32, 0);
       // Row 1 = label | Refresh (24 px), then the values grid: two columns in the 343 px box (two
       // rows), one column at 390 (three rows); 4 px top gap + 1 px rule.
-      expect(round(b.height)).toBe({ 1440: 77, 1024: 77, 390: 101 }[width]);
+      // One inline row (label + pairs, 25 px with its rule and gap); the pairs wrap to a second row in a narrow box.
+      expect(b.height).toBeGreaterThanOrEqual(25);
+      expect(b.height).toBeLessThanOrEqual(50);
       expect(await overflowing(boxOf(page, 'Alpha'))).toEqual([]);
       expect(await overflowing(boxOf(page, 'Other'))).toEqual([]);
       // QA4-4: copy, one Refresh button per line, no input, no block title.
       await expect(lineOf(page, 'Alpha')).toContainText('Versions');
       await expect(page.getByText('Evaluation Service versions')).toHaveCount(0);
       await expect(page.getByText('Current versions')).toHaveCount(0);
-      await expect(lineOf(page, 'Alpha').getByRole('button')).toHaveText(['Refresh']);
-      await expect(lineOf(page, 'Other').getByRole('button')).toHaveText(['Refresh']);
+      await expect(lineOf(page, 'Alpha').getByRole('button')).toHaveCount(0);
+      await expect(refreshOf(page, 'Alpha')).toHaveText('Refresh');
+      await expect(refreshOf(page, 'Other')).toHaveText('Refresh');
       await expect(lines(page).locator('input, textarea, select, [contenteditable]')).toHaveCount(0);
       await expect(lineOf(page, 'Alpha')).toContainText('agent-1.4.2');
       await expect(lineOf(page, 'Other')).toContainText('agent-9.9.9');
@@ -315,7 +320,7 @@ test.describe('versions inside the environment box on step 1', () => {
     }
     const at = (needle: string) => seen.findIndex((s) => s.includes(needle));
     console.log('QA4-13 tab order', JSON.stringify(seen));
-    const order = [at('Environment default'), at('Latency-sensitive run'), at('Alpha'), at('Details of Alpha'), at('Refresh versions of Alpha'), at('New environment'), at('golden')];
+    const order = [at('Environment default'), at('Latency-sensitive run'), at('Alpha'), at('Refresh versions of Alpha'), at('Details of Alpha'), at('New environment'), at('golden')];
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
     await expect(refreshOf(page, 'Alpha')).toHaveAccessibleName('Refresh versions of Alpha');

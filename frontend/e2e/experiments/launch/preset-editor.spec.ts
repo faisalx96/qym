@@ -2,7 +2,7 @@
 /** Brief 06 §2.6 (journey 6): the default preset editor (the launch form in editor mode). */
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { resetFakes, test } from '../support';
-import { dialog, listPresets, maxAttempts, seedLaunch, type LaunchFixture } from './launchSupport';
+import { dialog, launchButton, listPresets, maxAttempts, seedLaunch, toReview, type LaunchFixture } from './launchSupport';
 
 test.setTimeout(90_000);
 test.use({ actionTimeout: 10_000 });
@@ -29,14 +29,19 @@ async function versionsOf(
   return ((await res.json()) as { versions: any[] }).versions;
 }
 
-const pane = (page: Page) => page.getByRole('complementary', { name: 'Review and publish' });
+// Round 9: the editor is the Customize wizard. The review (notes, changes, checks) is its last step; Publish is the bar's.
+const pane = (page: Page) => page.getByTestId('publish-review');
 const notesBox = (page: Page) => pane(page).getByRole('textbox', { name: /Release notes/ });
-const publishBtn = (page: Page, v: number) => pane(page).getByRole('button', { name: `Publish v${v}` });
+const publishBtn = (page: Page, v: number) => launchButton(page).filter({ hasText: `Publish v${v}` });
 
 async function openEditor(page: Page, envId: string, q = '') {
   await page.goto(editorUrl(envId, q));
-  await expect(pane(page)).toBeVisible();
+  await expect(page.locator('[data-part=customize][data-mode=editor]')).toBeVisible({ timeout: 25_000 });
 }
+const toNotes = async (page: Page) => {
+  await toReview(page);
+  await expect(notesBox(page)).toBeVisible();
+};
 
 test('edit from v1: Publish v2 needs a change and notes, confirms, and creates version 2', async ({
   page,
@@ -46,6 +51,7 @@ test('edit from v1: Publish v2 needs a change and notes, confirms, and creates v
   await expect(publishBtn(page, 2)).toBeDisabled();
   const field = await maxAttempts(page);
   await field.fill('3');
+  await toNotes(page);
   await expect(pane(page)).toContainText('Environment configurations: 1 change');
   // Changed, but notes are still required.
   await expect(publishBtn(page, 2)).toBeDisabled();
@@ -75,6 +81,7 @@ test('an environment without a default preset publishes v1', async ({ page, requ
     .first()
     .click();
   await page.getByRole('option', { name: 'golden' }).click();
+  await toNotes(page);
   await notesBox(page).fill('First default');
   await publishBtn(page, 1).click();
   await dialog(page).getByRole('button', { name: 'Publish v1' }).click();
@@ -92,6 +99,8 @@ test('promote a saved preset to the default preset', async ({ page, request }) =
       `default-preset/edit\\?.*promote=saved.*id=${saved.id}|default-preset/edit\\?.*id=${saved.id}.*promote=saved`,
     ),
   );
+  await expect(page.getByRole('region', { name: 'Compared with' })).toBeVisible();
+  await toNotes(page);
   await expect(pane(page)).toContainText('Compared with');
   await expect(publishBtn(page, 2)).toBeDisabled(); // notes missing
   await notesBox(page).fill('Promote the slow timeout');
@@ -111,11 +120,13 @@ test('409: publishing from a stale tab shows the conflict and reopening drafts v
   await openEditor(page, f.env.id);
   const field = await maxAttempts(page);
   await field.fill('2');
+  await toNotes(page);
   await notesBox(page).fill('from the stale tab');
 
   const other = await context.newPage();
   await openEditor(other, f.env.id);
   await (await maxAttempts(other)).fill('5');
+  await toReview(other);
   await notesBox(other).fill('published first');
   await publishBtn(other, 2).click();
   await dialog(other).getByRole('button', { name: 'Publish v2' }).click();
@@ -134,8 +145,8 @@ test('409: publishing from a stale tab shows the conflict and reopening drafts v
 test('leaving the editor with unpublished changes asks first', async ({ page }) => {
   await openEditor(page, f.env.id);
   await (await maxAttempts(page)).fill('4');
-  await expect(pane(page)).toContainText('1 change');
-  await pane(page).getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('[data-part=bar-status]')).toContainText('1 change');
+  await page.locator('[data-part=bar-cancel]').click();
   await expect(dialog(page)).toContainText('Leave without publishing?');
   await dialog(page).getByRole('button', { name: 'Keep editing' }).click();
   await expect(page).toHaveURL(/default-preset\/edit/);

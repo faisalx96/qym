@@ -6,7 +6,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { createEnvironment, fakeJobsOf, getExperiment, resetFakes, setFakeFlags, FAKE_A, test } from '../support';
 import { datasetSelect, dsBox } from './multiSupport';
-import { launchButton, nameBox, openLaunch, review, seedLaunch, type LaunchFixture } from './launchSupport';
+import { launchButton, nameBox, openLaunch, review, seedLaunch, type LaunchFixture, toReview } from './launchSupport';
 
 test.setTimeout(120_000);
 test.use({ actionTimeout: 10_000 });
@@ -61,6 +61,7 @@ test.describe('Run settings', () => {
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 
       // Review row (B5-35): "Latency-sensitive: yes" after Priority.
+      await toReview(page);
       const summary = review(page).getByLabel('Summary');
       await expect(summary).toContainText('Latency-sensitive');
       await expect(summary).toContainText('yes');
@@ -121,6 +122,7 @@ test.describe('Review warnings', () => {
     await openLaunch(page, f.project.slug, `?env=${declaring.id}`);
     await nameBox(page).fill('ceiling');
     await checkbox(page).check({ force: true });
+    await toReview(page);
     const callout = review(page).getByRole('note').filter({ hasText: 'Post-run ceiling not set' });
     await expect(callout).toBeVisible({ timeout: 15_000 });
     await expect(callout).toContainText(CEILING);
@@ -132,6 +134,7 @@ test.describe('Review warnings', () => {
     expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('INPUT');
     await openLaunch(page, f.project.slug, `?env=${declaring.id}`);
     // A warning is not a problem: it never joins the list of problems to fix (B5-41).
+    await toReview(page);
     await expect(review(page).getByRole('list', { name: 'Problems to fix' })).not.toContainText('ceiling');
   });
 });
@@ -202,6 +205,7 @@ test.describe('Token warning', () => {
       await dsBox(page, 'golden').getByRole('button', { name: 'Remove golden' }).click();
       await datasetSelect(page).click();
       await page.getByRole('option', { name: /golden-private/ }).click();
+      await toReview(page);
       const callout = review(page).getByRole('note').filter({ hasText: 'Dataset read token will not be sent' });
       await expect(callout).toBeVisible({ timeout: 15_000 });
       await expect(callout).toContainText(

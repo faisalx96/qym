@@ -98,6 +98,20 @@ export function JobHistoryCard({
         ]
       : []),
     {
+      id: 'priority',
+      header: 'Priority',
+      width: 100,
+      priority: 3,
+      cell: (j: ExperimentJob) => {
+        const p = j.priority ?? detail.priority;
+        return (
+          <Tag tone={p === 'HIGH' ? 'danger' : undefined} data-job-priority={p}>
+            {p.charAt(0) + p.slice(1).toLowerCase()}
+          </Tag>
+        );
+      },
+    },
+    {
       id: 'params',
       header: 'Params',
       width: 220,

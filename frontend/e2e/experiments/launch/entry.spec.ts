@@ -15,7 +15,9 @@ import {
   openHome,
   openLaunch,
   rail,
+  launchBar,
   review,
+  toReview,
   seedLaunch,
   type LaunchFixture,
 } from './launchSupport';
@@ -122,12 +124,12 @@ test.describe('entry', () => {
     await expect(page.getByRole('radio', { name: /Default preset v1/ })).toBeChecked();
     await expect(page.getByRole('status').filter({ hasText: 'Based on' })).toContainText('Default preset v1');
     await expect(launchButton(page)).toBeDisabled();
-    await expect(review(page)).toContainText('Name the experiment.');
+    await expect(launchBar(page)).toContainText('Fix 1 problem first: Name');
     await goStep(page, 'where');
     await nameBox(page).fill('entry run');
     await expectReady(page);
     await expect(launchButton(page)).toBeEnabled();
-    await expect(review(page)).toContainText(/1\s*run to launch/);
+    await expect(launchBar(page)).toContainText(/1\s*run to launch/);
   });
 
   test('an environment without a default preset starts from scratch and asks for a dataset', async ({
@@ -142,7 +144,7 @@ test.describe('entry', () => {
     await expect(
       page.getByText('No default preset is published for Bare yet, so the form starts from scratch.'),
     ).toBeVisible();
-    await expect(review(page)).toContainText('Choose a dataset.');
+    await expect(launchBar(page)).toContainText('Fix 1 problem first: Dataset');
     await goStep(page, 'where');
     await nameBox(page).fill('scratch run');
     await page
@@ -195,6 +197,7 @@ test.describe('layering edits on a starting point', () => {
     await expect(wrapper).toHaveAttribute('data-changed', '');
     await expect(wrapper.getByText('changed', { exact: true })).toBeAttached();
     await expect(rail(page).getByRole('button', { name: /Environment configurations/ })).toContainText('1');
+    await toReview(page);
     await expect(review(page)).toContainText('Environment configurations: 1 change');
 
     await page.getByRole('button', { name: /^Reset .*Max Attempts/ }).click();

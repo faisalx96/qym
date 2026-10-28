@@ -70,6 +70,16 @@
   background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), var(--bg-elevated));
 }
 
+/* Tags inside the tinted selected box sit on the plain elevated fill, so their tone tint does not stack on the box tint
+   (axe: success and meta text kept 4.0 to 4.2:1 on the stacked fill, 4.5:1 needed). */
+.env[data-state='selected'] [data-tone] {
+  background: color-mix(in srgb, var(--tone) var(--tint-soft), var(--bg-elevated));
+}
+
+.env[data-state='selected'] .envTags > span:not([data-tone]) {
+  background: color-mix(in srgb, var(--text-primary) var(--tint-soft), var(--bg-elevated));
+}
+
 .env[data-state='flagged'] {
   border-color: var(--error);
   border-inline-start: var(--rail-width) solid var(--error);
