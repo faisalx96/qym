@@ -115,7 +115,8 @@
   grid-column: 1 / -1;
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--error);
+  /* --error alone is 4.2:1 on the elevated fill; lift it to clear 4.5:1 */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
 }
 
 .envTags {
@@ -600,7 +601,8 @@
 .errorText {
   margin: 0;
   font-size: var(--font-sm);
-  color: var(--error);
+  /* --error alone is 3.3:1 on the tinted selected box, 4.2:1 on the plain one; lift it to clear AA */
+  color: color-mix(in srgb, var(--error) 70%, var(--text-primary));
 }
 
 .versionSummary {

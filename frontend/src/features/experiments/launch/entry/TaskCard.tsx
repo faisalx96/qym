@@ -135,7 +135,7 @@ export function TaskCard() {
               ) : mixed ? (
                 <span className={styles.availLabel}>Cloned from an experiment that ran a different task per environment</span>
               ) : (
-                <span className={styles.availLabel}>Every ticked environment runs its Worker default</span>
+                <span className={styles.availLabel}>Environments run their Worker default</span>
               )}
             </span>
           </div>

@@ -22,7 +22,7 @@ import { useLaunch } from '@/features/experiments/launch/LaunchContext';
 import { LaunchProvider, type EditorSetup } from '@/features/experiments/launch/LaunchProvider';
 import styles from '@/features/experiments/launch/LaunchPage.module.css';
 import barStyles from '@/features/experiments/launch/review/launchBar.module.css';
-import { entryKey, useStep } from '@/features/experiments/launch/state/useStep';
+import { entryKey, locationKey, useStep } from '@/features/experiments/launch/state/useStep';
 import { LaunchWizard } from '@/features/experiments/launch/wizard/LaunchWizard';
 import { EDITOR_STEPS, type RevealStep } from '@/features/experiments/launch/wizard/steps';
 import { environmentPath } from '@/features/experiments/paths';
@@ -94,7 +94,7 @@ function EditorBody({
       dirty &&
       !done.current &&
       !skipGuard.current &&
-      currentLocation.pathname + currentLocation.search !== nextLocation.pathname + nextLocation.search,
+      locationKey(currentLocation) !== locationKey(nextLocation), // moving between steps is not leaving
   );
 
   const cancel = useCallback(() => navigate(environmentPath(slug, envId)), [navigate, slug, envId]);

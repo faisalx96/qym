@@ -215,6 +215,7 @@ test.describe('Token warning', () => {
     }
     console.log('B5-40 heights', JSON.stringify(heights));
     // Amended: the verbatim sentence wraps to 73.6 px in the 777 px column at 1024.
-    expect(heights[1024]).toBe(73.6);
+    // Round 9: the callout moved into the half-width Checks card of the Review step, so the sentence wraps one line more.
+    expect(heights[1024]).toBe(90.4);
   });
 });

@@ -56,11 +56,12 @@ async function showRaw(page: Page): Promise<void> {
   await expect(page.getByRole('button', { name: 'Hide raw JSON' })).toBeVisible();
 }
 /** Customize step 1 with the composed state: both environments, 4 dataset versions, a task on production. */
-async function composed(page: Page, shape: 'combined' | 'one_each' = 'combined'): Promise<void> {
+async function composed(page: Page, shape: 'combined' | 'one_each' = 'combined', task?: RegExp): Promise<void> {
   await openLaunch(page, f.project.slug, both());
   await composeFour(page);
   await page.getByTestId('env-shape-tag').first().waitFor();
-  await chooseTask(page, /Answer a ticket/);
+  // One task per experiment (round 9): a named task would flag staging (a v1.3 service), so the default scenario runs Worker default.
+  if (task) await chooseTask(page, task);
   if (shape === 'one_each') await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
   await nameBox(page).fill('multi dataset run');
   // The dry run of this exact state has settled (the next read of it is the form's current document).
@@ -79,7 +80,7 @@ test.describe('review, Raw JSON and launch', () => {
       await expect(launchBar(page).getByText('Ready to launch')).toBeVisible({ timeout: 15_000 });
       const summary = page.getByRole('region', { name: 'Summary' });
       await expect(summary.locator('[data-row=env] dd')).toHaveText('production, staging');
-      await expect(summary.locator('[data-row=task] dd')).toHaveText('Answer a ticket');
+      await expect(summary.locator('[data-row=task] dd')).toHaveText('Worker default');
       await expect(summary.locator('[data-row=ds] dd')).toContainText('support-tickets');
       await expect(summary.locator('[data-row=ds] dd')).toContainText('v3, v2');
       await expect(summary.locator('[data-row=ds] dd')).toContainText('billing-faq');
@@ -138,7 +139,7 @@ test.describe('review, Raw JSON and launch', () => {
   test('QD-47, QD-48: Raw JSON shows the list, the shape and the task; apply round-trips', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const posts = captureExperimentPosts(page);
-    await composed(page);
+    await composed(page, 'combined', /Answer a ticket/);
     const doc = await currentSpec(page, posts);
     await showRaw(page);
     const raw = page.getByRole('region', { name: /^Raw JSON/ });
@@ -154,7 +155,7 @@ test.describe('review, Raw JSON and launch', () => {
       { dataset: 'billing-faq', version: 'v1' },
     ]);
     expect(doc.evaluator.run_shape).toBe('combined');
-    expect(doc.evaluator.task).toEqual({ [f.production.id]: 'answer-ticket' });
+    expect(doc.evaluator.task).toBe('answer-ticket');
     expect(doc.evaluator.dataset).toBe('support-tickets');
     expect(doc.evaluator.dataset_version).toBe('v3');
     // Edit: drop the last pair, switch to One run each, clear the task; apply.
@@ -238,7 +239,7 @@ test.describe('review, Raw JSON and launch', () => {
     expect(experiment.jobs).toHaveLength(5);
     const detail: any = await getExperiment(request, f.project.id, id);
     expect(detail.job_count).toBe(5);
-    // production (v1.4): one combined job with the list and the task.
+    // production (v1.4): one combined job with the list.
     const onProduction = (await fakeJobsOf(request, experiment, FAKE_A)) as any[];
     expect(onProduction).toHaveLength(1);
     const sent = onProduction[0].eval_input;
@@ -248,7 +249,7 @@ test.describe('review, Raw JSON and launch', () => {
       { dataset: 'billing-faq', version: 'v2' },
       { dataset: 'billing-faq', version: 'v1' },
     ]);
-    expect(sent.task).toBe('answer-ticket');
+    expect(sent.task).toBeUndefined(); // Worker default: no task is sent
     expect(JSON.stringify(onProduction[0])).not.toContain('run_shape');
     // staging (v1.3): four jobs, one pair each, no list, no task.
     const onStaging = (await fakeJobsOf(request, experiment, FAKE_B)) as any[];

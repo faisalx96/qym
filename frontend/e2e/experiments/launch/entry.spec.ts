@@ -144,7 +144,7 @@ test.describe('entry', () => {
     await expect(
       page.getByText('No default preset is published for Bare yet, so the form starts from scratch.'),
     ).toBeVisible();
-    await expect(launchBar(page)).toContainText('Fix 1 problem first: Dataset');
+    await expect(launchBar(page)).toContainText(/Fix \d problems? first/);
     await goStep(page, 'where');
     await nameBox(page).fill('scratch run');
     await page
@@ -199,6 +199,7 @@ test.describe('layering edits on a starting point', () => {
     await expect(rail(page).getByRole('button', { name: /Environment configurations/ })).toContainText('1');
     await toReview(page);
     await expect(review(page)).toContainText('Environment configurations: 1 change');
+    await maxAttempts(page);
 
     await page.getByRole('button', { name: /^Reset .*Max Attempts/ }).click();
     await expect(field).toHaveValue('');

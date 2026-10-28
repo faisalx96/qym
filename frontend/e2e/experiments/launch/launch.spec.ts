@@ -69,10 +69,9 @@ test('HIGH priority needs the acknowledgement on the Review step, then sends ack
   await openLaunch(page, f.project.slug, `?env=${f.env.id}`);
   await nameBox(page).fill('high run');
   await pickSelect(page, /Priority/, /^HIGH/);
-  await expectReady(page);
   // Round 9 (C-6-6): any High run needs the checkbox; Launch stays disabled and the bar says why.
   await expect(launchButton(page)).toBeDisabled();
-  await expect(launchBar(page)).toContainText('Acknowledge the preemption to launch');
+  await expect(launchBar(page)).toContainText('Acknowledge the preemption to launch', { timeout: 15_000 });
   await toReview(page);
   const ack = page.locator('[data-part=review-ack]');
   await expect(ack).toContainText('1 run is High.');

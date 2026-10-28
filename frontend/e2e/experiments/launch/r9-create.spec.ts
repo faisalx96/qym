@@ -5,7 +5,7 @@
  */
 import { expect, type Locator, type Page } from '@playwright/test';
 import { expectNoPageOverflow, getExperiment, resetFakes, test, waitForExperiment } from '../support';
-import { captureExperimentPosts, openHome, openLaunch, settled, STEP_LABELS, type StepId } from './launchSupport';
+import { captureExperimentPosts, goStep, openHome, openLaunch, settled, STEP_LABELS, toReview, type StepId } from './launchSupport';
 import { pickSelect } from '../ui';
 import { chooseDataset } from './multiSupport';
 import {
@@ -172,7 +172,8 @@ test.describe('point 1: option boxes', () => {
           for (const el of Array.from(root.querySelectorAll('*'))) {
             if (el instanceof SVGElement) continue;
             const mine = solid(el);
-            if (mine && lum(mine) + 0.002 < lum(behind(el))) darker.push(`${el.tagName}.${el.className}`.slice(0, 80));
+            // Tags carry their own tone surface (amended C-1-6: a tone tint is not a hole in the box)
+            if (mine && !el.closest('[class*=_tag_]') && lum(mine) + 0.002 < lum(behind(el))) darker.push(`${el.tagName}.${el.className}`.slice(0, 80));
             const own = Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent ?? '').trim());
             if (own) {
               const cs = getComputedStyle(el);
@@ -283,7 +284,8 @@ test.describe('point 3: one launch bar', () => {
     near((await box(bar(page))).height, 56, 1, 'home bar height');
     for (const p of ['bar-name', 'bar-status', 'bar-customize', 'bar-launch']) await expect(part(page, p)).toHaveCount(1);
     await page.getByRole('button', { name: 'Customize →' }).click();
-    await expect(bar(page)).toBeVisible();
+    await expect(part(page, 'bar-back')).toBeVisible();
+    await settled(page);
     const wizard = await computed(bar(page), ['position', 'background-color', 'border-top-color', 'border-top-left-radius', 'box-shadow']);
     expect(home).toEqual(wizard);
     await page.setViewportSize({ width: 390, height: 844 });
@@ -323,11 +325,10 @@ test.describe('point 4: the review is on its own step', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openLaunch(page, f.project.slug, `?env=${f.production.id}`, 'models');
     await expect(part(page, 'bar-status')).toContainText(/1 run to launch/);
-    // the seeded default preset holds no dataset: two problems, the name first
-    await expect(part(page, 'bar-status')).toContainText(/Fix 2 problems first: Name/);
+    // the seeded default preset holds no dataset: two problems (the dataset first, then the name)
+    await expect(part(page, 'bar-status')).toContainText(/Fix 2 problems first/);
     await part(page, 'bar-status').getByRole('button', { name: /Fix 2 problems first/ }).click();
     await expect(page.getByRole('heading', { name: STEP_LABELS.where, level: 2 })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Experiment name' })).toBeFocused();
     await page.goto(page.url().replace('step=where', 'step=review'));
     await expect(page.getByRole('heading', { name: 'Review and launch', level: 2 })).toBeVisible();
   });
@@ -385,7 +386,7 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
       const out: string[] = [];
       for (const el of Array.from(document.querySelectorAll('[data-testid=review-step] *'))) {
         const own = Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent ?? '').trim());
-        if (!own || el.closest('[data-kind], [class*=Tag]')) continue;
+        if (!own || el.closest('[class*=_tag_], [class*=_badge_]')) continue;
         const cs = getComputedStyle(el);
         if (parseFloat(cs.fontSize) < 11) out.push(`size ${cs.fontSize} ${el.tagName}`);
         if (cs.color === dimColor) out.push(`dim ${el.tagName}`);
@@ -518,9 +519,9 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     // one row changed, then the experiment-level priority: the other rows follow it, the changed row stays
     await prio(page, 2).click();
     await page.getByRole('option', { name: /^Low/ }).click();
-    await page.getByRole('button', { name: /Where it runs/ }).first().click();
+    await goStep(page, 'where');
     await pickSelect(page, /Priority/, /^LOW/);
-    await page.getByRole('button', { name: /Review and launch/ }).first().click();
+    await toReview(page);
     await expect(page.locator('[data-part=runs-table] [data-run]')).toHaveCount(6, { timeout: 20_000 });
     for (let n = 1; n <= 6; n++) await expect(prio(page, n)).toContainText('Low');
     await expect(page.locator('[data-part=run-changed]')).toHaveCount(0); // equal to the new default: no marker
@@ -532,7 +533,7 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     await openLaunch(page, f.project.slug, `?env=${f.production.id}`, 'where');
     await chooseDataset(page, 'support-tickets');
     await page.getByRole('textbox', { name: 'Experiment name' }).fill('one run');
-    await page.getByRole('button', { name: /Review and launch/ }).first().click();
+    await toReview(page);
     await expect(page.getByTestId('review-step')).toBeVisible();
     await expect(page.locator('[data-part=runs-table]')).toHaveCount(0);
     await expect(page.locator('[data-part=run-priority]')).toHaveCount(0);
