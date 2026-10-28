@@ -99,7 +99,7 @@ describe('ReviewStep (round 9, points 4-6)', () => {
   it('C-5-3 / C-5-4 one row per run and only the columns that vary', () => {
     const jobs = sweepJobs();
     mount(createDocument({ environmentIds: ['p', 's'], name: 'x' }), jobs);
-    const table = screen.getByRole('table', { name: 'Runs to launch' });
+    const table = screen.getByRole('grid', { name: 'Runs to launch' });
     expect(within(table).getAllByRole('row')).toHaveLength(7);
     expect(Array.from(table.querySelectorAll('th')).map((h) => h.textContent)).toEqual(['#', 'Environment', 'Swept setting', 'Priority']);
     expect(visibleColumns([])).toEqual([]);
@@ -172,7 +172,7 @@ describe('ReviewStep (round 9, points 4-6)', () => {
 
   it('C-6-10 a single run draws no table', () => {
     mount(createDocument({ environmentIds: ['p'], name: 'x' }), sweepJobs().slice(0, 1));
-    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByRole('grid')).toBeNull();
     expect(screen.queryByRole('button', { name: /Priority of run/ })).toBeNull();
     expect(screen.queryByText('Set every run to')).toBeNull();
   });

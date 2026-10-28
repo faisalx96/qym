@@ -123,44 +123,10 @@
   }
 }
 
-/* Runs: one row per run, one fact per cell. */
+/* Runs: one row per run, one fact per cell (a DataTable on the compact 32 px row). */
 .tableWrap {
-  overflow-x: auto;
   margin-inline: calc(var(--space-lg) * -1);
-}
-
-.table {
-  inline-size: 100%;
-  border-collapse: collapse;
-  font-size: var(--font-base);
-  color: var(--text-primary);
-}
-
-.table th {
-  padding: var(--space-xs) var(--space-md);
-  background: var(--bg-elevated);
-  font-size: var(--font-sm);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-align: start;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.table td {
-  block-size: var(--row-compact);
-  padding: 0 var(--space-md);
-  border-block-start: 1px solid var(--border-subtle);
-  vertical-align: middle;
-}
-
-.table .num {
-  inline-size: 3rem;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  text-align: end;
-  color: var(--text-muted);
+  min-width: 0;
 }
 
 .mono {

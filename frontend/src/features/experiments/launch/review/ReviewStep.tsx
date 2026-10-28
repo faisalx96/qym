@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import type { EnvTasksPayload } from '@/api/launch';
 import { useEnvTaskLists } from '@/api/launch';
 import { useMediaQuery } from '@/features/shell';
-import { Checkbox, Select, Tag } from '@/ui';
+import { Checkbox, DataTable, Select, Tag, type Column } from '@/ui';
 import { plural } from '../../lib/format';
 import { Callout } from '../components/Callout';
 import { useGoToSection } from '../components/goToSection';
@@ -146,6 +146,33 @@ export function visibleColumns(rows: readonly RunRow[]): Array<'env' | 'dataset'
 }
 
 const COLUMN_LABEL = { env: 'Environment', dataset: 'Dataset', swept: 'Swept setting', task: 'Task' } as const;
+
+function tableColumns(
+  columns: ReadonlyArray<'env' | 'dataset' | 'swept' | 'task'>,
+  fallback: Priority,
+): Column<RunRow>[] {
+  return [
+    { id: 'n', header: '#', label: 'Run number', type: 'number', width: 48, minWidth: 48, resizable: false, cell: (r) => r.index },
+    ...columns.map(
+      (c): Column<RunRow> => ({
+        id: c,
+        header: COLUMN_LABEL[c],
+        type: c === 'dataset' ? 'id' : 'text',
+        flex: c !== 'swept',
+        width: c === 'swept' ? 160 : 180,
+        cell: (r) => (c === 'swept' ? (r.swept ? <Tag kind="data">{r.swept}</Tag> : '—') : r[c]),
+      }),
+    ),
+    {
+      id: 'priority',
+      header: 'Priority',
+      width: 280,
+      minWidth: 280,
+      resizable: false,
+      cell: (r) => <PriorityCell row={r} fallback={fallback} />,
+    },
+  ];
+}
 
 function PriorityCell({ row, fallback }: { row: RunRow; fallback: Priority }) {
   const { doc, setDoc, ctx, readOnly } = useLaunch();
@@ -312,37 +339,19 @@ function RunsCard({ taskLists, onAckRef }: { taskLists: Record<string, EnvTasksP
             ))}
           </ul>
         ) : (
-          <div className={styles.tableWrap}>
-            <table className={styles.table} data-part="runs-table" aria-label="Runs to launch">
-              <thead>
-                <tr>
-                  <th scope="col" className={styles.num}>
-                    #
-                  </th>
-                  {columns.map((c) => (
-                    <th key={c} scope="col">
-                      {COLUMN_LABEL[c]}
-                    </th>
-                  ))}
-                  <th scope="col">Priority</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.key} data-run={row.index}>
-                    <td className={styles.num}>{row.index}</td>
-                    {columns.map((c) => (
-                      <td key={c} className={c === 'dataset' ? styles.mono : undefined}>
-                        <RunFact column={c} row={row} bare />
-                      </td>
-                    ))}
-                    <td>
-                      <PriorityCell row={row} fallback={fallback} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className={styles.tableWrap} data-part="runs-table">
+            <DataTable<RunRow>
+              aria-label="Runs to launch"
+              columns={tableColumns(columns, fallback)}
+              rows={rows}
+              rowKey={(r) => r.key}
+              density="compact"
+              variant="embedded"
+              columnMenu={false}
+              stickyHeader={false}
+              responsive="scroll"
+              rowProps={(r) => ({ 'data-run': String(r.index) })}
+            />
           </div>
         )
       ) : null}
@@ -350,14 +359,13 @@ function RunsCard({ taskLists, onAckRef }: { taskLists: Record<string, EnvTasksP
   );
 }
 
-function RunFact({ column, row, bare }: { column: 'env' | 'dataset' | 'swept' | 'task'; row: RunRow; bare?: boolean }) {
+function RunFact({ column, row }: { column: 'env' | 'dataset' | 'swept' | 'task'; row: RunRow }) {
   const value =
     column === 'swept' ? (
       row.swept ? <Tag kind="data">{row.swept}</Tag> : '—'
     ) : (
       row[column]
     );
-  if (bare) return <>{value}</>;
   return (
     <>
       <dt>{COLUMN_LABEL[column]}</dt>
