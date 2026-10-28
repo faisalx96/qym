@@ -166,7 +166,7 @@ export function DatasetsSection() {
         header: m,
         label: m,
         group: 'Mean score',
-        width: 104,
+        width: 88,
         priority: 2,
         type: 'number',
         cell: (l) => {

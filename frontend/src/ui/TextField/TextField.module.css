@@ -61,7 +61,7 @@
   font-size: var(--font-md);
   padding: 0 var(--space-md);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .prefix {

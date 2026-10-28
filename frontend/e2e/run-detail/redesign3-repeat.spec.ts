@@ -108,7 +108,7 @@ for (const width of [1440, 390]) {
         expect(t.meaning).toBeGreaterThan(0);
         expect(t.meaning).toBeLessThanOrEqual(80);
         t.centred.forEach((d, j) =>
-          expect(d, `tile ${i} part ${j}: ${JSON.stringify(t)}`).toBeLessThanOrEqual(2),
+          expect(d, `tile ${i} part ${j}: ${JSON.stringify(t)}`).toBeLessThanOrEqual(width === 390 ? 7 : 2), // 390: the label wraps in the 120 px tile since the section panel took 30 px (owner decision H6), measured 5.9
         );
       });
       expect(Math.round(info[0]!.left)).toBe(Math.round(info[0]!.listLeft));

@@ -390,6 +390,53 @@ only be visible within the table itself".
 | Full Playwright (`heavy.sh --cost 3`, 2 workers; swap was 3.7 of 4 GB used) | 1331 passed, 6 failed under load, then `systemd-oomd` killed the test cgroup at 67.8% slice pressure (the session survived: the cgroup isolation did its job); the 4 spec files never reached plus the 5 with failures re-run alone with 1 worker: 65 passed, 0 failed |
 | `npm run e2e:sdk` | 41 passed, 1 failed under load (`qa-fixes` reconnect clock); that file alone: 9 passed |
 
+## Redesign round 8 and 8b (2026-10-26/27, `ui/redesign8-compare`, `ui/redesign8-sections`)
+
+Owner, on the compare page: "the runs compare page is not user friendly at all refer to the old design for better UX (make
+sure to analyze each component and it's design decisions and reflect them in the react app)"; then, on the after-shots:
+"the design is good but there's a general comment on this and the run details, enhance segments sepration from UI viewpoint."
+
+- Design (`redesign8/compare.md`, 62 legacy components L01-L62 with their design decision, 82 criteria, composed page
+  mocks `/__ui#round8`, scripts `redesign8/measure/`): the designer's measured findings were the sticky selects far from
+  the data they change, a 330 px Quick-filters sidebar that squeezed every section from 1193 to 873 px and left the reader
+  at the top, letters A-H with ellipsised 8-run headers, 101 px averages rows (legacy 70) so the table never fit a
+  1440x900 first screen, unequal wrapping output cards and two noise strips above the items. Owner decisions on the mocks
+  (H1-H5): the letters stay beside swatch and name, the sidebar stays but beside the item list only and opened from the
+  toolbar, item rows become legacy cards, INPUT above EXPECTED, keep the 36 px links-only nav.
+- Implementation (`redesign8/impl-notes.md`): section recipes for runs, averages (metrics as rows, runs as columns, verdict
+  box, count buttons), overview, categories, errors, item cards and the expanded grid, sweep, cohort banner, filter panel,
+  loading frame; `RunTag` = swatch + letter badge + name, never truncated; the first screen at 1440x900 shows all four run
+  cards and the whole averages table. 14 criteria amended with the measured number (mostly the cost of H1).
+- Review (`redesign8/review-compare.md`): MEETS WITH FIXES, 81 / 6 / 0 (F1 Escape did not close the Filters panel from
+  the button; F2 no "Change vs baseline" field in "+ Condition"; four amendments looser than needed). Fix pass
+  23af9f50..f4addf5f: both required fixes, the loosened amendments reverted to their original numbers, the slider block and
+  category rows fixed as well.
+- Round 8b design (`redesign8/sections.md`): both pages measured at every boundary; the round-8 compare recipe had 28 px
+  and no rule, the run page 69 px and a 1.33:1 hairline that reads as one more card edge. Two recipes mocked on the real
+  pages (`sections/shots/`), owner decision H6: recipe A, framed sections. Implementation 75a53698..c05758c1: one
+  `ReportSection` primitive renders every top-level section of both pages as a `--bg-surface` panel (14 px padding, 20 px
+  between panels, 50 px body end to next title); inner cards move to `--bg-elevated` without a border through the new
+  `--card-bg` / `--card-edge` tokens, so pages outside the two report pages are unchanged; `CompareSection` retired; the
+  first screen still fits (cards bottom 510.75, table bottom 899.83); the description stays `--font-sm` because
+  `--font-base` cost 5 px of the ceiling. Review (`redesign8/review-sections.md`): MEETS WITH FIXES, 11 / 1 / 0 (two 390
+  px overflows inside the panel, spec numbers, the frozen-static budget); fix pass: both overflows fixed and a
+  content-box containment test on both pages, the panel measured within 3% of the parent on the frozen export gallery so
+  the spec budget was raised to 900 s. Merged f0767695.
+- Open: `redesign2-items.spec.ts:101` is flaky (1 in 8 on the parent tip too); the run page's `Kind` and `Trace` header
+  labels truncate on both tips (pre-existing); the SDK 2.1.0 tarball in `dist/` predates the direction-default change.
+
+### Gate on `UI-redesign` f0767695
+
+| Suite | Result |
+|---|---|
+| `npm run check` | clean; Vitest 207 files, 1688 tests, design-language 54 |
+| `npm run build`, `npm run build:sdk` | ok |
+| `pytest tests/platform/test_design_language.py` | 1 passed (backend untouched; no other chunks) |
+| Playwright `e2e/compare` | 229 passed |
+| Playwright `e2e/run-detail` | 464 passed |
+| Playwright `e2e/visual-language` | 82 passed, 2 skipped (first attempt at cost 3 killed by `systemd-oomd` in the hover audit; re-run at cost 4) |
+| Playwright `e2e/runs-list`, `e2e/datasets` | 463 passed |
+
 ## Post-mortem
 
 The failures of the whole migration (two session kills, repeated feedback rounds, a finding fixed by hiding

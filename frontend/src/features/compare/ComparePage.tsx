@@ -16,16 +16,17 @@ import { KEYS, readLocal } from '@/lib/storage';
 import {
   EmptyState,
   ErrorState,
+  Icon,
   LinkButton,
   PageHeader,
   SegmentedControl,
   SeriesHighlightRoot,
-  Skeleton,
   useToast,
 } from '@/ui';
 import { CompareCtx, type CompareValue } from './CompareContext';
 import { CompareBar } from './components/CompareBar';
 import { CompareBody } from './components/CompareBody';
+import { CompareSkeleton } from './components/CompareSkeleton';
 import { ItemsUiHost } from './components/items/ItemsUi';
 import { Notices } from './components/Notices';
 import { CohortBanner } from './components/SelectionBar';
@@ -102,7 +103,7 @@ export function ComparePage() {
   else if (c.query.error)
     body = <ErrorState error={c.query.error} title="Couldn’t load this comparison" onRetry={c.retry} />;
   else if (c.query.isPending)
-    body = pending ? <Skeleton kind="cards" count={3} label="Loading comparison" /> : null;
+    body = pending ? <CompareSkeleton runs={c.refs.length} /> : null;
   else if (!c.model || c.model.runs.length < 2)
     body = (
       <ErrorState
@@ -112,7 +113,7 @@ export function ComparePage() {
             ? 'A run in this comparison was not found'
             : 'Runs in this comparison were not found'
         }
-        message={`${c.missing.length || 'Some'} of the runs in this link ${c.missing.length === 1 ? 'was' : 'were'} deleted or ${c.missing.length === 1 ? 'is' : 'are'} not visible to you. A comparison needs at least 2 runs.${c.missing.length ? ` Missing: ${c.missing.join(', ')}` : ''}`}
+        message={`${c.missing.length || 'Some'} of the runs in this link ${c.missing.length === 1 ? 'was' : 'were'} deleted or ${c.missing.length === 1 ? 'is' : 'are'} not visible to you. A comparison needs at least 2 runs.${c.missing.length ? ` Missing: ${c.missing.slice(0, 5).join(', ')}${c.missing.length > 5 ? ` + ${c.missing.length - 5} more` : ''}` : ''}`}
         notFoundMessage="Not found"
         action={<BackLink slug={slug} />}
         compact
@@ -233,42 +234,54 @@ function CompareLoaded({
   return (
     <CompareCtx.Provider value={value}>
       <MissingToast missing={c.missing} />
-      <PageHeader
-        title="Compare runs"
-        description="Scan the items that changed; the analytics follow your filter."
-        meta={[
-          `${info.columns.length} column${info.columns.length === 1 ? '' : 's'}`,
-          first?.dataset_name ?? '',
-          `${model.itemIds.length} aligned items`,
-        ].filter(Boolean)}
-        actions={
-          <>
-            {c.cohorts ? (
-              <SegmentedControl<'compare' | 'sweep'>
-                label="View"
-                value={sweep ? 'sweep' : 'compare'}
-                onChange={(v) => c.setView({ tab: v })}
-                options={[
-                  { value: 'compare', label: 'Compare' },
-                  { value: 'sweep', label: 'Sweep' },
-                ]}
-              />
+      <header className={styles.titleBlock} data-part="title-block">
+        <div>
+          <h1 className={styles.title}>Compare runs</h1>
+          <p className={styles.subtitle}>
+            Review configuration, performance and item-level differences across {model.bases.length} runs.
+          </p>
+          <p className={styles.meta}>
+            <span>
+              {info.columns.length} column{info.columns.length === 1 ? '' : 's'}
+            </span>
+            {first?.dataset_name ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className={styles.mono}>{first.dataset_name}</span>
+              </>
             ) : null}
-            <LinkButton
-              href={compareExportUrl(model.bases)}
-              download
-              isDisabled={model.bases.length < 2 || model.bases.length > MAX_EXPORT_RUNS}
-              title={
-                model.bases.length > MAX_EXPORT_RUNS
-                  ? `Export at most ${MAX_EXPORT_RUNS} runs at once`
-                  : 'Download this comparison as one self-contained HTML file'
-              }
-            >
-              Export HTML
-            </LinkButton>
-          </>
-        }
-      />
+            <span aria-hidden="true">·</span>
+            <span>{model.itemIds.length} aligned items</span>
+          </p>
+        </div>
+        <div className={styles.actions}>
+          {c.cohorts ? (
+            <SegmentedControl<'compare' | 'sweep'>
+              label="View"
+              value={sweep ? 'sweep' : 'compare'}
+              onChange={(v) => c.setView({ tab: v })}
+              options={[
+                { value: 'compare', label: 'Compare' },
+                { value: 'sweep', label: 'Sweep' },
+              ]}
+            />
+          ) : null}
+          <LinkButton
+            href={compareExportUrl(model.bases)}
+            download
+            variant="accent"
+            icon={<Icon name="download" size={14} />}
+            isDisabled={model.bases.length < 2 || model.bases.length > MAX_EXPORT_RUNS}
+            title={
+              model.bases.length > MAX_EXPORT_RUNS
+                ? `Export at most ${MAX_EXPORT_RUNS} runs at once`
+                : 'Download this comparison as one self-contained HTML file'
+            }
+          >
+            Export HTML
+          </LinkButton>
+        </div>
+      </header>
       <Notices />
       {c.cohorts ? <CohortBanner /> : null}
       <div ref={barRef} className={styles.focusRoot}>

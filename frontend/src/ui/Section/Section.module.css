@@ -3,8 +3,8 @@
   min-width: 0;
 }
 
-/* Any section after another one (Section, ReportSection and the run Items section all carry data-section). The line
-   sits in the middle of the gap, so it belongs to neither block, and the first section of an area has none. */
+/* Any section after another one (every Section carries data-section). The line sits in the middle of the gap, so it
+   belongs to neither block, and the first section of an area has none. */
 [data-section] + .section {
   margin-block-start: var(--section-gap);
   padding-block-start: var(--section-gap);

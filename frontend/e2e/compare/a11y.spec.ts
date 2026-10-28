@@ -1,7 +1,7 @@
 /** Scenario 11: keyboard operation, visible focus, accessible names and an axe-core scan. */
 import { expect, test, type Page } from '@playwright/test';
 import { axeSeriousViolations } from '../shell/support';
-import { compareUrl, seedScenario, waitLoaded } from './support';
+import { compareUrl, itemHead, seedScenario, waitLoaded } from './support';
 import type { CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -32,6 +32,12 @@ test('keyboard: Tab reaches the toolbar; Enter toggles Filters; Display popover 
   await expect(filters).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByTestId('filter-builder')).toHaveCount(0);
 
+  // Quick filters (round 8, H2) sits between Filters and Display; it opens the facet list beside the items
+  await page.keyboard.press('Tab');
+  const facets = page.getByRole('button', { name: 'Quick filters' });
+  await expect(facets).toBeFocused();
+  await expect(facets).toHaveAttribute('aria-expanded', 'false');
+
   // Display popover: Enter opens, Escape closes and focus returns to the trigger
   await page.keyboard.press('Tab');
   const display = page.getByRole('button', { name: 'Display' });
@@ -56,7 +62,7 @@ test('keyboard: Tab reaches the toolbar; Enter toggles Filters; Display popover 
 
 test('item rows: visible keyboard focus ring; Enter expands and collapses', async ({ page }) => {
   await open4(page);
-  const rowBtn = page.locator('[data-testid="item-row"][data-item-id="cmp-001"]');
+  const rowBtn = itemHead(page, 'cmp-001');
   // focus by keyboard so :focus-visible applies
   await page.getByRole('searchbox', { name: 'Search items' }).focus();
   for (let i = 0; i < 40 && !(await rowBtn.evaluate((el) => el === document.activeElement)); i++)
@@ -95,10 +101,9 @@ test('every control has an accessible name; remove buttons say what they remove'
   const names = await cards
     .getByRole('button')
     .evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.textContent ?? ''));
-  // per card: remove, plus "set as baseline" on the three that are not the baseline
-  expect(names).toHaveLength(7);
+  // per card: remove only (round 8: the baseline is chosen in the Averages head, there is no star button)
+  expect(names).toHaveLength(4);
   expect(names.filter((n) => /^Remove .+ from the comparison$/.test(n))).toHaveLength(4);
-  expect(names.filter((n) => /^Set .+ as the baseline$/.test(n))).toHaveLength(3);
   const unnamed = await page.evaluate(() => {
     const bad: string[] = [];
     for (const el of Array.from(
@@ -124,7 +129,7 @@ test('every control has an accessible name; remove buttons say what they remove'
   await expect(page.getByRole('main')).toHaveCount(1); // the shell's; the items list must not nest a second main
   await expect(page.getByRole('navigation', { name: 'Comparison sections' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Per-run averages' })).toBeVisible();
-  await expect(page.getByRole('grid', { name: 'Per-run averages' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Per-run averages' })).toBeVisible();
 });
 
 const axeScan = async (page: Page) => {
@@ -141,7 +146,7 @@ test('axe: no serious or critical violations on the loaded Compare page', async 
 
 test('axe: no serious or critical violations with an expanded item', async ({ page }) => {
   await open4(page);
-  await page.getByRole('button', { name: /^(Expand|Collapse) item 1$/ }).click();
+  await itemHead(page, 'cmp-001').click();
   await expect(page.getByTestId('output-card')).toHaveCount(4);
   expect(await axeScan(page)).toEqual([]);
 });
@@ -158,7 +163,7 @@ test('phone width: no horizontal page scroll, with and without an expanded item'
   await open4(page);
   const width = () => page.evaluate(() => document.documentElement.scrollWidth);
   expect(await width()).toBeLessThanOrEqual(390);
-  await page.getByRole('button', { name: /^(Expand|Collapse) item 1$/ }).click();
+  await itemHead(page, 'cmp-001').click();
   await expect(page.getByTestId('output-card')).toHaveCount(4);
   expect(await width()).toBeLessThanOrEqual(390);
 });
@@ -167,7 +172,7 @@ test.describe('light theme', () => {
   test.use({ colorScheme: 'light' });
   test('axe: no serious or critical violations with an expanded item', async ({ page }) => {
     await open4(page);
-    await page.getByRole('button', { name: /^(Expand|Collapse) item 1$/ }).click();
+    await itemHead(page, 'cmp-001').click();
     await expect(page.getByTestId('output-card')).toHaveCount(4);
     expect(await axeScan(page)).toEqual([]);
   });

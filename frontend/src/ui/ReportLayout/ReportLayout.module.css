@@ -33,7 +33,7 @@
   max-height: calc(100vh - var(--topbar-h) - var(--report-nav-h, 0px) - 2 * var(--space-md));
   overflow-y: auto;
   padding: var(--space-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   animation: aside-in var(--transition-fast);

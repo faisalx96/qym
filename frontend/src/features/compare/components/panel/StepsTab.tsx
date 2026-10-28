@@ -1,12 +1,12 @@
 /** Step latency per column (mean ms per traced step) with change against the baseline. */
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { useCompareStepLatency } from '@/api/compare';
 import { formatLatency } from '@/lib/metrics';
 import { ErrorState, Skeleton, Tag, Text } from '@/ui';
-import { letterOf, useCompare } from '../../CompareContext';
-import { RunDot } from '../common';
-import { ScrollRegion } from '../ScrollRegion';
-import styles from './Panel.module.css';
+import { useCompare } from '../../CompareContext';
+import { columnName } from '../../lib/columnName';
+import { RunTag } from '../RunTag';
+import avg from './AveragesMatrix.module.css';
 
 export function StepsTab() {
   const { model, columns, baseline } = useCompare();
@@ -56,17 +56,22 @@ export function StepsTab() {
     );
   const bi = columns.indexOf(baseline);
   return (
-    <ScrollRegion className={styles.scroll} label="Step latency">
-      <table className={styles.table}>
-        <caption className={styles.caption}>
-          Mean latency per traced step; change is against the baseline.
-        </caption>
+    <div className={avg.scroll} data-part="steps-table">
+      <table className={avg.table} aria-label="Step latency" style={{ '--cols': columns.length } as CSSProperties}>
         <thead>
           <tr>
-            <th scope="col">Step</th>
+            <th scope="col" className={avg.metricHead}>
+              Step
+            </th>
             {columns.map((c) => (
-              <th scope="col" key={c.key} title={c.title}>
-                <RunDot index={c.runIdxs[0] ?? 0} /> {letterOf(c.runIdxs[0] ?? 0)}
+              <th scope="col" key={c.key} className={avg.runHead} title={c.title}>
+                <RunTag
+                  index={c.runIdxs[0] ?? 0}
+                  name={columnName(model, c)}
+                  baseline={c.key === baseline.key}
+                  compact
+                  bare
+                />
               </th>
             ))}
           </tr>
@@ -76,8 +81,8 @@ export function StepsTab() {
             const b = r.cells[bi]?.mean_ms ?? null;
             return (
               <tr key={r.key}>
-                <th scope="row">
-                  <span className={styles.runLabel} title={`${r.phase}: ${r.name}`}>
+                <th scope="row" className={avg.metricName}>
+                  <span title={`${r.phase}: ${r.name}`}>
                     {r.name || r.phase} <Tag kind="data">{r.phase}</Tag>
                   </span>
                 </th>
@@ -85,14 +90,14 @@ export function StepsTab() {
                   const v = cell?.mean_ms ?? null;
                   const rel = i !== bi && v !== null && b ? (v - b) / b : null;
                   return (
-                    <td key={columns[i]!.key}>
-                      <div className={styles.cell}>
-                        <span className={styles.value}>{v === null ? '—' : formatLatency(v)}</span>
+                    <td key={columns[i]!.key} className={avg.cell} data-size="compact">
+                      <div className={avg.mark}>
+                        <span className={avg.plainValue}>{v === null ? '—' : formatLatency(v)}</span>
                         {rel !== null ? (
-                          <Tag kind="data" tone={rel < -0.02 ? 'success' : rel > 0.02 ? 'danger' : undefined}>
+                          <span className={avg.latDelta}>
                             {rel < -0.02 ? '▼' : rel > 0.02 ? '▲' : '≈'} {rel >= 0 ? '+' : '−'}
                             {Math.abs(rel * 100).toFixed(0)}%
-                          </Tag>
+                          </span>
                         ) : null}
                       </div>
                     </td>
@@ -103,6 +108,6 @@ export function StepsTab() {
           })}
         </tbody>
       </table>
-    </ScrollRegion>
+    </div>
   );
 }

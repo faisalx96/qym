@@ -1,5 +1,5 @@
 /** Small pieces shared by the delta line, the analytics panel and the item rows. */
-import { Chip, Tag } from '@/ui';
+import { Tag } from '@/ui';
 import { formatBand, formatDelta, kindLabel, type BaselineStats, type DeltaKind } from '../lib/baseline';
 import type { MetricDirection } from '@/lib/metrics';
 import { runColor } from '../CompareContext';
@@ -43,7 +43,7 @@ export function DeltaTag({ stats, type, metric }: { stats: BaselineStats; type: 
   );
 }
 
-/** Items improved / regressed vs the baseline; pressing one filters the item list. */
+/** Items improved / regressed vs the baseline: two small buttons `↑9 ↓2`; pressing one filters the item list (C-avg-7). */
 export function CountButtons({
   stats,
   active,
@@ -60,23 +60,46 @@ export function CountButtons({
   const up = kindLabel('improved', direction);
   const down = kindLabel('regressed', direction);
   return (
-    <span className={styles.counts}>
-      <Chip
-        isSelected={active === 'improved'}
-        onChange={() => onToggle('improved')}
-        count={stats.counts.improved}
+    <span className={styles.counts} data-part="averages-counts">
+      <button
+        type="button"
+        data-kind="up"
+        aria-pressed={active === 'improved'}
         aria-label={`${stats.counts.improved} items ${up} vs baseline on ${label}; filter items`}
+        onClick={() => onToggle('improved')}
       >
         {'↑'}
-      </Chip>
-      <Chip
-        isSelected={active === 'regressed'}
-        onChange={() => onToggle('regressed')}
-        count={stats.counts.regressed}
+        {stats.counts.improved}
+      </button>
+      <button
+        type="button"
+        data-kind="down"
+        aria-pressed={active === 'regressed'}
         aria-label={`${stats.counts.regressed} items ${down} vs baseline on ${label}; filter items`}
+        onClick={() => onToggle('regressed')}
       >
         {'↓'}
-      </Chip>
+        {stats.counts.regressed}
+      </button>
+    </span>
+  );
+}
+
+/** The change line of an Averages cell: glyph, signed change, 95% band; coloured only beyond the noise band (C-avg-6). */
+export function DeltaLine2({ stats, type, metric }: { stats: BaselineStats; type: string; metric: string }) {
+  if (stats.mean === null) return <span className={styles.delta}>{'—'}</span>;
+  const verdict = stats.verdict ?? 'within_noise';
+  const band = stats.halfWidth !== null ? formatBand(stats.halfWidth, type) : null;
+  const title =
+    `${metric}: ${formatDelta(stats.mean, type)} vs baseline over ${stats.paired} paired items` +
+    (band
+      ? ` (95% noise band ${band}${stats.pValue !== null ? `, p=${stats.pValue.toFixed(3)}` : ''})`
+      : ' (too few items for a noise band)');
+  return (
+    <span className={styles.delta} data-part="averages-delta" data-verdict={verdict} title={title}>
+      <span aria-hidden>{GLYPH[verdict]}</span> {formatDelta(stats.mean, type)}
+      <span className={styles.srOnly}> ({WORD[verdict]})</span>
+      {band ? <i>{band}</i> : null}
     </span>
   );
 }

@@ -235,7 +235,7 @@ for (const width of [1440, 390] as const) {
         .evaluate((e) => ((e as HTMLElement).style.display = 'none'));
       const h = (await panel.boundingBox())!.height;
       console.log(`R3-14 ${width}px panel height ${h}`);
-      expect(h).toBeLessThanOrEqual(width === 390 ? 1540 : 1040); // amended, see spec R3-14 (1530 -> 1540 in round 7: long fact keys wrap instead of ending in an ellipsis)
+      expect(h).toBeLessThanOrEqual(width === 390 ? 1680 : 1040); // amended, see spec R3-14 (1540 -> 1680 in round 8b: the section panel narrows the 390 column by 30 px, measured 1660; owner decision H6; 1530 -> 1540 in round 7: long fact keys wrap instead of ending in an ellipsis)
     });
 
     test('R3-16, R3-17, R3-18: matrix reason anchor, row heights, selected row', async ({ page }) => {

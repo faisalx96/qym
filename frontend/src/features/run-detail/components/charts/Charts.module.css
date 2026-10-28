@@ -297,7 +297,7 @@
 .dot2 {
   fill: var(--text-muted);
   fill-opacity: 0.7;
-  stroke: var(--bg-surface);
+  stroke: var(--card-bg);
   stroke-width: 1;
   transition:
     fill-opacity var(--transition-fast),
@@ -405,14 +405,14 @@
 }
 
 .marker {
-  fill: var(--bg-surface);
+  fill: var(--card-bg);
   stroke-width: 2;
 }
 
 /* A value label on a curve point: --font-sm mono with a 3px surface halo so it stays legible over the line. */
 .pointLabel {
   paint-order: stroke;
-  stroke: var(--bg-surface);
+  stroke: var(--card-bg);
   stroke-width: 3px;
   stroke-linejoin: round;
   font-family: var(--font-mono);

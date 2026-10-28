@@ -63,13 +63,13 @@ test.describe('run identity and chrome', () => {
     [4, 1440],
     [8, 1440],
   ] as const) {
-    test(`the sticky bar is one 44px row with ${n} runs and stays stuck`, async ({ page }) => {
+    test(`the sticky nav is one 36px row with ${n} runs and stays stuck`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 800 });
       await page.goto(compareUrl(n === 4 ? four() : eight));
       await waitLoaded(page);
       const bar = page.locator('[data-compare-sticky]');
       const h = (await bar.boundingBox())!.height;
-      expect(h).toBeLessThanOrEqual(48);
+      expect(h).toBeLessThanOrEqual(37);
       await page.getByTestId('item-list').scrollIntoViewIfNeeded();
       const top = (await bar.boundingBox())!.y;
       expect(top).toBeLessThan(60);
@@ -77,7 +77,7 @@ test.describe('run identity and chrome', () => {
     });
   }
 
-  test('run cards at 8 runs are compact and always visible', async ({ page }) => {
+  test('run cards at 8 runs keep the full 4-up card and are always visible', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(compareUrl(eight));
     await waitLoaded(page);
@@ -85,7 +85,7 @@ test.describe('run identity and chrome', () => {
     await expect(cards).toHaveCount(8);
     await expect(page.getByRole('button', { name: 'Run details' })).toHaveCount(0);
     const boxes = await cards.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
-    expect(new Set(boxes.map((t) => Math.round(t))).size).toBeLessThanOrEqual(3); // 3 across: 3 rows
+    expect(new Set(boxes.map((t) => Math.round(t))).size).toBe(2); // 4 across: 2 rows, the same card as at 4 runs
   });
 
   test('the averages matrix at 8 runs scrolls inside itself, not the page', async ({ page }) => {
@@ -109,9 +109,9 @@ test.describe('category and error cards', () => {
     await expect(card).toBeVisible();
     await expect(card.getByTestId('category-run')).toHaveCount(4);
     // the baseline run has no tick, each other run has one
-    await expect(card.getByTestId('score-marker')).toHaveCount(3);
+    await expect(card.locator('[data-part="category-tick"]')).toHaveCount(3);
     await card.click();
-    await expect(page.getByRole('group', { name: 'Filters set on the page' })).toContainText('easy');
+    await expect(page.getByTestId('baseline-delta-banner')).toContainText('easy');
     await card.click();
     await page.getByRole('radiogroup', { name: 'Categories view' }).getByText('Table').click();
     await expect.poll(() => urlParams(page).get('catView')).toBe('table');
@@ -131,7 +131,7 @@ test.describe('category and error cards', () => {
       .first();
     await expect(card.getByTestId('error-run')).toHaveCount(4);
     await expect(card.getByTestId('error-run').first()).toContainText('Baseline');
-    await expect(card.getByTestId('error-run').nth(1)).toContainText(/[▲▼=]/);
+    await expect(card.getByTestId('error-run').nth(1)).toContainText(/[+−=]/);
   });
 
   test('the winner bar has a named legend with counts', async ({ page }) => {
@@ -167,20 +167,15 @@ test.describe('expanded item', () => {
     expect(new Set(rails).size).toBeGreaterThan(1);
   });
 
-  test('a metric click opens its details under every run, aligned with the cards; Escape closes', async ({
-    page,
-  }) => {
+  test('a metric click opens its details under every run, at the same top; Escape closes', async ({ page }) => {
     const detail = await open(page);
     await detail.getByRole('button', { name: 'Show quality details' }).first().click();
     const cells = detail.getByTestId('metric-panel-cell');
     await expect(cells).toHaveCount(4);
-    const cardX = await detail
-      .getByTestId('output-card')
-      .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
-    const cellX = await cells.evaluateAll((els) =>
-      els.map((e) => Math.round(e.getBoundingClientRect().left)),
-    );
-    expect(cellX).toEqual(cardX);
+    const tops = await detail
+      .locator('[data-part="metric-details"]')
+      .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    expect(new Set(tops).size).toBe(1);
     await page.keyboard.press('Escape');
     await expect(cells).toHaveCount(0);
   });
@@ -194,7 +189,7 @@ test.describe('expanded item', () => {
     await expect(detail.getByTestId('output-card')).toHaveCount(3);
     await detail.getByRole('button', { name: 'All', exact: true }).click();
     await expect(detail.getByTestId('output-card')).toHaveCount(4);
-    await detail.getByRole('button', { name: 'Only differing outputs' }).click();
+    await detail.getByRole('button', { name: 'Only differing' }).click();
     const n = await detail.getByTestId('output-card').count();
     expect(n).toBeGreaterThanOrEqual(1);
     expect(n).toBeLessThanOrEqual(4);
@@ -238,16 +233,20 @@ test.describe('run focus', () => {
 });
 
 test.describe('polish', () => {
-  test('run card headers stay on one row at 1440 with four runs', async ({ page }) => {
+  test('run card head: status badge and remove button share the first row at 1440 with four runs', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(compareUrl(four()));
     await waitLoaded(page);
-    const heights = await page
-      .getByTestId('run-card')
-      .evaluateAll((els) =>
-        els.map((e) => (e.querySelector('[class*="cardHead"]') as HTMLElement).offsetHeight),
-      );
-    expect(Math.max(...heights)).toBeLessThan(40);
+    const gaps = await page.getByTestId('run-card').evaluateAll((els) =>
+      els.map((e) => {
+        const status = e.querySelector('[data-part="run-status"]')!.getBoundingClientRect();
+        const remove = e.querySelector('[data-part="run-remove"]')!.getBoundingClientRect();
+        return Math.abs(status.top + status.height / 2 - (remove.top + remove.height / 2));
+      }),
+    );
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(8);
   });
 
   test('four expanded cards fit the content width at 1440', async ({ page }) => {
@@ -288,17 +287,16 @@ test.describe('polish', () => {
     await expect(cards.filter({ hasText: 'Side B' })).toHaveCount(2);
   });
 
-  test('390px: the bar is the nav plus a View popover holding the selects', async ({ page }) => {
+  test('390px: the sticky bar is the 36px nav only; the Baseline select sits in the Averages head', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(compareUrl(four()));
     await waitLoaded(page);
     const bar = page.locator('[data-compare-sticky]');
-    await expect(bar.getByRole('button', { name: 'View' })).toBeVisible();
-    await expect(bar.getByText('Baseline', { exact: true })).toHaveCount(0);
-    await bar.getByRole('button', { name: 'View' }).click();
-    await expect(
-      page.getByRole('dialog', { name: 'View options' }).getByText('Baseline', { exact: true }).first(),
-    ).toBeVisible();
+    await expect(bar.getByRole('button')).toHaveCount(0);
+    await expect(bar.getByRole('link')).toHaveCount(6);
+    await expect(page.locator('[data-part="section-averages"] [data-part="baseline-control"]')).toBeVisible();
   });
 });
 
@@ -323,13 +321,15 @@ test.describe('accessibility and phone', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(compareUrl(four()));
     await waitLoaded(page);
-    await expect(page.getByTestId('average-card')).toHaveCount(4);
+    await expect(page.locator('[data-part="averages-table"] section[data-row]')).toHaveCount(4);
     await page.getByTestId('item-row').first().click();
     const tops = await page
       .getByTestId('output-card')
       .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
     expect(new Set(tops).size).toBe(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    // the pointer rests where the click left it; after the section panel moved the lists it sits over an error row, whose siblings dim (--dim-opacity)
+    await page.mouse.move(0, 0);
     expect(await axe(page)).toEqual([]);
   });
 });

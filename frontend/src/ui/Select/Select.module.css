@@ -61,7 +61,7 @@
 .popover {
   min-width: var(--trigger-width);
   max-width: min(420px, 90vw);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   border: 1px solid var(--border-default);
   border-radius: var(--dropdown-radius);
   box-shadow: var(--shadow-popover);

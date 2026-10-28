@@ -6,6 +6,7 @@
  * byte-compatible with the vanilla page (`tests/platform/test_compare_filter_fields_javascript.py`).
  */
 import { SKIPPED_METADATA } from './skipMetadata';
+import { runShortName } from './labels';
 import type { metricDirection } from '@/lib/metrics';
 import { isErrorRow } from '@/lib/metrics';
 import type { Row } from '@/features/run-detail/types';
@@ -423,8 +424,8 @@ export function buildFieldDefs(model: CompareModel, metric: string | null): Fiel
   ];
   const winnerChoices: FieldChoice[] = [{ value: 'tie', label: 'Tie' }];
   model.runs.forEach((run, i) => {
-    winnerChoices.push({ value: `win_${i}`, label: `${run.label} won` });
-    winnerChoices.push({ value: `only_${i}`, label: `Only ${run.label} solved` });
+    winnerChoices.push({ value: `win_${i}`, label: `${runShortName(run)} won` });
+    winnerChoices.push({ value: `only_${i}`, label: `Only ${runShortName(run)} solved` });
   });
   defs.push({
     id: 'winner',
@@ -445,7 +446,7 @@ export function buildFieldDefs(model: CompareModel, metric: string | null): Fiel
   model.runs.forEach((run, i) =>
     defs.push({
       id: `score:${i}`,
-      label: `${run.label} · ${metric ?? 'score'}`,
+      label: `${runShortName(run)} · ${metric ?? 'score'}`,
       group: 'Scores',
       kind: 'number',
       percent,

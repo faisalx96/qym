@@ -1,7 +1,8 @@
-/** Scenario 12: a 20-run comparison must not scroll the page sideways; the heat strip shows all 20 runs. */
+/** Scenario 12: a 20-run comparison must not scroll the page sideways; the run key and every row's chips show all 20 runs. */
 import { expect, test } from '@playwright/test';
 import { uniqueSlug } from '../helpers';
 import { client, compareUrl, waitLoaded } from './support';
+import { noSidewaysScroll, part } from './r8';
 import { createApiKey, ensureProject, seedCompareRun } from './seed';
 
 const ids: string[] = [];
@@ -26,7 +27,7 @@ test.beforeAll(async () => {
 const LETTERS = 'ABCDEFGHIJKLMNOPQRST'.split('');
 
 for (const width of [1440, 1024]) {
-  test(`20 runs at ${width}px: no horizontal page scroll and all 20 run letters in the heat strip`, async ({
+  test(`20 runs at ${width}px: no horizontal page scroll and all 20 runs keyed and charted as chips`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -46,20 +47,14 @@ for (const width of [1440, 1024]) {
     await page.evaluate(() => window.scrollTo(500, 0));
     expect(await page.evaluate(() => window.scrollX)).toBe(0);
 
-    // matrix: header letters A..T and one score cell per run in every row (the table scrolls inside its own region)
-    const list = page.getByTestId('item-list');
-    const head = await list
-      .getByRole('columnheader')
-      .evaluateAll((els) =>
-        els
-          .map((e) => (e.getAttribute('aria-label') ?? '').replace(' (baseline)', '').trim())
-          .filter((t) => /^[A-T]$/.test(t)),
-      );
-    expect(head).toEqual(LETTERS);
-    await expect(page.getByTestId('item-row').first().locator('td span[title]')).toHaveCount(20);
-    await expect(list.getByRole('region', { name: /scrollable/ })).toBeVisible();
-    // the delta line holds 19 candidates (scrolls inside its own region) and the section nav stays reachable
-    await expect(page.locator('[aria-label="Change against the baseline"] li[data-column]')).toHaveCount(19);
+    // the run key above the list names every run with its letter A..T; each row has one score chip per run
+    const key = page.locator('[data-part="run-key"] [data-part="run-letter"]');
+    expect(await key.allTextContents()).toEqual(LETTERS);
+    await expect(page.getByTestId('item-row').first().locator('[data-part="item-score-chip"]')).toHaveCount(20);
+    // the Averages table scrolls inside its own region, never the page
+    const [sw, cw] = await part(page, 'averages-table').evaluate((el) => [el.scrollWidth, el.clientWidth]);
+    expect(sw).toBeGreaterThan(cw);
+    await noSidewaysScroll(page);
     expect((await overflow()).sw).toBeLessThanOrEqual(width);
   });
 }
@@ -70,7 +65,7 @@ test('20 runs: an expanded item shows 8 cards and "Show all 20 runs" reveals the
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(compareUrl(ids));
   await waitLoaded(page);
-  await page.getByRole('button', { name: /^(Expand|Collapse) item 1$/ }).click();
+  await page.locator('[data-part="item-head"]').first().click();
   await expect(page.getByTestId('output-card')).toHaveCount(8);
   await page.getByRole('button', { name: 'Show all 20 runs' }).click();
   await expect(page.getByTestId('output-card')).toHaveCount(20);

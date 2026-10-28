@@ -74,3 +74,10 @@
     transition: none;
   }
 }
+
+/* Inside a narrow report column (the phone, after the 30px of the section panel) the options give up half their padding so a four-option control still fits a card. */
+@container (max-width: 300px) {
+  .option {
+    padding: 0 var(--space-xs);
+  }
+}

@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useCompare } from '../CompareContext';
 import { clearedView } from '../lib/activeChips';
 import type { ChipEntry } from '../lib/activeChips';
+import { columnName } from '../lib/columnName';
 import { compareScope } from '../lib/scope';
 
 export function useScope() {
@@ -13,7 +14,10 @@ export function useScope() {
         c.view,
         model,
         defs,
-        (key: string) => columns.find((col) => col.key === key)?.label ?? key,
+        (key: string) => {
+          const col = columns.find((x) => x.key === key);
+          return col ? columnName(model, col) : key;
+        },
       ),
     [c.view, model, defs, columns],
   );

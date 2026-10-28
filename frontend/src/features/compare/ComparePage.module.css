@@ -9,3 +9,43 @@
 .focusRoot {
   display: contents;
 }
+
+/* Title block (round 8): title, one subtitle, one meta line; Export (and the mode tabs) on the title row. */
+.titleBlock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-title);
+  font-weight: 650;
+}
+
+.subtitle,
+.meta {
+  margin: var(--space-xs) 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}

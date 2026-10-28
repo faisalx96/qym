@@ -1,9 +1,10 @@
+/* Expanded item (round 8): INPUT, EXPECTED OUTPUT, tags, then the outputs of every run in one aligned row. */
 .detail {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-sm);
   padding: var(--space-md);
-  border-top: 1px solid var(--border-subtle);
+  border-block-start: 1px solid var(--border-subtle);
 }
 
 .alert {
@@ -19,41 +20,48 @@
 }
 
 .bodies {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
-  gap: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
 }
 
 .block {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
-  border-inline-start: 3px solid var(--accent-primary);
-  background: var(--bg-elevated);
-  border-radius: var(--radius-md);
   min-width: 0;
+  padding: var(--space-sm) var(--space-md);
+  border-inline-start: 3px solid var(--info);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
 }
 
 .block[data-kind='expected'] {
   border-inline-start-color: var(--success);
+  background: color-mix(in srgb, var(--success) 14%, var(--panel-bg, var(--card-bg)));
 }
 
 .blockHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-block-size: 24px;
 }
 
-.label {
-  color: var(--text-muted);
+.block .label {
+  /* --info itself is 3.9:1 on the elevated surface: mix toward the primary text for 4.5:1 */
+  color: color-mix(in srgb, var(--info) 55%, var(--text-primary));
   font-size: var(--font-sm);
-  font-weight: 600;
+  font-weight: 650;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
-.tags,
-.toggles {
+.block[data-kind='expected'] .label {
+  color: var(--success);
+}
+
+.tags {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
@@ -66,70 +74,77 @@
   gap: var(--space-sm);
 }
 
-/* One row of runs side by side (legacy): three fit the width, more scroll sideways with snap. */
+.toggleRow > .label {
+  color: var(--success);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toggle[aria-pressed='true'] {
+  border-color: var(--run);
+  background: color-mix(in srgb, var(--run) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.toggleAll {
+  display: inline-flex;
+  gap: var(--space-xs);
+  margin-inline-start: auto;
+}
+
+/* One row of equal columns: 4 runs fit at 1440, more scroll sideways with snap; the cards share their rows. */
 .scroller {
+  /* contains the visually hidden (absolute) text of every card, which must scroll with its column */
+  position: relative;
   overflow-x: auto;
   scroll-snap-type: x proximity;
-  padding-bottom: var(--space-xs);
+  padding-block-end: var(--space-xs);
 }
 
 .grid {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(min(var(--col-min, 20rem), 85%), 1fr);
-  gap: var(--space-md);
-  align-items: start;
-}
-
-.slot {
-  min-width: 0;
-  scroll-snap-align: start;
-}
-
-.panelCell {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  animation: panel-open var(--motion-step) var(--ease-out);
-}
-
-.panelHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-}
-
-.panelMetric {
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-@keyframes panel-open {
-  from {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .panelCell {
-    animation: none;
-  }
+  grid-auto-columns: minmax(17rem, 1fr); /* 17rem: four columns still fit the 1133px detail inside the panel at 1440 (owner decision H6) */
+  grid-template-rows: auto auto auto auto auto;
+  gap: 0 var(--space-sm);
 }
 
 @media (max-width: 640px) {
-  .grid {
-    grid-auto-flow: row;
-    grid-auto-columns: auto;
+  .scroller {
+    overflow-x: visible;
   }
 
-  .slot {
-    grid-column: 1 !important;
-    grid-row: auto !important;
+  .grid {
+    grid-auto-flow: row;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    gap: var(--space-sm);
   }
 }

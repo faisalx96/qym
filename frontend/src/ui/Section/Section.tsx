@@ -41,6 +41,3 @@ export const Section = forwardRef<HTMLElement, SectionProps>(function Section(
     </section>
   );
 });
-
-/** For a section that renders its own markup (the run Items section): the class that gives it the divider rhythm. */
-export const sectionClassName = styles.section;

@@ -2,10 +2,11 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
+  min-block-size: 100px;
   padding: var(--space-md);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--card-edge);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--card-bg);
 }
 
 .group {
@@ -32,4 +33,24 @@
 
 .unit {
   color: var(--text-muted);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.headTitle {
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
 }

@@ -1,5 +1,6 @@
 /** "Set on the page" filters as removable chips (compare.html comparePageFilterEntries). */
 import { formatFieldName } from '@/features/run-detail/lib/rowMeta';
+import { runShortName } from './labels';
 import { kindLabel, type DeltaKind } from './baseline';
 import { emptyFilters, GROUPED_PREFIX, type CompareView } from './filters';
 import type { CompareModel } from './model';
@@ -51,7 +52,7 @@ export function activeChips(
     });
   if (view.winner !== 'any') {
     const [kind, idx] = view.winner.split('_');
-    const name = idx !== undefined ? (model.runs[Number(idx)]?.label ?? `run ${idx}`) : '';
+    const name = idx !== undefined ? (model.runs[Number(idx)] ? runShortName(model.runs[Number(idx)]!) : `run ${idx}`) : '';
     out.push({
       key: 'winner',
       label: kind === 'win' ? `${name} won` : kind === 'only' ? `Only ${name} solved` : 'Ties only',

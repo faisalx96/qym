@@ -2,6 +2,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { cohortUrl, seedScenario, urlParams, waitLoaded } from './support';
 import type { CompareSeed } from './seed';
+import { part } from './r8';
 
 let seed: CompareSeed;
 test.beforeAll(async () => {
@@ -16,7 +17,7 @@ const banner = (page: Page) => page.getByRole('group', { name: 'Compare sides' }
 const view = (page: Page) => page.getByRole('radiogroup', { name: 'View', exact: true });
 const sweep = (page: Page) => page.getByTestId('sweep-view');
 const verdictWord = async (page: Page) => {
-  const t = (await sweep(page).getByRole('status').first().innerText()).toUpperCase();
+  const t = (await part(page, 'sweep-verdict').innerText()).toUpperCase();
   return /IMPROVED|REGRESSED|WITHIN NOISE/.exec(t)?.[0] ?? '';
 };
 
@@ -25,8 +26,7 @@ test('banner: labels from the URL, inline rename commits on Enter and rewrites t
   await waitLoaded(page);
   await expect(banner(page)).toContainText('Weak');
   await expect(banner(page)).toContainText('Strong');
-  await expect(banner(page)).toContainText('k = 2 executions each');
-  await expect(banner(page).getByText(/^2 executions$/)).toHaveCount(2);
+  await expect(banner(page).getByText(/^2 runs$/)).toHaveCount(2);
   await banner(page).getByRole('button', { name: 'Rename cohort A' }).click();
   const field = banner(page).getByRole('textbox', { name: 'Label for cohort A' });
   await expect(field).toBeFocused();
@@ -44,35 +44,27 @@ test('banner: labels from the URL, inline rename commits on Enter and rewrites t
   expect(urlParams(page).get('cohortBLabel')).toBe('Strong');
 });
 
-test('Compare view shows the cohort verdict word, which agrees with the Sweep banner', async ({ page }) => {
+test('the View switch goes between Compare and Sweep and keeps the cohort params', async ({ page }) => {
   await page.goto(url());
   await waitLoaded(page);
-  const line = page.locator('[aria-label="Change against the baseline"]');
-  await expect(line).toContainText(
-    /Strong vs Weak: (Avg|Pass)@2 [+−][\d.]+ pts, (improved|regressed|within noise)/,
-  );
-  const word = /(improved|regressed|within noise)$/.exec(
-    (await line.innerText()).split('Open Sweep')[0]!.trim().replace(/\s+/g, ' '),
-  )?.[1];
-  expect(word).toBeTruthy();
-  // "Open Sweep" and the View switch both go to the Sweep tab
-  await line.getByRole('button', { name: 'Open Sweep' }).click();
+  await view(page).getByText('Sweep').click();
   await expect(sweep(page)).toBeVisible();
   expect(urlParams(page).get('tab')).toBe('sweep');
-  expect((await verdictWord(page)).toLowerCase()).toBe(word);
+  expect(urlParams(page).getAll('cohortA')).toHaveLength(2);
+  const word = (await verdictWord(page)).toLowerCase();
+  expect(['improved', 'regressed', 'within noise']).toContain(word);
   await view(page).getByText('Compare').click();
   await expect(sweep(page)).toHaveCount(0);
   await expect(page.getByTestId('item-list')).toBeVisible();
   expect(urlParams(page).get('tab')).toBeNull();
-  await view(page).getByText('Sweep').click();
-  await expect(sweep(page)).toBeVisible();
+  expect(urlParams(page).getAll('cohortA')).toHaveLength(2);
 });
 
 test('Sweep: verdict banner and five stat cards', async ({ page }) => {
   await page.goto(url({ tab: 'sweep' }));
   await expect(sweep(page)).toBeVisible();
-  await expect(sweep(page).getByRole('status').first()).toContainText(/IMPROVED|REGRESSED|WITHIN NOISE/);
-  await expect(sweep(page).getByRole('status').first()).toContainText('paired items');
+  await expect(part(page, 'sweep-verdict')).toContainText(/improved|regressed|within noise/i);
+  await expect(part(page, 'sweep-verdict')).toContainText('paired items');
   const stats = sweep(page).getByRole('region', { name: 'Cohort metrics', exact: true });
   // the five stat cards (no data-testid exists for them: located through their data-verdict attribute)
   const cards = stats.locator('[data-verdict]');
@@ -128,7 +120,7 @@ test('Sweep: a row opens the item dialog with a focus trap; Escape closes and fo
   const label = (await opener.getAttribute('aria-label')) ?? '';
   const id = label.replace('Open item ', '');
   await opener.click();
-  const dialog = page.getByRole('dialog', { name: `Item ${id}` });
+  const dialog = page.getByRole('dialog', { name: `Item comparison · ${id}` });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByTestId('item-detail')).toBeVisible();
   await expect(dialog.getByTestId('output-card').first()).toBeVisible();
@@ -147,21 +139,14 @@ test('Sweep: Reverse sides flips the sides and the delta sign', async ({ page })
   await expect(sweep(page)).toBeVisible();
   const headers = () =>
     sweep(page).getByRole('region', { name: 'Items' }).getByRole('columnheader').allInnerTexts();
-  expect((await headers()).map((h) => h.replace(/[↕↑↓]/g, '').trim())).toEqual([
-    'Item',
-    'Metadata',
-    'Weak',
-    'Strong',
-    'Move',
-  ]);
+  const norm = async () => (await headers()).map((h) => h.replace(/[↕↑↓]/g, '').trim().toLowerCase());
+  expect(await norm()).toEqual(['item', 'metadata', 'weak', 'strong', 'move']);
   const word = await verdictWord(page);
   const btn = sweep(page).getByRole('button', { name: 'Reverse sides' });
   await btn.click();
   await expect.poll(() => urlParams(page).get('sweepReverse')).toBe('1');
   await expect(btn).toHaveAttribute('aria-pressed', 'true');
-  await expect
-    .poll(async () => (await headers()).map((h) => h.replace(/[↕↑↓]/g, '').trim()))
-    .toEqual(['Item', 'Metadata', 'Strong', 'Weak', 'Move']);
+  await expect.poll(norm).toEqual(['item', 'metadata', 'strong', 'weak', 'move']);
   const flipped = await verdictWord(page);
   const mirror: Record<string, string> = {
     IMPROVED: 'REGRESSED',

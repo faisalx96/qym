@@ -1,6 +1,16 @@
 /** J2: every URL param restores its control; stale params are ignored. */
 import { expect, test, type Page } from '@playwright/test';
-import { compareUrl, expectShown, seedScenario, urlParams, waitLoaded, itemDetail } from './support';
+import {
+  activeFilters,
+  averagesGrid,
+  compareUrl,
+  expectShown,
+  itemDetail,
+  openFilters,
+  seedScenario,
+  urlParams,
+  waitLoaded,
+} from './support';
 import type { CompareSeed } from './seed';
 
 let seed: CompareSeed;
@@ -33,14 +43,14 @@ test('a full deep link restores metric, filters, search, sort, page and the open
   // search + filters + metric
   await expect(page.getByRole('searchbox', { name: 'Search items' })).toHaveValue('policy');
   await expectShown(page, 27);
-  await expect(page.getByRole('group', { name: 'Filters set on the page' })).toContainText(
-    'Complexity: easy, medium',
-  );
+  await expect(page.getByTestId('baseline-delta-banner')).toContainText('Complexity: easy, medium');
   await expect(page.getByRole('button', { name: /^Filters/ })).toContainText('1');
-  await expect(page.getByRole('button', { name: /^correct Metric$/ })).toBeVisible();
-  await expect(page.locator('[aria-label="Change against the baseline"]')).toContainText('+17.5 pts');
+  await openFilters(page);
+  await expect(activeFilters(page)).toContainText('Complexity: easy, medium');
+  await expect(page.getByRole('button', { name: /^Display · correct$/ })).toBeVisible();
+  await expect(averagesGrid(page)).toBeVisible();
   // sort in the Display popover
-  await page.getByRole('button', { name: 'Display' }).click();
+  await page.getByRole('button', { name: /^Display/ }).click();
   await expect(page.getByRole('dialog').getByRole('button', { name: /Score, high to low/ })).toBeVisible();
   await page.keyboard.press('Escape');
   // the item: on its page, expanded, scrolled into view
@@ -80,7 +90,8 @@ test('?filter=errors restores the errors preset as a chip', async ({ page }) => 
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c], { filter: 'errors' }));
   await waitLoaded(page);
-  await expect(page.getByRole('group', { name: 'Filters set on the page' })).toContainText('With errors');
+  await openFilters(page);
+  await expect(activeFilters(page)).toContainText('With errors');
   await expect
     .poll(async () => {
       const t =
@@ -107,7 +118,8 @@ test('a stale or invalid filters JSON is ignored silently', async ({ page }) => 
     await page.goto(compareUrl([base, a, b, c], { filters: bad }));
     await waitLoaded(page);
     await expectShown(page, 40);
-    await expect(page.getByRole('group', { name: 'Filters set on the page' })).toHaveCount(0);
+    await expect(activeFilters(page)).toHaveCount(0);
+    await expect(page.getByTestId('baseline-delta-banner')).toHaveCount(0);
     await expect(page.getByRole('alert')).toHaveCount(0);
   }
 });

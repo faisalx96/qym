@@ -11,7 +11,9 @@ import {
   Text,
   type QuickFilterOption,
 } from '@/ui';
-import { letterOf, useCompare } from '../CompareContext';
+import { useCompare } from '../CompareContext';
+import { columnName } from '../lib/columnName';
+import { runShortName } from '../lib/labels';
 import { useColumnStats, useColumns } from '../hooks/useColumnStats';
 import { useScope } from '../hooks/useScope';
 import type { DeltaKind } from '../lib/baseline';
@@ -59,7 +61,7 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
     .flatMap((col): QuickFilterOption[] => {
       const s = stats.get(col.key);
       if (!s) return [];
-      const l = letterOf(col.runIdxs[0] ?? 0);
+      const l = columnName(model, col);
       return [
         { id: `${col.key}|improved`, label: `${l} improved`, count: s.counts.improved, tone: 'success' },
         { id: `${col.key}|regressed`, label: `${l} regressed`, count: s.counts.regressed, tone: 'danger' },
@@ -79,8 +81,8 @@ export function QuickFilters({ onHide, onViewItems }: { onHide?: () => void; onV
 
   const winnerOptions: QuickFilterOption[] = dir
     ? [
-        ...model.runs.map((r, i) => ({ id: `win_${i}`, label: `${letterOf(i)} won`, title: r.label })),
-        ...model.runs.map((r, i) => ({ id: `only_${i}`, label: `Only ${letterOf(i)}`, title: r.label })),
+        ...model.runs.map((r, i) => ({ id: `win_${i}`, label: `${runShortName(r)} won`, title: r.label })),
+        ...model.runs.map((r, i) => ({ id: `only_${i}`, label: `Only ${runShortName(r)} solved`, title: r.label })),
         { id: 'tie', label: 'Ties' },
       ].map(({ id, label }) => ({ id, label }))
     : [];

@@ -93,3 +93,32 @@ export function runShortName(run: {
   const base = own && own !== label ? own : label;
   return run.pass ? `${base} · pass ${run.pass}` : base;
 }
+
+/**
+ * Round 8 (D2): the name a run goes by is its run name; two different runs that share a name get their start time
+ * appended in every place the name is shown (`name · Oct 1 3:00 PM`), so a swatch + name never reads the same twice.
+ * `bases` identifies the run (passes of one repeat run share it and share the name on purpose).
+ */
+export function disambiguateRunNames(
+  entries: Array<{ base: string; name: string; started: string }>,
+  now?: Date,
+): string[] {
+  const basesByName = new Map<string, Set<string>>();
+  for (const e of entries) basesByName.set(e.name, (basesByName.get(e.name) ?? new Set()).add(e.base));
+  const named = entries.map((e) => {
+    if ((basesByName.get(e.name)?.size ?? 0) < 2) return e.name;
+    const when = dateLabel(e.started, true, now);
+    return when ? `${e.name} · ${when}` : e.name;
+  });
+  // Runs that started at the same minute still read the same: number them in selection order.
+  const basesByLabel = new Map<string, string[]>();
+  named.forEach((label, i) => {
+    const list = basesByLabel.get(label) ?? [];
+    if (!list.includes(entries[i]!.base)) list.push(entries[i]!.base);
+    basesByLabel.set(label, list);
+  });
+  return named.map((label, i) => {
+    const list = basesByLabel.get(label)!;
+    return list.length < 2 ? label : `${label} #${list.indexOf(entries[i]!.base) + 1}`;
+  });
+}

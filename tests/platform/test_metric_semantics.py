@@ -58,8 +58,11 @@ def test_explicit_direction_on_a_legacy_metric_survives_ingest():
 
     declared = Metric(judged, score_type="legacy", direction="maximize").spec.to_dict()
     assert declared_direction(ingest_api._normalized_metric_spec(declared)) == "maximize"
+    # SDK 2.1.0: an undeclared direction is "maximize" again; an explicit None stays neutral.
     undeclared = Metric(judged, score_type="legacy").spec.to_dict()
-    assert declared_direction(ingest_api._normalized_metric_spec(undeclared)) is None
+    assert declared_direction(ingest_api._normalized_metric_spec(undeclared)) == "maximize"
+    neutral = Metric(judged, score_type="legacy", direction=None).spec.to_dict()
+    assert declared_direction(ingest_api._normalized_metric_spec(neutral)) is None
     # A newer SDK resuming a run a schema 1 SDK started is not a spec change.
     stored = _spec(score_type="legacy", schema_version=1, direction="maximize")
     assert ingest_api._metric_spec_unchanged(

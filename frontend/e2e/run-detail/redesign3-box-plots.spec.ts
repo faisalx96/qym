@@ -109,7 +109,7 @@ for (const width of [1440, 390]) {
           };
         });
         expect(info.svgW, name).toBeLessThanOrEqual(info.slotW + 1);
-        if (width === 390 && name !== 'trace-tokens') expect(info.svgW).toBeGreaterThanOrEqual(220);
+        if (width === 390 && name !== 'trace-tokens') expect(info.svgW).toBeGreaterThanOrEqual(205); // 220 before the section panel took 30 px (owner decision H6); measured 218, then 207 once the chart cards fit the 249 px content box (fix pass)
         expect(info.overlap, name).toBe(false);
         expect(info.gap, name).toBeLessThanOrEqual(16);
       }

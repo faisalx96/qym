@@ -10,7 +10,7 @@
   margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-lg)) var(--space-sm);
   padding: 0 var(--space-lg);
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  background: var(--card-bg);
   transform: translateY(var(--head-shift, 0px));
 }
 

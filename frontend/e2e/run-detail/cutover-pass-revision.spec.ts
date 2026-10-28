@@ -83,8 +83,9 @@ test('compare: an edit from a page loaded before the deletion is refused with th
   await deletePass(a, 1, 1);
 
   await page
-    .getByRole('button', { name: /^Expand item 2$/ })
-    .first()
+    .getByTestId('item-row')
+    .nth(1)
+    .locator('[data-part="item-head"]')
     .click();
   const chip = page.locator('[data-metric="quality"]').first();
   await chip.getByRole('button', { name: /^Edit quality score of/ }).click();

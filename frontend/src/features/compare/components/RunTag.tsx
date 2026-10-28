@@ -55,18 +55,28 @@ function Inner({
       className={[styles.tag, className].filter(Boolean).join(' ')}
       data-compact={compact ? '' : undefined}
       data-testid="run-tag"
+      data-part="run-name"
       title={title ?? name}
       {...rest}
     >
       <span className={styles.swatch} style={{ background: runColor(index) } as CSSProperties} aria-hidden />
-      {showLetter ? <span className={styles.letter}>{letterOf(index)}</span> : null}
-      {showName && name ? <span className={styles.name} data-id={isBareRunId(name) ? '' : undefined}>
-          {name}
-        </span> : null}
-      {baseline ? (
-        <span className={styles.star} role="img" aria-label="baseline">
-          {'★'}
+      {showLetter ? (
+        <span
+          className={styles.letter}
+          style={{ '--run': runColor(index) } as CSSProperties}
+          data-part="run-letter"
+          aria-hidden
+        >
+          {letterOf(index)}
         </span>
+      ) : null}
+      {showName && name ? (
+        <span className={styles.name} data-id={isBareRunId(name) ? '' : undefined}>
+          {name}
+          {baseline ? <span className={styles.baselineTag} data-part="baseline-tag">Baseline</span> : null}
+        </span>
+      ) : baseline ? (
+        <span className={styles.baselineTag} data-part="baseline-tag">Baseline</span>
       ) : null}
     </span>
   );
@@ -80,3 +90,4 @@ function Marked(props: RunTagProps) {
 export function RunTag(props: RunTagProps) {
   return props.bare ? <Inner {...props} rest={{}} /> : <Marked {...props} />;
 }
+export const RunName = RunTag;

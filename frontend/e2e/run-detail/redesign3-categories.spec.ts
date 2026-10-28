@@ -73,7 +73,7 @@ for (const width of [1440, 390]) {
         } else {
           // phone: the bar is full width on its own line
           expect(r.sameLine).toBe(false);
-          expect(r.trackWidth).toBeGreaterThan(150);
+          expect(r.trackWidth).toBeGreaterThan(140); // 150 before the section panel took 30 px (owner decision H6); measured 143
         }
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

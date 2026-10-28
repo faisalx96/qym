@@ -282,7 +282,7 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 ### 3.2 Surfaces and layout
 
-- **Card** (`Card`): the one grouping surface. `--bg-surface`, 1px `--border-subtle`, `--radius-md`, padding
+- **Card** (`Card`): the one grouping surface. `--bg-surface` (`--bg-elevated` with no outline inside a `ReportSection` body, see "Report section"), 1px `--border-subtle`, `--radius-md`, padding
   `--card-padding` (`compact`: `--card-padding-compact`), optional `header` / `footer` slots with a hairline. A 3px
   inline-start rail (`--rail-width`, logical so RTL mirrors) carries the meaning: `tone`, `band` or `series`
   (`rail="none"` drops it; `rail="bottom"` moves it under a tile that reads as a gauge, as the sweep stat tiles; `left` is
@@ -296,12 +296,13 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 - **Calm surface** (run detail, applies everywhere): a container (card, drawer, expanded item) is the only filled layer; inside
   it at most one more fill level, reserved for code and JSON viewers, inputs and the selected or open state. Parts are
-  separated by a `--border-subtle` hairline and `--space-md` rhythm, never by nested tiles; colour carries status, band,
+  separated by a `--border-subtle` hairline and `--space-md` rhythm, never by nested tiles (a `ReportSection` panel holding inset cards is one level of containment, not nesting: the cards read `--bg-surface`/`--card-edge`, which the body redefines, owner decision H6); colour carries status, band,
   series (a pass is `--chart-1..3`) or a selected state only. Stats in a group are a `StatStrip` (`StatStripItem.group`
   labels runs of cells), key/value groups a `KeyValueGrid`.
 
 - **Sticky bars** (`--bar-nav-h` 44px, `--bar-action-h` 56px): two heights across the app. The navigation bar of a
-  report (run-detail `SectionNav`, the compare bar) is `--bar-nav-h`; an action bar (the experiment home launch bar,
+  report (run-detail `SectionNav`) is `--bar-nav-h`; the compare page's links-only jump nav is the one exception,
+  `--bar-link-h` 36px (round 8, owner decision H5: it carries links only, no selects or buttons); an action bar (the experiment home launch bar,
   the analysis action rail, the run items toolbar) is `--bar-action-h`. Pages set `min-height` from the token, never a
   number. Enforced by `design-language.test.ts`.
 
@@ -311,7 +312,7 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 - **Report page and scope sidebar** (`ReportSection`, `ReportLayout`, `ScopeBar`,
   `QuickFilterGroup`): run detail and compare are one stacked report. Every
-  analytic topic is a full-width `ReportSection` (run section header, `xl`
+  analytic topic is a full-width `ReportSection` (framed panel, `xl`
   title, container-query body so cards respond to the real column width: 2 / 3 /
   4 per row, never a fixed 380px column); sections below the fold mount lazily
   (`lazy`, once, with a reserved `minHeight`) and are hidden, not shown empty,
@@ -328,15 +329,23 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   `--transition-fast` and not at all under `prefers-reduced-motion`.
 
 - **Section and section divider** (`Section`, `SectionHeader`; owner round, October 2026: "a reusable component for
-  sections and section dividers"): every titled block of a page (admin tabs, profile, dataset lineage, compare sweep,
-  each run report section) is a `Section`: a `SectionHeader` (`--font-xl` / 650 primary title, a 2px gap, one muted
-  `--font-base` description line, the controls on the end side and centred on the title block, `--space-md` above the
-  body) over its body. Sections that follow each other are divided by one `--border-subtle` hairline with
-  `--section-gap` (32px) on both sides of it, so the line belongs to neither block; the first section of a page area
-  (right under the tabs, the page header or the run section nav) has no line, so nothing doubles the tab underline.
+  sections and section dividers"): every titled block of a page outside the run and compare reports (admin tabs,
+  profile, environments, dataset lineage) is a `Section`: a `SectionHeader` (`--font-xl` / 650 primary title, a 2px
+  gap, one muted `--font-base` description line, the controls on the end side and centred on the title block,
+  `--space-md` above the body) over its body. Sections that follow each other are divided by one `--border-subtle`
+  hairline with `--section-gap` (32px) on both sides of it, so the line belongs to neither block; the first section of
+  a page area (right under the tabs or the page header) has no line, so nothing doubles the tab underline.
   `SectionHeader` draws no divider and no lead-in of its own (inside a card it is just the header). Parents stack
-  sections with no gap of their own; the run Items section, which renders its own markup, takes `sectionClassName`
-  and `data-section` to join the rhythm. A jump to a run section lands with its hairline 8px under the sticky nav.
+  sections with no gap of their own. The run and compare reports use the framed `ReportSection` below instead.
+- **Report section** (`ReportSection`; the run page and the compare page, `CompareSection` is retired; round 8b, owner
+  decision H6): every top-level section is a framed panel: `--bg-surface`, 1px `--border-subtle`, `--radius-md`, 14px
+  padding, 20px under the previous panel, the first panel with no lead-in. It opens with a `section-head` inside the
+  panel (no rule): a `--font-xl` / 650 primary title, one muted `--font-sm` description line, the section controls on the right, then
+  14px to the body. A card inside the body is an inset card: `--bg-elevated` with no visible outline. The primitive owns
+  every distance: pages set no gap between sections, sections add no margin of their own. Reason (section 6 amendment
+  rule): measured on both pages, the old 1.33:1 hairline was as faint as the card borders in the bodies and the compare
+  page had 28px and no mark between sections; one framed section replaces two recipes (measured: 20px between panels,
+  50px from the last pixel of a body to the next title (14 padding + 1 border + 20 gap + 1 border + 14 padding), first screen of the compare page unchanged within its ceilings).
 
 - **Field row, structured value, split pane** (`FieldRow`, `StructuredValue`, `SplitPane`): `FieldRow` puts a label, its
   body (reading measure `--field-measure`, 76ch) and actions on one logical row whose `dir` follows the content, so an
@@ -849,3 +858,11 @@ Open `/__ui` on the Vite dev server (`npm run dev`) to see the primitives in
 every state. If your change legitimately adds a decorative glyph size, add it
 to `FROZEN_HARDCODED_SIZES` in `design-language.test.ts` **in the same commit**,
 with the selector named in the diff so the reviewer can see what was exempted.
+
+### Round 8 amendment: the compare page's legacy-parity recipes
+
+The compare page (`features/compare`) reproduces the legacy page component by component (`docs/internal/ui-migration/redesign8/compare.md`).
+Where a measured legacy recipe is not a shared primitive, the page keeps a local one and the design-language test
+allow-lists it with this reason: raw `<table>` for the Averages and Error cards (aligned columns, pinned metric column),
+page-local card classes for the run card, category card, error card and output card (3 px run / value rail, one button
+each), and `--font-xs` for the 16x16 run letter badge (owner decision H1: swatch + letter badge + name identify a run).

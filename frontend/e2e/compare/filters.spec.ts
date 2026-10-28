@@ -16,8 +16,8 @@ test.beforeAll(async () => {
   seed = await seedScenario('cmp-flt');
 });
 
-const deltaLine = (page: Page) => page.locator('[aria-label="Change against the baseline"]');
-const pageChips = (page: Page) => page.getByRole('group', { name: 'Filters set on the page' });
+// round 8: a click on a number says what it filtered in the banner above the toolbar (the delta line and chips row are gone)
+const banner = (page: Page) => page.getByTestId('baseline-delta-banner');
 const open4 = async (page: Page, extra: Record<string, string> = {}) => {
   const { base, a, b, c } = seed.runs;
   await page.goto(compareUrl([base, a, b, c], extra));
@@ -27,25 +27,24 @@ const open4 = async (page: Page, extra: Record<string, string> = {}) => {
 const filtersJson = (page: Page) =>
   JSON.parse(urlParams(page).get('filters') ?? '{}') as Record<string, unknown>;
 
-test('count button in the delta line filters the list; chip and Clear restore it', async ({ page }) => {
+test('a count button in the averages filters the list; the banner and Clear restore it', async ({ page }) => {
   await open4(page);
-  const up = deltaLine(page).getByRole('button', {
+  const up = averagesGrid(page).getByRole('button', {
     name: '30 items improved vs baseline on quality; filter items',
   });
   await expect(up).toHaveAttribute('aria-pressed', 'false');
   await up.click();
   await expectShown(page, 30);
   await expect(up).toHaveAttribute('aria-pressed', 'true');
-  await expect(pageChips(page)).toContainText('improved on quality');
+  await expect(banner(page)).toContainText('improved');
+  await expect(banner(page)).toContainText('quality');
   await expect
     .poll(() => (filtersJson(page).baseline as { kind: string } | undefined)?.kind)
     .toBe('improved');
   expect((filtersJson(page).baseline as { metric: string }).metric).toBe('quality');
   await expect(page.getByRole('button', { name: /^Filters/ })).toContainText('1');
   // removing the chip restores the list
-  await pageChips(page)
-    .getByRole('button', { name: /^Remove filter:/ })
-    .click();
+  await banner(page).getByRole('button', { name: 'Clear' }).click();
   await expectShown(page, 40);
   await expect(up).toHaveAttribute('aria-pressed', 'false');
   expect(urlParams(page).get('filters')).toBeNull();
@@ -54,13 +53,13 @@ test('count button in the delta line filters the list; chip and Clear restore it
   await expectShown(page, 30);
   await up.click();
   await expectShown(page, 40);
-  await deltaLine(page)
+  await averagesGrid(page)
     .getByRole('button', { name: '26 items regressed vs baseline on quality; filter items' })
     .click();
   await expectShown(page, 26);
   await page.getByRole('button', { name: /^Clear \d/ }).click();
   await expectShown(page, 40);
-  await expect(pageChips(page)).toHaveCount(0);
+  await expect(banner(page)).toHaveCount(0);
 });
 
 test('count button in the Metrics table selects that metric and filters the list', async ({ page }) => {
@@ -75,7 +74,8 @@ test('count button in the Metrics table selects that metric and filters the list
     metric: 'correct',
     kind: 'improved',
   });
-  await expect(pageChips(page)).toContainText('improved on correct');
+  await expect(banner(page)).toContainText('improved');
+  await expect(banner(page)).toContainText('correct');
   await btn.click();
   await expectShown(page, 40);
   await expect(btn).toHaveAttribute('aria-pressed', 'false');
@@ -89,7 +89,7 @@ test('Overview: threshold slider changes Pass@K and is written to ?thr=', async 
   const strip = async () => {
     const out: string[] = [];
     for (const l of ['Pass@4', 'Pass^4', 'Max@4', 'Consistency', 'Reliability', 'Avg score'])
-      out.push(await page.getByText(l, { exact: true }).locator('xpath=ancestor::*[2]').innerText());
+      out.push(await page.locator('[data-part="stat-box"]').filter({ hasText: l }).first().innerText());
     return out.join(' | ').replace(/\s+/g, ' ');
   };
   const before = await strip();
@@ -108,7 +108,7 @@ test('Overview: Winner bar and Runs-correct distribution bars set filter chips',
   const label = (await win.getAttribute('aria-label')) ?? '';
   const wins = Number(/won (\d+) items/.exec(label)?.[1]);
   await win.click();
-  await expect(pageChips(page)).toContainText(/won/);
+  await expect(banner(page)).toContainText(/won/);
   await expectShown(page, wins);
   expect(urlParams(page).get('winner')).toMatch(/^win_\d$/);
   await win.click();
@@ -119,7 +119,7 @@ test('Overview: Winner bar and Runs-correct distribution bars set filter chips',
   const n = Number(/^(\d+) items/.exec((await bar.getAttribute('aria-label')) ?? '')?.[1]);
   expect(n).toBeGreaterThan(0);
   await bar.click();
-  await expect(pageChips(page)).toContainText('Passing runs = 2 of 4');
+  await expect(banner(page)).toContainText('Passing runs = 2 of 4');
   await expectShown(page, n);
   await expect(bar).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => filtersJson(page).passRate).toEqual(['eq', 2]);
@@ -129,7 +129,7 @@ test('rule builder: "+ Condition" adds an editable condition row', async ({ page
   await open4(page);
   await page.getByRole('button', { name: /^Filters/ }).click();
   const builder = page.getByTestId('filter-builder');
-  await expect(builder).toContainText('No rules yet');
+  await expect(builder).toContainText(/no rules yet/i);
   await builder.getByRole('button', { name: '+ Condition' }).click();
   await expect(builder.getByTestId('filter-condition')).toHaveCount(1);
   const cond = builder.getByTestId('filter-condition').first();
@@ -264,7 +264,7 @@ test('Categories and Errors tabs: pressing a row / card filters the items and ad
   const n = Number(/^easy\s*(\d+)/i.exec((await easy.innerText()).trim())![1]);
   await easy.click();
   await expectShown(page, n);
-  await expect(pageChips(page)).toContainText('Complexity: easy');
+  await expect(banner(page)).toContainText('Complexity: easy');
   await expect(easy).toHaveAttribute('aria-pressed', 'true');
   await easy.click();
   await expectShown(page, 40);
@@ -276,7 +276,7 @@ test('Categories and Errors tabs: pressing a row / card filters the items and ad
     .first();
   await expect(card).toBeVisible();
   await card.click();
-  await expect(pageChips(page)).toContainText(/Task error/);
+  await expect(banner(page)).toContainText(/Task error/);
   await expect(card).toHaveAttribute('aria-pressed', 'true');
   const shown = Number(
     /^(\d+) of/.exec(
@@ -289,8 +289,6 @@ test('Categories and Errors tabs: pressing a row / card filters the items and ad
   expect(shown).toBeGreaterThan(0);
   expect(shown).toBeLessThan(40);
   expect(((filtersJson(page).errors ?? {}) as Record<string, unknown>).task).toBeTruthy();
-  await pageChips(page)
-    .getByRole('button', { name: /^Remove filter:/ })
-    .click();
+  await banner(page).getByRole('button', { name: 'Clear' }).click();
   await expectShown(page, 40);
 });

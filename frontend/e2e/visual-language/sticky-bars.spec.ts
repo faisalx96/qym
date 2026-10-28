@@ -17,7 +17,7 @@ test.use({ viewport: { width: 1440, height: 900 } });
 const token = (page: Page, name: string) =>
   page.evaluate((n) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(n)), name);
 
-test('run section nav and compare bar are the same height (--bar-nav-h)', async ({ page }) => {
+test('run section nav is --bar-nav-h; the compare jump nav is --bar-link-h (round 8, H5)', async ({ page }) => {
   await gotoApp(page, runUrl(tour.slug, tour.runId));
   const nav = page.getByRole('navigation', { name: 'Run sections' });
   await expect(nav).toBeVisible();
@@ -30,8 +30,10 @@ test('run section nav and compare bar are the same height (--bar-nav-h)', async 
   const cmp = (await bar.boundingBox())!.height;
   expect(run, 'run section nav').toBeGreaterThanOrEqual(want);
   expect(run, 'run section nav').toBeLessThanOrEqual(want + 1);
-  expect(cmp, 'compare bar').toBeGreaterThanOrEqual(want);
-  expect(cmp, 'compare bar').toBeLessThanOrEqual(want + 1);
+  const link = await token(page, '--bar-link-h');
+  expect(link).toBe(36);
+  expect(cmp, 'compare bar').toBeGreaterThanOrEqual(link);
+  expect(cmp, 'compare bar').toBeLessThanOrEqual(link + 1);
 });
 
 test('the run items toolbar is one --bar-action-h row (wide)', async ({ page }) => {

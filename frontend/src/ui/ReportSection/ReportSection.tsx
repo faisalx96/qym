@@ -1,12 +1,13 @@
 import { useRef, type ReactNode } from 'react';
 import { useInView } from '@/lib/useInView';
-import { Section } from '../Section';
 import { Text } from '../Text';
 import styles from './ReportSection.module.css';
 
 export interface ReportSectionProps {
   /** Anchor id; the title gets `${id}-title`. */
   id: string;
+  /** `data-part` of the section (compare: `section-runs`, ...); defaults to `section`. */
+  part?: string;
   title: ReactNode;
   description?: ReactNode;
   aside?: ReactNode;
@@ -24,9 +25,10 @@ export interface ReportSectionProps {
   children?: ReactNode;
 }
 
-/** One full-width report section: a ui/Section (xl header, divider rhythm) over a container-query body (DESIGN_LANGUAGE §3). */
+/** One full-width report section: a framed panel (DESIGN_LANGUAGE §3 "Report section"): head inside, container-query body of inset cards. */
 export function ReportSection({
   id,
+  part = 'section',
   title,
   description,
   aside,
@@ -41,36 +43,46 @@ export function ReportSection({
   const ref = useRef<HTMLElement>(null);
   const inView = useInView(ref, { rootMargin, disabled: !lazy || hidden });
   if (hidden) return null;
+  const titleId = `${id}-title`;
   return (
-    <Section
-      ref={ref}
+    <section
       id={id}
+      ref={ref}
       className={[styles.section, className].filter(Boolean).join(' ')}
-      bodyClassName={styles.body}
-      title={title}
-      description={description}
-      actions={
-        scopeNote || aside ? (
-          <>
+      aria-labelledby={titleId}
+      data-report-section={id}
+      data-part={part}
+      data-mounted={inView ? '' : undefined}
+    >
+      <div className={styles.head} data-part="section-head">
+        <div className={styles.headText}>
+          <Text variant="xl" as="h2" id={titleId} className={styles.title}>
+            {title}
+          </Text>
+          {description ? (
+            <Text variant="sm" tone="muted" as="p" className={styles.desc}>
+              {description}
+            </Text>
+          ) : null}
+        </div>
+        {scopeNote || aside ? (
+          <div className={styles.aside}>
             {scopeNote ? (
               <Text variant="sm" tone="muted" data-testid="scope-note">
                 {scopeNote}
               </Text>
             ) : null}
             {aside}
-          </>
-        ) : undefined
-      }
-      data-report-section={id}
-      data-mounted={inView ? '' : undefined}
-    >
+          </div>
+        ) : null}
+      </div>
       <div
-        className={styles.lazyBody}
+        className={styles.body}
         style={inView ? undefined : { minHeight }}
         data-arrive={lazy && inView ? '' : undefined}
       >
         {inView ? children : null}
       </div>
-    </Section>
+    </section>
   );
 }
