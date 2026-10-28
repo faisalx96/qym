@@ -40,7 +40,7 @@ export function EnvironmentsPage() {
         canManage={canManage}
         readOnly={readOnly}
         storageKey="environments.list.v1"
-        onOpen={(env) => navigate(environmentPath(slug, env.id))}
+        rowHref={(env) => environmentPath(slug, env.id)}
         onAdd={() => setAdding(true)}
       />
       {canAdd ? (

@@ -24,10 +24,42 @@
   font-weight: 600;
   cursor: pointer;
   text-align: start;
+  text-decoration: none;
 }
 
 .nameLink:hover {
   color: var(--accent-primary);
+}
+
+/* The row is the target: hovering or focusing anywhere in it underlines the name. */
+tr:hover .nameLink,
+tr:focus-visible .nameLink {
+  text-decoration: underline;
+}
+
+.chev {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--text-muted);
+  line-height: 0;
+}
+
+tr:hover .chev,
+tr:focus-visible .chev {
+  color: var(--text-primary);
+}
+
+/* Stacked card: the chevron closes the name line. */
+.name:has(> .chev) {
+  position: relative;
+  padding-inline-end: var(--space-lg);
+}
+
+.name > .chev {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
 }
 
 .nameLink:focus-visible {

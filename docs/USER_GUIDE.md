@@ -207,6 +207,14 @@ environment is ticked and again on its **Refresh**. A service that cannot list i
 **Datasets and task** card, one matrix row per dataset version and a job history grouped by dataset version replace the plain
 matrix. A preset may hold the task of its own environment.
 
+### Environment pages
+
+Experiments -> Environments and Project settings -> Environments show the same table, and the whole row opens the environment (click
+any cell, press Enter on a focused row, Ctrl/Cmd-click for a new tab); the name is also a normal link and a chevron closes every
+row. Both entries open one page, `/projects/<project>/environments/<id>`, with Status, Schema, Tasks (what the service offers; read-only),
+LLM model groups, Default preset, Saved presets, Ranking, Policies and Connection, and a bar with Delete environment and Save changes.
+Opened from Project settings, its back link reads "Project settings"; otherwise "All environments".
+
 ## Experiments: latency-sensitive runs and credentials
 
 ### Latency-sensitive runs
