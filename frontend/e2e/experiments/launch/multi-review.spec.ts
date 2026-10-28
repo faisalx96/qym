@@ -142,6 +142,7 @@ test.describe('review, Raw JSON and launch', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const posts = captureExperimentPosts(page);
     await composed(page, 'combined', /Answer a ticket/);
+    await expect.poll(() => posts.dryRuns.at(-1)?.body.spec.evaluator.task, { timeout: 10_000 }).toBe('answer-ticket');
     const doc = await currentSpec(page, posts);
     await showRaw(page);
     const raw = page.getByRole('region', { name: /^Raw JSON/ });
