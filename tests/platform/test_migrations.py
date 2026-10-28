@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0092"]
+    assert heads == ["0093"]
 
 
 def test_operations_docs_name_the_current_migration_head() -> None:
@@ -762,11 +762,21 @@ def _is_0090(diff: Any) -> bool:
     return False
 
 
+def _is_0093(diff: Any) -> bool:
+    """0093 adds ``eval_experiment_jobs.priority`` (``test_job_priority_*`` checks it)."""
+    return (
+        isinstance(diff, tuple)
+        and diff[:1] == ("add_column",)
+        and diff[2] == "eval_experiment_jobs"
+        and diff[3].name == "priority"
+    )
+
+
 def _without_0088(diffs: list[Any]) -> list[Any]:
     return [
         d
         for d in diffs
-        if not _is_0090(d) and not any(name in repr(d) for name in _REVISION_0088_NAMES)
+        if not _is_0090(d) and not _is_0093(d) and not any(name in repr(d) for name in _REVISION_0088_NAMES)
     ]
 
 
@@ -2240,3 +2250,75 @@ def test_evaluator_schemas_migration_postgres_round_trips(
     _eval_environment_prerequisites(postgres_engine)
     with postgres_engine.begin() as connection:
         _evaluator_schemas_round_trip(connection, monkeypatch)
+
+
+def _job_priority_prerequisites(engine: sa.engine.Engine) -> None:
+    metadata = sa.MetaData()
+    sa.Table(
+        "eval_experiments",
+        metadata,
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("priority", sa.String(10), nullable=False),
+    )
+    sa.Table(
+        "eval_experiment_jobs",
+        metadata,
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("experiment_id", sa.String(36), nullable=False),
+        sa.Column("request_body", sa.JSON, nullable=False),
+    )
+    metadata.create_all(engine)
+
+
+def _run_job_priority_round_trip(connection, monkeypatch) -> None:
+    """0093: ``eval_experiment_jobs.priority`` backfilled from the stored body."""
+    migration = _load_migration("0093_job_priority.py")
+    assert (migration.revision, migration.down_revision) == ("0093", "0092")
+    connection.execute(
+        sa.text("INSERT INTO eval_experiments (id, priority) VALUES ('e1', 'LOW')")
+    )
+    for job_id, body in (
+        ("j1", '{"priority": "high"}'),
+        ("j2", "{}"),
+        ("j3", '{"priority": "bogus"}'),
+    ):
+        connection.execute(
+            sa.text(
+                "INSERT INTO eval_experiment_jobs (id, experiment_id, request_body) "
+                "VALUES (:id, 'e1', :body)"
+            ),
+            {"id": job_id, "body": body},
+        )
+    monkeypatch.setattr(
+        migration, "op", Operations(MigrationContext.configure(connection))
+    )
+    migration.upgrade()
+    columns = {c["name"]: c for c in sa.inspect(connection).get_columns("eval_experiment_jobs")}
+    assert columns["priority"]["nullable"]
+    rows = dict(
+        connection.execute(
+            sa.text("SELECT id, priority FROM eval_experiment_jobs ORDER BY id")
+        ).all()
+    )
+    assert rows == {"j1": "HIGH", "j2": "LOW", "j3": "LOW"}
+    migration.downgrade()
+    names = {c["name"] for c in sa.inspect(connection).get_columns("eval_experiment_jobs")}
+    assert "priority" not in names
+    count = connection.execute(sa.text("SELECT count(*) FROM eval_experiment_jobs")).scalar_one()
+    assert count == 3
+
+
+def test_job_priority_migration_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = sa.create_engine("sqlite://")
+    _job_priority_prerequisites(engine)
+    with engine.begin() as connection:
+        _run_job_priority_round_trip(connection, monkeypatch)
+    engine.dispose()
+
+
+def test_job_priority_migration_postgres_round_trips(
+    monkeypatch: pytest.MonkeyPatch, postgres_engine: sa.engine.Engine
+) -> None:
+    _job_priority_prerequisites(postgres_engine)
+    with postgres_engine.begin() as connection:
+        _run_job_priority_round_trip(connection, monkeypatch)

@@ -157,6 +157,12 @@ Response `200`:
 - The list is read by the API server and must match what the workers can run; a worker that no longer knows a task id fails the job
   with `unknown task: <id>` (and the API's validation of section 5 should use the same registry).
 
+### 4.4 Task ids across deployments (informative)
+
+A qym experiment names one task and runs it on every selected environment, one job per environment. Deployments that serve the same agent
+should therefore register the same task `id` (the `name` may differ). qym checks the id against each service's `GET /evals/tasks` before it launches and does not send the job to a service that
+does not list it; the service-side `422 unknown task: <id>` remains the authority. No new field, status code or endpoint.
+
 ## 5. Validation rules and error texts
 
 Structural validation happens in `POST /evals`, before the job row is written, and answers `422`. Two shapes appear:

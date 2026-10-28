@@ -458,7 +458,7 @@ def test_task_unsupported_for_a_service_without_it(client, two_envs):  # QD-77
     mismatch = [e for e in errors if e["rule"] == "task_unsupported"]
     assert [e["environment_id"] for e in mismatch] == [staging.id]
     assert mismatch[0]["message"] == 'Environment "staging" does not offer task selection; clear its task or deselect it.'
-    assert mismatch[0]["pointer"] == f"/evaluator/task/{staging.id}"
+    assert mismatch[0]["pointer"] == "/evaluator/task"  # one task per experiment (round 9)
     object_form = multi_spec(None, dataset="d", task={production.id: "answer-ticket", staging.id: "route-ticket"})
     assert [e["environment_id"] for e in _errors(_dry(client, [production.id, staging.id], object_form)) if e["rule"] == "task_unsupported"] == [staging.id]
 

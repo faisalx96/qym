@@ -129,7 +129,7 @@ from typing import (
 )
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -597,6 +597,16 @@ def _unsupported_evaluator_keys(
     return " and ".join(key for key in used if not declared[key])
 
 
+def priority_rank() -> Any:
+    """SQL rank of a job's own priority, HIGH first (a NULL is read as NORMAL).
+
+    The tie-break of the claim order within one experiment (round 9); also the
+    order the queue lists jobs in (``eval_queue.dispatch_order``).
+    """
+    job = EvalExperimentJob
+    return case((job.priority == "HIGH", 0), (job.priority == "LOW", 2), else_=1)
+
+
 class EvalDispatcher:
     """Leased submit/poll loop for ``eval_experiment_jobs``; safe with many workers."""
 
@@ -721,6 +731,8 @@ class EvalDispatcher:
                 .order_by(
                     func.coalesce(job.next_attempt_at, job.created_at),
                     job.created_at,
+                    # Within one experiment (same created_at) HIGH runs go first.
+                    priority_rank(),
                     job.combo_index,
                     job.dataset_index,
                 )
@@ -1075,7 +1087,7 @@ class EvalDispatcher:
         """
         body = copy.deepcopy(resolved)
         body.setdefault("user_id", _service_user_id(experiment))
-        body.setdefault("priority", _enum_value(experiment.priority))
+        body.setdefault("priority", job.priority or _enum_value(experiment.priority))
         evaluator = body.setdefault("evaluator", {})
         # The run shape is the platform's own choice; no service ever receives it.
         evaluator.pop("run_shape", None)
