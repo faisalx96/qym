@@ -68,6 +68,11 @@ export interface ApiKey {
   project_id: string;
   creator?: { id: string; email: string; display_name: string } | null;
   scopes?: string[];
+  /** `experiment`: minted at launch for one Evaluation Service experiment (scoped). */
+  kind?: 'user' | 'experiment';
+  experiment_id?: string | null;
+  /** Name of the key's experiment (`null`: none, or it was deleted). */
+  experiment_name?: string | null;
   created_at: string;
   revoked_at?: string | null;
 }
