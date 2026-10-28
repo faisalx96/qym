@@ -8,7 +8,7 @@ Feedback gets an assistant: anyone signed in describes a need, the assistant col
 
 ## Before you update
 
-- **Migrations `0089`–`0091` (head `0091`).** `0091`: four empty tables for AI-assisted feedback (quick DDL), nothing to backfill. `0089`: Quick DDL: the `run_datasets` table, `runs.dataset_count` (default 1) and `run_items.dataset_position` (nullable). There is no backfill: existing runs read as single-dataset runs, and no index is added to `run_items`. `0090`: `eval_experiment_jobs.dataset_index` (default 0) and a unique job key widened by it. Existing jobs get 0. The downgrade refuses while a per-dataset fan-out exists. New setting `QYM_EVAL_MAX_DATASETS` (default 20).
+- **Migrations `0089`–`0092` (head `0092`).** `0092`: `api_keys.kind` (default `user`) and `api_keys.experiment_id` (nullable, indexed); quick DDL. Existing keys named `Evaluation Service · …` that an experiment references become experiment keys and get the scopes `runs:write` and `datasets:read`; no other key changes. `0091`: four empty tables for AI-assisted feedback (quick DDL), nothing to backfill. `0089`: Quick DDL: the `run_datasets` table, `runs.dataset_count` (default 1) and `run_items.dataset_position` (nullable). There is no backfill: existing runs read as single-dataset runs, and no index is added to `run_items`. `0090`: `eval_experiment_jobs.dataset_index` (default 0) and a unique job key widened by it. Existing jobs get 0. The downgrade refuses while a per-dataset fan-out exists. New setting `QYM_EVAL_MAX_DATASETS` (default 20).
 - **Union runs are not ranked.** The best-run index, best-run bases and a dataset version's trend ignore union runs (their scores cover different items than a single-dataset run's). They form their own combo in the dashboard, named by the run's label.
 
 ## SDK 2.1.0
@@ -22,6 +22,8 @@ Feedback gets an assistant: anyone signed in describes a need, the assistant col
 ## What changed
 
 ### Experiments
+
+- **Evaluation Service keys are scoped.** The API key the platform mints for an experiment can only upload runs and read dataset items (`runs:write`, `datasets:read`); other routes answer 403 with `X-Qym-Key-State: scope_denied`. Keys users create are unchanged (still unscoped). Settings, API keys now lists the experiment keys (and the experiment dataset read tokens, for admins) in a closed group under your own keys, with a link to each experiment.
 
 - **Several datasets and versions per experiment.** The launch form's Datasets card takes any number of datasets, each with any number of versions or aliases, and a run shape: **Combine into one run** (one run over every dataset version) or **One run each** (one run per dataset version, grouped under the experiment). An Evaluation Service whose evaluator schema does not declare `datasets` gets one job per dataset version even when you combine; the environment box says so. A launch is capped at `QYM_EVAL_MAX_DATASETS` dataset versions and, with fan-out, at `QYM_EVAL_SWEEP_MAX_JOBS` jobs.
 - **Task per environment.** A ticked environment whose service declares `task` shows a **Task** control listing the tasks the service reports live (`GET /evals/tasks`, new platform route `GET /v1/projects/{id}/eval-environments/{env_id}/tasks`). The default is the worker's own task.
