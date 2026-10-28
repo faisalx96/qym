@@ -270,6 +270,7 @@ export function LaunchTestProvider({
     setDocState(docRef.current);
   }, []);
   const [secrets] = useState(() => new SecretStore());
+  const [preemptionAck, setPreemptionAck] = useState(false);
   const ctx = useMemo(
     () => buildContext({ envs, extraEndpoints: doc.extraEndpoints, datasetNames, isManager: canManage }),
     [envs, doc.extraEndpoints, datasetNames, canManage],
@@ -333,8 +334,8 @@ export function LaunchTestProvider({
     confirm: async () => true,
     isLaunching: false,
     launch: NOOP_ASYNC,
-    preemptionAck: false,
-    setPreemptionAck: () => {},
+    preemptionAck,
+    setPreemptionAck,
     flags: {
       initState: 'ready',
       envsLoading: false,

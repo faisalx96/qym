@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EnvVersions } from '../entry/VersionsBlock';
+import { EnvRefresh, EnvVersions } from '../entry/VersionsBlock';
 import { envRecord, newClient, Providers } from './helpers';
 
 /**
@@ -41,6 +41,7 @@ const ok = (details: Record<string, unknown>) => () =>
 const client = newClient();
 const line = (
   <Providers client={client}>
+    <EnvRefresh env={envRecord({ name: 'Staging' })} projectId="p1" />
     <EnvVersions env={envRecord({ name: 'Staging' })} projectId="p1" />
   </Providers>
 );
@@ -124,7 +125,8 @@ describe('EnvVersions', () => {
     stubVersioning([ok({ agent_version: 'v1' })]);
     renderLine();
     await waitFor(() => expect(row()).toHaveAttribute('data-status', 'ok'));
-    expect(within(row()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refresh']);
+    // Refresh moved to the box's head row (round 9): the versions line itself has no control
+    expect(within(row()).queryAllByRole('button')).toHaveLength(0);
     expect(refresh()).toHaveAccessibleName('Refresh versions of Staging');
     expect(row()).not.toHaveTextContent('Add versioning details');
     expect(row().querySelector('input, textarea, select, [contenteditable]')).toBeNull();
