@@ -51,7 +51,7 @@ export interface KvRow {
 }
 
 /** Summary rows: a 160 px label column and a value column no wider than the reading measure. */
-export function ReviewKv({ rows, label = 'Summary rows' }: { rows: readonly KvRow[]; label?: string }) {
+export function ReviewKv({ rows, label = 'Details' }: { rows: readonly KvRow[]; label?: string }) {
   return (
     <dl className={styles.kv} aria-label={label} data-part="review-kv">
       {rows.map((row) => (

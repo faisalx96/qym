@@ -89,6 +89,7 @@ test.describe('point 1: option boxes', () => {
     const selected = envBox(page, 'production');
     await expect(selected).toHaveAttribute('data-state', 'selected');
     await settled(page);
+    await expect.poll(async () => (await computed(selected, ['border-inline-start-color']))['border-inline-start-color']).toBe(accent);
     const s = await computed(selected, ['border-top-color', 'border-top-width', 'border-inline-start-width', 'border-inline-start-color', 'background-color']);
     expect(s['border-top-color']).toBe(accent);
     expect(s['border-top-width']).toBe('1px');
@@ -124,13 +125,14 @@ test.describe('point 1: option boxes', () => {
     await expect(flagged).toHaveAttribute('data-state', 'flagged');
     await settled(page);
     const error = await tokenColor(page, '--error');
+    await expect.poll(async () => (await computed(flagged, ['border-top-color']))['border-top-color']).toBe(error);
     const s = await computed(flagged, ['border-top-color', 'border-inline-start-width', 'border-inline-start-color', 'background-color']);
     expect(s['border-top-color']).toBe(error);
     expect(s['border-inline-start-width']).toBe('3px');
     expect(s['border-inline-start-color']).toBe(error);
     const line = flagged.locator('[data-part=env-flag]');
     const l = await computed(line, ['color']);
-    expect(contrast(l['color']!, s['background-color']!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(await resolved(page, l['color']!), await resolved(page, s['background-color']!))).toBeGreaterThanOrEqual(4.5);
     await expect(flagged.getByRole('checkbox', { name: 'staging' })).toBeChecked();
   });
 
@@ -290,6 +292,7 @@ test.describe('point 3: one launch bar', () => {
     expect(home).toEqual(wizard);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('button', { name: /← Start/ }).click();
+    await expect(page.getByTestId('launch-home')).toBeVisible();
     // 91 with a one-line status, 110 when the status wraps to two (the name row, the status, the buttons)
     const home390 = (await box(bar(page))).height;
     expect(home390).toBeGreaterThanOrEqual(90);
@@ -470,7 +473,7 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     await expect(ack.getByRole('checkbox')).not.toBeChecked();
     await expect(part(page, 'bar-launch')).toBeDisabled();
     await expect(part(page, 'bar-status')).toContainText('Acknowledge the preemption to launch');
-    await ack.getByRole('checkbox').click({ force: true });
+    await ack.getByText('I understand that High runs can preempt other work').click();
     await expect(part(page, 'bar-launch')).toBeEnabled({ timeout: 15_000 });
     await part(page, 'bar-launch').click();
     await page.waitForURL(/\/experiments\/[0-9a-f-]{36}/, { timeout: 20_000 });
@@ -524,7 +527,8 @@ test.describe('points 5 and 6: the review and a priority per run', () => {
     await toReview(page);
     await expect(page.locator('[data-part=runs-table] [data-run]')).toHaveCount(6, { timeout: 20_000 });
     for (let n = 1; n <= 6; n++) await expect(prio(page, n)).toContainText('Low');
-    await expect(page.locator('[data-part=run-changed]')).toHaveCount(0); // equal to the new default: no marker
+    // run 2 keeps its own choice (it equals the new default now, but it was changed individually): C-6-8 leaves changed rows alone
+    await expect(page.locator('[data-part=run-changed]')).toHaveCount(1);
   });
 
   test('C-6-10 a single run draws no table and sends no job_priorities', async ({ page }) => {

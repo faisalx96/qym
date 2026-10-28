@@ -76,7 +76,7 @@ test('HIGH priority needs the acknowledgement on the Review step, then sends ack
   const ack = page.locator('[data-part=review-ack]');
   await expect(ack).toContainText('1 run is High.');
   await expect(launchButton(page)).toBeDisabled();
-  await ack.getByRole('checkbox').click({ force: true });
+  await ack.getByText('I understand that High runs can preempt other work').click();
   await expect(launchButton(page)).toBeEnabled();
   expect(posts.launches).toHaveLength(0);
   await launchButton(page).click();

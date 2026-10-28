@@ -65,7 +65,9 @@ async function composed(page: Page, shape: 'combined' | 'one_each' = 'combined',
   if (shape === 'one_each') await page.getByTestId('run-shape').getByRole('radio', { name: 'One run each' }).click({ force: true });
   await nameBox(page).fill('multi dataset run');
   // The dry run of this exact state has settled (the next read of it is the form's current document).
-  await expect(launchBar(page).getByText('Ready to launch')).toBeVisible({ timeout: 15_000 });
+  // With a named task staging is flagged (J2), so the bar says why instead of Ready.
+  if (!task) await expect(launchBar(page).getByText('Ready to launch')).toBeVisible({ timeout: 15_000 });
+  else await expect(launchBar(page)).toContainText(/Fix 1 problem first/, { timeout: 15_000 });
 }
 
 test.describe('review, Raw JSON and launch', () => {
