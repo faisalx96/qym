@@ -70,8 +70,8 @@ and a small label is `--font-md` 13/600 uppercase and tracked. No page writes it
 
 Major analytical sections use a sentence-case section title (`--font-xl`) followed
 by a concise muted `--font-base` description, through the `Section` recipe below. Do not introduce a major section
-with an uppercase metadata-style label. The run detail page's top-level sections are the same `Section`, reached from
-the sticky section nav (`ReportSection` composes it).
+with an uppercase metadata-style label. The run and compare pages are the exception: their top-level sections are
+framed `ReportSection` panels (see "Report section"), reached from the sticky section nav.
 
 **Floor: no readable text below 11px.** 10px is reserved for badge/pill chrome.
 Off-scale values (9px, 10.5px, 11.5px, 12.5px, 13.5px, 14px, 16px, 17px, 20px…)

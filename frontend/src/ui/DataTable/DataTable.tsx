@@ -643,6 +643,8 @@ function DataTableInner<R>({
     if (typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(measure);
     ro.observe(table);
+    // Fitted columns set the table's width, so a narrower scroller does not resize the table: watch the scroller too.
+    if (scrollerRef.current) ro.observe(scrollerRef.current);
     return () => ro.disconnect();
     // `natural`: a content fit changes the column widths but not the table's, so the observer would not see it
   }, [colSig, model.widths, model.density, natural]);
