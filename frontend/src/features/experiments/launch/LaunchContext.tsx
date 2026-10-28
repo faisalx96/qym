@@ -209,6 +209,9 @@ export interface LaunchContextValue {
   isLaunching: boolean;
   launch: () => Promise<void>;
   flags: LaunchFlags;
+  /** The preemption acknowledgement ticked on the review step (needed while any run is High). */
+  preemptionAck: boolean;
+  setPreemptionAck: (value: boolean) => void;
 }
 
 export const LaunchCtx = createContext<LaunchContextValue | null>(null);
@@ -330,6 +333,8 @@ export function LaunchTestProvider({
     confirm: async () => true,
     isLaunching: false,
     launch: NOOP_ASYNC,
+    preemptionAck: false,
+    setPreemptionAck: () => {},
     flags: {
       initState: 'ready',
       envsLoading: false,

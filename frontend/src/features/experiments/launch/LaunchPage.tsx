@@ -34,7 +34,7 @@ function LaunchBody({
   onCancel: () => void;
 }) {
   const { flags, baseState, doc } = useLaunch();
-  const { step, goToStep, next, prev } = useStep();
+  const { step, goToStep } = useStep();
   // Phones drop the header link (the breadcrumb has Experiments) so the title is not pushed down.
   const narrow = useMediaQuery('(max-width: 760px)');
 
@@ -102,9 +102,8 @@ function LaunchBody({
       {step ? (
         <LaunchWizard
           step={step}
-          next={next}
-          prev={prev}
           onGo={(target) => goToStep(target)}
+          onBack={() => goToStep(null)}
           onCancel={onCancel}
         />
       ) : (

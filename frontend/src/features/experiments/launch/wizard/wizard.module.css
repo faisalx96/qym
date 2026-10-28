@@ -53,29 +53,6 @@
   }
 }
 
-.nav {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-}
-
-.navNext {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-  margin-inline-start: auto;
-}
-
 .live {
   position: absolute;
   width: 1px;
@@ -88,21 +65,5 @@
 @media (prefers-reduced-motion: reduce) {
   .panel {
     animation: none;
-  }
-}
-
-/* Narrow: one row (Back left, Skip and Continue right); the long label parts drop out. */
-@media (max-width: 760px) {
-  .nav {
-    flex-wrap: nowrap;
-    padding: var(--space-xs) var(--space-sm);
-  }
-
-  .navNext {
-    flex-wrap: nowrap;
-  }
-
-  .long {
-    display: none;
   }
 }

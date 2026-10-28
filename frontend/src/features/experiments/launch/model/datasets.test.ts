@@ -92,7 +92,7 @@ describe('dataset selection', () => {
 
 describe('spec', () => {
   it('QD-81 builds datasets, the mirrored first pair, the shape and the task', () => {
-    let doc = setTask(four(), PRODUCTION, 'answer-ticket');
+    let doc = setTask(four(), 'answer-ticket');
     const spec = buildSpec(doc, null);
     expect(spec.evaluator).toMatchObject({
       dataset: 'support-tickets',
@@ -104,19 +104,29 @@ describe('spec', () => {
         { dataset: 'billing-faq', version: 'v2' },
       ],
       run_shape: 'combined',
-      task: { [PRODUCTION]: 'answer-ticket' },
+      task: 'answer-ticket',
     });
-    doc = setTask(doc, PRODUCTION, null);
+    doc = setTask(doc, null);
     expect(buildSpec(doc, null).evaluator).not.toHaveProperty('task');
   });
 
-  it('an unticked environment sends no task (QD-38)', () => {
-    const doc = { ...setTask(four(), STAGING, 'x'), environmentIds: [PRODUCTION] };
-    expect(buildSpec(doc, null).evaluator).not.toHaveProperty('task');
+  it('one task per experiment is the string, whatever is ticked (round 9)', () => {
+    const doc = { ...setTask(four(), 'x'), environmentIds: [PRODUCTION] };
+    expect(buildSpec(doc, null).evaluator).toMatchObject({ task: 'x' });
+  });
+
+  it('a cloned per-environment mix keeps the object, for the ticked environments only', () => {
+    const mixed = {
+      ...four(),
+      selection: { ...four().selection, mixedTasks: { [PRODUCTION]: 'a', [STAGING]: 'b' } },
+    };
+    expect(buildSpec(mixed, null).evaluator).toMatchObject({ task: { [PRODUCTION]: 'a', [STAGING]: 'b' } });
+    expect(buildSpec({ ...mixed, environmentIds: [STAGING] }, null).evaluator).toMatchObject({ task: { [STAGING]: 'b' } });
+    expect(setTask(mixed, 'c').selection.mixedTasks).toBeNull();
   });
 
   it('QD-65 a preset holds neither the list nor the shape; its task is a string', () => {
-    const doc = setTask(four(), PRODUCTION, 'answer-ticket');
+    const doc = setTask(four(), 'answer-ticket');
     const config = buildPresetConfig(doc, 'h', null);
     expect(config.evaluator).not.toHaveProperty('datasets');
     expect(config.evaluator).not.toHaveProperty('run_shape');
@@ -168,14 +178,19 @@ describe('validation', () => {
       makeEnv(PRODUCTION, 'production', { capabilities: both, taskList: { status: 'ok', ids: ['answer-ticket'] } }),
       makeEnv(STAGING, 'staging', { capabilities: old }),
     ]);
-    let doc = setTask(four(), PRODUCTION, 'route-ticket');
-    doc = setTask(doc, STAGING, 'answer-ticket');
-    const items = localErrors(doc, ctx).filter((i) => i.pointer.startsWith('/evaluator/task/'));
-    expect(items.map((i) => [i.pointer, i.message, i.stepId])).toEqual([
-      [`/evaluator/task/${PRODUCTION}`, 'production: the service does not list the task “route-ticket”.', 'where'],
-      [`/evaluator/task/${STAGING}`, 'staging: this Evaluation Service does not offer task selection.', 'where'],
+    const doc = setTask(four(), 'route-ticket');
+    const items = localErrors(doc, ctx).filter((i) => i.pointer.startsWith('/evaluator/task'));
+    expect(items.map((i) => [i.pointer, i.message, i.stepId, i.environmentId, i.rule])).toEqual([
+      ['/evaluator/task', 'production does not offer the task “route-ticket”.', 'where', PRODUCTION, 'task_unknown'],
+      [
+        '/evaluator/task',
+        'staging does not offer the task “route-ticket”: its Evaluation Service has no task selection.',
+        'where',
+        STAGING,
+        'task_unsupported',
+      ],
     ]);
-    expect(locate(`/evaluator/task/${PRODUCTION}`, ctx).label).toBe('Task of production');
+    expect(locate('/evaluator/task', ctx).label).toBe('Task');
   });
 
   it('QD-49 the limit of 20', () => {
@@ -190,7 +205,7 @@ describe('validation', () => {
 describe('Raw JSON', () => {
   it('QD-47/48 shows the list and round-trips', () => {
     const ctx = ctxWith();
-    let doc = setTask(setRunShape(four(), 'one_each'), PRODUCTION, 'answer-ticket');
+    let doc = setTask(setRunShape(four(), 'one_each'), 'answer-ticket');
     const state = initRawJson(doc, ctx.evaluatorPanel);
     const parsed = JSON.parse(state.text) as { evaluator: Record<string, unknown> };
     expect(Object.keys(parsed.evaluator)).toEqual(expect.arrayContaining(['dataset', 'datasets', 'run_shape', 'task']));
@@ -209,7 +224,7 @@ describe('Raw JSON', () => {
     doc = result.doc;
     expect(datasetPairs(doc)).toHaveLength(3);
     expect(doc.selection.runShape).toBe('combined');
-    expect(doc.selection.tasks).toEqual({});
+    expect(doc.selection.task).toBeNull();
     expect(result.state.text).toBe(initRawJson(doc, ctx.evaluatorPanel).text); // re-serialised text equals
   });
 
@@ -262,7 +277,9 @@ describe('starting points', () => {
     expect(base.dataset).toMatchObject({ name: 'support-tickets', ref: 'v:v3' });
     expect(base.selection?.more).toEqual([{ name: 'billing-faq', refs: ['a:production'] }]);
     expect(base.selection?.runShape).toBe('one_each');
-    expect(base.selection?.tasks).toEqual({ [PRODUCTION]: 'answer-ticket' });
+    // one of two selected environments ran it: a read-only mix, not one task
+    expect(base.selection?.task).toBeNull();
+    expect(base.selection?.mixedTasks).toEqual({ [PRODUCTION]: 'answer-ticket' });
     expect(base.notes).toContain('Task for canary was not carried (environment not selected)');
   });
 
@@ -272,9 +289,9 @@ describe('starting points', () => {
       makeEnv(STAGING, 'staging', { capabilities: both, taskList: { status: 'ok', ids: ['answer-ticket'] } }),
     ]);
     const own = baselineFrom({ evaluator: { task: 'answer-ticket' } }, ctx, { taskEnvId: PRODUCTION });
-    expect(own.selection?.tasks).toEqual({ [PRODUCTION]: 'answer-ticket' });
+    expect(own.selection?.task).toBe('answer-ticket');
     const unknown = baselineFrom({ evaluator: { task: 'zzz' } }, ctx, { taskEnvId: PRODUCTION });
-    expect(unknown.selection?.tasks).toEqual({});
+    expect(unknown.selection?.task).toBeNull();
     expect(unknown.notes[0]).toContain('“zzz” is not listed by production');
   });
 
@@ -283,15 +300,15 @@ describe('starting points', () => {
     let doc: LaunchDocument;
     doc = four();
     expect(datasetChanged(doc)).toBe(true);
-    doc = setTask(setRunShape(doc, 'one_each'), PRODUCTION, 'answer-ticket');
+    doc = setTask(setRunShape(doc, 'one_each'), 'answer-ticket');
     expect(diffCount(doc)).toMatchObject({ dataset: 1, shape: 1, tasks: 1 });
     const kept = captureEdits(doc);
-    expect(kept.tasks).toEqual({ [PRODUCTION]: 'answer-ticket' });
+    expect(kept.task).toEqual({ value: 'answer-ticket' });
     const replayed = replayEdits(createDocument({ environmentIds: [PRODUCTION] }), kept, ctx).doc;
-    expect(replayed.selection.tasks).toEqual({ [PRODUCTION]: 'answer-ticket' });
+    expect(replayed.selection.task).toBe('answer-ticket');
     expect(replayed.selection.runShape).toBe('one_each');
     const undone = resetAll(doc, ctx);
     expect(pairCount(undone)).toBeLessThanOrEqual(1);
-    expect(undone.selection).toEqual({ extraRefs: [], more: [], runShape: 'combined', tasks: {} });
+    expect(undone.selection).toEqual({ extraRefs: [], more: [], runShape: 'combined', task: null, mixedTasks: null });
   });
 });

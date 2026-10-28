@@ -13,7 +13,7 @@ import {
   unconfirmedEndpoints,
 } from './bindings';
 import {
-  changedTasks,
+  taskChanged,
   copySelection,
   datasetsListChanged,
   pairCount,
@@ -119,7 +119,7 @@ export function diffCount(doc: LaunchDocument): DiffCount {
   const models = changedSlots(doc).length;
   const dataset = datasetChanged(doc) ? 1 : 0;
   const shape = pairCount(doc) >= 2 && runShapeChanged(doc, doc.baseline.selection) ? 1 : 0;
-  const tasks = changedTasks(doc, doc.baseline.selection).length;
+  const tasks = taskChanged(doc, doc.baseline.selection) ? 1 : 0;
   return { settings, models, dataset, shape, tasks, total: settings + models + dataset + shape + tasks };
 }
 
@@ -259,10 +259,13 @@ export function resetRoles(doc: LaunchDocument, rowPointers: readonly string[]):
   return next;
 }
 
-/** The baseline's list, shape and tasks; tasks of environments that are not ticked are not carried. */
+/** The baseline's list, shape and task; a cloned per-environment mix keeps only the ticked environments. */
 function restoreSelection(doc: LaunchDocument): LaunchDocument['selection'] {
   const base = copySelection(doc.baseline.selection ?? emptySelection());
-  base.tasks = Object.fromEntries(Object.entries(base.tasks).filter(([id]) => doc.environmentIds.includes(id)));
+  if (base.mixedTasks) {
+    const kept = Object.fromEntries(Object.entries(base.mixedTasks).filter(([id]) => doc.environmentIds.includes(id)));
+    base.mixedTasks = Object.keys(kept).length ? kept : null;
+  }
   return base;
 }
 
@@ -338,12 +341,19 @@ function selectionFrom(
   const listed = (e: (typeof ctx.envs)[number], id: string) =>
     !e.taskList || e.taskList.status !== 'ok' || e.taskList.ids.includes(id);
   if (typeof task === 'string' && task) {
+    // One task for the whole experiment. A preset's task belongs to its own environment: only that one is checked.
     const targets = options.taskEnvId ? accepting.filter((e) => e.id === options.taskEnvId) : accepting;
-    for (const e of targets) {
-      if (listed(e, task)) selection.tasks[e.id] = task;
-      else notes.push(`The task “${task}” is not listed by ${e.name}; it was left at the worker default.`);
-    }
+    const missing = targets.filter((e) => !listed(e, task));
+    if (!targets.length) {
+      /* no environment offers tasks: nothing to seed */
+    } else if (missing.length) {
+      notes.push(
+        `The task “${task}” is not listed by ${missing.map((e) => e.name).join(', ')}; it was left at the worker default.`,
+      );
+    } else selection.task = task;
   } else if (isPlainObject(task)) {
+    // An experiment launched before one-task-per-experiment: equal values collapse to one task, else a read-only mix.
+    const mixed: Record<string, string> = {};
     for (const [envId, value] of Object.entries(task)) {
       if (typeof value !== 'string' || !value) continue;
       const env = ctx.envs.find((e) => e.id === envId);
@@ -353,8 +363,12 @@ function selectionFrom(
         notes.push(`Task for ${env.name} was not carried (it does not offer task selection)`);
       } else if (!listed(env, value)) {
         notes.push(`The task “${value}” is not listed by ${env.name}; it was left at the worker default.`);
-      } else selection.tasks[envId] = value;
+      } else mixed[envId] = value;
     }
+    const values = Array.from(new Set(Object.values(mixed)));
+    if (values.length === 1 && Object.keys(mixed).length === ctx.envs.length) selection.task = values[0] as string;
+    else if (values.length === 1 && ctx.envs.length === 1) selection.task = values[0] as string;
+    else if (values.length) selection.mixedTasks = mixed;
   }
   return { entries, selection };
 }
@@ -477,10 +491,11 @@ export interface CapturedEdits {
   values: Record<string, { value: JsonValue } | { invalid: InvalidText } | { unset: true }>;
   bindings: Record<string, SlotBinding | null>;
   dataset: DatasetChoice | null;
-  /** The parts of the selection the user changed: the list, the run shape, tasks by environment. */
+  /** The parts of the selection the user changed: the list, the run shape, the task. */
   list: Pick<LaunchSelection, 'extraRefs' | 'more'> | null;
   runShape: LaunchSelection['runShape'] | null;
-  tasks: Record<string, string | null>;
+  /** The experiment's task when the user changed it (`null` inside = the worker default). */
+  task: { value: string | null } | null;
 }
 
 /** The user's edits relative to the current base. */
@@ -500,9 +515,8 @@ export function captureEdits(doc: LaunchDocument): CapturedEdits {
     ? { extraRefs: doc.selection.extraRefs.slice(), more: copySelection(doc.selection).more }
     : null;
   const runShape = runShapeChanged(doc, doc.baseline.selection) ? doc.selection.runShape : null;
-  const tasks: Record<string, string | null> = {};
-  for (const id of changedTasks(doc, doc.baseline.selection)) tasks[id] = doc.selection.tasks[id] ?? null;
-  return { values, bindings, dataset, list, runShape, tasks };
+  const task = taskChanged(doc, doc.baseline.selection) ? { value: doc.selection.task } : null;
+  return { values, bindings, dataset, list, runShape, task };
 }
 
 export interface ReplayResult {
@@ -557,14 +571,7 @@ export function replayEdits(
   if (edits.dataset) next = { ...next, dataset: { ...edits.dataset } };
   if (edits.list) next = { ...next, selection: { ...next.selection, ...copySelection({ ...next.selection, ...edits.list }) } };
   if (edits.runShape) next = { ...next, selection: { ...next.selection, runShape: edits.runShape } };
-  for (const id of Object.keys(edits.tasks)) {
-    if (!next.environmentIds.includes(id)) continue;
-    const tasks = { ...next.selection.tasks };
-    const value = edits.tasks[id];
-    if (value) tasks[id] = value;
-    else delete tasks[id];
-    next = { ...next, selection: { ...next.selection, tasks } };
-  }
+  if (edits.task) next = { ...next, selection: { ...next.selection, task: edits.task.value, mixedTasks: null } };
   return { doc: next, kept, dropped: droppedItems.length, droppedItems };
 }
 
