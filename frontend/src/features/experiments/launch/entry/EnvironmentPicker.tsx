@@ -2,11 +2,12 @@ import { useState } from 'react';
 import type { EvalEnvironment } from '@/api/evalCommon';
 import { AddEnvironmentDialog } from '@/features/environments/AddEnvironmentDialog';
 import { SlotEditorDialog } from '@/features/environments/SlotEditor';
-import { Button, Checkbox, Icon, LinkButton, Tag } from '@/ui';
+import { Link } from 'react-router-dom';
+import { Button, Checkbox, Icon, Tag } from '@/ui';
 import { environmentPath } from '../../paths';
 import { pairCount, PSEUDO, pointerToFieldName, unitsFor } from '../model';
 import { useLaunch } from '../LaunchContext';
-import { EnvVersions } from './VersionsBlock';
+import { EnvRefresh, EnvVersions } from './VersionsBlock';
 import styles from './entry.module.css';
 
 /** What a ticked environment will receive when the experiment names two or more dataset versions. */
@@ -131,15 +132,16 @@ export function EnvironmentPicker() {
                     Group LLM settings
                   </Button>
                 ) : null}
-                <LinkButton
+                {selected ? <EnvRefresh env={env} projectId={projectId} /> : null}
+                <Link
                   to={environmentPath(slug, env.id)}
-                  variant="ghost"
+                  className={styles.detailsLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Details of ${env.name} (opens in a new tab)`}
                 >
                   Details
-                </LinkButton>
+                </Link>
               </span>
               {selected ? <EnvVersions env={env} projectId={projectId} /> : null}
               {flag ? (

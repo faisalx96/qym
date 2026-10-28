@@ -169,26 +169,37 @@ function EditorBody({
   }, [onReload]);
 
   if (!editor || flags.initState === 'loading' || editor.state === 'loading')
-    return <Skeleton kind="cards" count={3} label="Loading the default preset" />;
+    return (
+      <>
+        {renderHeader(null)}
+        <Skeleton kind="cards" count={3} label="Loading the default preset" />
+      </>
+    );
   if (flags.initState === 'error' || editor.state === 'error')
     return (
-      <ErrorState
-        error={new Error(editor?.error || 'Could not load the environment')}
-        title="Could not open the editor"
-        onRetry={reload}
-      />
+      <>
+        {renderHeader(null)}
+        <ErrorState
+          error={new Error(editor?.error || 'Could not load the environment')}
+          title="Could not open the editor"
+          onRetry={reload}
+        />
+      </>
     );
   if (!editor.canPublish)
     return (
-      <EmptyState
-        title="Only managers publish the default preset"
-        body="You can read the default preset on the environment page."
-        action={
-          <LinkButton to={environmentPath(slug, envId)} variant="accent">
-            Back to the environment
-          </LinkButton>
-        }
-      />
+      <>
+        {renderHeader(null)}
+        <EmptyState
+          title="Only managers publish the default preset"
+          body="You can read the default preset on the environment page."
+          action={
+            <LinkButton to={environmentPath(slug, envId)} variant="accent">
+              Back to the environment
+            </LinkButton>
+          }
+        />
+      </>
     );
 
   const current = editor.currentVersion;
@@ -310,6 +321,7 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
     goRef.current(target, { replace: true });
   }, []);
   let body;
+  let ownHeader = false;
   if (!canManage)
     body = (
       <EmptyState
@@ -343,7 +355,9 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
         onRetry={() => void envs.refetch()}
       />
     );
-  else
+  else {
+    // The editor draws its own header: it knows the version the draft is compared with.
+    ownHeader = true;
     body = (
       <LaunchProvider
         key={`${entryKey(location.search)}|${reloadKey}`}
@@ -363,9 +377,10 @@ export function DefaultPresetEditorPage({ environmentId }: { environmentId: stri
         />
       </LaunchProvider>
     );
+  }
   return (
     <div className={`${fullWidth} ${styles.page}`}>
-      {header}
+      {ownHeader ? null : header}
       {body}
     </div>
   );

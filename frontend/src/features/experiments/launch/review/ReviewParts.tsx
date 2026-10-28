@@ -123,9 +123,10 @@ export interface ChangeRow {
 }
 
 /** "Changes from the starting point": 32 px rows with an Edit button. */
-export function ChangesCard({ rows, base }: { rows: readonly ChangeRow[]; base: string }) {
+export function ChangesCard({ rows, base }: { rows: readonly ChangeRow[]; base?: string }) {
+  void base;
   return (
-    <ReviewCard title={`Changes from ${base}`} part="review-changes" label="Changes">
+    <ReviewCard title="Changes from the starting point" part="review-changes" label="Changes">
       {rows.length ? (
         <ul className={styles.list}>
           {rows.map((r) => (
@@ -152,6 +153,7 @@ export function ChecksCard({
   lead,
   statusTestId,
   status,
+  ready: readyOverride,
   children,
 }: {
   warnings?: readonly LaunchWarning[];
@@ -160,12 +162,14 @@ export function ChecksCard({
   statusTestId?: string;
   /** The line shown when there is no problem (default: the review's status). */
   status?: string;
+  /** Overrides the Ready badge (the editor is not ready while a publish blocker stands). */
+  ready?: boolean;
   children?: ReactNode;
 }) {
   const { review, preview, mode } = useLaunch();
   const ready =
     review.items.length === 0 &&
-    (mode === 'editor' || (!preview.loading && !preview.error && preview.data != null));
+    (readyOverride ?? (mode === 'editor' || (!preview.loading && !preview.error && preview.data != null)));
   return (
     <ReviewCard
       part="review-checks"

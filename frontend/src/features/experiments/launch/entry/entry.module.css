@@ -76,6 +76,31 @@
   background: var(--bg-elevated);
 }
 
+.detailsLink,
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.detailsLink:hover,
+.linkButton:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.detailsLink:focus-visible,
+.linkButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .envFlag {
   grid-column: 1 / -1;
   margin: 0;
@@ -97,7 +122,7 @@
   grid-row: 1;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-md);
 }
 
 .help {
@@ -457,14 +482,13 @@
   overflow-wrap: anywhere;
 }
 
-/* Evaluation Service versions inside a ticked environment box (home view and step 1):
-   row 1 = label | Refresh, then the values in a grid whose column count depends on the box width
-   only (never on the values), so the loading placeholders and the loaded tags wrap identically and
-   the box keeps its height when it fills (rule 7). */
+/* Evaluation Service versions inside a ticked environment box (home view and step 1): one inline row, the label,
+   the values (they wrap under 480 px), Refresh at the end. The loading placeholders and the loaded tags share the
+   same boxes, so the box keeps its height when it fills (rule 7). */
 .versionLine {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-xs) var(--space-md);
   padding-block-start: var(--space-xs);
@@ -472,32 +496,22 @@
 }
 
 .versionLabel {
-  grid-row: 1;
-  grid-column: 1;
   font-size: var(--font-sm);
   font-weight: 600;
   line-height: var(--badge-height);
   color: var(--text-secondary);
 }
 
-.versionRefresh {
-  grid-row: 1;
-  grid-column: 2;
-  display: inline-flex;
-  justify-self: end;
-}
-
 .versionLine .versionList {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
-  gap: var(--space-xs) var(--space-md);
+  /* the pairs are flex items of the line itself: the first one sits beside the label, the rest wrap under it */
+  display: contents;
 }
 
 .versionLine .versionItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   min-width: 0;
-  /* A loaded row is exactly the placeholder's height: the key's line box matches the tag, and the
-     value cell is a flex box so the inline tag adds no descender space. */
   line-height: var(--badge-height);
 }
 
@@ -740,6 +754,13 @@
   gap: var(--space-xs);
   padding-block-start: var(--space-sm);
   border-block-start: 1px solid var(--border-subtle);
+}
+
+.taskStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
 }
 
 .taskHead {

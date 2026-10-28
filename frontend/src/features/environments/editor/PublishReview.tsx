@@ -83,7 +83,7 @@ export function PublishReview({ notes, onNotes, saving, failure, blocker, onRelo
       </div>
       <div className={styles.twoCol}>
         <ChangesCard rows={rows} base={comparedWith} />
-        <ChecksCard statusTestId="publish-status" status={blocker || 'Ready to publish'}>
+        <ChecksCard statusTestId="publish-status" status={blocker || 'Ready to publish'} ready={!blocker}>
           {review.items.length ? (
             <Text variant="base" tone="muted" role="status" data-testid="publish-status">
               {blocker}

@@ -1,6 +1,6 @@
 import type { EvalEnvironment } from '@/api/evalCommon';
 import { useEnvTasks, useEnvVersioning } from '@/api/launch';
-import { Button, Tag } from '@/ui';
+import { Tag } from '@/ui';
 import { useLaunch } from '../LaunchContext';
 import styles from './entry.module.css';
 
@@ -28,12 +28,32 @@ function show(value: unknown): string {
  * react-query entry per environment, read when the box is first ticked and again on its Refresh.
  * Read only: nothing user-typed is stored on an experiment.
  */
-export function EnvVersions({ env, projectId }: { env: EvalEnvironment; projectId: string }) {
+/**
+ * "Refresh" in the box's head row: reads the Evaluation Service versions again and, when the environment offers
+ * tasks, its task list (the Task section's union). A request already in flight is kept: Refresh twice is harmless.
+ */
+export function EnvRefresh({ env, projectId }: { env: EvalEnvironment; projectId: string }) {
   const query = useEnvVersioning(projectId, env.id, true);
-  // The box's Refresh reads the tasks too, when the environment offers them (the Task row below).
   const offersTasks = Boolean(env.evaluator_capabilities?.task);
   const tasksQuery = useEnvTasks(projectId, env.id, offersTasks);
-  const hasTaskRow = offersTasks && tasksQuery.data?.status !== 'unsupported';
+  const hasTasks = offersTasks && tasksQuery.data?.status !== 'unsupported';
+  return (
+    <button
+      type="button"
+      className={styles.linkButton}
+      aria-label={hasTasks ? `Refresh versions and tasks of ${env.name}` : `Refresh versions of ${env.name}`}
+      onClick={() => {
+        void query.refetch({ cancelRefetch: false });
+        if (offersTasks) void tasksQuery.refetch({ cancelRefetch: false });
+      }}
+    >
+      Refresh
+    </button>
+  );
+}
+
+export function EnvVersions({ env, projectId }: { env: EvalEnvironment; projectId: string }) {
+  const query = useEnvVersioning(projectId, env.id, true);
   const data = query.data;
   const status =
     query.isPending || query.isFetching ? 'loading' : query.isError ? 'error' : data?.status;
@@ -89,20 +109,6 @@ export function EnvVersions({ env, projectId }: { env: EvalEnvironment; projectI
           {data?.error || (query.error instanceof Error ? query.error.message : 'unknown error')}
         </span>
       )}
-      <span className={styles.versionRefresh}>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={hasTaskRow ? `Refresh versions and tasks of ${env.name}` : `Refresh versions of ${env.name}`}
-          // A request already in flight is kept (no cancel and re-issue): Refresh twice is harmless.
-          onPress={() => {
-            void query.refetch({ cancelRefetch: false });
-            if (offersTasks) void tasksQuery.refetch({ cancelRefetch: false });
-          }}
-        >
-          Refresh
-        </Button>
-      </span>
     </div>
   );
 }

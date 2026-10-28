@@ -4,7 +4,6 @@ import { useEnvTaskLists, type EnvTasksPayload } from '@/api/launch';
 import { Card, Select, Tag, Text } from '@/ui';
 import { pointerToFieldName, setTask } from '../model';
 import { useLaunch } from '../LaunchContext';
-import panel from '../components/launch.module.css';
 import styles from './entry.module.css';
 
 export const DEFAULT_TASK = '__worker_default';
@@ -80,9 +79,9 @@ export function TaskCard() {
   );
   const failed = selectedEnvs.filter((e) => lists[e.id]?.status === 'error');
   return (
-    <div data-part="task-section">
+    <div>
       <Card as="section" aria-label="Task">
-        <div className={panel.cardStack}>
+        <div className={styles.taskStack} data-part="task-section">
           <div className={styles.taskHead}>
             <Text variant="md" weight={600} as="h3">
               Task
