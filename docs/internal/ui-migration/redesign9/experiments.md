@@ -123,7 +123,7 @@ selected fill 4.56:1 (so descriptions inside a selected box use `--text-secondar
 | C-1-3 | `env-box` `[data-state=selected]` | all | border `--accent-primary` 1px plus 3px inline-start rail of the same colour; fill = `--bg-elevated` mixed with `--tint-soft` accent; contrast of the accent border against the fill >= 6:1; the Start-from `[role=radio][aria-checked=true]` uses the same border, rail and tint (identical computed `border-inline-start`) |
 | C-1-4 | `env-box` hover | 1440 | background `--bg-hover` (#2a2a3c) on an unselected box; cursor `auto` (the checkbox label is the control) |
 | C-1-5 | `env-box` `[data-state=flagged]` | all | border and rail `--error`, a `data-part=env-flag` line in `--error` text >= 4.5:1 on the box; the box keeps its checked checkbox |
-| C-1-6 | any element inside `env-section` or `dataset-section` | all | 0 elements whose background is darker than their container's (`--bg-base` or `--bg-void` inside a card); text contrast >= 4.5:1 for every text node on its resolved background |
+| C-1-6 **amended** (implementation A: tags excluded; their tone tint sits on an opaque elevated surface because stacking it on the selected tint measured 4.0 to 4.2:1 in axe) | any element inside `env-section` or `dataset-section` | all | 0 non-Tag elements whose background is darker than their container's (`--bg-base` or `--bg-void` inside a card); text contrast >= 4.5:1 for every text node on its resolved background |
 | C-1-7 | `env-box` heights | 1440 / 390 | ticked box with Versions: 88 +- 6 / 112 +- 8 px (mock 87.8 / 111.8; today 143 / 191 with the Task row); unticked-to-ticked change adds only the Versions line height |
 
 ## 3. Point 2: the task is not inside the environments (decision I1)
@@ -144,7 +144,7 @@ display unchanged (read-only, the experiment detail already reads `params.task`)
 | Id | Element | Width | Criterion |
 |---|---|---|---|
 | C-2-1 | `env-box` (all states) | all | contains 0 `Select` and 0 element named Task; the Task Select count on the page is exactly 1 (today: one per ticked environment) |
-| C-2-2 | `task-section` | 1440 / 1024 / 390 | directly above `env-section`; 0 px vertical gap difference to the other cards (14 px); height 74 +- 4 px at 1440 (mock 73.6), 148 +- 12 at 390 |
+| C-2-2 **amended** (measured on the card's content block, as the mock; 1024: help wraps, <= 92) | `task-section` | 1440 / 1024 / 390 | directly above `env-section`; 0 px vertical gap difference to the other cards (14 px); height 74 +- 4 px at 1440 (mock 73.6), 148 +- 12 at 390 |
 | C-2-3 | `task-select` | 1440 / 390 | 24 px high; 360 px wide at 1440 and 1024, the card's content width at 390 (235 px); first item "Worker default"; items carry a description naming the offering environments |
 | C-2-4 | task list | 1440 | items = union of the ticked environments' lists, de-duplicated by id, in the order of first appearance, "Worker default" first; one request per environment (cache keys unchanged: `useEnvTasks`), 0 extra requests when ticking a second environment already read |
 | C-2-5 | `task-section` with 0 ticked | all | Select disabled, text "Pick an environment first"; the section height equals its height with environments ticked +- 0 px (the availability row reserves its line) |
@@ -217,9 +217,9 @@ Shots: `mock-page-review-{1440,390}`, `mock-page-preset-publish-*` (the same Sum
 | C-5-4 | `runs-table` columns | 1440 | columns present = `#`, plus only those that vary (environment, dataset, swept setting, task), plus Priority; 0 columns whose 6 cells hold the same text (except `#`, Priority) |
 | C-5-5 | `run-count` | all | font 18 px / 700 mono in the card header, next to "runs to launch" (15/650); today 26 px mono in the aside |
 | C-5-6 | `runs-table` at 390 | 390 | replaced by `runs-cards`: one card per run, label column 96 px, 6 cards for 6 runs, card height <= 110 px |
-| C-5-7 | review cards | 1440 / 390 | Summary, Runs, Changes, Checks are `Card`s; Changes and Checks share a row at >= 960 px (two columns of 543 px at 1440), stack below; gaps 14 px |
+| C-5-7 **amended** (543 px contradicts 14 px gaps in a 1193 px column: two equal columns of 589.5 px) | review cards | 1440 / 390 | Summary, Runs, Changes, Checks are `Card`s; Changes and Checks share a row at >= 960 px (two columns of 589.5 px at 1440), stack below; gaps 14 px |
 | C-5-8 | text sizes | all | smallest non-tag text 11 px; every label >= 4.5:1; section titles 15 px; 0 text uses `--text-dim` |
-| C-5-9 | first screen of the Review step | 1440 x 900 | the Summary and the first 4 run rows are visible without scrolling at 1440x900 (mock: summary ends at y 553, run rows 4 end by y 940 in a 1000 px frame; the bar is sticky) |
+| C-5-9 **amended** (the mock numbers need a 1000 px frame) | first screen of the Review step | 1440 x 1000 | the Summary and the first 4 run rows are visible without scrolling at 1440x900 (mock: summary ends at y 553, run rows 4 end by y 940 in a 1000 px frame; the bar is sticky) |
 
 ## 7. Point 6: a priority dropdown per run (decision I2)
 
