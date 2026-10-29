@@ -468,7 +468,7 @@ function RulesView({
         title="Delete version?"
         description={
           deleting
-            ? `v${deleting.version} is removed from the history. A version that analyses still reference cannot be deleted.`
+            ? `v${deleting.version} is removed from the history. A platform admin can restore it.`
             : undefined
         }
         tone="danger"

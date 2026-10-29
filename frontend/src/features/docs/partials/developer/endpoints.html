@@ -251,7 +251,7 @@ curl -s -X POST "https://qym.example.com/v1/datasets:upload" \
     <tr><td><code>GET /api/runs/{run_id}/analysis-rule-versions/{version}:compare</code></td><td>Compare against the required <code>base</code> version, returning added, removed, changed, and unchanged rules.</td></tr>
     <tr><td><code>GET /api/runs/{run_id}/analysis-rule-lineage</code></td><td>Return the parent-linked rule-version history and production pointer.</td></tr>
     <tr><td><code>POST /api/runs/{run_id}/analysis-rule-versions/{version_id}/activate</code></td><td>Set an available rule version as the project's production version.</td></tr>
-    <tr><td><code>DELETE /api/runs/{run_id}/analysis-rule-versions/{version_id}</code></td><td>Delete a rule version while leaving at least one live version; requires run-owner or project-manager rights.</td></tr>
+    <tr><td><code>DELETE /api/runs/{run_id}/analysis-rule-versions/{version_id}</code></td><td>Soft-delete a rule version while leaving at least one live version. Project manager only. The production version answers <code>409</code>. Promote another version first.</td></tr>
     <tr><td><code>POST /api/runs/{run_id}/analysis-rule-versions/{version_id}/restore</code></td><td>Restore a deleted rule version. Platform admin only.</td></tr>
     <tr><td><code>DELETE /api/runs/{run_id}/analysis-rule-versions/{version_id}/permanent</code></td><td>Permanently remove a soft-deleted rule version. Platform admin only.</td></tr>
     <tr><td><code>/api/projects/{project_slug}/analysis-config</code></td><td>Project-scoped analysis configuration; this is the no-run equivalent of the run-scoped config endpoint.</td></tr>

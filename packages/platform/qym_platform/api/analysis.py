@@ -6680,7 +6680,8 @@ def list_project_analysis_rule_versions(
             )
             for version in versions
         ],
-        "can_delete": can_delete_run(db, principal, run),
+        # Deleting a version needs a manager, as creating and promoting do.
+        "can_delete": is_project_manager(db, principal, run.project_id),
         "can_activate": is_project_manager(db, principal, run.project_id),
         "can_restore": is_admin,
         "production_version_id": active.id if active else None,
@@ -7057,13 +7058,14 @@ def delete_project_analysis_rule_version(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """Permanently delete a project rules version."""
+    """Soft-delete a project rules version. Project managers only.
+
+    The row stays with ``deleted_at`` set, so a platform admin can restore it
+    or remove it permanently. The live (production) version cannot be deleted.
+    """
     run = _resolve_analysis_scope(db, principal, run_id)
-    if not can_delete_run(db, principal, run):
-        raise HTTPException(
-            status_code=403,
-            detail="Run owner or project manager access required",
-        )
+    if not is_project_manager(db, principal, run.project_id):
+        raise HTTPException(status_code=403, detail="Project manager access required")
     require_project_writable(db, run.project_id)
     version = (
         db.query(ProjectAnalysisRuleVersion)
@@ -7075,6 +7077,23 @@ def delete_project_analysis_rule_version(
     )
     if not version:
         raise HTTPException(status_code=404, detail="Rule version not found")
+    if version.deleted_at is not None:
+        raise HTTPException(status_code=409, detail="Rule version is already deleted")
+    active = _active_analysis_rule_version(db, run.project_id)
+    production_alias = (
+        db.query(ProjectAnalysisRuleAlias.id)
+        .filter(
+            ProjectAnalysisRuleAlias.project_id == run.project_id,
+            ProjectAnalysisRuleAlias.alias == "production",
+            ProjectAnalysisRuleAlias.rule_version_id == version.id,
+        )
+        .first()
+    )
+    if (active is not None and active.id == version.id) or production_alias:
+        raise HTTPException(
+            status_code=409,
+            detail="The live rule version cannot be deleted. Promote another version first.",
+        )
     remaining_live_versions = (
         db.query(ProjectAnalysisRuleVersion.id)
         .filter(
@@ -7089,58 +7108,24 @@ def delete_project_analysis_rule_version(
             status_code=409,
             detail="At least one rule version must remain",
         )
-    deleted_version_id = version.id
-    descendants = (
-        db.query(ProjectAnalysisRuleVersion)
-        .filter(
-            ProjectAnalysisRuleVersion.project_id == run.project_id,
-            or_(
-                ProjectAnalysisRuleVersion.parent_version_id == version.id,
-                ProjectAnalysisRuleVersion.base_version_id == version.id,
-            ),
-        )
-        .all()
-    )
-    for descendant in descendants:
-        if descendant.parent_version_id == version.id:
-            descendant.parent_version_id = None
-        if descendant.base_version_id == version.id:
-            descendant.base_version_id = None
-    db.query(ProjectAnalysisRuleMergeParent).filter(
-        ProjectAnalysisRuleMergeParent.version_id == version.id
-    ).delete(synchronize_session=False)
-    merge_descendants = (
-        db.query(ProjectAnalysisRuleMergeParent)
-        .filter(
-            ProjectAnalysisRuleMergeParent.parent_version_id == version.id
-        )
-        .all()
-    )
-    for edge in merge_descendants:
-        db.delete(edge)
-    db.query(ProjectAnalysisRuleMergeParent).filter(
-        ProjectAnalysisRuleMergeParent.merge_base_version_id == version.id
-    ).update(
-        {ProjectAnalysisRuleMergeParent.merge_base_version_id: None},
-        synchronize_session=False,
-    )
+    # Keep the lineage links so a restore brings the version back in place.
+    # Other aliases cannot resolve to a deleted version, so drop them.
     db.query(ProjectAnalysisRuleAlias).filter(
         ProjectAnalysisRuleAlias.project_id == run.project_id,
         ProjectAnalysisRuleAlias.rule_version_id == version.id,
     ).delete(synchronize_session=False)
-    try:
-        db.flush()
-        db.delete(version)
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="Rule version cannot be deleted while referenced",
-        ) from exc
+    version.deleted_at = utc_now_naive()
+    version.deleted_by_user_id = principal.user.id
+    db.commit()
+    logger.info(
+        "Analysis rule version %s of project %s deleted by user %s",
+        version.id,
+        run.project_id,
+        principal.user.id,
+    )
     active = _active_analysis_rule_version(db, run.project_id)
     return {
-        "deleted_version_id": deleted_version_id,
+        "deleted_version_id": version.id,
         "active_version": (
             _analysis_rule_version_payload(active, active_version_id=active.id)
             if active
