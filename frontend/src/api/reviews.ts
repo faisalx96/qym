@@ -18,6 +18,7 @@ export interface RootCauseIssue {
   category_reason?: string | null;
   confidence?: number | null;
   solution?: string | null;
+  solution_note?: string | null;
 }
 
 export interface ReviewRules {
@@ -228,12 +229,12 @@ export function useDeleteCorrection() {
   });
 }
 
+/**
+ * An edit sends the issue list only. The server reads the legacy single-field keys
+ * (human_root_cause_detail is the subcategory, human_root_cause_note the finding) only without it.
+ */
 export interface HumanDiagnosisBody {
   human_root_cause_issues: RootCauseIssue[];
-  human_root_causes: string[];
-  human_root_cause: string;
-  human_root_cause_detail: string;
-  human_root_cause_note: string;
 }
 
 export function useEditDiagnosis() {

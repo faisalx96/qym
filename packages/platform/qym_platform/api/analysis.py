@@ -9745,6 +9745,13 @@ def update_correction(
     ]:
         if request_key in request:
             patch[state_key] = request.get(request_key)
+    if "root_cause_issues" in patch:
+        # The issue list is the whole diagnosis. Older Reviews pages also sent
+        # the first finding as root_cause_detail (the subcategory) and the old
+        # note as root_cause_note (the finding). These keys must not overwrite
+        # the issues.
+        for key in ("root_cause", "root_causes", "root_cause_detail", "root_cause_note"):
+            patch.pop(key, None)
 
     if c.metric_name and correction_issue_id(c):
         current = correction_issues(c)[0]

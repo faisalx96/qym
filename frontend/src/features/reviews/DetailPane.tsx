@@ -51,6 +51,12 @@ export function ReviewStatusMark({ status }: { status: string }) {
   return <StatusMark tone={tone} shape={shape} label={status} data-status={status} />;
 }
 
+/** The diagnosis an edit starts from: the human issues, else the AI's (an AI candidate has no human issues yet). */
+export function editSeed(row: CorrectionRow): CorrectionRow['human_root_cause_issues'] {
+  const human = row.human_root_cause_issues ?? [];
+  return human.length ? human : (row.ai_root_cause_issues ?? []);
+}
+
 export function DetailPane(p: DetailPaneProps) {
   const { row } = p;
   const priority = correctionPriority(row);
@@ -179,7 +185,10 @@ export function DetailPane(p: DetailPaneProps) {
           </Text>
           {p.editing ? (
             <IssueEditForm
-              initial={row.human_root_cause_issues ?? []}
+              initial={editSeed(row)}
+              single={Boolean(row.issue_id)}
+              projectSlug={row.project_slug}
+              runHref={runHref}
               saving={p.saving}
               onSave={p.onSaveEdit}
               onCancel={p.onCancelEdit}
