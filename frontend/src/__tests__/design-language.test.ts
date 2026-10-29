@@ -294,6 +294,40 @@ describe('primitive module contracts', () => {
     }
   });
 
+  it('Tabs: the selected tab is green and its 2px underline sits inside the list, unclipped (round 10)', () => {
+    const css = ui('Tabs');
+    const list = css.split('.list {')[1]?.split('}')[0] ?? '';
+    // a border baseline let the underline hang 1px below the scrolling list: clipped, with a 1px vertical scrollbar
+    expect(list).toContain('box-shadow: inset 0 -1px 0 var(--border-subtle);');
+    expect(list).toContain('overflow-y: hidden;');
+    expect(list).not.toMatch(/border-bottom:/);
+    const tab = css.split('.tab {')[1]?.split('}')[0] ?? '';
+    expect(tab).toContain('border-bottom: 2px solid transparent;');
+    expect(tab).not.toMatch(/margin-bottom: -/);
+    const selected = css.split('.tab[data-selected] {')[1]?.split('}')[0] ?? '';
+    expect(selected).toContain('color: var(--accent-primary);');
+    expect(selected).toContain('border-color: var(--accent-primary);');
+  });
+
+  it('Button: a disabled primary keeps a green tint instead of the grey disabled fill (round 10)', () => {
+    const css = ui('Button');
+    const rule = css.split(".button[data-variant='primary'][data-disabled] {")[1]?.split('}')[0] ?? '';
+    expect(rule).toContain('color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent)');
+    expect(rule).toContain('box-shadow: none;');
+  });
+
+  it('DataTable: rows part on a faint hairline, none under zebra stripes or on the last row (round 10)', () => {
+    const css = ui('DataTable');
+    expect(css).toContain('--row-line: color-mix(in srgb, var(--border-subtle) 55%, transparent);');
+    expect(css.split('.card[data-zebra] {')[1]?.split('}')[0] ?? '').toContain('--row-line: transparent;');
+    expect(css.split('.tbody td {')[1]?.split('}')[0] ?? '').toContain(
+      'border-bottom: 1px solid var(--row-line);',
+    );
+    expect(css.split('.tbody > tr:last-child > td {')[1]?.split('}')[0] ?? '').toContain(
+      'border-bottom-color: transparent;',
+    );
+  });
+
   it('IconButton tile (row actions) is the soft tint at rest and the strong tint on hover', () => {
     const css = ui('IconButton');
     const rest = css.split('.iconAction[data-tile] {')[1]?.split('}')[0] ?? '';

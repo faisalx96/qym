@@ -14,6 +14,7 @@ import {
   ConfirmDialog,
   DataTable,
   ErrorState,
+  Icon,
   Skeleton,
   Stack,
   Tag,
@@ -26,6 +27,7 @@ import {
 } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
+import { SettingsCard } from './SettingsCard';
 
 const KEEP = '__KEEP__';
 
@@ -115,11 +117,14 @@ export function LlmConnectionsTab() {
               setShowForm(true);
             },
           },
+          // every action is a direct icon: a ⋯ menu that held only Delete hid the one action it had (round 10)
           ...(!c.is_default
             ? [
                 {
                   id: 'set-default',
                   label: `Set ${c.name} as default`,
+                  icon: 'star',
+                  primary: true,
                   onPress: () =>
                     action
                       .mutateAsync({ id: c.id, action: 'set-default' })
@@ -135,49 +140,65 @@ export function LlmConnectionsTab() {
                 },
               ]
             : []),
-          { id: 'delete', label: `Delete ${c.name}`, danger: true, onPress: () => setDeleting(c) },
+          {
+            id: 'delete',
+            label: `Delete ${c.name}`,
+            icon: 'trash',
+            primary: true,
+            danger: true,
+            onPress: () => setDeleting(c),
+          },
         ]
       : []),
   ];
 
   return (
     <Stack gap="lg">
-      {list.isError ? (
-        <ErrorState
-          error={list.error}
-          title="Couldn’t load connections"
-          onRetry={() => list.refetch()}
-          compact
-        />
-      ) : list.isPending ? (
-        showSkeleton ? (
-          <Skeleton kind="table" rows={2} />
-        ) : null
-      ) : (
-        <DataTable<LlmConnection>
-          density="regular"
-          rowActions={rowActions}
-          aria-label="LLM connections"
-          columns={columns}
-          rows={list.data}
-          rowKey={(c) => c.id}
-          storageKey="settings-llm"
-          empty="No LLM connections yet. Add one to run auto-analysis and experiments."
-        />
-      )}
-      {canEdit && !showForm ? (
-        <div ref={addRef}>
-          <Button
-            variant="accent"
-            onPress={() => {
-              setEditing(null);
-              setShowForm(true);
-            }}
-          >
-            Add connection
-          </Button>
-        </div>
-      ) : null}
+      <SettingsCard
+        title="LLM connections"
+        description="Model providers that auto-analysis and experiments call."
+        action={
+          canEdit && !showForm ? (
+            <div ref={addRef}>
+              <Button
+                variant="primary"
+                icon={<Icon name="plus" />}
+                onPress={() => {
+                  setEditing(null);
+                  setShowForm(true);
+                }}
+              >
+                Add connection
+              </Button>
+            </div>
+          ) : undefined
+        }
+        data-llm-connections
+      >
+        {list.isError ? (
+          <ErrorState
+            error={list.error}
+            title="Couldn’t load connections"
+            onRetry={() => list.refetch()}
+            compact
+          />
+        ) : list.isPending ? (
+          showSkeleton ? (
+            <Skeleton kind="table" rows={2} />
+          ) : null
+        ) : (
+          <DataTable<LlmConnection>
+            density="regular"
+            rowActions={rowActions}
+            aria-label="LLM connections"
+            columns={columns}
+            rows={list.data}
+            rowKey={(c) => c.id}
+            storageKey="settings-llm"
+            empty="No LLM connections yet. Add one to run auto-analysis and experiments."
+          />
+        )}
+      </SettingsCard>
       {canEdit && showForm ? (
         <ConnectionForm
           key={editing?.id ?? 'new'}

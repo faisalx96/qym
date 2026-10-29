@@ -1,5 +1,5 @@
 /**
- * Project settings -> Environments tab: the list with "+ Add environment" and the environment
+ * Project settings -> Environments tab: the list with "Add environment" and the environment
  * detail drawer. Deep link `?tab=environments&env=<id>[&promote=run|job&id=<id>]` opens the
  * drawer; with `promote` it goes straight to the default-preset editor.
  */
@@ -8,7 +8,8 @@ import { useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/features/shell';
 import { defaultPresetEditPath } from '@/features/experiments/paths';
 import { useSearchParamsState } from '@/lib/url-state';
-import { Button, Drawer, Text } from '@/ui';
+import { Button, Drawer, Icon } from '@/ui';
+import { SettingsCard } from '@/features/shell/settings/SettingsCard';
 import { useEvalEnvironment } from '@/api/evalEnvironments';
 import { projectPath } from '@/app/routes';
 import { AddEnvironmentDialog } from './AddEnvironmentDialog';
@@ -54,27 +55,32 @@ export function EnvironmentsPanel() {
   const close = () => replaceUrlQuery({ env: null, promote: null, id: null });
 
   return (
-    <div className={styles.body} data-environments-panel>
-      <div className={styles.sectionHead}>
-        <Text variant="base" tone="muted">
-          {canManage
-            ? 'Register Evaluation Service deployments; experiments launch jobs on them.'
-            : 'Only project managers and admins can add or change environments.'}
-        </Text>
-        {canAdd ? (
-          <Button variant="primary" size="md" onPress={() => setAdding(true)}>
-            + Add environment
-          </Button>
-        ) : null}
-      </div>
-      <EnvironmentsList
-        projectId={project.id}
-        slug={slug}
-        canManage={canManage}
-        readOnly={readOnly}
-        onOpen={(env) => open(env.id)}
-        onAdd={() => setAdding(true)}
-      />
+    <div className={styles.body}>
+      {/* One Add button, on the card's title row; the empty list no longer repeats it (round 10). */}
+      <SettingsCard
+        title="Environments"
+        description={
+          canManage
+            ? 'Evaluation Service deployments that experiments launch jobs on.'
+            : 'Evaluation Service deployments that experiments launch jobs on. Only project managers and admins can add or change them.'
+        }
+        action={
+          canAdd ? (
+            <Button variant="primary" icon={<Icon name="plus" />} onPress={() => setAdding(true)}>
+              Add environment
+            </Button>
+          ) : undefined
+        }
+        data-environments-panel
+      >
+        <EnvironmentsList
+          projectId={project.id}
+          slug={slug}
+          canManage={canManage}
+          readOnly={readOnly}
+          onOpen={(env) => open(env.id)}
+        />
+      </SettingsCard>
       {envId && !handingOff ? <EnvironmentDrawer environmentId={envId} onClose={close} /> : null}
       {canAdd ? (
         <AddEnvironmentDialog

@@ -4,7 +4,8 @@ import { useAdminUsers, useAllProjects, useMaintenance } from '@/api/admin';
 import { ADMIN_TABS, type AdminTab } from '@/app/routes';
 import { useDocumentTitle } from '@/features/shell/hooks';
 import { constrained } from '@/features/shell/layout';
-import { PageHeader, StatStrip, TabPanel, Tabs } from '@/ui';
+import { Icon, PageHeader, StatStrip, TabPanel, Tabs } from '@/ui';
+import { plural } from '@/features/shell/plural';
 import { FeedbackAgentTab } from './feedback/FeedbackAgentTab';
 import { MaintenanceTab } from './maintenance/MaintenanceTab';
 import { ProjectsTab } from './projects/ProjectsTab';
@@ -29,6 +30,7 @@ export function AdminPage() {
   }, [status]);
   if (!selected) return <Navigate to="/admin/runs" replace />;
   const archived = projects.data?.filter((p) => !p.is_active) ?? [];
+  const disabled = users.data?.filter((u) => !u.is_active).length ?? 0;
   const runs = projects.data?.reduce((n, p) => n + p.run_count, 0);
   const activeJobs = maint.data?.jobs.filter((j) =>
     ['queued', 'running', 'cancel_requested'].includes(j.status),
@@ -42,28 +44,39 @@ export function AdminPage() {
       <p className={styles.srOnly} role="status" aria-live="polite" data-status-line>
         {status}
       </p>
-      {/* The same compact totals on every tab, so the tabs never move when you switch between them. */}
+      {/* The platform totals as the band of tiles the project Overview uses (label, value, a line of context), the same
+          on every tab so the tabs never move. Round 10: the one-line compact strip was hard to read. */}
       <div className={styles.totals}>
         <StatStrip
-          variant="compact-header"
           aria-label="Platform totals"
           items={[
             {
+              key: 'users',
               label: 'Users',
+              icon: <Icon name="user" />,
               value: users.data?.length ?? '—',
-              sub: users.data ? `${users.data.filter((u) => !u.is_active).length} disabled` : undefined,
+              sub: users.data ? (disabled ? plural(disabled, 'disabled user') : 'All active') : undefined,
             },
             {
+              key: 'projects',
               label: 'Projects',
+              icon: <Icon name="folder" />,
               value: projects.data?.length ?? '—',
-              sub: projects.data ? `${archived.length} archived` : undefined,
+              sub: projects.data
+                ? archived.length
+                  ? plural(archived.length, 'archived project')
+                  : 'None archived'
+                : undefined,
             },
             {
-              label: 'Runs, all projects',
-              value: runs ?? '—',
+              key: 'runs',
+              label: 'Runs',
+              icon: <Icon name="chart" />,
+              tone: 'accent',
+              value: runs !== undefined ? runs.toLocaleString() : '—',
               sub: archived.length
-                ? `incl. ${archived.reduce((n, p) => n + p.run_count, 0)} in archived projects`
-                : undefined,
+                ? `All projects, incl. ${archived.reduce((n, p) => n + p.run_count, 0).toLocaleString()} archived`
+                : 'All projects',
               help: 'Sum of every project’s run count, including archived projects. Deleted runs are excluded. The lists below only show active projects.',
             },
           ]}

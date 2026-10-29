@@ -47,6 +47,8 @@ export type IconName =
   | 'archive'
   | 'play'
   | 'stop'
+  | 'ban'
+  | 'star'
   | 'clock'
   | 'eye'
   | 'eye-off'
@@ -115,6 +117,9 @@ const PATHS: Record<IconName, string> = {
   archive: 'M3 5h18v4H3zM5 9v11h14V9M10 13h4',
   play: 'M7 5v14l12-7z',
   stop: 'M6 6h12v12H6z',
+  /* Revoke a key or token, disable a user: a circle with a slash ("no access"), not a bare square or a cross. */
+  ban: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM5.6 5.6l12.8 12.8',
+  star: 'M12 3l2.8 5.6 6.2.9-4.5 4.4 1.1 6.1L12 17.1 6.4 20l1.1-6.1L3 9.5l6.2-.9z',
   clock: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7v5l3 2',
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   'eye-off':

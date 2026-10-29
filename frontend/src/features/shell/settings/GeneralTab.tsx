@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useRenameProject, useReviewRules } from '@/api/projects';
 import { ApiError } from '@/lib/http';
 import { useSubmitLock } from '@/lib/pending';
-import { Button, Checkbox, KeyValueGrid, Select, Stack, Text, TextField, useToast, Card } from '@/ui';
+import { Button, Checkbox, Select, Stack, Text, TextField, useToast, Card } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
 
@@ -32,38 +32,6 @@ export function GeneralTab() {
 
   return (
     <Stack gap="lg">
-      <Card
-        as="section"
-        aria-labelledby="general-overview"
-        header={
-          <div className={styles.cardHeader}>
-            <Text variant="md" id="general-overview">
-              Overview
-            </Text>
-          </div>
-        }
-      >
-        <div className={styles.cardBody}>
-          <KeyValueGrid
-            aria-label="Project overview"
-            columns={3}
-            items={[
-              { key: 'slug', label: 'Slug', value: project.slug, mono: true },
-              { key: 'role', label: 'Your role', value: isAdmin ? 'Admin' : project.role || 'Member' },
-              { key: 'members', label: 'Members', value: project.member_count },
-              { key: 'runs', label: 'Runs', value: project.run_count },
-              { key: 'status', label: 'Status', value: project.is_active ? 'Active' : 'Archived' },
-              {
-                key: 'created',
-                label: 'Created',
-                value: new Date(project.created_at).toLocaleDateString(),
-                mono: true,
-              },
-            ]}
-          />
-        </div>
-      </Card>
-
       {isAdmin && !readOnly ? (
         <Card
           as="section"

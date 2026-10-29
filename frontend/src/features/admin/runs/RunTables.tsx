@@ -114,6 +114,7 @@ export function RunTable({
       rowKey={(r) => r.run_id}
       storageKey={storageKey}
       density="comfortable"
+      densityLocked
       empty={emptyState}
       rowActions={(r) =>
         !r.can_force_stop || !onForceStop || /^(STOPPED|COMPLETED|FAILED)$/i.test(r.status)

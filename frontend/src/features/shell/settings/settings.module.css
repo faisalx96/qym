@@ -1,9 +1,16 @@
 /* Project settings: cards, add bars, tables (project_settings.html recipes). */
 .cardHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
+}
+
+.cardAction {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .cardBody {
@@ -52,7 +59,7 @@
 
 .promptLayout {
   display: grid;
-  grid-template-columns: var(--settings-prompt-rail-width) minmax(0, 1fr);
+  grid-template-columns: var(--settings-prompt-tab-width) minmax(0, 1fr);
   gap: var(--space-lg);
 }
 
@@ -62,13 +69,18 @@
   gap: 2px;
 }
 
+/* A prompt type: icon tile, name and default/custom on one line, what it does under them (the old list, round 10). */
 .promptTab {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'icon label state'
+    'icon desc desc';
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
+  column-gap: var(--space-sm);
+  row-gap: 2px;
   min-height: var(--tab-height);
-  padding: 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
   border: 0;
   border-inline-start: 2px solid transparent;
   border-radius: 0 var(--control-radius) var(--control-radius) 0;
@@ -80,15 +92,68 @@
   cursor: pointer;
 }
 
+.promptTab:hover {
+  background: var(--bg-hover);
+}
+
 .promptTab[aria-selected='true'] {
   color: var(--text-primary);
   border-color: var(--accent-primary);
   background: var(--bg-elevated);
 }
 
+.promptIcon {
+  grid-area: icon;
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--badge-height);
+  height: var(--badge-height);
+  border-radius: var(--control-radius);
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+}
+
+.promptTab[aria-selected='true'] .promptIcon {
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) var(--tint-soft), transparent);
+}
+
+.promptLabel {
+  grid-area: label;
+  min-width: 0;
+}
+
+.promptState {
+  grid-area: state;
+}
+
+.promptDesc {
+  grid-area: desc;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 400;
+}
+
+.promptPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
 .promptEditor {
   min-height: var(--settings-prompt-editor-min-height);
   font-family: var(--font-mono);
+}
+
+.promptFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
 }
 
 .promptMeta {

@@ -627,7 +627,12 @@ function DataTableInner<R>({
       table.querySelectorAll<HTMLElement>('thead th[data-col]').forEach((th) => {
         next[th.dataset.col!] = th.getBoundingClientRect().width;
       });
-      const sw = scrollerRef.current?.clientWidth ?? 0;
+      // clientWidth rounds; at a fractional zoom (125%) columns fitted to the rounded width overflowed by a fraction of a
+      // pixel and showed a horizontal scrollbar (round 10), so fit to the floor of the real width.
+      const el = scrollerRef.current;
+      const sw = el
+        ? Math.max(0, Math.floor(el.getBoundingClientRect().width) - (el.offsetWidth - el.clientWidth))
+        : 0;
       setScrollerWidth((p) => (p === sw ? p : sw));
       setMeasured((prev) => {
         const keys = Object.keys(next);
@@ -1548,8 +1553,13 @@ function DataTableInner<R>({
     }
     if (pseudo === 'actions') {
       const acts = actionsOf?.(r) ?? [];
-      const primary = acts.filter((a) => a.primary).slice(0, 2);
-      const more = acts.filter((a) => !primary.includes(a));
+      const shown = acts.filter((a) => a.primary).slice(0, 2);
+      const rest = acts.filter((a) => !shown.includes(a));
+      // A ⋯ menu that would hold one action with a glyph (or a delete) hides it behind a click: show it as an icon
+      // (round 10). A lone action with no glyph stays in the menu, so an icon never stands for an unnamed action.
+      const lone = rest.length === 1 && (rest[0]!.icon || rest[0]!.danger) ? rest[0]! : null;
+      const primary = lone ? [...shown, lone] : shown;
+      const more = lone ? [] : rest;
       return (
         <td key={col.id} {...common} role="gridcell" data-pseudo="actions">
           <span className={styles.rowActions}>
@@ -1557,7 +1567,7 @@ function DataTableInner<R>({
               <Tooltip key={a.id} content={a.hint ?? a.label}>
                 <IconButton
                   label={a.label}
-                  icon={a.icon ?? 'more'}
+                  icon={a.icon ?? (a.danger ? 'trash' : 'more')}
                   tone={a.danger ? 'danger' : 'default'}
                   isDisabled={a.disabled}
                   onPress={() => a.onPress(r)}

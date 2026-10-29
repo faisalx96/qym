@@ -187,6 +187,23 @@ describe('tone primitives', () => {
     expect(screen.getByText('m').querySelector('[data-series="4"]')).not.toBeNull();
   });
 
+  it('a role Tag takes its tone from the role: admin blue, manager green, member neutral (round 10)', () => {
+    render(
+      <>
+        <Tag kind="role">admin</Tag>
+        <Tag kind="role">MANAGER</Tag>
+        <Tag kind="role">member</Tag>
+        <Tag kind="role" tone="warning">
+          x
+        </Tag>
+      </>,
+    );
+    expect(screen.getByText('admin')).toHaveAttribute('data-tone', 'info');
+    expect(screen.getByText('MANAGER')).toHaveAttribute('data-tone', 'accent');
+    expect(screen.getByText('member')).not.toHaveAttribute('data-tone');
+    expect(screen.getByText('x')).toHaveAttribute('data-tone', 'warning');
+  });
+
   it('Chip takes a tone or a series for its selected colour', () => {
     render(
       <>

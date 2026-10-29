@@ -201,7 +201,9 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   no compact or roomy variants. Buttons come in neutral, accent (primary) and
   danger tones; a danger action states what will be deleted. A neutral button is quiet at rest
   (`--bg-elevated`, no border or ring, round 9) and brighter on hover (`--bg-active`), never the
-  reverse: a resting fill brighter than its hover reads as already pressed (round 8). Brand colour
+  reverse: a resting fill brighter than its hover reads as already pressed (round 8). A disabled primary keeps its
+  green as the soft accent tint with accent text and no ring, so Create and Add read as the main action before the
+  form is filled in (round 10); other variants disable to the flat elevated fill. Brand colour
   belongs to an integration action only (e.g. Langfuse), never to generic
   controls. The 42px authentication fields (`TextField`),
   textareas, sliders and composite controls are separate recipes and do not
@@ -217,7 +219,9 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 
 - **Tabs and switchers** (`Tabs`, `SegmentedControl`): section navigation is
   underline-only tabs (`role="tablist"`/`tab`, `aria-selected`, roving focus and
-  Left/Right/Home/End from React Aria). In-place view/metric/repeat/time
+  Left/Right/Home/End from React Aria). The selected tab is green, label and 2px underline (a danger tab is red); the
+  list's baseline is an inset 1px shadow, so the underline sits inside the list and is never clipped, and the list never
+  shows a scrollbar unless the tabs really overflow (round 10). In-place view/metric/repeat/time
   switching uses `SegmentedControl`: 24px high, only the selected option has the
   Qym-green fill, one sliding indicator, no motion under
   `prefers-reduced-motion`. Pages never add their own selection animation. The
@@ -264,6 +268,9 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   reject/delete red). The one exception is `tile` (table row actions only): the
   tone's `--tint-soft` 20px square at rest and `--tint-strong` on hover, focus and press,
   the glyph in the tone (accent, or `--error` for danger). Help markers and passive icons are not icon actions.
+  Revoking a key or token and disabling a user use the `ban` glyph (a circle with a slash), never a bare square or a
+  cross (round 10). A row action menu that would hold one action with a glyph, or a delete, shows it as an icon
+  instead; a lone action with no glyph stays in the menu (round 10).
   Every copy action is `CopyButton` with the shared overlapping-rectangles
   glyph from `Icon`.
 
@@ -337,6 +344,10 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   a page area (right under the tabs or the page header) has no line, so nothing doubles the tab underline.
   `SectionHeader` draws no divider and no lead-in of its own (inside a card it is just the header). Parents stack
   sections with no gap of their own. The run and compare reports use the framed `ReportSection` below instead.
+- **Settings card** (`SettingsCard`, project settings; round 10, as the old settings page): every settings tab opens
+  the same way, a card with a title, one description line and the block's main action (Add, Create) on the title
+  row's end side, then the controls. A tab has one Add button, in its card header; its empty state does not repeat it.
+  Facts about the project (slug, role, members, runs, created) live once, in the page header meta.
 - **Report section** (`ReportSection`; the run page and the compare page, `CompareSection` is retired; round 8b, owner
   decision H6): every top-level section is a framed panel: `--bg-surface`, 1px `--border-subtle`, `--radius-md`, 14px
   padding, 20px under the previous panel, the first panel with no lead-in. It opens with a `section-head` inside the
@@ -391,7 +402,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   fill. Roles, counts, data and versions are mono; other tags are sans. A tag
   may grow vertically when its content wraps. `kind` says what the label is: `task`, `version` and `config` are
   definition metadata and take the `meta` (purple) tone; `dataset` is neutral; `model` (+ `series`) renders the series
-  dot; `origin` is neutral (official is `tone="info"`). Passive: no hover.
+  dot; `origin` is neutral (official is `tone="info"`). A `role` tag takes its tone from the role, so an admin never
+  reads as a member: admin `info` (blue), manager `accent` (green), member neutral (round 10). Passive: no hover.
 
 - **Chip** (`Chip`): interactive filters only; `--chip-height`, rounded outline,
   sans `--font-sm` / 600, counts mono. Passive metadata never uses the chip
@@ -453,6 +465,9 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   body cells `--font-base`, `--text-secondary`, sans (this header/cell recipe is locked in `.thead th` / `.tbody td`).
   Row height comes from the density tokens `--row-compact` 32 / `--row-regular` 40 / `--row-comfortable` 52 (two-line
   and wrapped cells raise the minimum to comfortable); zebra alternates `--bg-base` and `--bg-surface` by logical row;
+  rows part on a faint hairline (`--row-line`, 55% of `--border-subtle`), none under zebra stripes and none under the
+  last row, where the frame closes the table (round 10: a full-strength line on every row read as a grid of boxes);
+  admin tables are locked to comfortable rows with no density menu (round 10);
   hover `--bg-hover`; selected `--bg-selected` plus a 2px accent bar; `rowState` draws a 3px rail (error, warn, live,
   new) and `error` and `live` also wash the row at `--tint-faint` (6%), the only washes allowed in a table. Numeric/ID columns add mono and `tabular-nums` per column type, scalar numbers are right-aligned (`align: 'center'`
   centres a column, header and values; the runs and charts tables centre every number column, round 9); a column

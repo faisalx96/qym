@@ -8,21 +8,37 @@ import {
   ConfirmDialog,
   Dialog,
   ErrorState,
+  Icon,
   Skeleton,
-  Stack,
   Tag,
   Text,
   Textarea,
   useToast,
+  type IconName,
 } from '@/ui';
 import { useProjectContext } from '../ProjectContext';
 import styles from './settings.module.css';
+import { SettingsCard } from './SettingsCard';
 
-const LABELS: Record<string, string> = {
-  llm_analyzer: 'LLM analyzer',
-  aggregator: 'Aggregator',
-  rules_writer: 'Rules writer',
+/** Each prompt type: its name, one line on what it does, and an icon (the old settings page's list, round 10). */
+const PROMPT_TYPES: Record<string, { label: string; description: string; icon: IconName }> = {
+  llm_analyzer: {
+    label: 'LLM analyzer',
+    description: 'Diagnoses why an item got its result for a metric.',
+    icon: 'sparkles',
+  },
+  aggregator: {
+    label: 'Aggregator',
+    description: 'Merges root-cause labels that name the same diagnosis.',
+    icon: 'chain',
+  },
+  rules_writer: {
+    label: 'Rules writer',
+    description: 'Writes reusable diagnostic rules from documents and approved examples.',
+    icon: 'book',
+  },
 };
+const labelOf = (k: string) => PROMPT_TYPES[k]?.label ?? k;
 
 function relative(iso: string | null | undefined, now: number): string {
   if (!iso) return 'never';
@@ -135,119 +151,151 @@ export function PromptsTab() {
   }
 
   return (
-    <div className={styles.promptLayout} data-prompts>
-      <div className={styles.promptRail} role="tablist" aria-label="Prompts" aria-orientation="vertical">
-        {keys.map((k, idx) => (
-          <button
-            key={k}
-            type="button"
-            role="tab"
-            aria-selected={k === key}
-            aria-controls={`prompt-panel-${k}`}
-            tabIndex={k === key ? 0 : -1}
-            className={styles.promptTab}
-            onClick={() => setSelected(k)}
-            onKeyDown={(e) => {
-              const move = (d: number) => setSelected(keys[(idx + d + keys.length) % keys.length]!);
-              if (e.key === 'ArrowDown' || e.key === 'ArrowRight') move(1);
-              else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') move(-1);
-              else if (e.key === 'Home') setSelected(keys[0]!);
-              else if (e.key === 'End') setSelected(keys[keys.length - 1]!);
-              else return;
-              e.preventDefault();
-            }}
-          >
-            <span>{LABELS[k] ?? k}</span>
-            {(prompts.data.prompts[k] ?? '') !== (prompts.data.defaults[k] ?? '') ? (
-              <Tag kind="accent">custom</Tag>
-            ) : (
-              <Tag>default</Tag>
-            )}
-          </button>
-        ))}
-      </div>
-      <Stack gap="md" id={`prompt-panel-${key}`} role="tabpanel" aria-label={LABELS[key] ?? key}>
-        <Textarea
-          label={`${LABELS[key] ?? key} prompt`}
-          value={draft}
-          onChange={(v) => setDrafts((d) => ({ ...d, [key]: v }))}
-          rows={14}
-          mono
-          className={styles.promptEditor}
-          isReadOnly={readOnly}
-        />
-        <div className={styles.promptMeta}>
-          <span>{draft.length.toLocaleString()} characters</span>
-          <span>edited {relative(prompts.data.updated_at, now)}</span>
-          {dirty ? <span className={styles.unsaved}>● Unsaved changes</span> : null}
-          {isCustom ? <Tag kind="accent">custom</Tag> : <Tag>default</Tag>}
+    <SettingsCard
+      title="AI prompts"
+      description="The instructions the analysis pipeline sends to the LLM. A change applies to new analysis, aggregation and rules-writer requests; saved results are not rerun."
+      data-prompts
+    >
+      <div className={styles.promptLayout}>
+        <div className={styles.promptRail} role="tablist" aria-label="Prompts" aria-orientation="vertical">
+          {keys.map((k, idx) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={k === key}
+              aria-controls={`prompt-panel-${k}`}
+              tabIndex={k === key ? 0 : -1}
+              className={styles.promptTab}
+              onClick={() => setSelected(k)}
+              onKeyDown={(e) => {
+                const move = (d: number) => setSelected(keys[(idx + d + keys.length) % keys.length]!);
+                if (e.key === 'ArrowDown' || e.key === 'ArrowRight') move(1);
+                else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') move(-1);
+                else if (e.key === 'Home') setSelected(keys[0]!);
+                else if (e.key === 'End') setSelected(keys[keys.length - 1]!);
+                else return;
+                e.preventDefault();
+              }}
+            >
+              <span className={styles.promptIcon} aria-hidden="true">
+                <Icon name={PROMPT_TYPES[k]?.icon ?? 'file'} />
+              </span>
+              <span className={styles.promptLabel}>{labelOf(k)}</span>
+              {/* default or custom shows here only, one marker per prompt */}
+              <span className={styles.promptState}>
+                {(prompts.data.prompts[k] ?? '') !== (prompts.data.defaults[k] ?? '') ? (
+                  <Tag kind="accent">custom</Tag>
+                ) : (
+                  <Tag>default</Tag>
+                )}
+              </span>
+              {PROMPT_TYPES[k] ? (
+                <small className={styles.promptDesc}>{PROMPT_TYPES[k].description}</small>
+              ) : null}
+            </button>
+          ))}
         </div>
-        {!readOnly ? (
-          <Stack direction="row" gap="sm">
-            <Button
-              variant="primary"
-              isDisabled={!dirty}
-              loading={save.isPending}
-              onPress={() => persist(draft)}
-            >
-              Save
-            </Button>
-            <Button
-              variant="neutral"
-              isDisabled={!dirty}
-              onPress={() => setDrafts((d) => ({ ...d, [key]: current }))}
-            >
-              Discard
-            </Button>
-            <Button variant="neutral" isDisabled={!isCustom && !dirty} onPress={() => setShowDiff(true)}>
-              View diff
-            </Button>
-            <Button variant="danger" isDisabled={!isCustom} onPress={() => setConfirmRestore(true)}>
-              Restore default
-            </Button>
-          </Stack>
-        ) : null}
-        <Dialog
-          open={showDiff}
-          onOpenChange={setShowDiff}
-          title={`${LABELS[key] ?? key}: changes vs shipped default`}
-          size="data"
+        <div
+          className={styles.promptPanel}
+          id={`prompt-panel-${key}`}
+          role="tabpanel"
+          aria-label={labelOf(key)}
         >
-          <Text variant="sm">Deleted words are red, added words are green.</Text>
-          <div className={styles.diff}>
-            {wordDiff(shipped, draft).map((part, i) =>
-              part.kind === 'same' ? (
-                <span key={i}>{part.text}</span>
-              ) : part.kind === 'add' ? (
-                <ins key={i}>{part.text}</ins>
-              ) : (
-                <del key={i}>{part.text}</del>
-              ),
-            )}
+          <div className={styles.cardHeader}>
+            <div>
+              <Text variant="md">{labelOf(key)}</Text>
+              {PROMPT_TYPES[key] ? <Text variant="sm">{PROMPT_TYPES[key].description}</Text> : null}
+            </div>
+            {!readOnly ? (
+              <div className={styles.cardAction}>
+                <Button variant="neutral" isDisabled={!isCustom && !dirty} onPress={() => setShowDiff(true)}>
+                  View diff
+                </Button>
+                <Button variant="danger" isDisabled={!isCustom} onPress={() => setConfirmRestore(true)}>
+                  Restore default
+                </Button>
+              </div>
+            ) : null}
           </div>
-        </Dialog>
-        <ConfirmDialog
-          open={blocker.state === 'blocked'}
-          onOpenChange={(o) => !o && blocker.state === 'blocked' && blocker.reset()}
-          title="Discard unsaved changes?"
-          description="A prompt has edits that are not saved."
-          cancelLabel="Keep editing"
-          confirmLabel="Discard changes"
-          tone="danger"
-          onConfirm={() => {
-            if (blocker.state === 'blocked') blocker.proceed();
-          }}
-        />
-        <ConfirmDialog
-          open={confirmRestore}
-          onOpenChange={setConfirmRestore}
-          title="Restore the shipped default?"
-          tone="danger"
-          description="Your customised prompt is replaced by the default that ships with qym."
-          confirmLabel="Restore default"
-          onConfirm={() => persist(shipped)}
-        />
-      </Stack>
-    </div>
+          <Textarea
+            label={`${labelOf(key)} prompt`}
+            hideLabel
+            value={draft}
+            onChange={(v) => setDrafts((d) => ({ ...d, [key]: v }))}
+            rows={16}
+            mono
+            className={styles.promptEditor}
+            isReadOnly={readOnly}
+          />
+          <div className={styles.promptFooter}>
+            <div className={styles.promptMeta}>
+              <span>{draft.length.toLocaleString()} characters</span>
+              <span>edited {relative(prompts.data.updated_at, now)}</span>
+              {dirty ? <span className={styles.unsaved}>● Unsaved changes</span> : null}
+            </div>
+            {!readOnly ? (
+              <div className={styles.cardAction}>
+                <Button
+                  variant="neutral"
+                  isDisabled={!dirty}
+                  onPress={() => setDrafts((d) => ({ ...d, [key]: current }))}
+                >
+                  Discard
+                </Button>
+                <Button
+                  variant="primary"
+                  isDisabled={!dirty}
+                  loading={save.isPending}
+                  onPress={() => persist(draft)}
+                >
+                  Save
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <Dialog
+        open={showDiff}
+        onOpenChange={setShowDiff}
+        title={`${labelOf(key)}: changes vs shipped default`}
+        size="data"
+      >
+        <Text variant="sm">Deleted words are red, added words are green.</Text>
+        <div className={styles.diff}>
+          {wordDiff(shipped, draft).map((part, i) =>
+            part.kind === 'same' ? (
+              <span key={i}>{part.text}</span>
+            ) : part.kind === 'add' ? (
+              <ins key={i}>{part.text}</ins>
+            ) : (
+              <del key={i}>{part.text}</del>
+            ),
+          )}
+        </div>
+      </Dialog>
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(o) => !o && blocker.state === 'blocked' && blocker.reset()}
+        title="Discard unsaved changes?"
+        description="A prompt has edits that are not saved."
+        cancelLabel="Keep editing"
+        confirmLabel="Discard changes"
+        tone="danger"
+        onConfirm={() => {
+          if (blocker.state === 'blocked') blocker.proceed();
+        }}
+      />
+      <ConfirmDialog
+        open={confirmRestore}
+        onOpenChange={setConfirmRestore}
+        title="Restore the shipped default?"
+        tone="danger"
+        description="Your customised prompt is replaced by the default that ships with qym."
+        confirmLabel="Restore default"
+        onConfirm={() => persist(shipped)}
+      />
+    </SettingsCard>
   );
 }
