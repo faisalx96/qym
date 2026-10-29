@@ -111,10 +111,11 @@ export function VersionCell({ row }: { row: RunRow }) {
   );
 }
 
+/** Sans with tabular figures (round 10, as the first qym list): the mono face spread the date and time apart. */
 export function DateCell({ row }: { row: RunRow }) {
   const d = formatDateParts(row.timestamp);
   return (
-    <time className={styles.mono} dateTime={row.timestamp} title={d.full}>
+    <time className={styles.date} dateTime={row.timestamp} title={d.full}>
       {d.date} · {d.time}
     </time>
   );

@@ -418,16 +418,11 @@ export function RunsPage() {
         search: toolbarParts.search,
         filters: toolbarParts.filters,
         rows: toolbarParts.rows,
-        trailing: (
-          <>
-            <Button
-              variant={selectMode ? 'accent' : 'neutral'}
-              onPress={() => (selectMode ? clearSelection() : setSelectMode(true))}
-              aria-pressed={selectMode}
-            >
-              {selectMode ? 'Done selecting' : 'Select'}
-            </Button>
-          </>
+        // in select mode Done selecting sits with the selection actions (round 10), so the toggle shows only to enter it
+        trailing: selectMode ? null : (
+          <Button variant="neutral" onPress={() => setSelectMode(true)} aria-pressed={false}>
+            Select
+          </Button>
         ),
       }}
       footer={{
@@ -478,7 +473,9 @@ export function RunsPage() {
               ),
             })
           }
-          onClear={clearSelection}
+          onClear={() => selection.clearSelected()}
+          onCancelCohort={() => selection.clear()}
+          onDone={clearSelection}
         />
       }
     />

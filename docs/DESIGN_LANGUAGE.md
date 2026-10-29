@@ -89,7 +89,8 @@ entry is a deliberate exemption, named in the commit message.
 - `--font-sans` — everything humans read: names, descriptions, prose, buttons,
   headers, labels.
 - `--font-mono` — **data only**: IDs, row numbers, JSON, code, metric/latency
-  values, timestamps, version strings. Never for prose or UI chrome. When in
+  values, timestamps, version strings. The runs list's Date column is the exception: sans with `tabular-nums`
+  (round 10: the mono face spread the date and time apart). Never for prose or UI chrome. When in
   doubt: if it could contain a sentence, it's sans.
 - One typeface family, three scripts: **IBM Plex Sans** (Latin), **IBM Plex Sans Arabic** and
   **IBM Plex Mono**, self-hosted as subsetted woff2 in `src/styles/fonts/` (SIL OFL, licence texts beside
@@ -130,7 +131,8 @@ removed on purpose; one token name means one value everywhere.
   `--bg-surface` cards/panels, `--bg-elevated` table headers/inputs/nested
   surfaces, `--bg-hover`/`--bg-active` interaction states.
 - Borders: `--border-subtle` (default hairlines), `--border-default`
-  (inputs, popovers), `--border-strong` (emphasis/dividers).
+  (popovers), `--border-strong` (emphasis/dividers). A field-like control's edge is `--control-edge`
+  (`--border-subtle`) at rest and `--control-edge-hover` (`--border-default`) on hover (round 10).
 
 ---
 
@@ -201,7 +203,11 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   no compact or roomy variants. Buttons come in neutral, accent (primary) and
   danger tones; a danger action states what will be deleted. A neutral button is quiet at rest
   (`--bg-elevated`, no border or ring, round 9) and brighter on hover (`--bg-active`), never the
-  reverse: a resting fill brighter than its hover reads as already pressed (round 8). Brand colour
+  reverse: a resting fill brighter than its hover reads as already pressed (round 8). Field-like controls (text field,
+  select, filter trigger, segmented control, date and time field) share that `--bg-elevated` fill with a soft
+  `--control-edge` (round 10: the `--border-default` outlines read as too bold next to the borderless buttons). A
+  disabled button keeps the flat shape at half its fill with muted text and no outline (round 10: an outline made a
+  locked button look like another, louder style). Brand colour
   belongs to an integration action only (e.g. Langfuse), never to generic
   controls. The 42px authentication fields (`TextField`),
   textareas, sliders and composite controls are separate recipes and do not
@@ -209,7 +215,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   adjacent status badge share the 24px control height.
 
 - **Multiselect** (`MultiSelect`): content in fixed order: search, actions
-  (Select all and None/Clear), then `--dropdown-option-height` option rows.
+  (Select all and None/Clear, neutral 20px buttons at rest, round 10), then `--dropdown-option-height` option rows.
+  The trigger's chevron sits at the end of the box, not after the label.
   Each option may expose an explicit "Only" action; never hide it behind
   double-click. As a filter (`emptyMeansAll`, the runs facets) no filter shows every box ticked: unticking a
   value narrows to the rest, ticking them all again is no filter, and None (or unticking the last one) matches
@@ -391,7 +398,8 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   fill. Roles, counts, data and versions are mono; other tags are sans. A tag
   may grow vertically when its content wraps. `kind` says what the label is: `task`, `version` and `config` are
   definition metadata and take the `meta` (purple) tone; `dataset` is neutral; `model` (+ `series`) renders the series
-  dot; `origin` is neutral (official is `tone="info"`). Passive: no hover.
+  dot; `origin` is neutral (official is `tone="info"`). Passive: no hover. Task, dataset and model names are 500
+  (round 10); a model tag's name is `--text-secondary` and its dot is flush (no ring), 6px before the name.
 
 - **Chip** (`Chip`): interactive filters only; `--chip-height`, rounded outline,
   sans `--font-sm` / 600, counts mono. Passive metadata never uses the chip
@@ -472,11 +480,13 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
   the column set change, `FIT_MAX_WIDTH` 480px at most before sharing) and the spare width is shared in proportion to
   those widths, the way an auto table layout spreads it, so no single flex column takes all of it; a flex column may give
   width back down to its minimum so the others still fit; a cell that fills its column (score, delta) counts its
-  declared width; a width the user dragged always wins; when even that does not fit, the declared widths apply and the
-  table scrolls. `fit="declared"` keeps the declared widths.
+  declared width; a width the user dragged always wins; when even that does not fit, every column keeps its content
+  width and the table scrolls (round 10: a declared width narrower than its content cut it with an ellipsis).
+  `fit="declared"` keeps the declared widths.
   **Fold column** (`Column.foldLabel`, the runs Actions column, round 8): a pinned-end actions column is not a frozen
-  block. While the scroller has columns past its end edge, each row shows one 20px handle (`chevron-left`, named
-  "Actions for <row>") at the inline end; the rest of the cell is see-through, draws no line and lets clicks pass.
+  block. While the scroller has columns past its end edge, a row shows one borderless 20px handle (`chevron-left`, named
+  "Actions for <row>") at the inline end while it is hovered or focused (every row on a touch screen; round 10: a handle
+  on every row covered the scores under it); the rest of the cell is see-through, draws no line and lets clicks pass.
   The handle opens that row's cell in place (the usual opaque cell, focus on its first action; Escape, the handle
   or a press outside folds it). Scrolled to the end, or with no overflow, the column renders as usual, with its
   title (`Actions`, end-aligned; the title is hidden while folded). A fold
@@ -510,12 +520,22 @@ it (`docs/internal/ui-migration/`): the recipe is the rule, the round is the evi
 - **Filter bar** (`features/runs-list/FilterBar`, `MultiSelect triggerVariant="bar"`, toolbar `rows` slot): row 1 is search,
   Time and Origin; row 2 one 24px trigger per facet (96 to 168px, label then `· value`, accent tint when active),
   `More filters` for versioning keys and facets that do not fit (priority Status, Model, Task, Dataset, User, Version)
-  and, right after them, one `× Clear n` in the danger tone. There is no chip line (round 8: each trigger already names
+  and, right after them, one `× Clear n` in the danger tone, the count on its own red disc. There is no chip line (round 8: each trigger already names
   its value, and the status-bar sentence lists every filter). The table controls (Select, Columns, Density) centre on
   both rows. Facet lists are `emptyMeansAll` (every box ticked = no filter) and always searchable. `Range` (no
-  ellipsis) expands From – To date fields, Apply and Cancel in place after the Time control, never a dialog; they stay
-  open while a custom range is applied. A list applies on each click, no Done button. Under 600px the bar is search
-  plus `Filters n` (and `× Clear n`), opening every facet in a drawer.
+  ellipsis) expands From – To `DateTimeField`s (typed date and 24-hour time segments, a qym calendar with a Time field;
+  a day picked alone covers the whole day: From 00:00, To 23:59; the URL carries `YYYY-MM-DDTHH:mm`, a plain day still
+  reads), Apply and a red Cancel in place after the Time control, never a dialog; they stay open while a custom range
+  is applied. A list applies on each click, no Done button. Under 600px the bar is search plus `Filters n` (and
+  `× Clear n`), opening every facet in a drawer. In select mode the selection is a full-width line above the filter
+  rows (round 10): the count (or Cohort A, locked, and Cohort B, green once it balances A), then Compare, Cohort,
+  Submit, Delete and Clear, each a visible button with its icon, the ready action green, then `Done selecting` and the
+  guidance. The score columns are the metrics of the filtered runs, so a filter drops the scores none of them has.
+
+- **Project dashboard** (`features/runs-list/OverviewPage`, round 10): the KPI band, the Trend card, then two panels of
+  parts with one hairline between them: Live runs over Recent runs, and Pending reviews beside Approved runs. A run is
+  one table line (Run, Task, Model, User, Status, Items, Date; Approved runs keep Run, User, Date), never a tag line
+  under the name. An empty part says so on its title line ("No live runs").
 
 - **Passes panel** (`features/runs-list/passes`): one surface and a 2px accent rail, sticky at the scroller start
   (`--dt-scroller-width`); one line, left to right: title, metric Select, the threshold as one inline `Slider`

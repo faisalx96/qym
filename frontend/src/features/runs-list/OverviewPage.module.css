@@ -1,4 +1,4 @@
-/* Overview: constrained page, KPI band, overview cards (DESIGN_LANGUAGE §4). */
+/* Overview: constrained page, KPI band, the Trend card, then two panels of parts (DESIGN_LANGUAGE §4, round 10). */
 .screen {
   display: flex;
   flex-direction: column;
@@ -10,12 +10,6 @@
 .screen[data-constrained] {
   max-width: var(--page-max-w);
   margin: 0 auto;
-}
-
-.twoUp {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr));
-  gap: var(--space-md);
 }
 
 .cardHead {
@@ -38,6 +32,57 @@
   min-width: 0;
 }
 
+/* A panel holds related parts: Live then Recent stacked; Pending reviews and Approved runs side by side. One hairline
+   between the parts, no nested card frames. */
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.group[data-pair] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  container-type: inline-size;
+}
+
+.part {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.part + .part {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.group[data-pair] > .part + .part {
+  border-top: 0;
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.partHead {
+  display: flex;
+  align-items: baseline; /* View all and the empty note sit on the title's line, with or without a description */
+  gap: var(--space-md);
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+}
+
+/* "No live runs" sits on the title line instead of an empty block under it */
+.partEmpty {
+  white-space: nowrap;
+}
+
+.partBody {
+  min-width: 0;
+  padding: 0 var(--space-md) var(--space-sm);
+}
+
+.part > :global([data-skeleton]),
+.part > [role='alert'] {
+  margin: 0 var(--space-md) var(--space-sm);
+}
+
 .viewAll {
   color: var(--accent-primary);
   font-size: var(--font-sm);
@@ -51,21 +96,6 @@
 }
 
 .viewAll:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-.runLink {
-  color: var(--accent-primary);
-  text-decoration: none;
-}
-
-.runLink:hover {
-  text-decoration: underline;
-}
-
-.runLink:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
   border-radius: 2px;
@@ -97,54 +127,50 @@
   clip-path: inset(50%);
 }
 
-@media (max-width: 1100px) {
-  .twoUp {
-    grid-template-columns: 1fr;
-  }
-}
-
+/* Pending reviews: one line each, the review number then its root cause */
 .reviews {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.runCell {
-  display: inline-flex;
-  flex-direction: column;
-  max-width: 100%;
-  align-items: flex-start; /* the task tag hugs its text, never a wide block */
-  gap: 2px;
-  min-width: 0;
-}
-
-.runTags {
+.review {
   display: flex;
-  align-items: center;
-  flex-wrap: nowrap; /* one tag line: the tags share the width and shorten with an ellipsis */
-  gap: var(--space-xs);
-  max-width: 100%;
+  align-items: baseline;
+  gap: var(--space-sm);
   min-width: 0;
+  padding: var(--space-xs) 0;
 }
 
-.runTask {
-  display: inline-flex;
-  min-width: 0;
+.review + .review {
+  border-top: 1px solid var(--border-subtle);
 }
 
-.runTags > * {
-  flex: 0 1 auto;
-  min-width: 0;
+.reviewLink {
+  flex: none;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
 }
 
-/* Narrow (card mode): the model tag goes; task and dataset stay. */
-@media (max-width: 639px) {
-  .runModel {
-    display: none;
-  }
+.reviewLink:hover {
+  text-decoration: underline;
+}
+
+.reviewLink:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.reviewText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .runLine {
@@ -152,4 +178,12 @@
   align-items: center;
   gap: var(--space-xs);
   min-width: 0;
+}
+
+/* stacked (two 420px columns do not fit): the hairline goes back on top */
+@container (max-width: 839px) {
+  .group[data-pair] > .part + .part {
+    border-inline-start: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
 }

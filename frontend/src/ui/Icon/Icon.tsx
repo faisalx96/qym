@@ -48,6 +48,8 @@ export type IconName =
   | 'play'
   | 'stop'
   | 'clock'
+  | 'calendar'
+  | 'split'
   | 'eye'
   | 'eye-off'
   | 'grid'
@@ -116,6 +118,9 @@ const PATHS: Record<IconName, string> = {
   play: 'M7 5v14l12-7z',
   stop: 'M6 6h12v12H6z',
   clock: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7v5l3 2',
+  calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  /* two cohorts side by side (A | B) */
+  split: 'M3 5h7v14H3zM14 5h7v14h-7z',
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   'eye-off':
     'M3 3l18 18M10 6a10 10 0 0 1 12 6 13 13 0 0 1-3 4M6 8a13 13 0 0 0-4 4s4 7 10 7a9 9 0 0 0 4-1M10 10a3 3 0 0 0 4 4',

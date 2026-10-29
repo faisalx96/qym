@@ -49,8 +49,17 @@
   background: var(--tone);
 }
 
-/* A model tag carries its series colour: tinted fill, primary text, the dot in the full hue. */
+/* A model tag carries its series colour: tinted fill, secondary text (round 10: primary text made every model name the
+   brightest word in the row), the dot in the full hue, flush, with a little more room before the name. */
 .tag[data-kind='model'][data-series] {
-  color: var(--text-primary);
+  gap: 6px;
+  color: var(--text-secondary);
   background: color-mix(in srgb, var(--tone) var(--tint-soft), transparent);
+}
+
+/* Task, dataset and model names read as plain text inside their tint: 500, not the 650 of a role or count tag. */
+.tag[data-kind='task'],
+.tag[data-kind='dataset'],
+.tag[data-kind='model'] {
+  font-weight: 500;
 }

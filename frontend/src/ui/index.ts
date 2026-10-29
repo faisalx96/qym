@@ -37,6 +37,7 @@ export * from './StatStrip';
 export * from './StatTiles';
 export * from './TextField';
 export * from './SearchField';
+export * from './DateTimeField';
 export * from './NumberField';
 export * from './Textarea';
 export * from './Checkbox';

@@ -10,13 +10,13 @@ import type { Facets } from '@/api/dashboardTypes';
 import {
   Button,
   Checkbox,
+  DateTimeField,
   Icon,
   IconButton,
   Popover,
   SearchField,
   SegmentedControl,
   Text,
-  TextField,
 } from '@/ui';
 import { parseLocalDate, type QuickRange } from '@/lib/runs-order';
 import {
@@ -360,7 +360,10 @@ function FacetSection({
   );
 }
 
-/** The custom range, in place: From and To (local days, either side may stay open), Apply, and Cancel while unapplied. */
+/**
+ * The custom range, in place: From and To (a local day and time each, round 10; either side may stay open), Apply, and
+ * a red Cancel while unapplied. A day picked without a time covers the whole day (From 00:00, To 23:59).
+ */
 function RangeFields({
   from,
   to,
@@ -382,19 +385,18 @@ function RangeFields({
   function apply() {
     const da = parseLocalDate(a);
     const db = parseLocalDate(b);
-    if (!da && !db) return setError('Choose a start date, an end date or both.');
-    if (da && db && da > db) return setError('The start date must be on or before the end date.');
+    if (!da && !db) return setError('Choose a start, an end or both.');
+    if (da && db && da > db) return setError('The start must be on or before the end.');
     setError('');
     onApply(da ? a : '', db ? b : '');
   }
   const changed = a !== from || b !== to;
   // Enter applies, Escape folds an unapplied range (on the date fields; buttons keep their own keys)
-  const onKey = (e: { key: string; preventDefault: () => void; continuePropagation?: () => void }) => {
+  const onKey = (e: { key: string; preventDefault: () => void }) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       apply();
     } else if (e.key === 'Escape' && !applied) onCancel();
-    else e.continuePropagation?.();
   };
   return (
     <div
@@ -403,26 +405,19 @@ function RangeFields({
       aria-label="Custom date range"
       data-testid="custom-range"
     >
-      <TextField
-        label="From"
-        hideLabel
-        type="date"
-        value={a}
-        onChange={setA}
-        onKeyDown={onKey}
-        autoFocus={autoFocus}
-        width={128}
-      />
+      <DateTimeField label="From" value={a} onChange={setA} onKeyDown={onKey} autoFocus={autoFocus} />
       <span className={styles.rangeDash} aria-hidden="true">
         –
       </span>
-      <TextField label="To" hideLabel type="date" value={b} onChange={setB} onKeyDown={onKey} width={128} />
+      <DateTimeField label="To" value={b} onChange={setB} onKeyDown={onKey} dayTime="end" />
       {!applied || changed ? (
         <Button variant="accent" onPress={apply}>
           Apply
         </Button>
       ) : null}
-      {!applied ? <IconButton label="Cancel custom range" icon="close" onPress={onCancel} /> : null}
+      {!applied ? (
+        <IconButton label="Cancel custom range" icon="close" tone="reject" onPress={onCancel} />
+      ) : null}
       {error ? (
         <Text variant="sm" tone="danger" as="span" role="alert">
           {error}

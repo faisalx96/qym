@@ -195,16 +195,16 @@ describe('fitColumnWidths (content fit)', () => {
     expect(out).toEqual({ name: 220, size: 90, rows: 90 });
   });
 
-  it('returns null when even the minimums do not fit (the declared widths apply)', () => {
+  it('keeps every content width when even the minimums do not fit (the table scrolls, no ellipsis)', () => {
     expect(
       fitColumnWidths(
         [
           { id: 'name', w: 260, min: 200 },
-          { id: 'size', w: 250 },
+          { id: 'size', w: 249.5 },
         ],
         400,
       ),
-    ).toBeNull();
+    ).toEqual({ name: 260, size: 250 });
     expect(fitColumnWidths([], 400)).toBeNull();
   });
 });

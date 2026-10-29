@@ -85,7 +85,7 @@ export function PassDate({ pass }: { pass: RunPass }) {
   const date = pass.started_at ? formatDateParts(pass.started_at) : null;
   if (!date) return <span className={styles.none}>—</span>;
   return (
-    <time className={styles.mono} dateTime={pass.started_at ?? undefined} title={date.full}>
+    <time className={styles.date} dateTime={pass.started_at ?? undefined} title={date.full}>
       {date.date} · {date.time}
     </time>
   );
